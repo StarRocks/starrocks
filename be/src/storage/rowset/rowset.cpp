@@ -225,9 +225,12 @@ StatusOr<int64_t> Rowset::estimate_compaction_segment_iterator_num() {
         // When creating segment iterators for compaction, we don't provide rowid_range_option and predicates_for_zone_map,
         // So here we don't need to consider the following two situation:
         //
-        //    if (options.rowid_range_option != nullptr && !options.rowid_range_option->match_segment(seg_ptr.get())) {
-        //       continue;
+        // if (options.rowid_range_option != nullptr) {
+        //    seg_options.rowid_range_option = options.rowid_range_option->get_segment_rowid_range(this, seg_ptr.get());
+        //    if (seg_options.rowid_range_option == nullptr) {
+        //        continue;
         //    }
+        // }
         //    auto res = seg_ptr->new_iterator(segment_schema, seg_options);
         //    if (res.status().is_end_of_file()) {
         //     continue;
@@ -501,7 +504,6 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
         seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(options.meta);
         seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(options.meta);
     }
-    seg_options.rowid_range_option = options.rowid_range_option;
     seg_options.short_key_ranges = options.short_key_ranges;
     if (options.runtime_state != nullptr) {
         seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
@@ -529,8 +531,11 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
             continue;
         }
 
-        if (options.rowid_range_option != nullptr && !options.rowid_range_option->match_segment(seg_ptr.get())) {
-            continue;
+        if (options.rowid_range_option != nullptr) {
+            seg_options.rowid_range_option = options.rowid_range_option->get_segment_rowid_range(this, seg_ptr.get());
+            if (seg_options.rowid_range_option == nullptr) {
+                continue;
+            }
         }
 
         auto res = seg_ptr->new_iterator(segment_schema, seg_options);

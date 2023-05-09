@@ -42,7 +42,8 @@ namespace starrocks::parquet {
 class ChunkWriter {
 public:
     ChunkWriter(::parquet::RowGroupWriter* rg_writer, const std::vector<TypeDescriptor>& type_descs,
-                const std::shared_ptr<::parquet::schema::GroupNode>& schema);
+                const std::shared_ptr<::parquet::schema::GroupNode>& schema,
+                const std::function<StatusOr<ColumnPtr>(Chunk*, size_t)>& eval_func);
 
     Status write(Chunk* chunk);
 
@@ -54,6 +55,7 @@ private:
     ::parquet::RowGroupWriter* _rg_writer;
     std::vector<TypeDescriptor> _type_descs;
     std::shared_ptr<::parquet::schema::GroupNode> _schema;
+    std::function<StatusOr<ColumnPtr>(Chunk*, size_t)> _eval_func;
     std::vector<int64_t> _estimated_buffered_bytes;
 };
 

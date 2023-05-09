@@ -35,15 +35,15 @@ inline uint8_t* get_raw_null_column(const ColumnPtr& col) {
     if (!col->has_null()) {
         return nullptr;
     }
-    auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
-    auto raw_column = null_column->get_data().data();
+    auto& null_column = down_cast<NullableColumn*>(col.get())->null_column();
+    auto* raw_column = null_column->get_data().data();
     return raw_column;
 }
 
 template <LogicalType lt>
 inline RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
-    auto data_column = ColumnHelper::get_data_column(col.get());
-    auto raw_column = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
+    auto* data_column = ColumnHelper::get_data_column(col.get());
+    auto* raw_column = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
     return raw_column;
 }
 
@@ -132,11 +132,11 @@ void LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const Typ
 void LevelBuilder::_write_boolean_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                                const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                                const CallbackFunction& write_leaf_callback) {
-    const auto data_col = get_raw_data_column<TYPE_BOOLEAN>(col);
-    const auto null_col = get_raw_null_column(col);
+    const auto* data_col = get_raw_data_column<TYPE_BOOLEAN>(col);
+    const auto* null_col = get_raw_null_column(col);
 
     // Use the rep_levels in the context from caller since node is primitive.
-    auto rep_levels = ctx._rep_levels;
+    auto& rep_levels = ctx._rep_levels;
     auto def_levels = _make_def_levels_branchless(ctx, node, null_col, col->size());
     auto null_bitset = _make_null_bitset(col->size(), null_col);
 
@@ -161,11 +161,11 @@ template <LogicalType lt, ::parquet::Type::type pt>
 void LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                            const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                            const CallbackFunction& write_leaf_callback) {
-    auto data_col = get_raw_data_column<lt>(col);
-    auto null_col = get_raw_null_column(col);
+    auto* data_col = get_raw_data_column<lt>(col);
+    auto* null_col = get_raw_null_column(col);
 
     // Use the rep_levels in the context from caller since node is primitive.
-    auto rep_levels = ctx._rep_levels;
+    auto& rep_levels = ctx._rep_levels;
     auto def_levels = _make_def_levels(ctx, node, null_col);
     auto null_bitset = _make_null_bitset(col->size(), null_col);
 
@@ -204,11 +204,11 @@ void LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, const
 void LevelBuilder::_write_decimal128_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                                   const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                                   const CallbackFunction& write_leaf_callback) {
-    const auto data_col = get_raw_data_column<TYPE_DECIMAL128>(col);
-    const auto null_col = get_raw_null_column(col);
+    const auto* data_col = get_raw_data_column<TYPE_DECIMAL128>(col);
+    const auto* null_col = get_raw_null_column(col);
 
     // Use the rep_levels in the context from caller since node is primitive.
-    auto rep_levels = ctx._rep_levels;
+    auto& rep_levels = ctx._rep_levels;
     auto def_levels = _make_def_levels_branchless(ctx, node, null_col, col->size());
     auto null_bitset = _make_null_bitset(col->size(), null_col);
 
@@ -240,11 +240,11 @@ void LevelBuilder::_write_decimal128_column_chunk(const LevelBuilderContext& ctx
 void LevelBuilder::_write_date_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                             const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                             const CallbackFunction& write_leaf_callback) {
-    const auto data_col = get_raw_data_column<TYPE_DATE>(col);
-    const auto null_col = get_raw_null_column(col);
+    const auto* data_col = get_raw_data_column<TYPE_DATE>(col);
+    const auto* null_col = get_raw_null_column(col);
 
     // Use the rep_levels in the context from caller since node is primitive.
-    auto rep_levels = ctx._rep_levels;
+    auto& rep_levels = ctx._rep_levels;
     auto def_levels = _make_def_levels_branchless(ctx, node, null_col, col->size());
     auto null_bitset = _make_null_bitset(col->size(), null_col);
 
@@ -296,13 +296,13 @@ void LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx, 
 void LevelBuilder::_write_varchar_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                                const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                                const CallbackFunction& write_leaf_callback) {
-    auto data_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(ColumnHelper::get_data_column(col.get()));
-    const auto null_col = get_raw_null_column(col);
+    const auto* data_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(ColumnHelper::get_data_column(col.get()));
+    const auto* null_col = get_raw_null_column(col);
     auto& vo = data_col->get_offset();
     auto& vb = data_col->get_bytes();
 
     // Use the rep_levels in the context from caller since node is primitive.
-    auto rep_levels = ctx._rep_levels;
+    auto& rep_levels = ctx._rep_levels;
     auto def_levels = _make_def_levels_branchless(ctx, node, null_col, col->size());
     auto null_bitset = _make_null_bitset(col->size(), null_col);
 
@@ -337,8 +337,8 @@ void LevelBuilder::_write_array_column_chunk(const LevelBuilderContext& ctx, con
     auto mid_node = std::static_pointer_cast<::parquet::schema::GroupNode>(outer_node->field(0));
     auto inner_node = mid_node->field(0);
 
-    const auto null_col = get_raw_null_column(col);
-    const auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
+    auto* null_col = get_raw_null_column(col);
+    auto* array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto& elements = array_col->elements_column();
     const auto& offsets = array_col->offsets_column()->get_data();
 
@@ -407,8 +407,8 @@ void LevelBuilder::_write_array_column_chunk_branchless(const LevelBuilderContex
     auto mid_node = std::static_pointer_cast<::parquet::schema::GroupNode>(outer_node->field(0));
     auto inner_node = mid_node->field(0);
 
-    const auto null_col = get_raw_null_column(col);
-    const auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
+    auto* null_col = get_raw_null_column(col);
+    auto* array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto& elements = array_col->elements_column();
     const auto& offsets = array_col->offsets_column()->get_data();
 
@@ -510,8 +510,8 @@ void LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, const
     auto key_node = mid_node->field(0);
     auto value_node = mid_node->field(1);
 
-    const auto null_col = get_raw_null_column(col);
-    const auto map_col = down_cast<MapColumn*>(ColumnHelper::get_data_column(col.get()));
+    auto* null_col = get_raw_null_column(col);
+    auto* map_col = down_cast<MapColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto& keys = map_col->keys_column();
     const auto& values = map_col->values_column();
     const auto& offsets = map_col->offsets_column()->get_data();
@@ -576,9 +576,9 @@ void LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, co
     DCHECK(type_desc.type == TYPE_STRUCT);
     auto struct_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
 
-    const auto null_col = get_raw_null_column(col);
-    const auto data_col = ColumnHelper::get_data_column(col.get());
-    const auto struct_col = down_cast<StructColumn*>(data_col);
+    auto* null_col = get_raw_null_column(col);
+    auto* data_col = ColumnHelper::get_data_column(col.get());
+    auto* struct_col = down_cast<StructColumn*>(data_col);
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;
@@ -607,7 +607,7 @@ std::shared_ptr<std::vector<uint8_t>> LevelBuilder::_make_null_bitset(size_t n, 
     return bitset;
 }
 
-// Make definition levels int terms of repetition and nullity.
+// Make definition levels in terms of repetition and nullity.
 // node could be primitive, or group node denoting struct.
 std::shared_ptr<std::vector<int16_t>> LevelBuilder::_make_def_levels(const LevelBuilderContext& ctx,
                                                                      const ::parquet::schema::NodePtr& node,

@@ -356,8 +356,16 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             batchWrite.addFile(builder.build());
         }
-        batchWrite.commit();
-        transaction.commitTransaction();
+
+        try {
+            batchWrite.commit();
+            transaction.commitTransaction();
+        } catch (Exception e) {
+            List<String> toDeleteFiles = dataFiles.stream()
+                    .map(TIcebergDataFile::getPath)
+                    .collect(Collectors.toList());
+            icebergCatalog.deleteUncommittedDataFiles(toDeleteFiles);
+        }
     }
 
     public BatchWrite getBatchWrite(Transaction transaction, boolean isOverwrite) {
@@ -401,12 +409,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         tables.clear();
     }
 
-    private interface BatchWrite {
+    interface BatchWrite {
         void addFile(DataFile file);
         void commit();
     }
 
-    private static class Append implements BatchWrite {
+    static class Append implements BatchWrite {
         private final AppendFiles append;
 
         public Append(Transaction txn) {
@@ -424,7 +432,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
-    private static class DynamicOverwrite implements BatchWrite {
+    static class DynamicOverwrite implements BatchWrite {
         private final ReplacePartitions replace;
 
         public DynamicOverwrite(Transaction txn) {

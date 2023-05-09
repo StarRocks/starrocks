@@ -74,6 +74,8 @@ public abstract class Warehouse implements Writable {
 
     public abstract Map<Long, Cluster> getClusters() throws DdlException;
 
+    public abstract Cluster getAnyAvailableCluster();
+
     public abstract void setClusters(Map<Long, Cluster> clusters) throws DdlException;
 
     @Override

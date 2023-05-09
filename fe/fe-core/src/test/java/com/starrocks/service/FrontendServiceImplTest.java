@@ -139,7 +139,7 @@ public class FrontendServiceImplTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
-        FeConstants.default_scheduler_interval_millisecond = 100;
+        Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_strict_storage_medium_check = false;
@@ -234,7 +234,7 @@ public class FrontendServiceImplTest {
                 .withView("create view v3 as select database()")
                 .withView("create view v4 as select user()")
                 .withView("create view v5 as select CONNECTION_ID()")
-                .withView("create view v6 as select CURRENT_CATALOG()");
+                .withView("create view v6 as select CATALOG()");
     }
 
     @AfterClass

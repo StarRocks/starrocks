@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.catalog.system.information.InfoSchemaDb;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -45,6 +46,7 @@ public class InfoSchemaDbTest {
         Database db = new InfoSchemaDb();
 
         Assert.assertFalse(db.createTable(null));
+        Assert.assertFalse(db.createMaterializedWithLock(null, false));
         Assert.assertFalse(db.createTableWithLock(null, false));
         db.dropTable("authors");
         db.dropTableWithLock("authors");

@@ -4,6 +4,8 @@
 
 Decodes a Base64-encoded string and return a BINARY.
 
+This function is supported from v3.0.
+
 ## Syntax
 
 ```Haskell

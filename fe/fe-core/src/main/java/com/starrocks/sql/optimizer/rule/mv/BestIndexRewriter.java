@@ -58,6 +58,7 @@ public class BestIndexRewriter extends OptExpressionVisitor<OptExpression, Long>
                     bestIndex,
                     olapScanOperator.getSelectedPartitionId(),
                     olapScanOperator.getPartitionNames(),
+                    olapScanOperator.hasTableHints(),
                     olapScanOperator.getSelectedTabletId(),
                     olapScanOperator.getHintsTabletIds());
 

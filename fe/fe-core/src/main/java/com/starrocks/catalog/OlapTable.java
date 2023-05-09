@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -46,6 +47,7 @@ import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -68,6 +70,7 @@ import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.Util;
@@ -76,7 +79,10 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -100,6 +106,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -1096,6 +1103,71 @@ public class OlapTable extends Table {
     // get all partitions' name except the temp partitions
     public Set<String> getPartitionNames() {
         return Sets.newHashSet(nameToPartition.keySet());
+    }
+
+    public Map<String, Range<PartitionKey>> getValidPartitionMap(int lastPartitionNum) throws AnalysisException {
+        Map<String, Range<PartitionKey>> rangePartitionMap = getRangePartitionMap();
+        // less than 0 means not set
+        if (lastPartitionNum < 0) {
+            return rangePartitionMap;
+        }
+
+        int partitionNum = rangePartitionMap.size();
+        if (lastPartitionNum > partitionNum) {
+            return rangePartitionMap;
+        }
+
+        List<Column> partitionColumns = ((RangePartitionInfo) partitionInfo).getPartitionColumns();
+        Column partitionColumn = partitionColumns.get(0);
+        Type partitionType = partitionColumn.getType();
+
+        List<Range<PartitionKey>> sortedRange = rangePartitionMap.values().stream()
+                .sorted(RangeUtils.RANGE_COMPARATOR).collect(Collectors.toList());
+        int startIndex;
+        if (partitionType.isNumericType()) {
+            startIndex = partitionNum - lastPartitionNum;
+        } else if (partitionType.isDateType()) {
+            LocalDateTime currentDateTime = LocalDateTime.now();
+            PartitionValue currentPartitionValue = new PartitionValue(currentDateTime.format(DateUtils.DATE_FORMATTER_UNIX));
+            PartitionKey currentPartitionKey = PartitionKey.createPartitionKey(
+                    ImmutableList.of(currentPartitionValue), partitionColumns);
+            // For date types, ttl number should not consider future time
+            int futurePartitionNum = 0;
+            for (int i = sortedRange.size(); i > 0; i--) {
+                PartitionKey lowerEndpoint = sortedRange.get(i - 1).lowerEndpoint();
+                if (lowerEndpoint.compareTo(currentPartitionKey) > 0) {
+                    futurePartitionNum++;
+                } else {
+                    break;
+                }
+            }
+
+            if (partitionNum - lastPartitionNum - futurePartitionNum <= 0) {
+                return rangePartitionMap;
+            } else {
+                startIndex = partitionNum - lastPartitionNum - futurePartitionNum;
+            }
+        } else {
+            throw new AnalysisException("Unsupported partition type: " + partitionType);
+        }
+
+        LiteralExpr startExpr = sortedRange.get(startIndex).lowerEndpoint().
+                getKeys().get(0);
+        LiteralExpr endExpr = sortedRange.get(partitionNum - 1).upperEndpoint().getKeys().get(0);
+        String start = AnalyzerUtils.parseLiteralExprToDateString(startExpr, 0);
+        String end = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 0);
+
+        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
+        Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
+        for (Map.Entry<String, Range<PartitionKey>> entry : rangePartitionMap.entrySet()) {
+            Range<PartitionKey> rangeToCheck = entry.getValue();
+            int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
+            int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
+            if (!(lowerCmp >= 0 || upperCmp <= 0)) {
+                result.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return result;
     }
 
     public Set<String> getBfColumns() {

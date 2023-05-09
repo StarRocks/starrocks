@@ -67,7 +67,9 @@ public class RandomDistributionDesc extends DistributionDesc {
 
     @Override
     public void analyze(Set<String> colSet) {
-        throw new SemanticException("Random distribution is deprecated now, use Hash distribution instead");
+        if (numBucket < 0) {
+            throw new SemanticException("Number of random distribution is zero.");
+        }
     }
 
     @Override

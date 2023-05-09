@@ -99,7 +99,6 @@ private:
             DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
             return Status::OK();
         }
-
         return _tablet.update_mgr()->publish_primary_compaction(op_compaction, *_metadata, &_tablet, &_builder,
                                                                 _base_version);
     }
@@ -188,8 +187,9 @@ private:
         };
 
         auto input_id = op_compaction.input_rowsets(0);
-        auto first_input_pos = std::find_if(_metadata->rowsets().begin(), _metadata->rowsets().end(), Finder{input_id});
-        if (UNLIKELY(first_input_pos == _metadata->rowsets().end())) {
+        auto first_input_pos = std::find_if(_metadata->mutable_rowsets()->begin(), _metadata->mutable_rowsets()->end(),
+                                            Finder{input_id});
+        if (UNLIKELY(first_input_pos == _metadata->mutable_rowsets()->end())) {
             return Status::InternalError(fmt::format("input rowset {} not found", input_id));
         }
 
@@ -199,8 +199,8 @@ private:
         auto pre_input_pos = first_input_pos;
         for (int i = 1, sz = op_compaction.input_rowsets_size(); i < sz; i++) {
             input_id = op_compaction.input_rowsets(i);
-            auto it = std::find_if(pre_input_pos + 1, _metadata->rowsets().end(), Finder{input_id});
-            if (it == _metadata->rowsets().end()) {
+            auto it = std::find_if(pre_input_pos + 1, _metadata->mutable_rowsets()->end(), Finder{input_id});
+            if (it == _metadata->mutable_rowsets()->end()) {
                 return Status::InternalError(fmt::format("input rowset {} not exist", input_id));
             } else if (it != pre_input_pos + 1) {
                 return Status::InternalError(fmt::format("input rowset position not adjacent"));
@@ -209,7 +209,13 @@ private:
             }
         }
 
-        auto first_idx = static_cast<uint32_t>(first_input_pos - _metadata->rowsets().begin());
+        const auto end_input_pos = pre_input_pos + 1;
+
+        for (auto iter = first_input_pos; iter != end_input_pos; ++iter) {
+            _metadata->mutable_compaction_inputs()->Add(std::move(*iter));
+        }
+
+        auto first_idx = static_cast<uint32_t>(first_input_pos - _metadata->mutable_rowsets()->begin());
         if (op_compaction.has_output_rowset() && op_compaction.output_rowset().num_rows() > 0) {
             // Replace the first input rowset with output rowset
             auto output_rowset = _metadata->mutable_rowsets(first_idx);
@@ -219,7 +225,6 @@ private:
             ++first_input_pos;
         }
         // Erase input rowsets from _metadata
-        auto end_input_pos = pre_input_pos + 1;
         _metadata->mutable_rowsets()->erase(first_input_pos, end_input_pos);
 
         // Set new cumulative point

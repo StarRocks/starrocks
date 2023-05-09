@@ -38,6 +38,11 @@
 
 namespace starrocks::parquet {
 
+struct FileColumnId {
+    int32_t field_id = -1;
+    std::vector<FileColumnId> children;
+};
+
 class ParquetOutputStream : public arrow::io::OutputStream {
 public:
     ParquetOutputStream(std::unique_ptr<starrocks::WritableFile> wfile);
@@ -78,17 +83,20 @@ public:
                                        const TCompressionType::type& compression_type);
 
     static arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> make_schema(
-            const std::vector<std::string>& file_column_names, const std::vector<ExprContext*>& output_expr_ctxs);
+            const std::vector<std::string>& file_column_names, const std::vector<ExprContext*>& output_expr_ctxs,
+            const std::vector<FileColumnId>& file_column_ids);
 
     static arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> make_schema(
-            const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs);
+            const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs,
+            const std::vector<FileColumnId>& file_column_ids);
 
     static std::shared_ptr<::parquet::WriterProperties> make_properties(const ParquetBuilderOptions& options);
 
 private:
     static arrow::Result<::parquet::schema::NodePtr> _make_schema_node(const std::string& name,
                                                                        const TypeDescriptor& type_desc,
-                                                                       ::parquet::Repetition::type rep_type);
+                                                                       ::parquet::Repetition::type rep_type,
+                                                                       FileColumnId file_column_ids = FileColumnId());
 };
 
 class FileWriterBase {
@@ -129,6 +137,7 @@ protected:
     std::unique_ptr<ChunkWriter> _chunk_writer;
 
     std::vector<TypeDescriptor> _type_descs;
+    std::function<StatusOr<ColumnPtr>(Chunk*, size_t)> _eval_func;
     std::shared_ptr<::parquet::FileMetaData> _file_metadata;
 
     const static int64_t kDefaultMaxRowGroupSize = 128 * 1024 * 1024; // 128MB
@@ -161,8 +170,8 @@ private:
 
 class AsyncFileWriter : public FileWriterBase {
 public:
-    AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::string file_name, std::string& file_dir,
-                    std::shared_ptr<::parquet::WriterProperties> properties,
+    AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::string file_location,
+                    std::string partition_location, std::shared_ptr<::parquet::WriterProperties> properties,
                     std::shared_ptr<::parquet::schema::GroupNode> schema,
                     const std::vector<ExprContext*>& output_expr_ctxs, PriorityThreadPool* executor_pool,
                     RuntimeProfile* parent_profile);
@@ -170,7 +179,7 @@ public:
     ~AsyncFileWriter() override = default;
 
     Status close(RuntimeState* state,
-                 std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> cb = nullptr);
+                 const std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)>& cb = nullptr);
 
     bool writable() {
         auto lock = std::unique_lock(_m);
@@ -179,16 +188,15 @@ public:
 
     bool closed() const override { return _closed.load(); }
 
-    std::string file_name() const { return _file_name; }
+    std::string file_location() const { return _file_location; }
 
-    std::string file_dir() const { return _file_dir; }
+    std::string partition_location() const { return _partition_location; }
 
 private:
     void _flush_row_group() override;
 
-    std::string _file_name;
-    std::string _file_dir;
-
+    std::string _file_location;
+    std::string _partition_location;
     std::atomic<bool> _closed = false;
 
     PriorityThreadPool* _executor_pool;

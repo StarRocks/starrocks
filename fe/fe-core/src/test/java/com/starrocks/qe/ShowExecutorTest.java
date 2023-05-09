@@ -57,14 +57,15 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RandomDistributionInfo;
-import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -1027,7 +1028,7 @@ public class ShowExecutorTest {
                 "AS select col1, col2 from table1;";
 
         Assert.assertTrue(resultSet.next());
-        List<Column> mvSchemaTable = SchemaTable.getSchemaTable("materialized_views").getFullSchema();
+        List<Column> mvSchemaTable = MaterializedViewsSystemTable.create().getFullSchema();
         Assert.assertEquals("1000", resultSet.getString(0));
         Assert.assertEquals("testDb", resultSet.getString(1));
         Assert.assertEquals("testMv", resultSet.getString(2));
@@ -1155,6 +1156,20 @@ public class ShowExecutorTest {
                 "PROPERTIES (\"type\"  =  \"hive\",\n" +
                 "\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\"\n" +
                 ")", resultSet.getResultRows().get(0).get(1));
+    }
+
+    @Test
+    public void testShowCreateExternalCatalogNotExists() {
+        new MockUp<CatalogMgr>() {
+            @Mock
+            public Catalog getCatalogByName(String name) {
+                return null;
+            }
+        };
+
+        ShowCreateExternalCatalogStmt stmt = new ShowCreateExternalCatalogStmt("catalog_not_exist");
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Unknown catalog 'catalog_not_exist'", executor::execute);
     }
 
     @Test

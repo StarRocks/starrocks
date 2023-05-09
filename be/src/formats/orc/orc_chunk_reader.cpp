@@ -735,6 +735,7 @@ static std::unordered_map<LogicalType, orc::PredicateDataType> _supported_logica
         {LogicalType::TYPE_DATE, orc::PredicateDataType::DATE},
         //TYPE_DATETIME, /* 12 */
         {LogicalType::TYPE_BINARY, orc::PredicateDataType::STRING},
+        {LogicalType::TYPE_VARBINARY, orc::PredicateDataType::STRING},
         {LogicalType::TYPE_CHAR, orc::PredicateDataType::STRING},
         {LogicalType::TYPE_DECIMALV2, orc::PredicateDataType::DECIMAL},
         // TYPE_TIME,       /* 21 */
@@ -852,6 +853,7 @@ static StatusOr<orc::Literal> translate_to_orc_literal(Expr* lit, orc::Predicate
         return {datum.get_double()};
     case LogicalType::TYPE_VARCHAR:
     case LogicalType::TYPE_CHAR:
+    case LogicalType::TYPE_VARBINARY:
     case LogicalType::TYPE_BINARY: {
         const Slice& slice = datum.get_slice();
         return orc::Literal{slice.data, slice.size};

@@ -299,6 +299,40 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select empid as col2, locations.locationid from emps " +
                 "join locations on emps.locationid = locations.locationid " +
                 "and locations.locationid > 10");
+        testRewriteOK(mv, "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where emps.locationid=10");
+    }
+
+    @Test
+    public void testsInnerJoinCompleteWithPredicates() {
+        String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where empid = 10 group by empid,emps.locationid");
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where locations.locationid= 10 " +
+                "group by empid,emps.locationid");
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where emps.locationid= 10 " +
+                "group by empid,emps.locationid");
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where emps.locationid= 10 " +
+                "group by empid,emps.locationid");
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from " +
+                "locations inner join emps on locations.locationid = emps.locationid where emps.locationid= 10 " +
+                "group by empid,emps.locationid");
+    }
+
+    @Test
+    public void testsInnerJoinCompleteWithPredicates2() {
+        String mv = "select locations.name, locations.locationid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid group by locations.name,locations.locationid";
+        testRewriteOK(mv, "select locations.name, emps.locationid, sum(emps.deptno) as col3 from " +
+                "locations inner join emps on locations.locationid = emps.locationid where emps.locationid= 10 " +
+                "group by locations.name,emps.locationid");
+        testRewriteOK(mv, "select locations.name, emps.locationid, sum(emps.deptno) as col3 from " +
+                "locations inner join emps on locations.locationid = emps.locationid where locations.locationid>10 " +
+                "group by locations.name,emps.locationid");
     }
 
     @Test
@@ -556,7 +590,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select count(*) from " +
                 "locations join emps on emps.locationid = locations.locationid + 1 " +
                 "group by emps.deptno");
-        testRewriteFail(mv, "select count(*) , emps.deptno from " +
+        testRewriteOK(mv, "select count(*) , emps.deptno from " +
                 "locations join emps on emps.locationid = locations.locationid + 1 " +
                 "where emps.deptno > 10 " +
                 "group by emps.deptno");
@@ -2306,5 +2340,110 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         String mv = "select user_id, time, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id, time;";
         testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testQueryWithLimitRewrite() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `aggregate_table_with_null` (\n" +
+                "  `k1` date NULL COMMENT \"\",\n" +
+                "  `k2` datetime NULL COMMENT \"\",\n" +
+                "  `k3` char(20) NULL COMMENT \"\",\n" +
+                "  `k4` varchar(20) NULL COMMENT \"\",\n" +
+                "  `k5` boolean NULL COMMENT \"\",\n" +
+                "  `v1` bigint(20) SUM NULL COMMENT \"\",\n" +
+                "  `v2` bigint(20) SUM NULL COMMENT \"\",\n" +
+                "  `v3` bigint(20) SUM NULL COMMENT \"\",\n" +
+                "  `v4` bigint(20) MAX NULL COMMENT \"\",\n" +
+                "  `v5` largeint(40) MAX NULL COMMENT \"\",\n" +
+                "  `v6` float MIN NULL COMMENT \"\",\n" +
+                "  `v7` double MIN NULL COMMENT \"\",\n" +
+                "  `v8` decimal128(38, 9) SUM NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"V2\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `duplicate_table_with_null_partition` (\n" +
+                "  `k1` date NULL COMMENT \"\",\n" +
+                "  `k2` datetime NULL COMMENT \"\",\n" +
+                "  `k3` char(20) NULL COMMENT \"\",\n" +
+                "  `k4` varchar(20) NULL COMMENT \"\",\n" +
+                "  `k5` boolean NULL COMMENT \"\",\n" +
+                "  `k6` tinyint(4) NULL COMMENT \"\",\n" +
+                "  `k7` smallint(6) NULL COMMENT \"\",\n" +
+                "  `k8` int(11) NULL COMMENT \"\",\n" +
+                "  `k9` bigint(20) NULL COMMENT \"\",\n" +
+                "  `k10` largeint(40) NULL COMMENT \"\",\n" +
+                "  `k11` float NULL COMMENT \"\",\n" +
+                "  `k12` double NULL COMMENT \"\",\n" +
+                "  `k13` decimal128(27, 9) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`k1`)\n" +
+                "(PARTITION p202006 VALUES [(\"0000-01-01\"), (\"2020-07-01\")),\n" +
+                "PARTITION p202007 VALUES [(\"2020-07-01\"), (\"2020-08-01\")),\n" +
+                "PARTITION p202008 VALUES [(\"2020-08-01\"), (\"2020-09-01\")))\n" +
+                "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"V2\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");");
+        {
+            String query = "SELECT t1.k1 k1, t2.k2 k2" +
+                    " from duplicate_table_with_null_partition t1 join aggregate_table_with_null t2" +
+                    " on t1.k1 = t2.k1 limit 10";
+            String mv = "SELECT t1.k1 k1, t2.k2 k2" +
+                    " from duplicate_table_with_null_partition t1 join aggregate_table_with_null t2" +
+                    " on t1.k1 = t2.k1";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("limit: 10");
+        }
+
+        {
+            String query = "SELECT t1.k1 k1, sum(t2.v1) as s" +
+                    " from duplicate_table_with_null_partition t1 join aggregate_table_with_null t2" +
+                    " on t1.k1 = t2.k1 group by t1.k1 limit 10";
+            String mv = "SELECT t1.k1 k1, sum(t2.v1) as s" +
+                    " from duplicate_table_with_null_partition t1 join aggregate_table_with_null t2" +
+                    " on t1.k1 = t2.k1 group by t1.k1";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("limit: 10");
+        }
+        starRocksAssert.dropTable("duplicate_table_with_null_partition");
+        starRocksAssert.dropTable("aggregate_table_with_null");
+    }
+
+    @Test
+    public void testUnionRewrite() {
+        {
+            String mv = "SELECT `customer`.`c_custkey`, `customer`.`c_name`, `customer`.`c_address`, `customer`.`c_city`," +
+                    " `customer`.`c_nation`, `customer`.`c_region`, `customer`.`c_phone`, `customer`.`c_mktsegment`\n" +
+                    "FROM `customer`\n" +
+                    "WHERE `customer`.`c_city` = 'ETHIOPIA 9'";
+            String query = "select * from lineorder, customer";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "SELECT `customer`.`c_custkey`, `customer`.`c_name`, `customer`.`c_address`, `customer`.`c_city`," +
+                    " `customer`.`c_nation`, `customer`.`c_region`, `customer`.`c_phone`, `customer`.`c_mktsegment`\n" +
+                    "FROM `customer`\n" +
+                    "WHERE `customer`.`c_city` = 'ETHIOPIA 9'";
+            String query = "select * from customer, lineorder";
+            testRewriteOK(mv, query);
+        }
     }
 }

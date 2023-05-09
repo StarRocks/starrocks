@@ -91,6 +91,8 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
             LOG(INFO) << "Ignore the parquet file because of unexpected nullptr FileMetaData";
             return Status::EndOfFile("Unexpected nullptr FileMetaData");
         }
+
+        _num_rows = _file_metadata->num_rows();
         // initial members
         _total_groups = _file_metadata->num_row_groups();
         if (_total_groups == 0) {
@@ -260,6 +262,10 @@ ParquetChunkReader::ParquetChunkReader(std::shared_ptr<ParquetReaderWrap>&& parq
 
 ParquetChunkReader::~ParquetChunkReader() {
     _parquet_reader->close();
+}
+
+int64_t ParquetChunkReader::total_num_rows() const {
+    return _parquet_reader->num_rows();
 }
 
 Status ParquetChunkReader::next_batch(RecordBatchPtr* batch) {
