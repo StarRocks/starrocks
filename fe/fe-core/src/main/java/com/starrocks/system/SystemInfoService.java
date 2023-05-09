@@ -604,6 +604,23 @@ public class SystemInfoService {
         return backendIds;
     }
 
+<<<<<<< HEAD
+=======
+    public List<Long> getAvailableComputeNodeIds() {
+        ImmutableMap<Long, ComputeNode>  idToComputeNode = idToComputeNodeRef;
+        List<Long> computeNodeIds = Lists.newArrayList(idToComputeNode.keySet());
+
+        Iterator<Long> iter = computeNodeIds.iterator();
+        while (iter.hasNext()) {
+            ComputeNode cn = this.getComputeNode(iter.next());
+            if (cn == null || !cn.isAvailable()) {
+                iter.remove();
+            }
+        }
+        return computeNodeIds;
+    }
+
+>>>>>>> 4a12f5f7a ([BugFix] Fix unstable ut for decommission test (#23068))
     public List<Backend> getBackends() {
         return idToBackendRef.values().asList();
     }
