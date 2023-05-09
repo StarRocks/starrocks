@@ -150,7 +150,7 @@ public class ExpressionPartitionDesc extends PartitionDesc {
             try {
                 RangePartitionInfo.checkRangeColumnType(column);
             } catch (AnalysisException e) {
-                throw new RuntimeException(e.getMessage());
+                throw new DdlException(e.getMessage());
             }
         }
 
