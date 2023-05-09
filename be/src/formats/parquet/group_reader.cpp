@@ -32,7 +32,7 @@ constexpr static const LogicalType kDictCodeFieldType = TYPE_INT;
 
 GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, const std::set<std::int64_t>* need_skip_rowids,
                          int64_t row_group_first_row)
-        : _row_group_first_row(row_group_number), _need_skip_rowids(need_skip_rowids), _param(param) {
+        : _row_group_first_row(row_group_first_row), _need_skip_rowids(need_skip_rowids), _param(param) {
     _row_group_metadata =
             std::make_shared<tparquet::RowGroup>(param.file_metadata->t_metadata().row_groups[row_group_number]);
 }
@@ -89,7 +89,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         auto end_iter =
                 upper_bound(_need_skip_rowids->begin(), _need_skip_rowids->end(), current_chunk_base_row + count);
         for (; start_iter != end_iter; start_iter++) {
-            chunk_filter[*start_iter] = 0;
+            chunk_filter[*start_iter - current_chunk_base_row] = 0;
             has_filter = true;
         }
     }
