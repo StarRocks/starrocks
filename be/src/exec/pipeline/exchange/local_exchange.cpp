@@ -187,8 +187,9 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
     }
 
     Partition2RowIndexes partition_row_indexes;
+    auto partition_columns_ptr = std::make_shared<Columns>(partitions_columns);
     for (int i = 0; i < num_rows; ++i) {
-        auto partition_key = std::make_shared<PartitionKey>(std::make_shared<Columns>(partitions_columns), i);
+        auto partition_key = std::make_shared<PartitionKey>(partition_columns_ptr, i);
         auto partition_row_index = partition_row_indexes.find(partition_key);
         if (partition_row_index == partition_row_indexes.end()) {
             partition_row_indexes.emplace(std::move(partition_key), std::make_shared<std::vector<uint32_t>>(1, i));
