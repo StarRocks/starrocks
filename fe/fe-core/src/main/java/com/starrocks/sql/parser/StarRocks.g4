@@ -38,6 +38,7 @@ statement
     | showClustersStatement
     | suspendWarehouseStatement
     | resumeWarehouseStatement
+    | test
 
     // Database Statement
     | useDatabaseStatement
