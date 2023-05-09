@@ -517,16 +517,10 @@ build_rocksdb() {
 # sasl
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
-
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    sh ./autogen.sh
-    ./configure --prefix=$TP_INSTALL_DIR  --enable-static=yes
+    ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=no --enable-static=yes --enable-shared=no
     make -j$PARALLEL
     make install
-    cd $TP_INSTALL_DIR/lib
-    ls | grep sasl | grep so | xargs rm -rf
-    cd $TP_INSTALL_DIR/lib/sasl2
-    find . | grep so | xargs rm -rf
 }
 
 # librdkafka
