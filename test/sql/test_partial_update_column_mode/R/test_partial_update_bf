@@ -1,0 +1,48 @@
+-- name: test_partial_update_bf
+show backends;
+CREATE table tab1 (
+      k1 INTEGER,
+      k2 VARCHAR(50),
+      v1 INTEGER,
+      v2 varchar(50),
+      v3 varchar(50)
+)
+ENGINE=OLAP
+PRIMARY KEY(`k1`,`k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1",
+    "bloom_filter_columns" = "v2"
+);
+-- result:
+-- !result
+insert into tab1 values (100, "100", 100, "100", "100");
+-- result:
+-- !result
+insert into tab1 values (200, "100", 100, "100", "100");
+-- result:
+-- !result
+insert into tab1 values (300, "100", 100, "100", "100");
+-- result:
+-- !result
+insert into tab1 values (400, "100", 100, "100", "100");
+-- result:
+-- !result
+insert into tab1 values (500, "100", 100, "100", "100");
+-- result:
+-- !result
+select * from tab1;
+-- result:
+100	100	100	100	100
+200	100	100	100	100
+500	100	100	100	100
+400	100	100	100	100
+300	100	100	100	100
+-- !result
+update tab1 set v2 = "600";
+-- result:
+-- !result
+select count(*) from tab1 where v2 = "600";
+-- result:
+5
+-- !result
