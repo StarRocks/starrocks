@@ -184,7 +184,12 @@ IcebergTableSinkOperatorFactory::IcebergTableSinkOperatorFactory(int32_t id, Fra
           _file_format(thrift_sink.file_format),
           _compression_codec(thrift_sink.compression_type),
           _cloud_conf(thrift_sink.cloud_configuration),
-          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {}
+          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {
+    DCHECK(thrift_sink.__isset.location);
+    DCHECK(thrift_sink.__isset.file_format);
+    DCHECK(thrift_sink.__isset.compression_type);
+    DCHECK(thrift_sink.__isset.cloud_configuration);
+}
 
 Status IcebergTableSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
