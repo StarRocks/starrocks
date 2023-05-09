@@ -314,8 +314,8 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
                     -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
                     -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \
-                    -DCURL_LIBRARY=${STARLET_INSTALL_DIR}/third_party/lib/libcurl.a \
-                    -DCURL_INCLUDE_DIR=${STARLET_INSTALL_DIR}/third_party/include \
+                    -DCURL_LIBRARY=${STARROCKS_THIRDPARTY}/installed/lib/libcurl.a \
+                    -DCURL_INCLUDE_DIR=${STARROCKS_THIRDPARTY}/installed/include \
                     -DLIBXML2_INCLUDE_DIR=${STARLET_INSTALL_DIR}/third_party/include/libxml2 \
                     -DLIBXML2_LIBRARY=${STARLET_INSTALL_DIR}/third_party/lib/libxml2.a \
                     -Dazure-core-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/share/azure-core-cpp \
