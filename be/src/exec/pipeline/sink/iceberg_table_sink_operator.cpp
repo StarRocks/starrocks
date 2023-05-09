@@ -244,8 +244,8 @@ void merge_stats(const std::shared_ptr<::parquet::Statistics>& left,
         MergeStats_BATCH_CASE(::parquet::Type::DOUBLE);
         MergeStats_BATCH_CASE(::parquet::Type::BYTE_ARRAY);
         MergeStats_BATCH_CASE(::parquet::Type::FIXED_LEN_BYTE_ARRAY);
-        default: {
-        }
+    default: {
+    }
     }
 }
 
