@@ -202,9 +202,8 @@ public class LeaderImpl {
                 LOG.warn("backend does not found. host: {}, be port: {}. task: {}", host, bePort, request.toString());
                 return result;
             }
-        } else {
-            backendId = cn.getId();
         }
+        backendId = cn.getId();
 
         TTaskType taskType = request.getTask_type();
         long signature = request.getSignature();

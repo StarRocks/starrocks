@@ -168,11 +168,7 @@ public class SystemInfoService {
 
         setComputeNodeOwner(newComputeNode);
 
-        // add it to warehouse
-        Warehouse currentWarehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-        currentWarehouse.getAnyAvailableCluster().addNode(newComputeNode.getId());
-
+        addComputeNodeIntoWarehouse(newComputeNode);
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
@@ -183,6 +179,22 @@ public class SystemInfoService {
         Preconditions.checkState(cluster != null);
         cluster.addComputeNode(computeNode.getId());
         computeNode.setBackendState(BackendState.using);
+    }
+
+    private void addComputeNodeIntoWarehouse(ComputeNode computeNode) {
+        final Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        if (warehouse != null) {
+            warehouse.getAnyAvailableCluster().addNode(computeNode.getId());
+        }
+    }
+
+    private void dropComputeNodeFromWarehouse(ComputeNode computeNode) {
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        if (warehouse != null) {
+            warehouse.getAnyAvailableCluster().dropNode(computeNode.getId());
+        }
     }
 
     public boolean isSingleBackendAndComputeNode() {
@@ -250,10 +262,7 @@ public class SystemInfoService {
         // add backend to DEFAULT_CLUSTER
         setBackendOwner(newBackend);
 
-        // add it to warehouse
-        Warehouse currentWarehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-        currentWarehouse.getAnyAvailableCluster().addNode(newBackend.getId());
+        addComputeNodeIntoWarehouse(newBackend);
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddBackend(newBackend);
@@ -347,10 +356,7 @@ public class SystemInfoService {
             LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
         }
 
-        // drop it from warehouse
-        Warehouse currentWarehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-        currentWarehouse.getAnyAvailableCluster().dropNode(dropComputeNode.getId());
+        dropComputeNodeFromWarehouse(dropComputeNode);
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog()
@@ -466,13 +472,7 @@ public class SystemInfoService {
             LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
         }
 
-
-        // drop it from warehouse
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-        if (warehouse != null) {
-            warehouse.getAnyAvailableCluster().dropNode(droppedBackend.getId());
-        }
+        dropComputeNodeFromWarehouse(droppedBackend);
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logDropBackend(droppedBackend);
@@ -1084,7 +1084,6 @@ public class SystemInfoService {
         ComputeNode cn = copiedComputeNodes.remove(computeNodeId);
         idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
 
-
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
@@ -1093,12 +1092,7 @@ public class SystemInfoService {
             LOG.error("Cluster DEFAULT_CLUSTER " + DEFAULT_CLUSTER + " no exist.");
         }
 
-        // drop it from warehouse
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-        if (warehouse != null) {
-            warehouse.getAnyAvailableCluster().dropNode(cn.getId());
-        }
+        dropComputeNodeFromWarehouse(cn);
 
         // clear map in starosAgent
         if (RunMode.allowCreateLakeTable()) {
@@ -1129,13 +1123,6 @@ public class SystemInfoService {
         if (null != cluster) {
             cluster.removeBackend(backend.getId());
 
-            // drop it from warehouse
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                    getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            if (warehouse != null) {
-                warehouse.getAnyAvailableCluster().dropNode(backend.getId());
-            }
-
             // clear map in starosAgent
             if (RunMode.allowCreateLakeTable()) {
                 long starletPort = backend.getStarletPort();
@@ -1149,6 +1136,8 @@ public class SystemInfoService {
         } else {
             LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
         }
+
+        dropComputeNodeFromWarehouse(backend);
     }
 
     public void updateBackendState(Backend be) {
