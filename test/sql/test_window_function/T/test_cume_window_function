@@ -68,8 +68,8 @@ VALUES (1, 10, 15, 2.5, '2023-01-01', 'apple'),
        (16, 8, 50, 11.5, null, null),
        (16, 7, 50, 12.5, '2023-02-24', null),
        (16, 6, 55, 13.5, '2023-02-25', 'acerola'),
-       (16, 5, 60, 13.5, '2023-02-26', 'bilberry'),
-       (17, 4, null, 13.5, null, 'cloudberry'),
+       (16, 5, null, 13.5, '2023-02-26', 'bilberry'),
+       (17, 4, 60, 13.5, null, 'cloudberry'),
        (17, 3, 60, 14.5, '2023-02-28', 'dewberry');
 
 SELECT *, CUME_DIST() OVER () AS cume_dist_without_order_by FROM cume_test;
