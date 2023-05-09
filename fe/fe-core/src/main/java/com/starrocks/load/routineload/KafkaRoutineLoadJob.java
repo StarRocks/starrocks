@@ -116,12 +116,6 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     public KafkaRoutineLoadJob(Long id, String name,
-                               long dbId, long tableId, String brokerList, String topic, boolean enableProfile) {
-        this(id, name, dbId, tableId, brokerList, topic);
-        this.enableProfile = enableProfile;
-    }
-
-    public KafkaRoutineLoadJob(Long id, String name,
                                long dbId, long tableId, String brokerList, String topic) {
         super(id, name, dbId, tableId, LoadDataSourceType.KAFKA);
         this.brokerList = brokerList;
@@ -420,7 +414,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         // init kafka routine load job
         long id = GlobalStateMgr.getCurrentState().getNextId();
         KafkaRoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob(id, stmt.getName(),
-                db.getId(), tableId, stmt.getKafkaBrokerList(), stmt.getKafkaTopic(), stmt.isEnableProfile());
+                db.getId(), tableId, stmt.getKafkaBrokerList(), stmt.getKafkaTopic());
         kafkaRoutineLoadJob.setOptional(stmt);
         kafkaRoutineLoadJob.checkCustomProperties();
         kafkaRoutineLoadJob.checkCustomPartition(kafkaRoutineLoadJob.customKafkaPartitions);

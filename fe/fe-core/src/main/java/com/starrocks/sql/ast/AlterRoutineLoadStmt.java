@@ -56,7 +56,6 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             .add(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
-            .add(LoadStmt.ENABLE_PROFILE)
             .build();
 
     private LabelName labelName;
@@ -208,11 +207,6 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         if (jobProperties.containsKey(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY)) {
             boolean stripOuterArray = Boolean.valueOf(jobProperties.get(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY));
             analyzedJobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, String.valueOf(stripOuterArray));
-        }
-
-        if (jobProperties.containsKey(CreateRoutineLoadStmt.ENABLE_PROFILE)) {
-            boolean enableProfile = Boolean.valueOf(jobProperties.get(CreateRoutineLoadStmt.ENABLE_PROFILE));
-            analyzedJobProperties.put(CreateRoutineLoadStmt.ENABLE_PROFILE, String.valueOf(enableProfile));
         }
     }
 

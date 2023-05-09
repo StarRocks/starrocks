@@ -229,6 +229,8 @@ import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionState.TxnCoordinator;
+import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -1164,7 +1166,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                 db.getId(), Lists.newArrayList(table.getId()), request.getLabel(), request.getRequest_id(),
-                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, clientIp),
+                new TxnCoordinator(TxnSourceType.BE, clientIp),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, timeoutSecond);
     }
 

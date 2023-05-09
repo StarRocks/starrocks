@@ -124,7 +124,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     public static final long DEFAULT_TASK_SCHED_INTERVAL_SECOND = 10;
     public static final boolean DEFAULT_STRICT_MODE = false; // default is false
 
-    protected boolean enableProfile = false;
 
     protected static final String STAR_STRING = "*";
 
@@ -319,7 +318,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         jobProperties.put(LoadStmt.PARTIAL_UPDATE_MODE, String.valueOf(stmt.getPartialUpdateMode()));
         jobProperties.put(LoadStmt.TIMEZONE, stmt.getTimezone());
         jobProperties.put(LoadStmt.STRICT_MODE, String.valueOf(stmt.isStrictMode()));
-        jobProperties.put(LoadStmt.ENABLE_PROFILE, String.valueOf(stmt.isEnableProfile()));
         if (stmt.getMergeConditionStr() != null) {
             jobProperties.put(LoadStmt.MERGE_CONDITION, stmt.getMergeConditionStr());
         }
@@ -1741,10 +1739,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY)) {
             this.maxBatchRows = Long.parseLong(
                     copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY));
-        }
-        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.ENABLE_PROFILE)) {
-            this.enableProfile = Boolean.parseBoolean(
-                    copiedJobProperties.remove(CreateRoutineLoadStmt.ENABLE_PROFILE));
         }
         this.jobProperties.putAll(copiedJobProperties);
     }

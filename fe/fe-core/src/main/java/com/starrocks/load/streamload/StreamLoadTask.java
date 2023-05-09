@@ -966,14 +966,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
 
     @Override
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
-        LOG.info("start");
         if (!txnOperated) {
             return;
         }
-        LOG.info("stream load task after commited");
+
         // sync stream load collect profile
         if (isSyncStreamLoad() && coord.isEnableLoadProfile()) {
-            LOG.info("enable load profile");
             collectProfile();
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
             // set state to commited for remove by streamLoadManager
@@ -996,6 +994,15 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
     public void collectProfile() {
         long currentTimestamp = System.currentTimeMillis();
         long totalTimeMs = currentTimestamp - createTimeMs;
+
+        // For the usage scenarios of flink cdc or routine load,
+        // the frequency of stream load maybe very high, resulting in many profiles,
+        // but we may only care about the long-duration stream load profile.
+        if (totalTimeMs < Config.stream_load_profile_collect_second * 1000) {
+            LOG.info(String.format("Load %s, totalTimeMs %ld < Config.stream_load_profile_collect_second %ld)",
+                    label, totalTimeMs, Config.stream_load_profile_collect_second));
+            return;
+        }
 
         RuntimeProfile profile = new RuntimeProfile("Load");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
@@ -1027,14 +1034,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                 coord.mergeIsomorphicProfiles(null);
             }
         }
-        // For the usage scenarios of flink cdc or routine load,
-        // the frequency of stream load maybe very high, resulting in many profiles,
-        // but we may only care about the long-duration stream load profile.
-        if (totalTimeMs < Config.stream_load_profile_collect_second * 1000) {
-            LOG.info("totoalTimeMs < Config.stream_load_profile_collect_second * 1000");
-        }
-        String content = ProfileManager.getInstance().pushLoadProfile(profile);
-        LOG.info(content);
+
+        ProfileManager.getInstance().pushLoadProfile(profile);
         return;
     }
 

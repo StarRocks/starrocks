@@ -220,7 +220,7 @@ public abstract class RoutineLoadTaskInfo {
     }
 
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
-        //StreamLoadTask is null, if not specify `enable_profile = true` when creating the routine load job
+        //StreamLoadTask is null, if not specify session variable `enable_profile = true`
         if (streamLoadTask != null) {
             streamLoadTask.afterCommitted(txnState, txnOperated);
         }
