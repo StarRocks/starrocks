@@ -97,6 +97,7 @@ set(UTIL_FILES
   tdigest.cpp
   debug/query_trace_impl.cpp
   random.cc
+  stack_trace_mutex.cpp
 )
 
 add_library(Util STATIC

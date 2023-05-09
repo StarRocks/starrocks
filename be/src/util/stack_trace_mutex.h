@@ -22,6 +22,8 @@
 #include <condition_variable>
 #include <mutex>
 #include <ratio>
+#include <string>
+#include <vector>
 
 #include "common/compiler_util.h"
 #include "common/logging.h"
@@ -31,10 +33,13 @@
 
 namespace starrocks {
 
+extern void save_stack_trace_of_long_wait_mutex(const std::string& stack_trace);
+extern std::vector<std::string> list_stack_trace_of_long_wait_mutex();
+
 // If the lock() method failed to acquire the mutex for a long time(5 minutes), print a
 // log message with call stack. Mainly used to detect dead lock in production environments.
 // Example output:
-// I0426 21:05:30.956799 22284 timed_retry_mutex.h:78] Long wait mutex:
+// I0426 21:05:30.956799 22284 stack_trace_mutex.h:78] Long wait mutex:
 //    @          0x5d760ca  starrocks::lake::AsyncDeltaWriter::open()
 //    @          0x5d72a36  starrocks::LakeTabletsChannel::add_chunk()
 //    @          0x5cc0f1f  starrocks::LoadChannel::_add_chunk()
@@ -48,15 +53,17 @@ namespace starrocks {
 //    @          0x7106e8f  bthread::TaskGroup::task_runner()
 //    @          0x710b5c1  bthread_make_fcontext
 template <typename Mutex>
-class TimedRetryMutex {
+class StackTraceMutex {
 public:
-    TimedRetryMutex() : _mutex() {}
+    StackTraceMutex() : _mutex() {}
 
-    DISALLOW_COPY_AND_MOVE(TimedRetryMutex);
+    DISALLOW_COPY_AND_MOVE(StackTraceMutex);
 
     void lock() {
         while (!try_lock_for(std::chrono::minutes(5))) {
-            LOG(INFO) << "Long wait mutex:\n" << get_stack_trace();
+            auto trace = get_stack_trace();
+            save_stack_trace_of_long_wait_mutex(trace);
+            LOG(INFO) << "Long wait mutex:\n" << trace;
         }
     }
 
@@ -83,13 +90,15 @@ private:
 // Specialize for bthread_mutex_t
 
 template <>
-class TimedRetryMutex<bthread::Mutex> {
+class StackTraceMutex<bthread::Mutex> {
 public:
-    TimedRetryMutex() : _mutex() {}
+    StackTraceMutex() : _mutex() {}
 
     void lock() {
         while (!try_lock_for(std::chrono::minutes(5))) {
-            LOG(INFO) << "Long wait mutex:\n" << get_stack_trace();
+            auto trace = get_stack_trace();
+            save_stack_trace_of_long_wait_mutex(trace);
+            LOG(INFO) << "Long wait mutex:\n" << trace;
         }
     }
 
@@ -135,8 +144,5 @@ public:
 private:
     bthread::Mutex _mutex;
 };
-
-using STLTimedRetryMutex = TimedRetryMutex<std::timed_mutex>;
-using BthreadTimedRetryMutex = TimedRetryMutex<bthread::Mutex>;
 
 } // namespace starrocks

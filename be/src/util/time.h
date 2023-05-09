@@ -34,9 +34,7 @@
 
 #pragma once
 
-#include <stdint.h>   // int64_t, uint64_t
 #include <sys/time.h> // timeval, gettimeofday
-#include <time.h>     // timespec, clock_gettime
 
 #include <chrono>
 #include <cstdint>
