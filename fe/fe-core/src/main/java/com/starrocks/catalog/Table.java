@@ -550,6 +550,11 @@ public class Table extends MetaObject implements Writable {
         return false;
     }
 
+    public boolean hasUniqueConstraints() {
+        List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
+        return uniqueConstraint != null;
+    }
+
     public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
         this.uniqueConstraints = uniqueConstraints;
     }

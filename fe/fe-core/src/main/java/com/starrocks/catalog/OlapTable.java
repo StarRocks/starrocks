@@ -1973,11 +1973,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return tableProperty.getCompressionType();
     }
 
-    public boolean hasUniqueConstraints() {
-        List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
-        return uniqueConstraint != null;
-    }
-
     @Override
     public List<UniqueConstraint> getUniqueConstraints() {
         if (tableProperty == null) {
