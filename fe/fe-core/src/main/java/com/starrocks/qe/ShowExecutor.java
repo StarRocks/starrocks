@@ -950,20 +950,20 @@ public class ShowExecutor {
         String dbName = showStmt.getDb();
         List<List<String>> rows = Lists.newArrayList();
 
+        Database db;
         if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
-            Database db = connectContext.getGlobalStateMgr().getDb(dbName);
-            MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
-            rows.add(Lists.newArrayList(showStmt.getDb(),
-                    "CREATE DATABASE `" + showStmt.getDb() + "`"));
-        } else { // external database
-            MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-            Database db = metadataMgr.getDb(catalogName, dbName);
-            MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
-            rows.add(Lists.newArrayList(showStmt.getDb(),
-                    "CREATE DATABASE `" + showStmt.getDb() + "`\n" +
-                    "PROPERTIES (\"location\" = \"" + db.getLocation() + "\")"));
+            db = connectContext.getGlobalStateMgr().getDb(dbName);
+        } else {
+            db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
         }
+        MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
 
+        StringBuilder createSqlBuilder = new StringBuilder();
+        createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
+        if (!Strings.isNullOrEmpty(db.getLocation())) {
+            createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
+        }
+        rows.add(Lists.newArrayList(showStmt.getDb(), createSqlBuilder.toString()));
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
