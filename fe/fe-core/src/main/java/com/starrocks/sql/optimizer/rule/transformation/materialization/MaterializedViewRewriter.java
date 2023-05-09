@@ -270,8 +270,8 @@ public class MaterializedViewRewriter {
             final Map<Table, Set<Integer>> compensationRelations = Maps.newHashMap();
             final Map<Integer, Integer> expectedExtraQueryToMVRelationIds = Maps.newHashMap();
             if (!compensateViewDelta(viewEquivalenceClasses, mvTableScanDescs, mvExtraTableScanDescs,
-                    materializationContext.getQueryRefFactory(), materializationContext.getMvColumnRefFactory(),
-                    compensationJoinColumns, compensationRelations, expectedExtraQueryToMVRelationIds)) {
+                    compensationJoinColumns, compensationRelations, expectedExtraQueryToMVRelationIds,
+                    materializationContext)) {
                 continue;
             }
 
@@ -387,11 +387,14 @@ public class MaterializedViewRewriter {
             EquivalenceClasses viewEquivalenceClasses,
             List<TableScanDesc> mvTableScanDescs,
             List<TableScanDesc> mvExtraTableScanDescs,
-            ColumnRefFactory queryRefFactory,
-            ColumnRefFactory mvRefFactory,
             Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns,
             Map<Table, Set<Integer>> compensationRelations,
-            Map<Integer, Integer> expectedExtraQueryToMVRelationIds) {
+            Map<Integer, Integer> expectedExtraQueryToMVRelationIds,
+            MaterializationContext materializationContext) {
+        MaterializedView materializedView = materializationContext.getMv();
+        ColumnRefFactory queryRefFactory = materializationContext.getQueryRefFactory();
+        ColumnRefFactory mvRefFactory = materializationContext.getMvColumnRefFactory();
+
         // use directed graph to construct foreign key join graph
         MutableGraph<TableScanDesc> mvGraph = GraphBuilder.directed().build();
         Map<TableScanDesc, List<ColumnRefOperator>> extraTableColumns = Maps.newHashMap();
@@ -405,7 +408,21 @@ public class MaterializedViewRewriter {
         for (TableScanDesc mvTableScanDesc : mvGraph.nodes()) {
             Table mvChildTable = mvTableScanDesc.getTable();
             List<ForeignKeyConstraint> foreignKeyConstraints = mvChildTable.getForeignKeyConstraints();
+            List<ForeignKeyConstraint> mvForeignKeyConstraints = Lists.newArrayList();
+            if (materializedView.getForeignKeyConstraints() != null) {
+                // add ForeignKeyConstraint from mv
+                materializedView.getForeignKeyConstraints().stream().filter(foreignKeyConstraint ->
+                        foreignKeyConstraint.getChildTableInfo() != null &&
+                                foreignKeyConstraint.getChildTableInfo().getTable().equals(mvChildTable)).
+                        forEach(mvForeignKeyConstraints::add);
+            }
+
             if (foreignKeyConstraints == null) {
+                foreignKeyConstraints = mvForeignKeyConstraints;
+            } else if (materializedView.getForeignKeyConstraints() != null) {
+                foreignKeyConstraints.addAll(mvForeignKeyConstraints);
+            }
+            if (foreignKeyConstraints.isEmpty()) {
                 continue;
             }
 
@@ -420,10 +437,18 @@ public class MaterializedViewRewriter {
                         .map(String::toLowerCase).collect(Collectors.toList());
                 List<String> parentKeys = columnPairs.stream().map(pair -> pair.second)
                         .map(String::toLowerCase).collect(Collectors.toList());
+
+                Table foreignKeyParentTable = foreignKeyConstraint.getParentTableInfo().getTable();
                 for (TableScanDesc mvParentTableScanDesc : mvParentTableScanDescs) {
+                    Table parentTable = mvParentTableScanDesc.getTable();
+                    // check the parent table is the same table in the foreign key constraint
+                    if (!parentTable.equals(foreignKeyParentTable)) {
+                        continue;
+                    }
+
                     Multimap<ColumnRefOperator, ColumnRefOperator> constraintCompensationJoinColumns = ArrayListMultimap.create();
                     if (!extraJoinCheck(mvParentTableScanDesc, mvTableScanDesc, columnPairs, childKeys, parentKeys,
-                            viewEquivalenceClasses, constraintCompensationJoinColumns)) {
+                            viewEquivalenceClasses, constraintCompensationJoinColumns, materializedView)) {
                         continue;
                     }
 
@@ -462,11 +487,33 @@ public class MaterializedViewRewriter {
         return true;
     }
 
+    private boolean hasForeignKeyConstraintInMv(Table childTable, MaterializedView materializedView,
+                                                List<String> childKeys) {
+        if (materializedView.getForeignKeyConstraints() == null) {
+            return false;
+        }
+        Set<String> childKeySet = Sets.newHashSet(childKeys);
+
+        for (ForeignKeyConstraint foreignKeyConstraint : materializedView.getForeignKeyConstraints()) {
+            if (foreignKeyConstraint.getChildTableInfo() != null &&
+                    foreignKeyConstraint.getChildTableInfo().getTable().equals(childTable)) {
+                List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnRefPairs();
+                Set<String> mvChildKeySet = columnPairs.stream().map(pair -> pair.first)
+                        .map(String::toLowerCase).collect(Collectors.toSet());
+                if (childKeySet.equals(mvChildKeySet)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private boolean extraJoinCheck(
             TableScanDesc parentTableScanDesc, TableScanDesc tableScanDesc,
             List<Pair<String, String>> columnPairs, List<String> childKeys, List<String> parentKeys,
             EquivalenceClasses viewEquivalenceClasses,
-            Multimap<ColumnRefOperator, ColumnRefOperator> constraintCompensationJoinColumns) {
+            Multimap<ColumnRefOperator, ColumnRefOperator> constraintCompensationJoinColumns,
+            MaterializedView materializedView) {
         Table parentTable = parentTableScanDesc.getTable();
         Table childTable = tableScanDesc.getTable();
         JoinOperator parentJoinType = parentTableScanDesc.getParentJoinType();
@@ -475,17 +522,19 @@ public class MaterializedViewRewriter {
             // 1. childKeys should be foreign key
             // 2. childKeys should be not null
             // 3. parentKeys should be unique
-            if (!isUniqueKeys(parentTable, parentKeys)) {
+            if (!isUniqueKeys(materializedView, parentTable, parentKeys)) {
                 return false;
             }
             // foreign keys are not null
-            if (childKeys.stream().anyMatch(column -> childTable.getColumn(column).isAllowNull())) {
+            // if child table has foreign key constraint in mv, we assume that the foreign key is not null
+            if (childKeys.stream().anyMatch(column -> childTable.getColumn(column).isAllowNull()) &&
+                    !hasForeignKeyConstraintInMv(childTable, materializedView, childKeys)) {
                 return false;
             }
         } else if (parentJoinType.isLeftOuterJoin()) {
             // make sure that all join keys are in foreign keys
             // the join keys of parent table should be unique
-            if (!isUniqueKeys(parentTable, parentKeys)) {
+            if (!isUniqueKeys(materializedView, parentTable, parentKeys)) {
                 return false;
             }
         } else {
@@ -533,10 +582,7 @@ public class MaterializedViewRewriter {
 
         // If all nodes left after removing the preprocessor's size is 1 and successor's size is zero are
         // disjoint with `extraTables`, means `query` can be view-delta compensated.
-        if (Collections.disjoint(graph.nodes(), extraTableScanDescs)) {
-            return true;
-        }
-        return false;
+        return Collections.disjoint(graph.nodes(), extraTableScanDescs);
     }
 
     private void getCompensationRelations(Map<TableScanDesc, List<ColumnRefOperator>> extraTableColumns,
@@ -568,7 +614,14 @@ public class MaterializedViewRewriter {
         }
     }
 
-    private boolean isUniqueKeys(Table table, List<String> lowerCasekeys) {
+    private boolean isUniqueKeys(MaterializedView materializedView, Table table, List<String> lowerCasekeys) {
+        List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
+        if (materializedView.hasUniqueConstraints()) {
+            mvUniqueConstraints = materializedView.getUniqueConstraints().stream().filter(
+                           uniqueConstraint -> table.getName().equals(uniqueConstraint.getTableName()))
+                   .collect(Collectors.toList());
+        }
+
         KeysType tableKeyType = KeysType.DUP_KEYS;
         Set<String> keySet = Sets.newHashSet(lowerCasekeys);
         if (table.isNativeTableOrMaterializedView()) {
@@ -580,11 +633,13 @@ public class MaterializedViewRewriter {
         }
         if (tableKeyType == KeysType.DUP_KEYS) {
             List<UniqueConstraint> uniqueConstraints = table.getUniqueConstraints();
-            if (uniqueConstraints == null || uniqueConstraints.isEmpty()) {
-                return false;
+            if (uniqueConstraints == null) {
+                uniqueConstraints = mvUniqueConstraints;
+            } else {
+                uniqueConstraints.addAll(mvUniqueConstraints);
             }
             for (UniqueConstraint uniqueConstraint : uniqueConstraints) {
-                if (uniqueConstraint.isMatch(keySet)) {
+                if (uniqueConstraint.isMatch(table, keySet)) {
                     return true;
                 }
             }
