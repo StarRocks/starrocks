@@ -42,6 +42,10 @@ RowsetColumnUpdateState::~RowsetColumnUpdateState() {
     if (!_status.ok()) {
         LOG(WARNING) << "bad RowsetColumnUpdateState released tablet:" << _tablet_id;
     }
+    if (_update_mem_tracker != nullptr) {
+        _update_mem_tracker->release(_update_chunk_cache_memory_usage);
+        _update_chunk_cache_memory_usage = 0;
+    }
 }
 
 Status RowsetColumnUpdateState::load(Tablet* tablet, Rowset* rowset, MemTracker* update_mem_tracker) {
@@ -50,7 +54,8 @@ Status RowsetColumnUpdateState::load(Tablet* tablet, Rowset* rowset, MemTracker*
     }
     std::call_once(_load_once_flag, [&] {
         _tablet_id = tablet->tablet_id();
-        _check_if_preload_column_mode_update_data(rowset, update_mem_tracker);
+        _update_mem_tracker = update_mem_tracker;
+        _check_if_preload_column_mode_update_data(rowset);
         _status = _do_load(tablet, rowset);
         if (!_status.ok()) {
             LOG(WARNING) << "load RowsetColumnUpdateState error: " << _status << " tablet:" << _tablet_id << " stack:\n"
@@ -64,10 +69,9 @@ Status RowsetColumnUpdateState::load(Tablet* tablet, Rowset* rowset, MemTracker*
 }
 
 // check if we have memory to preload update data
-void RowsetColumnUpdateState::_check_if_preload_column_mode_update_data(Rowset* rowset,
-                                                                        MemTracker* update_mem_tracker) {
-    if (update_mem_tracker->limit_exceeded() ||
-        update_mem_tracker->consumption() + rowset->total_update_row_size() >= update_mem_tracker->limit()) {
+void RowsetColumnUpdateState::_check_if_preload_column_mode_update_data(Rowset* rowset) {
+    if (_update_mem_tracker->any_limit_exceeded() ||
+        _update_mem_tracker->consumption() + rowset->total_update_row_size() >= _update_mem_tracker->limit()) {
         _enable_preload_column_mode_update_data = false;
     } else {
         _enable_preload_column_mode_update_data = true;
@@ -153,8 +157,21 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, uint32_t idx) {
                 PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
                 if (_enable_preload_column_mode_update_data) {
                     for (int i = pk_columns.size(); i < update_columns_with_keys.size(); i++) {
-                        _memory_usage += chunk->columns()[i]->byte_size();
+                        _update_chunk_cache_memory_usage += chunk->columns()[i]->byte_size();
+                        _update_mem_tracker->consume(chunk->columns()[i]->byte_size());
                         dest_chunk->columns()[i - pk_columns.size()]->append(*chunk->columns()[i]);
+                    }
+                    // disable preload if just find that memory usage is higher than update mem tracker
+                    if (_update_mem_tracker->any_limit_exceeded()) {
+                        _enable_preload_column_mode_update_data = false;
+                        for (uint32_t upt_id = 0; upt_id <= idx; upt_id++) {
+                            if (_update_chunk_cache[upt_id] != nullptr) {
+                                _update_chunk_cache[upt_id]->reset();
+                            }
+                        }
+                        // release memory
+                        _update_mem_tracker->release(_update_chunk_cache_memory_usage);
+                        _update_chunk_cache_memory_usage = 0;
                     }
                 }
             }

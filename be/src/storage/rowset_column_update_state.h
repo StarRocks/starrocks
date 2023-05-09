@@ -144,7 +144,7 @@ private:
                                    std::vector<ChunkIteratorPtr>& update_iterators, std::vector<uint32_t>& rowids,
                                    Chunk* result_chunk);
 
-    void _check_if_preload_column_mode_update_data(Rowset* rowset, MemTracker* update_mem_tracker);
+    void _check_if_preload_column_mode_update_data(Rowset* rowset);
 
 private:
     int64_t _tablet_id = 0;
@@ -155,8 +155,10 @@ private:
     // cache chunks read from update segment files
     std::vector<ChunkPtr> _update_chunk_cache;
     // total memory usage in current state.
-    // it will not record the temp memory usage.
+    // it will not record the temp memory usage and update chunk cache's memory
     size_t _memory_usage = 0;
+    // memory usage in update chunk cache
+    size_t _update_chunk_cache_memory_usage = 0;
 
     // maintain the reference from rowids in segment files been updated to rowids in update files.
     std::vector<ColumnPartialUpdateState> _partial_update_states;
@@ -170,6 +172,8 @@ private:
 
     // if need to pre load update data from rowset
     bool _enable_preload_column_mode_update_data = false;
+
+    MemTracker* _update_mem_tracker = nullptr;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetColumnUpdateState& o) {

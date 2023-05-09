@@ -49,7 +49,7 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
     _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "index_cache", mem_tracker);
     _del_vec_cache_mem_tracker = std::make_unique<MemTracker>(-1, "del_vec_cache", mem_tracker);
     _compaction_state_mem_tracker = std::make_unique<MemTracker>(-1, "compaction_state", mem_tracker);
-    _delta_column_group_cache_mem_tracker = std::make_unique<MemTracker>(-1, "delta_column_group_cache");
+    _delta_column_group_cache_mem_tracker = std::make_unique<MemTracker>(-1, "delta_column_group_cache", mem_tracker);
 
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
