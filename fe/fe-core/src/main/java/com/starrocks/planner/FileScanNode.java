@@ -253,6 +253,7 @@ public class FileScanNode extends LoadScanNode {
             throws UserException {
         TBrokerScanRangeParams params = new TBrokerScanRangeParams();
         params.setHdfs_read_buffer_size_kb(Config.hdfs_read_buffer_size_kb);
+        params.setParquet_coerce_int96_timestamp_unit(Config.parquet_coerce_int96_timestamp_unit.toUpperCase());
         context.params = params;
 
         BrokerFileGroup fileGroup = context.fileGroup;
