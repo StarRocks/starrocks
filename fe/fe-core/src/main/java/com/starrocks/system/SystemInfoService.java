@@ -332,6 +332,16 @@ public class SystemInfoService {
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
+            // remove worker
+            if (RunMode.allowCreateLakeTable()) {
+                long starletPort = dropComputeNode.getStarletPort();
+                // only need to remove worker after be reported its staretPort
+                if (starletPort != 0) {
+                    String workerAddr = dropComputeNode.getHost() + ":" + starletPort;
+                    GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
+                }
+            }
+            
             cluster.removeComputeNode(dropComputeNode.getId());
         } else {
             LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
