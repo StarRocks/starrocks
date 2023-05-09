@@ -950,7 +950,7 @@ public class ShowExecutor {
         String dbName = showStmt.getDb();
         List<List<String>> rows = Lists.newArrayList();
 
-        if (CatalogMgr.isInternalCatalog(catalogName)) {
+        if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
             Database db = connectContext.getGlobalStateMgr().getDb(dbName);
             MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
             rows.add(Lists.newArrayList(showStmt.getDb(),
