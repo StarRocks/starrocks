@@ -300,7 +300,7 @@ public:
                                                          const std::vector<size_t>& idxes);
 
     Status flush_to_immutable_index(const std::string& dir, const EditVersion& version, bool write_tmp_l1 = false,
-                                    BloomFilter* bf = nullptr);
+                                    std::map<size_t, std::unique_ptr<BloomFilter>>* bf_map = nullptr);
 
     // get the number of entries in the index (including NullIndexValue)
     size_t size();
@@ -388,10 +388,11 @@ public:
     }
 
     size_t memory_usage() {
-        if (_bf) {
-            return _bf->size();
+        size_t mem_usage = 0;
+        for (auto& [_, bf] : _bf_map) {
+            mem_usage += bf->size();
         }
-        return 0;
+        return mem_usage;
     }
 
     static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<RandomAccessFile>&& rb);
@@ -416,14 +417,9 @@ private:
                                 IndexValue* values, KeysInfo* found_keys_info,
                                 std::unique_ptr<ImmutableIndexShard>* shard) const;
 
-    Status _get_page_idxes(size_t shard_idx, std::vector<KeyInfo>& keys_info, std::vector<size_t>* page_idxes) const;
-
     Status _get_in_varlen_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
                                 IndexValue* values, KeysInfo* found_keys_info,
                                 std::unique_ptr<ImmutableIndexShard>* shard) const;
-
-    Status _get_in_shard_by_pages(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
-                                  IndexValue* values, KeysInfo* found_keys_info, std::vector<size_t>& page_idxes) const;
 
     Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
                          IndexValue* values, KeysInfo* found_keys_info) const;
@@ -453,7 +449,7 @@ private:
 
     std::vector<ShardInfo> _shards;
     std::map<size_t, std::pair<size_t, size_t>> _shard_info_by_length;
-    std::unique_ptr<BloomFilter> _bf;
+    std::map<size_t, std::unique_ptr<BloomFilter>> _bf_map;
 };
 
 class ImmutableIndexWriter {
@@ -625,7 +621,7 @@ private:
 
     Status _merge_compaction_internal(ImmutableIndexWriter* writer, int l1_start_idx, int l1_end_idx,
                                       std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat,
-                                      bool keep_delete, BloomFilter* bf);
+                                      bool keep_delete, std::map<size_t, std::unique_ptr<BloomFilter>>* bf_map);
     Status _merge_compaction_advance();
     // merge l0 and l1 into new l1, then clear l0
     Status _merge_compaction();
@@ -671,7 +667,6 @@ private:
     bool _dump_snapshot = false;
     bool _flushed = false;
     bool _need_bloom_filter = false;
-    std::unique_ptr<BloomFilter> _bf;
 
     mutable std::mutex _lock;
     std::unique_ptr<ThreadPool> _get_thread_pool;
