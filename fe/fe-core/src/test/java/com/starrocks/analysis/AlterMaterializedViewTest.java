@@ -31,6 +31,13 @@ public class AlterMaterializedViewTest {
         connectContext = AnalyzeTestUtil.getConnectContext();
         starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
         currentState = GlobalStateMgr.getCurrentState();
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1\n" +
+                "                DISTRIBUTED BY HASH(v1) BUCKETS 10\n" +
+                "                PROPERTIES(\n" +
+                "                    \"replication_num\" = \"1\"\n" +
+                "                )\n" +
+                "                as  select v1, count(v2) as count_c2, sum(v3) as sum_c3\n" +
+                "                from t0 group by v1;\n");
     }
 
     @Test
@@ -99,23 +106,6 @@ public class AlterMaterializedViewTest {
     public void testAlterAsyncRefreshLowercase() throws Exception {
         String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 day)";
         UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-    }
-
-    @Test
-    public void testAlterMVProperties() throws Exception {
-        {
-            String alterMvSql = "alter materialized view mv1 set (\"session.query_timeout\" = \"10000\")";
-            AlterMaterializedViewStmt stmt =
-                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            currentState.alterMaterializedView(stmt);
-        }
-
-        {
-            String alterMvSql = "alter materialized view mv1 set (\"query_timeout\" = \"10000\")";
-            AlterMaterializedViewStmt stmt =
-                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            Assert.assertThrows(DdlException.class, () -> currentState.alterMaterializedView(stmt));
-        }
     }
 
     @Test

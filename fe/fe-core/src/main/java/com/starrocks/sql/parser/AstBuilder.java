@@ -1140,6 +1140,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.mvName);
         TableName tableName = qualifiedNameToTableName(qualifiedName);
 
+        List<ColWithComment> colWithComments = null;
+        if (!context.columnNameWithComment().isEmpty()) {
+            colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
+        }
+
         String comment =
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
         QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
@@ -1237,7 +1242,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new IllegalArgumentException("Realtime materialized view is not supported");
         }
 
-        return new CreateMaterializedViewStatement(tableName, ifNotExist, comment,
+        return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments, comment,
                 refreshSchemeDesc, expressionPartitionDesc, distributionDesc, properties, queryStatement);
     }
 

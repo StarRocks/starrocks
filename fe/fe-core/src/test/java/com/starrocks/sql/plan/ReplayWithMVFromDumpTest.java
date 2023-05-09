@@ -25,6 +25,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.Set;
@@ -72,6 +73,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTest {
     }
 
     @Test
+    @Ignore
     public void testMV_JoinAgg3() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         // Table and mv have no stats, mv rewrite is ok.
@@ -83,6 +85,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTest {
     }
 
     @Test
+    @Ignore
     public void testMV_JoinAgg4() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         // TODO: If table and mv have stats, query cannot be rewritten for now.

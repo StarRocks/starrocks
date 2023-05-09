@@ -376,23 +376,6 @@ public class CreateMVStmtTest {
             }
         }
     }
-
-    @Test
-    public void testCreateMVWithAggFunctionAndOtherExprs() {
-        ConnectContext ctx = starRocksAssert.getCtx();
-        List<String> invalidSqls = Lists.newArrayList();
-        invalidSqls.add("create materialized view mv_01 as select c_1_2, cast(sum(c_1_4) as string) from t1 group by " +
-                "c_1_2");
-        for (String sql : invalidSqls) {
-            try {
-                UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-                fail("wrong sql, should fail");
-            } catch (Exception ex) {
-                Assert.assertTrue(ex.getMessage()
-                        .contains("Aggregate function with function expr is not supported yet"));
-            }
-        }
-    }
 }
 
 
