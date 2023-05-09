@@ -356,17 +356,17 @@ public class QueryAnalyzer {
             Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
             node.setScope(scope);
 
-            Map<Expr, SlotRef> mcMap = new HashMap<>();
+            Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
             for (Column column : table.getBaseSchema()) {
                 if (column.materializedColumnExpr() != null) {
-                    Expr materializedExpression = column.materializedColumnExpr().clone();
+                    Expr materializedExpression = column.materializedColumnExpr();
                     ExpressionAnalyzer.analyzeExpression(materializedExpression, new AnalyzeState(), scope, session);
                     SlotRef slotRef = new SlotRef(null, column.getName());
                     ExpressionAnalyzer.analyzeExpression(slotRef, new AnalyzeState(), scope, session);
-                    mcMap.put(materializedExpression, slotRef);
+                    generatedExprToColumnRef.put(materializedExpression, slotRef);
                 }
             }
-            node.setGeneratedExprToColumnRef(mcMap);
+            node.setGeneratedExprToColumnRef(generatedExprToColumnRef);
 
             return scope;
         }
