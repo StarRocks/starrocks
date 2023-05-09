@@ -19,6 +19,7 @@
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
 #include "exec/sorted_streaming_aggregator.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
@@ -26,10 +27,10 @@ class SpillableAggregateBlockingSourceOperator final : public AggregateBlockingS
 public:
     template <class... Args>
     SpillableAggregateBlockingSourceOperator(const AggregatorPtr& aggregator,
-                                             const SortedStreamingAggregatorPtr& stream_aggregator, Args&&... args)
+                                             SortedStreamingAggregatorPtr stream_aggregator, Args&&... args)
             : AggregateBlockingSourceOperator(aggregator, std::forward<Args>(args)...,
                                               "spillable_aggregate_source_operator"),
-              _stream_aggregator(stream_aggregator) {}
+              _stream_aggregator(std::move(stream_aggregator)) {}
 
     ~SpillableAggregateBlockingSourceOperator() override = default;
 
@@ -38,6 +39,7 @@ public:
 
     Status set_finished(RuntimeState* state) override;
 
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -50,7 +52,6 @@ private:
     bool _has_last_chunk = true;
     ChunkPipelineAccumulator _accumulator;
     SortedStreamingAggregatorPtr _stream_aggregator = nullptr;
-    bool _stream_aggregator_inited = false;
 };
 
 class SpillableAggregateBlockingSourceOperatorFactory final : public SourceOperatorFactory {
