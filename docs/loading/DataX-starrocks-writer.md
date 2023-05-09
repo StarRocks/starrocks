@@ -15,7 +15,7 @@ Use the following command to test:
 
 ### Sample Configuration
 
-Here is a configuration file for reading data from MySQL and importing it to StarRocks.
+Here is a configuration file for reading data from MySQL and loading it to StarRocks.
 
 ```json
 {

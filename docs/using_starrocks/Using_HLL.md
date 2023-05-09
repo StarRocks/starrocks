@@ -73,7 +73,7 @@ DISTRIBUTED BY HASH(ID) BUCKETS 32;
 
 > * Note: When the data volume is large, it is better to create a corresponding rollup table for high frequency HLL queries
 
-Importing data in Stream Load mode:
+Load data using Stream Load:
 
 ~~~bash
 curl --location-trusted -u root: -H "label:label_1600997542287" \

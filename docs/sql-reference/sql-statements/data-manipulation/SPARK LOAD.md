@@ -68,7 +68,7 @@ hive_external_tbl:
 
 hive external table name.
 It is required that the columns in the imported starrocks table must exist in the hive external table.
-Each import task only supports importing from one hive external table.
+Each load task only supports loading from one Hive external table.
 Cannot be used with file_ path mode at the same time.
 
 PARTITION:
@@ -78,7 +78,7 @@ If not specified, all partitions of table will be imported by default.
 
 NEGATIVE:
 
-If this parameter is specified, it is equivalent to importing a batch of "negative" data. Used to offset the same batch of previously imported data.
+If this parameter is specified, it is equivalent to loading a batch of "negative" data. Used to offset the same batch of previously imported data.
 This parameter is only applicable when the value column exists and the aggregation type of the value column is SUM only.
 
 column_separator:

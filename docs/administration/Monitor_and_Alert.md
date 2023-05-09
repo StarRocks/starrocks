@@ -323,9 +323,9 @@ Download a dashboard.
 
 Dashboard templates will be updated from time to time.
 
-After confirming the data source is available, click on the `+` sign to add a new Dashboard, here we use the StarRocks Dashboard template downloaded above. Go to Import -> Upload Json File`to import the downloaded json file.
+After confirming the data source is available, click on the `+` sign to add a new Dashboard, here we use the StarRocks Dashboard template downloaded above. Go to Import -> Upload Json File to load the downloaded json file.
 
-After importing, you can name the Dashboard. The default name is StarRocks Overview. Then select`starrocks_monitor`as the data source.
+After loading, you can name the Dashboard. The default name is StarRocks Overview. Then select`starrocks_monitor`as the data source.
 Click`Import` to complete the import. Then you should see the Dashboard.
 
 #### Dashboard Description

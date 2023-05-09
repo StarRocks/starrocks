@@ -166,7 +166,7 @@ You can use JSON functions and operators to construct and process JSON data. For
 
 ## Limits and usage notes
 
-- The maximum length per JSON value is the same as the maximum length per STRING value.
+- The maximum length of a JSON value is 16 MB.
 
 - The ORDER BY, GROUP BY, and JOIN clauses do not support references to JSON columns. If you want to create references to JSON columns, use the CAST function to convert JSON columns to SQL columns before you create the references. For more information, see [cast](../../sql-functions/json-functions/json-query-and-processing-functions/cast.md).
 
