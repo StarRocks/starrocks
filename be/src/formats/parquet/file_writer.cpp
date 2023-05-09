@@ -290,8 +290,8 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
 FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
                                std::shared_ptr<::parquet::WriterProperties> properties,
                                std::shared_ptr<::parquet::schema::GroupNode> schema,
-                               const std::vector<ExprContext*>& output_expr_ctxs)
-        : _properties(std::move(properties)), _schema(std::move(schema)) {
+                               const std::vector<ExprContext*>& output_expr_ctxs, int64_t max_file_size)
+        : _properties(std::move(properties)), _schema(std::move(schema)), _max_file_size(max_file_size) {
     _outstream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
     _type_descs.reserve(output_expr_ctxs.size());
     for (auto expr : output_expr_ctxs) {
@@ -336,7 +336,7 @@ Status FileWriterBase::write(Chunk* chunk) {
     _generate_chunk_writer();
     _chunk_writer->write(chunk);
 
-    if (_chunk_writer->estimated_buffered_bytes() > _max_row_group_size) {
+    if (_chunk_writer->estimated_buffered_bytes() > _max_row_group_size && !is_last_row_group()) {
         _flush_row_group();
     }
 
@@ -400,8 +400,9 @@ AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, st
                                  std::shared_ptr<::parquet::WriterProperties> properties,
                                  std::shared_ptr<::parquet::schema::GroupNode> schema,
                                  const std::vector<ExprContext*>& output_expr_ctxs, PriorityThreadPool* executor_pool,
-                                 RuntimeProfile* parent_profile)
-        : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs),
+                                 RuntimeProfile* parent_profile, int64_t max_file_size)
+        : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs,
+                         max_file_size),
           _file_location(std::move(file_location)),
           _partition_location(std::move(partition_location)),
           _executor_pool(executor_pool),
