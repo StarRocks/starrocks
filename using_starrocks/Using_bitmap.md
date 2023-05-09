@@ -55,18 +55,12 @@ Roaring Bitmap 实现，细节可以参考：[具体论文和实现](https://git
 
 采用本地文件导入
 
-```bash
-cat <<<'DONE' | \
-    curl --location-trusted -u root: -H "label:label_1600960288796" \
-        -H "column_separator:," \
-        -H "columns:page_id,visit_date,visit_users, visit_users=to_bitmap(visit_users)" -T - \
-        http://StarRocks_be0:8040/api/db0/page_uv/_stream_load
-1,2020-06-23 01:30:30,130
-1,2020-06-23 01:30:30,230
-1,2020-06-23 01:30:30,120
-1,2020-06-23 02:30:30,133
-2,2020-06-23 01:30:30,234
-DONE
+```shell
+echo -e '1,2020-06-23 01:30:30,130\n1,2020-06-23 01:30:30,230\n1,2020-06-23 01:30:30,120\n1,2020-06-23 02:30:30,133\n2,2020-06-23 01:30:30,234' > tmp.csv | 
+curl --location-trusted -u root: -H "label:label_1600960288798" \
+    -H "column_separator:," \
+    -H "columns:page_id,visit_date,visit_users, visit_users=to_bitmap(visit_users)" -T tmp.csv \
+    http://StarRocks_be0:8040/api/db0/page_uv/_stream_load
 ```
 
 统计每个页面的 UV
