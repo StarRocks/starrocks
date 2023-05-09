@@ -401,6 +401,16 @@ public class StarOSAgent {
         }
     }
 
+    private long getAvailableBackendId(String host, int starletPort) {
+        long backendId = GlobalStateMgr.getCurrentSystemInfo()
+                .getBackendIdWithStarletPort(host, starletPort);
+        if (backendId == -1L) {
+            backendId = GlobalStateMgr.getCurrentSystemInfo().
+                    getComputeNodeIdWithStarletPort(host, starletPort);
+        }
+        return backendId;
+    }
+
     public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
         List<ReplicaInfo> replicas = getShardReplicas(shardId);
 
@@ -414,13 +424,7 @@ public class StarOSAgent {
                         String workerAddr = workerInfo.getIpPort();
                         String[] pair = workerAddr.split(":");
 
-                        long backendId = GlobalStateMgr.getCurrentSystemInfo()
-                                .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
-                        if (backendId == -1L) {
-                            backendId = GlobalStateMgr.getCurrentSystemInfo().
-                                    getComputeNodeIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
-                        }
-
+                        long backendId = getAvailableBackendId(pair[0], Integer.parseInt(pair[1]));
                         if (backendId == -1L) {
                             throw new UserException("Failed to get backend by worker. worker id: " + workerId);
                         }
@@ -451,8 +455,7 @@ public class StarOSAgent {
                     // get backendId from system info
                     String workerAddr = workerInfo.getIpPort();
                     String[] pair = workerAddr.split(":");
-                    long backendId = GlobalStateMgr.getCurrentSystemInfo()
-                            .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
+                    long backendId = getAvailableBackendId(pair[0], Integer.parseInt(pair[1]));
 
                     if (backendId == -1L) {
                         LOG.info("can't find backendId with starletPort for {}.", workerAddr);

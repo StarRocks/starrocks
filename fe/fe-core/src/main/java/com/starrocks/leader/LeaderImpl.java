@@ -187,6 +187,7 @@ public class LeaderImpl {
         String host = tBackend.getHost();
         int bePort = tBackend.getBe_port();
         long backendId = -1L;
+        // TODO: need to refactor after be has been splited into cn + dn.
         ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
 
         if (cn == null) {
