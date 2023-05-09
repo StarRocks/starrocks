@@ -86,13 +86,13 @@ StatusOr<ChunkPtr> IcebergTableSinkOperator::pull_chunk(RuntimeState* state) {
 
 Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     TableInfo tableInfo;
-    tableInfo._schema = _parquet_file_schema;
-    tableInfo._compress_type = _compression_codec;
-    tableInfo._cloud_conf = _cloud_conf;
+    tableInfo.schema = _parquet_file_schema;
+    tableInfo.compress_type = _compression_codec;
+    tableInfo.cloud_conf = _cloud_conf;
 
     if (_iceberg_table->is_unpartitioned_table()) {
         if (_partition_writers.empty()) {
-            tableInfo._partition_location = _location + "/data/";
+            tableInfo.partition_location = _location + "/data/";
             auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _common_metrics.get(),
                                                                       add_iceberg_commit_info, state, _driver_sequence);
             _partition_writers.insert({"", std::move(writer)});

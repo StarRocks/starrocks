@@ -38,11 +38,11 @@ namespace starrocks {
 struct TableInfo;
 
 struct TableInfo {
-    TCompressionType::type _compress_type = TCompressionType::SNAPPY;
-    bool _enable_dictionary = true;
-    std::string _partition_location = "";
-    std::shared_ptr<::parquet::schema::GroupNode> _schema;
-    TCloudConfiguration _cloud_conf;
+    TCompressionType::type compress_type = TCompressionType::SNAPPY;
+    bool enable_dictionary = true;
+    std::string partition_location = "";
+    std::shared_ptr<::parquet::schema::GroupNode> schema;
+    TCloudConfiguration cloud_conf;
 };
 
 class RollingAsyncParquetWriter {

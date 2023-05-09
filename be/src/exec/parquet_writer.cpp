@@ -38,18 +38,18 @@ RollingAsyncParquetWriter::RollingAsyncParquetWriter(
 
 Status RollingAsyncParquetWriter::init_rolling_writer(const TableInfo& tableInfo) {
     ASSIGN_OR_RETURN(
-            _fs, FileSystem::CreateUniqueFromString(tableInfo._partition_location, FSOptions(&tableInfo._cloud_conf)))
-    _schema = tableInfo._schema;
-    _partition_location = tableInfo._partition_location;
+            _fs, FileSystem::CreateUniqueFromString(tableInfo.partition_location, FSOptions(&tableInfo.cloud_conf)))
+    _schema = tableInfo.schema;
+    _partition_location = tableInfo.partition_location;
 
     ::parquet::WriterProperties::Builder builder;
-    if (tableInfo._enable_dictionary) {
+    if (tableInfo.enable_dictionary) {
         builder.enable_dictionary();
     } else {
         builder.disable_dictionary();
     }
     builder.version(::parquet::ParquetVersion::PARQUET_2_0);
-    starrocks::parquet::ParquetBuildHelper::build_compression_type(builder, tableInfo._compress_type);
+    starrocks::parquet::ParquetBuildHelper::build_compression_type(builder, tableInfo.compress_type);
     _properties = builder.build();
 
     return Status::OK();
