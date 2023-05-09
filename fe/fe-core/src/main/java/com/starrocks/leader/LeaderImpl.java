@@ -204,7 +204,7 @@ public class LeaderImpl {
             }
         }
         backendId = cn.getId();
-        
+
         TTaskType taskType = request.getTask_type();
         long signature = request.getSignature();
         AgentTask task = AgentTaskQueue.getTask(backendId, taskType, signature);
