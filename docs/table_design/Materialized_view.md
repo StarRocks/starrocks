@@ -99,9 +99,9 @@ PREAGGREGATION: OFF. Reason: The aggregate operator does not match.
 
 This indicates the physical view cannot be used in the StarRocks storage engine because the aggregation function of the query does not match the one defined in the physical view, and requires on-site aggregation.
 
-### **Importing Data**
+### **Loading Data**
 
-Incremental imports to the base table are applied to all associated MVs tables. Data cannot be queried until the import to the base table and all MVs tables are all complete. StarRocks ensures that the data is consistent between the base and MVs tables. There is no data difference between querying the base table and the MVs table.
+Incremental loading to the base table are applied to all associated MVs tables. Data cannot be queried until data loading to the base table and all MVs tables are all complete. StarRocks ensures that the data is consistent between the base and MVs tables. There is no data difference between querying the base table and the MVs table.
 
 ## Notes
 

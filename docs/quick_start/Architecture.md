@@ -31,4 +31,4 @@ The StarRocks cluster is composed of FE and BE, and can be accessed via MySQL cl
 
 ### Other Components
 
-* Hdfs Broker: used for importing data from Hdfs to StarRocks cluster, see [Data Import section](../loading/Loading_intro.md).
+* HDFS Broker: used for loading data from HDFS to StarRocks cluster, see [Data loading section](../loading/Loading_intro.md).
