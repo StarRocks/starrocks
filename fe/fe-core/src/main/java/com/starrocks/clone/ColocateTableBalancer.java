@@ -298,7 +298,6 @@ public class ColocateTableBalancer extends FrontendDaemon {
         Set<GroupId> groupIds = colocateIndex.getAllGroupIds();
         TabletScheduler tabletScheduler = globalStateMgr.getTabletScheduler();
         TabletSchedulerStat stat = tabletScheduler.getStat();
-        Map<GroupId, Long> group2InScheduleTabletNum = tabletScheduler.getTabletsNumInScheduleForEachCG();
         Set<GroupId> toIgnoreGroupIds = new HashSet<>();
         boolean isAnyGroupChanged = false;
         for (GroupId groupId : groupIds) {
@@ -320,21 +319,6 @@ public class ColocateTableBalancer extends FrontendDaemon {
             }
 
             Set<Long> unavailableBeIdsInGroup = getUnavailableBeIdsInGroup(infoService, colocateIndex, groupId);
-            // Won't make new relocation decision if there is still colocate relocation tasks in schedule.
-            // We want the previous relocation decision is handled completely before new decision is made, so
-            // this won't trigger concurrent relocation decision and may mess up the scheduling.
-            Long inScheduleTabletNum = group2InScheduleTabletNum.get(groupId);
-            if (inScheduleTabletNum != null && inScheduleTabletNum >= 1L && unavailableBeIdsInGroup.isEmpty()) {
-                LOG.info("colocate group {} still has {} tablets in schedule, won't make new relocation decision",
-                        groupId, inScheduleTabletNum);
-                ColocateRelocationInfo info = group2ColocateRelocationInfo.get(groupId);
-                if (info != null) {
-                    LOG.info("number of finished scheduling tablets per bucket: {} for colocate group {}",
-                            info.getScheduledTabletNumPerBucket(), groupId);
-                }
-                continue;
-            }
-
             stat.counterColocateBalanceRound.incrementAndGet();
             List<Long> availableBeIds = getAvailableBeIds(infoService);
             List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
