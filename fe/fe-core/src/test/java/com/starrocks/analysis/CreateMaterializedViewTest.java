@@ -32,6 +32,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -2708,6 +2709,23 @@ public class CreateMaterializedViewTest {
         starRocksAssert.dropTable("emps");
         starRocksAssert.dropTable("depts");
 	}
+
+    @Test
+    public void testSelectFromSyncMV() throws Exception {
+        // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
+        String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
+        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
+                parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+
+        waitingRollupJobV2Finish();
+        sql = "select * from sync_mv1 [_SYNC_MV_];";
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
+        Assert.assertTrue(explainString.contains("partitions=2/2\n" +
+                "     rollup: sync_mv1\n" +
+                "     tabletRatio=6/6"));
+    }
 
     @Test
     public void testCreateAsyncDateTruncAndTimeSLice() throws Exception {
