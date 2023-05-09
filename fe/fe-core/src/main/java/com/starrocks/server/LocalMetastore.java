@@ -2959,6 +2959,16 @@ public class LocalMetastore implements ConnectorMetadata {
                         .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb.toString());
                 materializedView.getTableProperty().setExcludedTriggerTables(tables);
             }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
+                String resourceGroup = PropertyAnalyzer.analyzeResourceGroup(properties);
+                if (GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(resourceGroup) == null) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP
+                            + " " + resourceGroup + " does not exist.");
+                }
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP, resourceGroup);
+                materializedView.getTableProperty().setResourceGroup(resourceGroup);
+            }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
                 boolean forceExternalTableQueryReWrite = PropertyAnalyzer.
                         analyzeForceExternalTableQueryRewrite(properties);

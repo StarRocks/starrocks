@@ -1346,6 +1346,13 @@ public class CoordinatorPreprocessor {
         if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
             String rgName = sessionVariable.getResourceGroup();
             resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(rgName);
+            if (rgName.equalsIgnoreCase(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME)) {
+                ResourceGroup defaultMVResourceGroup = new ResourceGroup();
+                defaultMVResourceGroup.setId(ResourceGroup.DEFAULT_MV_WG_ID);
+                defaultMVResourceGroup.setName(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
+                defaultMVResourceGroup.setVersion(ResourceGroup.DEFAULT_MV_VERSION);
+                resourceGroup = defaultMVResourceGroup.toThrift();
+            }
         }
 
         // 2. try to use the resource group specified by workgroup_id

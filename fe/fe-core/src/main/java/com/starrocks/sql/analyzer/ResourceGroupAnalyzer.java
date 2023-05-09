@@ -201,11 +201,12 @@ public class ResourceGroupAnalyzer {
                 try {
                     resourceGroup.setResourceGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
                     if (resourceGroup.getResourceGroupType() != TWorkGroupType.WG_NORMAL &&
-                            resourceGroup.getResourceGroupType() != TWorkGroupType.WG_SHORT_QUERY) {
-                        throw new SemanticException("Only support 'normal' and 'short_query' type");
+                            resourceGroup.getResourceGroupType() != TWorkGroupType.WG_SHORT_QUERY &&
+                            resourceGroup.getResourceGroupType() != TWorkGroupType.WG_MV) {
+                        throw new SemanticException("Only support 'normal', 'mv' and 'short_query' type");
                     }
                 } catch (Exception ignored) {
-                    throw new SemanticException("Only support 'normal' and 'short_query' type");
+                    throw new SemanticException("Only support 'normal', 'mv' and 'short_query' type");
                 }
                 continue;
             }
