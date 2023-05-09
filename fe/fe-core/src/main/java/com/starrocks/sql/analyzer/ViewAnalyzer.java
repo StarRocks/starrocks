@@ -63,6 +63,7 @@ public class ViewAnalyzer {
             for (int i = 0; i < stmt.getCols().size(); ++i) {
                 Column col = viewColumns.get(i);
                 ColWithComment colWithComment = colWithComments.get(i);
+                colWithComment.analyze();
                 col.setName(colWithComment.getColName());
                 col.setComment(colWithComment.getComment());
             }

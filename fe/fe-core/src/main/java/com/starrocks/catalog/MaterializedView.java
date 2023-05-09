@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
@@ -742,7 +743,18 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public String getMaterializedViewDdlStmt(boolean simple) {
         StringBuilder sb = new StringBuilder();
-        sb.append("CREATE MATERIALIZED VIEW `").append(this.getName()).append("`");
+        sb.append("CREATE MATERIALIZED VIEW `").append(getName()).append("` (");
+        List<String> colDef = Lists.newArrayList();
+        for (Column column : getBaseSchema()) {
+            StringBuilder colSb = new StringBuilder();
+            colSb.append(column.getName());
+            if (!Strings.isNullOrEmpty(column.getComment())) {
+                colSb.append(" COMMENT ").append("\"").append(column.getComment()).append("\"");
+            }
+            colDef.add(colSb.toString());
+        }
+        sb.append(Joiner.on(", ").join(colDef));
+        sb.append(")");
         if (!Strings.isNullOrEmpty(this.getComment())) {
             sb.append("\nCOMMENT \"").append(this.getComment()).append("\"");
         }
