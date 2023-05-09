@@ -22,6 +22,7 @@
 #include "column/map_column.h"
 #include "exprs/string_functions.h"
 #include "gutil/strings/split.h"
+#include "util/utf8.h"
 
 namespace starrocks {
 
@@ -107,9 +108,10 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map(FunctionContext* context, const 
                 continue;
             }
             if (delimiter.size == 0) { // return {`1-th`:`rest`}
-                if (is_unique(tmp_slice, Slice(haystack.data, 1))) {
-                    tmp_keys.push(Slice(haystack.data, 1));
-                    tmp_values.push(Slice(haystack.data + 1, haystack.size - 1));
+                auto char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(haystack.data[0])];
+                if (is_unique(tmp_slice, Slice(haystack.data, char_size))) {
+                    tmp_keys.push(Slice(haystack.data, char_size));
+                    tmp_values.push(Slice(haystack.data + char_size, haystack.size - char_size));
                     val_is_null.push(false);
                 }
             } else {
