@@ -1448,6 +1448,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.mvName);
         TableName tableName = qualifiedNameToTableName(qualifiedName);
 
+        List<ColWithComment> colWithComments = null;
+        if (!context.columnNameWithComment().isEmpty()) {
+            colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
+        }
+
         String comment =
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
         QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
@@ -1539,7 +1544,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException(PARSER_ERROR_MSG.feConfigDisable("enable_experimental_mv"), NodePosition.ZERO);
         }
 
-        return new CreateMaterializedViewStatement(tableName, ifNotExist, comment, refreshSchemeDesc,
+        return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments, comment, refreshSchemeDesc,
                 expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement, createPos(context));
     }
 

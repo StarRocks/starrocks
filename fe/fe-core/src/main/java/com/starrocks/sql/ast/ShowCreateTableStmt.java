@@ -95,7 +95,6 @@ public class ShowCreateTableStmt extends ShowStmt {
         return MATERIALIZED_VIEW_META_DATA;
     }
 
-
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
