@@ -1,6 +1,6 @@
 # File external table
 
-File external table is a special type of external table. It allows you to directly query Parquet and ORC data files in external storage systems without loading data into StarRocks. In addition, file external tables do not rely on a metastore. In the current version, StarRocks supports the following external storage systems: HDFS, Amazon S3, and S3-compatible storage systems.
+File external table is a special type of external table. It allows you to directly query Parquet and ORC data files in external storage systems without loading data into StarRocks. In addition, file external tables do not rely on a metastore. In the current version, StarRocks supports the following external storage systems: HDFS, Amazon S3, and other S3-compatible storage systems.
 
 This feature is supported from StarRocks v2.5.
 
@@ -55,7 +55,7 @@ PROPERTIES
 | comment          | No       | The comment of column in the file external table.            |
 | ENGINE           | Yes      | The type of engine. Set the value to file.                   |
 | comment          | No       | The description of the file external table.                  |
-| PROPERTIES       | Yes      | <ul><li>`FileLayoutParams`: specifies the path and format of the target file. This property is required.</li><li>`StorageCredentialParams`: specifies the authentication information required for accessing object storage systems. This property is required only for AWS S3 and S3-compatible storage.</li></ul> |
+| PROPERTIES       | Yes      | <ul><li>`FileLayoutParams`: specifies the path and format of the target file. This property is required.</li><li>`StorageCredentialParams`: specifies the authentication information required for accessing object storage systems. This property is required only for AWS S3 and other S3-compatible storage systems.</li></ul> |
 
 #### FileLayoutParams
 
@@ -69,7 +69,7 @@ A set of parameters for accessing the target data file.
 
 | Parameter                | Required | Description                                                  |
 | ------------------------ | -------- | ------------------------------------------------------------ |
-| path                     | Yes      | The path of the data file. <ul><li>If the data file is stored in HDFS, the path format is `hdfs://<IP address of HDFS>:<port>/<path>`. The default port number is 8020. If you use the default port, you do not need to specify it.</li><li>If the data file is stored in AWS S3, the path format is `s3://<bucket name>/<folder>/`.</li></ul> Note the following rules when you enter the path: <ul><li>If you want to access all files in a path, end this parameter with a slash (`/`), such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data/`. When you run a query, StarRocks traverses all data files under the path. It does not traverse data files by using recursion.</li><li>If you want to access a single file, enter a path that directly points to this file, such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data`. When you run a query, StarRocks only scans this data file.</li></ul> |
+| path                     | Yes      | The path of the data file. <ul><li>If the data file is stored in HDFS, the path format is `hdfs://<IP address of HDFS>:<port>/<path>`. The default port number is 8020. If you use the default port, you do not need to specify it.</li><li>If the data file is stored in AWS S3 or other S3-compatible storage system, the path format is `s3://<bucket name>/<folder>/`.</li></ul> Note the following rules when you enter the path: <ul><li>If you want to access all files in a path, end this parameter with a slash (`/`), such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data/`. When you run a query, StarRocks traverses all data files under the path. It does not traverse data files by using recursion.</li><li>If you want to access a single file, enter a path that directly points to this file, such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data`. When you run a query, StarRocks only scans this data file.</li></ul> |
 | format                   | Yes      | The format of the data file. Only Parquet and ORC are supported. |
 | enable_recursive_listing | No       | Specifies whether to recursively transverse all files under the current path. Default value: false. |
 
@@ -77,7 +77,7 @@ A set of parameters for accessing the target data file.
 
 A set of parameters about how StarRocks integrates with the target storage system. This parameter set is **optional**.
 
-You need to configure `StorageCredentialParams` only when the target storage system is AWS S3 or S3-compatible storage.
+You need to configure `StorageCredentialParams` only when the target storage system is AWS S3 or other S3-compatible storage.
 
 For other storage systems, you can ignore `StorageCredentialParams`.
 
@@ -119,9 +119,9 @@ If you need to access a data file stored in AWS S3, configure the following auth
 
 For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS S3](../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
-##### AWS S3-compatible storage
+##### S3-compatible storage
 
-If you need to access an AWS S3-compatible storage system, such as MinIO, configure `StorageCredentialParams` as follows to ensure a successful integration:
+If you need to access an S3-compatible storage system, such as MinIO, configure `StorageCredentialParams` as follows to ensure a successful integration:
 
 ```SQL
 "aws.s3.enable_ssl" = "{ true | false }",
