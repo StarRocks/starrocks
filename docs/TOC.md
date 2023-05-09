@@ -413,6 +413,7 @@
         + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
     + Map Functions
+      + [distinct_map_keys](./sql-reference/sql-functions/map-functions/distinct_map_keys.md)
       + [map_apply](./sql-reference/sql-functions/map-functions/map_apply.md)
       + [map_filter](./sql-reference/sql-functions/map-functions/map_filter.md)
       + [map_from_arrays](./sql-reference/sql-functions/map-functions/map_from_arrays.md)

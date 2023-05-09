@@ -2,7 +2,7 @@
 
 ## Description
 
-Remove duplicated keys in a map, as map keys must be unique in terms of semantics. It keeps the last value for identical keys, called LAST WIN. It is used when querying map data from external tables, as StarRocks internal tables natively remove duplicated keys in maps.
+Remove duplicate keys in a map, as map keys must be unique in terms of semantics. It keeps the last value for identical keys, called LAST WIN. It is used when querying map data from external tables if there are duplicate keys in maps. StarRocks internal tables natively remove duplicate keys in maps.
 
 From v2.5, StarRocks supports querying complex data types MAP and STRUCT from data lakes. MAP is an unordered collection of key-value pairs, for example, `{"a":1, "b":2}`.
 
@@ -16,11 +16,11 @@ distinct_map_keys(any_map)
 
 ## Parameters
 
-`any_map`: the MAP value from which you want to remove duplicated keys.
+`any_map`: the MAP value from which you want to remove duplicate keys.
 
 ## Return value
 
-The return a new map without duplicated keys in each map, it keeps the last value for identical keys, called LAST WIN.
+The return a new map without duplicate keys in each map, it keeps the last value for identical keys, called LAST WIN.
 
 If the input is NULL, NULL is returned.
 
