@@ -304,10 +304,10 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
         auto op_column = chunk.get_column_by_index(op_column_id);
         auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
         for (size_t i = 0; i < chunk.num_rows(); i++) {
-            if (ops[i] == TOpType::UPSERT)
-                ;
-            LOG(WARNING) << "table with sort key do not support partial update";
-            return Status::NotSupported("table with sort key do not support partial update");
+            if (ops[i] == TOpType::UPSERT) {
+                LOG(WARNING) << "table with sort key do not support partial update";
+                return Status::NotSupported("table with sort key do not support partial update");
+            }
         }
     }
     return Status::OK();
