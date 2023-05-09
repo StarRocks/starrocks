@@ -249,7 +249,7 @@ void merge_stats(const std::shared_ptr<::parquet::Statistics>& left,
     }
 }
 
-void populate_column_states(const std::shared_ptr<::parquet::FileMetaData>& meta, TIcebergColumnStats& t_column_stats) {
+void populate_column_stats(const std::shared_ptr<::parquet::FileMetaData>& meta, TIcebergColumnStats& t_column_stats) {
     // field_id -> column_stat
     std::map<int32_t, std::shared_ptr<::parquet::Statistics>> column_stats;
     std::map<int32_t, int64_t> column_sizes;
@@ -302,8 +302,8 @@ void populate_column_states(const std::shared_ptr<::parquet::FileMetaData>& meta
 }
 
 static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state) {
-    TIcebergColumnStats iceberg_stats;
-    populate_column_states(writer->metadata(), iceberg_stats);
+    TIcebergColumnStats iceberg_column_stats;
+    populate_column_stats(writer->metadata(), iceberg_column_stats);
 
     TIcebergDataFile iceberg_data_file;
     iceberg_data_file.__set_partition_path(writer->partition_location());
@@ -314,7 +314,7 @@ static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer,
     std::vector<int64_t> split_offsets;
     writer->split_offsets(split_offsets);
     iceberg_data_file.__set_split_offsets(split_offsets);
-    iceberg_data_file.__set_column_stats(iceberg_stats);
+    iceberg_data_file.__set_column_stats(iceberg_column_stats);
 
     TSinkCommitInfo commit_info;
     commit_info.__set_iceberg_data_file(iceberg_data_file);
