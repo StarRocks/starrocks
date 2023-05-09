@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.IcebergTable;
@@ -73,8 +74,12 @@ public class IcebergTableSink extends DataSink {
                 compressionType = "default";
         }
         String catalogName = icebergTable.getCatalogName();
-        Connector connector  = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
-        this.cloudConfiguration = connector != null ? connector.getCloudConfiguration() : null;
+        Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+        Preconditions.checkState(connector != null,
+                String.format("connector of catalog %s should not be null", catalogName));
+        this.cloudConfiguration = connector.getCloudConfiguration();
+        Preconditions.checkState(cloudConfiguration != null,
+                String.format("cloudConfiguration of catalog %s should not be null", catalogName));
     }
 
     @Override
@@ -98,12 +103,9 @@ public class IcebergTableSink extends DataSink {
         tIcebergTableSink.setIs_statistics_partition_sink(isStatisticsPartitionSink);
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
         tIcebergTableSink.setCompression_type(compression);
-
-        if (cloudConfiguration != null) {
-            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
-            cloudConfiguration.toThrift(tCloudConfiguration);
-            tIcebergTableSink.setCloud_configuration(tCloudConfiguration);
-        }
+        TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+        cloudConfiguration.toThrift(tCloudConfiguration);
+        tIcebergTableSink.setCloud_configuration(tCloudConfiguration);
 
         tDataSink.setIceberg_table_sink(tIcebergTableSink);
         return tDataSink;
