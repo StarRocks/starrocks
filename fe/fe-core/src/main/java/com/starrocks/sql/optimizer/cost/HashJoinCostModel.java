@@ -56,13 +56,16 @@ public class HashJoinCostModel {
 
     private final List<BinaryPredicateOperator> eqOnPredicates;
 
+    private final Statistics joinStatistics;
+
     public HashJoinCostModel(ExpressionContext context, List<PhysicalPropertySet> inputProperties,
-                             List<BinaryPredicateOperator> eqOnPredicates) {
+                             List<BinaryPredicateOperator> eqOnPredicates, final Statistics joinStatistics) {
         this.context = context;
         this.leftStatistics = context.getChildStatistics(0);
         this.rightStatistics = context.getChildStatistics(1);
         this.inputProperties = inputProperties;
         this.eqOnPredicates = eqOnPredicates;
+        this.joinStatistics = joinStatistics;
     }
 
     public double getCpuCost() {
@@ -86,7 +89,10 @@ public class HashJoinCostModel {
                 buildCost = rightOutput;
                 probeCost = leftOutput;
         }
-        return buildCost + probeCost;
+        double joinCost = buildCost + probeCost;
+        // should add output cost
+        joinCost += joinStatistics.getComputeSize();
+        return joinCost;
     }
 
     public double getMemCost() {

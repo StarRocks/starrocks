@@ -698,8 +698,9 @@ select count(*) from profile_wos_p7;
 * Configure Kerberos support:
   1. To log in with `kinit -kt keytab_path principal` to all FE/BE machines, you need to have access to Hive and HDFS. The kinit command login is only good for a period of time and needs to be put into crontab to be executed regularly.
   2. Put `hive-site.xml/core-site.xml/hdfs-site.xml` under `fe/conf`, and put `core-site.xml/hdfs-site.xml` under `be/conf`.
-  3. Add **Djava.security.krb5.conf:/etc/krb5.conf** to the **JAVA_OPTS/JAVA_OPTS_FOR_JDK_9** option of the **fe/conf/fe.conf** file. **/etc/krb5.conf** is the path of the **krb5.conf** file. You can adjust the path based on your operating system.
-  4. When you add a Hive resource, you must pass in a domain name to `hive.metastore.uris`. In addition, you must add the mapping between Hive/HDFS domain names and IP addresses in the **/etc/hosts** file*.*
+  3. Add `-Djava.security.krb5.conf=/etc/krb5.conf` to the value of the `JAVA_OPTS` option in the **$FE_HOME/conf/fe.conf** file. **/etc/krb5.conf** is the save path of the **krb5.conf** file. You can change the path based on your operating system.
+  4. Directly add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to the **$BE_HOME/conf/be.conf** file. **/etc/krb5.conf** is the save path of the **krb5.conf** file. You can change the path based on your operating system.
+  5. When you add a Hive resource, you must pass in a domain name to `hive.metastore.uris`. In addition, you must add the mapping between Hive/HDFS domain names and IP addresses in the **/etc/hosts** file.
 
 * Configure support for AWS S3: Add the following configuration to `fe/conf/core-site.xml` and `be/conf/core-site.xml`.
 
