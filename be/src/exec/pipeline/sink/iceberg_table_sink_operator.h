@@ -54,8 +54,7 @@ public:
 
     void close(RuntimeState* state) override;
 
-    bool has_output() const override {
-        return false; }
+    bool has_output() const override { return false; }
 
     bool need_input() const override;
 
