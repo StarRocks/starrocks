@@ -65,7 +65,6 @@ public class IcebergConnector implements Connector {
     private IcebergCatalog buildIcebergNativeCatalog() {
         IcebergCatalogType nativeCatalogType = getNativeCatalogType();
         Configuration conf = hdfsEnvironment.getConfiguration();
-        String icebergNativeCatalogName = "native-" + nativeCatalogType.name() + "-" + catalogName;
 
         String catalogImpl;
         Map<String, String> copiedProperties = Maps.newHashMap(properties);
@@ -100,7 +99,7 @@ public class IcebergConnector implements Connector {
             props.setProperty(ThreadPools.WORKER_THREAD_POOL_SIZE_PROP, String.valueOf(Config.iceberg_worker_num_threads));
         }
 
-        return (IcebergCatalog) CatalogUtil.buildIcebergCatalog(icebergNativeCatalogName, copiedProperties, conf);
+        return (IcebergCatalog) CatalogUtil.buildIcebergCatalog(catalogName, copiedProperties, conf);
     }
 
     private IcebergCatalogType getNativeCatalogType() {

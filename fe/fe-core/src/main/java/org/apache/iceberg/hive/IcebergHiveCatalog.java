@@ -246,7 +246,7 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
             if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
                 try {
                     URI uri = new Path(value).toUri();
-                    FileSystem fileSystem = FileSystem.get(uri, new Configuration());
+                    FileSystem fileSystem = FileSystem.get(uri, conf);
                     fileSystem.exists(new Path(value));
                 } catch (Exception e) {
                     LOG.error("Invalid location URI: {}", value, e);
@@ -362,7 +362,7 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
         Path path = new Path(location);
         URI uri = path.toUri();
         try {
-            FileSystem fileSystem = FileSystem.get(uri, new Configuration());
+            FileSystem fileSystem = FileSystem.get(uri, conf);
             fileSystem.delete(path, true);
         } catch (IOException e) {
             LOG.error("Failed to delete location {}", location, e);

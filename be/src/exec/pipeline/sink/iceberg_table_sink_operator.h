@@ -23,6 +23,7 @@
 #include "exec/parquet_writer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
+#include "fs/fs.h"
 
 namespace starrocks {
 namespace pipeline {
@@ -31,14 +32,15 @@ class IcebergTableSinkOperator final : public Operator {
 public:
     IcebergTableSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                              std::string location, std::string file_format, TCompressionType::type compression_codec,
-                             IcebergTableDescriptor* iceberg_table, FragmentContext* fragment_ctx,
-                             const std::shared_ptr<::parquet::schema::GroupNode>& schema,
+                             const TCloudConfiguration& cloud_conf, IcebergTableDescriptor* iceberg_table,
+                             FragmentContext* fragment_ctx, const std::shared_ptr<::parquet::schema::GroupNode>& schema,
                              const std::vector<ExprContext*>& output_expr_ctxs,
                              const vector<ExprContext*>& partition_output_expr)
             : Operator(factory, id, "iceberg_table_sink", plan_node_id, driver_sequence),
               _location(std::move(location)),
               _file_format(std::move(file_format)),
               _compression_codec(std::move(compression_codec)),
+              _cloud_conf(cloud_conf),
               _iceberg_table(iceberg_table),
               _parquet_file_schema(std::move(schema)),
               _fragment_ctx(fragment_ctx),
@@ -75,6 +77,8 @@ private:
     std::string _location;
     std::string _file_format;
     TCompressionType::type _compression_codec;
+    TCloudConfiguration _cloud_conf;
+
     IcebergTableDescriptor* _iceberg_table;
     std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;
     FragmentContext* _fragment_ctx = nullptr;
@@ -95,8 +99,8 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<IcebergTableSinkOperator>(
-                this, _id, _plan_node_id, driver_sequence, _location, _file_format, _compression_codec, _iceberg_table,
-                _fragment_ctx, _parquet_file_schema, _output_expr_ctxs, _partition_expr_ctxs);
+                this, _id, _plan_node_id, driver_sequence, _location, _file_format, _compression_codec, _cloud_conf,
+                _iceberg_table, _fragment_ctx, _parquet_file_schema, _output_expr_ctxs, _partition_expr_ctxs);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -115,6 +119,8 @@ private:
     std::string _location;
     std::string _file_format;
     TCompressionType::type _compression_codec;
+    TCloudConfiguration _cloud_conf;
+
     std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;
     std::vector<ExprContext*> _partition_expr_ctxs;
 };

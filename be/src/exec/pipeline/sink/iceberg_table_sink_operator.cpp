@@ -86,12 +86,13 @@ StatusOr<ChunkPtr> IcebergTableSinkOperator::pull_chunk(RuntimeState* state) {
 
 Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     TableInfo tableInfo;
-    tableInfo._schema = _parquet_file_schema;
-    tableInfo._compress_type = _compression_codec;
+    tableInfo.schema = _parquet_file_schema;
+    tableInfo.compress_type = _compression_codec;
+    tableInfo.cloud_conf = _cloud_conf;
 
     if (_iceberg_table->is_unpartitioned_table()) {
         if (_partition_writers.empty()) {
-            tableInfo._partition_location = _location + "/data/";
+            tableInfo.partition_location = _location + "/data/";
             auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _common_metrics.get(),
                                                                       add_iceberg_commit_info, state, _driver_sequence);
             _partition_writers.insert({"", std::move(writer)});
@@ -182,7 +183,13 @@ IcebergTableSinkOperatorFactory::IcebergTableSinkOperatorFactory(int32_t id, Fra
           _location(thrift_sink.location),
           _file_format(thrift_sink.file_format),
           _compression_codec(thrift_sink.compression_type),
-          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {}
+          _cloud_conf(thrift_sink.cloud_configuration),
+          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {
+    DCHECK(thrift_sink.__isset.location);
+    DCHECK(thrift_sink.__isset.file_format);
+    DCHECK(thrift_sink.__isset.compression_type);
+    DCHECK(thrift_sink.__isset.cloud_configuration);
+}
 
 Status IcebergTableSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
