@@ -127,7 +127,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static int audit_log_roll_num = 90;
     @ConfField
-    public static String[] audit_log_modules = {"slow_query", "query"};
+    public static String[] audit_log_modules = {"slow_query", "query", "connection"};
     @ConfField(mutable = true)
     public static long qe_slow_log_ms = 5000;
     @ConfField
@@ -1742,7 +1742,7 @@ public class Config extends ConfigBase {
     /**
      * Enable background refresh all external tables all partitions metadata on internal catalog.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static boolean enable_background_refresh_connector_metadata = true;
 
     /**

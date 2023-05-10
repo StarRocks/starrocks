@@ -408,6 +408,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE = "hdfs_backend_selector_scan_range_shuffle";
     public static final String SQL_QUOTE_SHOW_CREATE = "sql_quote_show_create";
 
+    public static final String ENABLE_PLAN_VALIDATION = "enable_plan_validation";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1032,6 +1034,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean hdfsBackendSelectorScanRangeShuffle = false;
+
+    @VarAttr(name = ENABLE_PLAN_VALIDATION, flag = VariableMgr.INVISIBLE)
+    private boolean enablePlanValidation = true;
 
     private int exprChildrenLimit = -1;
 
@@ -1977,6 +1982,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableStrictType(boolean val) {
         this.enableStrictType = val;
+    }
+
+    public boolean getEnablePlanValidation() {
+        return this.enablePlanValidation;
+    }
+
+    public void setEnablePlanValidation(boolean val) {
+        this.enablePlanValidation = val;
     }
 
     // Serialize to thrift object

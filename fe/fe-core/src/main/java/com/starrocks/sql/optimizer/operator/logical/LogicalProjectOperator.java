@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -60,7 +61,7 @@ public final class LogicalProjectOperator extends LogicalOperator {
 
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
-        return new RowOutputInfo(columnRefMap);
+        return new RowOutputInfo(columnRefMap, Maps.newHashMap());
     }
 
     @Override
