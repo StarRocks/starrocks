@@ -300,7 +300,7 @@ After the load of data from your HDFS cluster, AWS S3 bucket, or Google GCS buck
    4 rows in set (0.01 sec)
    ```
 
-#### Create a single-table load job
+### Create a single-table load job
 
 You can also load a single data file or all data files from a specified path into a single destination table. Suppose your AWS S3 bucket `bucket_s3` contains a folder named `input`. The `input` folder contains multiple data files, one of which is named `file1.csv`. These data files consist of the same number of columns as `table1` and the columns from each of these data files can be mapped one on one in sequence to the columns from `table1`.
 
