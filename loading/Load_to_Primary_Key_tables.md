@@ -54,7 +54,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
 
 ## 基本操作
 
-下面通过几个示例来展示具体的导入操作。有关使用 Stream Load、Broker Load 和 Routine Load 导入数据的详细语法和参数介绍，请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 和 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)。
+下面通过几个示例来展示具体的导入操作。有关使用 Stream Load、Broker Load 和 Routine Load 导入数据的详细语法和参数介绍，请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 和 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)。
 
 ### UPSERT
 

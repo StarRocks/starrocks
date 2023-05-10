@@ -42,7 +42,7 @@ Topic 负责存储和发布消息。Producer 往 Topic 中写消息，Consumer �
 
 ## 创建导入作业
 
-通过 [CREATE ROUTINE LOAD](../sql-statements/data-manipulation/ROUTINE%20LOAD.md) 语句，向StarRocks 提交一个 Routine Load 导入作业 `routine_wiki_edit_1`，持续消费 Pulsar 集群中 Topic `ordertest1`  的消息， 并且使用 Subscription  `load-test`，指定消费分区为 `load-partition-0`，`load-partition-1`，分区对应的消费起始 Position 分别为 Partition 有数据的位置开始消费、Partition 末尾开始消费。并导入至数据库 `load_test` 的表 `routine_wiki_edit` 中。
+通过 [CREATE ROUTINE LOAD](../sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) 语句，向StarRocks 提交一个 Routine Load 导入作业 `routine_wiki_edit_1`，持续消费 Pulsar 集群中 Topic `ordertest1`  的消息， 并且使用 Subscription  `load-test`，指定消费分区为 `load-partition-0`，`load-partition-1`，分区对应的消费起始 Position 分别为 Partition 有数据的位置开始消费、Partition 末尾开始消费。并导入至数据库 `load_test` 的表 `routine_wiki_edit` 中。
 
 ```SQL
 CREATE ROUTINE LOAD load_test.routine_wiki_edit_1 ON routine_wiki_edit
