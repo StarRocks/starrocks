@@ -43,21 +43,28 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
         RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
         return Status::OK();
     }
+    if (state->is_cancelled()) {
+        _aggregator->spiller()->cancel();
+    }
     // ugly code
     // TODO: fixme
     auto io_executor = _aggregator->spill_channel()->io_executor();
 
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
-        return _aggregator->spiller()->flush(state, *io_executor, spill::MemTrackerGuard(tls_mem_tracker));
+        return _aggregator->spiller()->flush(
+                state, *io_executor,
+                spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
     };
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
         _aggregator->spill_channel()->set_finishing();
         return _aggregator->spiller()->set_flush_all_call_back(
-                [this]() {
+                [this, state]() {
                     _is_finished = true;
+                    RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
-                state, *io_executor, spill::MemTrackerGuard(tls_mem_tracker));
+                state, *io_executor,
+                spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
     };
 
     if (_aggregator->spill_channel()->is_working()) {
