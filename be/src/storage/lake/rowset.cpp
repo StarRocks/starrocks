@@ -179,6 +179,13 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     return seg_iterators;
 }
 
+StatusOr<std::vector<SegmentPtr>> Rowset::segments() {
+    std::vector<SegmentPtr> segments;
+    // currently used in compaction, not fill cache
+    RETURN_IF_ERROR(load_segments(&segments, false));
+    return segments;
+}
+
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache) {
     size_t footer_size_hint = 16 * 1024;
     uint32_t seg_id = 0;
