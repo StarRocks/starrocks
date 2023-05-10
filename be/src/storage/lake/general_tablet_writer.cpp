@@ -69,8 +69,7 @@ void HorizontalGeneralTabletWriter::close() {
             }
         }
     }
-    std::vector<std::string> tmp;
-    std::swap(tmp, _files);
+    _files.clear();
 }
 
 Status HorizontalGeneralTabletWriter::reset_segment_writer() {
@@ -220,8 +219,7 @@ void VerticalGeneralTabletWriter::close() {
             }
         }
     }
-    std::vector<std::string> tmp;
-    std::swap(tmp, _files);
+    _files.clear();
 }
 
 StatusOr<std::unique_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_segment_writer(
