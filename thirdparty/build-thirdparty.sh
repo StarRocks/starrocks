@@ -514,6 +514,15 @@ build_rocksdb() {
     export CFLAGS=$OLD_FLAGS
 }
 
+# sasl
+build_sasl() {
+    check_if_source_exist $SASL_SOURCE
+    cd $TP_SOURCE_DIR/$SASL_SOURCE
+    CFLAGS= ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=no --enable-static=yes --enable-shared=no
+    make -j$PARALLEL
+    make install
+}
+
 # librdkafka
 build_librdkafka() {
     check_if_source_exist $LIBRDKAFKA_SOURCE
@@ -521,7 +530,7 @@ build_librdkafka() {
     cd $TP_SOURCE_DIR/$LIBRDKAFKA_SOURCE
 
     $CMAKE_CMD -DCMAKE_LIBRARY_PATH=$TP_INSTALL_DIR/lib -DCMAKE_INCLUDE_PATH=$TP_INSTALL_DIR/include \
-        -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DRDKAFKA_BUILD_STATIC=ON -DWITH_SASL=OFF -DWITH_SASL_SCRAM=ON \
+        -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DRDKAFKA_BUILD_STATIC=ON -DWITH_SASL=ON -DWITH_SASL_SCRAM=ON \
         -DRDKAFKA_BUILD_EXAMPLES=OFF -DRDKAFKA_BUILD_TESTS=OFF -DWITH_SSL=ON -DCMAKE_INSTALL_LIBDIR=lib
 
     ${BUILD_SYSTEM} -j$PARALLEL
@@ -1108,6 +1117,7 @@ build_thrift
 build_leveldb
 build_brpc
 build_rocksdb
+build_sasl
 build_librdkafka
 build_flatbuffers
 # must build before arrow
