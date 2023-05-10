@@ -94,7 +94,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv9");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv9`\n" +
+        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv9` (k1, k2)\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
@@ -123,7 +123,7 @@ public class ShowCreateMaterializedViewStmtTest {
         Table table = currentState.getDb("test").getTable("mv10");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv10`\n" +
+        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv10` (c1, c2)\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "DISTRIBUTED BY HASH(`c1`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
