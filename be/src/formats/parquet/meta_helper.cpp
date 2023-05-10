@@ -21,7 +21,7 @@ namespace starrocks::parquet {
 void ParquetMetaHelper::set_existed_column_names(std::unordered_set<std::string>* names) const {
     names->clear();
     for (size_t i = 0; i < _file_metadata->schema().get_fields_size(); i++) {
-        names->emplace(_file_metadata->schema().get_stored_column_by_idx(i)->name);
+        names->emplace(_file_metadata->schema().get_stored_column_by_field_idx(i)->name);
     }
 }
 
@@ -50,12 +50,11 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
                                              std::vector<GroupReaderParam::Column>& read_cols,
                                              bool& _is_only_partition_scan) const {
     for (auto& materialized_column : materialized_columns) {
-        int32_t field_index = _file_metadata->schema().get_field_pos_by_column_name(materialized_column.col_name);
+        int32_t field_idx = _file_metadata->schema().get_field_idx_by_column_name(materialized_column.col_name);
+        if (field_idx < 0) continue;
 
-        if (field_index < 0) continue;
-
-        auto parquet_type = _file_metadata->schema().get_stored_column_by_idx(field_index)->physical_type;
-        GroupReaderParam::Column column = _build_column(field_index, materialized_column.col_idx, parquet_type,
+        auto parquet_type = _file_metadata->schema().get_stored_column_by_field_idx(field_idx)->physical_type;
+        GroupReaderParam::Column column = _build_column(field_idx, materialized_column.col_idx, parquet_type,
                                                         materialized_column.col_type, materialized_column.slot_id);
         read_cols.emplace_back(column);
     }
@@ -81,7 +80,7 @@ void IcebergMetaHelper::build_column_name_2_pos_in_meta(
         const std::vector<SlotDescriptor*>& slots) const {
     // Key is field name, value is unique iceberg field id.
     std::unordered_map<std::string, int32_t> column_name_2_field_id{};
-    for (auto each : _t_iceberg_schema->fields) {
+    for (const auto& each : _t_iceberg_schema->fields) {
         const std::string& format_field_name = _case_sensitive ? each.name : boost::algorithm::to_lower_copy(each.name);
         column_name_2_field_id.emplace(format_field_name, each.field_id);
     }
@@ -95,7 +94,7 @@ void IcebergMetaHelper::build_column_name_2_pos_in_meta(
         }
         // Put SlotDescriptor's origin column name here!
         column_name_2_pos_in_meta.emplace(slot->col_name(),
-                                          _file_metadata->schema().get_field_pos_by_field_id(it->second));
+                                          _file_metadata->schema().get_field_idx_by_field_id(it->second));
     }
 }
 
@@ -121,15 +120,13 @@ void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
 
         int32_t field_id = iceberg_it->second->field_id;
 
-        int32_t field_pos = _file_metadata->schema().get_field_pos_by_field_id(field_id);
-        if (field_pos < 0) {
-            continue;
-        }
+        int32_t field_idx = _file_metadata->schema().get_field_idx_by_field_id(field_id);
+        if (field_idx < 0) continue;
 
         auto parquet_type = _file_metadata->schema().get_stored_column_by_field_id(field_id)->physical_type;
 
         GroupReaderParam::Column column =
-                _build_column(field_pos, materialized_column.col_idx, parquet_type, materialized_column.col_type,
+                _build_column(field_idx, materialized_column.col_idx, parquet_type, materialized_column.col_type,
                               materialized_column.slot_id, iceberg_it->second);
         read_cols.emplace_back(column);
     }

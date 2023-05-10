@@ -64,16 +64,16 @@ public:
         if (it == column_name_2_pos_in_meta.end()) {
             return nullptr;
         }
-        return _file_metadata->schema().get_stored_column_by_idx(it->second);
+        return _file_metadata->schema().get_stored_column_by_field_idx(it->second);
     }
 
 protected:
-    GroupReaderParam::Column _build_column(int col_idx_in_parquet, int col_idx_in_chunk,
+    GroupReaderParam::Column _build_column(int32_t field_idx_in_parquet, int32_t col_idx_in_chunk,
                                            const tparquet::Type::type& col_type_in_parquet,
                                            const TypeDescriptor& col_type_in_chunk, const SlotId& slot_id,
                                            const TIcebergSchemaField* t_iceberg_schema_field = nullptr) const {
         GroupReaderParam::Column column{};
-        column.col_idx_in_parquet = col_idx_in_parquet;
+        column.field_idx_in_parquet = field_idx_in_parquet;
         column.col_idx_in_chunk = col_idx_in_chunk;
         column.col_type_in_parquet = col_type_in_parquet;
         column.col_type_in_chunk = col_type_in_chunk;
@@ -89,7 +89,7 @@ protected:
 class ParquetMetaHelper : public MetaHelper {
 public:
     ParquetMetaHelper(std::shared_ptr<FileMetaData> file_metadata, bool case_sensitive) {
-        _file_metadata = file_metadata;
+        _file_metadata = std::move(file_metadata);
         _case_sensitive = case_sensitive;
     }
     ~ParquetMetaHelper() override = default;
@@ -109,7 +109,7 @@ class IcebergMetaHelper : public MetaHelper {
 public:
     IcebergMetaHelper(std::shared_ptr<FileMetaData> file_metadata, bool case_sensitive,
                       const TIcebergSchema* t_iceberg_schema) {
-        _file_metadata = file_metadata;
+        _file_metadata = std::move(file_metadata);
         _case_sensitive = case_sensitive;
         _t_iceberg_schema = t_iceberg_schema;
         DCHECK(_t_iceberg_schema != nullptr);
