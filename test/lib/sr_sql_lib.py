@@ -418,7 +418,7 @@ class StarrocksSQLApiLib(object):
 
         res_for_log = res if len(res) < 1000 else res[:1000] + "..."
         # array pretreatment
-        if res.startswith("["):
+        if res.startswith("[") or ("\n" in res and any(line.startswith("[") for line in res.split("\n"))):
             # list result
             if "\n" in res:
                 # many lines, replace null to None for Python
@@ -497,36 +497,7 @@ class StarrocksSQLApiLib(object):
                 return
 
             try:
-                if exp.startswith("["):
-                    log.info("[check type]: List")
-                    # list result
-                    if "\n" in exp:
-                        # many lines
-                        expect_res = exp.replace("null", "None").split("\n")
-                    else:
-                        # only one line
-                        try:
-                            expect_res = ast.literal_eval(exp.replace("null", "None"))
-                        except Exception as e:
-                            log.warn("converse array error: %s, %s" % (exp, e))
-                            expect_res = str(exp)
-
-                    tools.assert_equal(type(expect_res), type(act), "exp and act results' type not match")
-
-                    if order:
-                        tools.assert_list_equal(
-                            expect_res,
-                            act,
-                            "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, expect_res, act),
-                        )
-                    else:
-                        tools.assert_count_equal(
-                            expect_res,
-                            act,
-                            "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, expect_res, act),
-                        )
-                    return
-                elif exp.startswith("{") and exp.endswith("}"):
+                if exp.startswith("{") and exp.endswith("}"):
                     log.info("[check type]: DICT")
                     tools.assert_equal(type(exp), type(act), "exp and act results' type not match")
                     # list result
@@ -536,6 +507,36 @@ class StarrocksSQLApiLib(object):
                         "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, exp, act),
                     )
                     return
+                else:
+                    if exp.startswith("[") or ("\n" in exp and any(line.startswith("[") for line in exp.split("\n"))):
+                        log.info("[check type]: List")
+                        # list result
+                        if "\n" in exp:
+                            # many lines
+                            expect_res = exp.replace("null", "None").split("\n")
+                        else:
+                            # only one line
+                            try:
+                                expect_res = ast.literal_eval(exp.replace("null", "None"))
+                            except Exception as e:
+                                log.warn("converse array error: %s, %s" % (exp, e))
+                                expect_res = str(exp)
+
+                        tools.assert_equal(type(expect_res), type(act), "exp and act results' type not match")
+
+                        if order:
+                            tools.assert_list_equal(
+                                expect_res,
+                                act,
+                                "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, expect_res, act),
+                            )
+                        else:
+                            tools.assert_count_equal(
+                                expect_res,
+                                act,
+                                "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, expect_res, act),
+                            )
+                        return
             except Exception as e:
                 log.warn("analyse result before check error, %s" % e)
 
