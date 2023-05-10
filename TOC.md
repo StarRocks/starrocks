@@ -512,7 +512,7 @@
         + [parse_json](/sql-reference/sql-functions/json-functions/json-constructor-functions/parse_json.md)
       + JSON 查询和处理函数
         + [箭头函数](/sql-reference/sql-functions/json-functions/json-query-and-processing-functions/arrow-function.md)
-        + [cast](/sql-reference/sql-functions/json-functions/json-query-and-processing-functions/cast-from-or-to-json.md)
+        + [cast](/sql-reference/sql-functions/json-functions/json-query-and-processing-functions/cast.md)
         + [get_json_double](/sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_double.md)
         + [get_json_int](/sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_int.md)
         + [get_json_string](/sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_string.md)
