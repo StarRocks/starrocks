@@ -6,11 +6,11 @@ This section briefly introduces memory classification and StarRocks’ methods o
 
 Explanation:
 
-|   Indicator  | Name | Description |
+|   Metric  | Name | Description |
 | --- | --- | --- |
 |  process   |  Total memory used of BE  | |
-|  query\_pool   |   Querying memory   | Consists of two parts: (1) memory used by the execution layer (2) memory used by the storage layer.|
-|  load   |  Importing memory    | Generally MemTable|
+|  query\_pool   |   Memory used by data querying  | Consists of two parts: memory used by the execution layer and memory used by the storage layer.|
+|  load   |  Memory used by data loading    | Generally MemTable|
 |  table_meta   |   Metadata memory | S Schema, Tablet metadata, RowSet metadata, Column metadata, ColumnReader, IndexReader |
 |  compaction   |   Multi-version memory compaction  |  compaction that happens after data import is complete |
 |  snapshot  |   Snapshot memory  | Generally used for clone, little memory usage |

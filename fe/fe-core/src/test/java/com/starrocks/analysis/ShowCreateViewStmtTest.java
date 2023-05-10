@@ -152,10 +152,10 @@ public class ShowCreateViewStmtTest {
                 .replaceAll(",\\s*(true|false)]", "");
         String snippet = "  0:UNION\n" +
                 "  |  child exprs:\n" +
-                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
-                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
+                "  |      [32: c1, VARCHAR | [33: cast, VARCHAR | [34: cast, VARCHAR | [35: cast, VARCHAR\n" +
+                "  |      [37: c1, VARCHAR | [38: c2, VARCHAR | [42: cast, VARCHAR | [40: c4, VARCHAR\n" +
                 "  |  pass-through-operands: all";
-        Assert.assertTrue(plan.contains(snippet));
+        Assert.assertTrue(plan, plan.contains(snippet));
 
         String dropViewSql = "drop view if exists v2";
         DropTableStmt dropViewStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropViewSql, ctx);
