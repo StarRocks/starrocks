@@ -186,6 +186,14 @@ public:
         return NullableColumn::create(src_column, NullColumn::create(src_column->size(), 0));
     }
 
+    static ColumnPtr cast_to_non_nullable_column_force(const ColumnPtr& src_column) {
+        if (!src_column->is_nullable()) {
+            return src_column;
+        }
+        auto* nullable_column = as_raw_column<NullableColumn>(src_column);
+        return nullable_column->data_column();
+    }
+
     // Move the source column according to the specific dest type and nullable.
     static ColumnPtr move_column(const TypeDescriptor& dst_type_desc, bool dst_nullable, const ColumnPtr& src_column,
                                  int num_rows) {
