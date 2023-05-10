@@ -293,9 +293,9 @@ class ParquetScannerTest : public ::testing::Test {
     }
 
     template <bool is_nullable>
-    ChunkPtr test_json_column(const std::vector<std::string>& columns_from_file,
+    ChunkPtr get_chunk(const std::vector<std::string>& columns_from_file,
                               const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs,
-                              std::string specific_file) {
+                              std::string specific_file, size_t expected_rows) {
         std::vector<std::string> file_names{std::move(specific_file)};
         const std::vector<std::string>& column_names = columns_from_file;
 
@@ -318,7 +318,11 @@ class ParquetScannerTest : public ::testing::Test {
             }
             result = chunk;
         };
+<<<<<<< HEAD:be/test/exec/vectorized/parquet_scanner_test.cpp
         validate(scanner, 36865, check);
+=======
+        validate(scanner, expected_rows, check);
+>>>>>>> 1d3ea49d2 ([BugFix] overflow in parsing parquet int96 timestamp  (#22356)):be/test/exec/parquet_scanner_test.cpp
 
         return result;
     }
@@ -533,7 +537,7 @@ TEST_F(ParquetScannerTest, test_to_json) {
         std::vector<std::string> column_names{column_name};
         std::cerr << "test " << column_name << std::endl;
 
-        ChunkPtr chunk = test_json_column<true>(column_names, slot_map, parquet_file_name);
+        ChunkPtr chunk = get_chunk<true>(column_names, slot_map, parquet_file_name, 3);
         ASSERT_EQ(1, chunk->num_columns());
 
         auto col = chunk->columns()[0];
@@ -578,4 +582,32 @@ TEST_F(ParquetScannerTest, test_arrow_null) {
     validate(scanner, 3, check);
 }
 
+<<<<<<< HEAD:be/test/exec/vectorized/parquet_scanner_test.cpp
 } // namespace starrocks::vectorized
+=======
+TEST_F(ParquetScannerTest, int96_timestamp) {
+    const std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/int96_timestamp.parquet";
+    std::vector<std::tuple<std::string, std::vector<std::string>>> test_cases = {
+            {"col_datetime", {"9999-12-31 23:59:59", "2006-01-02 15:04:05"}}};
+
+    std::vector<std::string> columns_from_path;
+    std::vector<std::string> path_values;
+    std::unordered_map<size_t, TExpr> slot_map;
+
+    for (auto& [column_name, expected] : test_cases) {
+        std::vector<std::string> column_names{column_name};
+
+        ChunkPtr chunk = get_chunk<true>(column_names, slot_map, parquet_file_name, 2);
+        ASSERT_EQ(1, chunk->num_columns());
+
+        auto col = chunk->columns()[0];
+        for (int i = 0; i < col->size(); i++) {
+            std::string result = col->debug_item(i);
+            std::string expect = expected[i];
+            EXPECT_EQ(expect, result);
+        }
+    }
+}
+
+} // namespace starrocks
+>>>>>>> 1d3ea49d2 ([BugFix] overflow in parsing parquet int96 timestamp  (#22356)):be/test/exec/parquet_scanner_test.cpp
