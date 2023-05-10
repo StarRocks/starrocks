@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
-
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -274,14 +272,16 @@ public class UtilsTest {
                 t0.getBaseColumn("v3"));
 
         OptExpression opt =
-                new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
+                new OptExpression(
+                        LogicalOlapScanOperator.builder().setTable(t0).setColRefToColumnMetaMap(columnRefMap).build());
         Assert.assertTrue(Utils.hasUnknownColumnsStats(opt));
 
         GlobalStateMgr.getCurrentStatisticStorage().addColumnStatistic(t0, "v2",
                 new ColumnStatistic(1, 1, 0, 1, 1));
         GlobalStateMgr.getCurrentStatisticStorage().addColumnStatistic(t0, "v3",
                 new ColumnStatistic(1, 1, 0, 1, 1));
-        opt = new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
+        opt = new OptExpression(
+                LogicalOlapScanOperator.builder().setTable(t0).setColRefToColumnMetaMap(columnRefMap).build());
         Assert.assertFalse(Utils.hasUnknownColumnsStats(opt));
     }
 
@@ -291,7 +291,7 @@ public class UtilsTest {
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         OptExpression opt =
                 new OptExpression(
-                        new LogicalOlapScanOperator(t1, Maps.newHashMap(), Maps.newHashMap(), null, -1, null));
+                        LogicalOlapScanOperator.builder().setTable(t1).build());
         Assert.assertFalse(Utils.hasUnknownColumnsStats(opt));
     }
 
@@ -305,7 +305,6 @@ public class UtilsTest {
                 OptExpression.create(new LogicalValuesOperator(Lists.newArrayList(), Lists.newArrayList())));
 
         assertEquals(1, Utils.countJoinNodeSize(root, JoinOperator.semiAntiJoinSet()));
-
 
         //      outer join (left child semi join node = 1, right child semi join node = 3) => result is 3
         //      /         \

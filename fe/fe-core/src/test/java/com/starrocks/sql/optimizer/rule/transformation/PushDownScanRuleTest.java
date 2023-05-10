@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Memo;
@@ -51,7 +49,7 @@ public class PushDownScanRuleTest {
 
         OptExpression scan =
                 new OptExpression(
-                        new LogicalOlapScanOperator(table, Maps.newHashMap(), Maps.newHashMap(), null, -1, null));
+                        LogicalOlapScanOperator.builder().setTable(table).build());
         optExpression.getInputs().add(scan);
 
         assertNull(((LogicalOlapScanOperator) scan.getOp()).getPredicate());

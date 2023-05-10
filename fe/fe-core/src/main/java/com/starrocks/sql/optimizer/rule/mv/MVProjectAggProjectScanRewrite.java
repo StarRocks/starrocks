@@ -119,7 +119,7 @@ public class MVProjectAggProjectScanRewrite {
 
         LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
         LogicalOlapScanOperator newScanOperator = builder.withOperator(olapScanOperator)
-                .setColRefToColumnMetaMap(ImmutableMap.copyOf(columnRefOperatorColumnMap)).build();
+                .setColRefToColumnMetaMap(columnRefOperatorColumnMap).build();
         optExpression.setChild(0, OptExpression.create(newScanOperator));
     }
 

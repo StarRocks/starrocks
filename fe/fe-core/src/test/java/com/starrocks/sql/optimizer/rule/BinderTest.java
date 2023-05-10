@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule;
 
 import com.starrocks.catalog.HashDistributionInfo;
@@ -39,8 +38,8 @@ public class BinderTest {
         OlapTable table2 = new OlapTable();
         table2.setDefaultDistributionInfo(new HashDistributionInfo());
         OptExpression expr = OptExpression.create(new LogicalJoinOperator(),
-                new OptExpression(new LogicalOlapScanOperator(table1)),
-                new OptExpression(new LogicalOlapScanOperator(table2)));
+                new OptExpression(LogicalOlapScanOperator.builder().setTable(table1).build()),
+                new OptExpression(LogicalOlapScanOperator.builder().setTable(table2).build()));
 
         Pattern pattern = Pattern.create(OperatorType.LOGICAL_JOIN)
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF))

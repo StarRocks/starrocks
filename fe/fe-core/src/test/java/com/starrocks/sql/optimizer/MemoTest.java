@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
@@ -48,8 +47,8 @@ public class MemoTest {
 
         OptExpression expr = OptExpression.create(new LogicalProjectOperator(Maps.newHashMap()),
                 OptExpression.create(new LogicalJoinOperator(),
-                        OptExpression.create(new LogicalOlapScanOperator(olapTable1)),
-                        OptExpression.create(new LogicalOlapScanOperator(olapTable2))));
+                        OptExpression.create(LogicalOlapScanOperator.builder().setTable(olapTable1).build()),
+                        OptExpression.create(LogicalOlapScanOperator.builder().setTable(olapTable2).build())));
 
         Memo memo = new Memo();
         GroupExpression groupExpression = memo.init(expr);
@@ -93,8 +92,8 @@ public class MemoTest {
 
         OptExpression expr = OptExpression.create(new LogicalProjectOperator(Maps.newHashMap()),
                 OptExpression.create(new LogicalJoinOperator(),
-                        OptExpression.create(new LogicalOlapScanOperator(olapTable1)),
-                        OptExpression.create(new LogicalOlapScanOperator(olapTable2))));
+                        OptExpression.create(LogicalOlapScanOperator.builder().setTable(olapTable1).build()),
+                        OptExpression.create(LogicalOlapScanOperator.builder().setTable(olapTable2).build())));
 
         Memo memo = new Memo();
         memo.init(expr);

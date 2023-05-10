@@ -33,14 +33,12 @@ import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Test;
@@ -141,13 +139,13 @@ public class DistributionPrunerRuleTest {
 
         InPredicateOperator inPredicateOperator4 = new InPredicateOperator(column5, ConstantOperator.createChar("2"));
 
-        ScalarOperator predicate =
-                Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2, inPredicateOperator1,
-                        inPredicateOperator2, inPredicateOperator3, inPredicateOperator4);
-        LogicalOlapScanOperator operator =
-                new LogicalOlapScanOperator(olapTable, scanColumnMap, Maps.newHashMap(), null, -1, predicate,
-                        1, Lists.newArrayList(1L), null, false, Lists.newArrayList(), Lists.newArrayList());
-        operator.setPredicate(null);
+        LogicalOlapScanOperator operator = LogicalOlapScanOperator.builder()
+                .setTable(olapTable)
+                .setColRefToColumnMetaMap(scanColumnMap)
+                .setColumnMetaToColRefMap(Maps.newHashMap())
+                .setSelectedIndexId(1)
+                .setSelectedPartitionId(Lists.newArrayList(1L))
+                .build();
 
         new Expectations() {
             {

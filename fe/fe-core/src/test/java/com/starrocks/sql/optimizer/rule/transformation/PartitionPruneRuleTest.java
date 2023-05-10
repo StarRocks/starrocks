@@ -30,6 +30,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
@@ -40,6 +41,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -59,6 +61,22 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 public class PartitionPruneRuleTest {
+    public LogicalOlapScanOperator createScan(Table table,
+                                              Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                              Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+                                              HashDistributionSpec hashDistributionSpec,
+                                              long limit, ScalarOperator predicate) {
+        return LogicalOlapScanOperator.builder()
+                .setTable(table)
+                .setColRefToColumnMetaMap(colRefToColumnMetaMap)
+                .setColumnMetaToColRefMap(columnMetaToColRefMap)
+                .setHashDistributionSpec(hashDistributionSpec)
+                .setLimit(limit)
+                .setPredicate(predicate)
+                .setSelectedIndexId(((OlapTable) table).getBaseIndexId())
+                .build();
+    }
+    
     @Test
     public void transform1(@Mocked OlapTable olapTable, @Mocked RangePartitionInfo partitionInfo) {
         FeConstants.runningUnitTest = true;
@@ -112,7 +130,7 @@ public class PartitionPruneRuleTest {
                         ConstantOperator.createDate(LocalDateTime.of(2020, 12, 1, 0, 0, 0)));
         ScalarOperator predicate = Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2);
         LogicalOlapScanOperator operator =
-                new LogicalOlapScanOperator(olapTable, scanColumnMap, scanMetaColMap, null, -1, predicate);
+                createScan(olapTable, scanColumnMap, scanMetaColMap, null, -1, predicate);
         operator.setPredicate(null);
 
         new Expectations() {
@@ -231,7 +249,7 @@ public class PartitionPruneRuleTest {
                 Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2, binaryPredicateOperator3,
                         binaryPredicateOperator4);
         LogicalOlapScanOperator operator =
-                new LogicalOlapScanOperator(olapTable, scanColumnMap, scanMetaColMap, null, -1, predicate);
+                createScan(olapTable, scanColumnMap, scanMetaColMap, null, -1, predicate);
 
         new Expectations() {
             {
@@ -301,7 +319,7 @@ public class PartitionPruneRuleTest {
         ScalarOperator predicate = Utils.compoundAnd(binaryPredicateOperator);
 
         LogicalOlapScanOperator operator =
-                new LogicalOlapScanOperator(olapTable, scanColumnMap, columnMetaToColRefMap, null, -1, predicate);
+                createScan(olapTable, scanColumnMap, columnMetaToColRefMap, null, -1, predicate);
 
         Partition part1 = new Partition(10001L, "p1", null, null);
         Partition part2 = new Partition(10002L, "p2", null, null);
@@ -378,10 +396,13 @@ public class PartitionPruneRuleTest {
                 new ColumnRefOperator(1, column.getType(), column.getName(), false));
 
         PartitionNames partitionNames = new PartitionNames(true, Lists.newArrayList("p1", "p2"));
-        LogicalOlapScanOperator operator =
-                new LogicalOlapScanOperator(olapTable, scanColumnMap, columnMetaToColRefMap,
-                        null, -1, null, olapTable.getBaseIndexId(),
-                        null, partitionNames, false, Lists.newArrayList(), Lists.newArrayList());
+        LogicalOlapScanOperator operator = LogicalOlapScanOperator.builder()
+                .setTable(olapTable)
+                .setColRefToColumnMetaMap(scanColumnMap)
+                .setColumnMetaToColRefMap(columnMetaToColRefMap)
+                .setSelectedIndexId(olapTable.getBaseIndexId())
+                .setPartitionNames(partitionNames)
+                .build();
 
         Partition part1 = new Partition(10001L, "p1", null, null);
         Partition part2 = new Partition(10002L, "p2", null, null);

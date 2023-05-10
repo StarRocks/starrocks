@@ -94,13 +94,13 @@ public class MvUtilsTest {
 
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
         Table table1 = db.getTable("t0");
-        LogicalScanOperator scanOperator1 = new LogicalOlapScanOperator(table1);
+        LogicalScanOperator scanOperator1 = LogicalOlapScanOperator.builder().setTable(table1).build();
         BinaryPredicateOperator binaryPredicate2 = new BinaryPredicateOperator(
                 BinaryPredicateOperator.BinaryType.GE, columnRef1, ConstantOperator.createInt(1));
         scanOperator1.setPredicate(binaryPredicate2);
         OptExpression scanExpr = OptExpression.create(scanOperator1);
         Table table2 = db.getTable("t1");
-        LogicalScanOperator scanOperator2 = new LogicalOlapScanOperator(table2);
+        LogicalScanOperator scanOperator2 = LogicalOlapScanOperator.builder().setTable(table2).build();
         BinaryPredicateOperator binaryPredicate3 = new BinaryPredicateOperator(
                 BinaryPredicateOperator.BinaryType.GE, columnRef2, ConstantOperator.createInt(1));
         scanOperator2.setPredicate(binaryPredicate3);

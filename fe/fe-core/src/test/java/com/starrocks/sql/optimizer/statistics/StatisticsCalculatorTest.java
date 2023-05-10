@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.ImmutableMap;
@@ -244,15 +243,13 @@ public class StatisticsCalculatorTest {
             refToColumn.put(ref, column);
             columnToRef.put(column, ref);
 
-            LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
-                    refToColumn, columnToRef,
-                    null, -1, null,
-                    ((OlapTable) table).getBaseIndexId(),
-                    partitionIds,
-                    null,
-                    false,
-                    Lists.newArrayList(),
-                    Lists.newArrayList());
+            LogicalOlapScanOperator olapScanOperator = LogicalOlapScanOperator.builder()
+                    .setTable(table)
+                    .setColRefToColumnMetaMap(refToColumn)
+                    .setColumnMetaToColRefMap(columnToRef)
+                    .setSelectedIndexId(table.getBaseIndexId())
+                    .setSelectedPartitionId(partitionIds)
+                    .build();
 
             GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
             groupExpression.setGroup(new Group(0));
@@ -288,8 +285,9 @@ public class StatisticsCalculatorTest {
         partition1.setVisibleVersion(Partition.PARTITION_INIT_VERSION, System.currentTimeMillis());
         partition2.setVisibleVersion(2, System.currentTimeMillis());
         partition3.setVisibleVersion(2, System.currentTimeMillis());
-        List<Long> partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
-                mapToLong(Partition::getId).boxed().collect(Collectors.toList());
+        List<Long> partitionIds =
+                partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
+                        mapToLong(Partition::getId).boxed().collect(Collectors.toList());
 
         new Expectations() {
             {
@@ -305,6 +303,7 @@ public class StatisticsCalculatorTest {
             }
         };
 
+<<<<<<< HEAD
         LogicalOlapScanOperator olapScanOperator =
                 new LogicalOlapScanOperator(table,
                         ImmutableMap.of(idDate, new Column("id_date", Type.DATE, true)),
@@ -316,6 +315,15 @@ public class StatisticsCalculatorTest {
                         false,
                         Lists.newArrayList(),
                         Lists.newArrayList());
+=======
+        LogicalOlapScanOperator olapScanOperator = LogicalOlapScanOperator.builder()
+                .setTable(table)
+                .setColRefToColumnMetaMap(ImmutableMap.of(idDate, new Column("id_date", Type.DATE, true)))
+                .setColumnMetaToColRefMap(ImmutableMap.of(new Column("id_date", Type.DATE, true), idDate))
+                .setSelectedIndexId(((OlapTable) table).getBaseIndexId())
+                .setSelectedPartitionId(partitionIds)
+                .build();
+>>>>>>> [Refactor] Remove all LogicalOlapScanNode constructor
 
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
@@ -359,6 +367,7 @@ public class StatisticsCalculatorTest {
             partition.getBaseIndex().setRowCount(1000);
         }
 
+<<<<<<< HEAD
         LogicalOlapScanOperator olapScanOperator =
                 new LogicalOlapScanOperator(table,
                         ImmutableMap.of(idDate, new Column("id_date", Type.DATE, true)),
@@ -372,6 +381,17 @@ public class StatisticsCalculatorTest {
                         false,
                         Lists.newArrayList(),
                         Lists.newArrayList());
+=======
+        LogicalOlapScanOperator olapScanOperator = LogicalOlapScanOperator.builder()
+                .setTable(table)
+                .setColRefToColumnMetaMap(ImmutableMap.of(idDate, new Column("id_date", Type.DATE, true)))
+                .setColumnMetaToColRefMap(ImmutableMap.of(new Column("id_date", Type.DATE, true), idDate))
+                .setSelectedIndexId(((OlapTable) table).getBaseIndexId())
+                .setSelectedPartitionId(partitionIds)
+                .setPredicate(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                        idDate, ConstantOperator.createDate(LocalDateTime.of(2013, 12, 30, 0, 0, 0))))
+                .build();
+>>>>>>> [Refactor] Remove all LogicalOlapScanNode constructor
 
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
@@ -390,6 +410,7 @@ public class StatisticsCalculatorTest {
         partitionIds.clear();
         partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
                 mapToLong(Partition::getId).boxed().collect(Collectors.toList());
+<<<<<<< HEAD
         olapScanOperator =
                 new LogicalOlapScanOperator(table,
                         ImmutableMap.of(idDate, new Column("id_date", Type.DATE, true)),
@@ -400,6 +421,16 @@ public class StatisticsCalculatorTest {
                         false,
                         Lists.newArrayList(),
                         Lists.newArrayList());
+=======
+        olapScanOperator = LogicalOlapScanOperator.builder()
+                .setTable(table)
+                .setColRefToColumnMetaMap(ImmutableMap.of(idDate, new Column("id_date", Type.DATE, true)))
+                .setColumnMetaToColRefMap(ImmutableMap.of(new Column("id_date", Type.DATE, true), idDate))
+                .setSelectedIndexId(((OlapTable) table).getBaseIndexId())
+                .setSelectedPartitionId(partitionIds)
+                .build();
+
+>>>>>>> [Refactor] Remove all LogicalOlapScanNode constructor
         olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,
                 idDate, ConstantOperator.createDate(LocalDateTime.of(2014, 5, 1, 0, 0, 0))));
 
@@ -449,6 +480,7 @@ public class StatisticsCalculatorTest {
             partition.getBaseIndex().setRowCount(1000);
         }
 
+<<<<<<< HEAD
         LogicalOlapScanOperator olapScanOperator =
                 new LogicalOlapScanOperator(table,
                         ImmutableMap.of(idDate, new Column("id_date", Type.DATE, true)),
@@ -459,6 +491,15 @@ public class StatisticsCalculatorTest {
                         false,
                         Lists.newArrayList(),
                         Lists.newArrayList());
+=======
+        LogicalOlapScanOperator olapScanOperator = LogicalOlapScanOperator.builder()
+                .setTable(table)
+                .setColRefToColumnMetaMap(ImmutableMap.of(idDate, new Column("id_date", Type.DATE, true)))
+                .setColumnMetaToColRefMap(ImmutableMap.of(new Column("id_date", Type.DATE, true), idDate))
+                .setSelectedIndexId(table.getBaseIndexId())
+                .setSelectedPartitionId(partitionIds)
+                .build();
+>>>>>>> [Refactor] Remove all LogicalOlapScanNode constructor
 
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
@@ -479,6 +520,7 @@ public class StatisticsCalculatorTest {
         partitionIds.clear();
         partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
                 mapToLong(Partition::getId).boxed().collect(Collectors.toList());
+<<<<<<< HEAD
         olapScanOperator =
                 new LogicalOlapScanOperator(table,
                         ImmutableMap.of(idDate, new Column("id_date", Type.DATE, true)),
@@ -489,6 +531,16 @@ public class StatisticsCalculatorTest {
                         false,
                         Lists.newArrayList(),
                         Lists.newArrayList());
+=======
+        olapScanOperator = LogicalOlapScanOperator.builder()
+                .setTable(table)
+                .setColRefToColumnMetaMap(ImmutableMap.of(idDate, new Column("id_date", Type.DATE, true)))
+                .setColumnMetaToColRefMap(ImmutableMap.of(new Column("id_date", Type.DATE, true), idDate))
+                .setSelectedIndexId(table.getBaseIndexId())
+                .setSelectedPartitionId(partitionIds)
+                .build();
+
+>>>>>>> [Refactor] Remove all LogicalOlapScanNode constructor
         olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,
                 idDate, ConstantOperator.createDate(LocalDateTime.of(2020, 04, 24, 0, 0, 0))));
 

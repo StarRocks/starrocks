@@ -14,22 +14,15 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Table;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 public final class LogicalOlapScanOperator extends LogicalScanOperator {
@@ -42,54 +35,6 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private List<Long> hintsTabletIds;
 
     private List<ScalarOperator> prunedPartitionPredicates;
-
-    // Only for UT
-    public LogicalOlapScanOperator(Table table) {
-        this(table, Maps.newHashMap(), Maps.newHashMap(), null, Operator.DEFAULT_LIMIT, null);
-    }
-
-    public LogicalOlapScanOperator(
-            Table table,
-            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
-            DistributionSpec distributionSpec,
-            long limit,
-            ScalarOperator predicate) {
-        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, distributionSpec, limit, predicate,
-                ((OlapTable) table).getBaseIndexId(),
-                null,
-                null,
-                false,
-                Lists.newArrayList(),
-                Lists.newArrayList());
-    }
-
-    public LogicalOlapScanOperator(
-            Table table,
-            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
-            DistributionSpec distributionSpec,
-            long limit,
-            ScalarOperator predicate,
-            long selectedIndexId,
-            List<Long> selectedPartitionId,
-            PartitionNames partitionNames,
-            boolean hasTableHints,
-            List<Long> selectedTabletId,
-            List<Long> hintsTabletIds) {
-        super(OperatorType.LOGICAL_OLAP_SCAN, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
-                null);
-
-        Preconditions.checkState(table instanceof OlapTable);
-        this.distributionSpec = distributionSpec;
-        this.selectedIndexId = selectedIndexId;
-        this.selectedPartitionId = selectedPartitionId;
-        this.partitionNames = partitionNames;
-        this.hasTableHints = hasTableHints;
-        this.selectedTabletId = selectedTabletId;
-        this.hintsTabletIds = hintsTabletIds;
-        this.prunedPartitionPredicates = Lists.newArrayList();
-    }
 
     private LogicalOlapScanOperator() {
         super(OperatorType.LOGICAL_OLAP_SCAN);
@@ -157,6 +102,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 selectedTabletId, hintsTabletIds);
     }
 
+    public static Builder builder() {
+        return new Builder();
+    }
+
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalOlapScanOperator, LogicalOlapScanOperator.Builder> {
         @Override
@@ -185,22 +134,37 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         }
 
         public Builder setSelectedTabletId(List<Long> selectedTabletId) {
-            builder.selectedTabletId = selectedTabletId;
+            builder.selectedTabletId = ImmutableList.copyOf(selectedTabletId);
             return this;
         }
 
         public Builder setSelectedPartitionId(List<Long> selectedPartitionId) {
-            builder.selectedPartitionId = selectedPartitionId;
+            builder.selectedPartitionId = ImmutableList.copyOf(selectedPartitionId);
             return this;
         }
 
         public Builder setPrunedPartitionPredicates(List<ScalarOperator> prunedPartitionPredicates) {
-            builder.prunedPartitionPredicates = prunedPartitionPredicates;
+            builder.prunedPartitionPredicates = ImmutableList.copyOf(prunedPartitionPredicates);
             return this;
         }
 
         public Builder setDistributionSpec(DistributionSpec distributionSpec) {
             builder.distributionSpec = distributionSpec;
+            return this;
+        }
+
+        public Builder setPartitionNames(PartitionNames partitionNames) {
+            builder.partitionNames = partitionNames;
+            return this;
+        }
+
+        public Builder setHasHintsPartitionNames(boolean hasHintsPartitionNames) {
+            builder.hasHintsPartitionNames = hasHintsPartitionNames;
+            return this;
+        }
+
+        public Builder setHintsTabletIds(List<Long> hintsTabletIds) {
+            builder.hintsTabletIds = ImmutableList.copyOf(hintsTabletIds);
             return this;
         }
     }

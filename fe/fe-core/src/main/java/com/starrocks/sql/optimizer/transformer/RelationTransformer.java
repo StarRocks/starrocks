@@ -469,18 +469,16 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             if (node.isMetaQuery()) {
                 scanOperator = new LogicalMetaScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build());
             } else if (!isMVPlanner) {
-                scanOperator = new LogicalOlapScanOperator(node.getTable(),
-                        colRefToColumnMetaMapBuilder.build(),
-                        columnMetaToColRefMap,
-                        distributionSpec,
-                        Operator.DEFAULT_LIMIT,
-                        null,
-                        ((OlapTable) node.getTable()).getBaseIndexId(),
-                        null,
-                        node.getPartitionNames(),
-                        node.hasTableHints(),
-                        Lists.newArrayList(),
-                        node.getTabletIds());
+                scanOperator = LogicalOlapScanOperator.builder()
+                        .setTable(node.getTable())
+                        .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
+                        .setColumnMetaToColRefMap(columnMetaToColRefMap)
+                        .setHashDistributionSpec(DistributionSpec.createHashDistributionSpec(hashDistributionDesc))
+                        .setSelectedIndexId(((OlapTable) node.getTable()).getBaseIndexId())
+                        .setPartitionNames(node.getPartitionNames())
+                        .setSelectedTabletId(Lists.newArrayList())
+                        .setHintsTabletIds(node.getTabletIds())
+                        .build();
             } else {
                 scanOperator = new LogicalBinlogScanOperator(
                         node.getTable(),

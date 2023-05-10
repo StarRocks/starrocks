@@ -16,7 +16,6 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
@@ -133,7 +132,7 @@ public class PredicateReorderRuleTest {
         builder.addColumnStatistics(ImmutableMap.of(v4, new ColumnStatistic(1, 1, 0, 10, 50)));
         builder.addColumnStatistics(ImmutableMap.of(v5, new ColumnStatistic(0, 0, 0, 10, 50)));
         builder.addColumnStatistics(ImmutableMap.of(v6, new ColumnStatistic(0, 1, 0, 10, 50)));
-        //2003-10-11 - 2003-10-12
+        // 2003-10-11 - 2003-10-12
         builder.addColumnStatistics(ImmutableMap.of(v7, new ColumnStatistic(1065801600, 1065888000, 0, 10, 200)));
         statistics = builder.build();
 
@@ -177,25 +176,25 @@ public class PredicateReorderRuleTest {
 
         OlapScanImplementationRule olapScanImplementationRule = new OlapScanImplementationRule();
         OptExpression optExpression1 = new OptExpression(
-                new LogicalOlapScanOperator(t0, Maps.newHashMap(), Maps.newHashMap(), null, -1, and)
+                LogicalOlapScanOperator.builder().setTable(t0).setPredicate(and).build()
         );
         optExpression1 = olapScanImplementationRule.transform(optExpression1, null).get(0);
         optExpression1.setStatistics(statistics);
 
         OptExpression optExpression2 = new OptExpression(
-                new LogicalOlapScanOperator(t0, Maps.newHashMap(), Maps.newHashMap(), null, -1, or)
+                LogicalOlapScanOperator.builder().setTable(t0).setPredicate(or).build()
         );
         optExpression2 = olapScanImplementationRule.transform(optExpression2, null).get(0);
         optExpression2.setStatistics(statistics);
 
         OptExpression optExpression3 = new OptExpression(
-                new LogicalOlapScanOperator(t0, Maps.newHashMap(), Maps.newHashMap(), null, -1, notLt)
+                LogicalOlapScanOperator.builder().setTable(t0).setPredicate(notLt).build()
         );
         optExpression3 = olapScanImplementationRule.transform(optExpression3, null).get(0);
         optExpression3.setStatistics(statistics);
 
         OptExpression optExpression4 = new OptExpression(
-                new LogicalOlapScanOperator(t0, Maps.newHashMap(), Maps.newHashMap(), null, -1, notGt)
+                LogicalOlapScanOperator.builder().setTable(t0).setPredicate(notGt).build()
         );
         optExpression4 = olapScanImplementationRule.transform(optExpression4, null).get(0);
         optExpression4.setStatistics(statistics);
@@ -214,10 +213,10 @@ public class PredicateReorderRuleTest {
         optExpression4 = predicateReorderRule.rewrite(optExpression4, null);
         assertEquals(optExpression4.getOp().getPredicate().getChild(0), intGt0);
 
-        //test disable
+        // test disable
         sessionVariable.disablePredicateReorder();
         optExpression1 = new OptExpression(
-                new LogicalOlapScanOperator(t0, Maps.newHashMap(), Maps.newHashMap(), null, -1, and)
+                LogicalOlapScanOperator.builder().setTable(t0).build()
         );
         optExpression1 = olapScanImplementationRule.transform(optExpression1, null).get(0);
         optExpression1.setStatistics(statistics);
@@ -254,12 +253,12 @@ public class PredicateReorderRuleTest {
 
         OlapScanImplementationRule olapScanImplementationRule = new OlapScanImplementationRule();
         OptExpression optExpressionT0 = new OptExpression(
-                new LogicalOlapScanOperator(t0, Maps.newHashMap(), Maps.newHashMap(), null, -1, null)
+                LogicalOlapScanOperator.builder().setTable(t0).build()
         );
         optExpressionT0 = olapScanImplementationRule.transform(optExpressionT0, null).get(0);
         optExpressionT0.setStatistics(statistics);
         OptExpression optExpressionT1 = new OptExpression(
-                new LogicalOlapScanOperator(t1, Maps.newHashMap(), Maps.newHashMap(), null, -1, null)
+                LogicalOlapScanOperator.builder().setTable(t1).build()
         );
         optExpressionT1 = olapScanImplementationRule.transform(optExpressionT1, null).get(0);
         optExpressionT1.setStatistics(statistics);

@@ -78,7 +78,7 @@ public class PruneScanColumnRule extends TransformationRule {
 
                 LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
                 LogicalOlapScanOperator newScanOperator = builder.withOperator(olapScanOperator)
-                        .setColRefToColumnMetaMap(ImmutableMap.copyOf(newColumnRefMap)).build();
+                        .setColRefToColumnMetaMap(newColumnRefMap).build();
                 return Lists.newArrayList(new OptExpression(newScanOperator));
             } else {
                 LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scanOperator);
