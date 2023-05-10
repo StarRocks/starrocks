@@ -156,6 +156,7 @@ public class SqlParser {
         boolean isBracketComment = false;
 
         boolean inComment = false;
+        boolean isNeedEscape = false;
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < sql.length(); ++i) {
             if (inComment) {
@@ -190,16 +191,25 @@ public class SqlParser {
                 }
             }
 
+            if (inString && sql.charAt(i) == '\\') {
+                isNeedEscape = true;
+                sb.append("\\");
+                i++;
+            }
+
             sb.append(sql.charAt(i));
 
             if (!inString && (sql.charAt(i) == '\"' || sql.charAt(i) == '\'' || sql.charAt(i) == '`')) {
                 inString = true;
                 inStringStart = sql.charAt(i);
-            } else if (inString && (sql.charAt(i) == inStringStart) && i > 0 && sql.charAt(i - 1) != '\\') {
+            } else if (!isNeedEscape && inString && (sql.charAt(i) == inStringStart)) {
                 inString = false;
             }
+            isNeedEscape = false;
         }
         return sb.toString();
     }
+
+
 
 }
