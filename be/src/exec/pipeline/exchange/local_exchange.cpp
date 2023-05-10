@@ -199,11 +199,10 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
     }
 
     std::vector<uint32_t> hash_values(chunk->num_rows());
-    for (auto& partition_row_index : partition_row_indexes) {
-        RowIndexPtr indexes = partition_row_index.second;
+    for (auto& [_, indexes] : partition_row_indexes) {
         hash_values[(*indexes)[0]] = HashUtil::FNV_SEED;
         for (const ColumnPtr& column : partitions_columns) {
-            column->fnv_hash(&hash_values[0], (*indexes)[0], (*indexes)[1]);
+            column->fnv_hash(&hash_values[0], (*indexes)[0], (*indexes)[0] + 1);
         }
 
         uint32_t shuffle_channel_id = hash_values[(*indexes)[0]] % source_op_cnt;
