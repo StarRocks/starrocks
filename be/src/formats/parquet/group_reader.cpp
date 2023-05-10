@@ -176,8 +176,10 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     for (auto& column : _param.read_cols) {
         int chunk_index = column.col_idx_in_chunk;
         SlotId slot_id = column.slot_id;
+        const auto* parquet_field = _param.file_metadata->schema().get_stored_column_by_idx(column.col_idx_in_parquet);
+        DCHECK(parquet_field != nullptr);
         const tparquet::ColumnMetaData& column_metadata =
-                _row_group_metadata->columns[column.col_idx_in_parquet].meta_data;
+                _row_group_metadata->columns[parquet_field->physical_column_index].meta_data;
         if (_can_using_dict_filter(slots[chunk_index], conjunct_ctxs_by_slot, column_metadata)) {
             _use_as_dict_filter_column[read_col_idx] = true;
             _dict_filter_conjunct_ctxs[slot_id] = conjunct_ctxs_by_slot.at(slot_id);
