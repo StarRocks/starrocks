@@ -201,7 +201,7 @@ TEST_F(PrimaryKeyPublishTest, test_write_read_success) {
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
     std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer());
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal));
     ASSERT_OK(writer->open());
 
     // write segment #1
