@@ -68,6 +68,7 @@ struct CompactionTaskInfo {
     size_t filtered_rows{0};
     size_t output_num_rows{0};
     CompactionType compaction_type{CompactionType::INVALID_COMPACTION};
+    bool is_shortcut_compaction{false};
 
     // for vertical compaction
     size_t column_group_size{0};
@@ -117,6 +118,7 @@ struct CompactionTaskInfo {
         ss << ", total_output_num_rows:" << total_output_num_rows;
         ss << ", total_merged_rows:" << total_merged_rows;
         ss << ", total_del_filtered_rows:" << total_del_filtered_rows;
+        ss << ", is_shortcut_compaction:" << is_shortcut_compaction;
         ss << ", progress:" << get_progress();
         return ss.str();
     }
@@ -208,6 +210,8 @@ public:
         return _task_info.to_string();
     }
 
+    bool is_shortcut_compaction() const { return _task_info.is_shortcut_compaction; }
+
 protected:
     virtual Status run_impl() = 0;
 
@@ -263,6 +267,8 @@ protected:
     void _success_callback();
 
     void _failure_callback(const Status& st);
+
+    Status _shortcut_compact(Statistics* statistics);
 
 protected:
     CompactionTaskInfo _task_info;
