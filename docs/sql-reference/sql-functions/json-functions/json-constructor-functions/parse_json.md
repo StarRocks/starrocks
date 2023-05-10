@@ -18,7 +18,7 @@ parse_json(string_expr)
 
 Returns a JSON value.
 
-> Note: If the string cannot be parsed into a standard JSON value, the PARSE_JSON function returns `NULL`. For information about the JSON specification, see [RFC 7159](https://tools.ietf.org/html/rfc7159?spm=a2c63.p38356.0.0.14d26b9fcp7fcf#page-4).
+> Note: If the string cannot be parsed into a standard JSON value, the PARSE_JSON function returns `NULL` (see Example 5). For information about the JSON specifications, see [RFC 7159](https://tools.ietf.org/html/rfc7159?spm=a2c63.p38356.0.0.14d26b9fcp7fcf#page-4).
 
 ## Examples
 
@@ -26,38 +26,57 @@ Example 1: Convert a STRING value of `1` to a JSON value of `1`.
 
 ```Plain%20Text
 mysql> SELECT parse_json('1');
-
-       -> 1
++-----------------+
+| parse_json('1') |
++-----------------+
+| "1"             |
++-----------------+
 ```
 
 Example 2: Convert an array of the STRING data type to a JSON array.
 
 ```Plain%20Text
 mysql> SELECT parse_json('[1,2,3]');
-
-       -> [1, 2, 3]   
++-----------------------+
+| parse_json('[1,2,3]') |
++-----------------------+
+| [1, 2, 3]             |
++-----------------------+ 
 ```
 
 Example 3: Convert an object of the STRING data type to a JSON object.
 
 ```Plain%20Text
 mysql> SELECT parse_json('{"star": "rocks"}');
-
-       -> {"star": "rocks"}
++---------------------------------+
+| parse_json('{"star": "rocks"}') |
++---------------------------------+
+| {"star": "rocks"}               |
++---------------------------------+
 ```
 
 Example 4: Construct a JSON value of `NULL`.
 
 ```Plain%20Text
 mysql> SELECT parse_json('null');
-
-       -> NULL
++--------------------+
+| parse_json('null') |
++--------------------+
+| "null"             |
++--------------------+
 ```
 
-Example 5: If the string cannot be parsed into a standard JSON value, the PARSE_JSON function returns `NULL`. In this example, star is not enclosed in double quotation marks ("). Therefore, the PARSE_JSON function returns `NULL`.
+Example 5: If the string cannot be parsed into a standard JSON value, the PARSE_JSON function returns `NULL`. In this example, `star` is not enclosed in double quotation marks ("). Therefore, the PARSE_JSON function returns `NULL`.
 
 ```Plain%20Text
 mysql> SELECT parse_json('{star: "rocks"}');
-
-       -> NULL
++-------------------------------+
+| parse_json('{star: "rocks"}') |
++-------------------------------+
+| NULL                          |
++-------------------------------+
 ```
+
+## Keywords
+
+parse_json, parse json
