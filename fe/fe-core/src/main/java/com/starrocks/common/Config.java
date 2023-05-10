@@ -1770,7 +1770,7 @@ public class Config extends ConfigBase {
     /**
      * Enable background refresh all external tables all partitions metadata on internal catalog.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static boolean enable_background_refresh_connector_metadata = true;
 
     /**
