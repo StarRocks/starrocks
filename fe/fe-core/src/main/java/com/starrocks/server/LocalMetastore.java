@@ -2836,7 +2836,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
                         Config.enable_replicated_storage_as_default_engine));
         boolean isNonPartitioned = partitionInfo.getType() == PartitionType.UNPARTITIONED;
-        DataProperty dataProperty = analyzeMVDataProperties(materializedView, properties, isNonPartitioned);
+        DataProperty dataProperty = analyzeMVDataProperties(db, materializedView, properties, isNonPartitioned);
 
         boolean createMvSuccess;
         Set<Long> tabletIdSet = new HashSet<>();
@@ -2891,7 +2891,8 @@ public class LocalMetastore implements ConnectorMetadata {
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), materializedView);
     }
 
-    private DataProperty analyzeMVDataProperties(MaterializedView materializedView,
+    private DataProperty analyzeMVDataProperties(Database db,
+                                                 MaterializedView materializedView,
                                                  Map<String, String> properties,
                                                  boolean isNonPartitioned) throws DdlException {
         DataProperty dataProperty;
