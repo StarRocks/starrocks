@@ -204,11 +204,10 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
                     filter[i] = 0;
                     _error_counter++;
 
-                    std::stringstream error_msg;
-                    error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
-                              << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
-
                     if (_state->enable_log_rejected_record()) {
+                        std::stringstream error_msg;
+                        error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
+                                  << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
                         // TODO(meegoo): support other file format
                         _state->append_rejected_record_to_file(src->rebuild_csv_row(i, ","), error_msg.str(),
                                                                src->source_filename());
@@ -216,6 +215,9 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
 
                     // avoid print too many debug log
                     if (!_state->has_reached_max_error_msg_num()) {
+                        std::stringstream error_msg;
+                        error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
+                                  << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
                         _state->append_error_msg_to_file(src->debug_row(i), error_msg.str());
                     }
                 }
@@ -229,14 +231,15 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
                 if (nulls[i]) {
                     filter[i] = 0;
 
-                    std::stringstream error_msg;
-                    error_msg << "NULL value in non-nullable column '" << slot->col_name() << "'";
-
                     if (!_state->has_reached_max_error_msg_num()) {
+                        std::stringstream error_msg;
+                        error_msg << "NULL value in non-nullable column '" << slot->col_name() << "'";
                         _state->append_error_msg_to_file(cast->debug_row(i), error_msg.str());
                     }
 
                     if (_state->enable_log_rejected_record()) {
+                        std::stringstream error_msg;
+                        error_msg << "NULL value in non-nullable column '" << slot->col_name() << "'";
                         _state->append_rejected_record_to_file(cast->rebuild_csv_row(i, ","), error_msg.str(),
                                                                cast->source_filename());
                     }
