@@ -777,10 +777,31 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |      [4: expr, BIGINT, true] | [2: v2, BIGINT, true] | [3: v3, BIGINT, true]\n" +
                     "  |      [8: expr, BIGINT, true] | [6: v5, BIGINT, true] | [7: v6, BIGINT, true]\n" +
                     "  |  pass-through-operands: all\n");
+<<<<<<< HEAD
             assertContains(unionPlan, "     cardinality: 360000\n" +
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)\n");
             assertContains(unionPlan, "     cardinality: 360000\n" +
+=======
+            assertContains(unionPlan, "  4:OlapScanNode\n" +
+                    "     table: t1, rollup: t1\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: 5: v4 + 2 IS NOT NULL\n" +
+                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                    "     tabletList=" + tabletIdsStrList.get(1) + "\n" +
+                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     cardinality: 360000\n" +
+                    "     probe runtime filters:\n" +
+                    "     - filter_id = 0, probe_expr = (5: v4 + 2)");
+            assertContains(unionPlan, "  1:OlapScanNode\n" +
+                    "     table: t0, rollup: t0\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: 1: v1 + 1 IS NOT NULL\n" +
+                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                    "     tabletList=" + tabletIdsStrList.get(0) + "\n" +
+                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     cardinality: 360000\n" +
+>>>>>>> 8a5d39354 ([BugFix] Disable using bucket keys as local shuffle keys (#23027))
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)");
         }
@@ -892,7 +913,14 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(plan, plan.contains("  0:OlapScanNode\n" +
                 "     table: t1, rollup: t1\n" +
                 "     preAggregation: on\n" +
+<<<<<<< HEAD
                 "     partitionsRatio=1/1, tabletsRatio=3/3\n"));
+=======
+                "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                "     tabletList=" + tabletIdsStrList.get(0) + "\n" +
+                "     actualRows=0, avgRowSize=1.0\n" +
+                "     cardinality: 400000");
+>>>>>>> 8a5d39354 ([BugFix] Disable using bucket keys as local shuffle keys (#23027))
 
         Assert.assertTrue(plan.contains("5:EXCHANGE\n" +
                 "     cardinality: 400000\n" +
@@ -1187,7 +1215,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             sql = "select sum(v1) from colocate_t0 group by v1";
             execPlan = getExecPlan(sql);
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-            Assert.assertEquals(1, olapScanNode.getBucketExprs().size());
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
             Assert.assertTrue(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "1:AGGREGATE (update finalize)\n" +
