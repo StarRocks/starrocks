@@ -192,14 +192,6 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
 
         col = ColumnHelper::unfold_const_column(slot->type(), cast->num_rows(), col);
 
-        // The column builder in ctx->evaluate may build column as non-nullable.
-        // See be/src/column/column_builder.h#L79.
-        if (!col->is_nullable() && slot->is_nullable()) {
-            col = ColumnHelper::cast_to_nullable_column(col);
-        }
-
-        dest_chunk->append_column(col, slot->id());
-
         if (src != nullptr && col->is_nullable() && col->has_null()) {
             if (_strict_mode && _dest_slot_desc_mappings[dest_index] != nullptr) {
                 ColumnPtr& src_col = src->get_column_by_slot_id(_dest_slot_desc_mappings[dest_index]->id());
@@ -232,6 +224,39 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
                 }
             }
         }
+
+        if (cast != nullptr && col->is_nullable() && col->has_null() && !slot->is_nullable()) {
+            auto* nullable = down_cast<NullableColumn*>(col.get());
+            auto& nulls = nullable->null_column_data();
+            for (int i = 0; i < col->size(); ++i) {
+                if (nulls[i]) {
+                    filter[i] = 0;
+
+                    std::stringstream error_msg;
+                    error_msg << "NULL value in non-nullable column '" << slot->col_name() << "'";
+
+                    if (!_state->has_reached_max_error_msg_num()) {
+                        _state->append_error_msg_to_file(cast->debug_row(i), error_msg.str());
+                    }
+
+                    if (_state->enable_log_rejected_record()) {
+                        _state->append_rejected_record_to_file(cast->rebuild_csv_row(i, ","), error_msg.str(),
+                                                               cast->source_filename());
+                    }
+                }
+            }
+        }
+
+        // The column builder in ctx->evaluate may build column as non-nullable/nullable,
+        // which is different from expected schema.
+        // See be/src/column/column_builder.h#L79.
+        if (!col->is_nullable() && slot->is_nullable()) {
+            col = ColumnHelper::cast_to_nullable_column(col);
+        } else if (col->is_nullable() && !slot->is_nullable()) {
+            col = ColumnHelper::cast_to_non_nullable_column_force(col);
+        }
+
+        dest_chunk->append_column(col, slot->id());
     }
 
     dest_chunk->filter(filter);
