@@ -304,7 +304,7 @@ public class CatalogMgr {
     }
 
     public Map<String, Catalog> getCatalogs() {
-        return catalogs;
+        return new HashMap<>(catalogs);
     }
 
     public boolean checkCatalogExistsById(long id) {

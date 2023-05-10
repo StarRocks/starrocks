@@ -230,6 +230,15 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
+    public Set<String> getAllResourceGroupNames() {
+        readLock();
+        try {
+            return resourceGroupMap.keySet();
+        } finally {
+            readUnlock();
+        }
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         List<ResourceGroup> resourceGroups = resourceGroupMap.values().stream().collect(Collectors.toList());

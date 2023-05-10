@@ -894,6 +894,15 @@ public class AuthorizationManager {
         }
     }
 
+    public UserPrivilegeCollection getUserPrivilegeCollection(UserIdentity userIdentity) {
+        userReadLock();
+        try {
+            return userToPrivilegeCollection.get(userIdentity);
+        } finally {
+            userReadUnlock();
+        }
+    }
+
     public UserPrivilegeCollection getUserPrivilegeCollectionUnlocked(UserIdentity userIdentity)
             throws PrivilegeException {
         UserPrivilegeCollection userCollection = userToPrivilegeCollection.get(userIdentity);
@@ -918,9 +927,42 @@ public class AuthorizationManager {
         }
     }
 
+    public Set<UserIdentity> getAllUserIdentities() {
+        userReadLock();
+        try {
+            List<String> users = Lists.newArrayList();
+            Set<UserIdentity> userIdentities = userToPrivilegeCollection.keySet();
+            return userIdentities;
+        } finally {
+            userReadUnlock();
+        }
+    }
+
     // return null if not exists
     protected UserPrivilegeCollection getUserPrivilegeCollectionUnlockedAllowNull(UserIdentity userIdentity) {
         return userToPrivilegeCollection.get(userIdentity);
+    }
+
+    public RolePrivilegeCollection getRolePrivilegeCollection(String roleName) {
+        roleReadLock();
+        try {
+            Long roleId = roleNameToId.get(roleName);
+            if (roleId == null) {
+                return null;
+            }
+            return roleIdToPrivilegeCollection.get(roleId);
+        } finally {
+            roleReadUnlock();
+        }
+    }
+
+    public RolePrivilegeCollection getRolePrivilegeCollection(long roleId) {
+        roleReadLock();
+        try {
+            return roleIdToPrivilegeCollection.get(roleId);
+        } finally {
+            roleReadUnlock();
+        }
     }
 
     public RolePrivilegeCollection getRolePrivilegeCollectionUnlocked(long roleId, boolean exceptionIfNotExists)
@@ -1028,6 +1070,20 @@ public class AuthorizationManager {
         try {
             UserPrivilegeCollection userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
             return userPrivilegeCollection.getTypeToPrivilegeEntryList();
+        } catch (PrivilegeException e) {
+            throw new SemanticException(e.getMessage());
+        } finally {
+            userReadUnlock();
+        }
+    }
+
+    public Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> getMergedTypeToPrivilegeEntryListByUser(
+            UserIdentity userIdentity) {
+        userReadLock();
+        try {
+            UserPrivilegeCollection userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
+            PrivilegeCollection collection = mergePrivilegeCollection(userIdentity, userPrivilegeCollection.getAllRoles());
+            return collection.getTypeToPrivilegeEntryList();
         } catch (PrivilegeException e) {
             throw new SemanticException(e.getMessage());
         } finally {

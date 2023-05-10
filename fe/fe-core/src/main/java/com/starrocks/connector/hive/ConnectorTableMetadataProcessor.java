@@ -153,7 +153,7 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
         List<Database> databases = gsm.getDbIds().stream()
                 .map(gsm::getDb)
                 .filter(Objects::nonNull)
-                .filter(db -> !db.isInfoSchemaDb())
+                .filter(db -> !db.isSystemDatabase())
                 .collect(Collectors.toList());
         for (Database db : databases) {
             List<HiveTable> tables = db.getTables().stream()

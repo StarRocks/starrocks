@@ -554,7 +554,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
                 createTblSuccess = db.createTableWithLock(table, false);
                 if (!createTblSuccess) {
-                    if (db.isInfoSchemaDb()) {
+                    if (db.isSystemDatabase()) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "create denied");
                     } else if (!stmt.isSetIfNotExists()) {
                         ErrorReport
