@@ -53,7 +53,12 @@ Status CacheLibWrapper::init(const CacheOptions& options) {
     return Status::OK();
 }
 
-Status CacheLibWrapper::write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds) {
+Status CacheLibWrapper::write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds,
+                                    bool overwrite) {
+    //  Simulate the behavior of skipping if exists
+    if (!overwrite && _cache->find(key)) {
+        return Status::AlreadyExist("the cache item already exists");
+    }
     // TODO: check size for chain item
     auto handle = _cache->allocate(_default_pool, key, size);
     if (!handle) {

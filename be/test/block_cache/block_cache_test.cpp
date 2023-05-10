@@ -24,10 +24,32 @@
 
 namespace starrocks {
 
+static const size_t block_size = 1024 * 1024;
+
 class BlockCacheTest : public ::testing::Test {
 protected:
-    void SetUp() override { ASSERT_TRUE(fs::create_directories("./ut_dir/block_disk_cache").ok()); }
-    void TearDown() override { ASSERT_TRUE(fs::remove_all("./ut_dir").ok()); }
+    static void SetUpTestCase() {
+        ASSERT_TRUE(fs::create_directories("./ut_dir/block_disk_cache").ok());
+        BlockCache* cache = BlockCache::instance();
+
+        CacheOptions options;
+        options.mem_space_size = 20 * 1024 * 1024;
+        size_t quota = 500 * 1024 * 1024;
+        options.disk_spaces.push_back({.path = "./ut_dir/block_disk_cache", .size = quota});
+        options.block_size = block_size;
+        options.engine = "starcache";
+        Status status = cache->init(options);
+        ASSERT_TRUE(status.ok());
+    }
+
+    static void TearDownTestCase() {
+        ASSERT_TRUE(fs::remove_all("./ut_dir").ok());
+        BlockCache* cache = BlockCache::instance();
+        cache->shutdown();
+    }
+
+    void SetUp() override {}
+    void TearDown() override {}
 };
 
 TEST_F(BlockCacheTest, hybrid_cache) {
@@ -80,8 +102,31 @@ TEST_F(BlockCacheTest, hybrid_cache) {
     // not found
     res = cache->read_cache(cache_key, block_size * 1000, batch_size, value);
     ASSERT_TRUE(res.status().is_not_found());
+}
 
-    cache->shutdown();
+TEST_F(BlockCacheTest, write_with_overwrite_option) {
+    BlockCache* cache = BlockCache::instance();
+
+    const size_t cache_size = 1024;
+    const std::string cache_key = "test_file";
+
+    std::string value(cache_size, 'a');
+    Status st = cache->write_cache(cache_key, 0, cache_size, value.c_str());
+    ASSERT_TRUE(st.ok());
+
+    std::string value2(cache_size, 'b');
+    st = cache->write_cache(cache_key, 0, cache_size, value2.c_str(), 0, true);
+    ASSERT_TRUE(st.ok());
+
+    char rvalue[cache_size] = {0};
+    auto res = cache->read_cache(cache_key, 0, cache_size, rvalue);
+    ASSERT_TRUE(res.status().ok());
+    std::string expect_value(cache_size, 'b');
+    ASSERT_EQ(memcmp(rvalue, expect_value.c_str(), cache_size), 0);
+
+    std::string value3(cache_size, 'c');
+    st = cache->write_cache(cache_key, 0, cache_size, value3.c_str(), 0, false);
+    ASSERT_TRUE(st.is_already_exist());
 }
 
 TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
