@@ -38,6 +38,7 @@ public:
                              const vector<ExprContext*>& partition_output_expr)
             : Operator(factory, id, "iceberg_table_sink", plan_node_id, driver_sequence),
               _location(std::move(location)),
+              _iceberg_table_data_location(_location + "/data/"),
               _file_format(std::move(file_format)),
               _compression_codec(std::move(compression_codec)),
               _cloud_conf(cloud_conf),
@@ -53,7 +54,8 @@ public:
 
     void close(RuntimeState* state) override;
 
-    bool has_output() const override { return false; }
+    bool has_output() const override {
+        return false; }
 
     bool need_input() const override;
 
@@ -70,11 +72,12 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
-    std::string _get_partition_location(std::vector<std::string> names, std::vector<std::string> values);
+    std::string _get_partition_location(const std::vector<std::string>& names, const std::vector<std::string>& values);
 
     std::string _value_to_string(const ColumnPtr& column, size_t index);
 
     std::string _location;
+    std::string _iceberg_table_data_location;
     std::string _file_format;
     TCompressionType::type _compression_codec;
     TCloudConfiguration _cloud_conf;

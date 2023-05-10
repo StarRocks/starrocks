@@ -21,6 +21,7 @@
 namespace starrocks::pipeline {
 
 [[maybe_unused]] static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state);
+static const std::string ICEBERG_UNPARTITIONED_TABLE_LOCATION = "iceberg_unpartitioned_table_fake_location";
 
 Status IcebergTableSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
@@ -92,62 +93,55 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
 
     if (_iceberg_table->is_unpartitioned_table()) {
         if (_partition_writers.empty()) {
-            tableInfo.partition_location = _location + "/data/";
+            tableInfo.partition_location = _iceberg_table_data_location;
             auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _common_metrics.get(),
                                                                       add_iceberg_commit_info, state, _driver_sequence);
-            _partition_writers.insert({"", std::move(writer)});
+            _partition_writers.insert({ICEBERG_UNPARTITIONED_TABLE_LOCATION, std::move(writer)});
         }
 
-        _partition_writers[""]->append_chunk(chunk.get(), state);
+        _partition_writers[ICEBERG_UNPARTITIONED_TABLE_LOCATION]->append_chunk(chunk.get(), state);
         return Status::OK();
     } else {
-        // TODO(stephen) wait https://github.com/StarRocks/starrocks/pull/22115 to merge
+        Columns partitions_columns;
+        partitions_columns.resize(_partition_expr.size());
+        for (size_t i = 0; i < partitions_columns.size(); ++i) {
+            ASSIGN_OR_RETURN(partitions_columns[i], _partition_expr[i]->evaluate(chunk.get()));
+            DCHECK(partitions_columns[i] != nullptr);
+        }
 
-        //        Columns partitions_columns;
-        //        partitions_columns.resize(_partition_expr.size());
-        //        for (size_t i = 0; i < partitions_columns.size(); ++i) {
-        //            ASSIGN_OR_RETURN(partitions_columns[i], _partition_expr[i]->evaluate(chunk.get()));
-        //            DCHECK(partitions_columns[i] != nullptr);
-        //        }
-        //
-        //        std::vector<std::string> partition_column_names = _iceberg_table->partition_column_names();
-        //
-        //        std::vector<std::string> partition_column_values;
-        //        for (const ColumnPtr& column : partitions_columns) {
-        //            partition_column_values.emplace_back(_value_to_string(column, 0));
-        //        }
-        //
-        //        DCHECK(partition_column_names.size() == partition_column_values.size());
-        //
-        //        string partition_location = _get_partition_location(partition_column_names, partition_column_values);
-        //        if (_partition_writers.find(partition_location) == _partition_writers.end()) {
-        //            tableInfo._partition_location = partition_location;
-        //            auto writer =
-        //                    new RollingAsyncParquetWriter(tableInfo, _output_expr, _common_metrics.get(), add_iceberg_commit_info);
-        //            _partition_writers.emplace(partition_location, writer);
-        //            LOG(WARNING) << "==========[insert writer on [" << partition_location << "]=============== size["
-        //                         << chunk->num_rows() << "]==";
-        //        }
-        //
-        //        _partition_writers[partition_location]->append_chunk(chunk.get(), state);
-        //
+        std::vector<std::string> partition_column_names = _iceberg_table->partition_column_names();
+        std::vector<std::string> partition_column_values;
+        for (const ColumnPtr& column : partitions_columns) {
+            partition_column_values.emplace_back(_value_to_string(column, 0));
+        }
+
+        DCHECK(partition_column_names.size() == partition_column_values.size());
+
+        string partition_location = _get_partition_location(partition_column_names, partition_column_values);
+
+        auto partition_writer = _partition_writers.find(partition_location);
+        if (partition_writer == _partition_writers.end()) {
+            tableInfo.partition_location = partition_location;
+            auto writer = new RollingAsyncParquetWriter(tableInfo, _output_expr, _common_metrics.get(),
+                                                        add_iceberg_commit_info, state, _driver_sequence);
+
+            _partition_writers.emplace(partition_location, writer);
+            writer->append_chunk(chunk.get(), state);
+        } else {
+            partition_writer->second->append_chunk(chunk.get(), state);
+        }
+
         return Status::OK();
     }
 }
 
-std::string IcebergTableSinkOperator::_get_partition_location(std::vector<std::string> names,
-                                                              std::vector<std::string> values) {
-    std::stringstream partition_location;
-    partition_location << _location;
-    partition_location << "/data/";
+std::string IcebergTableSinkOperator::_get_partition_location(const std::vector<std::string>& names,
+                                                              const std::vector<std::string>& values) {
+    std::string partition_location = _iceberg_table_data_location;
     for (size_t i = 0; i < names.size(); i++) {
-        partition_location << names[i];
-        partition_location << "=";
-        partition_location << values[i];
-        partition_location << "/";
+        partition_location += names[i] + "=" + values[i] + "/";
     }
-
-    return partition_location.str();
+    return partition_location;
 }
 
 std::string IcebergTableSinkOperator::_value_to_string(const ColumnPtr& column, size_t index) {

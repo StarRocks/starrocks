@@ -153,6 +153,36 @@ void PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange_for_si
     _fragment_context->pipelines().emplace_back(std::move(pipeline_with_local_exchange_source));
 }
 
+void PipelineBuilderContext::maybe_interpolate_local_key_partition_exchange_for_sink(
+        RuntimeState* state, OpFactoryPtr table_sink_operator, const std::vector<ExprContext*>& partition_expr_ctxs,
+        int32_t source_operator_dop, int32_t desired_sink_dop) {
+    auto* source_operator =
+            down_cast<SourceOperatorFactory*>(_fragment_context->pipelines().back()->source_operator_factory());
+    auto pseudo_plan_node_id = next_pseudo_plan_node_id();
+    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(source_operator_dop * state->chunk_size() *
+                                                                localExchangeBufferChunks());
+    auto local_shuffle_source =
+            std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), pseudo_plan_node_id, mem_mgr);
+    auto local_exchanger = std::make_shared<KeyPartitionExchanger>(mem_mgr, local_shuffle_source.get(),
+                                                                   partition_expr_ctxs, source_operator_dop);
+
+    auto local_shuffle_sink = std::make_shared<LocalExchangeSinkOperatorFactory>(next_operator_id(),
+                                                                                 pseudo_plan_node_id, local_exchanger);
+
+    _fragment_context->pipelines().back()->add_op_factory(local_shuffle_sink);
+
+    OpFactories operators_source_with_local_shuffle;
+    local_shuffle_source->set_runtime_state(state);
+    local_shuffle_source->set_group_leader(source_operator);
+    local_shuffle_source->set_degree_of_parallelism(desired_sink_dop);
+    operators_source_with_local_shuffle.emplace_back(std::move(local_shuffle_source));
+    operators_source_with_local_shuffle.emplace_back(std::move(table_sink_operator));
+
+    auto pipeline_with_local_exchange_source =
+            std::make_shared<Pipeline>(next_pipe_id(), operators_source_with_local_shuffle);
+    _fragment_context->pipelines().emplace_back(std::move(pipeline_with_local_exchange_source));
+}
+
 OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
         RuntimeState* state, OpFactories& pred_operators, const std::vector<ExprContext*>& self_partition_exprs) {
     return maybe_interpolate_local_shuffle_exchange(state, pred_operators,
