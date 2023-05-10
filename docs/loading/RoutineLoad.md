@@ -32,7 +32,7 @@ Routine Load now supports consuming CSV and JSON format data from a Kafka cluste
 ### Workflow
 
 1. **Create a Routine Load job.**
-   To load data from Kafka, you need to create a Routine Load job by running the [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md) statement. The FE parses the statement, and creates the job according to the properties you have specified.
+   To load data from Kafka, you need to create a Routine Load job by running the [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md) statement. The FE parses the statement, and creates the job according to the properties you have specified.
 
 2. **The FE splits the job into multiple load tasks.**
 
@@ -48,7 +48,7 @@ Routine Load now supports consuming CSV and JSON format data from a Kafka cluste
 
 3. **Multiple load tasks run concurrently to consume the messages from multiple Kafka topic partitions, and load the data into StarRocks**
 
-   1. **The FE schedules and submits load tasks**: the FE schedules the load tasks in the queue on a timely basis, and assigns them to selected Coordinator BE nodes. The interval between load tasks is defined by the configuration item `max_batch_interval`. The FE distributes the load tasks evenly to all BE nodes. See [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md#example) for more information about `max_batch_interval`.
+   1. **The FE schedules and submits load tasks**: the FE schedules the load tasks in the queue on a timely basis, and assigns them to selected Coordinator BE nodes. The interval between load tasks is defined by the configuration item `max_batch_interval`. The FE distributes the load tasks evenly to all BE nodes. See [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md#example) for more information about `max_batch_interval`.
 
    2. The Coordinator BE starts the load task, consumes messages in partitions, parses and filters the data. A load task lasts until the pre-defined amount of messages are consumed or the pre-defined time limit is reached. The message batch size and time limit are defined in the FE configurations `max_routine_load_batch_size` and `routine_load_task_consume_second`. For detailed information, see [Configuration](../administration/Configuration.md). The Coordinator BE then distributes the messages to the Executor BEs. The Executor BEs write the messages to disks.
 
@@ -61,7 +61,7 @@ Routine Load now supports consuming CSV and JSON format data from a Kafka cluste
 
 ## Create a Routine Load job
 
-The following two examples describe how to consume CSV-format and JSON-format data in Kafka, and load the data into StarRocks by creating a Routine Load job. For detailed instruction and reference, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+The following two examples describe how to consume CSV-format and JSON-format data in Kafka, and load the data into StarRocks by creating a Routine Load job. For detailed instruction and reference, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 ### Load CSV-format data
 
@@ -144,7 +144,7 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
     "property.kafka_default_offsets" = "OFFSET_BEGINNING"
     ```
 
-  For detailed information, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+  For detailed information, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 - **Data mapping and transformation**
 
@@ -176,7 +176,7 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
   In the example, the number of BE nodes that are alive is `5`, the number of the pre-specified Kafka topic partitions is `5`, and the value of `max_routine_load_task_concurrent_num` is `5`. To increase the actual load task concurrency, you can increase the `desired_concurrent_number` from the default value `3` to `5`.
 
-  For more about the properties, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md). For detailed instructions on accelerating the loading, see [Routine Load FAQ](../faq/loading/Routine_load_faq).
+  For more about the properties, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md). For detailed instructions on accelerating the loading, see [Routine Load FAQ](../faq/loading/Routine_load_faq).
 
 ### Load JSON-format data
 
@@ -272,7 +272,7 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
 Execute the [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md) statement to check the status of the load job `example_tbl2_ordertest2`. StarRocks returns the execution state `State`, the statistical information (including the total rows consumed and the total rows loaded) `Statistics`,  and the progress of the load job `progress`.
 
-If the state of the load job is automatically changed to **PAUSED**, it is possibly because the number of error rows has exceeded the threshold. For detailed instructions on setting this threshold, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md). You can check the files `ReasonOfStateChanged` and `ErrorLogUrls` to identify and troubleshoot the problem. Having fixed the problem, you can then execute the [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md) statement to resume the **PAUSED** load job.
+If the state of the load job is automatically changed to **PAUSED**, it is possibly because the number of error rows has exceeded the threshold. For detailed instructions on setting this threshold, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md). You can check the files `ReasonOfStateChanged` and `ErrorLogUrls` to identify and troubleshoot the problem. Having fixed the problem, you can then execute the [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md) statement to resume the **PAUSED** load job.
 
 If the state of the load job is **CANCELLED**, it is possibly because the load job encounters an exception (such as the table has been dropped). You can check the files `ReasonOfStateChanged` and `ErrorLogUrls` to identify and troubleshoot the problem. However, you cannot resume a **CANCELLED** load job.
 

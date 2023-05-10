@@ -175,7 +175,10 @@ public:
             return Status::InternalError(strings::Substitute(
                     "going to read out-of-bounds data, offset=$0,count=$1,size=$2", _offset, count, _data.size));
         }
-        [[maybe_unused]] auto ret = dst->append_strings(slices);
+        auto ret = dst->append_strings(slices);
+        if (UNLIKELY(!ret)) {
+            return Status::InternalError("PlainDecoder append strings to column failed");
+        }
         return Status::OK();
     }
 
@@ -343,8 +346,10 @@ public:
             return Status::InternalError(strings::Substitute(
                     "going to read out-of-bounds data, offset=$0,count=$1,size=$2", _offset, count, _data.size));
         }
-        [[maybe_unused]] auto ret =
-                dst->append_continuous_fixed_length_strings(_data.data + _offset, count, _type_length);
+        auto ret = dst->append_continuous_fixed_length_strings(_data.data + _offset, count, _type_length);
+        if (UNLIKELY(!ret)) {
+            return Status::InternalError("FLBAPlainDecoder append strings to column failed");
+        }
         _offset += count * _type_length;
         return Status::OK();
     }
