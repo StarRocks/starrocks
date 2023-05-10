@@ -261,11 +261,32 @@ Segment* PhysicalSplitMorselQueue::_cur_segment() {
 }
 
 bool PhysicalSplitMorselQueue::_is_last_split_of_current_morsel() {
+    if (_num_segment_rest_rows > 0) {
+        return false;
+    }
+
+    // Check if all tablets are processed.
     if (_tablet_idx >= _tablet_rowsets.size()) {
         return true;
     }
-    return _num_segment_rest_rows == 0 && _rowset_idx + 1 >= _tablet_rowsets[_tablet_idx].size() &&
-           _segment_idx + 1 >= _cur_rowset()->segments().size();
+    // Check if all rowsets of the current tablet are processed.
+    const size_t num_rowsets = _tablet_rowsets[_tablet_idx].size();
+    if (_rowset_idx >= num_rowsets) {
+        return true;
+    }
+
+    // Reach the last rowset of the current tablet.
+    if (_rowset_idx + 1 < num_rowsets) {
+        return false;
+    }
+
+    // Reach the last segment of the current rowset.
+    const size_t num_segments = _tablet_rowsets[_tablet_idx][_rowset_idx]->segments().size();
+    if (_segment_idx + 1 < num_segments) {
+        return false;
+    }
+
+    return true;
 }
 
 bool PhysicalSplitMorselQueue::_next_segment() {
