@@ -26,7 +26,6 @@ import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
-import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.RecoverDbStmt;
@@ -46,7 +45,6 @@ import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
@@ -63,7 +61,6 @@ import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
-import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
@@ -222,12 +219,6 @@ public class Analyzer {
         @Override
         public Void visitQueryStatement(QueryStatement stmt, ConnectContext session) {
             new QueryAnalyzer(session).analyze(stmt);
-
-            QueryRelation queryRelation = stmt.getQueryRelation();
-            long selectLimit = session.getSessionVariable().getSqlSelectLimit();
-            if (!queryRelation.hasLimit() && selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
-                queryRelation.setLimit(new LimitElement(selectLimit));
-            }
             return null;
         }
 
