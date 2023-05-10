@@ -43,6 +43,14 @@ public class Trino2SRFunctionCallTransformer {
     }
 
     public static Expr convert(String fnName, List<Expr> children) {
+        Expr result = convertRegisterFn(fnName, children);
+        if (result == null) {
+            result = ComplexFunctionCallTransformer.transform(fnName, children.toArray(new Expr[0]));
+        }
+        return result;
+    }
+
+    public static Expr convertRegisterFn(String fnName, List<Expr> children) {
         List<FunctionCallTransformer> transformers = TRANSFORMER_MAP.get(fnName);
         if (transformers == null) {
             return null;
@@ -195,7 +203,7 @@ public class Trino2SRFunctionCallTransformer {
                                                                List<Class<? extends Expr>> starRocksArgumentsClass) {
         List<Expr> arguments = Lists.newArrayList();
         for (int index = 0; index < starRocksArgumentsClass.size(); ++index) {
-            // For a FunctionCallExpr, do not known the actual arguments here, so we use a PlaceholderExpr to replace it.
+            // For a FunctionCallExpr, do not know the actual arguments here, so we use a PlaceholderExpr to replace it.
             arguments.add(new PlaceholderExpr(index + 1, starRocksArgumentsClass.get(index)));
         }
         return new FunctionCallExpr(starRocksFnName, arguments);

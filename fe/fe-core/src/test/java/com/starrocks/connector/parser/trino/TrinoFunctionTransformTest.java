@@ -119,6 +119,51 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     }
 
     @Test
+    public void testDateAddFnTransform() throws Exception {
+        String sql = "select date_add('day', 1, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "2014-03-09 09:00:00");
+
+        sql = "select date_add('second', 1, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "2014-03-08 09:00:01");
+
+        sql = "select date_add('minute', 1, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "2014-03-08 09:01:00");
+
+        sql = "select date_add('hour', 1, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "2014-03-08 10:00:00");
+
+        sql = "select date_add('week', 1, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "weeks_add('2014-03-08 09:00:00', 1)");
+
+        sql = "select date_add('month', 1, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "'2014-04-08 09:00:00'");
+
+        sql = "select date_add('year', 1, TIMESTAMP '2014-03-08 09:00:00');";
+        assertPlanContains(sql, "'2015-03-08 09:00:00'");
+
+        sql = "select date_add('second', 2, th) from tall;";
+        assertPlanContains(sql, "seconds_add(8: th, 2)");
+
+        sql = "select date_add('minute', 2, th) from tall;";
+        assertPlanContains(sql, "minutes_add(8: th, 2)");
+
+        sql = "select date_add('hour', 2, th) from tall;";
+        assertPlanContains(sql, "hours_add(8: th, 2)");
+
+        sql = "select date_add('day', 2, th) from tall;";
+        assertPlanContains(sql, "days_add(8: th, 2)");
+
+        sql = "select date_add('week', 2, th) from tall;";
+        assertPlanContains(sql, "weeks_add(8: th, 2)");
+
+        sql = "select date_add('month', 2, th) from tall;";
+        assertPlanContains(sql, "months_add(8: th, 2)");
+
+        sql = "select date_add('year', 2, th) from tall;";
+        assertPlanContains(sql, "years_add(8: th, 2)");
+    }
+
+    @Test
     public void testStringFnTransform() throws Exception {
         String sql = "select chr(56)";
         assertPlanContains(sql, "char(56)");
