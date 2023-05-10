@@ -179,7 +179,7 @@ FROM KAFKA
 >
 > If you choose Routine Load, you must use the `COLUMNS` parameter to temporarily name the columns of the data file to create a column mapping between the data file and the StarRocks table.
 
-For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 ### Query data
 
@@ -268,7 +268,7 @@ FROM KAFKA
 );
 ```
 
-For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 ### Query data
 
@@ -367,7 +367,7 @@ FROM KAFKA
 >
 > In the `COLUMNS` parameter, you must first temporarily name **all columns** of the data file, and then temporarily name the new columns that you want to generate from the original columns of the data file. As shown in the preceding example, the only column of `file2.csv` is temporarily named as `date`, and then the `year=year(date)`, `month=month(date)`, and `day=day(date)` functions are invoked to generate three new columns, which are temporarily named as `year`, `month`, and `day`.
 
-For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 ### Query data
 
