@@ -185,7 +185,7 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
         ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
         RETURN_IF_ERROR(handle_partial_update());
-        ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer());
+        ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer(kHorizontal));
         if (_partial_update_tablet_schema != nullptr) {
             _tablet_writer->set_tablet_schema(_partial_update_tablet_schema);
         }

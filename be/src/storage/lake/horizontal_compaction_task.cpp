@@ -47,7 +47,7 @@ Status HorizontalCompactionTask::execute(Progress* progress) {
     reader_params.use_page_cache = false;
     RETURN_IF_ERROR(reader.open(reader_params));
 
-    ASSIGN_OR_RETURN(auto writer, _tablet->new_writer());
+    ASSIGN_OR_RETURN(auto writer, _tablet->new_writer(kHorizontal));
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 

@@ -25,8 +25,8 @@
 
 namespace starrocks::lake {
 
-PkTabletWriter::PkTabletWriter(std::shared_ptr<const TabletSchema> tschema, Tablet tablet)
-        : TabletWriter(std::move(tschema)), _tablet(tablet), _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {}
+PkTabletWriter::PkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> tschema)
+        : TabletWriter(tablet, std::move(tschema)), _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {}
 
 PkTabletWriter::~PkTabletWriter() = default;
 
