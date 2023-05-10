@@ -418,6 +418,38 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         return new LogicalPlan(valuesOpt, valuesOutputColumns, null);
     }
 
+    private DistributionSpec getTableDistributionSpec(TableRelation node, Map<Column,
+            ColumnRefOperator> columnMetaToColRefMap) {
+        DistributionSpec distributionSpec = null;
+        DistributionInfo distributionInfo = ((OlapTable) node.getTable()).getDefaultDistributionInfo();
+
+        if (distributionInfo.getType() == DistributionInfoType.HASH) {
+            List<Integer> hashDistributeColumns = new ArrayList<>();
+            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
+            List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
+
+            // NOTE: sync mv output columns may not contain the distribution columns,
+            // set it as random distribution.
+            if (node.isSyncMVQuery() &&
+                    distributedColumns.stream().anyMatch(x -> !columnMetaToColRefMap.containsKey(x))) {
+                return DistributionSpec.createAnyDistributionSpec();
+            }
+
+            for (Column distributedColumn : distributedColumns) {
+                Preconditions.checkState(columnMetaToColRefMap.containsKey(distributedColumn));
+                hashDistributeColumns.add(columnMetaToColRefMap.get(distributedColumn).getId());
+            }
+            HashDistributionDesc hashDistributionDesc =
+                    new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.LOCAL);
+            distributionSpec = DistributionSpec.createHashDistributionSpec(hashDistributionDesc);
+        } else if (distributionInfo.getType() == DistributionInfoType.RANDOM) {
+            distributionSpec = DistributionSpec.createAnyDistributionSpec();
+        } else {
+            throw new IllegalStateException("Unknown distribution type: " + distributionInfo.getType());
+        }
+        return distributionSpec;
+    }
+
     @Override
     public LogicalPlan visitTable(TableRelation node, ExpressionMapping context) {
         ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
@@ -448,24 +480,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
         LogicalScanOperator scanOperator;
         if (node.getTable().isNativeTableOrMaterializedView()) {
-            DistributionSpec distributionSpec = null;
-            DistributionInfo distributionInfo = ((OlapTable) node.getTable()).getDefaultDistributionInfo();
-            if (distributionInfo.getType() == DistributionInfoType.HASH) {
-                List<Integer> hashDistributeColumns = new ArrayList<>();
-                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-                List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
-                for (Column distributedColumn : distributedColumns) {
-                    hashDistributeColumns.add(columnMetaToColRefMap.get(distributedColumn).getId());
-                }
-                HashDistributionDesc hashDistributionDesc =
-                        new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.LOCAL);
-                distributionSpec = DistributionSpec.createHashDistributionSpec(hashDistributionDesc);
-            } else if (distributionInfo.getType() == DistributionInfoType.RANDOM) {
-                distributionSpec = DistributionSpec.createAnyDistributionSpec();
-            } else {
-                throw new IllegalStateException("Unknown distribution type: " + distributionInfo.getType());
-            }
-
+            DistributionSpec distributionSpec = getTableDistributionSpec(node, columnMetaToColRefMap);
             if (node.isMetaQuery()) {
                 scanOperator = new LogicalMetaScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build());
             } else if (!isMVPlanner) {
