@@ -275,12 +275,12 @@ bool PhysicalSplitMorselQueue::_is_last_split_of_current_morsel() {
         return true;
     }
 
-    // Reach the last rowset of the current tablet.
+    // Check if reach the last rowset of the current tablet.
     if (_rowset_idx + 1 < num_rowsets) {
         return false;
     }
 
-    // Reach the last segment of the current rowset.
+    // Check if reach the last segment of the current rowset.
     const size_t num_segments = _tablet_rowsets[_tablet_idx][_rowset_idx]->segments().size();
     if (_segment_idx + 1 < num_segments) {
         return false;
