@@ -185,8 +185,8 @@ public class ReplayFromDumpTest {
                 "  |    \n" +
                 "  18:UNION\n" +
                 "  |  child exprs:\n" +
-                "  |      [325, INT, true] | [346, DECIMAL64(7,2), true]\n" +
-                "  |      [359, INT, true] | [380, DECIMAL64(7,2), true]"));
+                "  |      [325: ws_sold_date_sk, INT, true] | [346: ws_ext_sales_price, DECIMAL64(7,2), true]\n" +
+                "  |      [359: cs_sold_date_sk, INT, true] | [380: cs_ext_sales_price, DECIMAL64(7,2), true]"));
     }
 
     @Test
