@@ -1415,7 +1415,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         // lineorder_new_l contains more than one tablet.
         sql = "select count(P_TYPE), LO_ORDERKEY from lineorder_new_l group by LO_ORDERKEY";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "     LocalShuffleColumns:\n" +
+        assertNotContains(plan, "     LocalShuffleColumns:\n" +
                 "     - 1: LO_ORDERKEY");
         assertContains(plan, "  1:AGGREGATE (update finalize)");
         assertContains(plan, "  0:OlapScanNode");
