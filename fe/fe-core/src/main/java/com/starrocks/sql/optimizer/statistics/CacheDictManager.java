@@ -202,12 +202,18 @@ public class CacheDictManager implements IDictManager {
 
     @Override
     public void removeGlobalDict(long tableId, String columnName) {
+        ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
-        LOG.debug("remove dict for table:{} column:{}", tableId, columnName);
-        ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+
+        if (!dictStatistics.asMap().containsKey(columnIdentifier)) {
+            return;
+        }
+
+        LOG.info("remove dict for table:{} column:{}", tableId, columnName);
         dictStatistics.synchronous().invalidate(columnIdentifier);
     }
 
