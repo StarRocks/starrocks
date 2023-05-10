@@ -135,8 +135,8 @@ public class LogicalTopNOperator extends LogicalOperator {
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> entryList = Lists.newArrayList();
-        for (ColumnOutputInfo entry : inputs.get(0).getRowOutputInfo().getColumnEntries()) {
-            entryList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getScalarOp()));
+        for (ColumnOutputInfo entry : inputs.get(0).getRowOutputInfo().getColumnOutputInfo()) {
+            entryList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
         }
         for (Ordering ordering : orderByElements) {
             entryList.add(new ColumnOutputInfo(ordering.getColumnRef(), ordering.getColumnRef()));

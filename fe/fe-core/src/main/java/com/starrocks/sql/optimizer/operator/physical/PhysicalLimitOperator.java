@@ -17,10 +17,13 @@ package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
+
+import java.util.List;
 
 public class PhysicalLimitOperator extends PhysicalOperator {
     private final long offset;
@@ -34,6 +37,11 @@ public class PhysicalLimitOperator extends PhysicalOperator {
 
     public long getOffset() {
         return offset;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return projectInputRow(inputs.get(0).getRowOutputInfo());
     }
 
     @Override
