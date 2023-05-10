@@ -64,6 +64,10 @@ public class ConnectSchedulerTest {
                 minTimes = 0;
                 result = "192.168.1.1";
 
+                channel.getRemoteHostPortString();
+                minTimes = 0;
+                result = "192.168.1.1:9030";
+
                 // mock negotiate
                 MysqlProto.negotiate((ConnectContext) any);
                 minTimes = 0;
