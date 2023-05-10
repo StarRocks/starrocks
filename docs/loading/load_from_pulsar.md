@@ -44,7 +44,7 @@ The type of a subscription is defined when a consumer connects to it, and the ty
 
 ## Create a Routine Load job
 
-The following examples describe how to consume CSV-formatted messages in Pulsar, and load the data into StarRocks by creating a Routine Load job. For detailed instruction and reference, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+The following examples describe how to consume CSV-formatted messages in Pulsar, and load the data into StarRocks by creating a Routine Load job. For detailed instruction and reference, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 ```SQL
 CREATE ROUTINE LOAD load_test.routine_wiki_edit_1 ON routine_wiki_edit
@@ -69,7 +69,7 @@ FROM PULSAR
 );
 ```
 
-When Routine Load is created to consume data from Pulsar, most input parameters except for `data_source_properties` are the same as consuming data from Kafka . For descriptions about parameters except data_source_properties `data_source_properties` , see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+When Routine Load is created to consume data from Pulsar, most input parameters except for `data_source_properties` are the same as consuming data from Kafka . For descriptions about parameters except data_source_properties `data_source_properties` , see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 The parameters related to `data_source_properties` and their descriptions are as follows:
 
