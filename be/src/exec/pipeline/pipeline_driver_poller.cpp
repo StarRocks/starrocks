@@ -67,8 +67,12 @@ void PipelineDriverPoller::run_internal() {
                     //
                     // If the fragment is expired when the source operator is already pending i/o task,
                     // The state of driver shouldn't be changed.
-                    LOG(WARNING) << "[Driver] Timeout, query_id=" << print_id(driver->query_ctx()->query_id())
-                                 << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
+                    size_t expired_log_count = driver->fragment_ctx()->expired_log_count();
+                    if (expired_log_count <= 100) {
+                        LOG(WARNING) << "[Driver] Timeout, query_id=" << print_id(driver->query_ctx()->query_id())
+                                     << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
+                        driver->fragment_ctx()->set_expired_log_count(++expired_log_count);
+                    }
                     driver->fragment_ctx()->cancel(
                             Status::TimedOut(fmt::format("Query exceeded time limit of {} seconds",
                                                          driver->query_ctx()->get_query_expire_seconds())));

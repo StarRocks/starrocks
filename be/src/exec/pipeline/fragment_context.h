@@ -122,6 +122,33 @@ public:
 
     void set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts);
 
+<<<<<<< HEAD
+=======
+    void set_enable_adaptive_dop(bool val) { _enable_adaptive_dop = val; }
+    bool enable_adaptive_dop() const { return _enable_adaptive_dop; }
+    AdaptiveDopParam& adaptive_dop_param() { return _adaptive_dop_param; }
+
+    size_t next_driver_id() { return _next_driver_id++; }
+
+    void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
+    const workgroup::WorkGroupPtr& workgroup() const { return _workgroup; }
+    bool enable_resource_group() const { return _workgroup != nullptr; }
+
+    // STREAM MV
+    Status reset_epoch();
+    void set_is_stream_pipeline(bool is_stream_pipeline) { _is_stream_pipeline = is_stream_pipeline; }
+    bool is_stream_pipeline() const { return _is_stream_pipeline; }
+    void count_down_epoch_pipeline(RuntimeState* state, size_t val = 1);
+
+    // for ut
+    void set_is_stream_test(bool is_stream_test) { _is_stream_test = is_stream_test; }
+    bool is_stream_test() const { return _is_stream_test; }
+
+    size_t expired_log_count() { return _expired_log_count; }
+
+    void set_expired_log_count(size_t val) { _expired_log_count = val; }
+
+>>>>>>> 079f18b1d5 ([Enhancement] Avoid printing too many irrelevant logs when be hang (#22820))
 private:
     // Id of this query
     TUniqueId _query_id;
@@ -157,6 +184,19 @@ private:
     PerDriverScanRangesMap _scan_ranges_per_driver_seq;
     std::vector<StreamLoadContext*> _stream_load_contexts;
     bool _channel_stream_load = false;
+<<<<<<< HEAD
+=======
+
+    // STREAM MV
+    std::atomic<size_t> _num_finished_epoch_pipelines = 0;
+    bool _is_stream_pipeline = false;
+    bool _is_stream_test = false;
+
+    bool _enable_adaptive_dop = false;
+    AdaptiveDopParam _adaptive_dop_param;
+
+    size_t _expired_log_count = 0;
+>>>>>>> 079f18b1d5 ([Enhancement] Avoid printing too many irrelevant logs when be hang (#22820))
 };
 
 class FragmentContextManager {
