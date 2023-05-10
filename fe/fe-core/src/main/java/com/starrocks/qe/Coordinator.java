@@ -31,6 +31,8 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.catalog.WorkGroup;
+import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
@@ -2018,7 +2020,6 @@ public class Coordinator {
         }
     }
 
-<<<<<<< HEAD
     // For HybridBackendSelector
     private enum ScanRangeAssignType {
         SCAN_RANGE_NUM,
