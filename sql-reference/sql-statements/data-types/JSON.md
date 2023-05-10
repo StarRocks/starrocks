@@ -96,11 +96,15 @@ mysql> select * from tj where id = 1;
 
 示例二：根据 JSON 类型的列进行过滤，过滤出表中满足条件的数据。
 
-> `j->'a'` 返回数据的类型是 JSON，您可以使用 PARSE_JSON 将 SQL 类型数据构造为 JSON 类型，然后进行对比。或者，您可以使用 CAST 函数将 JSON 类型数据来构造为 INT，然后进行对比。
+> 以下示例中 `j->'a'` 返回的是 JSON 类型的数据，您可以使用第一个示例进行对比，该示例对数据进行了隐式转换；也可以使用 CAST 函数将 JSON 类型数据构造为 INT，然后进行对比。
 
 ```Plain Text
-mysql> select * from tj where j->'a' = parse_json('1');
-Empty set (0.05 sec)
+mysql> select * from tj where j->'a' = 1;
++------+---------------------+
+| id   | j                   |
++------+---------------------+
+|    1 | {"a": 1, "b": true} |
++------+---------------------+
 
 mysql> select * from tj where cast(j->'a' as INT) = 1; 
 +------+---------------------+
