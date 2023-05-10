@@ -54,13 +54,13 @@ CAST(sql_expr AS JSON)
 示例一：将 JSON 类型的数据转为 SQL 类型。
 
 ```Plain Text
--- 将JSON转为INT。
-mysql> select cast(parse_json('1') as int);
-+------------------------------+
-| CAST(parse_json('1') AS INT) |
-+------------------------------+
-|                            1 |
-+------------------------------+
+-- 将 JSON 转为 INT。
+mysql> select cast(parse_json('{"a": 1}') -> 'a' as int);
++--------------------------------------------+
+| CAST((parse_json('{"a": 1}')->'a') AS INT) |
++--------------------------------------------+
+|                                          1 |
++--------------------------------------------+
 
 -- 将 JSON 字符串转为 VARCHAR。
 mysql> select cast(parse_json('"star"') as varchar);
