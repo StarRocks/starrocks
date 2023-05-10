@@ -38,7 +38,7 @@ statement
     | showClustersStatement
     | suspendWarehouseStatement
     | resumeWarehouseStatement
-    | test0
+    | test00
 
     // Database Statement
     | useDatabaseStatement
