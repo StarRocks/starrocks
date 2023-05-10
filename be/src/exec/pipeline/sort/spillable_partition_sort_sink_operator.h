@@ -34,8 +34,6 @@ public:
 
     bool is_finished() const override { return _is_finished || _sort_context->is_finished(); }
 
-    bool pending_finish() const override { return _chunks_sorter && _chunks_sorter->has_pending_data(); }
-
     void mark_need_spill() override {
         Operator::mark_need_spill();
         if (_chunks_sorter) {
