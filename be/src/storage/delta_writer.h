@@ -141,6 +141,11 @@ private:
     Status _flush_memtable();
     const char* _state_name(State state) const;
     const char* _replica_state_name(ReplicaState state) const;
+<<<<<<< HEAD
+=======
+    Status _fill_auto_increment_id(const Chunk& chunk);
+    Status _check_partial_update_with_sort_key(const Chunk& chunk);
+>>>>>>> 969b3af94 ([Enhancement] Support delete sql for primary key table with sort key (#22799))
 
     void _garbage_collection();
 
@@ -171,6 +176,7 @@ private:
     bool _with_rollback_log;
     // initial value is max value
     size_t _memtable_buffer_row = -1;
+    bool _partial_schema_with_sort_key = false;
 };
 
 } // namespace vectorized
