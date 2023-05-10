@@ -14,9 +14,12 @@
 
 package com.starrocks.sql.optimizer.operator.stream;
 
+import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -62,6 +65,15 @@ public class PhysicalStreamAggOperator extends PhysicalStreamOperator {
 
     public void setAggImt(IMTInfo imt) {
         this.aggImt = imt;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
+        groupBys.stream().forEach(e -> columnOutputInfoList.add(new ColumnOutputInfo(e, e)));
+        aggregations.entrySet().forEach(entry -> columnOutputInfoList.add(new ColumnOutputInfo(entry.getKey(),
+                entry.getValue())));
+        return new RowOutputInfo(columnOutputInfoList);
     }
 
     @Override

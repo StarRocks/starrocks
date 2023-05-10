@@ -254,8 +254,7 @@ public class ReorderJoinRule extends Rule {
                         .withOperator((LogicalJoinOperator) optExpression.getOp())
                         .setProjection(new Projection(newOutputColumns.getStream()
                                 .map(optimizerContext.getColumnRefFactory()::getColumnRef)
-                                .collect(Collectors.toMap(Function.identity(), Function.identity())),
-                                new HashMap<>()))
+                                .collect(Collectors.toMap(Function.identity(), Function.identity()))))
                         .build();
             }
 

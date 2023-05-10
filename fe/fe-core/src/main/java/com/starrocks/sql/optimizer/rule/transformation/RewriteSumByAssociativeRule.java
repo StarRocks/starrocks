@@ -272,7 +272,7 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                 // if toType is fully compatible with fromType,
                 // and we can find related aggregate function signature,
                 // just remove the cast
-                if (ScalarType.isFullyCompatible(fromType, toType)) {
+                if (fromType.isFullyCompatible(toType)) {
                     AggregateFunction possibleAggregateFunction = AggregateFunction.createBuiltin(
                             FunctionSet.SUM, Lists.newArrayList(fromType), toType, toType,
                             false, true, false);

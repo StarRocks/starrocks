@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.operator.physical;
 import com.google.common.base.Objects;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -25,6 +26,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class PhysicalValuesOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> columnRefSet;
@@ -48,6 +51,11 @@ public class PhysicalValuesOperator extends PhysicalOperator {
 
     public List<List<ScalarOperator>> getRows() {
         return rows;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return new RowOutputInfo(columnRefSet.stream().collect(Collectors.toMap(Function.identity(), Function.identity())));
     }
 
     @Override
