@@ -745,6 +745,12 @@ public class Config extends ConfigBase {
     public static int spark_load_default_timeout_second = 86400; // 1 day
 
     /**
+     * Default timeout of spark submit task and wait for yarn response
+     */
+    @ConfField
+    public static long spark_load_submit_timeout_second = 300; // 5min
+
+    /**
      * Default spark home dir
      */
     @ConfField
