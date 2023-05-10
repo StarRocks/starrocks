@@ -1886,7 +1886,6 @@ public class Coordinator {
         }
     }
 
-<<<<<<< HEAD
     // For each fragment in fragments, computes hosts on which to run the instances
     // and stores result in fragmentExecParams.hosts.
     private void computeFragmentHosts() throws Exception {
