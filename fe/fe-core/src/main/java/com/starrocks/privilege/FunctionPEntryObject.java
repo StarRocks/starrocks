@@ -31,6 +31,14 @@ public class FunctionPEntryObject implements PEntryObject {
     @SerializedName(value = "functionId")
     protected Long functionId;
 
+    public long getDatabaseId() {
+        return databaseId;
+    }
+
+    public Long getFunctionId() {
+        return functionId;
+    }
+
     protected FunctionPEntryObject(long databaseId, Long functionId) {
         this.databaseId = databaseId;
         this.functionId = functionId;

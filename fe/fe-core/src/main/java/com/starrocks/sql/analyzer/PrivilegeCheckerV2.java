@@ -347,7 +347,7 @@ public class PrivilegeCheckerV2 {
         Set<TableName> tableNames = Sets.newHashSet();
         if (StatsConstants.DEFAULT_ALL_ID != tableId && StatsConstants.DEFAULT_ALL_ID != dbId) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            if (db != null && !db.isInfoSchemaDb()) {
+            if (db != null && !db.isSystemDatabase()) {
                 Table table = db.getTable(tableId);
                 if (table != null && table.isOlapOrCloudNativeTable()) {
                     tableNames.add(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -368,7 +368,7 @@ public class PrivilegeCheckerV2 {
 
     private static void getTableNamesInDb(Set<TableName> tableNames, Long id) {
         Database db = GlobalStateMgr.getCurrentState().getDb(id);
-        if (db != null && !db.isInfoSchemaDb()) {
+        if (db != null && !db.isSystemDatabase()) {
             for (Table table : db.getTables()) {
                 if (table == null || !table.isOlapOrCloudNativeTable()) {
                     continue;

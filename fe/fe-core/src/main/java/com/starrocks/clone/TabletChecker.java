@@ -257,7 +257,7 @@ public class TabletChecker extends LeaderDaemon {
                 continue;
             }
 
-            if (db.isInfoSchemaDb()) {
+            if (db.isSystemDatabase()) {
                 continue;
             }
 

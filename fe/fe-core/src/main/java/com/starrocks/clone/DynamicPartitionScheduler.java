@@ -51,7 +51,6 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -572,10 +571,10 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
             if (db == null) {
                 continue;
             }
-            String dbName = db.getFullName();
-            if (dbName.equals(InfoSchemaDb.DATABASE_NAME) || dbName.equals(StatsConstants.STATISTICS_DB_NAME)) {
+            if (db.isSystemDatabase() || db.getFullName().equals(StatsConstants.STATISTICS_DB_NAME)) {
                 continue;
             }
+
             db.readLock();
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getDb(dbId).getTables()) {
