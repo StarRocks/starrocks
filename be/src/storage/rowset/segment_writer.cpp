@@ -93,11 +93,15 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
 }
 
 Status SegmentWriter::init() {
+    return init(true);
+}
+
+Status SegmentWriter::init(bool has_key) {
     std::vector<uint32_t> all_column_indexes;
     for (uint32_t i = 0; i < _tablet_schema->num_columns(); ++i) {
         all_column_indexes.emplace_back(i);
     }
-    return init(all_column_indexes, true);
+    return init(all_column_indexes, has_key);
 }
 
 Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has_key, SegmentFooterPB* footer) {
@@ -205,7 +209,8 @@ Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size
 }
 
 Status SegmentWriter::finalize_columns(uint64_t* index_size) {
-    if (_has_key) {
+    if (_has_key || _num_rows == 0) {
+        // _num_rows == 0 && !_has_key means this segment not contains key columns
         _num_rows = _num_rows_written;
     } else if (_num_rows != _num_rows_written) {
         return Status::InternalError(strings::Substitute("num rows written $0 is not equal to segment num rows $1",
