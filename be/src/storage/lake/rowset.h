@@ -67,6 +67,8 @@ public:
 
     [[nodiscard]] const RowsetMetadata& metadata() const { return *_rowset_metadata; }
 
+    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments();
+
 private:
     [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache);
 
