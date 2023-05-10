@@ -178,7 +178,7 @@ FROM KAFKA
 >
 > `COLUMNS` 参数用于对数据中的列进行临时命名，从而映射到 StarRocks 表的列。
 
-有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)。
+有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)。
 
 ### 查询数据
 
@@ -267,7 +267,7 @@ FROM KAFKA
 );
 ```
 
-有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)。
+有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)。
 
 ### 查询数据
 
@@ -366,7 +366,7 @@ FROM KAFKA
 >
 > 必须通过 `COLUMNS` 参数先声明源数据文件中包含的所有列，然后再声明衍生列。如上述示例中，`COLUMNS` 参数中先声明 `file2.csv` 文件中包含的仅有的一列临时命名为 `date`，然后再声明需要调用函数经过转化才能生成的衍生列：`year=year(date)`、`month=month(date)` 和 `day=day(date)`。
 
-有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)。
+有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)。
 
 ### 查询数据
 
