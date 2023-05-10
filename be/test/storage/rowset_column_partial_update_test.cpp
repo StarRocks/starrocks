@@ -252,14 +252,15 @@ static void commit_rowsets(const TabletSharedPtr& tablet, std::vector<RowsetShar
     }
 }
 
-static void compact(const TabletSharedPtr& tablet, int64_t& version, MemTracker* compaction_mem_tracker) {
+static void compact(const TabletSharedPtr& tablet, int64_t& version, int64_t expected_num_rowsets,
+                    MemTracker* compaction_mem_tracker) {
     const auto& best_tablet =
             StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(tablet->data_dir());
     ASSERT_EQ(best_tablet->tablet_id(), tablet->tablet_id());
     ASSERT_TRUE(best_tablet->updates()->get_compaction_score() > 0);
     ASSERT_TRUE(best_tablet->updates()->compaction(compaction_mem_tracker).ok());
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
+    ASSERT_EQ(best_tablet->updates()->num_rowsets(), expected_num_rowsets);
     ASSERT_EQ(best_tablet->updates()->version_history_count(), version + 1);
     // the time interval is not enough after last compaction
     ASSERT_EQ(best_tablet->updates()->get_compaction_score(), -1);
@@ -550,8 +551,8 @@ TEST_F(RowsetColumnPartialUpdateTest, partial_update_compaction_and_check) {
     prepare_tablet(this, tablet, version, version_before_partial_update, N);
 
     {
-        // compaction
-        compact(tablet, version, _compaction_mem_tracker.get());
+        // compaction, only merge empty rowsets
+        compact(tablet, version, 2, _compaction_mem_tracker.get());
         // check data
         ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
             return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
