@@ -34,8 +34,8 @@ namespace starrocks::parquet {
 
 struct GroupReaderParam {
     struct Column {
-        // column index in parquet file
-        int32_t col_idx_in_parquet;
+        // parquet field index in root node's children
+        int32_t field_idx_in_parquet;
 
         // column index in chunk
         int32_t col_idx_in_chunk;

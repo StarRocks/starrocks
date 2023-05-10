@@ -68,12 +68,12 @@ public:
     }
 
 protected:
-    GroupReaderParam::Column _build_column(int32_t col_idx_in_parquet, int32_t col_idx_in_chunk,
+    GroupReaderParam::Column _build_column(int32_t field_idx_in_parquet, int32_t col_idx_in_chunk,
                                            const tparquet::Type::type& col_type_in_parquet,
                                            const TypeDescriptor& col_type_in_chunk, const SlotId& slot_id,
                                            const TIcebergSchemaField* t_iceberg_schema_field = nullptr) const {
         GroupReaderParam::Column column{};
-        column.col_idx_in_parquet = col_idx_in_parquet;
+        column.field_idx_in_parquet = field_idx_in_parquet;
         column.col_idx_in_chunk = col_idx_in_chunk;
         column.col_type_in_parquet = col_type_in_parquet;
         column.col_type_in_chunk = col_type_in_chunk;
