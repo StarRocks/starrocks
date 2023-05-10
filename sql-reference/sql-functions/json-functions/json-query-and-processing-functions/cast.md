@@ -20,9 +20,9 @@ CAST(sql_expr AS JSON)
 
 ## 参数说明
 
-- `json_expr`：JSON 类型的表达式，需要转换为 SQL 类型。
-- `sql_data_type`：转换后的 SQL 类型，可以是字符串类型（包括 STRING、VARCHAR、CHAR）、BOOLEAN、数字类型（包括 TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DOUBLE、FLOAT）。
-- `sql_expr`： SQL 类型的表达式，需要转换为 JSON 类型。支持的数据类型同 `sql_data_type`。
+- `json_expr`：待转换为 SQL 类型的 JSON 表达式。
+- `sql_data_type`：转换后的 SQL 类型，可以是字符串类型（包括 STRING、VARCHAR、CHAR）、BOOLEAN、数值类型（包括 TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DOUBLE、FLOAT）。
+- `sql_expr`：待转换为 JSON 类型的 SQL 表达式。支持的数据类型同 `sql_data_type`。
 
 ## 返回值说明
 
