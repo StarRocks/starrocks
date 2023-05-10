@@ -35,6 +35,7 @@
 namespace cpp starrocks
 namespace java com.starrocks.thrift
 
+include "CloudConfiguration.thrift"
 include "Exprs.thrift"
 include "Types.thrift"
 include "Descriptors.thrift"
@@ -207,12 +208,13 @@ struct TSchemaTableSink {
 }
 
 struct TIcebergTableSink {
-    1: required string location
+    1: optional string location
     2: optional string file_format
     3: optional i64 target_table_id
     4: optional Types.TTupleId tuple_id
     5: optional Types.TCompressionType compression_type
     6: optional bool is_statistics_partition_sink
+    7: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
 struct TDataSink {
