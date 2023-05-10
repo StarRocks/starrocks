@@ -35,7 +35,7 @@ Broker Load supports the following storage systems:
 
 - HDFS
 
-- Amazon S3
+- AWS S3
 
 - Google GCS
 
@@ -139,7 +139,9 @@ PROPERTIES
 );
 ```
 
-#### Load data from Amazon S3
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+
+#### Load data from AWS S3
 
 Execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your Amazon S3 bucket `bucket_s3` into `table1` and `table2`, respectively:
 
@@ -169,6 +171,8 @@ WITH BROKER "mybroker"
 > - Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
 > - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `fs.s3a.access.key` and `fs.s3a.secret.key` unspecified.
 
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+
 #### Load data from Google GCS
 
 Execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your Google GCS bucket `bucket_gcs` into `table1` and `table2`, respectively:
@@ -197,6 +201,8 @@ WITH BROKER "mybroker"
 > **NOTE**
 >
 > Broker Load supports accessing Google GCS only according to the S3A protocol. Therefore, when you load data from Google GCS, you must replace the prefix in the GCS URI you pass as a file path into `DATA INFILE` with `s3a://`.
+
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 #### Query data
 
