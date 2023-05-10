@@ -48,17 +48,17 @@ public class IcebergTableSink extends DataSink {
     private final String fileFormat;
     private final String location;
     private final String compressionType;
-    private final boolean isStatisticsPartitionSink;
+    private final boolean isStaticPartitionSink;
     private final String tableIdentifier;
     private final CloudConfiguration cloudConfiguration;
 
-    public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStatisticsPartitionSink) {
+    public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink) {
         Table nativeTable = icebergTable.getNativeTable();
         this.desc = desc;
         this.location = nativeTable.location();
         this.targetTableId = icebergTable.getId();
         this.tableIdentifier = icebergTable.getUUID();
-        this.isStatisticsPartitionSink = isStatisticsPartitionSink;
+        this.isStaticPartitionSink = isStaticPartitionSink;
         this.fileFormat = nativeTable.properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
                 .toLowerCase();
         switch (fileFormat) {
@@ -97,10 +97,9 @@ public class IcebergTableSink extends DataSink {
         TDataSink tDataSink = new TDataSink(TDataSinkType.ICEBERG_TABLE_SINK);
         TIcebergTableSink tIcebergTableSink = new TIcebergTableSink();
         tIcebergTableSink.setTarget_table_id(targetTableId);
-        tIcebergTableSink.setTuple_id(desc.getId().asInt());
         tIcebergTableSink.setLocation(location);
         tIcebergTableSink.setFile_format(fileFormat);
-        tIcebergTableSink.setIs_statistics_partition_sink(isStatisticsPartitionSink);
+        tIcebergTableSink.setIs_static_partition_sink(isStaticPartitionSink);
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
         tIcebergTableSink.setCompression_type(compression);
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();

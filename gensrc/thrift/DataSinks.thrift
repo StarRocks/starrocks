@@ -211,10 +211,9 @@ struct TIcebergTableSink {
     1: optional string location
     2: optional string file_format
     3: optional i64 target_table_id
-    4: optional Types.TTupleId tuple_id
-    5: optional Types.TCompressionType compression_type
-    6: optional bool is_statistics_partition_sink
-    7: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+    4: optional Types.TCompressionType compression_type
+    5: optional bool is_static_partition_sink
+    6: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
 struct TDataSink {
