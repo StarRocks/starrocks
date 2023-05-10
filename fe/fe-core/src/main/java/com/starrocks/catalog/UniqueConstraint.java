@@ -22,7 +22,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.spark_project.guava.base.Strings;
 
 import java.util.Arrays;
 import java.util.List;
