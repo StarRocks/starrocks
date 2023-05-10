@@ -153,7 +153,7 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     RETURN_IF_ERROR(reader->open(_read_params));
 
     // create writer
-    ASSIGN_OR_RETURN(auto writer, _new_tablet->new_writer());
+    ASSIGN_OR_RETURN(auto writer, _new_tablet->new_writer(kHorizontal));
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
