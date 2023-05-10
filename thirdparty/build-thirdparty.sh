@@ -566,6 +566,21 @@ build_flatbuffers() {
   cp libflatbuffers.a $TP_LIB_DIR/libflatbuffers.a
 }
 
+build_brotli() {
+    check_if_source_exist $BROTLI_SOURCE
+    cd $TP_SOURCE_DIR/$BROTLI_SOURCE
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+    ${CMAKE_CMD} .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib64
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+    mv -f $TP_INSTALL_DIR/lib64/libbrotlienc-static.a $TP_INSTALL_DIR/lib64/libbrotlienc.a
+    mv -f $TP_INSTALL_DIR/lib64/libbrotlidec-static.a $TP_INSTALL_DIR/lib64/libbrotlidec.a
+    mv -f $TP_INSTALL_DIR/lib64/libbrotlicommon-static.a $TP_INSTALL_DIR/lib64/libbrotlicommon.a
+    rm $TP_INSTALL_DIR/lib64/libbrotli*.so
+    rm $TP_INSTALL_DIR/lib64/libbrotli*.so.*
+}
+
 # arrow
 build_arrow() {
     OLD_FLAGS=$CXXFLAGS
@@ -588,7 +603,7 @@ build_arrow() {
     export ARROW_ZSTD_URL=${TP_SOURCE_DIR}/${ZSTD_NAME}
     export LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc"
 
-    ${CMAKE_CMD} -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_SHARED=OFF \
+    ${CMAKE_CMD} -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_STATIC=ON -DARROW_BUILD_SHARED=OFF \
     -DARROW_WITH_BROTLI=ON -DARROW_WITH_LZ4=ON -DARROW_WITH_SNAPPY=ON -DARROW_WITH_ZLIB=ON -DARROW_WITH_ZSTD=ON \
     -DARROW_WITH_UTF8PROC=OFF -DARROW_WITH_RE2=OFF \
     -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
@@ -596,19 +611,26 @@ build_arrow() {
     -DARROW_BOOST_USE_SHARED=OFF -DARROW_GFLAGS_USE_SHARED=OFF -DBoost_NO_BOOST_CMAKE=ON -DBOOST_ROOT=$TP_INSTALL_DIR \
     -DJEMALLOC_HOME=$TP_INSTALL_DIR \
     -Dzstd_SOURCE=BUNDLED \
+    -DRapidJSON_ROOT=$TP_INSTALL_DIR \
+    -DARROW_SNAPPY_USE_SHARED=OFF \
+    -DZLIB_ROOT=$TP_INSTALL_DIR \
+    -DLZ4_INCLUDE_DIR=$TP_INSTALL_DIR/include/lz4 \
+    -DARROW_LZ4_USE_SHARED=OFF \
+    -DBROTLI_ROOT=$TP_INSTALL_DIR \
+    -DARROW_BROTLI_USE_SHARED=OFF \
     -Dgflags_ROOT=$TP_INSTALL_DIR/ \
     -DSnappy_ROOT=$TP_INSTALL_DIR/ \
     -DGLOG_ROOT=$TP_INSTALL_DIR/ \
     -DLZ4_ROOT=$TP_INSTALL_DIR/ \
+    -DBoost_DIR=$TP_INSTALL_DIR \
+    -DBoost_ROOT=$TP_INSTALL_DIR \
+    -DARROW_BOOST_USE_SHARED=OFF \
     -G "${CMAKE_GENERATOR}" \
     -DThrift_ROOT=$TP_INSTALL_DIR/ ..
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
-    #copy dep libs
-    cp -rf ./brotli_ep/src/brotli_ep-install/lib/libbrotlienc-static.a $TP_INSTALL_DIR/lib64/libbrotlienc.a
-    cp -rf ./brotli_ep/src/brotli_ep-install/lib/libbrotlidec-static.a $TP_INSTALL_DIR/lib64/libbrotlidec.a
-    cp -rf ./brotli_ep/src/brotli_ep-install/lib/libbrotlicommon-static.a $TP_INSTALL_DIR/lib64/libbrotlicommon.a
+
     if [ -f ./zstd_ep-install/lib64/libzstd.a ]; then
         cp -rf ./zstd_ep-install/lib64/libzstd.a $TP_INSTALL_DIR/lib64/libzstd.a
     else
@@ -1120,8 +1142,9 @@ build_rocksdb
 build_sasl
 build_librdkafka
 build_flatbuffers
-# must build before arrow
 build_jemalloc
+build_brotli
+# must build before arrow
 build_arrow
 build_pulsar
 build_s2
