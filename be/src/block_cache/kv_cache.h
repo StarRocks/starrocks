@@ -27,7 +27,8 @@ public:
     virtual Status init(const CacheOptions& options) = 0;
 
     // Write data to cache
-    virtual Status write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds) = 0;
+    virtual Status write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds,
+                               bool overwrite) = 0;
 
     // Read data from cache, it returns the data size if successful; otherwise the error status
     // will be returned.

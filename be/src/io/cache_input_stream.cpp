@@ -168,23 +168,15 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
     int64_t end = std::min((offset + count + BLOCK_SIZE - 1) / BLOCK_SIZE * BLOCK_SIZE, _size);
     p -= (offset - begin);
     auto f = [&](const char* buf, size_t offset, size_t size) {
-        StatusOr<size_t> res;
-        // to support nullptr read.
-        res = cache->read_cache(_cache_key, offset, size, nullptr);
-        if (res.ok()) {
-            return;
-        }
-        {
-            SCOPED_RAW_TIMER(&_stats.write_cache_ns);
-            Status r = cache->write_cache(_cache_key, offset, size, buf);
-            if (r.ok()) {
-                _stats.write_cache_count += 1;
-                _stats.write_cache_bytes += size;
-            } else {
-                _stats.write_cache_fail_count += 1;
-                _stats.write_cache_fail_bytes += size;
-                LOG(WARNING) << "write block cache failed, errmsg: " << r.get_error_msg();
-            }
+        SCOPED_RAW_TIMER(&_stats.write_cache_ns);
+        Status r = cache->write_cache(_cache_key, offset, size, buf, 0, false);
+        if (r.ok()) {
+            _stats.write_cache_count += 1;
+            _stats.write_cache_bytes += size;
+        } else if (!r.is_already_exist()) {
+            _stats.write_cache_fail_count += 1;
+            _stats.write_cache_fail_bytes += size;
+            LOG(WARNING) << "write block cache failed, errmsg: " << r.get_error_msg();
         }
     };
 

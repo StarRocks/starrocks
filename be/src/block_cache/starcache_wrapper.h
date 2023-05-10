@@ -27,7 +27,8 @@ public:
 
     Status init(const CacheOptions& options) override;
 
-    Status write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds) override;
+    Status write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds,
+                       bool overwrite) override;
 
     StatusOr<size_t> read_cache(const std::string& key, char* value, size_t off, size_t size) override;
 
@@ -59,6 +60,8 @@ inline Status to_status(const butil::Status& st) {
         return Status::InvalidArgument(st.error_str());
     case EIO:
         return Status::IOError(st.error_str());
+    case ENOMEM:
+        return Status::MemoryLimitExceeded(st.error_str());
     default:
         return Status::InternalError(st.error_str());
     }
