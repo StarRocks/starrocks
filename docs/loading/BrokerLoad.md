@@ -57,7 +57,7 @@ The following figure shows the workflow of a Broker Load job.
 
 ## Basic operations
 
-### Create a load job
+### Create a multi-table load job
 
 This topic uses CSV as an example to describe how to load multiple data files into multiple tables. For information about how to load data in other file formats and about the syntax and parameter descriptions for Broker Load, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
@@ -111,9 +111,7 @@ This topic uses CSV as an example to describe how to load multiple data files in
 
 3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `input` folder of your Amazon S3 bucket `bucket_s3`, and to the `input` folder of your Google GCS bucket `bucket_gcs`.
 
-#### Single-table load
-
-##### Load data from HDFS
+#### Load data from HDFS
 
 Execute the following statement to load `file1.csv` and `file2.csv` from the `/user/starrocks` path of your HDFS cluster into `table1` and `table2`, respectively:
 
@@ -143,7 +141,7 @@ PROPERTIES
 
 For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
-##### Load data from AWS S3
+#### Load data from AWS S3
 
 Execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your Amazon S3 bucket `bucket_s3` into `table1` and `table2`, respectively:
 
@@ -175,7 +173,7 @@ WITH BROKER "mybroker"
 
 For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
-##### Load data from Google GCS
+#### Load data from Google GCS
 
 Execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your Google GCS bucket `bucket_gcs` into `table1` and `table2`, respectively:
 
@@ -206,7 +204,7 @@ WITH BROKER "mybroker"
 
 For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
-##### Query data
+#### Query data
 
 After the load of data from your HDFS cluster, Amazon S3 bucket, or Google GCS bucket is complete, you can use the SELECT statement to query the data of the StarRocks tables to verify that the load is successful.
 
@@ -237,7 +235,7 @@ After the load of data from your HDFS cluster, Amazon S3 bucket, or Google GCS b
    4 rows in set (0.01 sec)
    ```
 
-#### Multi-table load
+#### Create a single-table load job
 
 You can also load a single data file or all data files from a specified path into a single destination table. Suppose your AWS S3 bucket `bucket_s3` contains a folder named `input`. The `input` folder contains multiple data files, one of which is named `file1.csv`. These data files consist of the same number of columns as `table1` and the columns from each of these data files can be mapped one on one in sequence to the columns from `table1`.
 
