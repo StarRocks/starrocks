@@ -39,11 +39,13 @@ public:
               _tablet(std::move(tablet)),
               _input_rowsets(std::move(input_rowsets)) {}
 
-    ~HorizontalCompactionTask() override;
+    ~HorizontalCompactionTask() override = default;
 
     Status execute(Progress* progress) override;
 
 private:
+    StatusOr<int32_t> calculate_chunk_size();
+
     int64_t _txn_id;
     int64_t _version;
     std::shared_ptr<Tablet> _tablet;
