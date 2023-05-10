@@ -566,17 +566,17 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitFunctionCall(FunctionCall node, ParseTreeContext context) {
         List<Expr> arguments = visit(node.getArguments(), context, Expr.class);
 
-        FunctionCallExpr callExpr;
+        Expr callExpr;
         Expr convertedFunctionCall = Trino2SRFunctionCallTransformer.convert(node.getName().toString(), arguments);
         if (convertedFunctionCall != null) {
-            callExpr = (FunctionCallExpr) convertedFunctionCall;
+            callExpr = convertedFunctionCall;
         } else if (DISTINCT_FUNCTION.contains(node.getName().toString())) {
             callExpr = visitDistinctFunctionCall(node, context);
         }  else {
             callExpr = new FunctionCallExpr(node.getName().toString(), arguments);
         }
         if (node.getWindow().isPresent()) {
-            return visitWindow(callExpr, node.getWindow().get(), context);
+            return visitWindow((FunctionCallExpr) callExpr, node.getWindow().get(), context);
         }
         return callExpr;
 
