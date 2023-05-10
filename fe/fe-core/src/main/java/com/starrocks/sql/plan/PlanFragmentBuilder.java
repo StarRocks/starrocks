@@ -234,9 +234,43 @@ public class PlanFragmentBuilder {
         execPlan.getFragments().add(exchangeFragment);
     }
 
+<<<<<<< HEAD
     private ExecPlan finalizeFragments(ExecPlan execPlan) {
         try {
             List<PlanFragment> fragments = execPlan.getFragments();
+=======
+    static boolean useQueryCache(ExecPlan execPlan) {
+        if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnableQueryCache()) {
+            return false;
+        }
+        return true;
+    }
+
+    private static ExecPlan finalizeFragments(ExecPlan execPlan, TResultSinkType resultSinkType) {
+        List<PlanFragment> fragments = execPlan.getFragments();
+        for (PlanFragment fragment : fragments) {
+            fragment.createDataSink(resultSinkType);
+        }
+        Collections.reverse(fragments);
+
+        // compute local_rf_waiting_set for each PlanNode.
+        // when enable_pipeline_engine=true and enable_global_runtime_filter=false, we should clear
+        // runtime filters from PlanNode.
+        boolean shouldClearRuntimeFilters = ConnectContext.get() != null &&
+                !ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter() &&
+                ConnectContext.get().getSessionVariable().isEnablePipelineEngine();
+        for (PlanFragment fragment : fragments) {
+            fragment.computeLocalRfWaitingSet(fragment.getPlanRoot(), shouldClearRuntimeFilters);
+        }
+
+        if (useQueryCache(execPlan)) {
+            for (PlanFragment fragment : execPlan.getFragments()) {
+                FragmentNormalizer normalizer = new FragmentNormalizer(execPlan, fragment);
+                normalizer.normalize();
+            }
+        } else if (ConnectContext.get() != null &&
+                ConnectContext.get().getSessionVariable().isEnableRuntimeAdaptiveDop()) {
+>>>>>>> 8a5d39354 ([BugFix] Disable using bucket keys as local shuffle keys (#23027))
             for (PlanFragment fragment : fragments) {
                 fragment.finalize(null, false);
             }
@@ -672,6 +706,7 @@ public class PlanFragmentBuilder {
             scanNode.updateAppliedDictStringColumns(node.getGlobalDicts().stream().
                     map(entry -> entry.first).collect(Collectors.toSet()));
 
+<<<<<<< HEAD
             List<ColumnRefOperator> bucketColumns = getShuffleColumns(node.getDistributionSpec());
             boolean useAllBucketColumns =
                     bucketColumns.stream().allMatch(c -> node.getColRefToColumnMetaMap().containsKey(c));
@@ -684,6 +719,8 @@ public class PlanFragmentBuilder {
                 scanNode.setBucketColumns(bucketColumns);
             }
 
+=======
+>>>>>>> 8a5d39354 ([BugFix] Disable using bucket keys as local shuffle keys (#23027))
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
@@ -1227,6 +1264,101 @@ public class PlanFragmentBuilder {
              */
             TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
 
+<<<<<<< HEAD
+=======
+            return true;
+        }
+
+        /**
+         * Remove ExchangeNode between AggNode and ScanNode for the single backend.
+         * <p>
+         * This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
+         * which contains two steps:
+         * 1. Ignore the network cost for ExchangeNode when estimating cost model.
+         * 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
+         * <p>
+         * Specifically, transfer
+         * (AggNode->ExchangeNode)->([ProjectNode->]ScanNode)
+         * -      *inputFragment         sourceFragment
+         * to
+         * (AggNode->[ProjectNode->]ScanNode)
+         * -      *sourceFragment
+         * That is, when matching this fragment pattern, remove inputFragment and return sourceFragment.
+         *
+         * @param inputFragment The input fragment to match the above pattern.
+         * @param context       The context of building fragment, which contains all the fragments.
+         * @return SourceFragment if it matches th pattern, otherwise the original inputFragment.
+         */
+        private PlanFragment removeExchangeNodeForLocalShuffleAgg(PlanFragment inputFragment, ExecPlan context) {
+            if (ConnectContext.get() == null) {
+                return inputFragment;
+            }
+            if (!canUseLocalShuffleAgg) {
+                return inputFragment;
+            }
+            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+            boolean enableLocalShuffleAgg = sessionVariable.isEnableLocalShuffleAgg()
+                    && sessionVariable.isEnablePipelineEngine()
+                    && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+            if (!enableLocalShuffleAgg) {
+                return inputFragment;
+            }
+
+            // InputFragment should match "AggNode->ExchangeNode" pattern, where AggNode is the caller of this method.
+            if (!(inputFragment.getPlanRoot() instanceof ExchangeNode)) {
+                return inputFragment;
+            }
+
+            // SourceFragment should match "[ProjectNode->]ScanNode" pattern.
+            PlanNode sourceFragmentRoot = inputFragment.getPlanRoot().getChild(0);
+            if (!onlyContainNodeTypes(sourceFragmentRoot, ImmutableList.of(ScanNode.class, ProjectNode.class))) {
+                return inputFragment;
+            }
+
+            // If ExchangeSink is CTE MultiCastPlanFragment, we cannot remove this ExchangeNode.
+            PlanFragment sourceFragment = sourceFragmentRoot.getFragment();
+            if (sourceFragment instanceof MultiCastPlanFragment) {
+                return inputFragment;
+            }
+
+            // Traverse fragment in reverse to delete inputFragment,
+            // because the last fragment is inputFragment for the most cases.
+            ArrayList<PlanFragment> fragments = context.getFragments();
+            for (int i = fragments.size() - 1; i >= 0; --i) {
+                if (fragments.get(i).equals(inputFragment)) {
+                    fragments.remove(i);
+                    break;
+                }
+            }
+
+            sourceFragment.clearDestination();
+            sourceFragment.clearOutputPartition();
+            return sourceFragment;
+        }
+
+        private static class AggregateExprInfo {
+            public final ArrayList<Expr> groupExpr;
+            public final ArrayList<FunctionCallExpr> aggregateExpr;
+            public final ArrayList<Expr> partitionExpr;
+            public final ArrayList<Expr> intermediateExpr;
+
+            public AggregateExprInfo(ArrayList<Expr> groupExpr, ArrayList<FunctionCallExpr> aggregateExpr,
+                                     ArrayList<Expr> partitionExpr,
+                                     ArrayList<Expr> intermediateExpr) {
+                this.groupExpr = groupExpr;
+                this.aggregateExpr = aggregateExpr;
+                this.partitionExpr = partitionExpr;
+                this.intermediateExpr = intermediateExpr;
+            }
+        }
+
+        private AggregateExprInfo buildAggregateTuple(
+                Map<ColumnRefOperator, CallOperator> aggregations,
+                List<ColumnRefOperator> groupBys,
+                List<ColumnRefOperator> partitionBys,
+                TupleDescriptor outputTupleDesc,
+                ExecPlan context) {
+>>>>>>> 8a5d39354 ([BugFix] Disable using bucket keys as local shuffle keys (#23027))
             ArrayList<Expr> groupingExpressions = Lists.newArrayList();
             for (ColumnRefOperator grouping : node.getGroupBys()) {
                 Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,
@@ -1394,6 +1526,7 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
+<<<<<<< HEAD
             // One phase aggregation prefer the inter-instance parallel to avoid local shuffle
             if ((node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal())
                     && hasNoExchangeNodes(inputFragment.getPlanRoot())) {
@@ -1401,6 +1534,13 @@ public class PlanFragmentBuilder {
                     clearOlapScanNodePartitions(aggregationNode);
                 }
                 estimateDopOfOnePhaseAgg(inputFragment);
+=======
+            if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
+                // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
+                inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
+                aggregationNode.setWithLocalShuffle(withLocalShuffle);
+                aggregationNode.setIdenticallyDistributed(true);
+>>>>>>> 8a5d39354 ([BugFix] Disable using bucket keys as local shuffle keys (#23027))
             }
 
             inputFragment.setPlanRoot(aggregationNode);
@@ -2213,10 +2353,6 @@ public class PlanFragmentBuilder {
             if (root instanceof SortNode) {
                 SortNode sortNode = (SortNode) root;
                 sortNode.setAnalyticPartitionExprs(analyticEvalNode.getPartitionExprs());
-            }
-
-            if (optExpr.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
-                clearOlapScanNodePartitions(analyticEvalNode);
             }
 
             inputFragment.setPlanRoot(analyticEvalNode);
