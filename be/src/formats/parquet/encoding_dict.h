@@ -108,6 +108,13 @@ public:
         return Status::OK();
     }
 
+    Status skip(size_t values_to_skip) override {
+        //TODO(Smith) still heavy work load
+        _indexes.reserve(values_to_skip);
+        _index_batch_decoder.GetBatch(&_indexes[0], values_to_skip);
+        return Status::OK();
+    }
+
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
         _indexes.reserve(count);
         _index_batch_decoder.GetBatch(&_indexes[0], count);
@@ -179,7 +186,10 @@ public:
     }
 
     Status get_dict_values(Column* column) override {
-        [[maybe_unused]] auto ret = column->append_strings_overflow(_dict, _max_value_length);
+        auto ret = column->append_strings_overflow(_dict, _max_value_length);
+        if (UNLIKELY(!ret)) {
+            return Status::InternalError("DictDecoder append strings to column failed");
+        }
         return Status::OK();
     }
 
@@ -188,7 +198,10 @@ public:
         for (size_t i = 0; i < dict_codes.size(); i++) {
             slices[i] = _dict[dict_codes[i]];
         }
-        [[maybe_unused]] auto ret = column->append_strings_overflow(slices, _max_value_length);
+        auto ret = column->append_strings_overflow(slices, _max_value_length);
+        if (UNLIKELY(!ret)) {
+            return Status::InternalError("DictDecoder append strings to column failed");
+        }
         return Status::OK();
     }
 
@@ -211,13 +224,23 @@ public:
         return Status::OK();
     }
 
+    Status skip(size_t values_to_skip) override {
+        //TODO(Smith) still heavy work load
+        _indexes.reserve(values_to_skip);
+        _index_batch_decoder.GetBatch(&_indexes[0], values_to_skip);
+        return Status::OK();
+    }
+
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
         _indexes.reserve(count);
         _index_batch_decoder.GetBatch(&_indexes[0], count);
 
         switch (content_type) {
         case DICT_CODE: {
-            [[maybe_unused]] auto ret = dst->append_numbers(&_indexes[0], count * SIZE_OF_DICT_CODE_TYPE);
+            auto ret = dst->append_numbers(&_indexes[0], count * SIZE_OF_DICT_CODE_TYPE);
+            if (UNLIKELY(!ret)) {
+                return Status::InternalError("DictDecoder append numbers to column failed");
+            }
             DCHECK(ret) << "append_numbers failed";
             break;
         }
@@ -226,8 +249,10 @@ public:
             for (int i = 0; i < count; ++i) {
                 _slices[i] = _dict[_indexes[i]];
             }
-            [[maybe_unused]] auto ret = dst->append_strings_overflow(_slices, _max_value_length);
-            DCHECK(ret) << "append_strings_overflow failed";
+            auto ret = dst->append_strings_overflow(_slices, _max_value_length);
+            if (UNLIKELY(!ret)) {
+                return Status::InternalError("DictDecoder append strings to column failed");
+            }
             break;
         }
         default:

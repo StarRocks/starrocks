@@ -155,7 +155,7 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
             // this is 3-level case, it will generate a list<element>
             RETURN_IF_ERROR(node_to_field(t_schemas, pos + 2, cur_level_info, element, next_pos));
         } else {
-            // Have a required group field with chidren, this will generate a group element
+            // Have a required group field with children, this will generate a group element
             // list<group<child>>
             // the level2_schema may have converted_type = "MAP", in this scenario we should parse
             // level2_schema as map, otherwise when we create column reader we will get wrong type.
@@ -249,7 +249,7 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
     RETURN_IF_ERROR(group_to_struct_field(t_schemas, pos + 1, cur_level_info, kv_field, next_pos));
 
     field->name = map_schema.name;
-    // Actually, we don't need put field_id here
+    // Actually, we don't need to put field_id here
     field->field_id = map_schema.field_id;
     field->type.type = TYPE_MAP;
     field->is_nullable = is_optional;
@@ -378,11 +378,12 @@ Status SchemaDescriptor::from_thrift(const std::vector<tparquet::SchemaElement>&
         if (!case_sensitive) {
             _fields[i].name = boost::algorithm::to_lower_copy(_fields[i].name);
         }
-        if (_formatted_column_name_2_field_pos.find(_fields[i].name) != _formatted_column_name_2_field_pos.end()) {
+        if (_formatted_column_name_2_field_idx.find(_fields[i].name) != _formatted_column_name_2_field_idx.end()) {
             return Status::InvalidArgument(strings::Substitute("Duplicate field name: $0", _fields[i].name));
         }
-        _formatted_column_name_2_field_pos.emplace(_fields[i].name, i);
-        _field_id_2_field_pos.emplace(_fields[i].field_id, i);
+
+        _formatted_column_name_2_field_idx.emplace(_fields[i].name, i);
+        _field_id_2_field_idx.emplace(_fields[i].field_id, i);
     }
     _case_sensitive = case_sensitive;
 
@@ -406,29 +407,29 @@ std::string SchemaDescriptor::debug_string() const {
     return ss.str();
 }
 
-const int32_t SchemaDescriptor::get_field_pos_by_column_name(const std::string& column_name) const {
+const int32_t SchemaDescriptor::get_field_idx_by_column_name(const std::string& column_name) const {
     const auto& format_name = _case_sensitive ? column_name : boost::algorithm::to_lower_copy(column_name);
-    auto it = _formatted_column_name_2_field_pos.find(format_name);
-    if (it == _formatted_column_name_2_field_pos.end()) return -1;
+    auto it = _formatted_column_name_2_field_idx.find(format_name);
+    if (it == _formatted_column_name_2_field_idx.end()) return -1;
     return it->second;
 }
 
-const int32_t SchemaDescriptor::get_field_pos_by_field_id(int32_t field_id) const {
-    auto it = _field_id_2_field_pos.find(field_id);
-    if (it == _field_id_2_field_pos.end()) {
+const int32_t SchemaDescriptor::get_field_idx_by_field_id(int32_t field_id) const {
+    auto it = _field_id_2_field_idx.find(field_id);
+    if (it == _field_id_2_field_idx.end()) {
         return -1;
     }
     return it->second;
 }
 
 const ParquetField* SchemaDescriptor::get_stored_column_by_field_id(int32_t field_id) const {
-    int32_t idx = get_field_pos_by_field_id(field_id);
+    int32_t idx = get_field_idx_by_field_id(field_id);
     if (idx == -1) return nullptr;
     return &_fields[idx];
 }
 
 const ParquetField* SchemaDescriptor::get_stored_column_by_column_name(const std::string& column_name) const {
-    int idx = get_field_pos_by_column_name(column_name);
+    int idx = get_field_idx_by_column_name(column_name);
     if (idx == -1) return nullptr;
     return &(_fields[idx]);
 }

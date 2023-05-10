@@ -301,6 +301,7 @@ CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
+CONF_Int32(manual_compaction_threads, "4");
 
 // if compaction of a tablet failed, this tablet should not be chosen to
 // compaction until this interval passes.
@@ -825,6 +826,8 @@ CONF_mInt64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
 CONF_mBool(lake_compaction_check_txn_log_first, "false");
 CONF_mInt64(experimental_lake_segment_gc_max_retries, "3");
 CONF_mBool(experimental_lake_enable_fast_gc, "false");
+// Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
+CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -889,7 +892,7 @@ CONF_Bool(block_cache_enable, "false");
 CONF_Int64(block_cache_disk_size, "0");
 CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
 CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
-CONF_Int64(block_cache_block_size, "1048576");  // 1MB
+CONF_Int64(block_cache_block_size, "262144");   // 256K
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
 CONF_Bool(block_cache_checksum_enable, "false");
 // Maximum number of concurrent inserts we allow globally for block cache.

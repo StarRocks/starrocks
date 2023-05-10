@@ -16,10 +16,11 @@
 
 #include <fmt/format.h>
 
+#include <filesystem>
+
 #ifdef WITH_CACHELIB
 #include "block_cache/cachelib_wrapper.h"
 #endif
-
 #include "block_cache/starcache_wrapper.h"
 #include "common/config.h"
 #include "common/logging.h"
@@ -28,13 +29,32 @@
 
 namespace starrocks {
 
+namespace fs = std::filesystem;
+
 BlockCache* BlockCache::instance() {
     static BlockCache cache;
     return &cache;
 }
 
 Status BlockCache::init(const CacheOptions& options) {
-    // TODO: check block size limit
+    for (auto& dir : options.disk_spaces) {
+        if (dir.size == 0) {
+            continue;
+        }
+        fs::path dir_path(dir.path);
+        if (fs::exists(dir_path)) {
+            if (!fs::is_directory(dir_path)) {
+                LOG(ERROR) << "the block cache disk path already exists but not a directory, path: " << dir.path;
+                return Status::InvalidArgument("invalid block cache disk path");
+            }
+        } else {
+            std::error_code ec;
+            if (!fs::create_directory(dir_path, ec)) {
+                LOG(ERROR) << "create block cache disk path failed, path: " << dir.path << ", reason: " << ec.message();
+                return Status::InvalidArgument("invalid block cache disk path");
+            }
+        }
+    }
     _block_size = options.block_size;
     if (options.engine == "starcache") {
         _kv_cache = std::make_unique<StarCacheWrapper>();
@@ -52,7 +72,7 @@ Status BlockCache::init(const CacheOptions& options) {
 }
 
 Status BlockCache::write_cache(const CacheKey& cache_key, off_t offset, size_t size, const char* buffer,
-                               size_t ttl_seconds) {
+                               size_t ttl_seconds, bool overwrite) {
     if (offset % _block_size != 0) {
         LOG(WARNING) << "write block key: " << cache_key << " with invalid args, offset: " << offset;
         return Status::InvalidArgument(strings::Substitute("offset must be aligned by block size $0", _block_size));
@@ -66,7 +86,7 @@ Status BlockCache::write_cache(const CacheKey& cache_key, off_t offset, size_t s
 
     size_t index = offset / _block_size;
     std::string block_key = fmt::format("{}/{}", cache_key, index);
-    return _kv_cache->write_cache(block_key, buffer, size, ttl_seconds);
+    return _kv_cache->write_cache(block_key, buffer, size, ttl_seconds, overwrite);
 }
 
 StatusOr<size_t> BlockCache::read_cache(const CacheKey& cache_key, off_t offset, size_t size, char* buffer) {

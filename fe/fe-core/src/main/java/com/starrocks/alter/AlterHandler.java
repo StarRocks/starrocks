@@ -39,7 +39,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
@@ -88,7 +87,7 @@ public abstract class AlterHandler extends FrontendDaemon {
     }
 
     public AlterHandler(String name) {
-        super(name, FeConstants.default_scheduler_interval_millisecond);
+        super(name, Config.alter_scheduler_interval_millisecond);
         executor = ThreadPoolManager
                 .newDaemonCacheThreadPool(Config.alter_max_worker_threads, Config.alter_max_worker_queue_size,
                         name + "_pool", true);

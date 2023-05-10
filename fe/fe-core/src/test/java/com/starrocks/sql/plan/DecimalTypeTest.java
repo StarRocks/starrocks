@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.Config;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -186,7 +186,6 @@ public class DecimalTypeTest extends PlanTestBase {
         assertContains(plan, "PREDICATES: 4: c_1_3 <= 1000");
     }
 
-
     @Test
     public void testArrayAggDecimal() throws Exception {
         int stage = connectContext.getSessionVariable().getNewPlannerAggStage();
@@ -211,5 +210,28 @@ public class DecimalTypeTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setNewPlanerAggStage(stage);
         }
+    }
+
+    @Test
+    public void testDecimalV2ArraySlice() throws Exception {
+        try {
+            Config.enable_decimal_v3 = false;
+            starRocksAssert.withTable("CREATE TABLE dec22 (" +
+                    "c_2_0 INT NULL," +
+                    "c_1_0 ARRAY<DECIMAL(10, 0)> NULL " +
+                    ") " +
+                    "DUPLICATE KEY (c_2_0) " +
+                    "DISTRIBUTED BY HASH (c_2_0) " +
+                    "properties(\"replication_num\"=\"1\") ;");
+            String sql = "select array_slice(c_1_0, 1) from dec22";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan,
+                    "array_slice[([2: c_1_0, ARRAY<DECIMAL(10,0)>, true], 1); ",
+                    "result: ARRAY<DECIMAL(9,0)>;");
+        } finally {
+            Config.enable_decimal_v3 = true;
+            starRocksAssert.dropTable("dec22");
+        }
+
     }
 }

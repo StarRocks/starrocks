@@ -356,7 +356,8 @@ public class FunctionAnalyzer {
                 throw new SemanticException(
                         "percentile_approx requires the first parameter's type is numeric type");
             }
-            if (!functionCallExpr.getChild(1).getType().isNumericType() || !functionCallExpr.getChild(1).isConstant()) {
+            if (!functionCallExpr.getChild(1).getType().isNumericType() ||
+                    !functionCallExpr.getChild(1).isLiteral()) {
                 throw new SemanticException(
                         "percentile_approx requires the second parameter's type is numeric constant type");
             }

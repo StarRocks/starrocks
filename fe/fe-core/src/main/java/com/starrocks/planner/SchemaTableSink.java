@@ -14,7 +14,7 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.catalog.SchemaTable;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
@@ -25,7 +25,7 @@ import com.starrocks.thrift.TSchemaTableSink;
 public class SchemaTableSink extends DataSink {
     private final String tableName;
 
-    public SchemaTableSink(SchemaTable table) {
+    public SchemaTableSink(SystemTable table) {
         tableName = table.getName();
     }
 

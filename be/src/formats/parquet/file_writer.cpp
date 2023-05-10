@@ -290,21 +290,26 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
 FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
                                std::shared_ptr<::parquet::WriterProperties> properties,
                                std::shared_ptr<::parquet::schema::GroupNode> schema,
-                               const std::vector<ExprContext*>& output_expr_ctxs)
-        : _properties(std::move(properties)), _schema(std::move(schema)) {
+                               const std::vector<ExprContext*>& output_expr_ctxs, int64_t max_file_size)
+        : _properties(std::move(properties)), _schema(std::move(schema)), _max_file_size(max_file_size) {
     _outstream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
     _type_descs.reserve(output_expr_ctxs.size());
     for (auto expr : output_expr_ctxs) {
         _type_descs.push_back(expr->root()->type());
     }
+    _eval_func = [output_expr_ctxs](Chunk* chunk, size_t col_idx) {
+        return output_expr_ctxs[col_idx]->evaluate(chunk);
+    };
 }
 
+// For UT only
 FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
                                std::shared_ptr<::parquet::WriterProperties> properties,
                                std::shared_ptr<::parquet::schema::GroupNode> schema,
                                std::vector<TypeDescriptor> type_descs)
         : _properties(std::move(properties)), _schema(std::move(schema)), _type_descs(std::move(type_descs)) {
     _outstream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
+    _eval_func = [](Chunk* chunk, size_t col_idx) { return chunk->get_column_by_index(col_idx); };
 }
 
 Status FileWriterBase::init() {
@@ -319,7 +324,7 @@ void FileWriterBase::_generate_chunk_writer() {
     DCHECK(_writer != nullptr);
     if (_chunk_writer == nullptr) {
         auto rg_writer = _writer->AppendBufferedRowGroup();
-        _chunk_writer = std::make_unique<ChunkWriter>(rg_writer, _type_descs, _schema);
+        _chunk_writer = std::make_unique<ChunkWriter>(rg_writer, _type_descs, _schema, _eval_func);
     }
 }
 
@@ -331,7 +336,7 @@ Status FileWriterBase::write(Chunk* chunk) {
     _generate_chunk_writer();
     _chunk_writer->write(chunk);
 
-    if (_chunk_writer->estimated_buffered_bytes() > _max_row_group_size) {
+    if (_chunk_writer->estimated_buffered_bytes() > _max_row_group_size && !is_last_row_group()) {
         _flush_row_group();
     }
 
@@ -346,6 +351,9 @@ std::size_t FileWriterBase::file_size() const {
     return _outstream->Tell().MoveValueUnsafe() + _chunk_writer->estimated_buffered_bytes();
 }
 
+// TODO(stephen): we should use `RowGroupMetaData::file_offset()` of arrow to get file split_offset.
+// However, the current arrow version 5.0.0 have bug in this interface and requires an upgrade.
+// So we rewrite the correct logic for this.
 Status FileWriterBase::split_offsets(std::vector<int64_t>& splitOffsets) const {
     if (_file_metadata == nullptr) {
         LOG(WARNING) << "file metadata null";
@@ -387,14 +395,16 @@ Status SyncFileWriter::close() {
     return Status::OK();
 }
 
-AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::string file_name,
-                                 std::string& file_dir, std::shared_ptr<::parquet::WriterProperties> properties,
+AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::string file_location,
+                                 std::string partition_location,
+                                 std::shared_ptr<::parquet::WriterProperties> properties,
                                  std::shared_ptr<::parquet::schema::GroupNode> schema,
                                  const std::vector<ExprContext*>& output_expr_ctxs, PriorityThreadPool* executor_pool,
-                                 RuntimeProfile* parent_profile)
-        : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs),
-          _file_name(std::move(file_name)),
-          _file_dir(file_dir),
+                                 RuntimeProfile* parent_profile, int64_t max_file_size)
+        : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs,
+                         max_file_size),
+          _file_location(std::move(file_location)),
+          _partition_location(std::move(partition_location)),
           _executor_pool(executor_pool),
           _parent_profile(parent_profile) {
     _io_timer = ADD_TIMER(_parent_profile, "FileWriterIoTimer");
@@ -429,7 +439,7 @@ void AsyncFileWriter::_flush_row_group() {
 }
 
 Status AsyncFileWriter::close(RuntimeState* state,
-                              std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> cb) {
+                              const std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)>& cb) {
     bool ret = _executor_pool->try_offer([&, state, cb]() {
         SCOPED_TIMER(_io_timer);
         {

@@ -290,6 +290,7 @@
         + [CHAR](./sql-reference/sql-statements/data-types/CHAR.md)
         + [VARCHAR](./sql-reference/sql-statements/data-types/VARCHAR.md)
         + [STRING](./sql-reference/sql-statements/data-types/STRING.md)
+        + [BINARY](./sql-reference/sql-statements/data-types/BINARY.md)
       + Date
         + [DATE](./sql-reference/sql-statements/data-types/DATE.md)
         + [DATETIME](./sql-reference/sql-statements/data-types/DATETIME.md)
@@ -298,7 +299,6 @@
         + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
-        + [BINARY](./sql-reference/sql-statements/data-types/BINARY.md)
     + [Keywords](./sql-reference/sql-statements/keywords.md)
     + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
   + Function Reference
@@ -393,6 +393,37 @@
       + [intersect_count](./sql-reference/sql-functions/bitmap-functions/intersect_count.md)
       + [sub_bitmap](./sql-reference/sql-functions/bitmap-functions/sub_bitmap.md)
       + [to_bitmap](./sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
+    + JSON Functions
+      + [Overview of JSON functions and operators](./sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators.md)
+      + [JSON operators](./sql-reference/sql-functions/json-functions/json-operators.md)
+      + JSON constructor functions
+        + [json_array](./sql-reference/sql-functions/json-functions/json-constructor-functions/json_array.md)
+        + [json_object](./sql-reference/sql-functions/json-functions/json-constructor-functions/json_object.md)
+        + [parse_json](./sql-reference/sql-functions/json-functions/json-constructor-functions/parse_json.md)
+      + JSON query and processing functions
+        + [Arrow function](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/arrow-function.md)
+        + [cast](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/cast.md)
+        + [get_json_double](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_double.md)
+        + [get_json_int](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_int.md)
+        + [get_json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_string.md)
+        + [json_each](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
+        + [json_exists](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)
+        + [json_length](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_length.md)
+        + [json_keys](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_keys.md)
+        + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
+        + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
+    + Map Functions
+      + [map_apply](./sql-reference/sql-functions/map-functions/map_apply.md)
+      + [map_filter](./sql-reference/sql-functions/map-functions/map_filter.md)
+      + [map_from_arrays](./sql-reference/sql-functions/map-functions/map_from_arrays.md)
+      + [map_keys](./sql-reference/sql-functions/map-functions/map_keys.md)
+      + [map_size](./sql-reference/sql-functions/map-functions/map_size.md)
+      + [map_values](./sql-reference/sql-functions/map-functions/map_values.md)
+      + [transform_keys](./sql-reference/sql-functions/map-functions/transform_keys.md)
+      + [transform_values](./sql-reference/sql-functions/map-functions/transform_values.md)
+    + Binary Functions
+      + [to_binary](/sql-reference/sql-functions/binary-functions/to_binary.md)
+      + [from_binary](/sql-reference/sql-functions/binary-functions/from_binary.md)
     + Conditional Functions
       + [coalesce](./sql-reference/sql-functions/condition-functions/coalesce.md)
       + [if](./sql-reference/sql-functions/condition-functions/if.md)
@@ -470,6 +501,7 @@
       + [unix_timestamp](./sql-reference/sql-functions/date-time-functions/unix_timestamp.md)
       + [utc_timestamp](./sql-reference/sql-functions/date-time-functions/utc_timestamp.md)
       + [week](./sql-reference/sql-functions/date-time-functions/week.md)
+      + [week_iso](./sql-reference/sql-functions/date-time-functions/week_iso.md)
       + [weekofyear](./sql-reference/sql-functions/date-time-functions/weekofyear.md)
       + [weeks_add](./sql-reference/sql-functions/date-time-functions/weeks_add.md)
       + [weeks_diff](./sql-reference/sql-functions/date-time-functions/weeks_diff.md)
@@ -489,34 +521,6 @@
       + [st_polygon](./sql-reference/sql-functions/spatial-functions/st_polygon.md)
       + [st_x](./sql-reference/sql-functions/spatial-functions/st_x.md)
       + [st_y](./sql-reference/sql-functions/spatial-functions/st_y.md)
-    + JSON Functions
-      + [Overview of JSON functions and operators](./sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators.md)
-      + [JSON operators](./sql-reference/sql-functions/json-functions/json-operators.md)
-      + JSON constructor functions
-        + [json_array](./sql-reference/sql-functions/json-functions/json-constructor-functions/json_array.md)
-        + [json_object](./sql-reference/sql-functions/json-functions/json-constructor-functions/json_object.md)
-        + [parse_json](./sql-reference/sql-functions/json-functions/json-constructor-functions/parse_json.md)
-      + JSON query and processing functions
-        + [Arrow function](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/arrow-function.md)
-        + [cast](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/cast.md)
-        + [get_json_double](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_double.md)
-        + [get_json_int](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_int.md)
-        + [get_json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_string.md)
-        + [json_each](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
-        + [json_exists](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)
-        + [json_length](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_length.md)
-        + [json_keys](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_keys.md)
-        + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
-        + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
-    + Map Functions
-      + [map_apply](./sql-reference/sql-functions/map-functions/map_apply.md)
-      + [map_filter](./sql-reference/sql-functions/map-functions/map_filter.md)
-      + [map_from_arrays](./sql-reference/sql-functions/map-functions/map_from_arrays.md)
-      + [map_keys](./sql-reference/sql-functions/map-functions/map_keys.md)
-      + [map_size](./sql-reference/sql-functions/map-functions/map_size.md)
-      + [map_values](./sql-reference/sql-functions/map-functions/map_values.md)
-      + [transform_keys](./sql-reference/sql-functions/map-functions/transform_keys.md)
-      + [transform_values](./sql-reference/sql-functions/map-functions/transform_values.md)
     + Math Functions
       + [abs](./sql-reference/sql-functions/math-functions/abs.md)
       + [acos](./sql-reference/sql-functions/math-functions/acos.md)
@@ -616,9 +620,6 @@
       + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
     + Struct Functions
       + [row](/sql-reference/sql-functions/struct-functions/row.md)
-    + Binary Functions
-      + [to_binary](/sql-reference/sql-functions/binary-functions/to_binary.md)
-      + [from_binary](/sql-reference/sql-functions/binary-functions/from_binary.md)
     + Utility Functions
       + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
@@ -644,6 +645,7 @@
       + [Routine Load](./faq/loading/Routine_load_faq.md)
       + [Broker Load](./faq/loading/Broker_load_faq.md)
       + [Insert Into](./faq/loading/Insert_into_faq.md)
+      + [Synchronize data from MySQL in real time](/faq/loading/synchronize_mysql_into_sr.md)
       + [Flink connector](./faq/loading/Flink_connector_faq.md)
       + [DataX](./faq/loading/DataX_faq.md)
     + [Data Unloading](./faq/Exporting_faq.md)

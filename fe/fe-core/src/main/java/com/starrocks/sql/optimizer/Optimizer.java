@@ -205,7 +205,7 @@ public class Optimizer {
             memo = new Memo();
         }
 
-        context = new OptimizerContext(memo, columnRefFactory, connectContext);
+        context = new OptimizerContext(memo, columnRefFactory, connectContext, optimizerConfig);
         OptimizerTraceInfo traceInfo;
         if (connectContext.getExecutor() == null) {
             traceInfo = new OptimizerTraceInfo(connectContext.getQueryId(), null);
@@ -301,8 +301,11 @@ public class Optimizer {
             }
         }
 
-        tree = new MaterializedViewRule().transform(tree, context).get(0);
-        deriveLogicalProperty(tree);
+        if (sessionVariable.isEnableSyncMaterializedViewRewrite()) {
+            // Add a config to decide whether to rewrite sync mv.
+            tree = new MaterializedViewRule().transform(tree, context).get(0);
+            deriveLogicalProperty(tree);
+        }
 
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);

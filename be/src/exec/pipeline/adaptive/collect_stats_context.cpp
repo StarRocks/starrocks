@@ -88,11 +88,15 @@ PassthroughState::PassthroughState(CollectStatsContext* const ctx)
           _unpluging_per_driver_seq(ctx->_max_dop) {}
 
 bool PassthroughState::need_input(int32_t driver_seq) const {
-    return _in_chunk_queue_per_driver_seq[driver_seq].size_approx() < MAX_PASSTHROUGH_CHUNKS_PER_DRIVER_SEQ;
+    return _in_chunk_queue_per_driver_seq[driver_seq].queue.size_approx() < MAX_PASSTHROUGH_CHUNKS_PER_DRIVER_SEQ;
 }
 
 Status PassthroughState::push_chunk(int32_t driver_seq, ChunkPtr chunk) {
-    _in_chunk_queue_per_driver_seq[driver_seq].enqueue(std::move(chunk));
+    auto& [chunk_queue, token] = _in_chunk_queue_per_driver_seq[driver_seq];
+    if (UNLIKELY(!chunk_queue.enqueue(token, std::move(chunk)))) {
+        return Status::MemoryLimitExceeded(
+                "allocation failed when enqueueing into the passthrough queue of CollectStatsSink");
+    }
     return Status::OK();
 }
 
@@ -102,7 +106,7 @@ bool PassthroughState::has_output(int32_t driver_seq) const {
         return true;
     }
 
-    size_t num_chunks = _in_chunk_queue_per_driver_seq[driver_seq].size_approx();
+    size_t num_chunks = _in_chunk_queue_per_driver_seq[driver_seq].queue.size_approx();
     auto& unpluging = _unpluging_per_driver_seq[driver_seq];
     if (unpluging) {
         if (num_chunks > 0) {
@@ -129,9 +133,11 @@ StatusOr<ChunkPtr> PassthroughState::pull_chunk(int32_t driver_seq) {
         return chunk;
     }
 
-    auto& passthrough_chunk_queue = _in_chunk_queue_per_driver_seq[driver_seq];
+    auto& passthrough_chunk_queue = _in_chunk_queue_per_driver_seq[driver_seq].queue;
     ChunkPtr chunk = nullptr;
-    passthrough_chunk_queue.try_dequeue(chunk);
+    if (UNLIKELY(!passthrough_chunk_queue.try_dequeue(chunk))) {
+        return Status::InternalError("attempt to dequeue from the empty passthrough queue of CollectStatsSource");
+    }
     return chunk;
 }
 
@@ -145,7 +151,9 @@ bool PassthroughState::is_downstream_finished(int32_t driver_seq) const {
     }
 
     const auto& buffer_chunk_queue = _ctx->_buffer_chunk_queue(driver_seq);
-    const auto& passthrough_chunk_queue = _in_chunk_queue_per_driver_seq[driver_seq];
+    const auto& passthrough_chunk_queue = _in_chunk_queue_per_driver_seq[driver_seq].queue;
+    // _is_finishing_per_driver_seq is set to true using memory_order_release after all the chunks are enqueued.
+    // Therefore, enqueueing chunk hapens before setting _is_finishing_per_driver_seq to true.
     return buffer_chunk_queue.empty() && passthrough_chunk_queue.size_approx() <= 0;
 }
 bool PassthroughState::is_upstream_finished(int32_t driver_seq) const {

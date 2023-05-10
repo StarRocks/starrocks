@@ -210,6 +210,7 @@ public class IcebergTable extends Table {
         tIcebergTable.setColumns(tColumns);
 
         tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(nativeTable.schema()));
+        tIcebergTable.setPartition_column_names(getPartitionColumnNames());
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.ICEBERG_TABLE,
                 fullSchema.size(), 0, remoteTableName, remoteDbName);

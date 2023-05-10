@@ -313,7 +313,6 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 public class GlobalStateMgr {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
@@ -501,6 +500,8 @@ public class GlobalStateMgr {
     private WarehouseManager warehouseMgr;
 
     private ConfigRefreshDaemon configRefreshDaemon;
+
+    private StorageVolumeMgr storageVolumeMgr;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
@@ -692,6 +693,8 @@ public class GlobalStateMgr {
         this.shardDeleter = new ShardDeleter();
 
         this.binlogManager = new BinlogManager();
+
+        this.storageVolumeMgr = new StorageVolumeMgr();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -917,6 +920,10 @@ public class GlobalStateMgr {
 
     public WarehouseManager getWarehouseMgr() {
         return warehouseMgr;
+    }
+
+    public StorageVolumeMgr getStorageVolumeMgr() {
+        return storageVolumeMgr;
     }
 
     public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
@@ -2464,36 +2471,8 @@ public class GlobalStateMgr {
                         && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT))) {
                     sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                             .append("\" = \"");
-                    List<ForeignKeyConstraint> constraints = olapTable.getForeignKeyConstraints();
-                    List<String> constraintStrs = Lists.newArrayList();
-                    for (ForeignKeyConstraint constraint : constraints) {
-                        BaseTableInfo parentTableInfo = constraint.getParentTableInfo();
-                        StringBuilder constraintSb = new StringBuilder();
-                        constraintSb.append("(");
-                        String baseColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
-                                .stream().map(pair -> pair.first).collect(Collectors.toList()));
-                        constraintSb.append(baseColumns);
-                        constraintSb.append(")");
-                        constraintSb.append(" REFERENCES ");
-                        if (parentTableInfo.getCatalogName().equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
-                            Database parentDb = GlobalStateMgr.getCurrentState().getDb(parentTableInfo.getDbId());
-                            constraintSb.append(parentDb.getFullName());
-                            constraintSb.append(".");
-                            Table parentTable = parentDb.getTable(parentTableInfo.getTableId());
-                            constraintSb.append(parentTable.getName());
-                        } else {
-                            constraintSb.append(parentTableInfo);
-                        }
-
-                        constraintSb.append("(");
-                        String parentColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
-                                .stream().map(pair -> pair.second).collect(Collectors.toList()));
-                        constraintSb.append(parentColumns);
-                        constraintSb.append(")");
-                        constraintStrs.add(constraintSb.toString());
-                    }
-
-                    sb.append(Joiner.on(";").join(constraintStrs)).append("\"");
+                    sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(olapTable.getForeignKeyConstraints()))
+                            .append("\"");
                 }
             }
 

@@ -337,14 +337,14 @@ public:
         _tablet_fail_infos.emplace_back(std::move(fail_info));
     }
 
-    std::vector<TIcebergDataFile>& iceberg_commit_infos() {
-        std::lock_guard<std::mutex> l(_iceberg_info_lock);
-        return _iceberg_sink_commit_infos;
+    std::vector<TSinkCommitInfo>& sink_commit_infos() {
+        std::lock_guard<std::mutex> l(_sink_commit_infos_lock);
+        return _sink_commit_infos;
     }
 
-    void add_iceberg_data_file(const TIcebergDataFile& file) {
-        std::lock_guard<std::mutex> l(_iceberg_info_lock);
-        _iceberg_sink_commit_infos.emplace_back(std::move(file));
+    void add_sink_commit_info(const TSinkCommitInfo& sink_commit_info) {
+        std::lock_guard<std::mutex> l(_sink_commit_infos_lock);
+        _sink_commit_infos.emplace_back(std::move(sink_commit_info));
     }
 
     // get mem limit for load channel
@@ -492,8 +492,8 @@ private:
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
     std::vector<TTabletFailInfo> _tablet_fail_infos;
 
-    std::mutex _iceberg_info_lock;
-    std::vector<TIcebergDataFile> _iceberg_sink_commit_infos;
+    std::mutex _sink_commit_infos_lock;
+    std::vector<TSinkCommitInfo> _sink_commit_infos;
 
     // prohibit copies
     RuntimeState(const RuntimeState&) = delete;

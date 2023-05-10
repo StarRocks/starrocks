@@ -134,7 +134,7 @@ public class ReportHandler extends Daemon {
 
     private static final Logger LOG = LogManager.getLogger(ReportHandler.class);
 
-    private BlockingQueue<ReportTask> reportQueue = Queues.newLinkedBlockingQueue();
+    private BlockingQueue<Pair<Long, ReportType>> reportQueue = Queues.newLinkedBlockingQueue();
 
     private Map<ReportType, Map<Long, ReportTask>> pendingTaskMap = Maps.newHashMap();
 
@@ -294,7 +294,7 @@ public class ReportHandler extends Daemon {
             }
             ReportTask oldTask = pendingTaskMap.get(reportTask.type).get(reportTask.beId);
             if (oldTask == null) {
-                reportQueue.put(reportTask);
+                reportQueue.put(Pair.create(reportTask.beId, reportTask.type));
             } else {
                 LOG.info("update be {} report task, type: {}", oldTask.beId, oldTask.type);
             }
@@ -1461,15 +1461,14 @@ public class ReportHandler extends Daemon {
     @Override
     protected void runOneCycle() {
         while (true) {
-            ReportTask task = null;
             try {
-                task = reportQueue.take();
+                Pair<Long, ReportType> pair = reportQueue.take();
+                ReportTask task = null;
                 synchronized (pendingTaskMap) {
                     // using the lastest task
-                    long beId = task.beId;
-                    task = pendingTaskMap.get(task.type).get(beId);
+                    task = pendingTaskMap.get(pair.second).get(pair.first);
                     if (task == null) {
-                        throw new Exception("pendingTaskMap not exists " + beId);
+                        throw new Exception("pendingTaskMap not exists " + pair.first);
                     }
                     pendingTaskMap.get(task.type).remove(task.beId, task);
                 }

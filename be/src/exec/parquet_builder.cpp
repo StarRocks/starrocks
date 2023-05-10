@@ -33,9 +33,10 @@ namespace starrocks {
 ParquetBuilder::ParquetBuilder(std::unique_ptr<WritableFile> writable_file,
                                std::shared_ptr<::parquet::WriterProperties> properties,
                                std::shared_ptr<::parquet::schema::GroupNode> schema,
-                               const std::vector<ExprContext*>& output_expr_ctxs, int64_t row_group_max_size) {
+                               const std::vector<ExprContext*>& output_expr_ctxs, int64_t row_group_max_size,
+                               int64_t max_file_size) {
     _writer = std::make_unique<starrocks::parquet::SyncFileWriter>(std::move(writable_file), std::move(properties),
-                                                                   std::move(schema), output_expr_ctxs);
+                                                                   std::move(schema), output_expr_ctxs, max_file_size);
     _writer->set_max_row_group_size(row_group_max_size);
     _writer->init();
 }

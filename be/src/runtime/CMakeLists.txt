@@ -85,6 +85,7 @@ set(RUNTIME_FILES
     profile_report_worker.cpp
     schema_table_sink.cpp
     command_executor.cpp
+    iceberg_table_sink.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

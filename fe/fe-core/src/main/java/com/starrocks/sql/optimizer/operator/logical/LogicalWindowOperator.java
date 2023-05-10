@@ -37,30 +37,28 @@ import java.util.Map;
 import java.util.Objects;
 
 public class LogicalWindowOperator extends LogicalOperator {
-    private final ImmutableMap<ColumnRefOperator, CallOperator> windowCall;
-    private final ImmutableList<ScalarOperator> partitionExpressions;
-    private final ImmutableList<Ordering> orderByElements;
-    private final AnalyticWindow analyticWindow;
+    private ImmutableMap<ColumnRefOperator, CallOperator> windowCall;
+    private ImmutableList<ScalarOperator> partitionExpressions;
+    private ImmutableList<Ordering> orderByElements;
+    private AnalyticWindow analyticWindow;
     /**
      * Each LogicalWindowOperator will belong to a SortGroup,
      * so we need to record sortProperty to ensure that only one SortNode is enforced
      */
-    private final ImmutableList<Ordering> enforceSortColumns;
+    private ImmutableList<Ordering> enforceSortColumns;
 
     /**
      * For window functions with only partition by column but without order by column,
      * we can perform hash-based partition according to hint.
      */
-    private final boolean useHashBasedPartition;
+    private boolean useHashBasedPartition;
 
-    private LogicalWindowOperator(Builder builder) {
-        super(OperatorType.LOGICAL_WINDOW, builder.getLimit(), builder.getPredicate(), builder.getProjection());
-        this.windowCall = ImmutableMap.copyOf(builder.windowCall);
-        this.partitionExpressions = ImmutableList.copyOf(builder.partitionExpressions);
-        this.orderByElements = ImmutableList.copyOf(builder.orderByElements);
-        this.analyticWindow = builder.analyticWindow;
-        this.enforceSortColumns = ImmutableList.copyOf(builder.enforceSortColumns);
-        this.useHashBasedPartition = builder.useHashBasedPartition;
+    private LogicalWindowOperator() {
+        super(OperatorType.LOGICAL_WINDOW);
+        this.partitionExpressions = ImmutableList.of();
+        this.orderByElements = ImmutableList.of();
+        this.enforceSortColumns = ImmutableList.of();
+        this.useHashBasedPartition = false;
     }
 
     public Map<ColumnRefOperator, CallOperator> getWindowCall() {
@@ -146,59 +144,51 @@ public class LogicalWindowOperator extends LogicalOperator {
     }
 
     public static class Builder extends LogicalOperator.Builder<LogicalWindowOperator, LogicalWindowOperator.Builder> {
-        private Map<ColumnRefOperator, CallOperator> windowCall;
-        private List<ScalarOperator> partitionExpressions = Lists.newArrayList();
-        private List<Ordering> orderByElements = Lists.newArrayList();
-        private AnalyticWindow analyticWindow;
-        private List<Ordering> enforceSortColumns = Lists.newArrayList();
-        private boolean useHashBasedPartition = false;
-
         @Override
-        public LogicalWindowOperator build() {
-            return new LogicalWindowOperator(this);
+        protected LogicalWindowOperator newInstance() {
+            return new LogicalWindowOperator();
         }
 
         @Override
         public LogicalWindowOperator.Builder withOperator(LogicalWindowOperator windowOperator) {
             super.withOperator(windowOperator);
 
-            this.windowCall = windowOperator.windowCall;
-            this.partitionExpressions = windowOperator.partitionExpressions;
-            this.orderByElements = windowOperator.orderByElements;
-            this.analyticWindow = windowOperator.analyticWindow;
-            this.enforceSortColumns = windowOperator.enforceSortColumns;
-            this.useHashBasedPartition = windowOperator.useHashBasedPartition;
+            builder.windowCall = windowOperator.windowCall;
+            builder.partitionExpressions = windowOperator.partitionExpressions;
+            builder.orderByElements = windowOperator.orderByElements;
+            builder.analyticWindow = windowOperator.analyticWindow;
+            builder.enforceSortColumns = windowOperator.enforceSortColumns;
+            builder.useHashBasedPartition = windowOperator.useHashBasedPartition;
             return this;
         }
 
         public Builder setWindowCall(Map<ColumnRefOperator, CallOperator> windowCall) {
-            this.windowCall = windowCall;
+            builder.windowCall = ImmutableMap.copyOf(windowCall);
             return this;
         }
 
-        public Builder setPartitionExpressions(
-                List<ScalarOperator> partitionExpressions) {
-            this.partitionExpressions = partitionExpressions;
+        public Builder setPartitionExpressions(List<ScalarOperator> partitionExpressions) {
+            builder.partitionExpressions = ImmutableList.copyOf(partitionExpressions);
             return this;
         }
 
         public Builder setOrderByElements(List<Ordering> orderByElements) {
-            this.orderByElements = orderByElements;
+            builder.orderByElements = ImmutableList.copyOf(orderByElements);
             return this;
         }
 
         public Builder setAnalyticWindow(AnalyticWindow analyticWindow) {
-            this.analyticWindow = analyticWindow;
+            builder.analyticWindow = analyticWindow;
             return this;
         }
 
         public Builder setEnforceSortColumns(List<Ordering> enforceSortColumns) {
-            this.enforceSortColumns = enforceSortColumns;
+            builder.enforceSortColumns = ImmutableList.copyOf(enforceSortColumns);
             return this;
         }
 
         public Builder setUseHashBasedPartition(boolean useHashBasedPartition) {
-            this.useHashBasedPartition = useHashBasedPartition;
+            builder.useHashBasedPartition = useHashBasedPartition;
             return this;
         }
     }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.common;
+package com.starrocks.catalog.system;
 
 // used for system table.
 // cannot bigger than 10000(GlobalStateMgr.NEXT_ID_INIT_VALUE)

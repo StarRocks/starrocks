@@ -24,6 +24,7 @@
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
@@ -852,6 +853,43 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
     }
 };
 
+template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
+struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
+    static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
+                        size_t chunk_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* chunk_filter,
+                        ArrowConvertContext* ctx, const TypeDescriptor* type_desc) {
+        auto* struct_col = down_cast<StructColumn*>(column);
+        auto* struct_array = down_cast<const arrow::StructArray*>(array);
+
+        DCHECK_EQ(type_desc->field_names.size(), type_desc->children.size());
+        for (size_t i = 0; i < type_desc->field_names.size(); i++) {
+            const auto& child_type = type_desc->children[i];
+            const auto& child_name = type_desc->field_names[i];
+
+            auto child_col = struct_col->field_column(child_name);
+            auto child_array = struct_array->GetFieldByName(child_name);
+
+            if (child_array == nullptr) {
+                // default null
+                DCHECK(child_col->is_nullable());
+                child_col->append_nulls(num_elements);
+                continue;
+            }
+
+            auto conv_func = get_arrow_converter(child_array->type()->id(), child_type.type, true, false);
+            if (!conv_func) {
+                return illegal_converting_error(child_array->type()->name(), child_type.debug_string());
+            }
+
+            RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(conv_func, num_elements, child_array.get(),
+                                                                    &child_type, child_col, array_start_idx,
+                                                                    chunk_start_idx, chunk_filter, ctx));
+        }
+
+        return Status::OK();
+    }
+};
+
 // Convert Arrow null to any types
 Status null_converter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
                       size_t column_start_idx, uint8_t* null_data, [[maybe_unused]] Filter* chunk_filter,
@@ -935,7 +973,7 @@ static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_con
         // JSON converters
         ARROW_CONV_ENTRY(ArrowTypeId::MAP, TYPE_MAP, TYPE_JSON),
         ARROW_CONV_ENTRY(ArrowTypeId::LIST, TYPE_ARRAY, TYPE_JSON), // NOTE: FixedSizeListType, LargeListType, ListType
-        ARROW_CONV_ENTRY(ArrowTypeId::STRUCT, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::STRUCT, TYPE_STRUCT, TYPE_JSON),
 };
 
 ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType lt, bool is_nullable, bool is_strict) {
