@@ -30,15 +30,21 @@ bool SpillableAggregateDistinctBlockingSinkOperator::is_finished() const {
 
 Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+    if (state->is_cancelled()) {
+        _aggregator->spiller()->cancel();
+    }
     // ugly code
     // TODO: FIXME after refactor cancel
     auto io_executor = _aggregator->spill_channel()->io_executor();
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
         _aggregator->spill_channel()->set_finishing();
         RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::set_finishing(state));
-        RETURN_IF_ERROR(_aggregator->spiller()->flush(state, *io_executor, spill::MemTrackerGuard(tls_mem_tracker)));
-        return _aggregator->spiller()->set_flush_all_call_back([]() { return Status::OK(); }, state, *io_executor,
-                                                               spill::MemTrackerGuard(tls_mem_tracker));
+        RETURN_IF_ERROR(_aggregator->spiller()->flush(
+                state, *io_executor,
+                spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
+        return _aggregator->spiller()->set_flush_all_call_back(
+                []() { return Status::OK(); }, state, *io_executor,
+                spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
     };
 
     if (_aggregator->spill_channel()->is_working()) {
@@ -208,8 +214,10 @@ StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spill
 
     if (!_aggregator->is_spilled_eos()) {
         auto executor = _aggregator->spill_channel()->io_executor();
-        ASSIGN_OR_RETURN(auto chunk,
-                         _aggregator->spiller()->restore(state, *executor, spill::MemTrackerGuard(tls_mem_tracker)));
+        ASSIGN_OR_RETURN(auto chunk, _aggregator->spiller()->restore(
+                                             state, *executor,
+                                             spill::ResourceMemTrackerGuard(tls_mem_tracker,
+                                                                            state->query_ctx()->weak_from_this())));
 
         if (chunk->is_empty()) {
             return chunk;
