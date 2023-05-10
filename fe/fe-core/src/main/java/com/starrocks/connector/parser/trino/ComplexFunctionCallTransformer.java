@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.parser.trino;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TimestampArithmeticExpr;
@@ -22,14 +21,14 @@ import com.starrocks.analysis.TimestampArithmeticExpr;
 public class ComplexFunctionCallTransformer {
     public static Expr transform(String functionName, Expr... args) {
         if (functionName.equalsIgnoreCase("date_add")) {
-            Preconditions.checkState(args.length == 3);
-            StringLiteral unit = (StringLiteral) args[0];
-            Expr interval = args[1];
-            Expr date = args[2];
-            return new TimestampArithmeticExpr(functionName, date, interval,
-                    unit.getStringValue());
+            if (args.length == 3 && args[0] instanceof StringLiteral) {
+                StringLiteral unit = (StringLiteral) args[0];
+                Expr interval = args[1];
+                Expr date = args[2];
+                return new TimestampArithmeticExpr(functionName, date, interval,
+                        unit.getStringValue());
+            }
         }
-
         return null;
     }
 }
