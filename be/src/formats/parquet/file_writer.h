@@ -103,7 +103,7 @@ class FileWriterBase {
 public:
     FileWriterBase(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
                    std::shared_ptr<::parquet::schema::GroupNode> schema,
-                   const std::vector<ExprContext*>& output_expr_ctxs);
+                   const std::vector<ExprContext*>& output_expr_ctxs, int64_t _max_file_size);
 
     FileWriterBase(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
                    std::shared_ptr<::parquet::schema::GroupNode> schema, std::vector<TypeDescriptor> type_descs);
@@ -129,6 +129,11 @@ protected:
 
     virtual void _flush_row_group() = 0;
 
+private:
+    bool is_last_row_group() {
+        return _max_file_size - _writer->num_row_groups() * _max_row_group_size < 2 * _max_row_group_size;
+    }
+
 protected:
     std::shared_ptr<ParquetOutputStream> _outstream;
     std::shared_ptr<::parquet::WriterProperties> _properties;
@@ -142,14 +147,16 @@ protected:
 
     const static int64_t kDefaultMaxRowGroupSize = 128 * 1024 * 1024; // 128MB
     int64_t _max_row_group_size = kDefaultMaxRowGroupSize;
+    int64_t _max_file_size = 1 * 1024 * 1024 * 1024; // 1GB
 };
 
 class SyncFileWriter : public FileWriterBase {
 public:
     SyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
                    std::shared_ptr<::parquet::schema::GroupNode> schema,
-                   const std::vector<ExprContext*>& output_expr_ctxs)
-            : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs) {}
+                   const std::vector<ExprContext*>& output_expr_ctxs, int64_t max_file_size)
+            : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs,
+                             max_file_size) {}
 
     SyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
                    std::shared_ptr<::parquet::schema::GroupNode> schema, std::vector<TypeDescriptor> type_descs)
@@ -174,7 +181,7 @@ public:
                     std::string partition_location, std::shared_ptr<::parquet::WriterProperties> properties,
                     std::shared_ptr<::parquet::schema::GroupNode> schema,
                     const std::vector<ExprContext*>& output_expr_ctxs, PriorityThreadPool* executor_pool,
-                    RuntimeProfile* parent_profile);
+                    RuntimeProfile* parent_profile, int64_t max_file_size);
 
     ~AsyncFileWriter() override = default;
 

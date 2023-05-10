@@ -700,7 +700,6 @@ public class SystemInfoService {
         return computeNodeIds;
     }
 
-
     public List<Backend> getBackends() {
         return idToBackendRef.values().asList();
     }

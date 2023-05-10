@@ -16,17 +16,13 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ColWithComment implements ParseNode {
     private final String colName;
     private final String comment;
-
     private final NodePosition pos;
-
-    public ColWithComment(String colName, String comment) {
-        this(colName, comment, NodePosition.ZERO);
-    }
 
     public ColWithComment(String colName, String comment, NodePosition pos) {
         this.pos = pos;
@@ -45,5 +41,9 @@ public class ColWithComment implements ParseNode {
     @Override
     public NodePosition getPos() {
         return pos;
+    }
+
+    public void analyze() {
+        FeNameFormat.checkColumnName(colName);
     }
 }
