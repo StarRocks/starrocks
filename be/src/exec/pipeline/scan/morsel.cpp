@@ -264,8 +264,8 @@ bool PhysicalSplitMorselQueue::_is_last_split_of_current_morsel() {
     if (_tablet_idx >= _tablet_rowsets.size()) {
         return true;
     }
-    return _num_segment_rest_rows == 0 && _rowset_idx + 1 == _tablet_rowsets[_tablet_idx].size() &&
-           _segment_idx + 1 == _cur_rowset()->segments().size();
+    return _num_segment_rest_rows == 0 && _rowset_idx + 1 >= _tablet_rowsets[_tablet_idx].size() &&
+           _segment_idx + 1 >= _cur_rowset()->segments().size();
 }
 
 bool PhysicalSplitMorselQueue::_next_segment() {
