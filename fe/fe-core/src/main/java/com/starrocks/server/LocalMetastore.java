@@ -1686,18 +1686,20 @@ public class LocalMetastore implements ConnectorMetadata {
         if (partitions.isEmpty()) {
             return;
         }
-        int numAliveCNs = Config.only_use_compute_node ? systemInfoService.getAliveComputeNodeNumber() :
-                systemInfoService.getAliveBackendNumber();
+        int numAliveBackends = systemInfoService.getAliveBackendNumber();
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            numAliveBackends += systemInfoService.getAliveComputeNodeNumber();
+        }
         int numReplicas = 0;
         for (Partition partition : partitions) {
             numReplicas += partition.getReplicaCount();
         }
 
-        if (partitions.size() >= 3 && numAliveCNs >= 3 && numReplicas >= numAliveCNs * 500) {
+        if (partitions.size() >= 3 && numAliveBackends >= 3 && numReplicas >= numAliveBackends * 500) {
             LOG.info("creating {} partitions of table {} concurrently", partitions.size(), table.getName());
-            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveCNs);
-        } else if (numAliveCNs > 0) {
-            buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveCNs);
+            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends);
+        } else if (numAliveBackends > 0) {
+            buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);
         } else {
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 throw new DdlException("no alive compute nodes");
