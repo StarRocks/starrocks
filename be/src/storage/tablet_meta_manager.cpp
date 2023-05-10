@@ -1255,7 +1255,6 @@ Status TabletMetaManager::remove_tablet_meta(DataDir* store, WriteBatch* batch, 
 }
 
 Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool detail) {
-    // TODO(cbl): implement detail
     KVStore* meta = store->get_meta();
 
     auto traverse_tabletmeta_func = [&](std::string_view key, std::string_view value) -> bool {
@@ -1263,121 +1262,123 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
         TSchemaHash thash;
         if (!decode_tablet_meta_key(key, &tid, &thash)) {
             LOG(WARNING) << "invalid tablet_meta key:" << key;
-            stats->error_size++;
+            stats->error_count++;
             return true;
         }
         TabletMetaPB tablet_meta_pb;
         bool parsed = tablet_meta_pb.ParseFromArray(value.data(), value.size());
         if (!parsed) {
             LOG(WARNING) << "bad tablet meta pb data tablet_id:" << tid;
-            stats->error_size++;
+            stats->error_count++;
             return true;
         }
-        stats->tablet_size++;
-        stats->tablet_bytes += value.size();
         if (tablet_meta_pb.schema().keys_type() == KeysType::PRIMARY_KEYS) {
-            stats->update_tablet_size++;
-            stats->update_tablet_bytes += value.size();
+            stats->update_tablet_count++;
+            stats->update_tablet_meta_bytes += value.size();
+        } else {
+            stats->tablet_count++;
+            stats->tablet_meta_bytes += value.size();
         }
         if (detail) {
             if (stats->tablets.find(tid) != stats->tablets.end()) {
                 LOG(WARNING) << "found duplicate tablet meta tablet_id:" << tid << " schema_hash:" << thash;
-                stats->error_size++;
+                stats->error_count++;
             }
             TabletMetaStats ts;
             ts.tablet_id = tid;
             ts.table_id = tablet_meta_pb.table_id();
-            ts.meta_bytes = value.size();
+            ts.tablet_meta_bytes = value.size();
             stats->tablets[tid] = ts;
         }
         return true;
     };
     RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_tabletmeta_func));
-    stats->total_size += stats->tablet_size;
-    stats->total_bytes += stats->tablet_bytes;
+    stats->total_count += stats->tablet_count;
+    stats->total_count += stats->update_tablet_count;
+    stats->total_meta_bytes += stats->tablet_meta_bytes;
 
     auto traverse_rst_func = [&](std::string_view key, std::string_view value) -> bool {
-        stats->rst_size++;
-        stats->rst_bytes += value.size();
+        stats->rowset_count++;
+        stats->rowset_meta_bytes += value.size();
         return true;
     };
     RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, "rst_", traverse_rst_func));
-    stats->total_size += stats->rst_size;
-    stats->total_bytes += stats->rst_bytes;
+    stats->total_count += stats->rowset_count;
+    stats->total_meta_bytes += stats->rowset_meta_bytes;
 
     auto traverse_log_func = [&](std::string_view key, std::string_view value) -> bool {
         TTabletId tid;
         uint64_t logid;
         if (!decode_meta_log_key(key, &tid, &logid)) {
             LOG(WARNING) << "invalid tablet_meta_log key:" << key;
-            stats->error_size++;
+            stats->error_count++;
             return true;
         }
-        stats->log_size++;
-        stats->log_bytes += value.size();
+        stats->log_count++;
+        stats->log_meta_bytes += value.size();
         if (detail) {
             auto itr = stats->tablets.find(tid);
             if (itr == stats->tablets.end()) {
                 LOG(WARNING) << "tablet_meta_log without tablet tablet_id:" << tid << " logid:" << logid;
             } else {
-                itr->second.log_size++;
-                itr->second.log_bytes += value.size();
+                itr->second.log_count++;
+                itr->second.log_meta_bytes += value.size();
             }
         }
         return true;
     };
     RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, TABLET_META_LOG_PREFIX, traverse_log_func));
-    stats->total_size += stats->log_size;
-    stats->total_bytes += stats->log_bytes;
+    stats->total_count += stats->log_count;
+    stats->total_meta_bytes += stats->log_meta_bytes;
 
     auto traverse_delvec_func = [&](std::string_view key, std::string_view value) -> bool {
         TTabletId tid;
         uint32_t rssid;
         int64_t version;
         decode_del_vector_key(key, &tid, &rssid, &version);
-        stats->delvec_size++;
-        stats->delvec_bytes += value.size();
+        stats->delvec_count++;
+        stats->delvec_meta_bytes += value.size();
         if (detail) {
             auto itr = stats->tablets.find(tid);
             if (itr == stats->tablets.end()) {
                 LOG(WARNING) << "tablet_delvec without tablet tablet_id:" << tid;
-                stats->error_size++;
+                stats->error_count++;
             } else {
-                itr->second.delvec_size++;
-                itr->second.delvec_bytes += value.size();
+                itr->second.delvec_count++;
+                itr->second.delvec_meta_bytes += value.size();
             }
         }
         return true;
     };
     RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, TABLET_DELVEC_PREFIX, traverse_delvec_func));
-    stats->total_size += stats->delvec_size;
-    stats->total_bytes += stats->delvec_bytes;
+    stats->total_count += stats->delvec_count;
+    stats->total_meta_bytes += stats->delvec_meta_bytes;
 
     auto traverse_rowset_func = [&](std::string_view key, std::string_view value) -> bool {
         TTabletId tid;
         uint32_t rowsetid;
         if (!decode_meta_rowset_key(key, &tid, &rowsetid)) {
             LOG(WARNING) << "invalid rowsetid key:" << key;
-            stats->error_size++;
+            stats->error_count++;
             return true;
         }
-        stats->rowset_size++;
-        stats->rowset_bytes += value.size();
+        stats->update_rowset_count++;
+        stats->update_rowset_meta_bytes += value.size();
         if (detail) {
             auto itr = stats->tablets.find(tid);
             if (itr == stats->tablets.end()) {
                 LOG(WARNING) << "tablet_rowset without tablet tablet_id:" << tid << " rowsetid:" << rowsetid;
-                stats->error_size++;
+                stats->error_count++;
             } else {
-                itr->second.rowset_size++;
-                itr->second.rowset_bytes += value.size();
+                itr->second.rowset_count++;
+                itr->second.rowset_meta_bytes += value.size();
             }
         }
         return true;
     };
     RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, TABLET_META_ROWSET_PREFIX, traverse_rowset_func));
-    stats->total_size += stats->rowset_size;
-    stats->total_bytes += stats->rowset_bytes;
+    stats->total_count += stats->update_rowset_count;
+    stats->total_meta_bytes += stats->update_rowset_meta_bytes;
 
     auto traverse_pending_rowset_func = [&](std::string_view key, std::string_view value) -> bool {
         TTabletId tid;
@@ -1386,24 +1387,24 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
             LOG(WARNING) << "invalid pending rowsetid key:" << key;
             return true;
         }
-        stats->pending_rowset_size++;
-        stats->pending_rowset_bytes += value.size();
+        stats->pending_rowset_count++;
+        stats->pending_rowset_meta_bytes += value.size();
         if (detail) {
             auto itr = stats->tablets.find(tid);
             if (itr == stats->tablets.end()) {
                 LOG(WARNING) << "tablet_rowset without tablet tablet_id:" << tid;
-                stats->error_size++;
+                stats->error_count++;
             } else {
-                itr->second.pending_rowset_size++;
-                itr->second.pending_rowset_bytes += value.size();
+                itr->second.pending_rowset_count++;
+                itr->second.pending_rowset_meta_bytes += value.size();
             }
         }
         return true;
     };
     RETURN_IF_ERROR(
             meta->iterate(META_COLUMN_FAMILY_INDEX, TABLET_META_PENDING_ROWSET_PREFIX, traverse_pending_rowset_func));
-    stats->total_size += stats->pending_rowset_size;
-    stats->total_bytes += stats->pending_rowset_bytes;
+    stats->total_count += stats->pending_rowset_count;
+    stats->total_meta_bytes += stats->pending_rowset_meta_bytes;
 
     return Status::OK();
 }
