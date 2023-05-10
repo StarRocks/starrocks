@@ -46,6 +46,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -72,8 +73,10 @@ import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -191,6 +194,16 @@ public class QueryAnalyzer {
             selectRelation.setRelation(resolvedRelation);
             Scope sourceScope = process(resolvedRelation, scope);
             sourceScope.setParent(scope);
+
+            Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitTable(TableRelation tableRelation, Void context) {
+                    generatedExprToColumnRef.putAll(tableRelation.getGeneratedExprToColumnRef());
+                    return null;
+                }
+            }.visit(resolvedRelation);
+            analyzeState.setGeneratedExprToColumnRef(generatedExprToColumnRef);
 
             SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
             selectAnalyzer.analyze(
@@ -356,6 +369,19 @@ public class QueryAnalyzer {
 
             Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
             node.setScope(scope);
+
+            Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
+            for (Column column : table.getBaseSchema()) {
+                if (column.materializedColumnExpr() != null) {
+                    Expr materializedExpression = column.materializedColumnExpr();
+                    ExpressionAnalyzer.analyzeExpression(materializedExpression, new AnalyzeState(), scope, session);
+                    SlotRef slotRef = new SlotRef(null, column.getName());
+                    ExpressionAnalyzer.analyzeExpression(slotRef, new AnalyzeState(), scope, session);
+                    generatedExprToColumnRef.put(materializedExpression, slotRef);
+                }
+            }
+            node.setGeneratedExprToColumnRef(generatedExprToColumnRef);
+
             return scope;
         }
 
