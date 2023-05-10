@@ -16,12 +16,14 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +48,8 @@ public class TableRelation extends Relation {
     private String temporalClause;
 
     private Expr partitionPredicate;
+
+    private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
 
     public TableRelation(TableName name) {
         super(name.getPos());
@@ -174,5 +178,13 @@ public class TableRelation extends Relation {
 
     public String getTemporalClause() {
         return this.temporalClause;
+    }
+
+    public void setGeneratedExprToColumnRef(Map<Expr, SlotRef> generatedExprToColumnRef) {
+        this.generatedExprToColumnRef = generatedExprToColumnRef;
+    }
+
+    public Map<Expr, SlotRef> getGeneratedExprToColumnRef() {
+        return generatedExprToColumnRef;
     }
 }

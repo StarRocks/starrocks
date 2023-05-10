@@ -920,8 +920,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                 context->next_operator_id(), fragment_ctx, iceberg_table_sink->get_output_expr(), iceberg_table_desc,
                 thrift_sink.iceberg_table_sink, partition_expr_ctxs);
 
-        if (iceberg_table_desc->is_unpartitioned_table() ||
-            thrift_sink.iceberg_table_sink.is_statistics_partition_sink) {
+        if (iceberg_table_desc->is_unpartitioned_table() || thrift_sink.iceberg_table_sink.is_static_partition_sink) {
             if (desired_iceberg_sink_dop != source_operator_dop) {
                 context->maybe_interpolate_local_passthrough_exchange_for_sink(
                         runtime_state, iceberg_table_sink_op, source_operator_dop, desired_iceberg_sink_dop);
