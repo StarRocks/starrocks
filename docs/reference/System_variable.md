@@ -478,6 +478,10 @@ SELECT /*+ SET_VAR
 * sql_dialect  (v3.0 and later)
 
   The SQL dialect that is used. For example, you can run the `set sql_dialect = 'trino';` command to set the SQL dialect to Trino, so you can use Trino-specific SQL syntax and functions in your queries.
+  
+  > **NOTICE**
+  >
+  > After you use `sql_dialect` to specify a SQL dialect, identifiers are not case-sensitive by default. In this situation, when you query tables in StarRocks, you must make sure that the identifiers in your queries are in lower case. If you use uppercase identifiers, your queries will fail.
 
 * io_tasks_per_scan_operator (v3.0 and later)
 
