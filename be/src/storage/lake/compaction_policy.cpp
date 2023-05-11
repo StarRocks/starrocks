@@ -31,6 +31,8 @@ public:
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
 
+    StatusOr<CompactionAlgorithm> choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) override;
+
 private:
     StatusOr<std::vector<RowsetPtr>> pick_cumulative_rowsets();
     StatusOr<std::vector<RowsetPtr>> pick_base_rowsets();
@@ -76,6 +78,10 @@ public:
     ~PrimaryCompactionPolicy() override = default;
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
+
+    StatusOr<CompactionAlgorithm> choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) override {
+        return HORIZONTAL_COMPACTION;
+    }
 
 private:
     static const size_t kCompactionResultBytesThreashold = 1000000000;
@@ -247,6 +253,26 @@ StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_rowsets
     } else {
         return pick_cumulative_rowsets();
     }
+}
+
+StatusOr<CompactionAlgorithm> BaseAndCumulativeCompactionPolicy::choose_compaction_algorithm(
+        const std::vector<RowsetPtr>& rowsets) {
+    // TODO: support row source mask buffer based on starlet fs
+    // The current row source mask buffer is based on posix tmp file,
+    // if there is no storage root path, use horizontal compaction.
+    if (ExecEnv::GetInstance()->store_paths().empty()) {
+        return HORIZONTAL_COMPACTION;
+    }
+
+    size_t total_iterator_num = 0;
+    for (auto& rowset : rowsets) {
+        ASSIGN_OR_RETURN(auto rowset_iterator_num, rowset->get_read_iterator_num());
+        total_iterator_num += rowset_iterator_num;
+    }
+    ASSIGN_OR_RETURN(auto tablet_schema, _tablet->get_schema());
+    size_t num_columns = tablet_schema->num_columns();
+    return CompactionUtils::choose_compaction_algorithm(num_columns, config::vertical_compaction_max_columns_per_group,
+                                                        total_iterator_num);
 }
 
 StatusOr<CompactionPolicyPtr> CompactionPolicy::create_compaction_policy(TabletPtr tablet) {

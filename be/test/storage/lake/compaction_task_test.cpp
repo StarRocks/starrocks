@@ -29,12 +29,14 @@
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
+#include "storage/compaction_utils.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/vertical_compaction_task.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
@@ -46,7 +48,19 @@ using namespace starrocks;
 using VSchema = starrocks::Schema;
 using VChunk = starrocks::Chunk;
 
-class LakeCompactionTest : public testing::Test {
+struct CompactionParam {
+    CompactionAlgorithm algorithm = HORIZONTAL_COMPACTION;
+    uint32_t vertical_compaction_max_columns_per_group = 5;
+};
+
+std::string to_string_param_name(const testing::TestParamInfo<CompactionParam>& info) {
+    std::stringstream ss;
+    ss << CompactionUtils::compaction_algorithm_to_string(info.param.algorithm) << "_"
+       << info.param.vertical_compaction_max_columns_per_group;
+    return ss.str();
+}
+
+class LakeCompactionTest : public testing::Test, public testing::WithParamInterface<CompactionParam> {
 public:
     LakeCompactionTest(std::string test_dir) {
         _parent_mem_tracker = std::make_unique<MemTracker>(-1);
@@ -57,6 +71,15 @@ public:
     }
 
 protected:
+    void check_task(CompactionTaskPtr& task) {
+        if (GetParam().algorithm == HORIZONTAL_COMPACTION) {
+            ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(task.get()) != nullptr);
+        } else {
+            ASSERT_EQ(GetParam().algorithm, VERTICAL_COMPACTION);
+            ASSERT_TRUE(dynamic_cast<VerticalCompactionTask*>(task.get()) != nullptr);
+        }
+    }
+
     std::unique_ptr<MemTracker> _parent_mem_tracker;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<FixedLocationProvider> _location_provider;
@@ -64,9 +87,9 @@ protected:
     std::unique_ptr<TabletManager> _tablet_manager;
 };
 
-class DuplicateKeyHorizontalCompactionTest : public LakeCompactionTest {
+class DuplicateKeyCompactionTest : public LakeCompactionTest {
 public:
-    DuplicateKeyHorizontalCompactionTest() : LakeCompactionTest(kTestGroupPath) {
+    DuplicateKeyCompactionTest() : LakeCompactionTest(kTestGroupPath) {
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -103,10 +126,11 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_hcompaction_task";
+    constexpr static const char* const kTestGroupPath = "test_lake_compaction_task";
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
+        config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
@@ -166,7 +190,7 @@ protected:
     int64_t _txn_id = 1230;
 };
 
-TEST_F(DuplicateKeyHorizontalCompactionTest, test1) {
+TEST_P(DuplicateKeyCompactionTest, test1) {
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -195,6 +219,7 @@ TEST_F(DuplicateKeyHorizontalCompactionTest, test1) {
     _txn_id++;
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
+    check_task(task);
     ASSERT_OK(task->execute(nullptr));
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
     version++;
@@ -205,9 +230,14 @@ TEST_F(DuplicateKeyHorizontalCompactionTest, test1) {
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
 }
 
-class DuplicateKeyOverlapSegmentsHorizontalCompactionTest : public LakeCompactionTest {
+INSTANTIATE_TEST_SUITE_P(DuplicateKeyCompactionTest, DuplicateKeyCompactionTest,
+                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
+                                           CompactionParam{VERTICAL_COMPACTION, 1}),
+                         to_string_param_name);
+
+class DuplicateKeyOverlapSegmentsCompactionTest : public LakeCompactionTest {
 public:
-    DuplicateKeyOverlapSegmentsHorizontalCompactionTest() : LakeCompactionTest(kTestGroupPath) {
+    DuplicateKeyOverlapSegmentsCompactionTest() : LakeCompactionTest(kTestGroupPath) {
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -244,10 +274,11 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_hcompaction_task_duplicate_overlap_segments";
+    constexpr static const char* const kTestGroupPath = "test_lake_compaction_task_duplicate_overlap_segments";
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
+        config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
@@ -305,7 +336,7 @@ protected:
     int64_t _txn_id = 1233;
 };
 
-TEST_F(DuplicateKeyOverlapSegmentsHorizontalCompactionTest, test) {
+TEST_P(DuplicateKeyOverlapSegmentsCompactionTest, test) {
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -334,6 +365,7 @@ TEST_F(DuplicateKeyOverlapSegmentsHorizontalCompactionTest, test) {
 
     _txn_id++;
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
+    check_task(task);
     ASSERT_OK(task->execute(nullptr));
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
     version++;
@@ -364,9 +396,14 @@ TEST_F(DuplicateKeyOverlapSegmentsHorizontalCompactionTest, test) {
     ASSERT_TRUE(st.is_end_of_file());
 }
 
-class UniqueKeyHorizontalCompactionTest : public LakeCompactionTest {
+INSTANTIATE_TEST_SUITE_P(DuplicateKeyOverlapSegmentsCompactionTest, DuplicateKeyOverlapSegmentsCompactionTest,
+                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
+                                           CompactionParam{VERTICAL_COMPACTION, 1}),
+                         to_string_param_name);
+
+class UniqueKeyCompactionTest : public LakeCompactionTest {
 public:
-    UniqueKeyHorizontalCompactionTest() : LakeCompactionTest(kTestGroupPath) {
+    UniqueKeyCompactionTest() : LakeCompactionTest(kTestGroupPath) {
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -404,10 +441,11 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_hcompaction_task_unique";
+    constexpr static const char* const kTestGroupPath = "test_lake_compaction_task_unique";
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
+        config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
@@ -465,7 +503,7 @@ protected:
     int64_t _txn_id = 1001;
 };
 
-TEST_F(UniqueKeyHorizontalCompactionTest, test1) {
+TEST_P(UniqueKeyCompactionTest, test1) {
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -494,6 +532,7 @@ TEST_F(UniqueKeyHorizontalCompactionTest, test1) {
     _txn_id++;
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
+    check_task(task);
     ASSERT_OK(task->execute(nullptr));
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
     version++;
@@ -504,9 +543,14 @@ TEST_F(UniqueKeyHorizontalCompactionTest, test1) {
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
 }
 
-class UniqueKeyHorizontalCompactionWithDeleteTest : public LakeCompactionTest {
+INSTANTIATE_TEST_SUITE_P(UniqueKeyCompactionTest, UniqueKeyCompactionTest,
+                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
+                                           CompactionParam{VERTICAL_COMPACTION, 1}),
+                         to_string_param_name);
+
+class UniqueKeyCompactionWithDeleteTest : public LakeCompactionTest {
 public:
-    UniqueKeyHorizontalCompactionWithDeleteTest() : LakeCompactionTest(kTestGroupPath) {
+    UniqueKeyCompactionWithDeleteTest() : LakeCompactionTest(kTestGroupPath) {
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -544,10 +588,12 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_hcompaction_task_unique_with_delete";
+    constexpr static const char* const kTestGroupPath = "test_lake_compaction_task_unique_with_delete";
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
+        config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
+        (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
@@ -604,7 +650,7 @@ protected:
     int64_t _txn_id = 1002;
 };
 
-TEST_F(UniqueKeyHorizontalCompactionWithDeleteTest, test_base_compaction_with_delete) {
+TEST_P(UniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) {
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -658,6 +704,7 @@ TEST_F(UniqueKeyHorizontalCompactionWithDeleteTest, test_base_compaction_with_de
     }
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
+    check_task(task);
     ASSERT_OK(task->execute(nullptr));
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
     version++;
@@ -667,5 +714,10 @@ TEST_F(UniqueKeyHorizontalCompactionWithDeleteTest, test_base_compaction_with_de
     ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
 }
+
+INSTANTIATE_TEST_SUITE_P(UniqueKeyCompactionWithDeleteTest, UniqueKeyCompactionWithDeleteTest,
+                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
+                                           CompactionParam{VERTICAL_COMPACTION, 1}),
+                         to_string_param_name);
 
 } // namespace starrocks::lake

@@ -51,7 +51,8 @@ class TabletReader final : public ChunkIterator {
 public:
     TabletReader(Tablet tablet, int64_t version, Schema schema);
     TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets);
-    TabletReader(Tablet tablet, int64_t version, Schema schema, bool is_key, RowSourceMaskBuffer* mask_buffer);
+    TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets, bool is_key,
+                 RowSourceMaskBuffer* mask_buffer);
     ~TabletReader() override;
 
     DISALLOW_COPY_AND_MOVE(TabletReader);
