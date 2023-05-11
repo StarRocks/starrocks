@@ -1,6 +1,6 @@
 # ARRAY
 
-本文介绍如何使用 StarRocks 中的数组类型相关特性。
+本文介绍如何使用 StarRocks 中的数组类型。
 
 数组（Array) 是数据库中的一种扩展数据类型，其相关特性在众多数据库系统中均有支持，可以广泛的应用于 A/B Test 对比、用户标签分析、人群画像等场景。StarRocks 当前支持多维数组嵌套、数组切片、比较、过滤等特性。
 
@@ -19,13 +19,13 @@ ARRAY<ARRAY<type>>
 ARRAY<type> NOT NULL
 ~~~
 
-数组列的定义形式为 `ARRAY`，其中 `type` 是数组元素类型，默认为 nullable，暂时不支持指定数组元素类型为 NOT NULL，但是您可以定义数组列本身为 NOT NULL。
+数组列的定义形式为 `ARRAY<type>`，其中 `type` 表示数组内的元素类型。数组元素目前支持以下数据类型：BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、VARCHAR、CHAR、DATETIME、DATE。
 
-数组元素支持以下数据类型：BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、VARCHAR、CHAR、DATETIME、DATE。
+数组内的元素默认可以为 NULL，比如 [NULL, 1, 2]。暂时不支持指定数组元素为 NOT NULL，但是您可以定义数组列本身为 NOT NULL，比如上面的第三个示例。
 
 > **注意**
 >
-> 数组类型有以下限制：
+> 数组类型使用时有以下限制：
 >
 > * StarRocks 2.1 之前版本中，仅支持在明细模型表中（Duplicate Key）定义数组类型列。自 2.1 版本开始，支持在 Primary Key、Unique Key、Aggregate Key 模型表中定义数组类型列。注意在聚合模型表（Aggregate Key) 中，仅当聚合列的聚合函数为 replace 和 replace_if_not_null 时，才支持将该列定义为数组类型。
 > * 数组列暂时不能作为 Key 列。
