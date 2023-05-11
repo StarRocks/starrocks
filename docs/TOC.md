@@ -296,9 +296,11 @@
         + [DATETIME](./sql-reference/sql-statements/data-types/DATETIME.md)
       + Others
         + [ARRAY](./sql-reference/sql-statements/data-types/Array.md)
-        + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
+        + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
+        + [MAP](./sql-reference/sql-statements/data-types/Map.md)
+
     + [Keywords](./sql-reference/sql-statements/keywords.md)
     + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
   + Function Reference

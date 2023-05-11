@@ -56,7 +56,6 @@ The following limits apply when you create ARRAY columns in StarRocks tables:
 - In versions earlier than v2.1, you can create ARRAY columns only in Duplicate Key tables. From v2.1 onwards, you can also create ARRAY columns in other types of tables (Primary Key, Unique Key, Aggregate). Note that in an Aggregate table, you can create an ARRAY column only when the function used to aggregate data in that column is replace() or replace_if_not_null(). For more information, see [Aggregate table](../../../table_design/table_types/aggregate_table.md).
 - ARRAY columns cannot be used as key columns.
 - ARRAY columns cannot be used as partition keys (included in PARTITION BY) or bucketing keys (included in DISTRIBUTED BY).
-- DECIMAL V3 is not supported in ARRAY.
 - An array can have a maximum of 14-level nesting.
 
 ## Construct arrays in SQL
