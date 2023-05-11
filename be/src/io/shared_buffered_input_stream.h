@@ -65,6 +65,7 @@ public:
     int64_t direct_io_count() const { return _direct_io_count; }
     int64_t direct_io_bytes() const { return _direct_io_bytes; }
     int64_t direct_io_timer() const { return _direct_io_timer; }
+    int64_t estimated_mem_usage() const;
 
     StatusOr<std::string_view> peek(int64_t count) override;
 
