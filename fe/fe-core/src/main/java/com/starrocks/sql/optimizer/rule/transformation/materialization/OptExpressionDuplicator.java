@@ -131,10 +131,13 @@ public class OptExpressionDuplicator {
             // process HashDistributionSpec
             if (optExpression.getOp() instanceof LogicalOlapScanOperator) {
                 LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
-                HashDistributionSpec newHashDistributionSpec =
-                        processHashDistributionSpec(olapScan.getDistributionSpec(), columnRefFactory, columnMapping);
-                LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
-                olapScanBuilder.setHashDistributionSpec(newHashDistributionSpec);
+                if (olapScan.getDistributionSpec() instanceof HashDistributionSpec) {
+                    HashDistributionSpec newHashDistributionSpec =
+                            processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec(),
+                            columnRefFactory, columnMapping);
+                    LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
+                    olapScanBuilder.setDistributionSpec(newHashDistributionSpec);
+                }
             }
 
             processCommon(opBuilder);

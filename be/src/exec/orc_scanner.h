@@ -57,6 +57,7 @@ private:
     int _next_range;
     int _error_counter;
     bool _status_eof;
+    int64_t _last_file_size = 0;
 
     std::unique_ptr<OrcChunkReader> _orc_reader;
     std::vector<SlotDescriptor*> _orc_slot_descriptors;

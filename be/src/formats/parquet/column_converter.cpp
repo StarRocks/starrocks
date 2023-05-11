@@ -427,6 +427,7 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         break;
     }
     case tparquet::Type::type::BYTE_ARRAY: {
+        // TODO don't support converter byte_array to decimal
         if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR &&
             col_type != LogicalType::TYPE_VARBINARY) {
             need_convert = true;

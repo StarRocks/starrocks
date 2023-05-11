@@ -254,14 +254,20 @@ public class AnalyzeCreateTableTest {
     @Test
     public void testNullDistribution() {
         String sql = "create table table1 (col1 char(10) not null) engine=olap duplicate key(col1)";
-        analyzeFail(sql);
+        analyzeSuccess(sql);
+    }
+
+    public void testRandomDistribution() {
+        analyzeSuccess("create table table1 (col1 char(10) not null) engine=olap duplicate key(col1) distributed by random");
+        analyzeSuccess("create table table1 (col1 char(10) not null) engine=olap duplicate key(col1) " +
+                "distributed by random buckets 10");
     }
 
     @Test
     public void testExternalTable() {
         analyzeSuccess("create external table table1 (col1 char(10) not null) engine=olap distributed by hash(col1) buckets 10");
-        analyzeFail("create external table table1 (col1 char(10) not null) engine=olap duplicate key(col1)",
-                "Create olap table should contain distribution desc");
+        analyzeSuccess("create external table table1 (col1 char(10) not null) engine=olap " +
+                "distributed by random buckets 10");
     }
 
     @Test
@@ -276,7 +282,7 @@ public class AnalyzeCreateTableTest {
         analyzeSuccess("create external table table1 (col0 int, col1 array<map<int,int>>) " +
                 "engine=hive properties('key' = 'value')");
 
-        analyzeFail("create table table1 (col0 int, col1 array<struct<a int>>) " +
+        analyzeSuccess("create table table1 (col0 int, col1 array<struct<a int>>) " +
                 "engine=olap distributed by hash(col0) buckets 10");
         analyzeSuccess("create external table table1 (col0 int, col1 array<struct<a int>>) " +
                 "engine=hive properties('key' = 'value')");
@@ -286,7 +292,7 @@ public class AnalyzeCreateTableTest {
         analyzeSuccess("create external table table1 (col0 int, col1 map<int,int>) " +
                 "engine=hive properties('key' = 'value')");
 
-        analyzeFail("create table table1 (col0 int, col1 struct<a int>) " +
+        analyzeSuccess("create table table1 (col0 int, col1 struct<a int>) " +
                 "engine=olap distributed by hash(col0) buckets 10");
         analyzeSuccess("create external table table1 (col0 int, col1 struct<a int>) " +
                 "engine=hive properties('key' = 'value')");

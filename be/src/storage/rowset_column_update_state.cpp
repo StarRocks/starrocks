@@ -96,12 +96,17 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, uint32_t idx) {
         pk_columns.push_back((uint32_t)i);
     }
     std::vector<uint32_t> update_columns;
+    std::vector<uint32_t> update_columns_with_keys;
     const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
     for (uint32_t cid : txn_meta.partial_update_column_ids()) {
-        update_columns.push_back(cid);
+        update_columns_with_keys.push_back(cid);
+        if (cid >= schema.num_key_columns()) {
+            update_columns.push_back(cid);
+        }
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
     Schema update_schema = ChunkHelper::convert_schema(schema, update_columns);
+    Schema update_schema_with_keys = ChunkHelper::convert_schema(schema, update_columns_with_keys);
     std::unique_ptr<Column> pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         std::string err_msg = fmt::format("create column for primary key encoder failed, tablet_id: {}", _tablet_id);
@@ -115,11 +120,11 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, uint32_t idx) {
     std::shared_ptr<Chunk> chunk_shared_ptr;
     // if we want to preload update cache, create chunk with update columns
     if (_enable_preload_column_mode_update_data) {
-        _update_chunk_cache[idx] = std::move(ChunkHelper::new_chunk(update_schema, DEFAULT_CONTAINER_SIZE));
-        chunk_shared_ptr = ChunkHelper::new_chunk(update_schema, DEFAULT_CONTAINER_SIZE);
-        ASSIGN_OR_RETURN(itrs, rowset->get_update_file_iterators(update_schema, &stats));
+        _update_chunk_cache[idx] = ChunkHelper::new_chunk(update_schema, DEFAULT_CONTAINER_SIZE);
+        chunk_shared_ptr = ChunkHelper::new_chunk(update_schema_with_keys, DEFAULT_CONTAINER_SIZE);
+        ASSIGN_OR_RETURN(itrs, rowset->get_update_file_iterators(update_schema_with_keys, &stats));
     } else {
-        _update_chunk_cache[idx] = std::move(ChunkHelper::new_chunk(update_schema, 0));
+        _update_chunk_cache[idx] = ChunkHelper::new_chunk(update_schema, 0);
         chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CONTAINER_SIZE);
         ASSIGN_OR_RETURN(itrs, rowset->get_update_file_iterators(pkey_schema, &stats));
     }
@@ -147,8 +152,10 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, uint32_t idx) {
             } else {
                 PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
                 if (_enable_preload_column_mode_update_data) {
-                    _memory_usage += chunk->memory_usage();
-                    dest_chunk->append(*chunk);
+                    for (int i = pk_columns.size(); i < update_columns_with_keys.size(); i++) {
+                        _memory_usage += chunk->columns()[i]->byte_size();
+                        dest_chunk->columns()[i - pk_columns.size()]->append(*chunk->columns()[i]);
+                    }
                 }
             }
         }
@@ -335,7 +342,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_delta
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), rssid, tschema.get(), writer_options);
-    RETURN_IF_ERROR(segment_writer->init());
+    RETURN_IF_ERROR(segment_writer->init(false));
     return std::move(segment_writer);
 }
 
@@ -422,19 +429,24 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, const P
     RETURN_IF_ERROR(tablet->updates()->get_latest_applied_version(&latest_applied_version));
     RETURN_IF_ERROR(_finalize_partial_update_state(tablet, rowset, latest_applied_version, index));
 
-    std::vector<uint32_t> update_column_ids;
-    std::vector<int32_t> update_column_indexes;
+    std::vector<int32_t> update_column_ids;
+    std::vector<uint32_t> update_column_uids;
     std::vector<uint32_t> unique_update_column_ids;
     const auto& tschema = rowset->schema();
-    for (uint32_t cid : txn_meta.partial_update_column_ids()) {
-        update_column_ids.push_back(cid);
-        update_column_indexes.push_back((int32_t)cid);
+    for (int32_t cid : txn_meta.partial_update_column_ids()) {
+        if (cid >= tschema.num_key_columns()) {
+            update_column_ids.push_back(cid);
+            update_column_uids.push_back((uint32_t)cid);
+        }
     }
     for (uint32_t cid : txn_meta.partial_update_column_unique_ids()) {
-        unique_update_column_ids.push_back(cid);
+        auto& column = tschema.column(cid);
+        if (!column.is_key()) {
+            unique_update_column_ids.push_back(cid);
+        }
     }
-    auto partial_tschema = TabletSchema::create(tschema, update_column_indexes);
-    Schema partial_schema = ChunkHelper::convert_schema(tschema, update_column_ids);
+    auto partial_tschema = TabletSchema::create(tschema, update_column_ids);
+    Schema partial_schema = ChunkHelper::convert_schema(tschema, update_column_uids);
 
     // rss_id -> delta column group writer
     std::map<uint32_t, std::unique_ptr<SegmentWriter>> delta_column_group_writer;
@@ -470,8 +482,10 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, const P
     int64_t total_read_column_from_update_time = 0;
     int64_t total_finalize_dcg_time = 0;
     int64_t total_merge_column_time = 0;
+    int64_t update_rows = 0;
     // 4. read from raw segment file and update file, and generate `.col` files one by one
     for (const auto& each : rss_rowid_to_update_rowid) {
+        update_rows += each.second.size();
         int64_t t1 = MonotonicMillis();
         ASSIGN_OR_RETURN(auto rowsetid_segid, _find_rowset_seg_id(each.first));
         const std::string seg_path = Rowset::segment_file_path(rowset->rowset_path(), rowsetid_segid.unique_rowset_id,
@@ -515,8 +529,9 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, const P
             "avg_finalize_dcg_time(ms):$3 ",
             total_seek_source_segment_time, total_read_column_from_update_time, total_merge_column_time,
             total_finalize_dcg_time);
-    cost_str << strings::Substitute("rss_cnt:$0 update_cnt:$1 column_cnt:$2", rss_rowid_to_update_rowid.size(),
-                                    _partial_update_states.size(), update_column_ids.size());
+    cost_str << strings::Substitute("rss_cnt:$0 update_cnt:$1 column_cnt:$2 update_rows:$3",
+                                    rss_rowid_to_update_rowid.size(), _partial_update_states.size(),
+                                    update_column_ids.size(), update_rows);
 
     LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << " finalize cost:" << cost_str.str();
     _finalize_finished = true;

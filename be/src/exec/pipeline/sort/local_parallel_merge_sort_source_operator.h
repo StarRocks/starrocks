@@ -48,11 +48,12 @@ class SortContext;
 class LocalParallelMergeSortSourceOperator final : public SourceOperator {
 public:
     LocalParallelMergeSortSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
-                                         int32_t driver_sequence, SortContext* sort_context,
+                                         int32_t driver_sequence, SortContext* sort_context, bool is_gathered,
                                          merge_path::MergePathCascadeMerger* merge_path_merger)
             : SourceOperator(factory, id, "local_parallel_merge_source", plan_node_id, driver_sequence),
               _sort_context(sort_context),
-              _merger(merge_path_merger) {}
+              _merger(merge_path_merger),
+              _merge_parallel_id(is_gathered ? driver_sequence : 0) {}
 
     ~LocalParallelMergeSortSourceOperator() override = default;
 
@@ -60,6 +61,8 @@ public:
     void close(RuntimeState* state) override;
 
     bool has_output() const override;
+
+    bool is_mutable() const override { return true; }
 
     bool is_finished() const override;
 
@@ -70,9 +73,10 @@ public:
     Status set_finished(RuntimeState* state) override;
 
 private:
+    SortContext* const _sort_context;
+    merge_path::MergePathCascadeMerger* const _merger;
+    const int32_t _merge_parallel_id;
     bool _is_finished = false;
-    SortContext* _sort_context;
-    merge_path::MergePathCascadeMerger* _merger;
 };
 
 class LocalParallelMergeSortSourceOperatorFactory final : public SourceOperatorFactory {
@@ -88,14 +92,16 @@ public:
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
     void set_tuple_desc(const TupleDescriptor* tuple_desc) { _tuple_desc = tuple_desc; }
+    void set_is_gathered(const bool is_gathered) { _is_gathered = is_gathered; }
 
 private:
     const TupleDescriptor* _tuple_desc;
+    bool _is_gathered = true;
     RuntimeState* _state;
 
     // share data with multiple partition sort sink opeartor through _sort_context.
     std::shared_ptr<SortContextFactory> _sort_context_factory;
-    std::unique_ptr<merge_path::MergePathCascadeMerger> _merger;
+    std::vector<std::unique_ptr<merge_path::MergePathCascadeMerger>> _mergers;
 };
 
 } // namespace starrocks::pipeline

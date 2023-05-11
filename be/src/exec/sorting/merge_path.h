@@ -54,9 +54,14 @@ struct InputSegment {
     }
 };
 struct OutputSegment {
-    OutputSegment(SortedRun run, const size_t total_len) : run(std::move(run)), total_len(total_len) {}
+    OutputSegment(SortedRun run, std::vector<int32_t> orderby_indexes, const size_t total_len)
+            : run(std::move(run)), orderby_indexes(std::move(orderby_indexes)), total_len(total_len) {}
 
     SortedRun run;
+    // Auxiliary data structure to help void append orderby column twice if
+    // orderby column is a ColumnRef of the corresponding chunk
+    // orderby_indexes[i] < 0 means run.orderby[i] is not ColumnRef
+    const std::vector<int32_t> orderby_indexes;
 
     // Length of the overall merged chunk, and each segment only contains part of it,
     // which means run.num_rows() <= total_len, and for most cases, run.num_rows() < total_len
@@ -66,74 +71,80 @@ using InputSegmentPtr = std::unique_ptr<InputSegment>;
 using OutputSegmentPtr = std::unique_ptr<OutputSegment>;
 
 /**
-     * Merge the given two inputs to one.
-     *
-     * @param desc Ordering description.
-     * @param left Left side input.
-     * @param right Right side input.
-     * @param dest Output used to store the merged data for this parallelism.
-     * @param parallel_idx Index of current parallelism, densely ascending from 0 upwards to (degree_of_parallelism - 1).
-     * @param degree_of_parallelism Total parallelism.
-     */
+ * Merge the given two inputs to one.
+ *
+ * @param desc Ordering description.
+ * @param left Left side input.
+ * @param right Right side input.
+ * @param dest Output used to store the merged data for this parallelism.
+ * @param parallel_idx Index of current parallelism, densely ascending from 0 upwards to (degree_of_parallelism - 1).
+ * @param degree_of_parallelism Total parallelism.
+ */
 void merge(const SortDescs& descs, InputSegment& left, InputSegment& right, OutputSegment& dest,
            const size_t parallel_idx, const size_t degree_of_parallelism);
 
 namespace detail {
+
 /**
-     * This method is used to compute the point of intersection between merge path and diagonal of current parallelism
-     *
-     * @param desc Ordering description.
-     * @param left Left side input.
-     * @param right Right side input.
-     * @param d_size Total merge size among all parallelism.
-     * @param parallel_idx Index of current parallelism.
-     * @param degree_of_parallelism Total parallelism.
-     * @param l_start Output param, start index in left for this parallel_idx.
-     * @param r_start Output param, start index in right for this parallel_idx.
-     */
+ * Build auxiliary data structure to help avoid double append orderby columns
+ */
+std::vector<int32_t> _build_orderby_indexes(const ChunkPtr& chunk, const std::vector<ExprContext*>& sort_exprs);
+
+/**
+ * This method is used to compute the point of intersection between merge path and diagonal of current parallelism
+ *
+ * @param desc Ordering description.
+ * @param left Left side input.
+ * @param right Right side input.
+ * @param d_size Total merge size among all parallelism.
+ * @param parallel_idx Index of current parallelism.
+ * @param degree_of_parallelism Total parallelism.
+ * @param l_start Output param, start index in left for this parallel_idx.
+ * @param r_start Output param, start index in right for this parallel_idx.
+ */
 void _eval_diagonal_intersection(const SortDescs& descs, const InputSegment& left, const InputSegment& right,
                                  const size_t d_size, const size_t parallel_idx, const size_t degree_of_parallelism,
                                  size_t* l_start, size_t* r_start);
 
 /**
-     * Check if the point (left[li], right[ri]) is intersection point.
-     * Assuming M matrix is a matrix comprising of only boolean value
-     *      if left[i] > right[j], then M[i, j] = true
-     *      if left[i] <= right[j], then M[i, j] = false
-     * For edge cases (i or j beyond the matrix), think about the merge path, with left in the vertical direction 
-     * and right in the horizontal direction. Merge path goes from top left to bottom right, the positions below the merge path should be true, 
-     * and otherwise should be false.
-     *
-     * And the following 4 points will be checked
-     *      1. (left[li-1], right[ri-1])
-     *      2. (left[li-1], right[ri])
-     *      3. (left[li], right[ri-1])
-     *      4. (left[li], right[ri])
-     *
-     *
-     * @param desc Ordering description.
-     * @param left Left side input.
-     * @param li Current index in left.
-     * @param right Right side input.
-     * @param ri Current index in right.
-     * @param has_true Output param, true if one of the above four points is true.
-     * @param has_false Ouput param, true if one of the above four points is false.
-     */
+ * Check if the point (left[li], right[ri]) is intersection point.
+ * Assuming M matrix is a matrix comprising of only boolean value
+ *      if left[i] > right[j], then M[i, j] = true
+ *      if left[i] <= right[j], then M[i, j] = false
+ * For edge cases (i or j beyond the matrix), think about the merge path, with left in the vertical direction 
+ * and right in the horizontal direction. Merge path goes from top left to bottom right, the positions below the merge path should be true, 
+ * and otherwise should be false.
+ *
+ * And the following 4 points will be checked
+ *      1. (left[li-1], right[ri-1])
+ *      2. (left[li-1], right[ri])
+ *      3. (left[li], right[ri-1])
+ *      4. (left[li], right[ri])
+ *
+ *
+ * @param desc Ordering description.
+ * @param left Left side input.
+ * @param li Current index in left.
+ * @param right Right side input.
+ * @param ri Current index in right.
+ * @param has_true Output param, true if one of the above four points is true.
+ * @param has_false Ouput param, true if one of the above four points is false.
+ */
 void _is_intersection(const SortDescs& descs, const InputSegment& left, const size_t li, const InputSegment& right,
                       const size_t ri, bool& has_true, bool& has_false);
 
 /**
-     * Do merge along the merge path.
-     *
-     * @param desc Ordering description.
-     * @param left Left side input.
-     * @param li Current index in left.
-     * @param right Right side input.
-     * @param ri Current index in right.
-     * @param dest Output used to store the merged data for this parallelism.
-     * @param start_di Start index of the whole merge result, NOT only the above dest.
-     * @param length The step for this parallelism can forward along merge path.
-     */
+ * Do merge along the merge path.
+ *
+ * @param desc Ordering description.
+ * @param left Left side input.
+ * @param li Current index in left.
+ * @param right Right side input.
+ * @param ri Current index in right.
+ * @param dest Output used to store the merged data for this parallelism.
+ * @param start_di Start index of the whole merge result, NOT only the above dest.
+ * @param length The step for this parallelism can forward along merge path.
+ */
 void _do_merge_along_merge_path(const SortDescs& descs, const InputSegment& left, size_t& li, const InputSegment& right,
                                 size_t& ri, OutputSegment& dest, const size_t start_di, const size_t length);
 } // namespace detail
@@ -359,8 +370,8 @@ class MergePathCascadeMerger {
 public:
     MergePathCascadeMerger(const size_t chunk_size, const int32_t degree_of_parallelism,
                            std::vector<ExprContext*> sort_exprs, const SortDescs& sort_descs,
-                           const TupleDescriptor* tuple_desc, const int64_t offset, const int64_t limit,
-                           std::vector<MergePathChunkProvider> chunk_providers);
+                           const TupleDescriptor* tuple_desc, const TTopNType::type topn_type, const int64_t offset,
+                           const int64_t limit, std::vector<MergePathChunkProvider> chunk_providers);
     const std::vector<ExprContext*>& sort_exprs() const { return _sort_exprs; }
     const SortDescs& sort_descs() const { return _sort_descs; }
 
@@ -368,7 +379,7 @@ public:
 
     // There may be several parallelism working on the same stage
     // Return true if the current stage's work is done for the particular parallel_idx
-    bool is_current_stage_finished(const int32_t parallel_idx);
+    bool is_current_stage_finished(const int32_t parallel_idx, const bool sync);
 
     // All the data are coming from chunk_providers, which passes through ctor.
     // If one of the providers cannot provider new data at the moment, maybe waiting for network,
@@ -398,7 +409,7 @@ private:
     void _finishing();
 
     void _init_late_materialization();
-    ChunkPtr _restore_according_to_ordinal(const int32_t parallel_idx, const ChunkPtr& chunk);
+    ChunkPtr _restore_according_to_ordinal(const int32_t parallel_idx, const ChunkPtr& chunk, Columns orderby);
 
     void _process_limit(ChunkPtr& chunk);
 
@@ -422,8 +433,8 @@ public:
 private:
     // For each MergeNode, there may be multiply threads working on the same merge processing.
     // And here we need to guarantee that each parallelism can process a certain amount of data. Assuming it
-    // equals to chunk_size right now (can be later optimized), so the total size of the merge should be
-    // chunk_size * degree_of_parallelism, which is called _streaming_batch_size here.
+    // equals to (4 * chunk_size) right now (can be later optimized), so the total size of the merge should be
+    // 4 * chunk_size * degree_of_parallelism, which is called _streaming_batch_size here.
     // And each MergeNode can hold left/right buffer of size within 2 * _streaming_batch_size.
     // So the total amount size the whole merge tree will hold is around _degree_of_parallelism * 2 * _streaming_batch_size
     // (The number of MergeNode approximately equals to _degree_of_parallelism)
@@ -434,22 +445,20 @@ private:
     const std::vector<ExprContext*> _sort_exprs;
     const SortDescs _sort_descs;
     const TupleDescriptor* _tuple_desc;
+    const TTopNType::type _topn_type;
     const int64_t _offset;
     const int64_t _limit;
     const std::vector<MergePathChunkProvider> _chunk_providers;
     Action _finish_merge_action;
 
-    // The atomicity is provided by the following three atomic fields. The write-read order of these atomic fields must be
-    // the same among all threads, so the `std::memory_order_seq_cst` is requied when manipulating them.
-    // 1. _is_forwarding_stage is used for creating a critical section because all the condition methods, like
-    // `is_current_stage_finished/is_finished/is_pending`, are not protected by global mutex.
-    // 2. _process_cnts[i] represents how many times for parallel_idx=<i> that method `try_get_next` can be executed. Besides,
-    // it provides the final consistency of all the following non-atomic fields through
-    //      1. Read _process_cnts at the begining of try_get_next
-    //      2. Write _process_cnts at the end of try_get_next
-    std::atomic<bool> _is_forwarding_stage = false;
-    std::atomic<detail::Stage> _stage;
-    std::vector<std::atomic<size_t>> _process_cnts;
+    // All operations of _stage and _process_cnts must under the protection of _status_m, the critical section
+    // protected by the _status_m must won't last long, so it won't lead to drastic performance deduction.
+    // And the final consistency of all the following fields are guaranteed by:
+    //      1. read _process_cnts at the begining of try_get_next.
+    //      2. write _process_cnts at the end of try_get_next.
+    std::recursive_mutex _status_m;
+    detail::Stage _stage;
+    std::vector<size_t> _process_cnts;
 
     // Merge nodes
     std::vector<std::vector<detail::NodePtr>> _levels;
@@ -457,20 +466,18 @@ private:
     detail::Node* _root;
     std::vector<detail::LeafNode*> _leafs;
 
-    // In some cases when the original parallelism is not equal to power of 2, one level may contains both
-    // MergeNode and LeafNode. And given that LeafNode can only bind to one operator, so there may be one
-    // operator being idle when processing this level.
-    int32_t _working_parallelism;
     // In some cases, one parallelism may have to process more than one node.
     // _working_nodes[i] represents the node list for parallel_idx=<i>
     std::vector<std::vector<detail::Node*>> _working_nodes;
 
     // Fields used for late materialization
     bool _late_materialization = false;
+    std::mutex _late_materialization_m;
     size_t _chunk_id_generator = 0;
-    size_t _dequeued_chunk_num = 0;
     size_t _max_buffer_chunk_num = 0;
-    std::deque<std::pair<ChunkPtr, size_t>> _original_chunk_buffer;
+    // Pointer stability is required here, so we must use node_hash_map
+    phmap::node_hash_map<size_t, std::pair<ChunkPtr, size_t>> _original_chunk_buffer;
+    std::vector<int32_t> _orderby_indexes;
 
     // Output chunks for each parallelism
     std::vector<std::vector<ChunkPtr>> _output_chunks;
@@ -483,8 +490,6 @@ private:
     std::chrono::steady_clock::time_point _pending_start;
     // First pending should not be recorded, because it all comes from the operator dependency
     bool _is_first_pending = true;
-
-    std::mutex _m;
 };
 
 } // namespace starrocks::merge_path

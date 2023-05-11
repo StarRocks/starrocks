@@ -14,14 +14,26 @@
 
 package com.starrocks.planner;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.connector.Connector;
+import com.starrocks.connector.iceberg.IcebergConnector;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TCloudConfiguration;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
+import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.THdfsProperties;
+import com.starrocks.thrift.TIcebergTableSink;
 import org.apache.iceberg.Table;
 
 import java.util.Locale;
 
+import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 import static org.apache.iceberg.TableProperties.ORC_COMPRESSION;
@@ -35,37 +47,67 @@ public class IcebergTableSink extends DataSink {
     private final long targetTableId;
     private final String fileFormat;
     private final String location;
-    private String compressionType;
-    private final boolean isStatisticsPartitionSink;
+    private final String compressionType;
+    private final boolean isStaticPartitionSink;
     private final String tableIdentifier;
+    private final CloudConfiguration cloudConfiguration;
 
-    public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStatisticsPartitionSink) {
+    public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink) {
         Table nativeTable = icebergTable.getNativeTable();
         this.desc = desc;
         this.location = nativeTable.location();
         this.targetTableId = icebergTable.getId();
         this.tableIdentifier = icebergTable.getUUID();
-        this.isStatisticsPartitionSink = isStatisticsPartitionSink;
+        this.isStaticPartitionSink = isStaticPartitionSink;
         this.fileFormat = nativeTable.properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
                 .toLowerCase();
         switch (fileFormat) {
             case "parquet":
                 compressionType = nativeTable.properties().getOrDefault(PARQUET_COMPRESSION, PARQUET_COMPRESSION_DEFAULT)
                         .toLowerCase(Locale.ROOT);
+                break;
             case "orc":
                 compressionType = nativeTable.properties().getOrDefault(ORC_COMPRESSION, ORC_COMPRESSION_DEFAULT)
                         .toLowerCase(Locale.ROOT);
+                break;
+            default:
+                compressionType = "default";
         }
+        String catalogName = icebergTable.getCatalogName();
+        Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+        Preconditions.checkState(connector != null,
+                String.format("connector of catalog %s should not be null", catalogName));
+        this.cloudConfiguration = connector.getCloudConfiguration();
+        Preconditions.checkState(cloudConfiguration != null,
+                String.format("cloudConfiguration of catalog %s should not be null", catalogName));
     }
 
     @Override
     public String getExplainString(String prefix, TExplainLevel explainLevel) {
-        return "";
+        StringBuilder strBuilder = new StringBuilder();
+        strBuilder.append(prefix + "Iceberg TABLE SINK\n");
+        strBuilder.append(prefix + "  TABLE: " + tableIdentifier + "\n");
+        strBuilder.append(prefix + "  TUPLE ID: " + desc.getId() + "\n");
+        strBuilder.append(prefix + "  " + DataPartition.RANDOM.getExplainString(explainLevel));
+        return strBuilder.toString();
     }
 
     @Override
     protected TDataSink toThrift() {
-        return null;
+        TDataSink tDataSink = new TDataSink(TDataSinkType.ICEBERG_TABLE_SINK);
+        TIcebergTableSink tIcebergTableSink = new TIcebergTableSink();
+        tIcebergTableSink.setTarget_table_id(targetTableId);
+        tIcebergTableSink.setLocation(location);
+        tIcebergTableSink.setFile_format(fileFormat);
+        tIcebergTableSink.setIs_static_partition_sink(isStaticPartitionSink);
+        TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
+        tIcebergTableSink.setCompression_type(compression);
+        TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+        cloudConfiguration.toThrift(tCloudConfiguration);
+        tIcebergTableSink.setCloud_configuration(tCloudConfiguration);
+
+        tDataSink.setIceberg_table_sink(tIcebergTableSink);
+        return tDataSink;
     }
 
     @Override

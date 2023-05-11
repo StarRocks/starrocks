@@ -43,9 +43,11 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.ThriftServer;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.Counter;
@@ -89,6 +91,7 @@ import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TRuntimeFilterDestination;
 import com.starrocks.thrift.TRuntimeFilterProberParams;
+import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTabletFailInfo;
@@ -170,6 +173,9 @@ public class Coordinator {
     private List<String> exportFiles;
     private final List<TTabletCommitInfo> commitInfos = Lists.newArrayList();
     private final List<TTabletFailInfo> failInfos = Lists.newArrayList();
+
+    // for external table sink
+    private final List<TSinkCommitInfo> sinkCommitInfos = Lists.newArrayList();
     // Input parameter
     private long jobId = -1; // job which this task belongs to
     private TUniqueId queryId;
@@ -177,6 +183,8 @@ public class Coordinator {
     private final boolean needReport;
 
     private final CoordinatorPreprocessor coordinatorPreprocessor;
+
+    private boolean thriftServerHighLoad;
 
     // Used for new planner
     public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
@@ -413,6 +421,10 @@ public class Coordinator {
 
     public List<TTabletFailInfo> getFailInfos() {
         return failInfos;
+    }
+
+    public List<TSinkCommitInfo> getSinkCommitInfos() {
+        return sinkCommitInfos;
     }
 
     public boolean isUsingBackend(Long backendID) {
@@ -1481,6 +1493,9 @@ public class Coordinator {
             if (params.isSetRejected_record_path()) {
                 rejectedRecordPaths.add(execState.address.hostname + ":" + params.getRejected_record_path());
             }
+            if (params.isSetSink_commit_infos()) {
+                sinkCommitInfos.addAll(params.sink_commit_infos);
+            }
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
         }
 
@@ -1546,14 +1561,14 @@ public class Coordinator {
      * the caller should check queryStatus for result.
      *
      * We divide the entire waiting process into multiple rounds,
-     * with a maximum of 30 seconds per round. And after each round of waiting,
+     * with a maximum of 5 seconds per round. And after each round of waiting,
      * check the status of the BE. If the BE status is abnormal, the wait is ended
      * and the result is returned. Otherwise, continue to the next round of waiting.
      * This method mainly avoids the problem that the Coordinator waits for a long time
      * after some BE can no long return the result due to some exception, such as BE is down.
      */
     public boolean join(int timeoutS) {
-        final long fixedMaxWaitTime = 30;
+        final long fixedMaxWaitTime = 5;
 
         long leftTimeoutS = timeoutS;
         while (leftTimeoutS > 0) {
@@ -1570,6 +1585,11 @@ public class Coordinator {
 
             if (!checkBackendState()) {
                 return true;
+            }
+
+            if (ThriftServer.getExecutor() != null
+                    && ThriftServer.getExecutor().getPoolSize() >= Config.thrift_server_max_worker_threads) {
+                thriftServerHighLoad = true;
             }
 
             leftTimeoutS -= waitTime;
@@ -1803,6 +1823,10 @@ public class Coordinator {
             }
             fragmentProfiles.get(backendExecState.profileFragmentId).addChild(backendExecState.profile);
         }
+    }
+
+    public boolean isThriftServerHighLoad() {
+        return this.thriftServerHighLoad;
     }
 
     // record backend execute state

@@ -91,7 +91,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static String sys_log_roll_mode = "SIZE-MB-1024";
     /**
-     * Log to file by default. set to `true` if want to log to console
+     * Log to file by default. set to `true` if you want to log to console
      */
     @ConfField
     public static boolean sys_log_to_console = false;
@@ -127,7 +127,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static int audit_log_roll_num = 90;
     @ConfField
-    public static String[] audit_log_modules = {"slow_query", "query"};
+    public static String[] audit_log_modules = {"slow_query", "query", "connection"};
     @ConfField(mutable = true)
     public static long qe_slow_log_ms = 5000;
     @ConfField
@@ -479,7 +479,7 @@ public class Config extends ConfigBase {
     public static long bdbje_reserved_disk_size = 512L * 1024 * 1024;
 
     /**
-     * the max txn number which bdbje can rollback when trying to rejoin the group
+     * the max txn number which bdbje can roll back when trying to rejoin the group
      */
     @ConfField
     public static int txn_rollback_limit = 100;
@@ -604,12 +604,6 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int thrift_backlog_num = 1024;
-
-    /**
-     * Define thrift server's server model, default is TThreadPoolServer model
-     */
-    @ConfField
-    public static String thrift_server_type = ThriftServer.THREAD_POOL;
 
     /**
      * the timeout for thrift rpc call
@@ -757,6 +751,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int broker_load_default_timeout_second = 14400; // 4 hour
+
+    /**
+     * Default timeout of spark submit task and wait for yarn response
+     */
+    @ConfField
+    public static long spark_load_submit_timeout_second = 300; // 5min
 
     /**
      * Maximal bytes that a single broker scanner will read.
@@ -1076,29 +1076,31 @@ public class Config extends ConfigBase {
     public static String locale = "zh_CN.UTF-8";
 
     /**
-     * 'storage_high_watermark_usage_percent' limit the max capacity usage percent of a Backend storage path.
-     * 'storage_min_left_capacity_bytes' limit the minimum left capacity of a Backend storage path.
+     * 'storage_usage_soft_limit_percent' limit the max capacity usage percent of a Backend storage path.
+     * 'storage_usage_soft_limit_left_bytes' limit the minimum left capacity of a Backend storage path.
      * If both limitations are reached, this storage path can not be chosen as tablet balance destination.
      * But for tablet recovery, we may exceed these limit for keeping data integrity as much as possible.
      */
-    @ConfField(mutable = true)
-    public static int storage_high_watermark_usage_percent = 85;
-    @ConfField(mutable = true)
-    public static long storage_min_left_capacity_bytes = 2L * 1024 * 1024 * 1024; // 2G
+    @ConfField(mutable = true, aliases = {"storage_high_watermark_usage_percent"})
+    public static int storage_usage_soft_limit_percent = 90;
+    @ConfField(mutable = true, aliases = {"storage_min_left_capacity_bytes"})
+    public static long storage_usage_soft_limit_reserve_bytes = 200L * 1024 * 1024 * 1024; // 200GB
 
     /**
-     * If capacity of disk reach the 'storage_flood_stage_usage_percent' and 'storage_flood_stage_left_capacity_bytes',
+     * If capacity of disk reach the 'storage_usage_hard_limit_percent' and 'storage_usage_hard_limit_reserve_bytes',
      * the following operation will be rejected:
      * 1. load job
      * 2. restore job
      */
-    @ConfField(mutable = true)
-    public static int storage_flood_stage_usage_percent = 95;
-    @ConfField(mutable = true)
-    public static long storage_flood_stage_left_capacity_bytes = 1024L * 1024 * 1024; // 1G
+    @ConfField(mutable = true, aliases = {"storage_flood_stage_usage_percent"})
+    public static int storage_usage_hard_limit_percent = 95;
+    @ConfField(mutable = true, aliases = {"storage_flood_stage_left_capacity_bytes"})
+    public static long storage_usage_hard_limit_reserve_bytes = 100L * 1024L * 1024 * 1024; // 100GB
 
-    // update interval of tablet stat
-    // All frontends will get tablet stat from all backends at each interval
+    /**
+     * update interval of tablet stat
+     * All frontends will get tablet stat from all backends at each interval
+     */
     @ConfField
     public static int tablet_stat_update_interval_second = 300;  // 5 min
 
@@ -1168,6 +1170,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean tablet_sched_disable_colocate_overall_balance = false;
 
+    @ConfField(mutable = true)
+    public static long[] tablet_sched_colocate_balance_high_prio_backends = {};
+
+    @ConfField(mutable = true)
+    public static boolean tablet_sched_always_force_decommission_replica = false;
+
     /**
      * If BE is down beyond this time, tablets on that BE of colocate table will be migrated to other available BEs
      */
@@ -1187,6 +1195,14 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true, aliases = {"storage_cooldown_second"})
     public static long tablet_sched_storage_cooldown_second = -1L; // won't cool down by default
+
+    /**
+     * If the tablet in scheduler queue has not been scheduled for tablet_sched_max_not_being_scheduled_interval_ms,
+     * its priority will upgrade.
+     * default is 15min
+     */
+    @ConfField(mutable = true)
+    public static long tablet_sched_max_not_being_scheduled_interval_ms = 15 * 60 * 1000;
 
     /**
      * enable replicated storage as default table engine
@@ -1754,7 +1770,7 @@ public class Config extends ConfigBase {
     /**
      * Enable background refresh all external tables all partitions metadata on internal catalog.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static boolean enable_background_refresh_connector_metadata = true;
 
     /**
@@ -2097,7 +2113,7 @@ public class Config extends ConfigBase {
     public static long lake_compaction_simple_selector_threshold_seconds = 300;
 
     @ConfField(mutable = true)
-    public static double lake_compaction_score_selector_min_score = 2.0;
+    public static double lake_compaction_score_selector_min_score = 10.0;
 
     /**
      * -1 means calculate the value in an adaptive way.
@@ -2242,4 +2258,19 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static boolean enable_execute_script_on_frontend = true;
+
+    @ConfField(mutable = true)
+    public static short default_replication_num = 3;
+
+    /**
+     * The default scheduler interval for alter jobs.
+     */
+    @ConfField(mutable = true)
+    public static int alter_scheduler_interval_millisecond = 10000;
+
+    /**
+     * The default scheduler interval for routine loads.
+     */
+    @ConfField(mutable = true)
+    public static int routine_load_scheduler_interval_millisecond = 10000;
 }

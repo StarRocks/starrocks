@@ -306,6 +306,8 @@ UNION_VALUE_GUARD(LogicalType, AggregateComplexLTGuard, lt_is_complex_aggregate,
                   lt_is_decimalv2_struct, lt_is_decimal_struct, lt_is_datetime_struct, lt_is_date_struct,
                   lt_is_json_struct)
 
+UNION_VALUE_GUARD(LogicalType, StringOrBinaryGaurd, lt_is_string_or_binary, lt_is_string_struct, lt_is_binary_struct)
+
 TExprOpcode::type to_in_opcode(LogicalType t);
 LogicalType thrift_to_type(TPrimitiveType::type ttype);
 TPrimitiveType::type to_thrift(LogicalType ltype);

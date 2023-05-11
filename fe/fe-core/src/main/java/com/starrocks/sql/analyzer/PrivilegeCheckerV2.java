@@ -25,9 +25,9 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Resource;
-import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -346,7 +346,7 @@ public class PrivilegeCheckerV2 {
         Set<TableName> tableNames = Sets.newHashSet();
         if (StatsConstants.DEFAULT_ALL_ID != tableId && StatsConstants.DEFAULT_ALL_ID != dbId) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            if (db != null && !db.isInfoSchemaDb()) {
+            if (db != null && !db.isSystemDatabase()) {
                 Table table = db.getTable(tableId);
                 if (table != null && table.isOlapOrCloudNativeTable()) {
                     tableNames.add(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -367,7 +367,7 @@ public class PrivilegeCheckerV2 {
 
     private static void getTableNamesInDb(Set<TableName> tableNames, Long id) {
         Database db = GlobalStateMgr.getCurrentState().getDb(id);
-        if (db != null && !db.isInfoSchemaDb()) {
+        if (db != null && !db.isSystemDatabase()) {
             for (Table table : db.getTables()) {
                 if (table == null || !table.isOlapOrCloudNativeTable()) {
                     continue;
@@ -523,7 +523,7 @@ public class PrivilegeCheckerV2 {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ACCESS_TABLE_DENIED,
                                 context.getQualifiedUser(), tableName);
                     }
-                } else if (table instanceof SchemaTable && ((SchemaTable) table).requireOperatePrivilege()) {
+                } else if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
                     checkStmtOperatePrivilege(context);
                 } else if (table.isMaterializedView()) {
                     checkMvAction(context, tableName, PrivilegeType.SELECT);

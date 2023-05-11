@@ -14,8 +14,8 @@
 
 package com.starrocks.pseudocluster;
 
+import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -32,9 +32,13 @@ public class DecommissionTest {
         Config.enable_new_publish_mechanism = true;
         Config.drop_backend_after_decommission = false;
         Config.sys_log_verbose_modules = new String[] {"com.starrocks.clone"};
-        FeConstants.default_scheduler_interval_millisecond = 5000;
+        Config.alter_scheduler_interval_millisecond = 5000;
+        Config.tablet_sched_slot_num_per_path = 32;
+        PseudoBackend.reportIntervalMs = 1000;
         PseudoCluster.getOrCreateWithRandomPort(true, 4);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
+        ColocateTableBalancer.getInstance().setInterval(5000);
+        GlobalStateMgr.getCurrentState().getTabletScheduler().setInterval(2000);
         PseudoCluster.getInstance().runSql(null, "create database test");
     }
 

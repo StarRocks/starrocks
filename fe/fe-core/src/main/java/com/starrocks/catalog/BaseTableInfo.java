@@ -149,6 +149,14 @@ public class BaseTableInfo {
         }
     }
 
+    public String getReadableString() {
+        String dbName = getDbName();
+        dbName = dbName != null ? dbName : "null";
+        String tableName = getTableName();
+        tableName = tableName != null ? tableName : "null";
+        return catalogName + "." + dbName + "." + tableName;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

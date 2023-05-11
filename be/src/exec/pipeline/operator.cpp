@@ -32,6 +32,7 @@ const int32_t Operator::s_pseudo_plan_node_id_for_export_sink = -97;
 const int32_t Operator::s_pseudo_plan_node_id_for_olap_table_sink = -98;
 const int32_t Operator::s_pseudo_plan_node_id_for_result_sink = -99;
 const int32_t Operator::s_pseudo_plan_node_id_upper_bound = -100;
+const int32_t Operator::s_pseudo_plan_node_id_for_iceberg_table_sink = -101;
 
 Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id,
                    int32_t driver_sequence)

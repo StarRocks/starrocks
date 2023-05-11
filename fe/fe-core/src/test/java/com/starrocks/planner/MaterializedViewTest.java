@@ -241,6 +241,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"foreign_key_constraints\" = \"(c2) REFERENCES t2(c5);(c3) REFERENCES t2(c5)\"\n" +
                 ")");
 
+        String userTagTable = "create table user_tags " +
+                "(time date, user_id int, user_name varchar(20), tag_id int) " +
+                "partition by range (time) (partition p1 values less than MAXVALUE) " +
+                "distributed by hash(time) " +
+                "buckets 3 " +
+                "properties('replication_num' = '1');";
+        starRocksAssert
+                .withTable(userTagTable);
     }
 
     @Test
@@ -291,6 +299,40 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select empid as col2, locations.locationid from emps " +
                 "join locations on emps.locationid = locations.locationid " +
                 "and locations.locationid > 10");
+        testRewriteOK(mv, "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where emps.locationid=10");
+    }
+
+    @Test
+    public void testsInnerJoinCompleteWithPredicates() {
+        String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where empid = 10 group by empid,emps.locationid");
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where locations.locationid= 10 " +
+                "group by empid,emps.locationid");
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where emps.locationid= 10 " +
+                "group by empid,emps.locationid");
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where emps.locationid= 10 " +
+                "group by empid,emps.locationid");
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from " +
+                "locations inner join emps on locations.locationid = emps.locationid where emps.locationid= 10 " +
+                "group by empid,emps.locationid");
+    }
+
+    @Test
+    public void testsInnerJoinCompleteWithPredicates2() {
+        String mv = "select locations.name, locations.locationid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid group by locations.name,locations.locationid";
+        testRewriteOK(mv, "select locations.name, emps.locationid, sum(emps.deptno) as col3 from " +
+                "locations inner join emps on locations.locationid = emps.locationid where emps.locationid= 10 " +
+                "group by locations.name,emps.locationid");
+        testRewriteOK(mv, "select locations.name, emps.locationid, sum(emps.deptno) as col3 from " +
+                "locations inner join emps on locations.locationid = emps.locationid where locations.locationid>10 " +
+                "group by locations.name,emps.locationid");
     }
 
     @Test
@@ -548,7 +590,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select count(*) from " +
                 "locations join emps on emps.locationid = locations.locationid + 1 " +
                 "group by emps.deptno");
-        testRewriteFail(mv, "select count(*) , emps.deptno from " +
+        testRewriteOK(mv, "select count(*) , emps.deptno from " +
                 "locations join emps on emps.locationid = locations.locationid + 1 " +
                 "where emps.deptno > 10 " +
                 "group by emps.deptno");
@@ -1442,7 +1484,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "(select * from hive0.partitioned_db.t1 where c1 = 1) a\n"
                 + "join hive0.partitioned_db2.t2 using (c2)";
         String query = "select c2 from hive0.partitioned_db.t1 where c1 = 1";
-        testRewriteOK(mv, query)
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint)
                 .contains("0:OlapScanNode\n" +
                         "     TABLE: mv0\n" +
                         "     PREAGGREGATION: ON\n");
@@ -1454,7 +1498,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db2.t2 l on t1.c2= l.c2 " +
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2";
         String query = "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2";
-        testRewriteOK(mv, query)
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint)
                 .contains("0:OlapScanNode\n" +
                         "     TABLE: mv0\n" +
                         "     PREAGGREGATION: ON\n");
@@ -1467,7 +1514,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2 " +
                 "join hive0.partitioned_db.t3 on t1.c2 = t3.c2";
         String query = "select t1.c1, t3.c1 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2";
-        testRewriteOK(mv, query)
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint)
                 .contains("0:OlapScanNode\n" +
                         "     TABLE: mv0\n" +
                         "     PREAGGREGATION: ON\n");
@@ -1481,7 +1531,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db.t3 on a.c2 = t3.c2";
         String query = "select a.c2 from (select * from hive0.partitioned_db.t1 where c1 = 1) a join hive0.partitioned_db.t3 " +
                 "on a.c2 = hive0.partitioned_db.t3.c2";
-        testRewriteOK(mv, query)
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2);\" ";
+        testRewriteOK(mv, query, constraint)
                 .contains("0:OlapScanNode\n" +
                         "     TABLE: mv0\n" +
                         "     PREAGGREGATION: ON\n");
@@ -1495,7 +1547,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db.t3 on a.c2 = t3.c2";
         String query = "select a.c3 from (select * from hive0.partitioned_db.t1 where c1 = 1) a join hive0.partitioned_db.t3 " +
                 "on a.c2 = hive0.partitioned_db.t3.c2";
-        testRewriteFail(mv, query);
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2);\" ";
+        testRewriteFail(mv, query, constraint);
     }
 
     @Test
@@ -1506,7 +1560,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "where t1.c1 = 1";
         String query = "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2 " +
                 "where t1.c1 = 1";
-        testRewriteOK(mv, query)
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint)
                 .contains("0:OlapScanNode\n" +
                         "     TABLE: mv0\n" +
                         "     PREAGGREGATION: ON\n");
@@ -1520,7 +1577,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "where t1.c1 = 1";
         String query = "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c1 " +
                 "where t1.c1 = 1";
-        testRewriteFail(mv, query);
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteFail(mv, query, constraint);
     }
 
     @Test
@@ -1532,19 +1592,25 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "where t1.c1 = 1";
         String query = "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
                 "where t1.c1 = 1";
-        testRewriteOK(mv, query);
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint);
     }
 
     @Test
     public void testHiveViewDeltaJoinUKFK9() {
         String mv = "select t1.c1, l.c2 as c2_1, r.c2 as c2_2, t3.c3 from hive0.partitioned_db.t1 " +
                 "join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
-                "left join hive0.partitioned_db2.t2 l on t1.c2= l.c2 " +
+                "left join hive0.partitioned_db2.t2 l on t1.c2 = l.c2 " +
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2 " +
                 "where t1.c1 = 1";
         String query = "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
                 "where t1.c1 = 1";
-        testRewriteOK(mv, query);
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint);
     }
 
     @Test
@@ -1552,11 +1618,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         String mv = "select t1.c1, l.c2 as c2_1, r.c2 as c2_2, t3.c3 from hive0.partitioned_db.t1 " +
                 "join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2 " +
-                "left join hive0.partitioned_db2.t2 l on t1.c2= l.c2 " +
+                "left join hive0.partitioned_db2.t2 l on t1.c2 = l.c2 " +
                 "where t1.c1 = 1";
         String query = "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
                 "where t1.c1 = 1";
-        testRewriteOK(mv, query);
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint);
     }
 
     @Test
@@ -1567,7 +1636,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "where t1.c1 = 1";
         String query = "select t1.c1, t3.c3 from hive0.partitioned_db.t1 left join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
                 "where t1.c1 = 1";
-        testRewriteOK(mv, query);
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2);\" ";
+        testRewriteOK(mv, query, constraint);
     }
 
     // mv: t1, t2, t2
@@ -1751,6 +1822,93 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "left outer join dependents using (empid)\n"
                 + "where emps.empid = 1";
         testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFKInMV1() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "join dependents using (empid)";
+        String query = "select empid, deptno from emps\n"
+                + "where emps.empid = 1";
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"emps(empid) references dependents(empid)\" ";
+        testRewriteOK(mv, query, constraint).
+                contains("0:OlapScanNode\n" +
+                "     TABLE: mv0");
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFKInMV2() {
+        String mv = "select emps_no_constraint.empid, emps_no_constraint.deptno, dependents.name from emps_no_constraint\n"
+                + "join dependents using (empid)";
+        String query = "select empid, deptno from emps_no_constraint\n"
+                + "where empid = 1";
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+        testRewriteOK(mv, query, constraint).
+                contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0");
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFKInMV3() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+        testRewriteOK(mv, query, constraint).
+                contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0");
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFKInMV4() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "left join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+        testRewriteOK(mv, query, constraint).
+                contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0");
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFKInMV5() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "left join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join depts a on (emps.deptno=a.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+        testRewriteFail(mv, query, constraint);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFKInMV6() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "left join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join depts a on (emps.deptno=a.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+        String constraint = "\"unique_constraints\" = \"dependents.empid; depts.deptno\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid);" +
+                "emps_no_constraint(deptno) references depts(deptno)\" ";
+        testRewriteOK(mv, query, constraint).
+                contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0");
     }
 
     @Test
@@ -2186,6 +2344,222 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " from customer AS c\n" +
                     " LEFT OUTER JOIN lineorder AS l ON c.C_CUSTKEY = l.LO_CUSTKEY";
             testRewriteFail(mv, query);
+        }
+    }
+    @Test
+    public void testRewriteAvg1() {
+        String mv1 = "select user_id, avg(tag_id) from user_tags group by user_id;";
+        testRewriteOK(mv1, "select user_id, avg(tag_id) from user_tags group by user_id;");
+        String mv2 = "select user_id, sum(tag_id), count(tag_id) from user_tags group by user_id;";
+        testRewriteOK(mv2, "select user_id, avg(tag_id) from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testRewriteAvg2() {
+        String mv2 = "select user_id, time, sum(tag_id), count(tag_id) from user_tags group by user_id, time;";
+        testRewriteOK(mv2, "select user_id, avg(tag_id) from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testRewriteAvg3() {
+        String mv2 = "select user_id, time, sum(tag_id % 10), count(tag_id % 10) from user_tags group by user_id, time;";
+        testRewriteOK(mv2, "select user_id, avg(tag_id % 10) from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount1() {
+        String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount2() {
+        String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
+        // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount3() {
+        String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id % 10)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id % 10)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id % 10))) x from user_tags group by user_id;");
+        // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
+        testRewriteOK(mv, "select user_id, count(distinct tag_id % 10) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount4() {
+        String mv = "select user_id, tag_id from user_tags where user_id > 10;";
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags  where user_id > 10 group by user_id;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount5() {
+        String mv = "select user_id, tag_id from user_tags;";
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount6() {
+        String mv = "select user_id, count(tag_id) from user_tags group by user_id;";
+        testRewriteFail(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
+        testRewriteFail(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+        testRewriteFail(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testBitmapUnionCountToBitmapCount1() {
+        String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
+        testRewriteOK(mv, "select user_id, bitmap_union_count(to_bitmap(tag_id)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testBitmapUnionCountToBitmapCount2() {
+        String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, bitmap_union_count(to_bitmap(tag_id)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testApproxCountToHLL1() {
+        String mv = "select user_id, time, hll_union(hll_hash(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, ndv(tag_id) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, hll_union(hll_hash(tag_id)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testApproxCountToHLL2() {
+        String mv = "select user_id, hll_union(hll_hash(tag_id)) from user_tags group by user_id;";
+        testRewriteOK(mv, "select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, ndv(tag_id) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, hll_union(hll_hash(tag_id)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testPercentile1() {
+        String mv = "select user_id, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id;";
+        testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 0) x from user_tags group by user_id;");
+        // testRewriteOK(mv, "select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testPercentile2() {
+        String mv = "select user_id, time, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testQueryWithLimitRewrite() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `aggregate_table_with_null` (\n" +
+                "  `k1` date NULL COMMENT \"\",\n" +
+                "  `k2` datetime NULL COMMENT \"\",\n" +
+                "  `k3` char(20) NULL COMMENT \"\",\n" +
+                "  `k4` varchar(20) NULL COMMENT \"\",\n" +
+                "  `k5` boolean NULL COMMENT \"\",\n" +
+                "  `v1` bigint(20) SUM NULL COMMENT \"\",\n" +
+                "  `v2` bigint(20) SUM NULL COMMENT \"\",\n" +
+                "  `v3` bigint(20) SUM NULL COMMENT \"\",\n" +
+                "  `v4` bigint(20) MAX NULL COMMENT \"\",\n" +
+                "  `v5` largeint(40) MAX NULL COMMENT \"\",\n" +
+                "  `v6` float MIN NULL COMMENT \"\",\n" +
+                "  `v7` double MIN NULL COMMENT \"\",\n" +
+                "  `v8` decimal128(38, 9) SUM NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"V2\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `duplicate_table_with_null_partition` (\n" +
+                "  `k1` date NULL COMMENT \"\",\n" +
+                "  `k2` datetime NULL COMMENT \"\",\n" +
+                "  `k3` char(20) NULL COMMENT \"\",\n" +
+                "  `k4` varchar(20) NULL COMMENT \"\",\n" +
+                "  `k5` boolean NULL COMMENT \"\",\n" +
+                "  `k6` tinyint(4) NULL COMMENT \"\",\n" +
+                "  `k7` smallint(6) NULL COMMENT \"\",\n" +
+                "  `k8` int(11) NULL COMMENT \"\",\n" +
+                "  `k9` bigint(20) NULL COMMENT \"\",\n" +
+                "  `k10` largeint(40) NULL COMMENT \"\",\n" +
+                "  `k11` float NULL COMMENT \"\",\n" +
+                "  `k12` double NULL COMMENT \"\",\n" +
+                "  `k13` decimal128(27, 9) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`k1`)\n" +
+                "(PARTITION p202006 VALUES [(\"0000-01-01\"), (\"2020-07-01\")),\n" +
+                "PARTITION p202007 VALUES [(\"2020-07-01\"), (\"2020-08-01\")),\n" +
+                "PARTITION p202008 VALUES [(\"2020-08-01\"), (\"2020-09-01\")))\n" +
+                "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"V2\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");");
+        {
+            String query = "SELECT t1.k1 k1, t2.k2 k2" +
+                    " from duplicate_table_with_null_partition t1 join aggregate_table_with_null t2" +
+                    " on t1.k1 = t2.k1 limit 10";
+            String mv = "SELECT t1.k1 k1, t2.k2 k2" +
+                    " from duplicate_table_with_null_partition t1 join aggregate_table_with_null t2" +
+                    " on t1.k1 = t2.k1";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("limit: 10");
+        }
+
+        {
+            String query = "SELECT t1.k1 k1, sum(t2.v1) as s" +
+                    " from duplicate_table_with_null_partition t1 join aggregate_table_with_null t2" +
+                    " on t1.k1 = t2.k1 group by t1.k1 limit 10";
+            String mv = "SELECT t1.k1 k1, sum(t2.v1) as s" +
+                    " from duplicate_table_with_null_partition t1 join aggregate_table_with_null t2" +
+                    " on t1.k1 = t2.k1 group by t1.k1";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("limit: 10");
+        }
+        starRocksAssert.dropTable("duplicate_table_with_null_partition");
+        starRocksAssert.dropTable("aggregate_table_with_null");
+    }
+
+    @Test
+    public void testUnionRewrite() {
+        {
+            String mv = "SELECT `customer`.`c_custkey`, `customer`.`c_name`, `customer`.`c_address`, `customer`.`c_city`," +
+                    " `customer`.`c_nation`, `customer`.`c_region`, `customer`.`c_phone`, `customer`.`c_mktsegment`\n" +
+                    "FROM `customer`\n" +
+                    "WHERE `customer`.`c_city` = 'ETHIOPIA 9'";
+            String query = "select * from lineorder, customer";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "SELECT `customer`.`c_custkey`, `customer`.`c_name`, `customer`.`c_address`, `customer`.`c_city`," +
+                    " `customer`.`c_nation`, `customer`.`c_region`, `customer`.`c_phone`, `customer`.`c_mktsegment`\n" +
+                    "FROM `customer`\n" +
+                    "WHERE `customer`.`c_city` = 'ETHIOPIA 9'";
+            String query = "select * from customer, lineorder";
+            testRewriteOK(mv, query);
         }
     }
 }

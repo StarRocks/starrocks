@@ -1,6 +1,6 @@
 # File external table
 
-File external table is a special type of external table. It allows you to directly query Parquet and ORC data files in external storage systems without loading data into StarRocks. In addition, file external tables do not rely on a metastore. In the current version, StarRocks supports the following external storage systems: HDFS, Amazon S3, and S3-compatible storage systems.
+File external table is a special type of external table. It allows you to directly query Parquet and ORC data files in external storage systems without loading data into StarRocks. In addition, file external tables do not rely on a metastore. In the current version, StarRocks supports the following external storage systems: HDFS, Amazon S3, and other S3-compatible storage systems.
 
 This feature is supported from StarRocks v2.5.
 
@@ -55,7 +55,7 @@ PROPERTIES
 | comment          | No       | The comment of column in the file external table.            |
 | ENGINE           | Yes      | The type of engine. Set the value to file.                   |
 | comment          | No       | The description of the file external table.                  |
-| PROPERTIES       | Yes      | <ul><li>`FileLayoutParams`: specifies the path and format of the target file. This property is required.</li><li>`StorageCredentialParams`: specifies the credential information required for accessing object storage systems. This property is required only for AWS S3 and S3-compatible storage.</li></ul> |
+| PROPERTIES       | Yes      | <ul><li>`FileLayoutParams`: specifies the path and format of the target file. This property is required.</li><li>`StorageCredentialParams`: specifies the authentication information required for accessing object storage systems. This property is required only for AWS S3 and other S3-compatible storage systems.</li></ul> |
 
 #### FileLayoutParams
 
@@ -69,7 +69,7 @@ A set of parameters for accessing the target data file.
 
 | Parameter                | Required | Description                                                  |
 | ------------------------ | -------- | ------------------------------------------------------------ |
-| path                     | Yes      | The path of the data file. <ul><li>If the data file is stored in HDFS, the path format is `hdfs://<IP address of HDFS>:<port>/<path>`. The default port number is 8020. If you use the default port, you do not need to specify it.</li><li>If the data file is stored in AWS S3, the path format is `s3://<bucket name>/<folder>/`.</li></ul> Note the following rules when you enter the path: <ul><li>If you want to access all files in a path, end this parameter with a slash (`/`), such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data/`. When you run a query, StarRocks traverses all data files under the path. It does not traverse data files by using recursion.</li><li>If you want to access a single file, enter a path that directly points to this file, such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data`. When you run a query, StarRocks only scans this data file.</li></ul> |
+| path                     | Yes      | The path of the data file. <ul><li>If the data file is stored in HDFS, the path format is `hdfs://<IP address of HDFS>:<port>/<path>`. The default port number is 8020. If you use the default port, you do not need to specify it.</li><li>If the data file is stored in AWS S3 or other S3-compatible storage system, the path format is `s3://<bucket name>/<folder>/`.</li></ul> Note the following rules when you enter the path: <ul><li>If you want to access all files in a path, end this parameter with a slash (`/`), such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data/`. When you run a query, StarRocks traverses all data files under the path. It does not traverse data files by using recursion.</li><li>If you want to access a single file, enter a path that directly points to this file, such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data`. When you run a query, StarRocks only scans this data file.</li></ul> |
 | format                   | Yes      | The format of the data file. Only Parquet and ORC are supported. |
 | enable_recursive_listing | No       | Specifies whether to recursively transverse all files under the current path. Default value: false. |
 
@@ -77,7 +77,7 @@ A set of parameters for accessing the target data file.
 
 A set of parameters about how StarRocks integrates with the target storage system. This parameter set is **optional**.
 
-You need to configure `StorageCredentialParams` only when the target storage system is AWS S3 or S3-compatible storage.
+You need to configure `StorageCredentialParams` only when the target storage system is AWS S3 or other S3-compatible storage.
 
 For other storage systems, you can ignore `StorageCredentialParams`.
 
@@ -85,14 +85,14 @@ For other storage systems, you can ignore `StorageCredentialParams`.
 
 If you need to access a data file stored in AWS S3, configure the following authentication parameters in `StorageCredentialParams`.
 
-- You use instance profile as the credential method for accessing S3.
+- If you choose the instance profile-based authentication method, configure `StorageCredentialParams` as follows:
 
 ```JavaScript
 "aws.s3.use_instance_profile" = "true",
 "aws.s3.region" = "<aws_s3_region>"
 ```
 
-- You use assumed role as the credential method for accessing S3.
+- If you choose the assumed role-based authentication method, configure `StorageCredentialParams` as follows:
 
 ```JavaScript
 "aws.s3.use_instance_profile" = "true",
@@ -100,7 +100,7 @@ If you need to access a data file stored in AWS S3, configure the following auth
 "aws.s3.region" = "<aws_s3_region>"
 ```
 
-- You use IAM user as the credential method for accessing AWS S3.
+- If you choose the IAM user-based authentication method, configure `StorageCredentialParams` as follows:
 
 ```JavaScript
 "aws.s3.use_instance_profile" = "false",
@@ -111,17 +111,17 @@ If you need to access a data file stored in AWS S3, configure the following auth
 
 | Parameter name              | Required | Description                                                  |
 | --------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.use_instance_profile | Yes      | Specifies whether to enable the instance profile and assumed role as credential methods for authentication when you access AWS S3. Valid values: true and false. Default value: false. |
-| aws.s3.iam_role_arn         | Yes      | The ARN of the IAM role that has privileges on your AWS S3 bucket. <br>If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses the target data file. |
+| aws.s3.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method when you access AWS S3. Valid values: true and false. Default value: false. |
+| aws.s3.iam_role_arn         | Yes      | The ARN of the IAM role that has privileges on your AWS S3 bucket. <br>If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses the target data file. |
 | aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: us-west-1. |
-| aws.s3.access_key           | No       | The access key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
-| aws.s3.secret_key           | No       | The secret key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter.|
+| aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
+| aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter.|
 
-For information about how to choose a credential method for accessing AWS S3 and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS S3](../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS S3](../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
-##### AWS S3-compatible storage
+##### S3-compatible storage
 
-If you need to access an AWS S3-compatible storage system, such as MinIO, configure `StorageCredentialParams` as follows to ensure a successful integration:
+If you need to access an S3-compatible storage system, such as MinIO, configure `StorageCredentialParams` as follows to ensure a successful integration:
 
 ```SQL
 "aws.s3.enable_ssl" = "{ true | false }",
@@ -136,7 +136,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | Parameter                       | Required | Description                                                  |
 | ------------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.enable_ssl               | Yes      | Specifies whether to enable SSL connection. <br>Valid values: true and false. Default value: true. |
-| aws.s3.enable_path_style_access | Yes      | Specifies whether to enable path-style URL access. <br>Valid values: true and false. Default value: false. |
+| aws.s3.enable_path_style_access | Yes      | Specifies whether to enable path-style access.<br>Valid values: `true` and `false`. Default value: `false`.<br>Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. |
 | aws.s3.endpoint                 | Yes      | The endpoint used to connect to an S3-compatible storage system instead of AWS S3. |
 | aws.s3.access_key               | Yes      | The access key of your IAM user.                         |
 | aws.s3.secret_key               | Yes      | The secret key of your IAM user.                         |

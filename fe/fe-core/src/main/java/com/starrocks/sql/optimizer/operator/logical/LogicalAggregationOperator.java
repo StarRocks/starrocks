@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.operator.logical;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -26,6 +27,7 @@ import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -42,15 +44,15 @@ import java.util.stream.Collectors;
 import static java.util.function.Function.identity;
 
 public class LogicalAggregationOperator extends LogicalOperator {
-    private final AggType type;
+    private AggType type;
     // The flag for this aggregate operator has split to
     // two stage aggregate or three stage aggregate
     private boolean isSplit;
     /**
      * aggregation key is output variable of aggregate function
      */
-    private final ImmutableMap<ColumnRefOperator, CallOperator> aggregations;
-    private final ImmutableList<ColumnRefOperator> groupingKeys;
+    private ImmutableMap<ColumnRefOperator, CallOperator> aggregations;
+    private ImmutableList<ColumnRefOperator> groupingKeys;
 
     // For normal aggregate function, partitionByColumns are same with groupingKeys
     // but for single distinct function, partitionByColumns are not same with groupingKeys
@@ -65,7 +67,6 @@ public class LogicalAggregationOperator extends LogicalOperator {
     // count function is update function, but sum is merge function
     // if singleDistinctFunctionPos is -1, means no single distinct function
     private int singleDistinctFunctionPos = -1;
-
 
     private DataSkewInfo distinctColumnDataSkew = null;
 
@@ -93,15 +94,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
         this.singleDistinctFunctionPos = singleDistinctFunctionPos;
     }
 
-    private LogicalAggregationOperator(Builder builder) {
-        super(OperatorType.LOGICAL_AGGR, builder.getLimit(), builder.getPredicate(), builder.getProjection());
-        this.type = builder.type;
-        this.groupingKeys = builder.groupingKeys;
-        this.partitionByColumns = builder.partitionByColumns;
-        this.aggregations = builder.aggregations;
-        this.isSplit = !builder.type.isGlobal() || builder.isSplit;
-        this.singleDistinctFunctionPos = builder.singleDistinctFunctionPos;
-        this.distinctColumnDataSkew = builder.distinctColumnDataSkew;
+    private LogicalAggregationOperator() {
+        super(OperatorType.LOGICAL_AGGR);
+        this.isSplit = false;
+        this.singleDistinctFunctionPos = -1;
     }
 
     public AggType getType() {
@@ -180,7 +176,11 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
-        return new RowOutputInfo(getColumnRefMap());
+        List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
+        groupingKeys.stream().forEach(e -> columnOutputInfoList.add(new ColumnOutputInfo(e, e)));
+        aggregations.entrySet().forEach(entry -> columnOutputInfoList.add(new ColumnOutputInfo(entry.getKey(),
+                entry.getValue())));
+        return new RowOutputInfo(columnOutputInfoList);
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
@@ -246,75 +246,73 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     public static class Builder
             extends LogicalOperator.Builder<LogicalAggregationOperator, LogicalAggregationOperator.Builder> {
-        private AggType type;
-        private boolean isSplit = false;
-        private ImmutableMap<ColumnRefOperator, CallOperator> aggregations;
-        private ImmutableList<ColumnRefOperator> groupingKeys;
-        private List<ColumnRefOperator> partitionByColumns;
-        private int singleDistinctFunctionPos = -1;
 
-        private DataSkewInfo distinctColumnDataSkew = null;
+        @Override
+        protected LogicalAggregationOperator newInstance() {
+            return new LogicalAggregationOperator();
+        }
 
         @Override
         public LogicalAggregationOperator build() {
-            Preconditions.checkNotNull(type);
-            Preconditions.checkNotNull(aggregations);
-            Preconditions.checkNotNull(groupingKeys);
-            Preconditions.checkNotNull(partitionByColumns);
-            return new LogicalAggregationOperator(this);
+            Preconditions.checkNotNull(builder.type);
+            Preconditions.checkNotNull(builder.aggregations);
+            Preconditions.checkNotNull(builder.groupingKeys);
+            Preconditions.checkNotNull(builder.partitionByColumns);
+            builder.isSplit = !builder.type.isGlobal() || builder.isSplit;
+            return super.build();
         }
 
         @Override
         public LogicalAggregationOperator.Builder withOperator(LogicalAggregationOperator aggregationOperator) {
             super.withOperator(aggregationOperator);
-            this.type = aggregationOperator.type;
-            this.groupingKeys = aggregationOperator.groupingKeys;
-            this.partitionByColumns = aggregationOperator.partitionByColumns;
-            this.aggregations = aggregationOperator.aggregations;
-            this.isSplit = aggregationOperator.isSplit;
-            this.singleDistinctFunctionPos = aggregationOperator.singleDistinctFunctionPos;
-            this.distinctColumnDataSkew = aggregationOperator.distinctColumnDataSkew;
+            builder.type = aggregationOperator.type;
+            builder.groupingKeys = aggregationOperator.groupingKeys;
+            builder.partitionByColumns = aggregationOperator.partitionByColumns;
+            builder.aggregations = aggregationOperator.aggregations;
+            builder.isSplit = aggregationOperator.isSplit;
+            builder.singleDistinctFunctionPos = aggregationOperator.singleDistinctFunctionPos;
+            builder.distinctColumnDataSkew = aggregationOperator.distinctColumnDataSkew;
             return this;
         }
 
         public Builder setType(AggType type) {
-            this.type = type;
+            builder.type = type;
             return this;
         }
 
         public Builder setGroupingKeys(
                 List<ColumnRefOperator> groupingKeys) {
-            this.groupingKeys = ImmutableList.copyOf(groupingKeys);
+            builder.groupingKeys = ImmutableList.copyOf(groupingKeys);
             return this;
         }
 
         public Builder setAggregations(Map<ColumnRefOperator, CallOperator> aggregations) {
-            this.aggregations = ImmutableMap.copyOf(aggregations);
+            builder.aggregations = ImmutableMap.copyOf(aggregations);
             return this;
         }
 
         public Builder setSplit() {
-            this.isSplit = true;
+            builder.isSplit = true;
             return this;
         }
 
         public Builder setPartitionByColumns(
                 List<ColumnRefOperator> partitionByColumns) {
-            this.partitionByColumns = partitionByColumns;
+            builder.partitionByColumns = partitionByColumns;
             return this;
         }
 
         public Builder setSingleDistinctFunctionPos(int singleDistinctFunctionPos) {
-            this.singleDistinctFunctionPos = singleDistinctFunctionPos;
+            builder.singleDistinctFunctionPos = singleDistinctFunctionPos;
             return this;
         }
 
         public void setDistinctColumnDataSkew(DataSkewInfo distinctColumnDataSkew) {
-            this.distinctColumnDataSkew = distinctColumnDataSkew;
+            builder.distinctColumnDataSkew = distinctColumnDataSkew;
         }
 
         public DataSkewInfo getDistinctColumnDataSkew() {
-            return distinctColumnDataSkew;
+            return builder.distinctColumnDataSkew;
         }
     }
 }

@@ -42,7 +42,6 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -100,17 +99,6 @@ public class TypeDef implements ParseNode {
         }
         analyze(parsedType);
         isAnalyzed = true;
-    }
-
-    public void analyze(boolean isOlap) throws AnalysisException {
-        if (isOlap && (!FeConstants.runningUnitTest)) {
-            // we haven't support create table with map or struct type column in native table
-            Type innerType = Type.getInnermostType(parsedType);
-            if (innerType.isStructType()) {
-                throw new AnalysisException("Unsupported data type: " + parsedType.toSql());
-            }
-        }
-        analyze();
     }
 
     private void analyze(Type type) throws AnalysisException {
@@ -213,6 +201,10 @@ public class TypeDef implements ParseNode {
 
     private void analyzeMapType(MapType type) throws AnalysisException {
         Type keyType = type.getKeyType();
+        if (!keyType.isValidMapKeyType()) {
+            throw new AnalysisException("Invalid map.key's type: " + keyType.toSql() +
+                    ", which should be base types");
+        }
         analyze(keyType);
         Type valueType = type.getValueType();
         analyze(valueType);

@@ -371,6 +371,11 @@ public class StarOSAgentTest {
             public long getBackendIdWithStarletPort(String host, int starletPort) {
                 return -1L;
             }
+
+            @Mock
+            public long getComputeNodeIdWithStarletPort(String host, int starletPort) {
+                return -1L;
+            }
         };
 
         new MockUp<WorkerInfo>() {

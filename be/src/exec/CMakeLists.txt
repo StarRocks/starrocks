@@ -101,6 +101,7 @@ set(EXEC_FILES
     schema_scanner.cpp
     schema_scan_node.cpp
     iceberg/iceberg_delete_builder.cpp
+    iceberg/iceberg_delete_file_iterator.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
     schema_scanner/schema_schemata_scanner.cpp
@@ -131,6 +132,8 @@ set(EXEC_FILES
     schema_scanner/schema_be_compactions_scanner.cpp
     schema_scanner/schema_be_bvars_scanner.cpp
     schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
+    schema_scanner/starrocks_role_edges_scanner.cpp
+    schema_scanner/starrocks_grants_to_scanner.cpp
     schema_scanner/schema_helper.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
@@ -176,6 +179,7 @@ set(EXEC_FILES
     pipeline/scan/olap_schema_chunk_source.cpp
     pipeline/scan/olap_schema_scan_operator.cpp
     pipeline/scan/olap_schema_scan_context.cpp
+    pipeline/sink/iceberg_table_sink_operator.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp
@@ -216,6 +220,7 @@ set(EXEC_FILES
     pipeline/aggregate/sorted_aggregate_streaming_source_operator.cpp
     pipeline/aggregate/spillable_aggregate_blocking_sink_operator.cpp
     pipeline/aggregate/spillable_aggregate_blocking_source_operator.cpp
+    pipeline/aggregate/spillable_aggregate_distinct_blocking_operator.cpp
     pipeline/aggregate/repeat/repeat_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp

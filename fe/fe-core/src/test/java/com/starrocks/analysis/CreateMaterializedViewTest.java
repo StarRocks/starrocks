@@ -32,7 +32,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -87,7 +87,7 @@ public class CreateMaterializedViewTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.beforeClass();
-        FeConstants.default_scheduler_interval_millisecond = 100;
+        Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_experimental_mv = true;
@@ -1222,7 +1222,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testDistributeByIsNull1() {
+    public void testDistributeByIsNull1() throws Exception {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
@@ -1230,11 +1230,7 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select tbl1.k1 ss from tbl1;";
-        try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view should contain distribution desc"));
-        }
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
     }
 
     @Test
@@ -1626,8 +1622,9 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Materialized view query statement select item rand() " +
-                    "not supported nondeterministic function", e.getMessage());
+            Assert.assertEquals("Getting analyzing error from line 3, column 38 to line 3, column 43." +
+                    " Detail message: Materialized view query statement select item rand()" +
+                    " not supported nondeterministic function.", e.getMessage());
         }
     }
 
@@ -2713,6 +2710,23 @@ public class CreateMaterializedViewTest {
         starRocksAssert.dropTable("emps");
         starRocksAssert.dropTable("depts");
 	}
+
+    @Test
+    public void testSelectFromSyncMV() throws Exception {
+        // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
+        String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
+        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
+                parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+
+        waitingRollupJobV2Finish();
+        sql = "select * from sync_mv1 [_SYNC_MV_];";
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
+        Assert.assertTrue(explainString.contains("partitions=2/2\n" +
+                "     rollup: sync_mv1\n" +
+                "     tabletRatio=6/6"));
+    }
 
     @Test
     public void testCreateAsyncDateTruncAndTimeSLice() throws Exception {

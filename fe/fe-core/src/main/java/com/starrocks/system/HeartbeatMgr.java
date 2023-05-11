@@ -223,10 +223,8 @@ public class HeartbeatMgr extends FrontendDaemon {
             case BACKEND: {
                 BackendHbResponse hbResponse = (BackendHbResponse) response;
                 ComputeNode computeNode = nodeMgr.getBackend(hbResponse.getBeId());
-                boolean isBackend = true;
                 if (computeNode == null) {
                     computeNode = nodeMgr.getComputeNode(hbResponse.getBeId());
-                    isBackend = false;
                 }
                 if (computeNode != null) {
                     boolean isChanged = computeNode.handleHbResponse(hbResponse, isReplay);
@@ -238,7 +236,7 @@ public class HeartbeatMgr extends FrontendDaemon {
                                     .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
                         }
                     } else {
-                        if (RunMode.allowCreateLakeTable() && !isReplay && isBackend) {
+                        if (RunMode.allowCreateLakeTable() && !isReplay) {
                             // addWorker
                             int starletPort = computeNode.getStarletPort();
 

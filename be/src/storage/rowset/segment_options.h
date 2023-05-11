@@ -78,7 +78,7 @@ public:
 
     bool has_delete_pred = false;
 
-    RowidRangeOptionPtr rowid_range_option = nullptr;
+    SparseRangePtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
     OlapRuntimeScanRangePruner runtime_range_pruner;

@@ -257,7 +257,7 @@ public class TabletChecker extends FrontendDaemon {
                 continue;
             }
 
-            if (db.isInfoSchemaDb()) {
+            if (db.isSystemDatabase()) {
                 continue;
             }
 

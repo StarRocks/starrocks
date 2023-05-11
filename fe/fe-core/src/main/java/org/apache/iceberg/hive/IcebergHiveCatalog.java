@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
@@ -32,6 +33,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
+import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.iceberg.BaseMetastoreCatalog;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.CatalogProperties;
@@ -140,6 +142,9 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
                     properties.get(CatalogProperties.WAREHOUSE_LOCATION));
         }
 
+        this.conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
+                String.valueOf(Config.hive_meta_store_timeout_s));
+
         String fileIOImpl = properties.get(CatalogProperties.FILE_IO_IMPL);
         this.fileIO =
                 fileIOImpl == null ? new HadoopFileIO(conf) : CatalogUtil.loadFileIO(fileIOImpl, properties, conf);
@@ -241,7 +246,7 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
             if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
                 try {
                     URI uri = new Path(value).toUri();
-                    FileSystem fileSystem = FileSystem.get(uri, new Configuration());
+                    FileSystem fileSystem = FileSystem.get(uri, conf);
                     fileSystem.exists(new Path(value));
                 } catch (Exception e) {
                     LOG.error("Invalid location URI: {}", value, e);
@@ -333,7 +338,7 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
                 CatalogUtil.dropTableData(ops.io(), lastMetadata);
             }
 
-            deleteTableDirectory(ops.current().location());
+            deletePath(ops.current().location());
             LOG.info("Dropped table: {}", identifier);
             return true;
         } catch (NoSuchTableException | NoSuchObjectException e) {
@@ -347,15 +352,21 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
         }
     }
 
-    private void deleteTableDirectory(String tableLocation) {
-        Path path = new Path(tableLocation);
+    @Override
+    public void deleteUncommittedDataFiles(List<String> fileLocations) {
+        fileLocations.forEach(this::deletePath);
+    }
+
+    // TODO(stephen): use CachingFileIO to access file system After adaptation
+    private void deletePath(String location) {
+        Path path = new Path(location);
         URI uri = path.toUri();
         try {
-            FileSystem fileSystem = FileSystem.get(uri, new Configuration());
+            FileSystem fileSystem = FileSystem.get(uri, conf);
             fileSystem.delete(path, true);
         } catch (IOException e) {
-            LOG.error("Failed to delete directory {}", tableLocation, e);
-            throw new StarRocksConnectorException("Failed to delete directory %s. msg: %s", tableLocation, e.getMessage());
+            LOG.error("Failed to delete location {}", location, e);
+            throw new StarRocksConnectorException("Failed to delete location %s. msg: %s", location, e.getMessage());
         }
     }
 

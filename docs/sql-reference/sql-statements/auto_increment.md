@@ -335,3 +335,7 @@ This feature can be used to build a dictionary table for fastly computing distin
 - Adding the `AUTO_INCREMENT` attribute by using ALTER TABLE is not supported.
 - Currently, StarRocks's shared-data mode does not support the `AUTO_INCREMENT` attribute.
 - StarRocks does not support specifying the starting value and step size for the `AUTO_INCREMENT` column.
+
+## Keywords
+
+AUTO_INCREMENT, AUTO INCREMENT

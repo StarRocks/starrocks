@@ -149,6 +149,10 @@ enum TSchemaTableType {
     SCH_BE_LOGS,
     SCH_BE_BVARS,
     SCH_BE_CLOUD_NATIVE_COMPACTIONS,
+
+    STARROCKS_ROLE_EDGES,
+    STARROCKS_GRANT_TO_ROLES,
+    STARROCKS_GRANT_TO_USERS
 }
 
 enum THdfsCompression {
@@ -387,6 +391,9 @@ struct TIcebergTable {
 
     // Iceberg schema, used to support schema evolution
     3: optional TIcebergSchema iceberg_schema
+
+    // partition column names
+    4: optional list<string> partition_column_names
 }
 
 struct THudiTable {

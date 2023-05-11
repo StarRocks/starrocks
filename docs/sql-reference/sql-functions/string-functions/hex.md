@@ -14,7 +14,7 @@ HEX(x);
 
 ## Parameters
 
-`x`: the string or number to convert. The supported data types are BIGINT and VARCHAR.
+`x`: the string or number to convert. The supported data types are BIGINT, VARCHAR, and VARBINARY (v3.0 and later).
 
 ## Return value
 
@@ -45,6 +45,16 @@ mysql> select hex('apple');
 +--------------+
 | 6170706C65   |
 +--------------+
+
+-- The input is a binary value.
+
+mysql> select hex(x'abab');
++-------------+
+| hex('ABAB') |
++-------------+
+| ABAB        |
++-------------+
+1 row in set (0.01 sec)
 ```
 
 ## Keywords

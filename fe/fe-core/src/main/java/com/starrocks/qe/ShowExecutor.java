@@ -128,6 +128,7 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
@@ -135,6 +136,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRevokeClause;
@@ -186,6 +188,7 @@ import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.ShowStorageVolumesStmt;
 import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
@@ -361,6 +364,10 @@ public class ShowExecutor {
             handleShowCreateExternalCatalog();
         } else if (stmt instanceof ShowCharsetStmt) {
             handleShowCharset();
+        } else if (stmt instanceof ShowStorageVolumesStmt) {
+            handleShowStorageVolumes();
+        } else if (stmt instanceof DescStorageVolumeStmt) {
+            handleDescStorageVolume();
         } else {
             handleEmpty();
         }
@@ -939,11 +946,24 @@ public class ShowExecutor {
     // Show create database
     private void handleShowCreateDb() throws AnalysisException {
         ShowCreateDbStmt showStmt = (ShowCreateDbStmt) stmt;
+        String catalogName = showStmt.getCatalogName();
+        String dbName = showStmt.getDb();
         List<List<String>> rows = Lists.newArrayList();
-        Database db = connectContext.getGlobalStateMgr().getDb(showStmt.getDb());
+
+        Database db;
+        if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
+            db = connectContext.getGlobalStateMgr().getDb(dbName);
+        } else {
+            db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        }
         MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
-        rows.add(Lists.newArrayList(showStmt.getDb(),
-                "CREATE DATABASE `" + showStmt.getDb() + "`"));
+
+        StringBuilder createSqlBuilder = new StringBuilder();
+        createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
+        if (!Strings.isNullOrEmpty(db.getLocation())) {
+            createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
+        }
+        rows.add(Lists.newArrayList(showStmt.getDb(), createSqlBuilder.toString()));
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
@@ -2491,15 +2511,20 @@ public class ShowExecutor {
         return returnRows;
     }
 
-    private void handleShowCreateExternalCatalog() {
+    private void handleShowCreateExternalCatalog() throws AnalysisException {
         ShowCreateExternalCatalogStmt showStmt = (ShowCreateExternalCatalogStmt) stmt;
         String catalogName = showStmt.getCatalogName();
-        Catalog catalog = connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
         List<List<String>> rows = Lists.newArrayList();
         if (InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(catalogName)) {
             resultSet = new ShowResultSet(stmt.getMetaData(), rows);
             return;
         }
+
+        Catalog catalog = connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
+        if (catalog == null) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+        }
+
         // Create external catalog catalogName (
         StringBuilder createCatalogSql = new StringBuilder();
         createCatalogSql.append("CREATE EXTERNAL CATALOG ")
@@ -2519,5 +2544,32 @@ public class ShowExecutor {
                 .append("\n)");
         rows.add(Lists.newArrayList(catalogName, createCatalogSql.toString()));
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private void handleShowStorageVolumes() {
+        ShowStorageVolumesStmt showStmt = (ShowStorageVolumesStmt) stmt;
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        StorageVolumeMgr storageVolumeMgr = globalStateMgr.getStorageVolumeMgr();
+        List<String> storageVolumeNames = storageVolumeMgr.listStorageVolumeNames();
+        PatternMatcher matcher = null;
+        List<List<String>> rows = Lists.newArrayList();
+        if (!showStmt.getPattern().isEmpty()) {
+            matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
+                    CaseSensibility.TABLE.getCaseSensibility());
+        }
+        PatternMatcher finalMatcher = matcher;
+        storageVolumeNames = storageVolumeNames.stream()
+                .filter(tblName -> finalMatcher == null || finalMatcher.match(tblName))
+                // TODO: check privilege
+                .collect(Collectors.toList());
+        for (String storageVolumeName : storageVolumeNames) {
+            rows.add(Lists.newArrayList(storageVolumeName));
+        }
+        resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
+    }
+
+    private void handleDescStorageVolume() {
+        DescStorageVolumeStmt desc = (DescStorageVolumeStmt) stmt;
+        resultSet = new ShowResultSet(desc.getMetaData(), desc.getResultRows());
     }
 }

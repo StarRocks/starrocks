@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -29,6 +30,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class PhysicalStreamScanOperator extends PhysicalStreamOperator {
 
@@ -62,6 +65,12 @@ public class PhysicalStreamScanOperator extends PhysicalStreamOperator {
 
     public Table getTable() {
         return table;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return new RowOutputInfo(colRefToColumnMetaMap.keySet().stream()
+                .collect(Collectors.toMap(Function.identity(), Function.identity())));
     }
 
     @Override

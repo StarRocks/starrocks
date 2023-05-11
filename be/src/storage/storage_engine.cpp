@@ -93,7 +93,7 @@ static Status _validate_options(const EngineOptions& options) {
 Status StorageEngine::open(const EngineOptions& options, StorageEngine** engine_ptr) {
     RETURN_IF_ERROR(_validate_options(options));
     std::unique_ptr<StorageEngine> engine = std::make_unique<StorageEngine>(options);
-    RETURN_IF_ERROR_WITH_WARN(engine->_open(), "open engine failed");
+    RETURN_IF_ERROR_WITH_WARN(engine->_open(options), "open engine failed");
     *engine_ptr = engine.release();
     return Status::OK();
 }
@@ -174,12 +174,13 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     }
 }
 
-Status StorageEngine::_open() {
+Status StorageEngine::_open(const EngineOptions& options) {
     // init store_map
     RETURN_IF_ERROR_WITH_WARN(_init_store_map(), "_init_store_map failed");
 
     _effective_cluster_id = config::cluster_id;
-    RETURN_IF_ERROR_WITH_WARN(_check_all_root_path_cluster_id(), "fail to check cluster id");
+    RETURN_IF_ERROR_WITH_WARN(_check_all_root_path_cluster_id(options.need_write_cluster_id),
+                              "fail to check cluster id");
 
     _update_storage_medium_type_count();
 
@@ -391,7 +392,7 @@ Status StorageEngine::_check_file_descriptor_number() {
     return Status::OK();
 }
 
-Status StorageEngine::_check_all_root_path_cluster_id() {
+Status StorageEngine::_check_all_root_path_cluster_id(bool need_write_cluster_id) {
     int32_t cluster_id = -1;
     for (auto& it : _store_map) {
         int32_t tmp_cluster_id = it.second->cluster_id();
@@ -413,7 +414,7 @@ Status StorageEngine::_check_all_root_path_cluster_id() {
     RETURN_IF_ERROR(_judge_and_update_effective_cluster_id(cluster_id));
 
     // write cluster id into cluster_id_path if get effective cluster id success
-    if (_effective_cluster_id != -1 && !_is_all_cluster_id_exist) {
+    if (_effective_cluster_id != -1 && !_is_all_cluster_id_exist && need_write_cluster_id) {
         set_cluster_id(_effective_cluster_id);
     }
 
@@ -533,59 +534,41 @@ void StorageEngine::stop() {
 
     _bg_worker_stopped.store(true, std::memory_order_release);
 
-    if (_update_cache_expire_thread.joinable()) {
-        _update_cache_expire_thread.join();
+#define JOIN_THREAD(THREAD)  \
+    if (THREAD.joinable()) { \
+        THREAD.join();       \
     }
-    if (_unused_rowset_monitor_thread.joinable()) {
-        _unused_rowset_monitor_thread.join();
+
+#define JOIN_THREADS(THREADS)      \
+    for (auto& thread : THREADS) { \
+        JOIN_THREAD(thread);       \
     }
-    if (_garbage_sweeper_thread.joinable()) {
-        _garbage_sweeper_thread.join();
-    }
-    if (_disk_stat_monitor_thread.joinable()) {
-        _disk_stat_monitor_thread.join();
-    }
-    for (auto& thread : _base_compaction_threads) {
-        if (thread.joinable()) {
-            thread.join();
-        }
-    }
-    for (auto& thread : _cumulative_compaction_threads) {
-        if (thread.joinable()) {
-            thread.join();
-        }
-    }
-    for (auto& thread : _update_compaction_threads) {
-        if (thread.joinable()) {
-            thread.join();
-        }
-    }
-    if (_repair_compaction_thread.joinable()) {
-        _repair_compaction_thread.join();
-    }
-    for (auto& thread : _tablet_checkpoint_threads) {
-        if (thread.joinable()) {
-            thread.join();
-        }
-    }
-    if (_fd_cache_clean_thread.joinable()) {
-        _fd_cache_clean_thread.join();
-    }
-    if (_adjust_cache_thread.joinable()) {
-        _adjust_cache_thread.join();
-    }
+
+    JOIN_THREAD(_update_cache_expire_thread)
+    JOIN_THREAD(_update_cache_evict_thread)
+    JOIN_THREAD(_unused_rowset_monitor_thread)
+    JOIN_THREAD(_garbage_sweeper_thread)
+    JOIN_THREAD(_disk_stat_monitor_thread)
+
+    JOIN_THREADS(_base_compaction_threads)
+    JOIN_THREADS(_cumulative_compaction_threads)
+    JOIN_THREADS(_update_compaction_threads)
+
+    JOIN_THREAD(_repair_compaction_thread)
+
+    JOIN_THREADS(_manual_compaction_threads)
+    JOIN_THREADS(_tablet_checkpoint_threads)
+
+    JOIN_THREAD(_fd_cache_clean_thread)
+    JOIN_THREAD(_adjust_cache_thread)
+
     if (config::path_gc_check) {
-        for (auto& thread : _path_scan_threads) {
-            if (thread.joinable()) {
-                thread.join();
-            }
-        }
-        for (auto& thread : _path_gc_threads) {
-            if (thread.joinable()) {
-                thread.join();
-            }
-        }
+        JOIN_THREADS(_path_scan_threads)
+        JOIN_THREADS(_path_gc_threads);
     }
+
+#undef JOIN_THREADS
+#undef JOIN_THREAD
 
     {
         std::lock_guard<std::mutex> l(_store_lock);
@@ -680,6 +663,118 @@ size_t StorageEngine::_compaction_check_one_round() {
                              [this] { return bg_worker_stopped(); });
     }
     return tablets_num_checked;
+}
+
+struct ManualCompactionTask {
+    int64_t tablet_id{0};
+    int64_t rowset_size_threshold{0};
+    vector<uint32_t> input_rowset_ids;
+    size_t total_bytes{0};
+    int64_t start_time{0};
+    int64_t end_time{0};
+    std::string status;
+};
+
+static std::mutex manual_compaction_mutex;
+static size_t total_manual_compaction_tasks_submitted = 0;
+static size_t total_manual_compaction_tasks_finished = 0;
+static size_t total_manual_compaction_bytes = 0;
+static std::deque<ManualCompactionTask> manual_compaction_tasks;
+static const int64_t MAX_MANUAL_COMPACTION_HISTORY = 1000;
+static std::deque<ManualCompactionTask> manual_compaction_history;
+
+void StorageEngine::submit_manual_compaction_task(int64_t tablet_id, int64_t rowset_size_threshold) {
+    std::lock_guard lg(manual_compaction_mutex);
+    auto& task = manual_compaction_tasks.emplace_back();
+    task.tablet_id = tablet_id;
+    task.rowset_size_threshold = rowset_size_threshold;
+    total_manual_compaction_tasks_submitted++;
+    LOG(INFO) << "submit manual compaction task tablet:" << tablet_id
+              << " rowset_size_threshold:" << rowset_size_threshold;
+}
+
+std::string StorageEngine::get_manual_compaction_status() {
+    std::ostringstream os;
+    std::lock_guard lg(manual_compaction_mutex);
+    os << "current task:" << manual_compaction_tasks.size() << "\ntablet_ids: ";
+    for (auto& task : manual_compaction_tasks) {
+        os << task.tablet_id << ",";
+    }
+    os << "\n";
+    for (auto& t : manual_compaction_history) {
+        os << "  tablet:" << t.tablet_id << " #rowset:" << t.input_rowset_ids.size() << " bytes:" << t.total_bytes
+           << " start:" << t.start_time << " duration:" << t.end_time - t.start_time << " " << t.status << std::endl;
+    }
+    os << "history: " << manual_compaction_history.size() << " submitted:" << total_manual_compaction_tasks_submitted
+       << " finished:" << total_manual_compaction_tasks_finished << " bytes:" << total_manual_compaction_bytes
+       << std::endl;
+    return os.str();
+}
+
+static void do_manual_compaction(TabletManager* tablet_manager, ManualCompactionTask& t) {
+    auto tablet = tablet_manager->get_tablet(t.tablet_id);
+    if (!tablet) {
+        LOG(WARNING) << "repair compaction failed, tablet not found: " << t.tablet_id;
+        return;
+    }
+    if (tablet->updates() == nullptr) {
+        LOG(ERROR) << "manual compaction failed, tablet not primary key tablet found: " << t.tablet_id;
+        return;
+    }
+    auto* mem_tracker = ExecEnv::GetInstance()->compaction_mem_tracker();
+    auto st = tablet->updates()->get_rowsets_for_compaction(t.rowset_size_threshold, t.input_rowset_ids, t.total_bytes);
+    if (!st.ok()) {
+        t.status = st.to_string();
+        LOG(WARNING) << "get_rowsets_for_compaction failed: " << st.get_error_msg();
+        return;
+    }
+    st = tablet->updates()->compaction(mem_tracker, t.input_rowset_ids);
+    t.status = st.to_string();
+    if (!st.ok()) {
+        LOG(WARNING) << "manual compaction failed: " << st.get_error_msg() << " tablet:" << t.tablet_id;
+        return;
+    }
+}
+
+bool StorageEngine::_check_and_run_manual_compaction_task() {
+    ManualCompactionTask t;
+    {
+        std::lock_guard lg(manual_compaction_mutex);
+        if (manual_compaction_tasks.empty()) {
+            return false;
+        }
+        t = manual_compaction_tasks.front();
+        manual_compaction_tasks.pop_front();
+    }
+    t.start_time = UnixSeconds();
+    do_manual_compaction(_tablet_manager.get(), t);
+    t.end_time = UnixSeconds();
+    {
+        std::lock_guard lg(manual_compaction_mutex);
+        total_manual_compaction_tasks_finished++;
+        total_manual_compaction_bytes += t.total_bytes;
+        manual_compaction_history.push_back(t);
+        while (manual_compaction_history.size() > MAX_MANUAL_COMPACTION_HISTORY) {
+            manual_compaction_history.pop_front();
+        }
+    }
+    return true;
+}
+
+void* StorageEngine::_manual_compaction_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    Status status = Status::OK();
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        _check_and_run_manual_compaction_task();
+        int64_t left_seconds = 5;
+        while (!_bg_worker_stopped.load(std::memory_order_consume) && left_seconds > 0) {
+            sleep(1);
+            --left_seconds;
+        }
+    }
+    return nullptr;
 }
 
 Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
@@ -1243,27 +1338,6 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
     std::iota(ids_iter, ids.end(), cur_avaliable_min_id);
     cur_avaliable_min_id += num_row;
 
-    return Status::OK();
-}
-
-DummyStorageEngine::DummyStorageEngine(const EngineOptions& options)
-        : StorageEngine(options), _conf_path(options.conf_path) {
-    _s_instance = this;
-    _effective_cluster_id = config::cluster_id;
-    cluster_id_mgr = std::make_unique<ClusterIdMgr>(options.conf_path);
-}
-
-Status DummyStorageEngine::open(const EngineOptions& options, StorageEngine** engine_ptr) {
-    std::unique_ptr<DummyStorageEngine> engine = std::make_unique<DummyStorageEngine>(options);
-    RETURN_IF_ERROR(engine->cluster_id_mgr->init());
-    *engine_ptr = engine.release();
-    LOG(INFO) << "Opened Empty storage engine";
-    return Status::OK();
-}
-
-Status DummyStorageEngine::set_cluster_id(int32_t cluster_id) {
-    RETURN_IF_ERROR(cluster_id_mgr->set_cluster_id(cluster_id));
-    _effective_cluster_id = cluster_id;
     return Status::OK();
 }
 

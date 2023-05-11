@@ -342,6 +342,50 @@ public class PlanFragmentBuilder {
         return execPlan;
     }
 
+    private static void maybeClearOlapScanNodePartitions(PlanFragment fragment) {
+        List<OlapScanNode> olapScanNodes = fragment.collectOlapScanNodes();
+        long numNodesWithBucketColumns = olapScanNodes.stream().filter(node -> !node.getBucketColumns().isEmpty()).count();
+        // Either all OlapScanNode use bucketColumns for local shuffle, or none of them do.
+        // Therefore, clear bucketColumns if only some of them contain bucketColumns.
+        boolean needClear = numNodesWithBucketColumns > 0 && numNodesWithBucketColumns < olapScanNodes.size();
+        if (needClear) {
+            clearOlapScanNodePartitions(fragment.getPlanRoot());
+        }
+    }
+
+    /**
+     * Clear partitionExprs of OlapScanNode (the bucket keys to pass to BE).
+     * <p>
+     * When partitionExprs of OlapScanNode are passed to BE, the post operators will use them as
+     * local shuffle partition exprs.
+     * Otherwise, the operators will use the original partition exprs (group by keys or join on keys).
+     * <p>
+     * The bucket keys can satisfy the required hash property of blocking aggregation except two scenarios:
+     * - OlapScanNode only has one tablet after pruned.
+     * - It is executed on the single BE.
+     * As for these two scenarios, which will generate ScanNode(k1)->LocalShuffle(c1)->BlockingAgg(c1),
+     * partitionExprs of OlapScanNode must be cleared to make BE use group by keys not bucket keys as
+     * local shuffle partition exprs.
+     *
+     * @param root The root node of the fragment which need to check whether to clear bucket keys of OlapScanNode.
+     */
+    private static void clearOlapScanNodePartitions(PlanNode root) {
+        if (root instanceof OlapScanNode) {
+            OlapScanNode scanNode = (OlapScanNode) root;
+            scanNode.setBucketExprs(Lists.newArrayList());
+            scanNode.setBucketColumns(Lists.newArrayList());
+            return;
+        }
+
+        if (root instanceof ExchangeNode) {
+            return;
+        }
+
+        for (PlanNode child : root.getChildren()) {
+            clearOlapScanNodePartitions(child);
+        }
+    }
+
     private static class PhysicalPlanTranslator extends OptExpressionVisitor<PlanFragment, ExecPlan> {
         private final ColumnRefFactory columnRefFactory;
         private final IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator = RuntimeFilterId.createGenerator();
@@ -718,18 +762,6 @@ public class PlanFragmentBuilder {
             scanNode.setDictStringIdToIntIds(node.getDictStringIdToIntIds());
             scanNode.updateAppliedDictStringColumns(node.getGlobalDicts().stream().
                     map(entry -> entry.first).collect(Collectors.toSet()));
-
-            List<ColumnRefOperator> bucketColumns = getShuffleColumns(node.getDistributionSpec());
-            boolean useAllBucketColumns =
-                    bucketColumns.stream().allMatch(c -> node.getColRefToColumnMetaMap().containsKey(c));
-            if (useAllBucketColumns) {
-                List<Expr> bucketExprs = bucketColumns.stream()
-                        .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                        .collect(Collectors.toList());
-                scanNode.setBucketExprs(bucketExprs);
-                scanNode.setBucketColumns(bucketColumns);
-            }
 
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
@@ -1483,43 +1515,9 @@ public class PlanFragmentBuilder {
                 }
             }
 
-            clearOlapScanNodePartitions(sourceFragment.getPlanRoot());
             sourceFragment.clearDestination();
             sourceFragment.clearOutputPartition();
             return sourceFragment;
-        }
-
-        /**
-         * Clear partitionExprs of OlapScanNode (the bucket keys to pass to BE).
-         * <p>
-         * When partitionExprs of OlapScanNode are passed to BE, the post operators will use them as
-         * local shuffle partition exprs.
-         * Otherwise, the operators will use the original partition exprs (group by keys or join on keys).
-         * <p>
-         * The bucket keys can satisfy the required hash property of blocking aggregation except two scenarios:
-         * - OlapScanNode only has one tablet after pruned.
-         * - It is executed on the single BE.
-         * As for these two scenarios, which will generate ScanNode(k1)->LocalShuffle(c1)->BlockingAgg(c1),
-         * partitionExprs of OlapScanNode must be cleared to make BE use group by keys not bucket keys as
-         * local shuffle partition exprs.
-         *
-         * @param root The root node of the fragment which need to check whether to clear bucket keys of OlapScanNode.
-         */
-        private void clearOlapScanNodePartitions(PlanNode root) {
-            if (root instanceof OlapScanNode) {
-                OlapScanNode scanNode = (OlapScanNode) root;
-                scanNode.setBucketExprs(Lists.newArrayList());
-                scanNode.setBucketColumns(Lists.newArrayList());
-                return;
-            }
-
-            if (root instanceof ExchangeNode) {
-                return;
-            }
-
-            for (PlanNode child : root.getChildren()) {
-                clearOlapScanNodePartitions(child);
-            }
         }
 
         private static class AggregateExprInfo {
@@ -1757,9 +1755,6 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
-                if (optExpr.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
-                    clearOlapScanNodePartitions(aggregationNode);
-                }
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
@@ -2400,10 +2395,6 @@ public class PlanFragmentBuilder {
                 sortNode.setAnalyticPartitionExprs(analyticEvalNode.getPartitionExprs());
             }
 
-            if (optExpr.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
-                clearOlapScanNodePartitions(analyticEvalNode);
-            }
-
             inputFragment.setPlanRoot(analyticEvalNode);
             return inputFragment;
         }
@@ -2456,6 +2447,8 @@ public class PlanFragmentBuilder {
                     new PlanFragment(context.getNextFragmentId(), setOperationNode, DataPartition.RANDOM);
             List<List<Expr>> materializedResultExprLists = Lists.newArrayList();
 
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
             for (int i = 0; i < optExpr.getInputs().size(); i++) {
                 List<ColumnRefOperator> childOutput = setOperation.getChildOutputColumns().get(i);
                 PlanFragment fragment = visit(optExpr.getInputs().get(i), context);
@@ -2464,8 +2457,7 @@ public class PlanFragmentBuilder {
 
                 // keep output column order
                 for (ColumnRefOperator ref : childOutput) {
-                    SlotDescriptor slotDescriptor = context.getDescTbl().getSlotDesc(new SlotId(ref.getId()));
-                    materializedExpressions.add(new SlotRef(slotDescriptor));
+                    materializedExpressions.add(ScalarOperatorToExpr.buildExecExpression(ref, formatterContext));
                 }
 
                 materializedResultExprLists.add(materializedExpressions);

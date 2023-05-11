@@ -14,10 +14,12 @@
 
 package com.starrocks.credential;
 
+import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.aliyun.AliyunCloudConfigurationFactory;
 import com.starrocks.credential.aws.AWSCloudConfigurationFactory;
 import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
 import com.starrocks.credential.gcp.GCPCloudConfigurationFactory;
+import com.starrocks.credential.hdfs.HDFSCloudConfigurationFactory;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
@@ -39,6 +41,12 @@ public abstract class CloudConfigurationFactory {
         }
 
         factory = new GCPCloudConfigurationFactory(properties);
+        cloudConfiguration = factory.buildForStorage();
+        if (cloudConfiguration != null) {
+            return cloudConfiguration;
+        }
+
+        factory = new HDFSCloudConfigurationFactory(properties);
         cloudConfiguration = factory.buildForStorage();
         if (cloudConfiguration != null) {
             return cloudConfiguration;
@@ -70,6 +78,11 @@ public abstract class CloudConfigurationFactory {
             @Override
             public CloudType getCloudType() {
                 return CloudType.DEFAULT;
+            }
+
+            @Override
+            public FileStoreInfo toFileStoreInfo() {
+                return null;
             }
 
             @Override

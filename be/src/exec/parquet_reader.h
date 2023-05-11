@@ -69,6 +69,7 @@ public:
     Status init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs, const std::string& timezone);
     Status read_record_batch(const std::vector<SlotDescriptor*>& tuple_slot_descs, bool* eof);
     const std::shared_ptr<arrow::RecordBatch>& get_batch();
+    int64_t num_rows() { return _num_rows; }
 
 private:
     Status column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs);
@@ -76,14 +77,15 @@ private:
     Status next_selected_row_group();
 
     const int32_t _num_of_columns_from_file;
-    parquet::ReaderProperties _properties;
+    int64_t _num_rows = 0;
+    ::parquet::ReaderProperties _properties;
     std::shared_ptr<arrow::io::RandomAccessFile> _parquet;
 
     // parquet file reader object
     std::shared_ptr<::arrow::RecordBatchReader> _rb_batch;
     std::shared_ptr<arrow::RecordBatch> _batch;
-    std::unique_ptr<parquet::arrow::FileReader> _reader;
-    std::shared_ptr<parquet::FileMetaData> _file_metadata;
+    std::unique_ptr<::parquet::arrow::FileReader> _reader;
+    std::shared_ptr<::parquet::FileMetaData> _file_metadata;
 
     // For nested column type, it's consisting of multiple physical-columns
     std::map<std::string, std::vector<int>> _map_column_nested;
@@ -111,6 +113,7 @@ public:
                        const std::vector<SlotDescriptor*>& src_slot_descs, std::string time_zone);
     ~ParquetChunkReader();
     Status next_batch(RecordBatchPtr* batch);
+    int64_t total_num_rows() const;
 
 private:
     std::shared_ptr<ParquetReaderWrap> _parquet_reader;

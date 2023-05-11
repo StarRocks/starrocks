@@ -554,7 +554,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
                 createTblSuccess = db.createTableWithLock(table, false);
                 if (!createTblSuccess) {
-                    if (db.isInfoSchemaDb()) {
+                    if (db.isSystemDatabase()) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "create denied");
                     } else if (!stmt.isSetIfNotExists()) {
                         ErrorReport
@@ -613,7 +613,7 @@ public class OlapTableFactory implements AbstractTableFactory {
 
     private void processConstraint(
             Database db, OlapTable olapTable, Map<String, String> properties) throws AnalysisException {
-        List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, olapTable);
+        List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db, olapTable);
         if (uniqueConstraints != null) {
             olapTable.setUniqueConstraints(uniqueConstraints);
         }

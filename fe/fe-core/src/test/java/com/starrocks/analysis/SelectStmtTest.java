@@ -253,11 +253,8 @@ public class SelectStmtTest {
 
     @Test
     public void testCatalogFunSupport() throws Exception {
-        String sql = "select current_catalog()";
+        String sql = "select catalog()";
         starRocksAssert.query(sql).explainQuery();
-        sql = "select current_catalog";
-        starRocksAssert.query(sql).explainQuery();
-
     }
 
     @Test

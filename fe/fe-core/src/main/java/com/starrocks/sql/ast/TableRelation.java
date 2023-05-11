@@ -16,12 +16,14 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +33,8 @@ public class TableRelation extends Relation {
 
     public enum TableHint {
         _META_,
-        _BINLOG_
+        _BINLOG_,
+        _SYNC_MV_
     }
 
     private final TableName name;
@@ -45,6 +48,8 @@ public class TableRelation extends Relation {
     private String temporalClause;
 
     private Expr partitionPredicate;
+
+    private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
 
     public TableRelation(TableName name) {
         super(name.getPos());
@@ -84,8 +89,9 @@ public class TableRelation extends Relation {
         this.partitionNames = partitionNames;
     }
 
-    public boolean getHasHintsPartitionNames() {
-        return partitionNames != null;
+    // Check whether the table has some table hints, some rules should not be applied.
+    public boolean hasTableHints() {
+        return partitionNames != null || isSyncMVQuery() ||  (tabletIds != null && !tabletIds.isEmpty());
     }
 
     public List<Long> getTabletIds() {
@@ -152,6 +158,9 @@ public class TableRelation extends Relation {
     public boolean isBinlogQuery() {
         return tableHints.contains(TableHint._BINLOG_) && table.isOlapTable();
     }
+    public boolean isSyncMVQuery() {
+        return tableHints.contains(TableHint._SYNC_MV_);
+    }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
@@ -169,5 +178,13 @@ public class TableRelation extends Relation {
 
     public String getTemporalClause() {
         return this.temporalClause;
+    }
+
+    public void setGeneratedExprToColumnRef(Map<Expr, SlotRef> generatedExprToColumnRef) {
+        this.generatedExprToColumnRef = generatedExprToColumnRef;
+    }
+
+    public Map<Expr, SlotRef> getGeneratedExprToColumnRef() {
+        return generatedExprToColumnRef;
     }
 }

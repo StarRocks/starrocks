@@ -668,6 +668,10 @@ public abstract class Type implements Cloneable {
                 isScalarType(PrimitiveType.PERCENTILE);
     }
 
+    public boolean isValidMapKeyType() {
+        return !isComplexType() && !isJsonType() && !isOnlyMetricType() && !isFunctionType();
+    }
+
     public static List<Type> getSupportedTypes() {
         return SUPPORTED_TYPES;
     }

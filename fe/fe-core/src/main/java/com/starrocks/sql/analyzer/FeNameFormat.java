@@ -66,7 +66,7 @@ public class FeNameFormat {
         }
     }
 
-    public static void checkColumnName(String columnName) throws AnalysisException {
+    public static void checkColumnName(String columnName) {
         if (Strings.isNullOrEmpty(columnName) || !columnName.matches(COLUMN_NAME_REGEX)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }
@@ -118,6 +118,10 @@ public class FeNameFormat {
 
     public static void checkWarehouseName(String warehouseName) {
         checkCommonName("warehouse", warehouseName);
+    }
+
+    public static void checkStorageVolumeName(String svName) {
+        checkCommonName("storage volume", svName);
     }
 
     public static void checkCommonName(String type, String name) {

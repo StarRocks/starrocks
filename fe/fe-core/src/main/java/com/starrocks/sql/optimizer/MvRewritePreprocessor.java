@@ -229,6 +229,7 @@ public class MvRewritePreprocessor {
                 mv.getBaseIndexId(),
                 selectPartitionIds,
                 partitionNames,
+                false,
                 selectTabletIds,
                 Lists.newArrayList());
     }
