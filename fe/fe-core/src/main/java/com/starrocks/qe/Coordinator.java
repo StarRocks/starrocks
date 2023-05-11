@@ -2796,7 +2796,6 @@ public class Coordinator {
         }
     }
 
-<<<<<<< HEAD
     // fragment instance exec param, it is used to assemble
     // the per-instance TPlanFragmentExecParas, as a member of
     // FragmentExecParams
