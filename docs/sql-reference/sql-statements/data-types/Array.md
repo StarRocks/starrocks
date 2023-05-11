@@ -1,6 +1,6 @@
 # ARRAY
 
-ARRAY, as an extended type of databases, is supported in various database systems such as PostgreSQL, ClickHouse, and Snowflake. ARRAY is widely used in scenarios such as A/B tests, user tag analysis, and user profiling. StarRocks supports multidimensional array nesting, array slicing, comparison, and filtering.
+ARRAY, as an extended type of database, is supported in various database systems such as PostgreSQL, ClickHouse, and Snowflake. ARRAY is widely used in scenarios such as A/B tests, user tag analysis, and user profiling. StarRocks supports multidimensional array nesting, array slicing, comparison, and filtering.
 
 ## Define array columns
 
@@ -17,9 +17,9 @@ ARRAY<ARRAY<type>>
 ARRAY<type> NOT NULL
 ~~~
 
-`type` specifies the data types of elements in an array. It is nullable by default. You cannot set it to NOT NULL. However, you can specify array as NOT NULL.
+`type` specifies the data types of elements in an array. StarRocks supports the following element types: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, CHAR, DATETIME, and DATE.
 
-The following element types are supported: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, CHAR, DATETIME, DATE.
+Elements in an array are nullable by default, for example, `[null, 1 ,2]`. You cannot specify elements in an array as NOT NULL. However, you can specify an ARRAY column as NOT NULL when you create a table, for example, `ARRAY<type> NOT NULL`.
 
 Examples:
 
