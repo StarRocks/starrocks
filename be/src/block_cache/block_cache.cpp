@@ -19,10 +19,6 @@ namespace starrocks {
 
 namespace fs = std::filesystem;
 
-BlockCache::BlockCache() {
-    _kv_cache = std::make_unique<FbCacheLib>();
-}
-
 BlockCache* BlockCache::instance() {
     static BlockCache cache;
     return &cache;
@@ -48,6 +44,7 @@ Status BlockCache::init(const CacheOptions& options) {
         }
     }
     _block_size = options.block_size;
+    _kv_cache = std::make_unique<FbCacheLib>();
     return _kv_cache->init(options);
 }
 
