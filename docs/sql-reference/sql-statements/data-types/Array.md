@@ -2,7 +2,7 @@
 
 ARRAY, as an extended type of database, is supported in various database systems such as PostgreSQL, ClickHouse, and Snowflake. ARRAY is widely used in scenarios such as A/B tests, user tag analysis, and user profiling. StarRocks supports multidimensional array nesting, array slicing, comparison, and filtering.
 
-## Define array columns
+## Define ARRAY columns
 
 You can define an ARRAY column when you create a table.
 
@@ -53,9 +53,9 @@ distributed by hash(c0) buckets 3;
 
 The following limits apply when you create ARRAY columns in StarRocks tables:
 
-- In versions earlier than v2.1, you can create ARRAY columns only in Duplicate Key tables. From v2.1 onwards, you can also create ARRAY columns in other types of tables (Primary Key, Unique Key, Aggregate). Note that in an Aggregate table, you can create an ARRAY column only when the function used to aggregate data in that column is replace() or replace_if_not_null(). For more information, see [Aggregate table](../../../table_design/table_types/aggregate_table.md).
+- In versions earlier than v2.1, you can create ARRAY columns only in Duplicate Key tables. From v2.1 onwards, you can also create ARRAY columns in other types of tables (Primary Key, Unique Key, Aggregate). Note that in an Aggregate table, you can create an ARRAY column only when the function used to aggregate data in that column is replace() or replace_if_not_null(), for example, `arr ARRAY<INT> replace`. For more information, see [Aggregate table](../../../table_design/table_types/aggregate_table.md).
 - ARRAY columns cannot be used as key columns.
-- ARRAY columns cannot be used as partition keys (PARTITION BY) or bucketing keys (DISTRIBUTED BY).
+- ARRAY columns cannot be used as partition keys (included in PARTITION BY) or bucketing keys (included in DISTRIBUTED BY).
 - DECIMAL V3 is not supported in ARRAY.
 - An array can have a maximum of 14-level nesting.
 
@@ -176,7 +176,7 @@ StarRocks supports loading Array data in three ways:
 - Broker Load is suitable for loading ORC or Parquet files with large-scale data.
 - Stream Load and Routine Load are suitable for loading CSV files with large-scale data.
 
-### Use INSERT INTO to load Array data
+### Use INSERT INTO to load arrays
 
 You can use INSERT INTO to load small-scale data column by column, or perform ETL on data before loading the data.
 
@@ -191,15 +191,15 @@ distributed by hash(c0) buckets 3;
 INSERT INTO t0 VALUES(1, [1,2,3]);
 ~~~
 
-### Use Broker Load to load Array data from ORC or Parquet files in batches
+### Use Broker Load to load arrays from ORC or Parquet files
 
   The array type in StarRocks corresponds to the list structure in ORC and Parquet files, which eliminates the need for you to specify different data types in StarRocks. For more information about data loading, see [Broker load](../../../loading/BrokerLoad.md).
 
-### Use Stream Load or Routine Load to load Array data from CSV files
+### Use Stream Load or Routine Load to load CSV-formatted arrays
 
-  The array data in CSV files is separated by commas by default. You can use [Stream Load](../../../loading/StreamLoad.md#load-csv-data) or [Routine Load](../../../loading/RoutineLoad.md#load-csv-format-data) to load CSV text files or CSV data in Kafka.
+  Arrays in CSV files are separated with comma by default. You can use [Stream Load](../../../loading/StreamLoad.md#load-csv-data) or [Routine Load](../../../loading/RoutineLoad.md#load-csv-format-data) to load CSV text files or CSV data in Kafka.
 
-## Query array data
+## Query ARRAY data
 
 You can access elements in an array using `[]` and subscripts, starting from `1`.
 
