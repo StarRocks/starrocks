@@ -54,7 +54,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | drop_backend_after_decommission  | -    | TRUE    | Whether to delete a BE after the BE is decommissioned. `TRUE` indicates that the BE is deleted immediately after it is decommissioned.<br>`FALSE` indicates that the BE is not deleted after it is decommissioned. |
 | enable_collect_query_detail_info | -    | FALSE   | Whether to view the profile of a query. If this parameter is set to `TRUE`, the system collects the profile of the query.<br>If this parameter is set to `FALSE`, the system does not collect the profile of the query. |
 | background_refresh_metadata_interval_millis                  | ms   | 600000 | The interval between two consecutive Hive metadata refreshes. It is supported from v2.5.5 onwards. |
-| background_refresh_metadata_time_secs_since_last_access_secs | s    | 86400  | The Hive metadata refresh task expiration time. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its metadata. It is supported from v2.5.5 onwards. |
+| background_refresh_metadata_time_secs_since_last_access_secs | s    | 86400  | The expiration time of a Hive metadata refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its metadata. This parameter is supported from v2.5.5 onwards. |
 
 #### Query engine
 
