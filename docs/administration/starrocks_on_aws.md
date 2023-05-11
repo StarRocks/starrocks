@@ -78,7 +78,7 @@ All resources in a stack are defined by a template. Suppose you have created a t
 
     ![StarRocks_on_AWS_1](../assets/StarRocks_on_AWS_1.png)
 
-    **Note that you are responsible for the cost of** **the** **AWS** **services and any third-party licenses** used while running this Partner Solution. For cost estimates, refer to the pricing pages for each AWS service you use.
+    **Note that you are responsible for the cost of the AWS services and any third-party licenses** used while running this Partner Solution. For cost estimates, refer to the pricing pages for each AWS service you use.
 
 ## Access StarRocks cluster
 
@@ -107,7 +107,7 @@ Because the StarRocks cluster is deployed into a private subnet, you need to fir
       ```
 
       - host:
-        You can find FE's private IP address according to the following steps:
+        You can find the FE's private IP address according to the following steps:
 
         1. From the AWS CloudFormation console, on the **Outputs** tab for `StarRocksClusterStack`, click the value for `FeLeaderInstance`.
         ![StarRocks_on_AWS_4](../assets/StarRocks_on_AWS_4.png)

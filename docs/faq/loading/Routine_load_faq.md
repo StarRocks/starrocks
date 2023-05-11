@@ -2,7 +2,7 @@
 
 ## How can I improve loading performance?
 
-**Method 1: Increase the actual load task** **parallelism** by splitting a load job into as many parallel load tasks as possible.
+**Method 1: Increase the actual load task parallelism** by splitting a load job into as many parallel load tasks as possible.
 
 > **NOTICE**
 >
@@ -25,11 +25,11 @@ Parameter description:
 
 Therefore, when the number of partitions to be consumed and the number of BE nodes alive are greater than the other two parameters, you can increase the values of `desired_concurrent_number` and `max_routine_load_task_concurrent_num` parameters to increase the actual load task parallelism.
 
-For example, the number of partitions to be consumed is `7`, the number of live BE nodes is `5`, and `max_routine_load_task_concurrent_num` is the default value `5`. At this time, if you need to increase the load task parallelism to the upper limit, you need to set `desired_concurrent_number` to `5` (the default value is `3`). Then, the actual task parallelism `min(5,7,5,5)`is computed to be `5`.
+For example, the number of partitions to be consumed is `7`, the number of live BE nodes is `5`, and `max_routine_load_task_concurrent_num` is the default value `5`. At this time, if you need to increase the load task parallelism to the upper limit, you need to set `desired_concurrent_number` to `5` (the default value is `3`). Then, the actual task parallelism `min(5,7,5,5)` is computed to be `5`.
 
 For more parameter descriptions, see [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md#example).
 
-**Method 2:** **Increase the amount of data consumed by a Routine Load task from one or more partitions.**
+**Method 2: Increase the amount of data consumed by a Routine Load task from one or more partitions.**
 
 > **NOTICE**
 >
@@ -70,7 +70,7 @@ If the field `left_bytes` is less than `0`, it means that the amount of data con
 
 ## What do I do if the result of SHOW ROUTINE LOAD shows that the load job is in the `CANCELLED` state?
 
-  **Cause analysis:** The load task encountered an exception during loading, such as the table deleted.
+  **Cause analysis:** The load job encountered an exception during loading, such as the table deleted.
 
   **Solution:** When troubleshooting and fixing the issue, you can refer to the error messages in the fields `ReasonOfStateChanged` and `ErrorLogUrls`. However, after fixing the issue, you cannot resume the cancelled load job.
 
@@ -78,4 +78,4 @@ If the field `left_bytes` is less than `0`, it means that the amount of data con
 
    Routine Load guarantees exactly-once semantics.
 
-   Each load task is a individual transaction. If an error occurs during the execution of the transaction, the transaction is aborted, and the FE does not update the consumption progress of the relevant partitions of the load tasks. When FE schedules the load tasks from the task queue next time, the load tasks send the consumption request from the last saved consumption position of the partitions, thus ensuring exactly-once semantics.
+   Each load task is a individual transaction. If an error occurs during the execution of the transaction, the transaction is aborted, and the FE does not update the consumption progress of the relevant partitions of the load tasks. When the FE schedules the load tasks from the task queue next time, the load tasks send the consumption request from the last saved consumption position of the partitions, thus ensuring exactly-once semantics.
