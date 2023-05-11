@@ -15,17 +15,26 @@
 #pragma once
 
 #include <atomic>
+#include <string>
 
-#include "util/logging.h"
+#include "http/http_handler.h"
 
 namespace starrocks {
+
 class ExecEnv;
 
-extern std::atomic<bool> k_starrocks_exit;
-extern std::atomic<bool> k_starrocks_exit_quick;
+// stop be
+class StopBeAction : public HttpHandler {
+public:
+    explicit StopBeAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
+    ~StopBeAction() override = default;
 
-void wait_for_fragments_finish(ExecEnv* exec_env, size_t max_loop_cnt_cfg);
+    void handle(HttpRequest* req) override;
+
+private:
+    [[maybe_unused]] ExecEnv* _exec_env;
+
+    std::string construct_response_message(const std::string& msg);
+};
+
 } // namespace starrocks
-
-void start_cn();
-void start_be();

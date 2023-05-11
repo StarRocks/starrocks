@@ -344,6 +344,11 @@ int main(int argc, char** argv) {
         starrocks::BlockCache::instance()->shutdown();
     }
 
+    if (starrocks::k_starrocks_exit_quick.load()) {
+        LOG(INFO) << "BE is shutting down，will exit quickly";
+        exit(0);
+    }
+
     daemon->stop();
     daemon.reset();
 
