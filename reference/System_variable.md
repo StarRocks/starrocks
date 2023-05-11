@@ -472,6 +472,10 @@ SELECT /*+ SET_VAR
 * sql_dialect (3.0 及以后)
 
   设置生效的 SQL 语法。例如，执行 `set sql_dialect = 'trino';` 命令可以切换为 Trino 语法，这样您就可以在查询中使用 Trino 特有的 SQL 语法和函数。
+  
+  > **注意**
+  >
+  > 当使用此语法时，默认对标识符大小写不敏感。因此，如果您在此语法模式下查询 StarRocks 内表，请确保相关标志符均为小写，否则会查询失败。
 
 * io_tasks_per_scan_operator (3.0 及以后)
 
