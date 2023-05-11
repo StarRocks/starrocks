@@ -23,7 +23,7 @@ ARRAY<type> NOT NULL
 
 数组元素支持以下数据类型：BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、VARCHAR、CHAR、DATETIME、DATE。
 
-> 注意
+> **注意**
 >
 > 数组类型有以下限制：
 >
@@ -64,7 +64,7 @@ distributed by hash(c0) buckets 3;
 
 ## 使用 SELECT 语句构造数组
 
-您可以在 SQL 语句中通过中括号（ `[]` ）来构造数组常量，每个数组元素通过逗号（`,`）分隔。
+您可以在 SQL 语句中通过中括号（`[]`）来构造数组常量，每个数组元素通过逗号（`,`）分隔。
 
 示例：
 
@@ -196,13 +196,13 @@ INSERT INTO t0 VALUES(1, [1,2,3]);
 
 ### 通过 Broker Load 批量导入 ORC 或 Parquet 文件中的数组
 
-StarRocks 中的数组类型，与 ORC 或 Parquet 格式中的 List 结构相对应，所以无需额外指定。具体导入方法请参考 [Broker load](../loading/BrokerLoad.md)。
+StarRocks 中的数组类型，与 ORC 或 Parquet 格式中的 List 结构相对应，所以无需额外指定。具体导入方法请参考 [Broker load](../../../loading/BrokerLoad.md)。
 
 当前 StarRocks 支持直接导入 ORC 文件的 List 结构。Parquet 格式导入正在开发中。
 
 ### 通过 Stream Load 或 Routine Load 导入 CSV 格式数组
 
-您可以使用 [Stream Load](/loading/StreamLoad.md) 或 [Routine Load](/loading/RoutineLoad.md) 方式导入 CSV 文本文件或 Kafka 中的 CSV 格式数据，默认采用逗号分隔。
+您可以使用 [Stream Load](../../../loading/StreamLoad.md#导入-csv-格式的数据) 或 [Routine Load](../../../loading/RoutineLoad.md#导入-csv-数据) 方式导入 CSV 文本文件或 Kafka 中的 CSV 格式数据，默认采用逗号分隔。
 
 ## 访问数组中的元素
 
