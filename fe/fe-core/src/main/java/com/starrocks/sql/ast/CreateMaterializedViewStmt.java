@@ -37,7 +37,6 @@ package com.starrocks.sql.ast;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
@@ -76,7 +75,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
@@ -270,9 +268,14 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                                         new IntLiteral(0, Type.BIGINT))), new IntLiteral(1, Type.BIGINT));
                         result.put(mvColumnBuilder(functionName, baseColumnNames), defineExpr);
                         break;
-                    default: // normal function
-                        result.put(mvColumnBuilder(functionName, baseColumnNames), selectListItemExpr);
-                        // throw new AnalysisException("Unsupported function:" + functionName);
+                    default: {
+                        if (functionCallExpr.isAggregateFunction()) {
+                            throw new AnalysisException("Unsupported function: " + functionName);
+                        } else {
+                            // normal function
+                            result.put(mvColumnBuilder(functionName, baseColumnNames), selectListItemExpr);
+                        }
+                    }
                 }
             } else {
                 /// other operator, like arithmetic operator
@@ -342,7 +345,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             statement.setBaseIndexName(table.getName());
             statement.setDBName(tableName.getDb());
 
-            /// Need analyze select relation
+            /// Need analyze select relation, insure it is a valid select relation
             QueryAnalyzer analyzer = new QueryAnalyzer(context);
             analyzer.analyze(queryStatement);
 
@@ -389,7 +392,6 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         List<MVColumnItem> mvColumnItemList = Lists.newArrayList();
 
         boolean meetAggregate = false;
-        Set<String> mvColumnNameSet = Sets.newHashSet();
         int beginIndexOfAggregation = -1;
         StringJoiner joiner = new StringJoiner(", ", "[", "]");
 
@@ -414,45 +416,25 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 MVColumnItem mvColumnItem = new MVColumnItem(columnName, slotRef.getType());
                 mvColumnItemList.add(mvColumnItem);
             } else if (selectListItemExpr instanceof FunctionCallExpr) {
-                // Function must match pattern.
+                // Aggregate function must match pattern.
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectListItemExpr;
                 String functionName = functionCallExpr.getFnName().getFunction();
                 MVColumnPattern mvColumnPattern =
                         CreateMaterializedViewStmt.FN_NAME_TO_PATTERN.get(functionName.toLowerCase());
                 if (mvColumnPattern == null) {
-                    /// We treat it as normal function
-                    mvColumnItemList.add(buildMVColumnItem(functionCallExpr, statement.isReplay(), true));
-                    //throw new SemanticException(
-                    //       "Materialized view does not support this function:%s, supported functions are: %s",
-                    //      functionCallExpr.toSqlImpl(), FN_NAME_TO_PATTERN.keySet());
+                    if (functionCallExpr.isAggregateFunction()) {
+                        throw new SemanticException(
+                                "Materialized view does not support aggregate function " + functionCallExpr.toSqlImpl());
+                    } else {
+                        /// Normal function
+                        mvColumnItemList.add(buildMVColumnItem(functionCallExpr, statement.isReplay(), true));
+                    }
                 } else {
                     // current version not support count(distinct) function in creating materialized view
                     if (!statement.isReplay() && functionCallExpr.isDistinct()) {
                         throw new SemanticException(
                                 "Materialized view does not support distinct function " + functionCallExpr.toSqlImpl());
                     }
-                    /*
-                    /// Do not constraint function arguments
-                    if (!mvColumnPattern.match(functionCallExpr)) {
-                        throw new SemanticException(
-                                "The function " + functionName + " must match pattern:" + mvColumnPattern.toString());
-                    }
-                    if (functionCallExpr.getChild(0) instanceof CastExpr) {
-                        throw new SemanticException(
-                                "The function " + functionName + " disable cast expression");
-                    }
-                     */
-
-                    // do not check duplicate column, column may be referenced multiple times
-                    /*
-                    List<SlotRef> slots = new ArrayList<>();
-                    functionCallExpr.collect(SlotRef.class, slots);
-                    Preconditions.checkArgument(slots.size() == 1);
-                    String columnName = slots.get(0).getColumnName().toLowerCase();
-                    if (!mvColumnNameSet.add(columnName)) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnName);
-                    }
-                     */
 
                     if (beginIndexOfAggregation == -1) {
                         beginIndexOfAggregation = i;
@@ -462,7 +444,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 }
                 joiner.add(functionCallExpr.toSqlImpl());
             } else {
-                /// other operator
+                /// Other operator like arithmetic operator
                 List<SlotRef> slots = new ArrayList<>();
                 selectListItemExpr.collect(SlotRef.class, slots);
                 Type type = selectListItemExpr.getType();
