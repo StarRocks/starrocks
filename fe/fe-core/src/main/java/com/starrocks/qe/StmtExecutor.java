@@ -148,6 +148,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -873,17 +875,21 @@ public class StmtExecutor {
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
         GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
-        if (analyzeStmt.isAsync()) {
-            try {
-                GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
-                        .submit(() -> executeAnalyze(true, analyzeStmt, analyzeStatus, db, table));
-            } catch (RejectedExecutionException e) {
-                analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
-                analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
-                GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        try {
+            Future<?> future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
+                    .submit(() -> executeAnalyze(analyzeStmt, analyzeStatus, db, table));
+
+            if (!analyzeStmt.isAsync()) {
+                future.get();
             }
-        } else {
-            executeAnalyze(false, analyzeStmt, analyzeStatus, db, table);
+        } catch (RejectedExecutionException e) {
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+            analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        } catch (ExecutionException | InterruptedException e) {
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+            analyzeStatus.setReason("The statistics tasks running failed");
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         }
 
         ShowResultSet resultSet = analyzeStatus.toShowResult();
@@ -896,15 +902,12 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
-    private void executeAnalyze(boolean isAsync, AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
+    private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         // from current session, may execute analyze stmt
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
-
-        if (isAsync) {
-            statsConnectCtx.setThreadLocalInfo();
-        }
+        statsConnectCtx.setThreadLocalInfo();
         executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
     }
 
@@ -1299,7 +1302,7 @@ public class StmtExecutor {
                                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                                             FrontendOptions.getLocalHostAddress()),
                                     sourceType,
-                                    ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
+                                    context.getSessionVariable().getQueryTimeoutS(),
                                     authenticateParams);
         } else {
             transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
@@ -1309,7 +1312,7 @@ public class StmtExecutor {
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                             FrontendOptions.getLocalHostAddress()),
                     sourceType,
-                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                    context.getSessionVariable().getQueryTimeoutS());
 
             // add table indexes to transaction state
             TransactionState txnState =
