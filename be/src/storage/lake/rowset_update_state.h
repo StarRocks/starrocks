@@ -40,7 +40,7 @@ public:
     ~RowsetUpdateState();
 
     Status load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version, Tablet* tablet,
-                const MetaFileBuilder* builder);
+                const MetaFileBuilder* builder, bool need_check_conflict);
 
     Status rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet);
 
@@ -60,8 +60,14 @@ public:
 private:
     Status _do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet);
 
+    Status _do_load_upserts_deletes(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema, Tablet* tablet,
+                                    Rowset* rowset_ptr);
+
     Status _prepare_partial_update_states(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
                                           Tablet* tablet, const TabletSchema& tablet_schema);
+
+    Status _resolve_conflict(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version,
+                             Tablet* tablet, const MetaFileBuilder* builder);
 
     std::once_flag _load_once_flag;
     Status _status;

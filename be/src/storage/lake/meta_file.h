@@ -46,6 +46,7 @@ public:
     StatusOr<bool> find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec) const;
     // when apply or finalize fail, need to clear primary index cache
     void handle_failure();
+    bool has_update_index() const { return _has_update_index; }
 
 private:
     Status _finalize_delvec(int64_t version);
@@ -56,7 +57,10 @@ private:
     UpdateManager* _update_mgr;
     Buffer<uint8_t> _buf;
     std::unordered_map<uint32_t, DelvecPagePB> _delvecs;
+    // whether finalize meta file success.
     bool _has_finalized = false;
+    // whether update the state of pk index.
+    bool _has_update_index = false;
 };
 
 class MetaFileReader {

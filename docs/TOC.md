@@ -94,6 +94,7 @@
       + [Deploy StarRocks with Helm](./administration/helm.md)
     + [Deploy CN](./administration/deploy_cn.md)
     + [Deploy FE cluster with high availability](./administration/Deployment.md)
+    + [Deploy StarRocks on AWS](./administration/starrocks_on_aws.md)
   + Management
     + [Scale in and out](./administration/Scale_up_down.md)
     + [Backup and restore](./administration/Backup_and_restore.md)
@@ -615,11 +616,6 @@
       + [percentile_union](./sql-reference/sql-functions/percentile-functions/percentile_union.md)
     + Scalar Functions
       + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
-    + Struct Functions
-      + [row](/sql-reference/sql-functions/struct-functions/row.md)
-    + Binary Functions
-      + [to_binary](/sql-reference/sql-functions/binary-functions/to_binary.md)
-      + [from_binary](/sql-reference/sql-functions/binary-functions/from_binary.md)
     + Utility Functions
       + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
