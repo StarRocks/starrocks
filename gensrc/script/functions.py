@@ -943,6 +943,10 @@ vectorized_functions = [
     [170006, 'distinct_map_keys', 'ANY_MAP',  ['ANY_MAP'], 'MapFunctions::distinct_map_keys'],
     [170007, 'map_concat', 'ANY_MAP',  ['ANY_MAP', "..."], 'MapFunctions::map_concat'],
 
+    # map, array common functions
+    [170100, 'cardinality', 'INT', ['ANY_MAP'], 'MapFunctions::map_size'],
+    [170101, 'cardinality', 'INT', ['ANY_ARRAY'], 'ArrayFunctions::array_length'],
+
     # struct functions
     # [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],
 ]

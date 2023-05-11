@@ -1010,15 +1010,6 @@ public class ExpressionAnalyzer {
                 argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV2(fnName, argumentTypes)) {
                 fn = DecimalV3FunctionAnalyzer.getDecimalV2Function(node, argumentTypes);
-            } else if (FunctionSet.CARDINALITY.equals(fnName)) {
-                String newFnName = fnName;
-                if (argumentTypes[0].isMapType()) {
-                    newFnName = FunctionSet.MAP_SIZE;
-                } else {
-                    newFnName = FunctionSet.ARRAY_LENGTH;
-                }
-                node.resetFnName("", newFnName);
-                fn = Expr.getBuiltinFunction(newFnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
@@ -1158,17 +1149,6 @@ public class ExpressionAnalyzer {
                             throw new SemanticException("array_agg can't support order by nested types, " +
                                     "but " + i + "-th input is " + argumentTypes[i].toSql());
                         }
-                    }
-                    break;
-                }
-                case FunctionSet.CARDINALITY: {
-                    if (argumentTypes.length != 1) {
-                        throw new SemanticException("cardinality() should have only one argument, but there are "
-                                + argumentTypes.length);
-                    }
-                    if (!argumentTypes[0].isCollectionType() && !argumentTypes[0].isNull()) {
-                        throw new SemanticException("cardinality()'s argument should be array, map or null, but it is "
-                                + argumentTypes[0].toSql());
                     }
                     break;
                 }
