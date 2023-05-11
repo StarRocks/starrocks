@@ -151,6 +151,8 @@ public abstract class Type implements Cloneable {
     public static final Type ARRAY_DECIMAL64 = new ArrayType(Type.DECIMAL64);
     public static final Type ARRAY_DECIMAL128 = new ArrayType(Type.DECIMAL128);
 
+    public static final Type MAP_VARCHAR_VARCHAR = new MapType(Type.VARCHAR, Type.VARCHAR);
+
     public static final ImmutableList<ScalarType> INTEGER_TYPES =
             ImmutableList.of(BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT);
 
