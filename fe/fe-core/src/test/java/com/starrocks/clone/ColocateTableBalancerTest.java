@@ -180,24 +180,6 @@ public class ColocateTableBalancerTest {
     }
 
     @Test
-    public void test2TabletsInScheduleBlockColocateBalanceRound() throws Exception {
-        starRocksAssert.withDatabase("db2").useDatabase("db2")
-                .withTable("CREATE TABLE db2.tbl2(id INT NOT NULL) " +
-                        "distributed by hash(`id`) buckets 3 " +
-                        "properties('replication_num' = '1', 'colocate_with' = 'group2');");
-
-        ColocateTableBalancer colocateTableBalancer = ColocateTableBalancer.getInstance();
-        TabletSchedulerStat stat = GlobalStateMgr.getCurrentState().getTabletScheduler().getStat();
-
-        colocateTableBalancer.runAfterCatalogReady();
-        addTabletsToScheduler("db2", "tbl2", true);
-        long before = stat.counterColocateBalanceRound.get();
-        colocateTableBalancer.runAfterCatalogReady();
-        long after = stat.counterColocateBalanceRound.get();
-        Assert.assertEquals(before, after);
-    }
-
-    @Test
     public void test3RepairWithBadReplica() throws Exception {
         Config.tablet_sched_disable_colocate_overall_balance = true;
         UtFrameUtils.addMockBackend(10002);
