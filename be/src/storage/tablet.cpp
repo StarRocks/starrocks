@@ -239,6 +239,77 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
     return st;
 }
 
+Status Tablet::load_rowset(const RowsetSharedPtr& rowset) {
+    Status st = add_rowset(rowset, false);
+    if (!st.ok() && !st.is_already_exist()) {
+        return st;
+    }
+
+    std::unique_lock wrlock(_meta_lock);
+    auto config = _tablet_meta->get_binlog_config();
+    if (config == nullptr || !config->binlog_enable) {
+        return st;
+    }
+
+    if (rowset->version().second < _tablet_meta->get_binlog_min_lsn().version()) {
+        return st;
+    }
+
+    auto rs = _inc_rs_version_map.find(rowset->version());
+    if (rs != _inc_rs_version_map.end()) {
+        // this should not happen
+        DCHECK(rowset->rowset_id() == rs->second->rowset_id())
+                << "Find an incremental rowset with the same version but different ids for tablet: " << full_name()
+                << ". The version is " << rowset->version() << ", and ids are " << rowset->rowset_id() << " and "
+                << rs->second->rowset_id();
+    } else {
+        _tablet_meta->add_inc_rs_meta(rowset->rowset_meta());
+        _inc_rs_version_map[rowset->version()] = rowset;
+    }
+
+    return st;
+}
+
+Status Tablet::finish_load_rowsets() {
+    if (keys_type() != DUP_KEYS) {
+        return Status::OK();
+    }
+
+    std::unique_lock wrlock(_meta_lock);
+    auto config = _tablet_meta->get_binlog_config();
+    if (config == nullptr || !config->binlog_enable) {
+        return Status::OK();
+    }
+
+    // find valid versions
+    BinlogLsn min_lsn = _tablet_meta->get_binlog_min_lsn();
+    std::vector<int64_t> valid_versions;
+    for (auto& item : _inc_rs_version_map) {
+        int64_t version = item.first.first;
+        if (version < min_lsn.version()) {
+            continue;
+        }
+        valid_versions.push_back(version);
+    }
+    std::sort(valid_versions.begin(), valid_versions.end());
+
+    // TabletMeta#binlog_min_lsn may be not accurate for the minimum version. Consider that when
+    // enable binlog in Tablet#update_binlog_config, we don't know the first incremental version
+    // for add_inc_rowset, so just set the min version to (_tablet_meta->max_version + 1), and
+    // after some ingestion, the actual min version may be larger than it
+    int64_t min_valid_version = valid_versions.empty() ? min_lsn.version() : valid_versions.front();
+    if (min_valid_version > min_lsn.version()) {
+        min_lsn = BinlogLsn(min_valid_version, 0);
+    }
+
+    Status status = _binlog_manager->init(min_lsn, valid_versions);
+    if (!status.ok()) {
+        LOG(WARNING) << "Fail to initialize binlog for tablet " << full_name() << ", " << status;
+    }
+
+    return status;
+}
+
 Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
     CHECK(!_updates) << "updatable tablet should not call add_rowset";
     DCHECK(rowset != nullptr);
@@ -375,6 +446,24 @@ Status Tablet::support_binlog() {
     return Status::InternalError("Not support binlog, keys type: " + KeysType_Name(keys_type()));
 }
 
+void Tablet::update_binlog_config(const BinlogConfig& new_config) {
+    std::shared_ptr<BinlogConfig> old_config = _tablet_meta->get_binlog_config();
+    if (old_config != nullptr && old_config->version >= new_config.version) {
+        VLOG(3) << "skip to update binlog config of tablet: " << tablet_id()
+                << ", current version: " << old_config->version << ", new version: " << new_config.version;
+        return;
+    }
+    _tablet_meta->set_binlog_config(new_config);
+    // set minimum lsn if this will enable binlog
+    if (new_config.binlog_enable && (old_config == nullptr || !old_config->binlog_enable)) {
+        BinlogLsn lsn(_tablet_meta->max_version().second + 1, 0);
+        _tablet_meta->set_binlog_min_lsn(lsn);
+    }
+
+    LOG(INFO) << "set binlog config of tablet: " << tablet_id() << ", " << new_config.to_string()
+              << ", minimum version: " << _tablet_meta->get_binlog_min_lsn();
+}
+
 StatusOr<bool> Tablet::_prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version) {
     auto config = _tablet_meta->get_binlog_config();
     if (config == nullptr || !config->binlog_enable) {
@@ -420,6 +509,28 @@ void Tablet::_commit_binlog(int64_t version) {
 void Tablet::_abort_binlog(const RowsetSharedPtr& rowset, int64_t version) {
     _binlog_manager->delete_ingestion(version);
     rowset->close();
+}
+
+bool Tablet::_check_useless_binlog_and_update_meta(int64_t current_second) {
+    auto config = _tablet_meta->get_binlog_config();
+    if (config == nullptr || !config->binlog_enable) {
+        return false;
+    }
+
+    bool expired_or_overcapacity = _binlog_manager->check_expire_and_capacity(current_second, config->binlog_ttl_second,
+                                                                              config->binlog_max_size);
+    if (!expired_or_overcapacity) {
+        return false;
+    }
+    BinlogRange binlog_range = _binlog_manager->current_binlog_range();
+    BinlogLsn lsn;
+    if (binlog_range.is_empty()) {
+        lsn = {_tablet_meta->max_version().second + 1, 0};
+    } else {
+        lsn = {binlog_range.start_version(), binlog_range.start_seq_id()};
+    }
+    _tablet_meta->set_binlog_min_lsn(lsn);
+    return true;
 }
 
 Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
@@ -506,32 +617,11 @@ void Tablet::_delete_stale_rowset_by_version(const Version& version) {
     VLOG(3) << "delete stale rowset. tablet=" << full_name() << ", version=" << version;
 }
 
-void Tablet::_delete_unused_binlog() {
-    if (_binlog_manager == nullptr) {
-        return;
-    }
-
-    bool binlog_enable = false;
-    {
-        int64_t now = UnixSeconds();
-        std::shared_lock rdlock(_meta_lock);
-        auto config = _tablet_meta->get_binlog_config();
-        binlog_enable = config != nullptr && config->binlog_enable;
-        if (binlog_enable) {
-            _binlog_manager->check_expire_and_capacity(now, config->binlog_ttl_second, config->binlog_max_size);
-        }
-    }
-
-    if (binlog_enable) {
-        _binlog_manager->delete_unused_binlog();
-    }
-}
-
 void Tablet::delete_expired_inc_rowsets() {
-    _delete_unused_binlog();
     int64_t now = UnixSeconds();
     std::vector<Version> expired_versions;
     std::unique_lock wrlock(_meta_lock);
+    bool binlog_meta_changed = _check_useless_binlog_and_update_meta(now);
     for (auto& rs_meta : _tablet_meta->all_inc_rs_metas()) {
         int64_t diff = now - rs_meta->creation_time();
         bool inc_rowset_expired = diff >= config::inc_rowset_expired_sec;
@@ -548,7 +638,7 @@ void Tablet::delete_expired_inc_rowsets() {
         }
     }
 
-    if (expired_versions.empty()) {
+    if (!binlog_meta_changed && expired_versions.empty()) {
         return;
     }
 
@@ -558,6 +648,15 @@ void Tablet::delete_expired_inc_rowsets() {
     }
 
     save_meta();
+    wrlock.unlock();
+
+    if (binlog_meta_changed) {
+        // delete binlog files after the tablet meta is persisted, so that we can recover the
+        // binlog file accurately according to the binlog_min_version and inc_rs_metas in
+        // the table meta. Otherwise, binlog files may be not found for some versions if the
+        // mate is not persisted successfully, but the binlog file has been deleted
+        _binlog_manager->delete_unused_binlog();
+    }
 }
 
 void Tablet::delete_expired_stale_rowset() {
