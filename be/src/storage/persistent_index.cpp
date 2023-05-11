@@ -1654,6 +1654,7 @@ Status ShardByLengthMutableIndex::update_overlap_info(size_t key_size, size_t nu
             }
         }
         if (erase) {
+            num_overlap *= 2;
             overlap_size *= 2;
         }
         for (size_t i = 0; i < shard_size; ++i) {

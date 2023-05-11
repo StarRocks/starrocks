@@ -10,6 +10,7 @@ import com.google.common.collect.Range;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
@@ -19,6 +20,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -508,7 +510,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 double max;
                 if (minLiteral instanceof DateLiteral) {
                     DateLiteral minDateLiteral = (DateLiteral) minLiteral;
-                    DateLiteral maxDateLiteral = (DateLiteral) maxLiteral;
+                    DateLiteral maxDateLiteral;
+                    try {
+                        maxDateLiteral = maxLiteral instanceof MaxLiteral ? new DateLiteral(Type.DATE, true) :
+                                (DateLiteral) maxLiteral;
+                    } catch (AnalysisException e) {
+                        LOG.warn("get max date literal failed, msg : " + e.getMessage());
+                        return null;
+                    }
                     min = Utils.getLongFromDateTime(minDateLiteral.toLocalDateTime());
                     max = Utils.getLongFromDateTime(maxDateLiteral.toLocalDateTime());
                 } else {
