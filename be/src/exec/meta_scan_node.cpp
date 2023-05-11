@@ -29,11 +29,6 @@ MetaScanNode::~MetaScanNode() {
     }
 }
 
-Status MetaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::init(tnode, state));
-    return Status::OK();
-}
-
 void MetaScanNode::_init_counter(RuntimeState* state) {
     _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _meta_scan_profile = _runtime_profile->create_child("META_SCAN", true, false);
