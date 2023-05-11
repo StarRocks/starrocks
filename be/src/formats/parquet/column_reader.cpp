@@ -82,22 +82,25 @@ public:
         return StoredColumnReader::create(_opts, field, chunk_metadata, &_reader);
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+    StatusOr<size_t> skip(size_t rows_to_skip) override {
+        return _reader->skip(rows_to_skip);
+    }
+
+    StatusOr<size_t> prepare_batch(size_t rows_to_read, ColumnContentType* content_type, Column* dst) override {
         DCHECK(_field->is_nullable ? dst->is_nullable() : true);
         if (!converter->need_convert) {
-            return _reader->read_records(num_records, content_type, dst);
+            return _reader->read(rows_to_read, content_type, dst);
         } else {
             SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
             auto column = converter->create_src_column();
 
-            Status status = _reader->read_records(num_records, content_type, column.get());
-            if (!status.ok() && !status.is_end_of_file()) {
-                return status;
+            ASSIGN_OR_RETURN(size_t rows_read, _reader->read(rows_to_read, content_type, column.get()));
+
+            if (rows_read > 0) {
+                RETURN_IF_ERROR(converter->convert(column, dst));
             }
 
-            RETURN_IF_ERROR(converter->convert(column, dst));
-
-            return Status::OK();
+            return rows_read;
         }
     }
 
@@ -137,7 +140,11 @@ public:
         return Status::OK();
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+    StatusOr<size_t> skip(size_t rows_to_skip) override {
+        return _element_reader->skip(rows_to_skip);
+    }
+
+    StatusOr<size_t> prepare_batch(size_t rows_to_read, ColumnContentType* content_type, Column* dst) override {
         NullableColumn* nullable_column = nullptr;
         ArrayColumn* array_column = nullptr;
         if (dst->is_nullable()) {
@@ -150,7 +157,7 @@ public:
             array_column = down_cast<ArrayColumn*>(dst);
         }
         auto* child_column = array_column->elements_column().get();
-        auto st = _element_reader->prepare_batch(num_records, content_type, child_column);
+        ASSIGN_OR_RETURN(size_t rows_read, _element_reader->prepare_batch(rows_to_read, content_type, child_column));
 
         level_t* def_levels = nullptr;
         level_t* rep_levels = nullptr;
@@ -174,7 +181,7 @@ public:
             nullable_column->set_has_null(has_null);
         }
 
-        return st;
+        return rows_read;
     }
 
     Status finish_batch() override { return Status::OK(); }
@@ -194,7 +201,7 @@ private:
 
 class MapColumnReader : public ColumnReader {
 public:
-    explicit MapColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
+    explicit MapColumnReader(const ColumnReaderOptions& opts) {}
     ~MapColumnReader() override = default;
 
     Status init(const ParquetField* field, std::unique_ptr<ColumnReader> key_reader,
@@ -211,7 +218,20 @@ public:
         return Status::OK();
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+    StatusOr<size_t> skip(const size_t rows_to_skip) override {
+        size_t rows_skip = 0;
+        if (_key_reader != nullptr) {
+            ASSIGN_OR_RETURN(rows_skip, _key_reader->skip(rows_to_skip));
+        }
+        if (_value_reader != nullptr) {
+            ASSIGN_OR_RETURN(size_t tmp_rows_skip, _value_reader->skip(rows_to_skip));
+            DCHECK(rows_skip > 0 ? rows_skip == tmp_rows_skip : true);
+            rows_skip = tmp_rows_skip;
+        }
+        return rows_skip;
+    }
+
+    StatusOr<size_t> prepare_batch(size_t rows_to_read, ColumnContentType* content_type, Column* dst) override {
         NullableColumn* nullable_column = nullptr;
         MapColumn* map_column = nullptr;
         if (dst->is_nullable()) {
@@ -225,32 +245,20 @@ public:
         }
         auto* key_column = map_column->keys_column().get();
         auto* value_column = map_column->values_column().get();
-        Status st;
 
-        // TODO(SmithCruise) Ugly code, it's a temporary solution,
-        //  to reset late materialization's rows_to_skip before read each subfield column
-        size_t origin_next_row = _opts.context->next_row;
-        size_t origin_rows_to_skip = _opts.context->rows_to_skip;
+        size_t rows_read = 0;
 
         if (_key_reader != nullptr) {
-            st = _key_reader->prepare_batch(num_records, content_type, key_column);
-            if (!st.ok() && !st.is_end_of_file()) {
-                return st;
-            }
+            ASSIGN_OR_RETURN(rows_read, _key_reader->prepare_batch(rows_to_read, content_type, key_column));
         }
 
         if (_value_reader != nullptr) {
-            // do reset
-            _opts.context->next_row = origin_next_row;
-            _opts.context->rows_to_skip = origin_rows_to_skip;
-
-            st = _value_reader->prepare_batch(num_records, content_type, value_column);
-            if (!st.ok() && !st.is_end_of_file()) {
-                return st;
-            }
+            ASSIGN_OR_RETURN(size_t tmp_rows_read, _value_reader->prepare_batch(rows_to_read, content_type, value_column));
+            DCHECK(rows_read > 0 ? rows_read == tmp_rows_read : true);
+            rows_read = tmp_rows_read;
         }
 
-        // if neither key_reader not value_reader is nullptr , check the value_column size is the same with key_column
+        // if neither key_reader not value_reader is nullptr, check the value_column size is the same with key_column
         DCHECK((_key_reader == nullptr) || (_value_reader == nullptr) || (value_column->size() == key_column->size()));
 
         level_t* def_levels = nullptr;
@@ -292,7 +300,7 @@ public:
             nullable_column->set_has_null(has_null);
         }
 
-        return st;
+        return rows_read;
     }
 
     Status finish_batch() override { return Status::OK(); }
@@ -322,12 +330,11 @@ private:
     const ParquetField* _field = nullptr;
     std::unique_ptr<ColumnReader> _key_reader;
     std::unique_ptr<ColumnReader> _value_reader;
-    const ColumnReaderOptions& _opts;
 };
 
 class StructColumnReader : public ColumnReader {
 public:
-    explicit StructColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
+    explicit StructColumnReader(const ColumnReaderOptions& opts) {}
     ~StructColumnReader() override = default;
 
     Status init(const ParquetField* field, std::vector<std::unique_ptr<ColumnReader>>&& child_readers) {
@@ -348,7 +355,22 @@ public:
         return Status::InternalError("No existed parquet subfield column reader in StructColumn");
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+    StatusOr<size_t> skip(const size_t rows_to_skip) override {
+        size_t rows_skip = 0;
+        for(const auto& reader : _child_readers) {
+            if (reader != nullptr) {
+                if (rows_skip == 0) {
+                    ASSIGN_OR_RETURN(rows_skip, reader->skip(rows_to_skip));
+                } else {
+                    ASSIGN_OR_RETURN(size_t tmp_rows_skip, reader->skip(rows_to_skip));
+                    DCHECK_EQ(rows_skip, tmp_rows_skip);
+                }
+            }
+        }
+        return rows_skip;
+    }
+
+    StatusOr<size_t> prepare_batch(size_t rows_to_read, ColumnContentType* content_type, Column* dst) override {
         NullableColumn* nullable_column = nullptr;
         StructColumn* struct_column = nullptr;
         if (dst->is_nullable()) {
@@ -365,18 +387,17 @@ public:
 
         DCHECK_EQ(fields_column.size(), _child_readers.size());
 
-        // TODO(SmithCruise) Ugly code, it's a temporary solution,
-        //  to reset late materialization's rows_to_skip before read each subfield column
-        size_t origin_next_row = _opts.context->next_row;
-        size_t origin_rows_to_skip = _opts.context->rows_to_skip;
-
         // Fill data for non-nullptr subfield column reader
+        size_t rows_read = 0;
         for (size_t i = 0; i < fields_column.size(); i++) {
             Column* child_column = fields_column[i].get();
             if (_child_readers[i] != nullptr) {
-                _opts.context->next_row = origin_next_row;
-                _opts.context->rows_to_skip = origin_rows_to_skip;
-                RETURN_IF_ERROR(_child_readers[i]->prepare_batch(num_records, content_type, child_column));
+                if (rows_read == 0) {
+                    ASSIGN_OR_RETURN(rows_read, _child_readers[i]->prepare_batch(rows_to_read, content_type, child_column));
+                } else {
+                    ASSIGN_OR_RETURN(size_t tmp_rows_read, _child_readers[i]->prepare_batch(rows_to_read, content_type, child_column));
+                    DCHECK_EQ(rows_read, tmp_rows_read);
+                }
             }
         }
 
@@ -384,7 +405,7 @@ public:
         for (size_t i = 0; i < fields_column.size(); i++) {
             Column* child_column = fields_column[i].get();
             if (_child_readers[i] == nullptr) {
-                child_column->append_default(*num_records);
+                child_column->append_default(rows_read);
             }
         }
 
@@ -399,7 +420,7 @@ public:
             nullable_column->mutable_null_column()->swap_column(null_column);
             nullable_column->set_has_null(has_null);
         }
-        return Status::OK();
+        return rows_read;
     }
 
     Status finish_batch() override { return Status::OK(); }
@@ -480,7 +501,6 @@ private:
     std::vector<std::unique_ptr<ColumnReader>> _child_readers;
     // First non-nullptr child ColumnReader, used to get def & rep levels
     const std::unique_ptr<ColumnReader>* _def_rep_level_child_reader = nullptr;
-    const ColumnReaderOptions& _opts;
 };
 
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,

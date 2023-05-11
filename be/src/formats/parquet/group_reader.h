@@ -131,16 +131,19 @@ private:
     static bool _column_all_pages_dict_encoded(const tparquet::ColumnMetaData& column_metadata);
     void _init_read_chunk();
 
-    Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
-    Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
+    StatusOr<size_t> _read(const std::vector<int>& read_columns, size_t rows_to_read, ChunkPtr* chunk);
+    StatusOr<size_t> _skip(const std::vector<int>& read_columns, size_t rows_to_skip);
     void _collect_field_io_range(const ParquetField& field, std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                  int64_t* end_offset);
 
     // row group meta
     std::shared_ptr<tparquet::RowGroup> _row_group_metadata;
-    std::int64_t _row_group_first_row = 0;
+
+    // Used to support an Iceberg v2 format
+    std::int64_t _row_group_start_row = 0;
     const std::set<std::int64_t>* _need_skip_rowids;
-    std::int64_t _raw_rows_read = 0;
+    // Accumulate read rows in this RowGroup
+    std::int64_t _accumulate_rows_read = 0;
 
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;
@@ -152,6 +155,7 @@ private:
     std::vector<int> _active_column_indices;
     // lazy conlumns that hold read_col index
     std::vector<int> _lazy_column_indices;
+    size_t _previous_rows_to_skip = 0;
 
     // dict value is empty after conjunct eval, file group can be skipped
     bool _is_group_filtered = false;

@@ -72,7 +72,7 @@ public:
         return _rep_level_decoder.decode_batch(n, levels);
     }
 
-    Status decode_values(size_t n, const uint8_t* is_nulls, ColumnContentType content_type, Column* dst) {
+    Status decode_values(size_t n, const uint8_t* is_nulls, ColumnContentType* content_type, Column* dst) {
         size_t idx = 0;
         while (idx < n) {
             bool is_null = is_nulls[idx++];
@@ -90,7 +90,7 @@ public:
         return Status::OK();
     }
 
-    Status decode_values(size_t n, ColumnContentType content_type, Column* dst) {
+    Status decode_values(size_t n, ColumnContentType* content_type, Column* dst) {
         return _cur_decoder->next_batch(n, content_type, dst);
     }
 
@@ -111,12 +111,17 @@ public:
         return _cur_decoder->get_dict_codes(dict_values, dict_codes);
     }
 
+    // You need to make sure that values_to_skip will not out-of-bound access
+    Status skip(size_t values_to_skip) {
+        return _cur_decoder->skip(values_to_skip);
+    }
+
 private:
+    // May return EOF in this function
     Status _parse_page_header();
     Status _parse_page_data();
 
     Status _try_load_dictionary();
-    Status _read_and_decompress_page_data();
     Status _parse_data_page();
     Status _parse_dict_page();
 

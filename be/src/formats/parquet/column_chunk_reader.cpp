@@ -59,8 +59,7 @@ Status ColumnChunkReader::init(int chunk_size) {
 }
 
 Status ColumnChunkReader::load_header() {
-    RETURN_IF_ERROR(_parse_page_header());
-    return Status::OK();
+    return _parse_page_header();
 }
 
 Status ColumnChunkReader::load_page() {
@@ -121,7 +120,6 @@ Status ColumnChunkReader::_parse_page_data() {
     default:
         return Status::NotSupported(
                 strings::Substitute("Not supported page type: $0", _page_reader->current_header()->type));
-        break;
     }
     return Status::OK();
 }

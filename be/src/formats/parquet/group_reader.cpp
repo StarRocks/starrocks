@@ -31,8 +31,8 @@ constexpr static const LogicalType kDictCodePrimitiveType = TYPE_INT;
 constexpr static const LogicalType kDictCodeFieldType = TYPE_INT;
 
 GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, const std::set<std::int64_t>* need_skip_rowids,
-                         int64_t row_group_first_row)
-        : _row_group_first_row(row_group_first_row), _need_skip_rowids(need_skip_rowids), _param(param) {
+                         int64_t row_group_start_row)
+        : _row_group_start_row(row_group_start_row), _need_skip_rowids(need_skip_rowids), _param(param) {
     _row_group_metadata =
             std::make_shared<tparquet::RowGroup>(param.file_metadata->t_metadata().row_groups[row_group_number]);
 }
@@ -55,39 +55,30 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     }
 
     _read_chunk->reset();
-    size_t count = *row_count;
+    size_t rows_to_read = *row_count;
+    size_t rows_read = 0;
     bool has_more_filter = !_left_conjunct_ctxs.empty();
-    Status status;
 
     ChunkPtr active_chunk = _create_read_chunk(_active_column_indices);
     {
-        size_t rows_to_skip = _column_reader_opts.context->rows_to_skip;
-        _column_reader_opts.context->rows_to_skip = 0;
-
         SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
         // read data into active_chunk
-        _column_reader_opts.context->filter = nullptr;
-        status = _read(_active_column_indices, &count, &active_chunk);
-        _param.stats->raw_rows_read += count;
-        _raw_rows_read += count;
-        if (!status.ok() && !status.is_end_of_file()) {
-            return status;
-        }
-
-        _column_reader_opts.context->rows_to_skip = rows_to_skip;
+        ASSIGN_OR_RETURN(rows_read, _read(_active_column_indices, rows_to_read, &active_chunk));
+        _accumulate_rows_read += rows_read;
+        _param.stats->raw_rows_read += rows_read;
     }
 
     bool has_filter = false;
     int chunk_size = -1;
-    Filter chunk_filter(count, 1);
-    DCHECK_EQ(active_chunk->num_rows(), count);
+    Filter chunk_filter(rows_read, 1);
+    DCHECK_EQ(active_chunk->num_rows(), rows_read);
 
     // row id filter
     if ((nullptr != _need_skip_rowids) && !_need_skip_rowids->empty()) {
-        std::int64_t current_chunk_base_row = _row_group_first_row + _raw_rows_read - count;
+        std::int64_t current_chunk_base_row = _row_group_start_row + _accumulate_rows_read - rows_read;
         auto start_iter = lower_bound(_need_skip_rowids->begin(), _need_skip_rowids->end(), current_chunk_base_row);
         auto end_iter =
-                upper_bound(_need_skip_rowids->begin(), _need_skip_rowids->end(), current_chunk_base_row + count);
+                upper_bound(_need_skip_rowids->begin(), _need_skip_rowids->end(), current_chunk_base_row + rows_read);
         for (; start_iter != end_iter; start_iter++) {
             chunk_filter[*start_iter - current_chunk_base_row] = 0;
             has_filter = true;
@@ -110,51 +101,66 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     }
 
     if (has_filter) {
-        size_t hit_count = chunk_size >= 0 ? chunk_size : SIMD::count_nonzero(chunk_filter.data(), count);
+        size_t hit_count = chunk_size >= 0 ? chunk_size : SIMD::count_nonzero(chunk_filter.data(), rows_read);
         if (hit_count == 0) {
             active_chunk->set_num_rows(0);
-        } else if (hit_count != count) {
-            active_chunk->filter_range(chunk_filter, 0, count);
+        } else if (hit_count != rows_read) {
+            active_chunk->filter_range(chunk_filter, 0, rows_read);
         }
         active_chunk->check_or_die();
     }
 
     size_t active_rows = active_chunk->num_rows();
-    if (active_rows > 0 && !_lazy_column_indices.empty()) {
-        ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
-        RETURN_IF_ERROR(_lazy_skip_rows(_lazy_column_indices, lazy_chunk, *row_count));
-
+    if (!_lazy_column_indices.empty()) {
         SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
-        // read data into lazy chunk
-        _column_reader_opts.context->filter = has_filter ? &chunk_filter : nullptr;
-        Status st = _read(_lazy_column_indices, &count, &lazy_chunk);
-        if (!st.ok() && !st.is_end_of_file()) {
-            return st;
-        }
-        if (has_filter) {
-            lazy_chunk->filter_range(chunk_filter, 0, lazy_chunk->num_rows());
-        }
-        if (lazy_chunk->num_rows() != active_rows) {
-            return Status::InternalError(strings::Substitute("Unmatched row count, active_rows=$0, lazy_rows=$1",
-                                                             active_rows, lazy_chunk->num_rows()));
+        ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
+        if (active_rows == 0) {
+            // We can skip the whole active chunk in this round get_next()
+            _param.stats->skip_read_rows += rows_read;
+            _previous_rows_to_skip += rows_read;
+        } else {
+            if (_previous_rows_to_skip > 0) {
+                // skip previous accumulate rows to skip first
+                ASSIGN_OR_RETURN(size_t rows_skip, _skip(_lazy_column_indices, _previous_rows_to_skip));
+                DCHECK_EQ(rows_skip, _previous_rows_to_skip);
+                _previous_rows_to_skip = 0;
+            }
+
+            for (size_t index = 0; index < chunk_filter.size();) {
+                bool is_selected = chunk_filter[index++];
+                size_t run = 1;
+                while (index < chunk_filter.size() && chunk_filter[index] == is_selected) {
+                    index++;
+                    run++;
+                }
+                if (is_selected) {
+                    ASSIGN_OR_RETURN(size_t tmp_rows_read, _read(_lazy_column_indices, run, &lazy_chunk));
+                    DCHECK_EQ(tmp_rows_read, run);
+                } else {
+                    _param.stats->skip_read_rows += run;
+                    ASSIGN_OR_RETURN(size_t tmp_rows_skip, _skip(_lazy_column_indices, run));
+                    DCHECK_EQ(tmp_rows_skip, run);
+                }
+            }
+            if (lazy_chunk->num_rows() != active_rows) {
+                return Status::InternalError(strings::Substitute("Unmatched row count, active_rows=$0, lazy_rows=$1",
+                                                                 active_rows, lazy_chunk->num_rows()));
+            }
         }
         active_chunk->merge(std::move(*lazy_chunk));
-    } else if (active_rows == 0) {
-        _param.stats->skip_read_rows += count;
-        _column_reader_opts.context->rows_to_skip += count;
-        *row_count = 0;
-        return status;
     }
 
     // We don't care about the column order as they will be reordered in HiveDataSource
     _read_chunk->swap_chunk(*active_chunk);
-    *row_count = _read_chunk->num_rows();
+    Status status = Status::OK();
+    if (rows_read < rows_to_read) {
+        status = Status::EndOfFile("");
+    }
+    *row_count = rows_read;
 
     SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
     // convert from _read_chunk to chunk.
     RETURN_IF_ERROR(_dict_filter_ctx.decode_chunk(_param, _column_readers, _read_chunk, chunk));
-
-    _column_reader_opts.context->filter = nullptr;
     return status;
 }
 
@@ -174,7 +180,6 @@ Status GroupReader::_init_column_readers() {
     opts.stats = _param.stats;
     opts.file = _param.file;
     opts.row_group_meta = _row_group_metadata.get();
-    opts.context = _obj_pool.add(new ColumnReaderContext);
     opts.sb_stream = _param.sb_stream;
     for (const auto& column : _param.read_cols) {
         RETURN_IF_ERROR(_create_column_reader(column));
@@ -402,63 +407,40 @@ void GroupReader::_init_read_chunk() {
     _dict_filter_ctx.init_chunk(_param, &_read_chunk);
 }
 
-Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk) {
-    if (read_columns.empty()) {
-        *row_count = 0;
-        return Status::OK();
-    }
-
-    size_t count = *row_count;
+StatusOr<size_t> GroupReader::_skip(const std::vector<int>& read_columns, size_t rows_to_skip) {
+    size_t rows_skip = 0;
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
-        ColumnContentType content_type = _dict_filter_ctx.column_content_type(col_idx);
         SlotId slot_id = column.slot_id;
-        _column_reader_opts.context->next_row = 0;
-        count = *row_count;
-        Status status = _column_readers[slot_id]->next_batch(&count, content_type,
-                                                             (*chunk)->get_column_by_slot_id(slot_id).get());
-        if (!status.ok() && !status.is_end_of_file()) {
-            return status;
+        ASSIGN_OR_RETURN(size_t tmp_rows_skip, _column_readers[slot_id]->skip(rows_to_skip));
+        if (rows_skip == 0) {
+            rows_skip = tmp_rows_skip;
         }
+        DCHECK_EQ(tmp_rows_skip, rows_skip);
     }
-
-    if (count != *row_count) {
-        *row_count = count;
-        return Status::EndOfFile("");
-    }
-
-    *row_count = count;
-    return Status::OK();
+    return rows_skip;
 }
 
-Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size) {
-    auto& ctx = _column_reader_opts.context;
-    if (ctx->rows_to_skip == 0) {
-        return Status::OK();
+StatusOr<size_t> GroupReader::_read(const std::vector<int>& read_columns, size_t rows_to_read, ChunkPtr* chunk) {
+    if (read_columns.empty()) {
+        DCHECK(false);
+        return 0;
     }
 
-    size_t rows_to_skip = ctx->rows_to_skip;
-    Filter empty_filter(1, 0);
-    ctx->filter = &empty_filter;
+    size_t rows_read = 0;
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
         ColumnContentType content_type = _dict_filter_ctx.column_content_type(col_idx);
         SlotId slot_id = column.slot_id;
-        _column_reader_opts.context->next_row = 0;
-
-        ctx->rows_to_skip = rows_to_skip;
-        while (ctx->rows_to_skip > 0) {
-            size_t to_read = std::min(ctx->rows_to_skip, chunk_size);
-            auto temp_column = chunk->get_column_by_slot_id(slot_id)->clone_empty();
-            Status status = _column_readers[slot_id]->next_batch(&to_read, content_type, temp_column.get());
-            if (!status.ok()) {
-                return status;
-            }
+        ASSIGN_OR_RETURN(size_t tmp_rows_read,
+                         _column_readers[slot_id]->next_batch(rows_to_read, &content_type,
+                                                              (*chunk)->get_column_by_slot_id(slot_id).get()));
+        if (rows_read == 0) {
+            rows_read = tmp_rows_read;
         }
+        DCHECK_EQ(rows_read, tmp_rows_read);
     }
-
-    ctx->rows_to_skip = 0;
-    return Status::OK();
+    return rows_read;
 }
 
 void GroupReader::DictFilterContext::init(size_t column_number) {
