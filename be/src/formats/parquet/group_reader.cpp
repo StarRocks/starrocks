@@ -408,6 +408,8 @@ void GroupReader::_init_read_chunk() {
 }
 
 StatusOr<size_t> GroupReader::_skip(const std::vector<int>& read_columns, size_t rows_to_skip) {
+    DCHECK(!read_columns.empty());
+
     size_t rows_skip = 0;
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
@@ -422,10 +424,7 @@ StatusOr<size_t> GroupReader::_skip(const std::vector<int>& read_columns, size_t
 }
 
 StatusOr<size_t> GroupReader::_read(const std::vector<int>& read_columns, size_t rows_to_read, ChunkPtr* chunk) {
-    if (read_columns.empty()) {
-        DCHECK(false);
-        return 0;
-    }
+    DCHECK(!read_columns.empty());
 
     size_t rows_read = 0;
     for (int col_idx : read_columns) {
