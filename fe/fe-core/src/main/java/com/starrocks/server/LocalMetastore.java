@@ -4182,16 +4182,13 @@ public class LocalMetastore implements ConnectorMetadata {
     private void truncateTableInternal(OlapTable olapTable, List<Partition> newPartitions,
                                        boolean isEntireTable, boolean isReplay) {
         // use new partitions to replace the old ones.
-        Map<Long, Set<Long>> oldTabletIds = Maps.newHashMap();
+        Set<Tablet> oldTablets = Sets.newHashSet();
         for (Partition newPartition : newPartitions) {
             Partition oldPartition = olapTable.replacePartition(newPartition);
             // save old tablets to be removed
             for (MaterializedIndex index : oldPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                for (Tablet tablet : index.getTablets()) {
-                    if (!oldTabletIds.containsKey(tablet.getId())) {
-                        oldTabletIds.put(tablet.getId(), tablet.getBackendIds());
-                    }
-                }
+                // let HashSet do the deduplicate work
+                oldTablets.addAll(index.getTablets());
             }
         }
 
@@ -4201,14 +4198,15 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // remove the tablets in old partitions
-        for (Long tabletId : oldTabletIds.keySet()) {
-            GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+        for (Tablet tablet : oldTablets) {
+            TabletInvertedIndex index = GlobalStateMgr.getCurrentInvertedIndex();
+            index.deleteTablet(tablet.getId());
             // Ensure that only the leader records truncate information.
             // TODO(yangzaorang): the information will be lost when failover occurs. The probability of this case
             // happening is small, and the trash data will be deleted by BE anyway, but we need to find a better
             // solution.
             if (!isReplay) {
-                GlobalStateMgr.getCurrentInvertedIndex().markTabletForceDelete(tabletId, oldTabletIds.get(tabletId));
+                index.markTabletForceDelete(tablet);
             }
         }
     }
