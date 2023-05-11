@@ -219,13 +219,8 @@ public class CacheDictManager implements IDictManager {
 
     @Override
     public void disableGlobalDict(long tableId) {
-<<<<<<< HEAD
         LOG.debug("remove dict for table {}", tableId);
         forbiddenDictTableIds.add(tableId);
-=======
-        LOG.debug("disable dict optimize for table {}", tableId);
-        FORBIDDEN_DICT_TABLE_IDS.add(tableId);
->>>>>>> bcec5730ec... [Enhancement] add some trace log for dictionary manager
     }
 
     @Override
