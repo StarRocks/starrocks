@@ -771,7 +771,7 @@ public class MaterializedViewTest {
                 .withMaterializedView("create materialized view sync_mv_to_check\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "as select k2, sum(v1) as total from tbl_sync_mv group by k2;");
-        String showSql = "show create materialized view table sync_mv_to_check;";
+        String showSql = "show create materialized view sync_mv_to_check;";
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, showSql);
         stmtExecutor.execute();
         Assert.assertEquals(connectContext.getState().getStateType(), QueryState.MysqlStateType.OK);
