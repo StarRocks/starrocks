@@ -125,6 +125,7 @@ import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
@@ -389,6 +390,13 @@ public class LocalMetastore implements ConnectorMetadata {
                 id = getNextId();
                 Database db = new Database(id, dbName);
                 unprotectCreateDb(db);
+
+                /* TODO (log compatibility):
+                    For the compatibility reasons of the development version,
+                    temporarily use OP_CREATE_DB, we will use the new log of the new version in a single PR
+                 */
+                //CreateDbInfo createDbInfo = new CreateDbInfo(id, dbName);
+                //editLog.logCreateDb(createDbInfo);
                 editLog.logCreateDb(db);
             }
         } finally {
@@ -416,6 +424,17 @@ public class LocalMetastore implements ConnectorMetadata {
     public void replayCreateDb(Database db) {
         tryLock(true);
         try {
+            unprotectCreateDb(db);
+            LOG.info("finish replay create db, name: {}, id: {}", db.getOriginName(), db.getId());
+        } finally {
+            unlock();
+        }
+    }
+
+    public void replayCreateDb(CreateDbInfo createDbInfo) {
+        tryLock(true);
+        try {
+            Database db = new Database(createDbInfo.getId(), createDbInfo.getDbName());
             unprotectCreateDb(db);
             LOG.info("finish replay create db, name: {}, id: {}", db.getOriginName(), db.getId());
         } finally {
