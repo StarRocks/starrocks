@@ -289,6 +289,10 @@ jobs:
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
       - name: Checkout PR
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
