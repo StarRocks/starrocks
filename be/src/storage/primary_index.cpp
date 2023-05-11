@@ -467,7 +467,7 @@ public:
     std::size_t memory_usage() const final { return _map.capacity() * (1 + S * 4 + sizeof(RowIdPack4)); }
 };
 
-struct StringHasher1 {
+struct StringHash {
     size_t operator()(const string& v) const { return XXH3_64bits(v.data(), v.length()); }
 };
 
