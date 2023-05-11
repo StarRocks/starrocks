@@ -82,13 +82,15 @@ public:
     virtual Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) {
         return _reader->get_dict_codes(dict_values, dict_codes);
     }
+
 protected:
     // Load next page
     // Will return values you skipped(values, not rows)
     // If meet EOF, will return Status::EndOfFile()
     StatusOr<size_t> load_next_page(size_t values_to_skip);
     // Skip and read have similar logic, so we combine it into a function
-    virtual StatusOr<size_t> do_read_or_skip_rows(size_t rows_to_do, ColumnContentType* content_type = nullptr, Column* dst = nullptr) = 0;
+    virtual StatusOr<size_t> do_read_or_skip_rows(size_t rows_to_do, ColumnContentType* content_type = nullptr,
+                                                  Column* dst = nullptr) = 0;
 
     std::unique_ptr<ColumnChunkReader> _reader;
     size_t _num_values_left_in_cur_page = 0;

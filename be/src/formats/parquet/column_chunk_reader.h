@@ -112,9 +112,7 @@ public:
     }
 
     // You need to make sure that values_to_skip will not out-of-bound access
-    Status skip(size_t values_to_skip) {
-        return _cur_decoder->skip(values_to_skip);
-    }
+    Status skip(size_t values_to_skip) { return _cur_decoder->skip(values_to_skip); }
 
 private:
     // May return EOF in this function

@@ -82,9 +82,7 @@ public:
         return StoredColumnReader::create(_opts, field, chunk_metadata, &_reader);
     }
 
-    StatusOr<size_t> skip(size_t rows_to_skip) override {
-        return _reader->skip(rows_to_skip);
-    }
+    StatusOr<size_t> skip(size_t rows_to_skip) override { return _reader->skip(rows_to_skip); }
 
     StatusOr<size_t> prepare_batch(size_t rows_to_read, ColumnContentType* content_type, Column* dst) override {
         DCHECK(_field->is_nullable ? dst->is_nullable() : true);
@@ -140,9 +138,7 @@ public:
         return Status::OK();
     }
 
-    StatusOr<size_t> skip(size_t rows_to_skip) override {
-        return _element_reader->skip(rows_to_skip);
-    }
+    StatusOr<size_t> skip(size_t rows_to_skip) override { return _element_reader->skip(rows_to_skip); }
 
     StatusOr<size_t> prepare_batch(size_t rows_to_read, ColumnContentType* content_type, Column* dst) override {
         NullableColumn* nullable_column = nullptr;
@@ -253,7 +249,8 @@ public:
         }
 
         if (_value_reader != nullptr) {
-            ASSIGN_OR_RETURN(size_t tmp_rows_read, _value_reader->prepare_batch(rows_to_read, content_type, value_column));
+            ASSIGN_OR_RETURN(size_t tmp_rows_read,
+                             _value_reader->prepare_batch(rows_to_read, content_type, value_column));
             DCHECK(rows_read > 0 ? rows_read == tmp_rows_read : true);
             rows_read = tmp_rows_read;
         }
@@ -357,7 +354,7 @@ public:
 
     StatusOr<size_t> skip(const size_t rows_to_skip) override {
         size_t rows_skip = 0;
-        for(const auto& reader : _child_readers) {
+        for (const auto& reader : _child_readers) {
             if (reader != nullptr) {
                 if (rows_skip == 0) {
                     ASSIGN_OR_RETURN(rows_skip, reader->skip(rows_to_skip));
@@ -393,9 +390,11 @@ public:
             Column* child_column = fields_column[i].get();
             if (_child_readers[i] != nullptr) {
                 if (rows_read == 0) {
-                    ASSIGN_OR_RETURN(rows_read, _child_readers[i]->prepare_batch(rows_to_read, content_type, child_column));
+                    ASSIGN_OR_RETURN(rows_read,
+                                     _child_readers[i]->prepare_batch(rows_to_read, content_type, child_column));
                 } else {
-                    ASSIGN_OR_RETURN(size_t tmp_rows_read, _child_readers[i]->prepare_batch(rows_to_read, content_type, child_column));
+                    ASSIGN_OR_RETURN(size_t tmp_rows_read,
+                                     _child_readers[i]->prepare_batch(rows_to_read, content_type, child_column));
                     DCHECK_EQ(rows_read, tmp_rows_read);
                 }
             }
