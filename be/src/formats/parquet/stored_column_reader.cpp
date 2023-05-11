@@ -61,6 +61,7 @@ public:
 protected:
     StatusOr<size_t> do_read_or_skip_rows(size_t rows_to_do, ColumnContentType* content_type, Column* dst) override {
         bool is_do_skip = dst == nullptr;
+        SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
         size_t rows_do = 0;
         while (rows_do < rows_to_do) {
             if (_num_values_left_in_cur_page == 0) {
@@ -85,7 +86,11 @@ protected:
             DCHECK_GT(_num_values_left_in_cur_page, 0);
 
             size_t remain_rows_to_do = std::min(rows_to_do - rows_do, _num_values_left_in_cur_page);
-            _decode_levels(remain_rows_to_do);
+
+            {
+                SCOPED_RAW_TIMER(&_opts.stats->level_decode_ns);
+                _decode_levels(remain_rows_to_do);
+            }
 
             auto res = _delimit_rows(remain_rows_to_do);
             remain_rows_to_do = res.first;
@@ -100,10 +105,13 @@ protected:
                 for (int i = 0; i < levels_parsed; ++i) {
                     level_t def_level = _def_levels[i + _levels_parsed];
                     _is_nulls[null_pos] = (def_level < _field->max_def_level());
-                    // If current def level < ancestor def level, the ancestor will be not defined too, so that we don't
-                    // need to add null value to this column. Otherwise, we need to add null value to this column.
+                    // If the current def level < ancestor def level, the ancestor will be not defined too,
+                    // so that we don't need to add null value to this column.
+                    // Otherwise, we need to add null value to this column.
                     null_pos += (def_level >= _field->level_info.immediate_repeated_ancestor_def_level);
                 }
+
+                SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
                 if (is_do_skip) {
                     RETURN_IF_ERROR(_reader->skip(null_pos));
                 } else {
@@ -119,7 +127,7 @@ protected:
     }
 
 private:
-    // Try to deocde enough levels in levels buffer, except there is no enough levels in current
+    // Try to decode enough levels in levels buffer, except there is no enough levels in current
     void _decode_levels(size_t num_levels) {
         constexpr size_t min_level_batch_size = 4096;
         size_t levels_remaining = _levels_decoded - _levels_parsed;
@@ -228,9 +236,9 @@ public:
         _levels_parsed = 0;
     }
 
-    // If need_levels is set, client will get all levels through get_levels function.
-    // If need_levels is not set, read_records may not records levels information, this will
-    // improve performance. So set this flag when you only needs it.
+    // If need_levels is set, a client will get all levels through get_levels function.
+    // If need_levels is not set, read_records may not record levels information, this will
+    // improve performance. So set this flag when you only need it.
     void set_need_parse_levels(bool needs_levels) override { _need_parse_levels = needs_levels; }
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
@@ -275,20 +283,22 @@ public:
             if (_need_parse_levels) {
                 {
                     SCOPED_RAW_TIMER(&_opts.stats->level_decode_ns);
-                    // TODO Support to skip _decode_levels
+                    // TODO(SmithCruise) Support to skip _decode_levels
                     _decode_levels(remain_rows_to_do);
                 }
-                if (is_do_skip) {
-                    RETURN_IF_ERROR(_reader->skip(remain_rows_to_do));
-                } else {
-                    // TODO(zc): make it better
-                    _is_nulls.resize(remain_rows_to_do);
-                    // decode def levels
-                    for (size_t i = 0; i < remain_rows_to_do; ++i) {
-                        _is_nulls[i] = _def_levels[_levels_parsed + i] < _field->max_def_level();
-                    }
+                {
                     SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
-                    RETURN_IF_ERROR(_reader->decode_values(remain_rows_to_do, &_is_nulls[0], content_type, dst));
+                    if (is_do_skip) {
+                        RETURN_IF_ERROR(_reader->skip(remain_rows_to_do));
+                    } else {
+                        // TODO(zc): make it better
+                        _is_nulls.resize(remain_rows_to_do);
+                        // decode def levels
+                        for (size_t i = 0; i < remain_rows_to_do; ++i) {
+                            _is_nulls[i] = _def_levels[_levels_parsed + i] < _field->max_def_level();
+                        }
+                        RETURN_IF_ERROR(_reader->decode_values(remain_rows_to_do, &_is_nulls[0], content_type, dst));
+                    }
                 }
                 _levels_parsed += remain_rows_to_do;
                 _num_values_left_in_cur_page -= remain_rows_to_do;
@@ -318,12 +328,10 @@ public:
                 } else {
                     {
                         SCOPED_RAW_TIMER(&_opts.stats->level_decode_ns);
-
                         size_t new_capacity = remain_rows_to_do;
                         if (new_capacity > _levels_capacity) {
                             new_capacity = BitUtil::next_power_of_two(new_capacity);
                             _def_levels.resize(new_capacity);
-
                             _levels_capacity = new_capacity;
                         }
                         _reader->decode_def_levels(remain_rows_to_do, &_def_levels[0]);
@@ -445,12 +453,14 @@ public:
             DCHECK_GT(_num_values_left_in_cur_page, 0);
 
             size_t remain_rows_to_do = std::min(rows_to_do - rows_do, _num_values_left_in_cur_page);
-            if (is_do_skip) {
-                RETURN_IF_ERROR(_reader->skip(remain_rows_to_do));
-            } else {
-                RETURN_IF_ERROR(_reader->decode_values(remain_rows_to_do, content_type, dst));
+            {
+                SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
+                if (is_do_skip) {
+                    RETURN_IF_ERROR(_reader->skip(remain_rows_to_do));
+                } else {
+                    RETURN_IF_ERROR(_reader->decode_values(remain_rows_to_do, content_type, dst));
+                }
             }
-
             rows_do += remain_rows_to_do;
             _num_values_left_in_cur_page -= remain_rows_to_do;
         }

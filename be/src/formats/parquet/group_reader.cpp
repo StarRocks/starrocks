@@ -117,6 +117,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 
     size_t active_rows = active_chunk->num_rows();
     if (active_rows > 0 && !_lazy_column_indices.empty()) {
+        SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
         ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
         // skip previous accumulate rows to skip first
         if (_previous_rows_to_skip > 0) {
@@ -124,7 +125,6 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             DCHECK_EQ(rows_skip, _previous_rows_to_skip);
             _previous_rows_to_skip = 0;
         }
-        SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
         for (size_t index = 0; index < chunk_filter.size();) {
             bool is_selected = chunk_filter[index++];
             size_t run = 1;
