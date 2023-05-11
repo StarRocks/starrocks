@@ -41,7 +41,13 @@
 
 namespace starrocks {
 
-enum CompactionActionType { SHOW_INFO = 1, RUN_COMPACTION = 2, SHOW_REPAIR = 3, SUBMIT_REPAIR = 4 };
+enum CompactionActionType {
+    SHOW_INFO = 1,
+    RUN_COMPACTION = 2,
+    SHOW_REPAIR = 3,
+    SUBMIT_REPAIR = 4,
+    SHOW_RUNNING_TASK = 5
+};
 
 // This action is used for viewing the compaction status.
 // See compaction-action.md for details.
@@ -61,6 +67,7 @@ private:
     Status _handle_compaction(HttpRequest* req, std::string* json_result);
     Status _handle_show_repairs(HttpRequest* req, std::string* json_result);
     Status _handle_submit_repairs(HttpRequest* req, std::string* json_result);
+    Status _handle_running_task(HttpRequest* req, std::string* json_result);
 
 private:
     CompactionActionType _type;

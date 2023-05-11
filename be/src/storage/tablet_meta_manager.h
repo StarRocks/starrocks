@@ -58,36 +58,37 @@ class TabletMetaPB;
 struct TabletMetaStats {
     TTabletId tablet_id = 0;
     TTableId table_id = 0;
-    size_t meta_bytes = 0;
-    // updatable related
-    size_t log_size = 0;
-    size_t log_bytes = 0;
-    size_t rowset_size = 0;
-    size_t rowset_bytes = 0;
-    size_t pending_rowset_size = 0;
-    size_t pending_rowset_bytes = 0;
-    size_t delvec_size = 0;
-    size_t delvec_bytes = 0;
+    size_t tablet_meta_bytes = 0;
+    // update tablet related
+    size_t log_count = 0;
+    size_t log_meta_bytes = 0;
+    size_t rowset_count = 0;
+    size_t rowset_meta_bytes = 0;
+    size_t pending_rowset_count = 0;
+    size_t pending_rowset_meta_bytes = 0;
+    size_t delvec_count = 0;
+    size_t delvec_meta_bytes = 0;
 };
 
 struct MetaStoreStats {
-    size_t tablet_size = 0;
-    size_t tablet_bytes = 0;
-    size_t rst_size = 0;
-    size_t rst_bytes = 0;
-    size_t update_tablet_size = 0;
-    size_t update_tablet_bytes = 0;
-    size_t log_size = 0;
-    size_t log_bytes = 0;
-    size_t delvec_size = 0;
-    size_t delvec_bytes = 0;
-    size_t rowset_size = 0;
-    size_t rowset_bytes = 0;
-    size_t pending_rowset_size = 0;
-    size_t pending_rowset_bytes = 0;
-    size_t total_size = 0;
-    size_t total_bytes = 0;
-    size_t error_size = 0;
+    size_t tablet_count = 0;
+    size_t tablet_meta_bytes = 0;
+    size_t rowset_count = 0;
+    size_t rowset_meta_bytes = 0;
+    // update tablet related
+    size_t update_tablet_count = 0;
+    size_t update_tablet_meta_bytes = 0;
+    size_t log_count = 0;
+    size_t log_meta_bytes = 0;
+    size_t delvec_count = 0;
+    size_t delvec_meta_bytes = 0;
+    size_t update_rowset_count = 0;
+    size_t update_rowset_meta_bytes = 0;
+    size_t pending_rowset_count = 0;
+    size_t pending_rowset_meta_bytes = 0;
+    size_t total_count = 0;
+    size_t total_meta_bytes = 0;
+    size_t error_count = 0;
     std::map<TTabletId, TabletMetaStats> tablets;
 };
 

@@ -275,16 +275,17 @@ void get_meta_stats(DataDir* data_dir) {
         std::cout << "get_meta_stats failed: " << st.to_string() << std::endl;
         return;
     }
-    printf("All tablets:\n");
-    printf(" tablet: %8zu %10zu\n", stats.tablet_size, stats.tablet_bytes);
-    printf("    rst: %8zu %10zu\n", stats.rst_size, stats.rst_bytes);
-    printf("Updatable tablets:\n");
-    printf(" tablet: %8zu %10zu\n", stats.update_tablet_size, stats.update_tablet_bytes);
-    printf("    log: %8zu %10zu\n", stats.log_size, stats.log_bytes);
-    printf(" delvec: %8zu %10zu\n", stats.delvec_size, stats.delvec_bytes);
-    printf(" rowset: %8zu %10zu\n", stats.rowset_size, stats.rowset_bytes);
-    printf("\n  Total: %8zu %10zu\n", stats.total_size, stats.total_bytes);
-    printf("Error: %zu\n", stats.error_size);
+    printf("Non-update tablets:\n");
+    printf("         tablet: %8zu %10zu\n", stats.tablet_count, stats.tablet_meta_bytes);
+    printf("            rst: %8zu %10zu\n", stats.rowset_count, stats.rowset_meta_bytes);
+    printf("Update tablets:\n");
+    printf("         tablet: %8zu %10zu\n", stats.update_tablet_count, stats.update_tablet_meta_bytes);
+    printf("            log: %8zu %10zu\n", stats.log_count, stats.log_meta_bytes);
+    printf("  delete vector: %8zu %10zu\n", stats.delvec_count, stats.delvec_meta_bytes);
+    printf("         rowset: %8zu %10zu\n", stats.update_rowset_count, stats.update_rowset_meta_bytes);
+    printf(" pending rowset: %8zu %10zu\n", stats.pending_rowset_count, stats.pending_rowset_count);
+    printf("\n          Total: %8zu %10zu\n", stats.total_count, stats.total_meta_bytes);
+    printf("Error: %zu\n", stats.error_count);
 }
 
 void list_meta(DataDir* data_dir) {
@@ -294,16 +295,17 @@ void list_meta(DataDir* data_dir) {
         std::cout << "list_meta: " << st.to_string() << std::endl;
         return;
     }
-    printf("%8s %8s %10s %4s %10s %6s %10s %6s %10s %18s %24s\n", "table", "tablet", "bytes", "log", "bytes", "delvec",
-           "bytes", "rowset", "bytes", "pending_rowset", "pending_rowset_bytes");
+    printf("%8s %8s %18s %4s %16s %8s %18s %6s %18s %18s %26s\n", "table", "tablet", "tablet_meta_bytes", "log",
+           "log_meta_bytes", "delvec", "delvec_meta_bytes", "rowset", "rowset_meta_bytes", "pending_rowset",
+           "pending_rowset_meta_bytes");
     for (auto& e : stats.tablets) {
         auto& st = e.second;
-        printf("%8ld %8ld %10zu %4zu %10zu %6zu %10zu %6zu %10lu %18lu %24lu\n", st.table_id, st.tablet_id,
-               st.meta_bytes, st.log_size, st.log_bytes, st.delvec_size, st.delvec_bytes, st.rowset_size,
-               st.rowset_bytes, st.pending_rowset_size, st.pending_rowset_bytes);
+        printf("%8ld %8ld %18zu %4zu %16zu %8zu %18zu %6zu %18lu %18lu %26lu\n", st.table_id, st.tablet_id,
+               st.tablet_meta_bytes, st.log_count, st.log_meta_bytes, st.delvec_count, st.delvec_meta_bytes,
+               st.rowset_count, st.rowset_meta_bytes, st.pending_rowset_count, st.pending_rowset_meta_bytes);
     }
-    printf("  Total KV: %zu Bytes: %zu Tablets: %zu Error: %zu\n", stats.total_size, stats.total_bytes,
-           stats.tablets.size(), stats.error_size);
+    printf("  Total KV: %zu Bytes: %zu Tablets: %zu Error: %zu\n", stats.total_count, stats.total_meta_bytes,
+           stats.tablets.size(), stats.error_count);
 }
 
 Status init_data_dir(const std::string& dir, std::unique_ptr<DataDir>* ret, bool read_only = false) {

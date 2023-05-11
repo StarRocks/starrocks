@@ -45,14 +45,12 @@
 
 #include "common/tracer.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
-#include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/binlog_builder.h"
 #include "storage/compaction_candidate.h"
 #include "storage/compaction_context.h"
 #include "storage/compaction_manager.h"
-#include "storage/compaction_policy.h"
 #include "storage/compaction_task.h"
 #include "storage/default_compaction_policy.h"
 #include "storage/olap_common.h"
@@ -1129,17 +1127,26 @@ void Tablet::get_compaction_status(std::string* json_result) {
     rapidjson::Document root;
     root.SetObject();
 
-    rapidjson::Document path_arr;
-    path_arr.SetArray();
+    rapidjson::Document stale_path_arr;
+    stale_path_arr.SetArray();
 
     std::vector<RowsetSharedPtr> rowsets;
     std::vector<bool> delete_flags;
+
+    bool compaction_running;
+    uint64_t compaction_task_id;
+    double compaction_score;
+    std::string compaction_type;
+    vector<RowsetSharedPtr> compaction_rowsets;
+    int64_t compaction_start_time;
+
     {
         std::shared_lock rdlock(_meta_lock);
         rowsets.reserve(_rs_version_map.size());
         for (auto& it : _rs_version_map) {
             rowsets.push_back(it.second);
         }
+
         std::sort(rowsets.begin(), rowsets.end(), Rowset::comparator);
 
         delete_flags.reserve(rowsets.size());
@@ -1147,44 +1154,143 @@ void Tablet::get_compaction_status(std::string* json_result) {
             delete_flags.push_back(version_for_delete_predicate(rs->version()));
         }
         // get snapshot version path json_doc
-        _timestamped_version_tracker.get_stale_version_path_json_doc(path_arr);
+        _timestamped_version_tracker.get_stale_version_path_json_doc(stale_path_arr);
+
+        std::lock_guard lock(_compaction_task_lock);
+        compaction_running = _compaction_task != nullptr;
+        if (compaction_running) {
+            compaction_task_id = _compaction_task->task_id();
+            compaction_score = _compaction_task->compaction_score();
+            compaction_type = to_string(_compaction_task->compaction_type());
+            compaction_rowsets.reserve(_compaction_task->input_rowsets().size());
+            for (auto& it : _compaction_task->input_rowsets()) {
+                compaction_rowsets.push_back(it);
+            }
+            compaction_start_time = _compaction_task->get_start_time();
+            std::sort(compaction_rowsets.begin(), compaction_rowsets.end(), Rowset::comparator);
+        }
     }
 
-    root.AddMember("cumulative point", _cumulative_point.load(), root.GetAllocator());
+    rapidjson::Value compaction_detail;
+    compaction_detail.SetObject();
+
+    rapidjson::Value enable_compaction;
+    enable_compaction.SetBool(_enable_compaction);
+    compaction_detail.AddMember("enable_compaction", enable_compaction, root.GetAllocator());
+
+    rapidjson::Value compaction_status;
+    std::string compaction_status_value = compaction_running ? "RUNNING" : "NO_RUNNING_TASK";
+    compaction_status.SetString(compaction_status_value.c_str(), compaction_status_value.length(), root.GetAllocator());
+    compaction_detail.AddMember("compaction_status", compaction_status, root.GetAllocator());
+
+    if (compaction_running) {
+        rapidjson::Value compaction_task_id_value;
+        compaction_task_id_value.SetUint64(compaction_task_id);
+        compaction_detail.AddMember("task_id", compaction_task_id_value, root.GetAllocator());
+
+        rapidjson::Value elapsed_time;
+        int64_t elapsed = (UnixMillis() - compaction_start_time) / MILLIS_PER_SEC;
+        elapsed_time.SetInt64(elapsed);
+        compaction_detail.AddMember("elapsed_time", elapsed_time, root.GetAllocator());
+
+        rapidjson::Value compaction_score_value;
+        compaction_score_value.SetDouble(compaction_score);
+        compaction_detail.AddMember("score", compaction_score_value, root.GetAllocator());
+
+        rapidjson::Value compaction_type_value;
+        compaction_type_value.SetString(compaction_type.c_str(), compaction_type.length(), root.GetAllocator());
+        compaction_detail.AddMember("type", compaction_type_value, root.GetAllocator());
+
+        rapidjson::Value compaction_rowsets_count;
+        compaction_rowsets_count.SetUint64(compaction_rowsets.size());
+        compaction_detail.AddMember("rowsets_count", compaction_rowsets_count, root.GetAllocator());
+
+        rapidjson::Document input_rowset_details;
+        input_rowset_details.SetArray();
+        for (auto& compaction_rowset : compaction_rowsets) {
+            rapidjson::Value value;
+            value.SetObject();
+
+            rapidjson::Value rowset_id;
+            std::string rowset_id_value = compaction_rowset->rowset_id().to_string();
+            rowset_id.SetString(rowset_id_value.c_str(), rowset_id_value.length(), root.GetAllocator());
+            value.AddMember("rowset_id", rowset_id, root.GetAllocator());
+
+            rapidjson::Value version;
+            const Version& ver = compaction_rowset->version();
+            std::string version_value = strings::Substitute("$0-$1", ver.first, ver.second);
+            version.SetString(version_value.c_str(), version_value.length(), root.GetAllocator());
+            value.AddMember("version", version, root.GetAllocator());
+
+            input_rowset_details.PushBack(value, input_rowset_details.GetAllocator());
+        }
+        compaction_detail.AddMember("input_rowset_details", input_rowset_details, root.GetAllocator());
+    }
+    root.AddMember("compaction_detail", compaction_detail, root.GetAllocator());
+
+    root.AddMember("cumulative_point", _cumulative_point.load(), root.GetAllocator());
     rapidjson::Value cumu_value;
     std::string format_str = ToStringFromUnixMillis(_last_cumu_compaction_failure_millis.load());
     cumu_value.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
-    root.AddMember("last cumulative failure time", cumu_value, root.GetAllocator());
+    root.AddMember("last_cumulative_failure_time", cumu_value, root.GetAllocator());
     rapidjson::Value base_value;
     format_str = ToStringFromUnixMillis(_last_base_compaction_failure_millis.load());
     base_value.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
-    root.AddMember("last base failure time", base_value, root.GetAllocator());
+    root.AddMember("last_base_failure_time", base_value, root.GetAllocator());
     rapidjson::Value cumu_success_value;
     format_str = ToStringFromUnixMillis(_last_cumu_compaction_success_millis.load());
     cumu_success_value.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
-    root.AddMember("last cumulative success time", cumu_success_value, root.GetAllocator());
+    root.AddMember("last_cumulative_success_time", cumu_success_value, root.GetAllocator());
     rapidjson::Value base_success_value;
     format_str = ToStringFromUnixMillis(_last_base_compaction_success_millis.load());
     base_success_value.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
-    root.AddMember("last base success time", base_success_value, root.GetAllocator());
+    root.AddMember("last_base_success_time", base_success_value, root.GetAllocator());
 
-    // print all rowsets' version as an array
-    rapidjson::Document versions_arr;
-    versions_arr.SetArray();
-    for (int i = 0; i < rowsets.size(); ++i) {
-        const Version& ver = rowsets[i]->version();
+    rapidjson::Value rowsets_count;
+    rowsets_count.SetUint64(rowsets.size());
+    root.AddMember("rowsets_count", rowsets_count, root.GetAllocator());
+
+    rapidjson::Value rowset_details(rapidjson::kArrayType);
+    rowset_details.Reserve(rowsets.size(), root.GetAllocator());
+    for (int i = 0; i < rowsets.size(); i++) {
         rapidjson::Value value;
-        std::string version_str =
-                strings::Substitute("[$0-$1] $2 $3 $4", ver.first, ver.second, rowsets[i]->num_segments(),
-                                    (delete_flags[i] ? "DELETE" : "DATA"),
-                                    SegmentsOverlapPB_Name(rowsets[i]->rowset_meta()->segments_overlap()));
-        value.SetString(version_str.c_str(), version_str.length(), versions_arr.GetAllocator());
-        versions_arr.PushBack(value, versions_arr.GetAllocator());
+        value.SetObject();
+
+        rapidjson::Value rowset_id;
+        std::string rowset_id_value = rowsets[i]->rowset_id().to_string();
+        rowset_id.SetString(rowset_id_value.c_str(), rowset_id_value.length(), root.GetAllocator());
+        value.AddMember("rowset_id", rowset_id, root.GetAllocator());
+
+        rapidjson::Value version;
+        const Version& ver = rowsets[i]->version();
+        std::string version_value = strings::Substitute("$0-$1", ver.first, ver.second);
+        version.SetString(version_value.c_str(), version_value.length(), root.GetAllocator());
+        value.AddMember("version", version, root.GetAllocator());
+
+        rapidjson::Value num_segments;
+        num_segments.SetInt64(rowsets[i]->num_segments());
+        value.AddMember("num_segments", num_segments, root.GetAllocator());
+
+        rapidjson::Value type;
+        std::string type_value = delete_flags[i] ? "DELETE" : "DATA";
+        type.SetString(type_value.c_str(), type_value.length(), root.GetAllocator());
+        value.AddMember("type", type, root.GetAllocator());
+
+        rapidjson::Value overlap;
+        std::string overlap_value = SegmentsOverlapPB_Name(rowsets[i]->rowset_meta()->segments_overlap());
+        overlap.SetString(overlap_value.c_str(), overlap_value.length(), root.GetAllocator());
+        value.AddMember("overlap", overlap, root.GetAllocator());
+
+        rapidjson::Value rowset_size;
+        rowset_size.SetInt64(rowsets[i]->data_disk_size());
+        value.AddMember("rowset_size", rowset_size, root.GetAllocator());
+
+        rowset_details.PushBack(value, root.GetAllocator());
     }
-    root.AddMember("rowsets", versions_arr, root.GetAllocator());
+    root.AddMember("rowset_details", rowset_details, root.GetAllocator());
 
     // add stale version rowsets
-    root.AddMember("stale version path", path_arr, root.GetAllocator());
+    root.AddMember("stale_version_path", stale_path_arr, root.GetAllocator());
 
     // to json string
     rapidjson::StringBuffer strbuf;

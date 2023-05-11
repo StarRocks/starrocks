@@ -947,8 +947,6 @@ CONF_mInt64(file_write_history_size, "10000");
 CONF_mInt32(update_cache_evict_internal_sec, "11");
 CONF_mBool(enable_auto_evict_update_cache, "true");
 
-CONF_Bool(enable_preload_column_mode_update_cache, "true");
-
 CONF_mInt64(load_tablet_timeout_seconds, "30");
 
 CONF_mBool(enable_pk_value_column_zonemap, "true");
