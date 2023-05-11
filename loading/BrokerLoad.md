@@ -4,7 +4,7 @@ StarRocks 提供基于 MySQL 协议的 Broker Load 导入方式，帮助您从 H
 
 Broker Load 是一种异步的导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句或者 curl 命令来查看导入作业的结果。
 
-Broker Load 支持一次导入多个数据文件，并且能够保证单次导入事务的原子性，即单次导入的多个数据文件都成功或者都失败，而不会出现部分导入成功、部分导入失败的情况。
+Broker Load 支持单表导入 (Single-Table Load) 和多表导入 (Multi-Table Load)。您可以通过单次导入操作，把一个或多个数据文件导入单张或多张目标表。而且 Broker Load 能够保证单次导入事务的原子性，即单次导入的多个数据文件都成功或者都失败，而不会出现部分导入成功、部分导入失败的情况。
 
 Broker Load 还支持在导入过程中做数据的转换，具体请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)。
 
@@ -68,9 +68,9 @@ Broker Load 支持从如下外部存储系统导入数据：
 
 ## 基本操作
 
-### 创建导入作业
+### 创建多表导入 (Multi-Table Load) 作业
 
-这里以导入 CSV 格式的数据为例介绍如何创建导入作业。有关如何导入其他格式的数据、以及 Broker Load 的详细语法和参数说明，请参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+这里以 CSV 格式的数据为例，介绍如何导入多个数据文件至多张目标表。有关如何导入其他格式的数据、以及 Broker Load 的详细语法和参数说明，请参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
 
 注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
 
@@ -344,9 +344,9 @@ WITH BROKER
       4 rows in set (0.01 sec)
       ```
 
-#### 使用说明
+### 创建单表导入 (Single-Table Load) 作业
 
-以上导入操作以导入多个数据文件到多个目标表为例。您还可以指定导入一个数据文件或者一个路径下所有数据文件到一个目标表。这里假设您的 AWS S3 存储空间 `bucket_s3` 里 `input` 文件夹下包含多个数据文件，其中一个数据文件名为 `file1.csv`。这些数据文件与目标表 `table1` 包含的列数相同、并且这些列能按顺序一一对应到目标表 `table1` 中的列。
+您还可以指定导入一个数据文件或者一个路径下所有数据文件到一张目标表。这里假设您的 AWS S3 存储空间 `bucket_s3` 里 `input` 文件夹下包含多个数据文件，其中一个数据文件名为 `file1.csv`。这些数据文件与目标表 `table1` 包含的列数相同、并且这些列能按顺序一一对应到目标表 `table1` 中的列。
 
 如果要把数据文件 `file1.csv` 导入到目标表 `table1` 中，可以执行如下语句:
 
