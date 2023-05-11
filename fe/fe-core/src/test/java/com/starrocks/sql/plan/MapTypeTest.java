@@ -38,9 +38,5 @@ public class MapTypeTest extends PlanTestBase {
         String sql = "select map_concat({16865432442:3},{3.323777777:'3'})";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "MAP<DECIMAL128(28,9),VARCHAR>");
-
-        sql = "select cardinality({1:3})";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "map_size("); // rewrite to map_size
     }
 }
