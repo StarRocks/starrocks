@@ -97,6 +97,7 @@ public class LoadStmt extends DdlStmt {
     public static final String PARTIAL_UPDATE = "partial_update";
     public static final String PRIORITY = "priority";
     public static final String MERGE_CONDITION = "merge_condition";
+    public static final String SPARK_LOAD_SUBMIT_TIMEOUT = "spark_load_submit_timeout";
 
     // for load data from Baidu Object Store(BOS)
     public static final String BOS_ENDPOINT = "bos_endpoint";
@@ -134,6 +135,7 @@ public class LoadStmt extends DdlStmt {
             .add(TIMEZONE)
             .add(PARTIAL_UPDATE)
             .add(PRIORITY)
+            .add(SPARK_LOAD_SUBMIT_TIMEOUT)
             .build();
 
     public LoadStmt(LabelName label, List<DataDescription> dataDescriptions,
@@ -231,6 +233,19 @@ public class LoadStmt extends DdlStmt {
                 }
             } catch (NumberFormatException e) {
                 throw new DdlException(TIMEOUT_PROPERTY + " is not a number.");
+            }
+        }
+
+        // spark load wait yarn timeout
+        final String sparkLoadSubmitTimeoutProperty = properties.get(SPARK_LOAD_SUBMIT_TIMEOUT);
+        if (sparkLoadSubmitTimeoutProperty != null) {
+            try {
+                final long sparkLoadSubmitTimeout = Long.parseLong(sparkLoadSubmitTimeoutProperty);
+                if (sparkLoadSubmitTimeout < 0) {
+                    throw new DdlException(SPARK_LOAD_SUBMIT_TIMEOUT + " must be greater than 0");
+                }
+            } catch (NumberFormatException e) {
+                throw new DdlException(SPARK_LOAD_SUBMIT_TIMEOUT + " is not a number.");
             }
         }
 

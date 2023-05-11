@@ -596,12 +596,6 @@ public class Config extends ConfigBase {
     public static int thrift_backlog_num = 1024;
 
     /**
-     * Define thrift server's server model, default is TThreadPoolServer model
-     */
-    @ConfField
-    public static String thrift_server_type = ThriftServer.THREAD_POOL;
-
-    /**
      * the timeout for thrift rpc call
      */
     @ConfField(mutable = true)
@@ -747,6 +741,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int broker_load_default_timeout_second = 14400; // 4 hour
+
+    /**
+     * Default timeout of spark submit task and wait for yarn response
+     */
+    @ConfField
+    public static long spark_load_submit_timeout_second = 300; // 5min
 
     /**
      * Maximal bytes that a single broker scanner will read.
