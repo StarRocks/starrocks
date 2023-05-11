@@ -37,7 +37,7 @@ For more parameter descriptions, see [CREATE ROUTINE LOAD](../../sql-reference/s
 
 The upper limit of the number of messages that a Routine Load task can consume is determined by either the parameter `max_routine_load_batch_size` which means the maximum number of messages that a load task can consume or the parameter `routine_load_task_consume_second` which means the maximum duration of message consumption. Once an load task consumes enough data that meets either requirement, the consumption is complete. These two parameters are FE dynamic parameters. For more information and the configuration method, see [Parameter configuration](../../administration/Configuration.md#loading-and-unloading).
 
-You can analyze which parameter determines the upper limit of the amount of data consumed by a load task by viewing the log in **be/log/****be.INFO**. By increasing that parameter, you can increase the amount of data consumed by a load task.
+You can analyze which parameter determines the upper limit of the amount of data consumed by a load task by viewing the log in **be/log/be.INFO**. By increasing that parameter, you can increase the amount of data consumed by a load task.
 
 ```Plaintext
 I0325 20:27:50.410579 15259 data_consumer_group.cpp:131] consumer group done: 41448fb1a0ca59ad-30e34dabfa7e47a0. consume time(ms)=3261, received rows=179190, received bytes=9855450, eos: 1, left_time: -261, left_bytes: 514432550, blocking get time(us): 3065086, blocking put time(us): 24855
@@ -50,13 +50,16 @@ If the field `left_bytes` is less than `0`, it means that the amount of data con
 ## What do I do if the result of SHOW ROUTINE LOAD shows that the load job is in the `PAUSED` state?
 
 - Check the field `ReasonOfStateChanged` and it reports the error message `Broker: Offset out of range`.
+
   **Cause analysis:** The consumer offset of the load job does not exist in the Kafka partition.
 
   **Solution:** You can execute [SHOW ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md) and check the latest consumer offset of the load job in the parameter `Progress`. Then, you can verify if the corresponding message exists in the Kafka partition. If it does not exist, it may be because
 
   - The consumer offset specified when the load job is created is an offset in the future.
   - The message at the specified consumer offset in the Kafka partition has been removed before being consumed by the load job. It is recommended to set a reasonable Kafka log cleaning policy and parameters, such as `log.retention.hours and log.retention.bytes`, based on the loading speed.
-- Check the field `ReasonOfStateChanged` without the error message `Broker: Offset out of range`.
+
+- Check the field `ReasonOfStateChanged` and it doesn't report the error message `Broker: Offset out of range`.
+
   **Cause analysis:** The number of error rows in the load task exceeds the threshold `max_error_number`.
 
   **Solution:** You can troubleshoot and fix the issue by using error messages in the fields `ReasonOfStateChanged` and `ErrorLogUrls`.
@@ -74,4 +77,5 @@ If the field `left_bytes` is less than `0`, it means that the amount of data con
 ## Can Routine Load guarantee consistency semantics when consuming from Kafka and writing to StarRocks?
 
    Routine Load guarantees exactly-once semantics.
+
    Each load task is a individual transaction. If an error occurs during the execution of the transaction, the transaction is aborted, and the FE does not update the consumption progress of the relevant partitions of the load tasks. When FE schedules the load tasks from the task queue next time, the load tasks send the consumption request from the last saved consumption position of the partitions, thus ensuring exactly-once semantics.

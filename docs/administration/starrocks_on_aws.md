@@ -48,19 +48,19 @@ All resources in a stack are defined by a template. Suppose you have created a t
              | Network configuration           | Availability Zones        | Yes                                                  | Select two availability zones for deploying the StarRocks cluster. For more information, see [Regions and Zones](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-regions-availability-zones.html#concepts-local-zones). |
              | EC2 configuration               | Key pair name             | Yes                                                  | Enter a key pair, consisting of a public key and a private key, is a set of security credentials that you use to prove your identity when you connect to EC2 instances. For more information, see [key pairs](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html). > Note > > If you need to create a key pair, see [Create key pairs](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/create-key-pairs.html). |
              | StarRocks cluster configuration | Root Password of Starrock | Yes                                                  | Enter the password of your StarRocks root account. You need to provide the password when you connect to the StarRocks cluster by using the root account. |
-             | Confirm Root Password           | Yes                       | Confirm the password of your StarRocks root account. |                                                              |
+             |  |Confirm Root Password           | Yes                       | Confirm the password of your StarRocks root account. |                                                              |
 
          - When you choose to deploy StarRocks into an existing VPC, pay attention to the following parameters:
 
            | Type                            | Parameter                 | Required                                                     | Description                                                  |
            | ------------------------------- | ------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
            | Network configuration           | VPC ID                    | Yes                                                          | Enter the ID of your existing VPC. Make sure that you [configure VPC endpoint for the AWS S3](https://docs.aws.amazon.com/vpc/latest/privatelink/vpc-endpoints-s3.html). |
-           | Private subnet 1 ID             | Yes                       | Enter the ID of the private subnet in Availability Zone 1 of your existing VPC (for example, subnet-fe9a8b32). |                                                              |
-           | Public subnet 1 ID              | Yes                       | Enter the ID of the public subnet in Availability Zone 1 of your existing VPC. |                                                              |
-           | Public subnet 2 ID              | Yes                       | Enter the ID of the public subnet in Availability Zone 2 of your existing VPC. |                                                              |
+           | |Private subnet 1 ID             | Yes                       | Enter the ID of the private subnet in Availability Zone 1 of your existing VPC (for example, subnet-fe9a8b32). |                                                              |
+           | |Public subnet 1 ID              | Yes                       | Enter the ID of the public subnet in Availability Zone 1 of your existing VPC. |                                                              |
+           | |Public subnet 2 ID              | Yes                       | Enter the ID of the public subnet in Availability Zone 2 of your existing VPC. |                                                              |
            | EC2 configuration               | Key pair name             | Yes                                                          | Enter a key pair, consisting of a public key and a private key, is a set of security credentials that you use to prove your identity when you connect to EC2 instances. For more information, see [key pairs](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html). > Note > > If you need to create a key pair, see [Create key pairs](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/create-key-pairs.html). |
            | StarRocks cluster configuration | Root Password of Starrock | Yes                                                          | Enter the password of your StarRocks root account. You need to provide the password when you connect to the StarRocks cluster by using the root account. |
-           | Confirm Root Password           | Yes                       | Confirm the password of your StarRocks root account.         |                                                              |
+           | |Confirm Root Password           | Yes                       | Confirm the password of your StarRocks root account.         |                                                              |
 
       2. For other parameters, review the default settings and customize them as necessary.
 
@@ -70,15 +70,15 @@ All resources in a stack are defined by a template. Suppose you have created a t
 
 8. On the **Review starrocks-starrocks** page, review the stack information configured above, including the template, details, and more options. For more information, see [Reviewing your stack and estimating stack cost on the AWS CloudFormation console](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cfn-using-console-create-stack-review.html).
 
-> **Note**
->
-> If you need to change any of the parameters, click **Edit** on the top right corner of the related section to go back to the relevant page.
+    > **Note**
+    >
+    > If you need to change any of the parameters, click **Edit** on the top right corner of the related section to go back to the relevant page.
 
-1. Select the following two check boxes and click **Create stack**.
+9. Select the following two check boxes and click **Create stack**.
 
-![StarRocks_on_AWS_1](../assets/StarRocks_on_AWS_1.png)
+    ![StarRocks_on_AWS_1](../assets/StarRocks_on_AWS_1.png)
 
-**Note that you are responsible for the cost of** **the** **AWS** **services and any third-party licenses** used while running this Partner Solution. For cost estimates, refer to the pricing pages for each AWS service you use.
+    **Note that you are responsible for the cost of** **the** **AWS** **services and any third-party licenses** used while running this Partner Solution. For cost estimates, refer to the pricing pages for each AWS service you use.
 
 ## Access StarRocks cluster
 
