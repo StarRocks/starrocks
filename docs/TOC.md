@@ -52,6 +52,7 @@
     + [Deploy StarRocks in Docker](./administration/deploy_with_docker.md)
     + [Compile StarRocks](./administration/Build_in_docker.md)
     + [Deploy FE cluster with high availability](./administration/Deployment.md)
+    + [Deploy StarRocks on AWS](./administration/starrocks_on_aws.md)
   + Management
     + [Manage a cluster](./administration/Cluster_administration.md)
     + [Configuration](./administration/Configuration.md)
