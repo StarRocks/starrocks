@@ -269,10 +269,11 @@ StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_c
         }
         return TYPE_VARCHAR;
     } else if (java_class == "java.math.BigDecimal") {
-        if (type != TYPE_DECIMAL32 && type != TYPE_DECIMAL64 && type != TYPE_DECIMAL128) {
-            return Status::NotSupported(fmt::format(
-                    "Type mismatches on column[{}], JDBC result type is BigDecimal, please set the type to decimal",
-                    slot_desc->col_name()));
+        if (type != TYPE_DECIMAL32 && type != TYPE_DECIMAL64 && type != TYPE_DECIMAL128 && type != TYPE_VARCHAR) {
+            return Status::NotSupported(
+                    fmt::format("Type mismatches on column[{}], JDBC result type is BigDecimal, please set the type to "
+                                "decimal or varchar",
+                                slot_desc->col_name()));
         }
         return TYPE_VARCHAR;
     } else {
