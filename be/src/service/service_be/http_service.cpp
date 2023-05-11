@@ -51,6 +51,7 @@
 #include "http/action/restore_tablet_action.h"
 #include "http/action/runtime_filter_cache_action.h"
 #include "http/action/snapshot_action.h"
+#include "http/action/stop_be_action.h"
 #include "http/action/stream_load.h"
 #include "http/action/transaction_stream_load.h"
 #include "http/action/update_config_action.h"
@@ -129,6 +130,11 @@ Status HttpServiceBE::start() {
     auto* health_action = new HealthAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/health", health_action);
     _http_handlers.emplace_back(health_action);
+
+    // Register Stop Be action
+    auto* stop_be_action = new StopBeAction(_env);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/_stop_be", stop_be_action);
+    _http_handlers.emplace_back(stop_be_action);
 
     // register pprof actions
     if (!config::pprof_profile_dir.empty()) {
