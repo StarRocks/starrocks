@@ -62,7 +62,7 @@ PARTITION BY RANGE(`dt`) (
     PARTITION p20210930 VALUES [('2021-09-30'), ('2021-10-01'))
 ) DISTRIBUTED BY HASH(order_id) BUCKETS 4
 PROPERTIES (
-    "replication_num" = "1",
+    "replication_num" = "3",
     "enable_persistent_index" = "true"
 );
 ```
@@ -88,7 +88,7 @@ create table users (
 DISTRIBUTED BY HASH(user_id) BUCKETS 4
 ORDER BY(`address`,`last_active`)
 PROPERTIES (
-    "replication_num" = "1",
+    "replication_num" = "3",
     "enable_persistent_index" = "true"
 );
 ```
