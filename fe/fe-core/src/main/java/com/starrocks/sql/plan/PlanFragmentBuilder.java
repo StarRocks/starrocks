@@ -215,8 +215,6 @@ public class PlanFragmentBuilder {
         }
         Collections.reverse(fragments);
 
-        fragments.forEach(PlanFragmentBuilder::maybeClearOlapScanNodePartitions);
-
         // compute local_rf_waiting_set for each PlanNode.
         // when enable_pipeline_engine=true and enable_global_runtime_filter=false, we should clear
         // runtime filters from PlanNode.
@@ -644,18 +642,6 @@ public class PlanFragmentBuilder {
             scanNode.setDictStringIdToIntIds(node.getDictStringIdToIntIds());
             scanNode.updateAppliedDictStringColumns(node.getGlobalDicts().stream().
                     map(entry -> entry.first).collect(Collectors.toSet()));
-
-            List<ColumnRefOperator> bucketColumns = getShuffleColumns(node.getDistributionSpec());
-            boolean useAllBucketColumns =
-                    bucketColumns.stream().allMatch(c -> node.getColRefToColumnMetaMap().containsKey(c));
-            if (useAllBucketColumns) {
-                List<Expr> bucketExprs = bucketColumns.stream()
-                        .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                        .collect(Collectors.toList());
-                scanNode.setBucketExprs(bucketExprs);
-                scanNode.setBucketColumns(bucketColumns);
-            }
 
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
@@ -1238,7 +1224,6 @@ public class PlanFragmentBuilder {
             Preconditions.checkState(fragments.size() >= 2 && fragments.get(fragments.size() - 1) == inputFragment);
             fragments.remove(fragments.size() - 1);
 
-            clearOlapScanNodePartitions(sourceFragment.getPlanRoot());
             sourceFragment.clearDestination();
             sourceFragment.clearOutputPartition();
             return sourceFragment;
@@ -1426,9 +1411,6 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
-                if (optExpr.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
-                    clearOlapScanNodePartitions(aggregationNode);
-                }
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
@@ -2204,10 +2186,6 @@ public class PlanFragmentBuilder {
             if (root instanceof SortNode) {
                 SortNode sortNode = (SortNode) root;
                 sortNode.setAnalyticPartitionExprs(analyticEvalNode.getPartitionExprs());
-            }
-
-            if (optExpr.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
-                clearOlapScanNodePartitions(analyticEvalNode);
             }
 
             inputFragment.setPlanRoot(analyticEvalNode);
