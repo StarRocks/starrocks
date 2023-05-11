@@ -70,6 +70,7 @@
     + [Deploy CN](./administration/deploy_cn.md)
     + [Deploy Broker](./administration/deploy_broker.md)
     + [Deploy FE cluster with high availability](./administration/Deployment.md)
+    + [Deploy StarRocks on AWS](./administration/starrocks_on_aws.md)
   + Management
     + [Scale in and out](./administration/Scale_up_down.md)
     + [Backup and restore](./administration/Backup_and_restore.md)
