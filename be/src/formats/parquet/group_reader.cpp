@@ -110,53 +110,53 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         active_chunk->check_or_die();
     }
 
-    size_t active_rows = active_chunk->num_rows();
-    if (!_lazy_column_indices.empty()) {
-        SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
-        ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
-        if (active_rows == 0) {
-            // We can skip the whole active chunk in this round get_next()
-            _param.stats->skip_read_rows += rows_read;
-            _previous_rows_to_skip += rows_read;
-        } else {
-            if (_previous_rows_to_skip > 0) {
-                // skip previous accumulate rows to skip first
-                ASSIGN_OR_RETURN(size_t rows_skip, _skip(_lazy_column_indices, _previous_rows_to_skip));
-                DCHECK_EQ(rows_skip, _previous_rows_to_skip);
-                _previous_rows_to_skip = 0;
-            }
-
-            for (size_t index = 0; index < chunk_filter.size();) {
-                bool is_selected = chunk_filter[index++];
-                size_t run = 1;
-                while (index < chunk_filter.size() && chunk_filter[index] == is_selected) {
-                    index++;
-                    run++;
-                }
-                if (is_selected) {
-                    ASSIGN_OR_RETURN(size_t tmp_rows_read, _read(_lazy_column_indices, run, &lazy_chunk));
-                    DCHECK_EQ(tmp_rows_read, run);
-                } else {
-                    _param.stats->skip_read_rows += run;
-                    ASSIGN_OR_RETURN(size_t tmp_rows_skip, _skip(_lazy_column_indices, run));
-                    DCHECK_EQ(tmp_rows_skip, run);
-                }
-            }
-            if (lazy_chunk->num_rows() != active_rows) {
-                return Status::InternalError(strings::Substitute("Unmatched row count, active_rows=$0, lazy_rows=$1",
-                                                                 active_rows, lazy_chunk->num_rows()));
-            }
-        }
-        active_chunk->merge(std::move(*lazy_chunk));
-    }
-
-    // We don't care about the column order as they will be reordered in HiveDataSource
-    _read_chunk->swap_chunk(*active_chunk);
     Status status = Status::OK();
     if (rows_read < rows_to_read) {
         status = Status::EndOfFile("");
     }
-    *row_count = rows_read;
+
+    size_t active_rows = active_chunk->num_rows();
+    if (active_rows > 0 && !_lazy_column_indices.empty()) {
+        ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
+        // skip previous accumulate rows to skip first
+        if (_previous_rows_to_skip > 0) {
+            ASSIGN_OR_RETURN(size_t rows_skip, _skip(_lazy_column_indices, _previous_rows_to_skip));
+            DCHECK_EQ(rows_skip, _previous_rows_to_skip);
+            _previous_rows_to_skip = 0;
+        }
+        SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
+        for (size_t index = 0; index < chunk_filter.size();) {
+            bool is_selected = chunk_filter[index++];
+            size_t run = 1;
+            while (index < chunk_filter.size() && chunk_filter[index] == is_selected) {
+                index++;
+                run++;
+            }
+            if (is_selected) {
+                ASSIGN_OR_RETURN(size_t tmp_rows_read, _read(_lazy_column_indices, run, &lazy_chunk));
+                DCHECK_EQ(tmp_rows_read, run);
+            } else {
+                _param.stats->skip_read_rows += run;
+                ASSIGN_OR_RETURN(size_t tmp_rows_skip, _skip(_lazy_column_indices, run));
+                DCHECK_EQ(tmp_rows_skip, run);
+            }
+        }
+        if (lazy_chunk->num_rows() != active_rows) {
+            return Status::InternalError(strings::Substitute("Unmatched row count, active_rows=$0, lazy_rows=$1",
+                                                             active_rows, lazy_chunk->num_rows()));
+        }
+        active_chunk->merge(std::move(*lazy_chunk));
+    } else if (active_rows == 0) {
+        // We can skip the whole active chunk in this round get_next()
+        _param.stats->skip_read_rows += rows_read;
+        _previous_rows_to_skip += rows_read;
+        *row_count = 0;
+        return status;
+    }
+
+    // We don't care about the column order as they will be reordered in HiveDataSource
+    _read_chunk->swap_chunk(*active_chunk);
+    *row_count = _read_chunk->num_rows();
 
     SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
     // convert from _read_chunk to chunk.
