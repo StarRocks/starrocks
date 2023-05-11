@@ -168,6 +168,11 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             this.timeUnit = null;
         }
 
+        public void clearVisibleVersionMap() {
+            this.baseTableInfoVisibleVersionMap.clear();
+            this.baseTableVisibleVersionMap.clear();
+        }
+
         public Map<Long, Map<String, BasePartitionInfo>> getBaseTableVisibleVersionMap() {
             return baseTableVisibleVersionMap;
         }

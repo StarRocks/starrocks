@@ -68,4 +68,7 @@ public class SemanticException extends StarRocksPlannerException {
         return builder.toString();
     }
 
+    public String getDetailMsg() {
+        return detailMsg;
+    }
 }

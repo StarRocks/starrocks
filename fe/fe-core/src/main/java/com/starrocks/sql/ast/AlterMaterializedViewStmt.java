@@ -28,24 +28,20 @@ public class AlterMaterializedViewStmt extends DdlStmt {
     private final TableName mvName;
     private final String newMvName;
     private final RefreshSchemeDesc refreshSchemeDesc;
-
     private final ModifyTablePropertiesClause modifyTablePropertiesClause;
-
-    public AlterMaterializedViewStmt(TableName mvName, String newMvName,
-                                     RefreshSchemeDesc refreshSchemeDesc,
-                                     ModifyTablePropertiesClause modifyTablePropertiesClause) {
-        this(mvName, newMvName, refreshSchemeDesc, modifyTablePropertiesClause, NodePosition.ZERO);
-    }
+    private final String status;
 
     public AlterMaterializedViewStmt(TableName mvName, String newMvName,
                                      RefreshSchemeDesc refreshSchemeDesc,
                                      ModifyTablePropertiesClause modifyTablePropertiesClause,
+                                     String status,
                                      NodePosition pos) {
         super(pos);
         this.mvName = mvName;
         this.newMvName = newMvName;
         this.refreshSchemeDesc = refreshSchemeDesc;
         this.modifyTablePropertiesClause = modifyTablePropertiesClause;
+        this.status = status;
     }
 
     public TableName getMvName() {
@@ -62,6 +58,10 @@ public class AlterMaterializedViewStmt extends DdlStmt {
 
     public ModifyTablePropertiesClause getModifyTablePropertiesClause() {
         return modifyTablePropertiesClause;
+    }
+
+    public String getStatus() {
+        return status;
     }
 
     @Override
