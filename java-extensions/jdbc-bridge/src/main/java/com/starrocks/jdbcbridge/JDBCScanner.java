@@ -19,18 +19,19 @@ import com.zaxxer.hikari.HikariDataSource;
 
 import java.lang.reflect.Array;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class JDBCScanner {
     private String driverLocation;
     private HikariDataSource dataSource;
     private JDBCScanContext scanContext;
     private Connection connection;
-    private Statement statement;
+    private PreparedStatement statement;
     private ResultSet resultSet;
     private ResultSetMetaData resultSetMetaData;
     private List<String> resultColumnClassNames;
@@ -58,9 +59,13 @@ public class JDBCScanner {
         });
 
         connection = dataSource.getConnection();
-        statement = connection.createStatement();
-        statement.setFetchSize(scanContext.getStatementFetchSize());
-        statement.execute(scanContext.getSql());
+        statement = connection.prepareStatement(scanContext.getSql(), ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
+        if (scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("mysql")) {
+            statement.setFetchSize(Integer.MIN_VALUE);
+        } else {
+            statement.setFetchSize(scanContext.getStatementFetchSize());
+        }
+        statement.executeQuery();
         resultSet = statement.getResultSet();
         resultSetMetaData = resultSet.getMetaData();
         resultColumnClassNames = new ArrayList<>(resultSetMetaData.getColumnCount());
