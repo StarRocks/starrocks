@@ -499,32 +499,54 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     } else {
                         type = funcArgType;
                     }
-                    defineExpr = functionChild0;
+
+                    if (functionChild0 instanceof SlotRef) {
+                        mvColumnName = ((SlotRef) functionChild0).getColumnName().toLowerCase();
+                    } else {
+                        mvColumnName = mvColumnBuilder(functionName, baseColumnNames);
+                        defineExpr = functionChild0;
+                    }
                     break;
                 case "min":
                 case "max":
-                    mvColumnName = mvColumnBuilder(functionName, baseColumnNames);
                     mvAggregateType = AggregateType.valueOf(functionName.toUpperCase());
                     type = funcArgType;
-                    defineExpr = functionChild0;
+                    if (functionChild0 instanceof SlotRef) {
+                        mvColumnName = ((SlotRef) functionChild0).getColumnName().toLowerCase();
+                    } else {
+                        mvColumnName = mvColumnBuilder(functionName, baseColumnNames);
+                        defineExpr = functionChild0;
+                    }
                     break;
                 case FunctionSet.BITMAP_UNION:
                     // Compatible aggregation models
-                    mvColumnName = mvColumnBuilder(functionName, baseColumnNames);
-                    defineExpr = functionChild0;
+                    if (functionChild0 instanceof SlotRef && funcArgType.getPrimitiveType() == PrimitiveType.BITMAP) {
+                        mvColumnName = ((SlotRef) functionChild0).getColumnName().toLowerCase();
+                    } else {
+                        mvColumnName = mvColumnBuilder(functionName, baseColumnNames);
+                        defineExpr = functionChild0;
+                    }
 
                     mvAggregateType = AggregateType.valueOf(functionName.toUpperCase());
                     type = Type.BITMAP;
                     break;
                 case FunctionSet.HLL_UNION:
-                    mvColumnName = mvColumnBuilder(functionName, baseColumnNames);
-                    defineExpr = functionChild0;
+                    if (functionChild0 instanceof SlotRef && funcArgType.getPrimitiveType() == PrimitiveType.HLL) {
+                        mvColumnName = ((SlotRef) functionChild0).getColumnName().toLowerCase();
+                    } else {
+                        mvColumnName = mvColumnBuilder(functionName, baseColumnNames);
+                        defineExpr = functionChild0;
+                    }
                     mvAggregateType = AggregateType.valueOf(functionName.toUpperCase());
                     type = Type.HLL;
                     break;
                 case FunctionSet.PERCENTILE_UNION:
-                    mvColumnName = mvColumnBuilder(functionName, baseColumnNames);
-                    defineExpr = functionChild0;
+                    if (functionChild0 instanceof SlotRef && funcArgType.getPrimitiveType() == PrimitiveType.PERCENTILE) {
+                        mvColumnName = ((SlotRef) functionChild0).getColumnName().toLowerCase();
+                    } else {
+                        mvColumnName = mvColumnBuilder(functionName, baseColumnNames);
+                        defineExpr = functionChild0;
+                    }
                     mvAggregateType = AggregateType.valueOf(functionName.toUpperCase());
                     type = Type.PERCENTILE;
                     break;
