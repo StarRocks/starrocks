@@ -178,6 +178,13 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class FlatMapDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            MapType mapType = (MapType) types[0];
+            return new StructType(Arrays.asList(mapType.getValueType()));
+        }
+    }
     private static final ImmutableMap<String, java.util.function.Function<Type[], Type>> DEDUCE_RETURN_TYPE_FUNCTIONS
             = ImmutableMap.<String, java.util.function.Function<Type[], Type>>builder()
             .put("map_keys", new MapKeysDeduce())
@@ -186,6 +193,7 @@ public class PolymorphicFunctionAnalyzer {
             .put("row", new RowDeduce())
             .put("map_apply", new MapApplyDeduce())
             .put("map_filter", new MapFilterDeduce())
+            .put("flat_map", new FlatMapDeduce())
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {
