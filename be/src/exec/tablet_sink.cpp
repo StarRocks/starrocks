@@ -438,7 +438,7 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
 
     SCOPED_TIMER(_parent->_pack_chunk_timer);
     // 1. append data
-    _cur_chunk->append_selective(*input, indexes.data(), from, size);
+    _cur_chunk->move_selective(*input, indexes.data(), from, size);
     auto req = _rpc_request.mutable_requests(0);
     for (size_t i = 0; i < size; ++i) {
         req->add_tablet_ids(tablet_ids[indexes[from + i]]);
@@ -486,7 +486,7 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
 
     SCOPED_TIMER(_parent->_pack_chunk_timer);
     // 1. append data
-    _cur_chunk->append_selective(*input, indexes.data(), from, size);
+    _cur_chunk->move_selective(*input, indexes.data(), from, size);
     for (size_t index_i = 0; index_i < tablet_ids.size(); ++index_i) {
         auto req = _rpc_request.mutable_requests(index_i);
         for (size_t i = 0; i < size; ++i) {

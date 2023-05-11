@@ -103,6 +103,8 @@ public:
 
     void append_shallow_copy(const Column& src, size_t offset, size_t count) override;
 
+    void move_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
+
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
     void append_selective_shallow_copy(const Column& src, const uint32_t* indexes, uint32_t from,

@@ -111,6 +111,14 @@ void ObjectColumn<T>::append_selective(const starrocks::Column& src, const uint3
 }
 
 template <typename T>
+void ObjectColumn<T>::move_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
+    for (uint32_t j = 0; j < size; ++j) {
+        append(std::move(*obj_col.get_object(indexes[from + j])));
+    }
+}
+
+template <typename T>
 void ObjectColumn<T>::append_selective_shallow_copy(const starrocks::Column& src, const uint32_t* indexes,
                                                     uint32_t from, uint32_t size) {
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
