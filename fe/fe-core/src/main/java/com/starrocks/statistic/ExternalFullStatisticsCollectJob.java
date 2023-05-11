@@ -54,6 +54,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(FullStatisticsCollectJob.class);
 
     private static final String BATCH_FULL_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
+            ", '$partitionNameStr'" + // VARCHAR
             ", '$columnNameStr'" + // VARCHAR
             ", cast(COUNT(1) as BIGINT)" + // BIGINT
             ", cast($dataSize as BIGINT)" + // BIGINT
@@ -124,6 +125,8 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         String quoteColumnName = StatisticUtils.quoting(columnName);
 
         context.put("version", StatsConstants.STATISTIC_EXTERNAL_VERSION);
+        // all table now, partition later
+        context.put("partitionNameStr", "All");
         context.put("columnNameStr", columnNameStr);
         context.put("dataSize", fullAnalyzeGetDataSize(column));
         context.put("dbName", db.getOriginName());
@@ -156,13 +159,16 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         sessionVariable.setUsePageCache(false);
         List<TStatisticData> dataList = executor.executeStatisticDQL(context, sql);
 
-        String tableName = StringEscapeUtils.escapeSql(db.getOriginName() + "." + table.getName());
         for (TStatisticData data : dataList) {
             List<String> params = Lists.newArrayList();
             List<Expr> row = Lists.newArrayList();
 
             params.add(table.getUUID());
+            params.add("'" + StringEscapeUtils.escapeSql(data.getPartitionName()) + "'");
             params.add("'" + StringEscapeUtils.escapeSql(data.getColumnName()) + "'");
+            params.add(catalogName);
+            params.add(db.getOriginName());
+            params.add(table.getName());
             params.add(String.valueOf(data.getRowCount()));
             params.add(String.valueOf(data.getDataSize()));
             params.add("hll_deserialize(unhex('mockData'))");
@@ -172,7 +178,11 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             params.add("now()");
             // int
             row.add(new StringLiteral(table.getUUID())); // table id, wait to byte
+            row.add(new StringLiteral(data.getPartitionName()));
             row.add(new StringLiteral(data.getColumnName())); // column name, 20 byte
+            row.add(new StringLiteral(catalogName));
+            row.add(new StringLiteral(db.getOriginName()));
+            row.add(new StringLiteral(table.getName()));
             row.add(new IntLiteral(data.getRowCount(), Type.BIGINT)); // row count, 8 byte
             row.add(new IntLiteral((long) data.getDataSize(), Type.BIGINT)); // data size, 8 byte
             row.add(hllDeserialize(data.getHll())); // hll, 32 kB
@@ -230,7 +240,8 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     private StatementBase createInsertStmt() {
         String sql = "INSERT INTO column_statistics values " + String.join(", ", sqlBuffer) + ";";
         List<String> names = Lists.newArrayList("column_0", "column_1", "column_2", "column_3",
-                "column_4", "column_5", "column_6", "column_7", "column_8");
+                "column_4", "column_5", "column_6", "column_7", "column_8", "column_9", "column_10",
+                "column_11", "column_12");
         QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, names));
         InsertStmt insert = new InsertStmt(new TableName("_statistics_", "external_column_statistics"), qs);
         insert.setOrigStmt(new OriginStatement(sql, 0));

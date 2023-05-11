@@ -344,27 +344,42 @@ Status StatisticResultWriter::_fill_full_statistic_data_v4(int version, const Co
     return Status::OK();
 }
 
+/*
+FE SQL:
+    SELECT cast(5 as INT),
+        'partitionName',
+        'columnName',
+        cast(COUNT(1) as BIGINT),
+        cast($dataSize as BIGINT),
+        $hllFunction,
+        cast($countNullFunction as BIGINT),
+        $maxFunction,
+        $minFunction
+    FROM xxx
+*/
 Status StatisticResultWriter::_fill_full_statistic_data_external(int version, const Columns& columns,
                                                                  const Chunk* chunk, TFetchDataResult* result) {
     SCOPED_TIMER(_serialize_timer);
 
     // mapping with Data.thrift.TStatisticData
-    DCHECK(columns.size() == 8);
+    DCHECK(columns.size() == 9);
 
     // skip read version
-    auto name = ColumnViewer<TYPE_VARCHAR>(columns[1]);
-    auto rowCounts = ColumnViewer<TYPE_BIGINT>(columns[2]);
-    auto dataSizes = ColumnViewer<TYPE_BIGINT>(columns[3]);
-    auto hll = ColumnViewer<TYPE_VARCHAR>(columns[4]);
-    auto nullCounts = ColumnViewer<TYPE_BIGINT>(columns[5]);
-    auto max = ColumnViewer<TYPE_VARCHAR>(columns[6]);
-    auto min = ColumnViewer<TYPE_VARCHAR>(columns[7]);
+    auto partitionName = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto name = ColumnViewer<TYPE_VARCHAR>(columns[2]);
+    auto rowCounts = ColumnViewer<TYPE_BIGINT>(columns[3]);
+    auto dataSizes = ColumnViewer<TYPE_BIGINT>(columns[4]);
+    auto hll = ColumnViewer<TYPE_VARCHAR>(columns[5]);
+    auto nullCounts = ColumnViewer<TYPE_BIGINT>(columns[6]);
+    auto max = ColumnViewer<TYPE_VARCHAR>(columns[7]);
+    auto min = ColumnViewer<TYPE_VARCHAR>(columns[8]);
 
     std::vector<TStatisticData> data_list;
     int num_rows = chunk->num_rows();
 
     data_list.resize(num_rows);
     for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_partitionName(partitionName.value(i).to_string());
         data_list[i].__set_columnName(name.value(i).to_string());
         data_list[i].__set_rowCount(rowCounts.value(i));
         data_list[i].__set_dataSize(dataSizes.value(i));

@@ -169,6 +169,7 @@ public class StatisticUtils {
         ScalarType minType = ScalarType.createMaxVarcharType();
         ScalarType bucketsType = ScalarType.createMaxVarcharType();
         ScalarType mostCommonValueType = ScalarType.createMaxVarcharType();
+        ScalarType catalogNameType = ScalarType.createVarcharType(65530);
 
         // varchar type column need call setAssignedStrLenInColDefinition here,
         // otherwise it will be set length to 1 at analyze
@@ -181,6 +182,7 @@ public class StatisticUtils {
         minType.setAssignedStrLenInColDefinition();
         bucketsType.setAssignedStrLenInColDefinition();
         mostCommonValueType.setAssignedStrLenInColDefinition();
+        catalogNameType.setAssignedStrLenInColDefinition();
 
         if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
@@ -216,7 +218,11 @@ public class StatisticUtils {
         } else if (tableName.equals(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
                     new ColumnDef("table_uuid", new TypeDef(tableUUIDType)),
+                    new ColumnDef("partition_name", new TypeDef(partitionNameType)),
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
+                    new ColumnDef("catalog_name", new TypeDef(catalogNameType)),
+                    new ColumnDef("db_name", new TypeDef(dbNameType)),
+                    new ColumnDef("table_name", new TypeDef(tableNameType)),
                     new ColumnDef("row_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("data_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("ndv", new TypeDef(ScalarType.createType(PrimitiveType.HLL))),

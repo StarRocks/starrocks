@@ -130,7 +130,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
     );
 
     private static final List<String> EXTERNAL_FULL_STATISTICS_KEY_COLUMNS = ImmutableList.of(
-            "table_uuid", "column_name"
+            "table_uuid", "partition_name", "column_name"
     );
 
     private boolean createSampleStatisticsTable(ConnectContext context) {
