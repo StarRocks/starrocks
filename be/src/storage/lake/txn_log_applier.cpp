@@ -71,7 +71,7 @@ public:
 
     Status apply(const TxnLogPB& log) override {
         if (log.has_op_write()) {
-            RETURN_IF_ERROR(apply_write_log(log.op_write()));
+            RETURN_IF_ERROR(apply_write_log(log.op_write(), log.txn_id()));
         }
         if (log.has_op_compaction()) {
             RETURN_IF_ERROR(apply_compaction_log(log.op_compaction()));
@@ -85,12 +85,12 @@ public:
     Status finish() override { return _builder.finalize(); }
 
 private:
-    Status apply_write_log(const TxnLogPB_OpWrite& op_write) {
+    Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
         if (op_write.dels_size() == 0 && op_write.rowset().num_rows() == 0 &&
             !op_write.rowset().has_delete_predicate()) {
             return Status::OK();
         }
-        return _tablet.update_mgr()->publish_primary_key_tablet(op_write, *_metadata, &_tablet, &_builder,
+        return _tablet.update_mgr()->publish_primary_key_tablet(op_write, txn_id, *_metadata, &_tablet, &_builder,
                                                                 _base_version);
     }
 

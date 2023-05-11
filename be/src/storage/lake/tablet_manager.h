@@ -80,6 +80,8 @@ public:
 
     StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& path, bool fill_cache = true);
 
+    TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
+
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id, bool filter_tablet);
 
     Status delete_tablet_metadata(int64_t tablet_id, int64_t version);
@@ -155,6 +157,7 @@ private:
     using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr, DelVectorPtr>;
 
     static std::string tablet_schema_cache_key(int64_t tablet_id);
+    static std::string tablet_latest_metadata_key(int64_t tablet_id);
     static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
 
     StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id);
@@ -173,6 +176,9 @@ private:
     void cache_segment(std::string_view key, SegmentPtr segment);
     DelVectorPtr lookup_delvec(std::string_view key);
     void cache_delvec(std::string_view key, DelVectorPtr delvec);
+    // only store tablet's latest metadata
+    TabletMetadataPtr lookup_tablet_latest_metadata(std::string_view key);
+    void cache_tablet_latest_metadata(TabletMetadataPtr metadata);
 
     LocationProvider* _location_provider;
     std::unique_ptr<Cache> _metacache;

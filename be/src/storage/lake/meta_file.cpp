@@ -59,6 +59,7 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write) {
     rowset->set_id(_tablet_meta->next_rowset_id());
     // if rowset don't contain segment files, still inc next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
+    _has_update_index = true;
 }
 
 void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction) {
@@ -109,6 +110,8 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         rowset->set_id(_tablet_meta->next_rowset_id());
         _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + rowset->segments_size());
     }
+
+    _has_update_index = true;
 
     LOG(INFO) << fmt::format("MetaFileBuilder apply_opcompaction, id:{} input range:{} delvec del cnt:{} output:{}",
                              _tablet_meta->id(), del_range_ss.str(), delvec_erase_cnt,
@@ -183,7 +186,7 @@ StatusOr<bool> MetaFileBuilder::find_delvec(const TabletSegmentId& tsid, DelVect
 }
 
 void MetaFileBuilder::handle_failure() {
-    if (is_primary_key(_tablet_meta.get()) && !_has_finalized) {
+    if (is_primary_key(_tablet_meta.get()) && !_has_finalized && _has_update_index) {
         // if we meet failures and have not finalized yet, have to clear primary index cache,
         // then we can retry again.
         _update_mgr->remove_primary_index_cache(_tablet_meta->id());

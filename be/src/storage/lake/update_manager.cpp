@@ -52,20 +52,21 @@ Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelV
 }
 
 // |metadata| contain last tablet meta info with new version
-Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
-                                                 Tablet* tablet, MetaFileBuilder* builder, int64_t base_version) {
+Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                                 const TabletMetadata& metadata, Tablet* tablet,
+                                                 MetaFileBuilder* builder, int64_t base_version) {
     std::stringstream cost_str;
     MonotonicStopWatch watch;
     watch.start();
     // 1. load rowset update data to cache, get upsert and delete list
     const uint32_t rowset_id = metadata.next_rowset_id();
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
-    auto state_entry = _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->id(), rowset_id));
+    auto state_entry = _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->id(), txn_id));
     state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     // only use state entry once, remove it when publish finish or fail
     DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
     auto& state = state_entry->value();
-    RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet, builder));
+    RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet, builder, true));
     cost_str << " [UpdateStateCache load] " << watch.elapsed_time();
     watch.reset();
     // 2. rewrite segment file if it is partial update
@@ -252,10 +253,8 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
     return Status::OK();
 }
 
-Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
-                                              const std::vector<ColumnUniquePtr>& upserts, const int64_t base_version,
-                                              const MetaFileBuilder* builder,
-                                              std::vector<std::vector<uint64_t>*>* rss_rowids) {
+Status UpdateManager::_handle_index_op(Tablet* tablet, const TabletMetadata& metadata, const int64_t base_version,
+                                       const MetaFileBuilder* builder, std::function<void(LakePrimaryIndex&)> op) {
     auto index_entry = _index_cache.get_or_create(tablet->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -270,15 +269,37 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, const TabletMetada
     }
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
-
-    // get rss_rowids for each segment of rowset
-    uint32_t num_segments = upserts.size();
-    for (size_t i = 0; i < num_segments; i++) {
-        auto& pks = *upserts[i];
-        index.get(pks, (*rss_rowids)[i]);
-    }
+    op(index);
 
     return Status::OK();
+}
+
+Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
+                                              const std::vector<ColumnUniquePtr>& upserts, const int64_t base_version,
+                                              const MetaFileBuilder* builder,
+                                              std::vector<std::vector<uint64_t>*>* rss_rowids) {
+    return _handle_index_op(tablet, metadata, base_version, builder, [&](LakePrimaryIndex& index) {
+        // get rss_rowids for each segment of rowset
+        uint32_t num_segments = upserts.size();
+        for (size_t i = 0; i < num_segments; i++) {
+            auto& pks = *upserts[i];
+            index.get(pks, (*rss_rowids)[i]);
+        }
+    });
+}
+
+Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
+                                              const std::vector<ColumnUniquePtr>& upserts, const int64_t base_version,
+                                              const MetaFileBuilder* builder,
+                                              std::vector<std::vector<uint64_t>>* rss_rowids) {
+    return _handle_index_op(tablet, metadata, base_version, builder, [&](LakePrimaryIndex& index) {
+        // get rss_rowids for each segment of rowset
+        uint32_t num_segments = upserts.size();
+        for (size_t i = 0; i < num_segments; i++) {
+            auto& pks = *upserts[i];
+            index.get(pks, &((*rss_rowids)[i]));
+        }
+    });
 }
 
 Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& metadata,
@@ -571,6 +592,29 @@ bool UpdateManager::TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint3
         }
     }
     return true;
+}
+
+void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
+    // use tabletid-txnid as update state cache's key, so it can retry safe.
+    auto state_entry = _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->id(), txnlog.txn_id()));
+    state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
+    auto& state = state_entry->value();
+    // get latest metadata from cache, it is not matter if it isn't the real latest metadata.
+    auto metadata_ptr = _tablet_mgr->get_latest_cached_tablet_metadata(tablet->id());
+    if (metadata_ptr != nullptr) {
+        auto st = state.load(txnlog.op_write(), *metadata_ptr, metadata_ptr->version(), tablet, nullptr, false);
+        if (!st.ok()) {
+            _update_state_cache.remove(state_entry);
+            LOG(ERROR) << strings::Substitute("lake primary table preload_update_state id:$0 error:$1", tablet->id(),
+                                              st.to_string());
+            // not return error even it fail, because we can load update state in publish again.
+        } else {
+            // just release it, will use it again in publish
+            _update_state_cache.release(state_entry);
+        }
+    } else {
+        // if latest metadata not in cache, do nothing
+    }
 }
 
 } // namespace lake
