@@ -480,6 +480,7 @@ public class ReportHandler extends Daemon {
 
             // to escape sending duplicate agent task to be
             if (task.shouldResend(taskReportTime)) {
+                LOG.info("task type is {}, signature is {}", task.getTaskType(), task.getSignature());
                 batchTask.addTask(task);
             }
         }
