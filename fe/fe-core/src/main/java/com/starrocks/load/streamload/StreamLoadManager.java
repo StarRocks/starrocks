@@ -55,10 +55,6 @@ public class StreamLoadManager {
     // txnId -> streamLoadTask
     private Map<Long, StreamLoadTask> txnIdToSyncStreamLoadTasks;
 
-    // The reason of not using labelToSyncStreamLoadTasks fo sync stream load is that
-    // there may be lots of sync stream load,
-    // and these task would better not be showed through `show stream load`
-    private Map<String, StreamLoadTask> labelToSyncStreamLoadTasks;
     private Map<Long, Map<String, StreamLoadTask>> dbToLabelToStreamLoadTask;
     private ReentrantReadWriteLock lock;
 
@@ -86,7 +82,6 @@ public class StreamLoadManager {
         LOG.debug("begin to init stream load manager");
         idToStreamLoadTask = Maps.newConcurrentMap();
         txnIdToSyncStreamLoadTasks = Maps.newConcurrentMap();
-        labelToSyncStreamLoadTasks = Maps.newConcurrentMap();
         dbToLabelToStreamLoadTask = Maps.newConcurrentMap();
         lock = new ReentrantReadWriteLock(true);
     }
@@ -99,7 +94,6 @@ public class StreamLoadManager {
         // if task is already created, return directly
         readLock();
         try {
-            // indicate it is parallel stream load
             task = idToStreamLoadTask.get(label);
             if (task != null) {
                 task.beginTxn(channelId, channelNum, resp);
@@ -135,14 +129,14 @@ public class StreamLoadManager {
 
     // for sync stream load task
     public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,
-                              TransactionResult resp) throws UserException {
+                              TransactionResult resp, boolean isRoutineLoad) throws UserException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
 
         writeLock();
         try {
-            task = createLoadTask(db, tableName, label, timeoutMillis);
+            task = createLoadTask(db, tableName, label, timeoutMillis, isRoutineLoad);
             LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
                     .add("msg", "create load task").build());
 
@@ -154,7 +148,7 @@ public class StreamLoadManager {
     }
 
     // for sync stream load
-    public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis)
+    public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis, boolean isRoutineLoad)
             throws UserException {
         Table table;
         db.readLock();
@@ -168,7 +162,7 @@ public class StreamLoadManager {
         // init stream load task
         long id = GlobalStateMgr.getCurrentState().getNextId();
         StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) table,
-                label, timeoutMillis, System.currentTimeMillis());
+                label, timeoutMillis, System.currentTimeMillis(), isRoutineLoad);
         return streamLoadTask;
     }
     public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis,
@@ -231,11 +225,7 @@ public class StreamLoadManager {
     // add load tasks and also add to to callback factory
     public void addLoadTask(StreamLoadTask task) {
         if (task.isSyncStreamLoad()) {
-            labelToSyncStreamLoadTasks.put(task.getLabel(), task);
             txnIdToSyncStreamLoadTasks.put(task.getTxnId(), task);
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(task);
-            LOG.info("add load task" + task.getTxnId() + " " + task.getLabel());
-            return;
         }
         long dbId = task.getDBId();
         String label = task.getLabel();
@@ -382,6 +372,9 @@ public class StreamLoadManager {
                 if (streamLoadTask.checkNeedRemove(currentMs)) {
                     unprotectedRemoveTaskFromDb(streamLoadTask);
                     iterator.remove();
+                    if (streamLoadTask.isSyncStreamLoad()) {
+                        txnIdToSyncStreamLoadTasks.remove(streamLoadTask.getTxnId());
+                    }
                     LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, streamLoadTask.getId())
                             .add("label", streamLoadTask.getLabel())
                             .add("end_timestamp", streamLoadTask.endTimeMs())
@@ -392,18 +385,6 @@ public class StreamLoadManager {
                 }
             }
 
-            // remove old sync stream load
-            // Maybe the logic can be unified with the above
-            // by put the synchronous stream load into `idToStreamLoadTask`,
-            // but for now, leave it as this
-            iterator = labelToSyncStreamLoadTasks.entrySet().iterator();
-            while (iterator.hasNext()) {
-                StreamLoadTask streamLoadTask = iterator.next().getValue();
-                if (streamLoadTask.checkNeedRemove(currentMs)) {
-                    txnIdToSyncStreamLoadTasks.remove(streamLoadTask.getTxnId());
-                    iterator.remove();;
-                }
-            }
         } finally {
             writeUnlock();
         }
@@ -477,11 +458,6 @@ public class StreamLoadManager {
         return txnIdToSyncStreamLoadTasks.getOrDefault(txnId, null);
     }
 
-    public StreamLoadTask getSyncSteamLoadTaskByLabel(String label) {
-        return labelToSyncStreamLoadTasks.getOrDefault(label, null);
-    }
-
-
     // put history task in the end
     private void sortStreamLoadTask(List<StreamLoadTask> streamLoadTaskList) {
         if (streamLoadTaskList == null) {
@@ -494,6 +470,11 @@ public class StreamLoadManager {
             }
         });
     }
+
+    public StreamLoadTask getTaskByLabel(String label) {
+        return idToStreamLoadTask.get(label);
+    }
+
 
     // return all of stream load task named label in all of db
     public List<StreamLoadTask> getTaskByName(String label) {

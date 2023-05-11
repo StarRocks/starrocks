@@ -84,6 +84,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         FINISHED
     }
 
+    public enum Type {
+        SYNC,
+        ROUTINE_LOAD,
+        PARALLEL     // default
+    }
+
     @SerializedName(value = "id")
     private long id;
     private TUniqueId loadId;
@@ -135,6 +141,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
     // used for sync stream load and routine load
     private boolean isSyncStreamLoad = false;
 
+    private Type type = Type.PARALLEL;
+
     private List<State> channels;
     private StreamLoadParam streamLoadParam;
     private StreamLoadInfo streamLoadInfo;
@@ -164,9 +172,14 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
     }
 
     public StreamLoadTask(long id, Database db, OlapTable table, String label,
-                          long timeoutMs, long createTimeMs) {
+                          long timeoutMs, long createTimeMs, boolean isRoutineLoad) {
         this(id, db, table, label, timeoutMs, 1, 0, createTimeMs);
         isSyncStreamLoad = true;
+        if (isRoutineLoad) {
+            type = Type.ROUTINE_LOAD;
+        } else {
+            type = Type.SYNC;
+        }
     }
     public StreamLoadTask(long id, Database db, OlapTable table, String label,
             long timeoutMs, int channelNum, int channelId, long createTimeMs) {
@@ -974,9 +987,6 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         if (isSyncStreamLoad() && coord.isEnableLoadProfile()) {
             collectProfile();
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
-            // set state to commited for remove by streamLoadManager
-            this.state = State.COMMITED;
-            return;
         }
 
         writeLock();
@@ -999,7 +1009,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         // the frequency of stream load maybe very high, resulting in many profiles,
         // but we may only care about the long-duration stream load profile.
         if (totalTimeMs < Config.stream_load_profile_collect_second * 1000) {
-            LOG.info(String.format("Load %s, totalTimeMs %ld < Config.stream_load_profile_collect_second %ld)",
+            LOG.info(String.format("Load %s, totalTimeMs %d < Config.stream_load_profile_collect_second %d)",
                     label, totalTimeMs, Config.stream_load_profile_collect_second));
             return;
         }
@@ -1039,6 +1049,17 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         return;
     }
 
+    public void setLoadState(long loadBytes, long loadRows, long filteredRows, long unselectedRows,
+                             String errorLogUrl, String errorMsg) {
+        this.numRowsNormal = loadRows;
+        this.numRowsAbnormal = filteredRows;
+        this.numRowsUnselected = unselectedRows;
+        this.numLoadBytesTotal = loadBytes;
+        this.trackingUrl = errorLogUrl;
+        this.errorMsg = errorMsg;
+    }
+
+
     @Override
     public void replayOnCommitted(TransactionState txnState) {
         writeLock();
@@ -1063,9 +1084,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         }
 
         if (isSyncStreamLoad && coord.isEnableLoadProfile()) {
-            state = State.CANCELLED;
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
-            return;
         }
 
         writeLock();
@@ -1073,7 +1092,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             if (isFinalState()) {
                 return;
             }
-            if (coord != null) {
+            if (coord != null && !isSyncStreamLoad) {
                 coord.cancel();
                 QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
             }
@@ -1261,13 +1280,33 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         this.txnId = txnId;
     }
 
+    public void setType(Type type) {
+        this.type = type;
+    }
+
     public boolean isSyncStreamLoad() {
         return isSyncStreamLoad;
     }
 
+    public boolean isRoutineLoadTask() {
+        return type == Type.ROUTINE_LOAD;
+    }
     // for sync stream load
     public void setCoordinator(Coordinator coord) {
         this.coord = coord;
+    }
+
+    public String getStringByType() {
+        switch (this.type) {
+            case ROUTINE_LOAD:
+                return "ROUTINE_LOAD";
+            case SYNC:
+                return "SYNC";
+            case PARALLEL:
+                return "PARALLEL";
+            default:
+                return "UNKOWN TYPE";
+        }
     }
 
     public List<String> getShowInfo() {
@@ -1307,6 +1346,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                 channelStateBuilder.append(channels.get(i).name());
             }
             row.add(channelStateBuilder.toString());
+            row.add(getStringByType());
             return row;
         } finally {
             readUnlock();
@@ -1343,6 +1383,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         TUniqueId loadId = new TUniqueId(hi, lo);
         task.init();
         task.setTUniqueId(loadId);
+        // Only task which type is PARALLEL will be persisted
+        // just set type to PARALLEL
+        task.setType(Type.PARALLEL);
         return task;
     }
 }
