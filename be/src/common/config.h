@@ -886,11 +886,15 @@ CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
 CONF_Bool(block_cache_checksum_enable, "true");
 // Maximum number of concurrent inserts we allow globally for block cache.
 // 0 means unlimited.
-CONF_Int64(block_cache_max_concurrent_inserts, "1000000");
+CONF_Int64(block_cache_max_concurrent_inserts, "1500000");
 // Total memory limit for in-flight parcels.
 // Once this is reached, requests will be rejected until the parcel memory usage gets under the limit.
 CONF_Int64(block_cache_max_parcel_memory_mb, "256");
 CONF_Bool(block_cache_report_stats, "false");
+// This essentially turns the LRU into a two-segmented LRU. Setting this to 1 means every new insertion
+// will be inserted 1/2 from the end of the LRU, 2 means 1/4 from the end of the LRU, and so on.
+// It is only useful for the cachelib engine currently.
+CONF_Int64(block_cache_lru_insertion_point, "1");
 // cachelib, starcache
 CONF_String(block_cache_engine, "starcache");
 
