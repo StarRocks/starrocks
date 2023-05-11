@@ -267,7 +267,12 @@ jobs:
     needs: fe-checker
     if: needs.fe-checker.outputs.output1 == 'true'
     name: FE Code Style Check
+    env:
+      PR_NUMBER: ${{ github.event.number }}
     steps:
+      - name: clean
+        run: rm -rf ${{ github.workspace }}/*
+
       - uses: dorny/paths-filter@v2
         id: java-file
         name: JAVA FILE
@@ -278,13 +283,26 @@ jobs:
 
       - run: echo ${{ steps.java-file.outputs.java }}
 
-      - name: "Checkout ${{ github.ref }} ( ${{ github.sha }} )"
-        id: checkout
-        if: ${{ steps.java-file.outputs.java == 'true' }}
-        uses: actions/checkout@v3
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v3
         with:
-          persist-credentials: false
-          submodules: recursive
+          fetch-depth: 0
+
+      - name: Checkout PR
+        run: |
+          BRANCH=${{steps.branch.outputs.branch}}
+          git checkout $BRANCH;
+          git pull;
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout $BRANCH_NAME;
+          git checkout -b merge_pr;
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
 
       - name: Copy checkstyle files
         if: ${{ steps.java-file.outputs.java == 'true' }}
@@ -294,7 +312,7 @@ jobs:
 
       - name: Run java checkstyle
         if: ${{ steps.java-file.outputs.java == 'true' }}
-        uses: dbelyaev/action-checkstyle@v0.6.1
+        uses: dbelyaev/action-checkstyle@v0.7.5
         with:
           workdir: "./fe"
           checkstyle_config: checkstyle.xml
@@ -302,6 +320,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
           level: error
+
   fe-ut:
     runs-on: [self-hosted]
     needs: fe-codestyle-check
