@@ -202,14 +202,16 @@ public:
 
     void copy_file_meta(BinlogFileMetaPB* new_file_meta) { new_file_meta->CopyFrom(*_file_meta.get()); }
 
-    // For testing
-    std::unordered_set<int64_t>& rowsets() { return _rowsets; }
-
     // Reopen an existed binlog file to append data. The writer will be reset
     // to the state described by *previous_meta*.
     static StatusOr<std::shared_ptr<BinlogFileWriter>> reopen(int64_t file_id, const std::string& file_path,
                                                               int32_t page_size, CompressionTypePB compression_type,
                                                               BinlogFileMetaPB* previous_meta);
+
+    // For testing
+    std::unordered_set<int64_t>& rowsets() { return _rowsets; }
+
+    Status force_flush_page(bool end_version);
 
 private:
     Status _check_state(WriterState expect_state);
