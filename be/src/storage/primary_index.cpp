@@ -88,14 +88,9 @@ const uint32_t PREFETCHN = 8;
 template <typename Key>
 class HashIndexImpl : public HashIndex {
 private:
-<<<<<<< HEAD
     phmap::parallel_flat_hash_map<Key, RowIdPack4, vectorized::StdHashWithSeed<Key, vectorized::PhmapSeed1>,
                                   phmap::priv::hash_default_eq<Key>,
-                                  TraceAlloc<phmap::priv::Pair<const Key, RowIdPack4>>, 4, phmap::NullMutex, false>
-=======
-    phmap::parallel_flat_hash_map<Key, RowIdPack4, StdHashWithSeed<Key, PhmapSeed1>, phmap::priv::hash_default_eq<Key>,
                                   TraceAlloc<phmap::priv::Pair<const Key, RowIdPack4>>, 4, phmap::NullMutex, true>
->>>>>>> e771c35... [Enhancement] Change primary index hash from crc32 to XXH3_64 (#22123)
             _map;
 
 public:
@@ -237,11 +232,7 @@ struct FixSlice {
 
 template <size_t S>
 struct FixSliceHash {
-<<<<<<< HEAD
-    size_t operator()(const FixSlice<S>& v) const { return vectorized::crc_hash_64(v.v, 4 * S, 0x811C9DC5); }
-=======
     size_t operator()(const FixSlice<S>& v) const { return XXH3_64bits(v.v, 4 * S); }
->>>>>>> e771c35... [Enhancement] Change primary index hash from crc32 to XXH3_64 (#22123)
 };
 
 template <size_t S>
@@ -535,11 +526,7 @@ public:
 };
 
 struct StringHasher1 {
-<<<<<<< HEAD
-    size_t operator()(const string& v) const { return vectorized::crc_hash_64(v.data(), v.length(), 0x811C9DC5); }
-=======
     size_t operator()(const string& v) const { return XXH3_64bits(v.data(), v.length()); }
->>>>>>> e771c35... [Enhancement] Change primary index hash from crc32 to XXH3_64 (#22123)
 };
 
 class SliceHashIndex : public HashIndex {
