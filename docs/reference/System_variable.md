@@ -481,7 +481,7 @@ SELECT /*+ SET_VAR
   
   > **NOTICE**
   >
-  > After you use `sql_dialect` to specify a SQL dialect, identifiers are not case-sensitive by default. In this situation, when you query tables in StarRocks, you must make sure that the identifiers in your queries are in lower case. If you use uppercase identifiers, your queries will fail.
+  > After you configure StarRocks to use the Trino dialect, identifiers in queries are not case-sensitive by default. Therefore, you must specify names in lowercase for your databases and tables at database and table creation. If you specify database and table names in uppercase, queries against these databases and tables will fail.
 
 * io_tasks_per_scan_operator (v3.0 and later)
 
