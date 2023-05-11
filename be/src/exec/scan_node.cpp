@@ -55,6 +55,11 @@ Status ScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (options.__isset.io_tasks_per_scan_operator) {
         _io_tasks_per_scan_operator = options.io_tasks_per_scan_operator;
     }
+    double mem_ratio = config::scan_use_query_mem_ratio;
+    if (options.__isset.scan_use_query_mem_ratio) {
+        mem_ratio = options.scan_use_query_mem_ratio;
+    }
+    _mem_limit = state->query_mem_tracker_ptr()->limit() * mem_ratio;
     return Status::OK();
 }
 

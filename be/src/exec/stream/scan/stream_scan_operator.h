@@ -35,8 +35,8 @@ class StreamChunkSource;
 
 class StreamScanOperatorFactory final : public ConnectorScanOperatorFactory {
 public:
-    StreamScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop, ChunkBufferLimiterPtr buffer_limiter,
-                              bool is_stream_pipeline);
+    StreamScanOperatorFactory(int32_t id, ScanNode* scan_node, RuntimeState* state, size_t dop,
+                              ChunkBufferLimiterPtr buffer_limiter, bool is_stream_pipeline);
 
     ~StreamScanOperatorFactory() override = default;
 
