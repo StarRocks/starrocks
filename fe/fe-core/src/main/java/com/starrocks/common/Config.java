@@ -536,12 +536,6 @@ public class Config extends ConfigBase {
     public static int thrift_backlog_num = 1024;
 
     /**
-     * Define thrift server's server model, default is TThreadPoolServer model
-     */
-    @ConfField
-    public static String thrift_server_type = ThriftServer.THREAD_POOL;
-
-    /**
      * the timeout for thrift rpc call
      */
     @ConfField(mutable = true)
@@ -1118,6 +1112,14 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true, aliases = {"storage_cooldown_second"})
     public static long tablet_sched_storage_cooldown_second = -1L; // won't cool down by default
+
+    /**
+     * If the tablet in scheduler queue has not been scheduled for tablet_sched_max_not_being_scheduled_interval_ms,
+     * its priority will upgrade.
+     * default is 15min
+     */
+    @ConfField(mutable = true)
+    public static long tablet_sched_max_not_being_scheduled_interval_ms = 15 * 60 * 1000;
 
     /**
      * FOR DiskAndTabletLoadBalancer:

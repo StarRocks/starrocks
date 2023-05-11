@@ -195,6 +195,7 @@ public class OlapScanNode extends ScanNode {
         return bucketColumns;
     }
 
+    // TODO: Determine local shuffle keys by FE to make local shuffle use bucket columns of OlapScanNode.
     public void setBucketColumns(List<ColumnRefOperator> bucketColumns) {
         this.bucketColumns = bucketColumns;
     }
