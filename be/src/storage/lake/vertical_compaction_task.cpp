@@ -39,9 +39,7 @@ Status VerticalCompactionTask::execute(Progress* progress) {
     }
 
     const auto& store_paths = ExecEnv::GetInstance()->store_paths();
-    if (store_paths.empty()) {
-        return Status::InternalError("No store paths");
-    }
+    DCHECK(!store_paths.empty());
     auto mask_buffer = std::make_unique<RowSourceMaskBuffer>(_tablet->id(), store_paths.begin()->path);
     auto source_masks = std::make_unique<std::vector<RowSourceMask>>();
 

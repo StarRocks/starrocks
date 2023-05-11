@@ -257,7 +257,9 @@ StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_rowsets
 
 StatusOr<CompactionAlgorithm> BaseAndCumulativeCompactionPolicy::choose_compaction_algorithm(
         const std::vector<RowsetPtr>& rowsets) {
-    // TODO: support rowset mask buffer based on starlet fs
+    // TODO: support row source mask buffer based on starlet fs
+    // The current row source mask buffer is based on posix tmp file,
+    // if there is no storage root path, use horizontal compaction.
     if (ExecEnv::GetInstance()->store_paths().empty()) {
         return HORIZONTAL_COMPACTION;
     }
