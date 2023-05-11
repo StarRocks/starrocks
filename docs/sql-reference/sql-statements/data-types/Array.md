@@ -19,7 +19,7 @@ ARRAY<type> NOT NULL
 
 `type` specifies the data types of elements in an array. StarRocks supports the following element types: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, VARCHAR, CHAR, DATETIME, and DATE.
 
-Elements in an array are nullable by default, for example, `[null, 1 ,2]`. You cannot specify elements in an array as NOT NULL. However, you can specify an ARRAY column as NOT NULL when you create a table, for example, `ARRAY<type> NOT NULL`.
+Elements in an array are nullable by default, for example, `[null, 1 ,2]`. You cannot specify elements in an array as NOT NULL. However, you can specify an ARRAY column as NOT NULL when you create a table, such as the third example in the preceding code snippet.
 
 Examples:
 
@@ -53,7 +53,7 @@ distributed by hash(c0) buckets 3;
 
 The following limits apply when you create ARRAY columns in StarRocks tables:
 
-- In versions earlier than v2.1, you can create ARRAY columns only in Duplicate Key tables. From v2.1 onwards, you can also create ARRAY columns in other types of tables (Primary Key, Unique Key, Aggregate). Note that in an Aggregate table, you can create an ARRAY column only when the function used to aggregate data in that column is replace() or replace_if_not_null(), for example, `arr ARRAY<INT> replace`. For more information, see [Aggregate table](../../../table_design/table_types/aggregate_table.md).
+- In versions earlier than v2.1, you can create ARRAY columns only in Duplicate Key tables. From v2.1 onwards, you can also create ARRAY columns in other types of tables (Primary Key, Unique Key, Aggregate). Note that in an Aggregate table, you can create an ARRAY column only when the function used to aggregate data in that column is replace() or replace_if_not_null(). For more information, see [Aggregate table](../../../table_design/table_types/aggregate_table.md).
 - ARRAY columns cannot be used as key columns.
 - ARRAY columns cannot be used as partition keys (included in PARTITION BY) or bucketing keys (included in DISTRIBUTED BY).
 - DECIMAL V3 is not supported in ARRAY.
