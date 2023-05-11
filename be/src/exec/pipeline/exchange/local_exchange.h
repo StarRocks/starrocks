@@ -197,6 +197,26 @@ private:
     std::vector<std::unique_ptr<ShufflePartitioner>> _partitioners;
 };
 
+// key partition mainly means that the column value of each partition is the same.
+// For external table sinks, the chunk received by operators after exchange need to ensure that
+// the values of the partition columns are the same.
+class KeyPartitionExchanger final : public LocalExchanger {
+    using RowIndexPtr = std::shared_ptr<std::vector<uint32_t>>;
+    using Partition2RowIndexes = std::map<PartitionKeyPtr, RowIndexPtr, PartitionKeyComparator>;
+
+public:
+    KeyPartitionExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
+                          LocalExchangeSourceOperatorFactory* source,
+                          const std::vector<ExprContext*>& _partition_expr_ctxs, size_t num_sinks);
+
+    Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
+
+private:
+    LocalExchangeSourceOperatorFactory* _source;
+    const std::vector<ExprContext*> _partition_expr_ctxs;
+    std::vector<Columns> _channel_partitions_columns;
+};
+
 // Exchange the local data for broadcast
 class BroadcastExchanger final : public LocalExchanger {
 public:

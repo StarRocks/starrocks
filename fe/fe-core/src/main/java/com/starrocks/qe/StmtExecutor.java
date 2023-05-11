@@ -994,8 +994,14 @@ public class StmtExecutor {
         ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
     }
 
-    private void handleExecScriptStmt() throws PrivilegeException, UserException {
-        ExecuteScriptExecutor.execute((ExecuteScriptStmt) parsedStmt, context);
+    private void handleExecScriptStmt() throws IOException, UserException {
+        ShowResultSet resultSet = ExecuteScriptExecutor.execute((ExecuteScriptStmt) parsedStmt, context);
+        if (isProxy) {
+            proxyResultSet = resultSet;
+            context.getState().setEof();
+            return;
+        }
+        sendShowResult(resultSet);
     }
 
     private void handleSetRole() throws PrivilegeException, UserException {

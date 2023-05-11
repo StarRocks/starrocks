@@ -55,7 +55,9 @@ public class CatalogAnalyzer {
             FeNameFormat.checkCatalogName(catalogName);
 
             if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
-                throw new SemanticException("External catalog name can't be the same as internal catalog name 'default'");
+                throw new SemanticException(
+                        String.format("External catalog name can't be the same as internal catalog name '%s'",
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME));
             }
             Map<String, String> properties = statement.getProperties();
             String catalogType = properties.get(TYPE);

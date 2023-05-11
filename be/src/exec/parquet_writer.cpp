@@ -37,18 +37,19 @@ RollingAsyncParquetWriter::RollingAsyncParquetWriter(
 }
 
 Status RollingAsyncParquetWriter::init_rolling_writer(const TableInfo& tableInfo) {
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(tableInfo._partition_location))
-    _schema = tableInfo._schema;
-    _partition_location = tableInfo._partition_location;
+    ASSIGN_OR_RETURN(_fs,
+                     FileSystem::CreateUniqueFromString(tableInfo.partition_location, FSOptions(&tableInfo.cloud_conf)))
+    _schema = tableInfo.schema;
+    _partition_location = tableInfo.partition_location;
 
     ::parquet::WriterProperties::Builder builder;
-    if (tableInfo._enable_dictionary) {
+    if (tableInfo.enable_dictionary) {
         builder.enable_dictionary();
     } else {
         builder.disable_dictionary();
     }
     builder.version(::parquet::ParquetVersion::PARQUET_2_0);
-    starrocks::parquet::ParquetBuildHelper::build_compression_type(builder, tableInfo._compress_type);
+    starrocks::parquet::ParquetBuildHelper::build_compression_type(builder, tableInfo.compress_type);
     _properties = builder.build();
 
     return Status::OK();
@@ -69,7 +70,7 @@ Status RollingAsyncParquetWriter::_new_file_writer() {
     ASSIGN_OR_RETURN(auto writable_file, _fs->new_writable_file(options, new_file_location))
     _writer = std::make_shared<starrocks::parquet::AsyncFileWriter>(
             std::move(writable_file), new_file_location, _partition_location, _properties, _schema, _output_expr_ctxs,
-            ExecEnv::GetInstance()->pipeline_sink_io_pool(), _parent_profile);
+            ExecEnv::GetInstance()->pipeline_sink_io_pool(), _parent_profile, _max_file_size);
     auto st = _writer->init();
     return st;
 }
