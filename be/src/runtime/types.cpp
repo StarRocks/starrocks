@@ -267,7 +267,7 @@ bool TypeDescriptor::support_join() const {
 
 bool TypeDescriptor::support_orderby() const {
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_MAP && type != TYPE_STRUCT && type != TYPE_ARRAY;
+           type != TYPE_MAP && type != TYPE_STRUCT;
 }
 
 bool TypeDescriptor::support_groupby() const {
