@@ -122,9 +122,6 @@ void SimdBlockFilter::merge(const SimdBlockFilter& bf) {
     }
 }
 
-static constexpr uint32_t SALT[8] = {0x47b6137b, 0x44974d91, 0x8824ad5b, 0xa2b7289d,
-                                     0x705495c7, 0x2df1424b, 0x9efc4947, 0x5c6bfb31};
-
 // For scalar version:
 void SimdBlockFilter::make_mask(uint32_t key, uint32_t* masks) const {
     for (int i = 0; i < BITS_SET_PER_BLOCK; ++i) {
