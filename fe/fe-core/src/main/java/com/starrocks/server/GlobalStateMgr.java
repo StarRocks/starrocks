@@ -1167,10 +1167,6 @@ public class GlobalStateMgr {
                 initDefaultCluster();
             }
 
-            if (!isDefaultWarehouseCreated) {
-                initDefaultWarehouse();
-            }
-
             // MUST set leader ip before starting checkpoint thread.
             // because checkpoint thread need this info to select non-leader FE to push image
             nodeMgr.setLeaderInfo();
@@ -1193,6 +1189,11 @@ public class GlobalStateMgr {
             // start other daemon threads that should run on all FEs
             startAllNodeTypeDaemonThreads();
             insertOverwriteJobManager.cancelRunningJobs();
+
+            // must behind startLeaderOnlyDaemonThreads(), because creating workerGroup depends on serviceId
+            if (!isDefaultWarehouseCreated) {
+                initDefaultWarehouse();
+            }
 
             MetricRepo.init();
 
