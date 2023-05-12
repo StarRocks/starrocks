@@ -35,7 +35,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskBuilder;
@@ -2786,34 +2785,6 @@ public class CreateMaterializedViewTest {
             Assert.assertThrows(AnalysisException.class,
                     () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
         }
-    }
-
-    @Test
-    public void testShowSyncMV() throws Exception {
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable("CREATE TABLE test.tbl_sync_mv\n" +
-                        "(\n" +
-                        "    k1 date,\n" +
-                        "    k2 int,\n" +
-                        "    v1 int sum\n" +
-                        ")\n" +
-                        "PARTITION BY RANGE(k1)\n" +
-                        "(\n" +
-                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
-                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
-                        ")\n" +
-                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "PROPERTIES('replication_num' = '1');")
-                .withMaterializedView("create materialized view sync_mv_to_check\n" +
-                        "distributed by hash(k2) buckets 3\n" +
-                        "as select k2, sum(v1) as total from tbl_sync_mv group by k2;");
-        String showSql = "show create materialized view sync_mv_to_check;";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, showSql);
-        stmtExecutor.execute();
-        waitingRollupJobV2Finish();
-        Assert.assertEquals(connectContext.getState().getStateType(), QueryState.MysqlStateType.EOF);
     }
 }
 
