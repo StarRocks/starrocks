@@ -192,7 +192,7 @@ public class LoadLoadingTask extends LoadTask {
             long beginTimeInNanoSecond = TimeUtils.getStartTime();
             actualExecute(curCoordinator);
 
-            if (context.getSessionVariable().isEnableProfile()) {
+            if (context.getSessionVariable().isEnableLoadProfile()) {
                 RuntimeProfile profile = new RuntimeProfile("Load");
                 RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
                 summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));

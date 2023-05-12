@@ -238,6 +238,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     if (!coord_status.ok()) {
         std::stringstream ss;
         ss << "couldn't get a client for " << _coord_addr;
+        LOG(WARNING) << ss.str();
         update_status(Status::InternalError(ss.str()));
         return;
     }

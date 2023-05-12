@@ -25,10 +25,14 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+import com.starrocks.common.Version;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.loadv2.LoadJob;
@@ -128,6 +132,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
     @SerializedName(value = "numLoadBytesTotal")
     private long numLoadBytesTotal;
 
+    // used for sync stream load and routine load
+    private boolean isSyncStreamLoad = false;
+
     private List<State> channels;
     private StreamLoadParam streamLoadParam;
     private StreamLoadInfo streamLoadInfo;
@@ -156,6 +163,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         lock.readLock().unlock();
     }
 
+    public StreamLoadTask(long id, Database db, OlapTable table, String label,
+                          long timeoutMs, long createTimeMs) {
+        this(id, db, table, label, timeoutMs, 1, 0, createTimeMs);
+        isSyncStreamLoad = true;
+    }
     public StreamLoadTask(long id, Database db, OlapTable table, String label,
             long timeoutMs, int channelNum, int channelId, long createTimeMs) {
         this.id = id;
@@ -779,6 +791,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                     throw new LoadException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
                 }
 
+                if (coord.isEnableLoadProfile()) {
+                    collectProfile();
+                }
+
                 this.trackingUrl = coord.getTrackingUrl();
                 if (!status.ok()) {
                     throw new LoadException(status.getErrorMsg());
@@ -953,6 +969,16 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         if (!txnOperated) {
             return;
         }
+
+        // sync stream load collect profile
+        if (isSyncStreamLoad() && coord.isEnableLoadProfile()) {
+            collectProfile();
+            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
+            // set state to commited for remove by streamLoadManager
+            this.state = State.COMMITED;
+            return;
+        }
+
         writeLock();
         try {
             for (int i = 0; i < channelNum; i++) {
@@ -963,6 +989,54 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         } finally {
             writeUnlock();
         }
+    }
+
+    public void collectProfile() {
+        long currentTimestamp = System.currentTimeMillis();
+        long totalTimeMs = currentTimestamp - createTimeMs;
+
+        // For the usage scenarios of flink cdc or routine load,
+        // the frequency of stream load maybe very high, resulting in many profiles,
+        // but we may only care about the long-duration stream load profile.
+        if (totalTimeMs < Config.stream_load_profile_collect_second * 1000) {
+            LOG.info(String.format("Load %s, totalTimeMs %ld < Config.stream_load_profile_collect_second %ld)",
+                    label, totalTimeMs, Config.stream_load_profile_collect_second));
+            return;
+        }
+
+        RuntimeProfile profile = new RuntimeProfile("Load");
+        RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(loadId));
+        summaryProfile.addInfoString(ProfileManager.START_TIME,
+                TimeUtils.longToTimeString(createTimeMs));
+
+        summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(System.currentTimeMillis()));
+        summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
+
+        summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
+        summaryProfile.addInfoString("StarRocks Version",
+                String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
+        summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, dbName);
+
+        Map<String, String> loadCounters = coord.getLoadCounters();
+        if (loadCounters != null && loadCounters.size() != 0) {
+            summaryProfile.addInfoString("NumRowsNormal", loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL));
+            summaryProfile.addInfoString("NumLoadBytesTotal", loadCounters.get(LoadJob.LOADED_BYTES));
+            summaryProfile.addInfoString("NumRowsAbnormal", loadCounters.get(LoadEtlTask.DPP_ABNORMAL_ALL));
+            summaryProfile.addInfoString("numRowsUnselected", loadCounters.get(LoadJob.UNSELECTED_ROWS));
+        }
+
+        profile.addChild(summaryProfile);
+        if (coord.getQueryProfile() != null) {
+            profile.addChild(coord.getQueryProfile());
+            if (!isSyncStreamLoad()) {
+                coord.endProfile();
+                coord.mergeIsomorphicProfiles(null);
+            }
+        }
+
+        ProfileManager.getInstance().pushLoadProfile(profile);
+        return;
     }
 
     @Override
@@ -987,6 +1061,13 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         if (!txnOperated) {
             return;
         }
+
+        if (isSyncStreamLoad && coord.isEnableLoadProfile()) {
+            state = State.CANCELLED;
+            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
+            return;
+        }
+
         writeLock();
         try {
             if (isFinalState()) {
@@ -1156,6 +1237,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         return label;
     }
 
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
     public long getId() {
         return id;
     }
@@ -1166,6 +1251,23 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
     
     public void setTUniqueId(TUniqueId loadId) {
         this.loadId = loadId;
+    }
+
+    public long getTxnId() {
+        return txnId;
+    }
+
+    public void setTxnId(long txnId) {
+        this.txnId = txnId;
+    }
+
+    public boolean isSyncStreamLoad() {
+        return isSyncStreamLoad;
+    }
+
+    // for sync stream load
+    public void setCoordinator(Coordinator coord) {
+        this.coord = coord;
     }
 
     public List<String> getShowInfo() {
