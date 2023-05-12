@@ -24,7 +24,7 @@ The query cache supports queries that meet the following conditions:
   >
   > Other query engines do not support the query cache.
 
-- The queries are on native OLAP tables (from v2.5) or lake tables (from v3.0). The query cache does not support queries on external tables or lake tables. The query cache also supports queries whose plans require access to synchronous materialized views. However, the query cache does not support queries whose plans require access to asynchronous materialized views.
+- The queries are on native OLAP tables (from v2.5) or cloud-native tables (from v3.0). The query cache does not support queries on external tables. The query cache also supports queries whose plans require access to synchronous materialized views. However, the query cache does not support queries whose plans require access to asynchronous materialized views.
 
 - The queries are aggregate queries on individual tables or on multiple joined tables.
 
