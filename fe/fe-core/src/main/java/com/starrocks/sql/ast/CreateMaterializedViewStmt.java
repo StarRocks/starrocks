@@ -391,6 +391,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             if (selectListItemExpr instanceof SlotRef) {
                 SlotRef slotRef = (SlotRef) selectListItemExpr;
                 String columnName = alias != null ? alias : slotRef.getColumnName().toLowerCase();
+                Expr defineExpr = alias != null ? selectListItemExpr : null;
                 joiner.add(columnName);
                 if (meetAggregate) {
                     throw new SemanticException("Any single column should be before agg column. " +
@@ -401,7 +402,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 if (!mvColumnNameSet.add(columnName)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnName);
                 }
-                MVColumnItem mvColumnItem = new MVColumnItem(columnName, slotRef.getType());
+                MVColumnItem mvColumnItem = new MVColumnItem(columnName, slotRef.getType(), defineExpr);
                 mvColumnItemList.add(mvColumnItem);
             } else if (selectListItemExpr instanceof FunctionCallExpr) {
                 // Aggregate function must match pattern.

@@ -79,6 +79,14 @@ public class MVColumnItem {
         this.baseColumnNames.add(name);
     }
 
+    public MVColumnItem(String name, Type type, Expr defineExpr) {
+        this.name = name;
+        this.type = type;
+        this.baseColumnNames = new ArrayList<>();
+        this.baseColumnNames.add(name);
+        this.defineExpr = defineExpr;
+    }
+
     public MVColumnItem(String name, Type type, Expr defineExpr, List<String> baseColumnNames) {
         this.name = name;
         this.type = type;
