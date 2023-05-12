@@ -257,7 +257,9 @@ The following bugs are fixed:
 
 ### Behavior Change
 
-Page Cache is enabled by default. The default cache size is 20% of the system memory.
+- Page Cache is enabled by default ("disable_storage_page_cache" = "false"). The default cache size (`storage_page_cache_limit`) is 20% of the system memory.
+- CBO is enabled by default. Deprecated the session variable `enable_cbo`.
+- Vectorized engine is enabled by default. Deprecated the session variable `vectorized_engine_enable`.
 
 ### Others
 
