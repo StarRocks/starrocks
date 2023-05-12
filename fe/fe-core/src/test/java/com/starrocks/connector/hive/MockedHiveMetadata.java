@@ -681,27 +681,14 @@ public class MockedHiveMetadata implements ConnectorMetadata {
 
     public static void mockT1() {
         mockSimpleTable(MOCKED_PARTITIONED_DB_NAME, "t1");
-        HiveTable  t1 = (HiveTable) MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_DB_NAME).
-                get("t1").table;
-        // todo(ywb) remove mock not null later
-        // c2, c3 is not null
-        t1.setColumnAllowNull("c2", false);
-        t1.setColumnAllowNull("c3", false);
     }
 
     public static void mockT2() {
         mockSimpleTable(MOCKED_PARTITIONED_DB_NAME2, "t2");
-        HiveTable t2 = (HiveTable) MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_DB_NAME2).get("t2").table;
-        // todo(ywb) remove mock not null later
-        // c2 is not null
-        t2.setColumnAllowNull("c2", false);
     }
 
     public static void mockT3() {
         mockSimpleTable(MOCKED_PARTITIONED_DB_NAME, "t3");
-        HiveTable t3 = (HiveTable) MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_DB_NAME).get("t3").table;
-        // c2 is not null
-        t3.setColumnAllowNull("c2", false);
     }
 
     public static void mockT1WithMultiPartitionColumns() {
