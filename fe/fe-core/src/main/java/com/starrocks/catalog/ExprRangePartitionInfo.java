@@ -49,34 +49,27 @@ public class ExprRangePartitionInfo extends RangePartitionInfo {
 
     private static final Logger LOG = LogManager.getLogger(ExprRangePartitionInfo.class);
 
-    @SerializedName(value = "exprPartitionMeta")
-    private ExprPartitionMeta exprPartitionMeta;
+    @SerializedName(value = "partitionExprs")
+    private List<Expr> partitionExprs;
 
-    public ExprRangePartitionInfo() {
-        this.type = PartitionType.EXPR_RANGE_EX;
-    }
+    @SerializedName(value = "automaticPartition")
+    private Boolean automaticPartition = false;
 
-    public ExprRangePartitionInfo(ExprPartitionMeta exprPartitionMeta, List<Column> columns) {
+    @SerializedName(value = "sourcePartitionTypes")
+    private List<Type> sourcePartitionTypes;
+
+    public ExprRangePartitionInfo(List<Expr> partitionExprs, List<Column> columns) {
         super(columns);
-        this.exprPartitionMeta = exprPartitionMeta;
         this.type = PartitionType.EXPR_RANGE_EX;
+        this.partitionExprs = partitionExprs;
     }
 
-    public ExprPartitionMeta getExprPartitionMeta() {
-        return exprPartitionMeta;
-    }
-
-    public void setExprPartitionMeta(ExprPartitionMeta exprPartitionMeta) {
-        this.exprPartitionMeta = exprPartitionMeta;
-    }
 
     public static PartitionInfo read(DataInput in) throws IOException {
-        ExprRangePartitionInfo info = new ExprRangePartitionInfo();
-        info.readFields(in);
         String json = Text.readString(in);
-        ExprPartitionMeta meta = GsonUtils.GSON.fromJson(json, ExprPartitionMeta.class);
-        info.setExprPartitionMeta(meta);
-        List<Expr> exprs = meta.getPartitionExprs();
+        ExprRangePartitionInfo exprRangePartitionInfo = GsonUtils.GSON.fromJson(json, ExprRangePartitionInfo.class);
+        // Analyze partition expr
+        List<Expr> exprs = exprRangePartitionInfo.getPartitionExprs();
         SlotRef slotRef;
         for (Expr expr : exprs) {
             if (expr instanceof FunctionCallExpr) {
@@ -92,22 +85,20 @@ public class ExprRangePartitionInfo extends RangePartitionInfo {
 
             PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
             // The current expression partition only supports 1 column
-            slotRef.setType(meta.getSourcePartitionTypes().get(0));
+            slotRef.setType(exprRangePartitionInfo.getSourcePartitionTypes().get(0));
         }
-        return info;
+        return exprRangePartitionInfo;
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeString(out, GsonUtils.GSON.toJson(exprPartitionMeta));
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     @Override
     public String toSql(OlapTable table, List<Long> partitionId) {
         StringBuilder sb = new StringBuilder();
         sb.append("PARTITION BY ");
-        List<Expr> partitionExprs = exprPartitionMeta.getPartitionExprs();
         if (table instanceof MaterializedView) {
             sb.append("(");
             for (Expr expr : partitionExprs) {
@@ -131,7 +122,6 @@ public class ExprRangePartitionInfo extends RangePartitionInfo {
             sb.append(")");
             return sb.toString();
         }
-        boolean automaticPartition = exprPartitionMeta.getAutomaticPartition();
         if (!automaticPartition) {
             sb.append("RANGE(");
         }
@@ -181,4 +171,27 @@ public class ExprRangePartitionInfo extends RangePartitionInfo {
         return sb.toString();
     }
 
+    public List<Expr> getPartitionExprs() {
+        return partitionExprs;
+    }
+
+    public void setPartitionExprs(List<Expr> partitionExprs) {
+        this.partitionExprs = partitionExprs;
+    }
+
+    public Boolean getAutomaticPartition() {
+        return automaticPartition;
+    }
+
+    public void setAutomaticPartition(Boolean automaticPartition) {
+        this.automaticPartition = automaticPartition;
+    }
+
+    public List<Type> getSourcePartitionTypes() {
+        return sourcePartitionTypes;
+    }
+
+    public void setSourcePartitionTypes(List<Type> sourcePartitionTypes) {
+        this.sourcePartitionTypes = sourcePartitionTypes;
+    }
 }

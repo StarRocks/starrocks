@@ -47,7 +47,6 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.ExprPartitionMeta;
 import com.starrocks.catalog.ExprRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExternalOlapTable;
@@ -342,8 +341,7 @@ public class OlapTableSink extends DataSink {
                     partitionParam.setPartition_exprs(Expr.treesToThrift(exprPartitionInfo.getPartitionExprs()));
                 } else if (rangePartitionInfo instanceof ExprRangePartitionInfo) {
                     ExprRangePartitionInfo exprRangePartitionInfo = (ExprRangePartitionInfo) rangePartitionInfo;
-                    ExprPartitionMeta meta = exprRangePartitionInfo.getExprPartitionMeta();
-                    partitionParam.setPartition_exprs(Expr.treesToThrift(meta.getPartitionExprs()));
+                    partitionParam.setPartition_exprs(Expr.treesToThrift(exprRangePartitionInfo.getPartitionExprs()));
                 }
                 break;
             }
