@@ -182,7 +182,7 @@ public class StarOSAgentTest {
         final long workerId2 = 11;
         new Expectations() {
             {
-                client.addWorker("1", workerHost,0);
+                client.addWorker("1", workerHost, 0);
                 minTimes = 1;
                 result = workerId1;
             }
