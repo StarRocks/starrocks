@@ -23,8 +23,9 @@ select lpad('test', 2, ' ');
 -- result:
 te
 -- !result
-select lpad('test', 0, '中文，');
+select lpad('test', 2, '中文，');
 -- result:
+te
 -- !result
 select lpad('test', 2);
 -- result:
@@ -40,6 +41,50 @@ select lpad('test', 0, '中文，');
 -- result:
 -- !result
 select lpad('test', 0);
+-- result:
+-- !result
+select rpad('test', 8, '');
+-- result:
+test
+-- !result
+select rpad('test', 8, ' ');
+-- result:
+test    
+-- !result
+select rpad('test', 8, '中文，');
+-- result:
+test中文，中
+-- !result
+select rpad('test', 8);
+-- result:
+test    
+-- !result
+select rpad('test', 2, '');
+-- result:
+te
+-- !result
+select rpad('test', 2, ' ');
+-- result:
+te
+-- !result
+select rpad('test', 2, '中文，');
+-- result:
+te
+-- !result
+select rpad('test', 2);
+-- result:
+te
+-- !result
+select rpad('test', 0, '');
+-- result:
+-- !result
+select rpad('test', 0, ' ');
+-- result:
+-- !result
+select rpad('test', 0, '中文，');
+-- result:
+-- !result
+select rpad('test', 0);
 -- result:
 -- !result
 create table t0(c0 varchar(16), c1 INT(16))
@@ -73,6 +118,30 @@ te
 select lpad(c0, c1) from t0;
 -- result:
     test
+te
+
+-- !result
+select rpad(c0, c1, ' ') from t0;
+-- result:
+test    
+te
+
+-- !result
+select rpad(c0, c1, '中文，') from t0;
+-- result:
+test中文，中
+te
+
+-- !result
+select rpad(c0, c1, '') from t0;
+-- result:
+test
+te
+
+-- !result
+select rpad(c0, c1) from t0;
+-- result:
+test    
 te
 
 -- !result

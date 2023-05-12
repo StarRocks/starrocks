@@ -510,6 +510,40 @@ TEST_F(StringFunctionPadTest, rpadTest) {
     ASSERT_EQ("", v->get_data()[1].to_string());
 }
 
+TEST_F(StringFunctionPadTest, rpadDefaultFillTest) {
+    std::vector<FunctionContext::TypeDesc> arg_types;
+    arg_types.push_back(AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)));
+    arg_types.push_back(AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT)));
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    Columns columns;
+    auto str = BinaryColumn::create();
+    auto len = Int32Column::create();
+
+    str->append("test");
+    len->append(8);
+
+    str->append("test");
+    len->append(2);
+
+    columns.emplace_back(str);
+    columns.emplace_back(len);
+
+    ASSERT_OK(StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
+    ColumnPtr result = StringFunctions::rpad(ctx.get(), columns).value();
+    ASSERT_OK(StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
+    ASSERT_EQ(2, result->size());
+    ASSERT_FALSE(result->is_nullable());
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    ASSERT_FALSE(result->is_null(0));
+    ASSERT_EQ("test    ", v->get_data()[0].to_string());
+
+    ASSERT_FALSE(result->is_null(1));
+    ASSERT_EQ("te", v->get_data()[1].to_string());
+}
+
 TEST_F(StringFunctionPadTest, rpadChineseTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;

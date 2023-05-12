@@ -251,6 +251,7 @@ vectorized_functions = [
     [30090, 'lpad', 'VARCHAR', ['VARCHAR', 'INT', 'VARCHAR'], 'StringFunctions::lpad', 'StringFunctions::pad_prepare', 'StringFunctions::pad_close'],
     [30091, 'lpad', 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::lpad', 'StringFunctions::pad_prepare', 'StringFunctions::pad_close'],
     [30100, 'rpad', 'VARCHAR', ['VARCHAR', 'INT', 'VARCHAR'], 'StringFunctions::rpad', 'StringFunctions::pad_prepare', 'StringFunctions::pad_close'],
+    [30101, 'rpad', 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::rpad', 'StringFunctions::pad_prepare', 'StringFunctions::pad_close'],
 
     [30110, 'append_trailing_char_if_absent', 'VARCHAR', ['VARCHAR', 'VARCHAR'],
      'StringFunctions::append_trailing_char_if_absent'],

@@ -7,7 +7,7 @@ This function returns strings with a length of len (starting counting from the f
 ## Syntax
 
 ```Haskell
-VARCHAR lpad(VARCHAR str, INT len, VARCHAR pad)
+VARCHAR lpad(VARCHAR str, INT len[, VARCHAR pad])
 ```
 
 ## Parameters
@@ -41,7 +41,7 @@ MySQL > SELECT lpad("hi", 1, "xy");
 
 MySQL > SELECT lpad("hi", 5);
 +---------------------+
-| lpad('hi', 5, 'xy') |
+| lpad('hi', 5)       |
 +---------------------+
 |    hi               |
 +---------------------+
