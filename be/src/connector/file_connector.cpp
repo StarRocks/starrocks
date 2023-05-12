@@ -172,6 +172,7 @@ void FileDataSource::_validate_nullable(vectorized::ChunkPtr chunk) {
         auto slot = _tuple_desc->slots()[i];
         auto column = chunk->get_column_by_slot_id(slot->id());
 
+        // filter null values in non-nullable column.
         if (column->is_nullable() && !slot->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(column.get());
             if (nullable->has_null()) {
@@ -180,16 +181,18 @@ void FileDataSource::_validate_nullable(vectorized::ChunkPtr chunk) {
                     if (nulls[j]) {
                         filter[j] = 0;
 
-                        std::stringstream ss;
-                        ss << "NULL value in non-nullable column '" << slot->col_name() << "'";
                         if (!_runtime_state->has_reached_max_error_msg_num()) {
+                            std::stringstream ss;
+                            ss << "NULL value in non-nullable column '" << slot->col_name() << "'";
                             _runtime_state->append_error_msg_to_file(chunk->debug_row(j), ss.str());
                         }
                     }
                 }
             }
         }
-        column = ColumnHelper::update_column_nullable(slot->is_nullable(), column, num_rows);
+
+        // update column nullable property according to the slot descriptor.
+        column = ColumnHelper::update_column_nullable(slot->is_nullable(), column, num_rows, true);
         chunk->update_column(column, slot->id());
     }
     chunk->filter(filter);
