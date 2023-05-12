@@ -52,6 +52,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
@@ -134,6 +135,11 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return schemaVersion;
     }
 
+    public List<Column> getNonAggregatedColumns() {
+        return schema.stream().filter(column -> !column.isAggregated())
+                .collect(Collectors.toList());
+    }
+
     public String getOriginStmt() {
         if (defineStmt == null) {
             return null;
@@ -153,15 +159,6 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
                 }
             }
         }
-    }
-
-    public Column getColumnByName(String columnName) {
-        for (Column column : schema) {
-            if (column.getName().equalsIgnoreCase(columnName)) {
-                return column;
-            }
-        }
-        return null;
     }
 
     @Override
