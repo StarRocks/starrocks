@@ -9,11 +9,13 @@ import java.nio.ByteBuffer;
 
 public final class ColumnDict {
     private final ImmutableMap<ByteBuffer, Integer> dict;
-    private final long versionTime;
+    private final long collectedVersionTime;
+    private long versionTime;
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long versionTime) {
         Preconditions.checkState(dict.size() > 0 && dict.size() <= 256);
         this.dict = dict;
+        this.collectedVersionTime = versionTime;
         this.versionTime = versionTime;
     }
 
@@ -23,5 +25,13 @@ public final class ColumnDict {
 
     public long getVersionTime() {
         return versionTime;
+    }
+
+    public long getCollectedVersionTime() {
+        return collectedVersionTime;
+    }
+
+    void updateVersionTime(long versionTime) {
+        this.versionTime = versionTime;
     }
 }
