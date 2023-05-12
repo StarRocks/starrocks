@@ -20,6 +20,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "gen_cpp/olap_common.pb.h"
 #include "gutil/macros.h"
+#include "storage/memtable_flush_executor.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/tablet.h"
@@ -144,6 +145,8 @@ public:
     State get_state() const;
 
     Status get_err_status() const;
+
+    const FlushStatistic& get_flush_stats() const { return _flush_token->get_stats(); }
 
 private:
     DeltaWriter(DeltaWriterOptions opt, MemTracker* parent, StorageEngine* storage_engine);

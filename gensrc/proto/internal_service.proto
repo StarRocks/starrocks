@@ -236,6 +236,7 @@ message PTabletWriterAddBatchResult {
     optional int64 execution_time_us = 3;
     optional int64 wait_lock_time_us = 4;
     repeated PTabletInfo failed_tablet_vec = 5;
+    optional int64 wait_memtable_flush_time_us = 6;
 };
 
 message PTabletWriterAddSegmentRequest {

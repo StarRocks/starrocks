@@ -83,11 +83,14 @@ struct AddBatchCounter {
     int64_t add_batch_num = 0;
     // total time of client rpc
     int64_t client_prc_time_us = 0;
+    // total time of wait memtable flush
+    int64_t add_batch_wait_memtable_flush_time_us = 0;
 
     AddBatchCounter& operator+=(const AddBatchCounter& rhs) {
         add_batch_execution_time_us += rhs.add_batch_execution_time_us;
         add_batch_wait_lock_time_us += rhs.add_batch_wait_lock_time_us;
         add_batch_num += rhs.add_batch_num;
+        add_batch_wait_memtable_flush_time_us += rhs.add_batch_wait_memtable_flush_time_us;
         return *this;
     }
     friend AddBatchCounter operator+(const AddBatchCounter& lhs, const AddBatchCounter& rhs) {
@@ -472,6 +475,7 @@ private:
     RuntimeProfile::Counter* _client_rpc_timer = nullptr;
     RuntimeProfile::Counter* _server_rpc_timer = nullptr;
     RuntimeProfile::Counter* _alloc_auto_increment_timer = nullptr;
+    RuntimeProfile::Counter* _server_wait_flush_timer = nullptr;
 
     // load mem limit is for remote load channel
     int64_t _load_mem_limit = 0;
