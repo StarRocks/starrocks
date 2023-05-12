@@ -31,8 +31,8 @@ public class ExprPartitionMeta {
     @SerializedName(value = "automaticPartition")
     private Boolean automaticPartition = false;
 
-    @SerializedName(value = "sourcePartitionType")
-    private Type sourcePartitionType;
+    @SerializedName(value = "sourcePartitionTypes")
+    private List<Type> sourcePartitionTypes;
 
     public List<Expr> getPartitionExprs() {
         return partitionExprs;
@@ -50,11 +50,11 @@ public class ExprPartitionMeta {
         this.automaticPartition = automaticPartition;
     }
 
-    public Type getSourcePartitionType() {
-        return sourcePartitionType;
+    public List<Type> getSourcePartitionTypes() {
+        return sourcePartitionTypes;
     }
 
-    public void setSourcePartitionType(Type sourcePartitionType) {
-        this.sourcePartitionType = sourcePartitionType;
+    public void setSourcePartitionTypes(List<Type> sourcePartitionTypes) {
+        this.sourcePartitionTypes = sourcePartitionTypes;
     }
 }

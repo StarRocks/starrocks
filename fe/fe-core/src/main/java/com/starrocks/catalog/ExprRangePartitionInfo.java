@@ -91,7 +91,8 @@ public class ExprRangePartitionInfo extends RangePartitionInfo {
             }
 
             PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
-            slotRef.setType(meta.getSourcePartitionType());
+            // The current expression partition only supports 1 column
+            slotRef.setType(meta.getSourcePartitionTypes().get(0));
         }
         return info;
     }

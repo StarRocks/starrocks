@@ -165,7 +165,7 @@ public class ExpressionPartitionDesc extends PartitionDesc {
             ExprPartitionMeta meta = new ExprPartitionMeta();
             meta.setAutomaticPartition(false);
             meta.setPartitionExprs(Collections.singletonList(expr));
-            meta.setSourcePartitionType(sourcePartitionColumn.getType());
+            meta.setSourcePartitionTypes(Collections.singletonList(sourcePartitionColumn.getType()));
             partitionInfo = new ExprRangePartitionInfo(meta, partitionColumns);
         }
 
