@@ -490,13 +490,17 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 .computeIfAbsent(baseTable.getId(), k -> Maps.newHashMap());
         Set<String> result = Sets.newHashSet();
 
+        // Ignore partitions when mv 's last refreshed time period is less than `maxMVRewriteStaleness`
         boolean isLessThanMVRewriteStaleness = isLessThanMVRewriteStaleness();
+        if (isLessThanMVRewriteStaleness) {
+            return result;
+        }
 
         // If there are new added partitions, add it into refresh result.
         for (String partitionName : baseTable.getPartitionNames()) {
             if (!mvBaseTableVisibleVersionMap.containsKey(partitionName)) {
                 Partition partition = baseTable.getPartition(partitionName);
-                if (partition.getVisibleVersion() != 1 && !isLessThanMVRewriteStaleness) {
+                if (partition.getVisibleVersion() != 1) {
                     result.add(partitionName);
                 }
             }
@@ -516,10 +520,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 // Ignore partitions if mv's partition is the same with the basic table.
                 if (mvRefreshedPartitionInfo.getId() == basePartition.getId()
                         && basePartition.getVisibleVersion() == mvRefreshedPartitionInfo.getVersion()) {
-                    continue;
-                }
-                // Ignore partitions when mv 's last refreshed time period is less than `maxMVRewriteStaleness`
-                if (isLessThanMVRewriteStaleness) {
                     continue;
                 }
 
@@ -552,7 +552,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Map<String, com.starrocks.connector.PartitionInfo> partitionNameWithPartition =
                 PartitionUtil.getPartitionNameWithPartitionInfo(baseTable);
 
+        // Ignore partitions when mv 's last refreshed time period is less than `maxMVRewriteStaleness`
         boolean isLessThanMVRewriteStaleness = isLessThanMVRewriteStaleness();
+        if (isLessThanMVRewriteStaleness) {
+            return result;
+        }
+
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
                 continue;
@@ -564,7 +569,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
             // check whether there are partitions added
             for (Map.Entry<String, com.starrocks.connector.PartitionInfo> entry : partitionNameWithPartition.entrySet()) {
-                if (!baseTableInfoVisibleVersionMap.containsKey(entry.getKey()) && !isLessThanMVRewriteStaleness) {
+                if (!baseTableInfoVisibleVersionMap.containsKey(entry.getKey())) {
                     result.add(entry.getKey());
                 }
             }
@@ -583,10 +588,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 } else  {
                     // Ignore partitions if mv's partition is the same with the basic table.
                     if (basePartitionVersion == basePartitionInfo.getVersion()) {
-                        continue;
-                    }
-                    // Ignore partitions when mv 's last refreshed time period is less than `maxMVRewriteStaleness`
-                    if (isLessThanMVRewriteStaleness) {
                         continue;
                     }
                     result.add(basePartitionName);
