@@ -53,7 +53,7 @@ Variables that can be set both globally or partially effective include:
 * sql_mode
 * time_zone
 * use_compute_nodes
-* vectorized_engine_enable
+* vectorized_engine_enable (deprecated from v2.4 onwards)
 * wait_timeout
 * sql_dialect
 
@@ -428,9 +428,9 @@ SELECT /*+ SET_VAR
 
   Used to control the query to fetch data using the rollup index of the segment v2 storage format. This variable is used for validation when going online with segment v2. It is not recommended for other cases.
 
-* vectorized_engine_enable
+* vectorized_engine_enable (deprecated from v2.4 onwards)
 
-  Used to control whether the vectorized engine is used to execute queries. A value of `true` indicates that the vectorized engine is used, otherwise the non-vectorized engine is used. The default is `true`.
+  Used to control whether the vectorized engine is used to execute queries. A value of `true` indicates that the vectorized engine is used, otherwise the non-vectorized engine is used. The default is `true`. This feature is enabled by default from v2.4 onwards and therefore, is deprecated.
 
 * version
 
