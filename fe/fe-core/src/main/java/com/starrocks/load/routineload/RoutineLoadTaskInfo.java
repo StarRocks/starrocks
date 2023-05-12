@@ -41,6 +41,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -97,6 +98,10 @@ public abstract class RoutineLoadTaskInfo {
 
     // record task schedule info
     protected String msg;
+
+    protected String label;
+
+    protected StreamLoadTask streamLoadTask = null;
 
     public RoutineLoadTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs,
                                long timeToExecuteMs) {
@@ -204,13 +209,32 @@ public abstract class RoutineLoadTaskInfo {
         // begin a txn for task
         RoutineLoadJob routineLoadJob = routineLoadManager.getJob(jobId);
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-        String label =
-                Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id));
+
+        //  label = job_name+job_id+task_id
+        label = Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id));
         txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                 routineLoadJob.getDbId(), Lists.newArrayList(routineLoadJob.getTableId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, routineLoadJob.getId(),
                 timeoutMs / 1000);
+    }
+
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+        //StreamLoadTask is null, if not specify session variable `enable_profile = true`
+        if (streamLoadTask != null) {
+            streamLoadTask.afterCommitted(txnState, txnOperated);
+        }
+    }
+
+    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) throws UserException {
+        //StreamLoadTask is null, if not specify `enable_profile = true` when creating the routine load job
+        if (streamLoadTask != null) {
+            streamLoadTask.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        }
+    }
+
+    public void setStreamLoadTask(StreamLoadTask streamLoadTask) {
+        this.streamLoadTask = streamLoadTask;
     }
 
     public List<String> getTaskShowInfo() {

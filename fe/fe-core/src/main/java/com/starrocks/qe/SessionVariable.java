@@ -99,6 +99,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String ENABLE_PROFILE = "enable_profile";
+
+    public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
     public static final String PROFILING = "profiling";
     public static final String SQL_MODE = "sql_mode";
     /**
@@ -539,6 +541,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if true, need report to coordinator when plan fragment execute successfully.
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
+
+    // if true, will generate profile when load finished
+    @VariableMgr.VarAttr(name = ENABLE_LOAD_PROFILE)
+    private boolean enableLoadProfile = false;
 
     // Default sqlMode is ONLY_FULL_GROUP_BY
     @VariableMgr.VarAttr(name = SQL_MODE_STORAGE_NAME, alias = SQL_MODE, show = SQL_MODE)
@@ -1237,6 +1243,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableProfile(boolean enableProfile) {
         this.enableProfile = enableProfile;
+    }
+
+    public boolean isEnableLoadProfile() {
+        return enableLoadProfile;
+    }
+
+    public void setEnableLoadProfile(boolean enableLoadProfile) {
+        this.enableLoadProfile = enableLoadProfile;
     }
 
     public int getWaitTimeoutS() {
