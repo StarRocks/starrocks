@@ -80,7 +80,7 @@
 **数据湖分析**
 
 - 优化元数据统计信息收集。
-- Hive Catalog、Iceberg Catalog、Hudi Catalog 和 Delta Catalog 支持通过 [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md) 查看外表 Schema 信息，支持通过 [SHOW CREATE CATALOG](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) 查看 Catalog 的创建信息。
+- Hive Catalog、Iceberg Catalog、Hudi Catalog 和 Delta Lake Catalog 支持通过 [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md) 查看外表的创建信息。
 
 ### 问题修复
 
