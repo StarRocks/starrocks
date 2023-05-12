@@ -77,8 +77,7 @@ protected:
     void verify_file_id(FileIdPB* expect_file_id, FileIdPB* actual_file_id);
     void verify_log_entry(LogEntryPB* expect, LogEntryPB* actual);
     void verify_log_entry_info(const std::shared_ptr<TestLogEntryInfo>& expect, LogEntryInfo* actual);
-    void verify_file_meta(BinlogFileMetaPB* expect_file_meta,
-                          const std::shared_ptr<BinlogFileMetaPB>& actual_file_meta);
+    void verify_file_meta(BinlogFileMetaPB* expect_file_meta, std::shared_ptr<BinlogFileMetaPB>& actual_file_meta);
     void verify_seek_and_next(const std::string& file_path, const std::shared_ptr<BinlogFileMetaPB>& file_meta,
                               int64_t seek_version, int64_t seek_seq_id,
                               std::vector<std::shared_ptr<TestLogEntryInfo>>& expected, int expected_first_entry_index);

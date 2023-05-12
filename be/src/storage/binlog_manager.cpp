@@ -43,9 +43,192 @@ BinlogManager::~BinlogManager() {
     }
 }
 
+Status BinlogManager::init(BinlogLsn min_valid_lsn, std::vector<int64_t>& sorted_valid_versions) {
+    // 1. list all of binlog files
+    std::list<int64_t> binlog_file_ids;
+    Status status = BinlogUtil::list_binlog_file_ids(_path, &binlog_file_ids);
+    if (!status.ok()) {
+        std::string err_msg = fmt::format("Failed to init binlog because of list error, tablet {}, status: {}",
+                                          _tablet_id, status.to_string());
+        LOG(ERROR) << err_msg;
+        _init_failure.store(true);
+        return Status::InternalError(err_msg);
+    }
+    binlog_file_ids.sort();
+
+    // 2. recover binlog from the largest version to the smallest version
+    std::vector<int64_t> useless_file_ids;
+    std::vector<BinlogFileMetaPBPtr> recovered_file_metas;
+    recovered_file_metas.reserve(binlog_file_ids.size());
+    std::list<int64_t>::reverse_iterator file_id_it = binlog_file_ids.rbegin();
+    int64_t next_version_index = sorted_valid_versions.size() - 1;
+    while (next_version_index >= 0) {
+        int64_t version = sorted_valid_versions[next_version_index];
+        BinlogLsn min_lsn = version == min_valid_lsn.version() ? min_valid_lsn : BinlogLsn(version, 0);
+        Status recover_status = _recover_version(version, min_lsn, binlog_file_ids, file_id_it, recovered_file_metas,
+                                                 &useless_file_ids);
+        if (!recover_status.ok()) {
+            LOG(ERROR) << "Failed to recover version: " << version << " for tablet: " << _tablet_id
+                       << ", status: " << recover_status.to_string();
+            break;
+        }
+        next_version_index--;
+    }
+
+    if (next_version_index >= 0) {
+        std::string err_msg = fmt::format(
+                "Failed to init binlog because can't find binlog for all of versions, "
+                "tablet: {}, min_valid_lsn: {}, num expected versions: {}, num recovered version: {}, last failed "
+                "version: {}",
+                _tablet_id, min_valid_lsn.to_string(), sorted_valid_versions.size(),
+                sorted_valid_versions.size() - next_version_index, sorted_valid_versions[next_version_index]);
+        LOG(ERROR) << err_msg << ". Details of valid versions for tablet: "
+                   << fmt::format("{}", fmt::join(sorted_valid_versions, ", "));
+        _init_failure.store(true);
+        return Status::InternalError(err_msg);
+    }
+
+    // 3. construct metas according to the recovery result
+
+    // file metas are pushed back to recovered_file_metas in the descending order of file ids,
+    // and we want to recover them in the ascending order, so reverse the vector first
+    std::reverse(recovered_file_metas.begin(), recovered_file_metas.end());
+    BinlogBuildResult build_result;
+    build_result.next_file_id = binlog_file_ids.empty() ? BINLOG_MIN_FILE_ID : (*binlog_file_ids.rbegin() + 1);
+    build_result.metas = recovered_file_metas;
+    _apply_build_result(&build_result);
+
+    // 4. cleanup useless binlog files
+    while (file_id_it != binlog_file_ids.rend()) {
+        useless_file_ids.push_back(*file_id_it);
+        file_id_it++;
+    }
+
+    // file ids are pushed back to useless_file_ids in descending order, and we want to delete
+    // them in ascending order, so traverse the vector in the reverse order
+    for (auto it = useless_file_ids.rbegin(); it != useless_file_ids.rend(); it++) {
+        _unused_binlog_file_ids.blocking_put(*it);
+    }
+
+    std::string version_details;
+    if (!sorted_valid_versions.empty()) {
+        version_details = fmt::format(", min valid lsn: {}, min/max valid version: {}/{}", min_valid_lsn.to_string(),
+                                      sorted_valid_versions.front(), sorted_valid_versions.back());
+    }
+    LOG(INFO) << "Init binlog successfully, tablet: " << _tablet_id
+              << ", num valid versions: " << sorted_valid_versions.size() << version_details;
+    VLOG(3) << "Details of recovered versions for tablet: " << _tablet_id
+            << ", versions: " << fmt::format("{}", fmt::join(sorted_valid_versions, ", "));
+
+    return Status::OK();
+}
+
+Status BinlogManager::_recover_version(int64_t version, BinlogLsn& min_lsn, std::list<int64_t>& file_ids,
+                                       std::list<int64_t>::reverse_iterator& file_id_it,
+                                       std::vector<BinlogFileMetaPBPtr>& recovered_file_metas,
+                                       std::vector<int64_t>* useless_file_ids) {
+    // the last file meta that contains the binlog of the version
+    BinlogFileMetaPBPtr last_file_meta;
+    if (!recovered_file_metas.empty()) {
+        auto& file_meta = recovered_file_metas.back();
+        BinlogLsn start_lsn(file_meta->start_version(), file_meta->start_seq_id());
+        if (start_lsn <= min_lsn) {
+            // the binlog for the version is only in one file,
+            // and finish to recover the version
+            return Status::OK();
+        } else if (start_lsn.version() == version) {
+            // the last recovered file only contains part of binlog
+            last_file_meta = file_meta;
+        } else {
+            // the last file is just the start of the last recovered version
+            DCHECK(start_lsn.seq_id() == 0);
+        }
+    }
+
+    bool find_all_binlog = false;
+    while (file_id_it != file_ids.rend()) {
+        int64_t file_id = *file_id_it;
+        file_id_it++;
+        StatusOr<BinlogFileMetaPBPtr> status_or =
+                _recover_file_meta_for_version(version, file_id, last_file_meta.get());
+        if (!status_or.ok() && !status_or.status().is_not_found()) {
+            return status_or.status();
+        }
+        if (status_or.status().is_not_found()) {
+            useless_file_ids->push_back(file_id);
+            continue;
+        }
+        BinlogFileMetaPBPtr file_meta = status_or.value();
+        recovered_file_metas.push_back(file_meta);
+        BinlogLsn lsn(file_meta->start_version(), file_meta->start_seq_id());
+        last_file_meta = file_meta;
+        if (lsn <= min_lsn) {
+            find_all_binlog = true;
+            break;
+        }
+    }
+
+    if (!find_all_binlog) {
+        std::string err_msg = fmt::format("Failed to recover version {} because of incomplete binlog, tablet {}",
+                                          version, _tablet_id);
+        std::string meta_msg =
+                last_file_meta == nullptr ? "null" : BinlogUtil::file_meta_to_string(last_file_meta.get());
+        LOG(ERROR) << err_msg << ", last file meta: " << meta_msg;
+        return Status::InternalError(err_msg);
+    }
+
+    return Status::OK();
+}
+
+StatusOr<BinlogFileMetaPBPtr> BinlogManager::_recover_file_meta_for_version(int64_t version, int64_t file_id,
+                                                                            BinlogFileMetaPB* last_file_meta) {
+    BinlogLsn lsn_upper_bound;
+    if (last_file_meta == nullptr) {
+        lsn_upper_bound = BinlogLsn(version + 1, 0);
+    } else {
+        lsn_upper_bound = BinlogLsn(last_file_meta->start_version(), last_file_meta->start_seq_id());
+    }
+    std::string file_path = BinlogUtil::binlog_file_path(_path, file_id);
+    StatusOr status_or = BinlogFileReader::load_meta(file_id, file_path, lsn_upper_bound);
+    if (!status_or.ok() && !status_or.status().is_not_found()) {
+        std::string err_msg =
+                fmt::format("Failed to recover version {} because of load error, tablet {}, file_path: {}", version,
+                            _tablet_id, file_path);
+        LOG(ERROR) << err_msg << ", " << status_or.status();
+        return Status::InternalError(err_msg);
+    }
+
+    if (status_or.status().is_not_found()) {
+        return status_or;
+    }
+
+    BinlogFileMetaPBPtr file_meta = status_or.value();
+    DCHECK(file_meta->num_pages() > 0);
+
+    // check the lsn is continuous between the file meta and the last file meta
+    if (file_meta->end_version() == version) {
+        if (last_file_meta == nullptr && file_meta->version_eof()) {
+            return file_meta;
+        } else if (last_file_meta != nullptr && file_meta->end_seq_id() + 1 == last_file_meta->start_seq_id()) {
+            return file_meta;
+        }
+    }
+
+    std::string err_msg = fmt::format(
+            "Failed to recover version {} because of discontinuous lsn, "
+            "tablet: {}, file_path: {}",
+            version, _tablet_id, file_path);
+    LOG(ERROR) << err_msg << ", current file meta: " << BinlogUtil::file_meta_to_string(file_meta.get())
+               << ", last file meta: "
+               << (last_file_meta == nullptr ? "null" : BinlogUtil::file_meta_to_string(last_file_meta));
+
+    return Status::InternalError(err_msg);
+}
+
 StatusOr<BinlogBuilderParamsPtr> BinlogManager::begin_ingestion(int64_t version) {
     VLOG(3) << "Begin ingestion, tablet: " << _tablet_id << ", version: " << version << ", path: " << _path;
     DCHECK_EQ(-1, _ingestion_version);
+    RETURN_IF_ERROR(_check_init_failure());
 
     std::shared_lock meta_lock(_meta_lock);
     if (!_alive_binlog_files.empty()) {
@@ -114,7 +297,7 @@ void BinlogManager::commit_ingestion(int64_t version) {
 void BinlogManager::_apply_build_result(BinlogBuildResult* result) {
     std::unique_lock lock(_meta_lock);
     for (auto& meta : result->metas) {
-        int128_t lsn = BinlogUtil::get_lsn(meta->start_version(), meta->start_seq_id());
+        BinlogLsn lsn(meta->start_version(), meta->start_seq_id());
         auto it = _alive_binlog_files.find(lsn);
         bool override_meta = it != _alive_binlog_files.end();
         if (override_meta) {
@@ -152,11 +335,11 @@ void BinlogManager::_apply_build_result(BinlogBuildResult* result) {
     _active_binlog_writer = result->active_writer;
 }
 
-void BinlogManager::check_expire_and_capacity(int64_t current_second, int64_t binlog_ttl_second,
+bool BinlogManager::check_expire_and_capacity(int64_t current_second, int64_t binlog_ttl_second,
                                               int64_t binlog_max_size) {
     std::unique_lock lock(_meta_lock);
     _check_wait_reader_binlog_files();
-    _check_alive_binlog_files(current_second, binlog_ttl_second, binlog_max_size);
+    bool expired_or_overcapacity = _check_alive_binlog_files(current_second, binlog_ttl_second, binlog_max_size);
 
     LOG(INFO) << "Check binlog expire and capacity, tablet: " << _tablet_id
               << ", num alive binlog files: " << _alive_binlog_files.size()
@@ -167,6 +350,8 @@ void BinlogManager::check_expire_and_capacity(int64_t current_second, int64_t bi
               << ", num wait reader rowset: " << _wait_reader_rowset_count_map.size()
               << ", total_wait_reader_binlog_file_size: " << _total_wait_reader_binlog_file_size
               << ", total_wait_reader_rowset_data_size: " << _total_wait_reader_rowset_data_size;
+
+    return expired_or_overcapacity;
 }
 
 void BinlogManager::_check_wait_reader_binlog_files() {
@@ -178,7 +363,7 @@ void BinlogManager::_check_wait_reader_binlog_files() {
         if (binlog_file->reader_count() > 0) {
             break;
         }
-        auto& file_meta = binlog_file->file_meta();
+        auto file_meta = binlog_file->file_meta();
         _total_wait_reader_binlog_file_size -= file_meta->file_size();
         for (int64_t rowset_id : file_meta->rowsets()) {
             int32_t count = --_wait_reader_rowset_count_map[rowset_id];
@@ -203,7 +388,7 @@ void BinlogManager::_check_wait_reader_binlog_files() {
               << ", num of still wait files: " << _wait_reader_binlog_files.size();
 }
 
-void BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t binlog_ttl_second,
+bool BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t binlog_ttl_second,
                                               int64_t binlog_max_size) {
     int64_t expiration_time = current_second - binlog_ttl_second;
     int64_t active_file_id = _active_binlog_writer != nullptr ? _active_binlog_writer->file_id() : -1;
@@ -214,9 +399,10 @@ void BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t bi
     int64_t last_file_id = -1;
     int64_t num_files = 0;
     int64_t num_unused_files = 0;
+    bool expired_or_overcapacity = false;
     for (auto it = _alive_binlog_files.begin(); it != _alive_binlog_files.end();) {
         auto& binlog_file = it->second;
-        auto& meta = binlog_file->file_meta();
+        auto meta = binlog_file->file_meta();
         // skip to clean up the active file
         if (meta->id() == active_file_id) {
             break;
@@ -227,6 +413,7 @@ void BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t bi
             break;
         }
 
+        expired_or_overcapacity = true;
         if (binlog_file->reader_count() > 0) {
             need_wait_reader = true;
         }
@@ -272,6 +459,8 @@ void BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t bi
     LOG(INFO) << "Check alive binlog files, tablet: " << _tablet_id << ", num files: " << num_files
               << ", first file id: " << first_file_id << ", last file id: " << last_file_id
               << ", num unused files: " << num_unused_files;
+
+    return expired_or_overcapacity;
 }
 
 void BinlogManager::delete_unused_binlog() {
@@ -330,6 +519,7 @@ bool BinlogManager::is_rowset_used(int64_t rowset_id) {
 }
 
 StatusOr<int64_t> BinlogManager::register_reader(std::shared_ptr<BinlogReader> reader) {
+    RETURN_IF_ERROR(_check_init_failure());
     std::unique_lock lock(_meta_lock);
     int64_t reader_id = _next_reader_id++;
     _binlog_readers.emplace(reader_id, reader);
@@ -344,8 +534,9 @@ void BinlogManager::unregister_reader(int64_t reader_id) {
 }
 
 StatusOr<BinlogFileReadHolderPtr> BinlogManager::find_binlog_file(int64_t version, int64_t seq_id) {
+    RETURN_IF_ERROR(_check_init_failure());
     std::shared_lock lock(_meta_lock);
-    int128_t lsn = BinlogUtil::get_lsn(version, seq_id);
+    BinlogLsn lsn(version, seq_id);
     // find the first file whose start lsn is greater than the target
     auto upper = _alive_binlog_files.upper_bound(lsn);
     if (upper == _alive_binlog_files.begin()) {
@@ -383,6 +574,17 @@ void BinlogManager::close_active_writer() {
         _active_binlog_writer->close(true);
         _active_binlog_writer.reset();
     }
+}
+
+Status BinlogManager::_check_init_failure() {
+    if (_init_failure.load()) {
+        std::string msg = fmt::format(
+                "Can't provide binlog read/write because tablet {} fails to init binlog. "
+                "See the BE log for the reason of init failure",
+                _tablet_id);
+        return Status::InternalError(msg);
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

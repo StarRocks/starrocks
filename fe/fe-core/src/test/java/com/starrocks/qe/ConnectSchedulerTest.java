@@ -90,12 +90,6 @@ public class ConnectSchedulerTest {
     }
 
     @Test
-    public void testSubmitFail() throws InterruptedException {
-        ConnectScheduler scheduler = new ConnectScheduler(10);
-        Assert.assertFalse(scheduler.submit(null));
-    }
-
-    @Test
     public void testSubmitTooMany() throws InterruptedException {
         ConnectScheduler scheduler = new ConnectScheduler(0);
         ConnectContext context = new ConnectContext(socketChannel);

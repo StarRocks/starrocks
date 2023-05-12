@@ -189,6 +189,8 @@ public:
 
     void set_start_time(int64_t start_time) { _task_info.start_time = start_time; }
 
+    int64_t get_start_time() { return _task_info.start_time; }
+
     void set_end_time(int64_t end_time) { _task_info.end_time = end_time; }
 
     void set_output_segments_num(uint32_t output_segments_num) { _task_info.output_segments_num = output_segments_num; }

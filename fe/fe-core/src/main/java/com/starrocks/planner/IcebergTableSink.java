@@ -14,12 +14,20 @@
 
 package com.starrocks.planner;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.connector.Connector;
+import com.starrocks.connector.iceberg.IcebergConnector;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TIcebergTableSink;
 import org.apache.iceberg.Table;
 
@@ -40,16 +48,17 @@ public class IcebergTableSink extends DataSink {
     private final String fileFormat;
     private final String location;
     private final String compressionType;
-    private final boolean isStatisticsPartitionSink;
+    private final boolean isStaticPartitionSink;
     private final String tableIdentifier;
+    private final CloudConfiguration cloudConfiguration;
 
-    public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStatisticsPartitionSink) {
+    public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink) {
         Table nativeTable = icebergTable.getNativeTable();
         this.desc = desc;
         this.location = nativeTable.location();
         this.targetTableId = icebergTable.getId();
         this.tableIdentifier = icebergTable.getUUID();
-        this.isStatisticsPartitionSink = isStatisticsPartitionSink;
+        this.isStaticPartitionSink = isStaticPartitionSink;
         this.fileFormat = nativeTable.properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
                 .toLowerCase();
         switch (fileFormat) {
@@ -64,6 +73,13 @@ public class IcebergTableSink extends DataSink {
             default:
                 compressionType = "default";
         }
+        String catalogName = icebergTable.getCatalogName();
+        Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+        Preconditions.checkState(connector != null,
+                String.format("connector of catalog %s should not be null", catalogName));
+        this.cloudConfiguration = connector.getCloudConfiguration();
+        Preconditions.checkState(cloudConfiguration != null,
+                String.format("cloudConfiguration of catalog %s should not be null", catalogName));
     }
 
     @Override
@@ -81,12 +97,14 @@ public class IcebergTableSink extends DataSink {
         TDataSink tDataSink = new TDataSink(TDataSinkType.ICEBERG_TABLE_SINK);
         TIcebergTableSink tIcebergTableSink = new TIcebergTableSink();
         tIcebergTableSink.setTarget_table_id(targetTableId);
-        tIcebergTableSink.setTuple_id(desc.getId().asInt());
         tIcebergTableSink.setLocation(location);
         tIcebergTableSink.setFile_format(fileFormat);
-        tIcebergTableSink.setIs_statistics_partition_sink(isStatisticsPartitionSink);
+        tIcebergTableSink.setIs_static_partition_sink(isStaticPartitionSink);
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
         tIcebergTableSink.setCompression_type(compression);
+        TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+        cloudConfiguration.toThrift(tCloudConfiguration);
+        tIcebergTableSink.setCloud_configuration(tCloudConfiguration);
 
         tDataSink.setIceberg_table_sink(tIcebergTableSink);
         return tDataSink;

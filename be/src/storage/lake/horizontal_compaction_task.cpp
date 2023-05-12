@@ -18,37 +18,26 @@
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/lake/rowset.h"
-#include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
 #include "util/defer_op.h"
 
 namespace starrocks::lake {
 
-HorizontalCompactionTask::~HorizontalCompactionTask() = default;
-
 Status HorizontalCompactionTask::execute(Progress* progress) {
     ASSIGN_OR_RETURN(auto tablet_schema, _tablet->get_schema());
-    const KeysType keys_type = tablet_schema->keys_type();
-    int64_t num_rows = 0;
-    int64_t num_size = 0;
+    int64_t total_num_rows = 0;
     for (auto& rowset : _input_rowsets) {
-        num_rows += rowset->num_rows();
-        num_size += rowset->data_size();
+        total_num_rows += rowset->num_rows();
     }
-    int64_t max_input_segs = 0;
-    if (keys_type == DUP_KEYS) {
-        max_input_segs = 1;
-    } else {
-        for (auto& rowset : _input_rowsets) {
-            max_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
-        }
-    }
-    const int32_t chunk_size = CompactionUtils::get_read_chunk_size(
-            config::compaction_memory_limit_per_worker, config::vector_chunk_size, num_rows, num_size, max_input_segs);
+
+    ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size());
+
+    VLOG(3) << "Start horizontal compaction. tablet: " << _tablet->id() << ", reader chunk size: " << chunk_size;
 
     Schema schema = ChunkHelper::convert_schema(*tablet_schema);
     TabletReader reader(*_tablet, _version, schema, _input_rowsets);
@@ -60,7 +49,7 @@ Status HorizontalCompactionTask::execute(Progress* progress) {
     reader_params.use_page_cache = false;
     RETURN_IF_ERROR(reader.open(reader_params));
 
-    ASSIGN_OR_RETURN(auto writer, _tablet->new_writer());
+    ASSIGN_OR_RETURN(auto writer, _tablet->new_writer(kHorizontal));
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -84,8 +73,8 @@ Status HorizontalCompactionTask::execute(Progress* progress) {
         chunk->reset();
 
         if (progress != nullptr) {
-            progress->update(100 * reader.stats().raw_rows_read / num_rows);
-            VLOG(3) << "Compaction progress: " << progress->value();
+            progress->update(100 * reader.stats().raw_rows_read / total_num_rows);
+            VLOG_EVERY_N(3, 1000) << "Compaction progress: " << progress->value();
         }
     }
     RETURN_IF_ERROR(writer->finish());
@@ -105,6 +94,28 @@ Status HorizontalCompactionTask::execute(Progress* progress) {
     op_compaction->mutable_output_rowset()->set_overlapped(false);
     Status st = _tablet->put_txn_log(std::move(txn_log));
     return st;
+}
+
+StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
+    int64_t total_num_rows = 0;
+    int64_t total_input_segs = 0;
+    int64_t total_mem_footprint = 0;
+    for (auto& rowset : _input_rowsets) {
+        total_num_rows += rowset->num_rows();
+        total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(false));
+        for (auto& segment : segments) {
+            for (size_t i = 0; i < segment->num_columns(); ++i) {
+                const auto* column_reader = segment->column(i);
+                if (column_reader == nullptr) {
+                    continue;
+                }
+                total_mem_footprint += column_reader->total_mem_footprint();
+            }
+        }
+    }
+    return CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker, config::vector_chunk_size,
+                                                total_num_rows, total_mem_footprint, total_input_segs);
 }
 
 } // namespace starrocks::lake

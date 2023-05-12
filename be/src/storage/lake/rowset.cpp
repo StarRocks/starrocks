@@ -17,9 +17,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
-#include "storage/empty_iterator.h"
 #include "storage/lake/tablet.h"
-#include "storage/merge_iterator.h"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
@@ -38,9 +36,8 @@ Rowset::Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata)
 Rowset::~Rowset() = default;
 
 // TODO: support
-//  1. primary key table
-//  2. rowid range and short key range
-StatusOr<ChunkIteratorPtr> Rowset::read(const Schema& schema, const RowsetReadOptions& options) {
+//  1. rowid range and short key range
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options) {
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->root_location()));
     seg_options.stats = options.stats;
@@ -117,14 +114,31 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const Schema& schema, const RowsetReadOp
             segment_iterators.emplace_back(std::move(res).value());
         }
     }
-    if (segment_iterators.empty()) {
-        return new_empty_iterator(schema, options.chunk_size);
-    } else if (segment_iterators.size() == 1) {
-        return segment_iterators[0];
-    } else if (options.sorted && is_overlapped()) {
-        return new_heap_merge_iterator(segment_iterators);
+    if (segment_iterators.size() > 1 && !is_overlapped()) {
+        // union non-overlapped segment iterators
+        auto iter = new_union_iterator(std::move(segment_iterators));
+        return std::vector<ChunkIteratorPtr>{iter};
     } else {
-        return new_union_iterator(segment_iterators);
+        return segment_iterators;
+    }
+}
+
+StatusOr<size_t> Rowset::get_read_iterator_num() {
+    std::vector<SegmentPtr> segments;
+    RETURN_IF_ERROR(load_segments(&segments, false));
+
+    size_t segment_num = 0;
+    for (auto& seg_ptr : segments) {
+        if (seg_ptr->num_rows() == 0) {
+            continue;
+        }
+        ++segment_num;
+    }
+
+    if (segment_num > 1 && !is_overlapped()) {
+        return 1;
+    } else {
+        return segment_num;
     }
 }
 
@@ -177,6 +191,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         seg_iterators.push_back(std::move(res).value());
     }
     return seg_iterators;
+}
+
+StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
+    std::vector<SegmentPtr> segments;
+    RETURN_IF_ERROR(load_segments(&segments, fill_cache));
+    return segments;
 }
 
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache) {

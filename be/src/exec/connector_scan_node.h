@@ -120,7 +120,10 @@ private:
     Profile _profile;
 
     void _estimate_scan_row_bytes();
+    void _estimate_mem_usage_per_chunk_source();
     int _estimated_max_concurrent_chunks() const;
+    int64_t _mem_limit = 0;
     size_t _estimated_scan_row_bytes = 0;
+    size_t _estimated_mem_usage_per_chunk_source = 0;
 };
 } // namespace starrocks

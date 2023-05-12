@@ -63,7 +63,7 @@ struct BinlogConfig {
         binlog_config_pb->set_binlog_max_size(binlog_max_size);
     }
 
-    std::string to_string() {
+    std::string to_string() const {
         return strings::Substitute(
                 "BinlogConfig={version=$0, binlog_enable=$1, binlog_ttl_second=$2, binlog_max_size=$3}", version,
                 binlog_enable, binlog_ttl_second, binlog_max_size);
@@ -176,6 +176,59 @@ public:
 
     ~BinlogManager();
 
+    // Initialize the binlog. It will load binlog files metas from disk, and recover the binlog.
+    // @param min_valid_lsn the minimum lsn of valid binlog
+    // @param sorted_valid_versions a list of versions of valid binlog. They are already sorted.
+    //
+    // Let's explain how to recovery the binlog by an example. Assume BE restarts after a crash. There are
+    // 6 binlog files under the directory, and their states are described in the following table
+    // +---------+----------+------------------------+---------------------------------------------------------------------------------------------------+
+    // | file id | should   | data                   | what happened before BE crashed                                                                   |
+    // |         | recovery |                        |                                                                                                   |
+    // +---------+----------+------------------------+---------------------------------------------------------------------------------------------------+
+    // | 1       | no       | version 1, seq 0-100   | expired, and invalid. rowset meta for v1 had been removed from TabletMetaPB#inc_rs_metas, but the |
+    // |         |          | version 2, seq 0-50    | binlog file was residual because BE crashed before deleting the file                              |
+    // +---------+----------+------------------------+---------------------------------------------------------------------------------------------------+
+    // | 2       | yes      | version 2, seq 51-100  | valid. TabletMetaPB#binlog_min_lsn recorded the minimum lsn (version 2, seq 51) when file 1 was   |
+    // |         |          | version 3, seq 0-99    | expired, and rowset metas for version 2 and 3 were still in TabletMetaPB#inc_rs_metas             |
+    // +---------+----------+------------------------+---------------------------------------------------------------------------------------------------+
+    // | 3       | yes      | version 3, seq 100-149 | valid. rowset metas for version 3 and 4 were in TabletMetaPB#inc_rs_metas                         |
+    // |         |          | version 4, seq 0-50    |                                                                                                   |
+    // +---------+----------+------------------------+---------------------------------------------------------------------------------------------------+
+    // | 4       | no       | version 5, seq 0-10    | invalid. when publishing version 5, temporary disk error happened after partial data was          |
+    // |         |          |                        | written into the binlog file, so the publish failed, and the file should be deleted, but          |
+    // |         |          |                        | the file also failed to delete because of disk error, and waited for gc (would support later)     |
+    // +---------+----------+------------------------+---------------------------------------------------------------------------------------------------+
+    // | 5       | yes      | version 5, seq 0-149   | valid. publish for version 5 was retried, and succeeded                                           |
+    // +---------+----------+------------------------+---------------------------------------------------------------------------------------------------+
+    // | 6       | no       | version 6, seq 0-50    | invalid. binlog for version 6 was partially written before BE crashed                             |
+    // +---------+----------+------------------------+---------------------------------------------------------------------------------------------------+
+    //
+    // the parameters for init() will be min_lsn = (2, 51), sorted_valid_versions = [2, 3, 4, 5], and they are constructed in Tablet#finish_load_rowsets()
+    // The steps to recover binlog are as follows
+    // 1. recover version 5:
+    //    1.1 load file 6, and the version of binlog is 6, which is bigger than 5, so discard file 6
+    //    1.2 load file 5, the version of all data is 5 which is expected, so recover file 5. The min
+    //        seq is 0 which indicates we find all binlog for version 5
+    // 2. recover version 4
+    //    2.1 load file 4, and the version of binlog is 5, which is bigger than 4, so discard file 4
+    //    2.2 load file 3, and the max version is 4, so the file is valid, and recover it. The min version
+    //        is 3 which indicates the binlog for version 4 is only in one file, and we find all data
+    // 3. recover version 3:
+    //    3.1 the min version of file 3 is 3, but the min seq is 100 (not 0), so only part of binlog for version 3
+    //        is in file 3, and we need to load more files
+    //    3.2 load file 2, and the max lsn (version 3, seq 99) is continuously with the min lsn (version 3, seq 100)
+    //        in file 3, and the min version is 2, which indicates file 2 contains left binlog for version 3, and
+    //        we find all data
+    // 4. recover version 2:
+    //    4.1 the min lsn of file 2 is (version 2, seq 51) which is equal to the min_valid_lsn, so we find all valid binlog
+    //        for version 2
+    // After recovery, file 1, 4 and 6 will be deleted.
+    // Core ideas for the recovery
+    // 1. use min_valid_lsn and sorted_valid_versions to decide what data is valid, and ensure the completeness
+    // 2. recover from the higher version to the lower so that remove duplicate data (such as version 5)
+    Status init(BinlogLsn min_valid_lsn, std::vector<int64_t>& sorted_valid_versions);
+
     //  The process of an ingestion is as following, and protected by Tablet#_meta_lock to ensure there is
     //  no concurrent ingestion for duplicate key table
     //    +-------+  success to build binlog  +------------------------+ RowsetMetaPB persisted  +-----------------+
@@ -221,7 +274,8 @@ public:
     // because Tablet#_inc_rs_version_map may be visited. This method only updates metas
     // of binlog files that should be deleted, but not do the deletion which will be done
     // in delete_unused_binlog() later, so Tablet#_meta_lock will not be blocked too long.
-    void check_expire_and_capacity(int64_t current_second, int64_t binlog_ttl_second, int64_t binlog_max_size);
+    // Return true if there is expired or overcapacity binlog.
+    bool check_expire_and_capacity(int64_t current_second, int64_t binlog_ttl_second, int64_t binlog_max_size);
 
     // Whether the rowset is used by the binlog.
     bool is_rowset_used(int64_t rowset_id);
@@ -255,7 +309,7 @@ public:
 
     BinlogFileWriter* active_binlog_writer() { return _active_binlog_writer.get(); }
 
-    std::map<int128_t, BinlogFilePtr>& alive_binlog_files() { return _alive_binlog_files; }
+    std::map<BinlogLsn, BinlogFilePtr>& alive_binlog_files() { return _alive_binlog_files; }
 
     std::unordered_map<int64_t, int32_t>& alive_rowset_count_map() { return _alive_rowset_count_map; }
 
@@ -276,9 +330,16 @@ public:
     void close_active_writer();
 
 private:
+    Status _recover_version(int64_t version, BinlogLsn& min_lsn, std::list<int64_t>& file_ids,
+                            std::list<int64_t>::reverse_iterator& file_id_it,
+                            std::vector<BinlogFileMetaPBPtr>& recovered_file_metas,
+                            std::vector<int64_t>* useless_file_ids);
+    StatusOr<BinlogFileMetaPBPtr> _recover_file_meta_for_version(int64_t version, int64_t file_id,
+                                                                 BinlogFileMetaPB* last_file_meta);
     void _apply_build_result(BinlogBuildResult* result);
     void _check_wait_reader_binlog_files();
-    void _check_alive_binlog_files(int64_t current_second, int64_t binlog_ttl_second, int64_t binlog_max_size);
+    bool _check_alive_binlog_files(int64_t current_second, int64_t binlog_ttl_second, int64_t binlog_max_size);
+    Status _check_init_failure();
 
     int64_t _tablet_id;
     // binlog storage directory
@@ -286,11 +347,15 @@ private:
     int64_t _max_file_size;
     int32_t _max_page_size;
     CompressionTypePB _compression_type;
-
     std::shared_ptr<RowsetFetcher> _rowset_fetcher;
 
+    // Whether there is failure when initializing the BinlogManager.
+    // If true, will decline to generate new binlog and read requests
+    std::atomic<bool> _init_failure{false};
+
+    static const int64_t BINLOG_MIN_FILE_ID = 1;
     // file id for the next binlog file. Protected by Tablet#_meta_lock
-    std::atomic<int64_t> _next_file_id = 0;
+    std::atomic<int64_t> _next_file_id = BINLOG_MIN_FILE_ID;
     // the version of running ingestion. -1 indicates no ingestion.
     // Protected by Tablet#_meta_lock
     int64_t _ingestion_version = -1;
@@ -304,7 +369,7 @@ private:
     // LSN(start_version, start_seq_id) of a binlog file to the file meta. A binlog file with a
     // smaller start LSN also has a smaller file id. The file with the biggest start LSN is the
     // meta of _active_binlog_writer if it's not null.
-    std::map<int128_t, BinlogFilePtr> _alive_binlog_files;
+    std::map<BinlogLsn, BinlogFilePtr> _alive_binlog_files;
     // Alive rowsets. Map from rowset id to the number of binlog files using it in _alive_binlog_files
     std::unordered_map<int64_t, int32_t> _alive_rowset_count_map;
     // Disk size for alive binlog files

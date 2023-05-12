@@ -999,7 +999,18 @@ public class PseudoBackend {
 
         @Override
         public Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request) {
-            throw new org.apache.commons.lang3.NotImplementedException("TODO");
+            ExecuteCommandResultPB result = new ExecuteCommandResultPB();
+            StatusPB pStatus = new StatusPB();
+            pStatus.statusCode = 0;
+            result.status = pStatus;
+            if (request.command.equals("execute_script")) {
+                result.result = "dummy result";
+            } else if (request.command.equals("set_config")) {
+                result.result = "";
+            } else {
+                throw new org.apache.commons.lang3.NotImplementedException("TODO");
+            }
+            return CompletableFuture.completedFuture(result);
         }
     }
 
