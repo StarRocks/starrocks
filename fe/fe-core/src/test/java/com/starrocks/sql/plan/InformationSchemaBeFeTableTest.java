@@ -63,6 +63,29 @@ public class InformationSchemaBeFeTableTest {
     }
 
     @Test
+    public void testBeSchemaTableAgg() throws Exception {
+        Connection connection = PseudoCluster.getInstance().getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            // https://github.com/StarRocks/starrocks/issues/23306
+            // verify aggregation behavior is correct
+            Assert.assertTrue(stmt.execute(
+                    "explain select table_id, count(*) as cnt from information_schema.be_tablets group by table_id"));
+            int numExchange = 0;
+            while (stmt.getResultSet().next()) {
+                String line = stmt.getResultSet().getString(1);
+                if (line.contains(":EXCHANGE")) {
+                    numExchange++;
+                }
+            }
+            Assert.assertEquals(2, numExchange);
+        } finally {
+            stmt.close();
+            connection.close();
+        }
+    }
+
+    @Test
     public void testUpdateBeConfig() throws Exception {
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
