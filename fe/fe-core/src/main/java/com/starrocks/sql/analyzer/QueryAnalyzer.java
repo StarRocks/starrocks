@@ -111,14 +111,22 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitQueryStatement(QueryStatement node, Scope parent) {
+            Scope scope = visitQueryRelation(node.getQueryRelation(), parent);
             if (node.hasOutFileClause()) {
                 try {
                     node.getOutFileClause().analyze();
                 } catch (AnalysisException e) {
                     throw new SemanticException(e.getMessage());
                 }
+                SelectRelation selectRelation = (SelectRelation) node.getQueryRelation();
+                List<Expr> outputExprs = selectRelation.getOutputExpression();
+                for (Expr expr : outputExprs) {
+                    if (expr.getType().getPrimitiveType() == Type.BITMAP.getPrimitiveType()) {
+                        throw new SemanticException("bitmap not supported");
+                    }
+                }
             }
-            return visitQueryRelation(node.getQueryRelation(), parent);
+            return scope;
         }
 
         @Override
