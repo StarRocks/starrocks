@@ -1159,7 +1159,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             StreamLoadTask task = streamLoadManager.getSyncSteamLoadTaskByLabel(request.getLabel());
             if (task == null || task.getTxnId() == -1) {
-                throw new UserException("Load begin transactonId failed");
+                throw new UserException(String.format("Load label: {} begin transacton failed", request.getLabel()));
             }
             return task.getTxnId();
         }
