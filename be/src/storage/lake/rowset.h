@@ -32,7 +32,9 @@ public:
 
     ~Rowset();
 
-    [[nodiscard]] StatusOr<ChunkIteratorPtr> read(const Schema& schema, const RowsetReadOptions& options);
+    [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options);
+
+    [[nodiscard]] StatusOr<size_t> get_read_iterator_num();
 
     // only used for updatable tablets' rowset, for update state load, it wouldn't load delvec
     // simply get iterators to iterate all rows without complex options like predicates
@@ -67,7 +69,7 @@ public:
 
     [[nodiscard]] const RowsetMetadata& metadata() const { return *_rowset_metadata; }
 
-    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments();
+    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
 private:
     [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache);

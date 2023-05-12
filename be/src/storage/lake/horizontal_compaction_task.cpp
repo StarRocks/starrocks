@@ -37,6 +37,8 @@ Status HorizontalCompactionTask::execute(Progress* progress) {
 
     ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size());
 
+    VLOG(3) << "Start horizontal compaction. tablet: " << _tablet->id() << ", reader chunk size: " << chunk_size;
+
     Schema schema = ChunkHelper::convert_schema(*tablet_schema);
     TabletReader reader(*_tablet, _version, schema, _input_rowsets);
     RETURN_IF_ERROR(reader.prepare());
@@ -101,7 +103,7 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
         total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
-        ASSIGN_OR_RETURN(auto segments, rowset->segments());
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(false));
         for (auto& segment : segments) {
             for (size_t i = 0; i < segment->num_columns(); ++i) {
                 const auto* column_reader = segment->column(i);
