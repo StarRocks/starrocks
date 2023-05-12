@@ -158,7 +158,8 @@ public class AnalyzeManager implements Writable {
     public void dropAnalyzeStatus(Long tableId) {
         List<AnalyzeStatus> expireList = Lists.newArrayList();
         for (AnalyzeStatus analyzeStatus : analyzeStatusMap.values()) {
-            if (analyzeStatus.getTableId() == tableId) {
+            if (analyzeStatus instanceof NativeAnalyzeStatus &&
+                    ((NativeAnalyzeStatus) analyzeStatus).getTableId() == tableId) {
                 expireList.add(analyzeStatus);
             }
         }
@@ -497,8 +498,8 @@ public class AnalyzeManager implements Writable {
                 }
             }
 
-            if (null != data.status) {
-                for (AnalyzeStatus status : data.status) {
+            if (null != data.nativeStatus) {
+                for (AnalyzeStatus status : data.nativeStatus) {
                     replayAddAnalyzeStatus(status);
                 }
             }
@@ -522,7 +523,9 @@ public class AnalyzeManager implements Writable {
         // save history
         SerializeData data = new SerializeData();
         data.jobs = getAllAnalyzeJobList();
-        data.status = new ArrayList<>(getAnalyzeStatusMap().values());
+        data.nativeStatus = new ArrayList<>(getAnalyzeStatusMap().values().stream().
+                filter(status -> status instanceof NativeAnalyzeStatus).
+                map(status -> (NativeAnalyzeStatus) status).collect(Collectors.toSet()));
         data.basicStatsMeta = new ArrayList<>(getBasicStatsMetaMap().values());
         data.histogramStatsMeta = new ArrayList<>(getHistogramStatsMetaMap().values());
 
@@ -550,7 +553,7 @@ public class AnalyzeManager implements Writable {
         public List<AnalyzeJob> jobs;
 
         @SerializedName("analyzeStatus")
-        public List<AnalyzeStatus> status;
+        public List<NativeAnalyzeStatus> nativeStatus;
 
         @SerializedName("basicStatsMeta")
         public List<BasicStatsMeta> basicStatsMeta;

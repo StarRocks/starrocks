@@ -240,7 +240,11 @@ public class StatisticExecutor {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setEndTime(LocalDateTime.now());
             analyzeStatus.setReason(e.getMessage());
-            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            if (analyzeStatus instanceof NativeAnalyzeStatus) {
+                GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            } else {
+                GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+            }
             return analyzeStatus;
         } finally {
             GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(analyzeStatus.getId(), false);
@@ -248,7 +252,14 @@ public class StatisticExecutor {
 
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
         analyzeStatus.setEndTime(LocalDateTime.now());
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        if (analyzeStatus instanceof NativeAnalyzeStatus) {
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        } else {
+            GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+            return analyzeStatus;
+        }
+
+        // update StatisticsCache
         if (statsJob.getType().equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
             for (String columnName : statsJob.getColumns()) {
                 HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db.getId(),
