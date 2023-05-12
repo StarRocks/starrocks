@@ -25,11 +25,7 @@ import org.apache.parquet.Strings;
 public class CreateDbAnalyzer {
     public static void analyze(CreateDbStmt statement, ConnectContext context) {
         String dbName = statement.getFullDbName();
-        try {
-            FeNameFormat.checkDbName(dbName);
-        } catch (AnalysisException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
-        }
+        FeNameFormat.checkDbName(dbName);
 
         String catalogName = statement.getCatalogName();
         if (Strings.isNullOrEmpty(catalogName)) {

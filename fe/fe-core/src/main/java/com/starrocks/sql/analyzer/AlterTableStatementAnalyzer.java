@@ -123,11 +123,7 @@ public class AlterTableStatementAnalyzer {
             if (Strings.isNullOrEmpty(newTableName)) {
                 throw new SemanticException("New Table name is not set");
             }
-            try {
-                FeNameFormat.checkTableName(newTableName);
-            } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, newTableName);
-            }
+            FeNameFormat.checkTableName(newTableName);
             return null;
         }
 
