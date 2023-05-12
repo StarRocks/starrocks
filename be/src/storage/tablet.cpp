@@ -1138,7 +1138,7 @@ void Tablet::get_compaction_status(std::string* json_result) {
     double compaction_score;
     std::string compaction_type;
     vector<RowsetSharedPtr> compaction_rowsets;
-    int64_t compaction_start_time = 1;
+    int64_t compaction_start_time = 0;
 
     {
         std::shared_lock rdlock(_meta_lock);
