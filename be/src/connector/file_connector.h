@@ -77,5 +77,7 @@ private:
     void _init_counter();
 
     void _update_counter();
+
+    void _validate_nullable(vectorized::ChunkPtr chunk);
 };
 } // namespace starrocks::connector

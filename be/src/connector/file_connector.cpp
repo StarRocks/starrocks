@@ -113,6 +113,8 @@ Status FileDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk
         _counter.num_rows_unselected += (before - (*chunk)->num_rows());
         _counter.num_bytes_read += (*chunk)->bytes_usage();
 
+        _validate_nullable(*chunk);
+
         // Row batch has been filled, return this
         if ((*chunk)->num_rows() > 0) {
             break;
@@ -160,6 +162,37 @@ void FileDataSource::_update_counter() {
     COUNTER_UPDATE(_scanner_materialize_timer, _counter.materialize_ns);
     COUNTER_UPDATE(_scanner_init_chunk_timer, _counter.init_chunk_ns);
     COUNTER_UPDATE(_scanner_file_reader_timer, _counter.file_read_ns);
+}
+
+void FileDataSource::_validate_nullable(vectorized::ChunkPtr chunk) {
+    auto num_rows = chunk->num_rows();
+    Filter filter(num_rows, 1);
+
+    for (size_t i = 0; i < _tuple_desc->slots().size(); i++) {
+        auto slot = _tuple_desc->slots()[i];
+        auto column = chunk->get_column_by_slot_id(slot->id());
+
+        if (column->is_nullable() && !slot->is_nullable()) {
+            auto* nullable = down_cast<NullableColumn*>(column.get());
+            if (nullable->has_null()) {
+                NullData& nulls = nullable->null_column_data();
+                for (size_t j = 0; j < num_rows; ++j) {
+                    if (nulls[j]) {
+                        filter[j] = 0;
+
+                        std::stringstream ss;
+                        ss << "NULL value in non-nullable column '" << slot->col_name() << "'";
+                        if (!_runtime_state->has_reached_max_error_msg_num()) {
+                            _runtime_state->append_error_msg_to_file(chunk->debug_row(j), ss.str());
+                        }
+                    }
+                }
+            }
+        }
+        column = ColumnHelper::update_column_nullable(slot->is_nullable(), column, num_rows);
+        chunk->update_column(column, slot->id());
+    }
+    chunk->filter(filter);
 }
 
 } // namespace connector
