@@ -54,6 +54,7 @@ import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
@@ -276,7 +277,7 @@ public class PrivilegeChecker {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "ALTER VIEW",
                         session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
             }
-            check(statement.getQueryStatement(), session);
+            check(((AlterViewClause) statement.getAlterClause()).getQueryStatement(), session);
             return null;
         }
 

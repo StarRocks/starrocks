@@ -48,7 +48,6 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -227,11 +226,7 @@ public class MaterializedViewAnalyzer {
             final TableName tableNameObject = statement.getTableName();
             MetaUtils.normalizationTableName(context, tableNameObject);
             final String tableName = tableNameObject.getTbl();
-            try {
-                FeNameFormat.checkTableName(tableName);
-            } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
-            }
+            FeNameFormat.checkTableName(tableName);
             QueryStatement queryStatement = statement.getQueryStatement();
             // check query relation is select relation
             if (!(queryStatement.getQueryRelation() instanceof SelectRelation) &&
@@ -819,7 +814,7 @@ public class MaterializedViewAnalyzer {
             PrimitiveType type = partitionColumn.getPrimitiveType();
             if (!type.isFixedPointType() && !type.isDateType()) {
                 throw new SemanticException("Materialized view partition exp column:"
-                        + partitionColumn.getName() + " with type "  + type + " not supported");
+                        + partitionColumn.getName() + " with type " + type + " not supported");
             }
         }
 
@@ -949,7 +944,7 @@ public class MaterializedViewAnalyzer {
             if (!mv.isActive()) {
                 throw new SemanticException(
                         "Refresh materialized view failed because " + mv.getName() + " is not active. " +
-                        "You can try to active it with ALTER MATERIALIZED VIEW " + mv.getName() + " ACTIVE.");
+                                "You can try to active it with ALTER MATERIALIZED VIEW " + mv.getName() + " ACTIVE.");
             }
             if (statement.getPartitionRangeDesc() == null) {
                 return null;

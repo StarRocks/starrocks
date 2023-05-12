@@ -14,68 +14,38 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
-import com.starrocks.analysis.TableName;
+import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.Column;
 
 import java.util.List;
 
-public class CreateViewStmt extends DdlStmt {
-    private final TableName tableName;
-    private final List<ColWithComment> colWithComments;
-    private final boolean ifNotExists;
-    private final String comment;
+public class AlterViewClause extends AlterClause {
+    protected List<ColWithComment> colWithComments;
     protected QueryStatement queryStatement;
 
-    //Resolved by Analyzer
     protected List<Column> columns;
-    private String inlineViewDef;
+    protected String inlineViewDef;
 
-    public CreateViewStmt(boolean ifNotExists,
-                          TableName tableName, List<ColWithComment> colWithComments,
-                          String comment,
-                          QueryStatement queryStmt) {
-        this.ifNotExists = ifNotExists;
-        this.tableName = tableName;
+    public AlterViewClause(List<ColWithComment> colWithComments, QueryStatement queryStatement) {
+        super(AlterOpType.ALTER_VIEW);
         this.colWithComments = colWithComments;
-        this.comment = Strings.nullToEmpty(comment);
-        this.queryStatement = queryStmt;
-    }
-
-    public String getDbName() {
-        return tableName.getDb();
-    }
-
-    public String getTable() {
-        return tableName.getTbl();
-    }
-
-    public TableName getTableName() {
-        return tableName;
+        this.queryStatement = queryStatement;
     }
 
     public List<ColWithComment> getColWithComments() {
         return colWithComments;
     }
 
-    public boolean isSetIfNotExists() {
-        return ifNotExists;
-    }
-
-    public String getComment() {
-        return comment;
-    }
-
     public QueryStatement getQueryStatement() {
         return queryStatement;
     }
 
-    public void setColumns(List<Column> columns) {
-        this.columns = columns;
-    }
-
     public List<Column> getColumns() {
         return columns;
+    }
+
+    public void setColumns(List<Column> columns) {
+        this.columns = columns;
     }
 
     public String getInlineViewDef() {
@@ -86,7 +56,8 @@ public class CreateViewStmt extends DdlStmt {
         this.inlineViewDef = inlineViewDef;
     }
 
+    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateViewStatement(this, context);
+        return visitor.visitAlterViewClause(this, context);
     }
 }
