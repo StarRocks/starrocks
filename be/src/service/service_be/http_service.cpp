@@ -51,6 +51,7 @@
 #include "http/action/restore_tablet_action.h"
 #include "http/action/runtime_filter_cache_action.h"
 #include "http/action/snapshot_action.h"
+#include "http/action/stop_be_action.h"
 #include "http/action/stream_load.h"
 #include "http/action/transaction_stream_load.h"
 #include "http/action/update_config_action.h"
@@ -129,6 +130,11 @@ Status HttpServiceBE::start() {
     auto* health_action = new HealthAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/health", health_action);
     _http_handlers.emplace_back(health_action);
+
+    // Register Stop Be action
+    auto* stop_be_action = new StopBeAction(_env);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/_stop_be", stop_be_action);
+    _http_handlers.emplace_back(stop_be_action);
 
     // register pprof actions
     if (!config::pprof_profile_dir.empty()) {
@@ -213,6 +219,10 @@ Status HttpServiceBE::start() {
     auto* submit_repair_action = new CompactionAction(CompactionActionType::SUBMIT_REPAIR);
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/compaction/submit_repair", submit_repair_action);
     _http_handlers.emplace_back(submit_repair_action);
+
+    auto* show_running_action = new CompactionAction(CompactionActionType::SHOW_RUNNING_TASK);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/compaction/running", show_running_action);
+    _http_handlers.emplace_back(show_running_action);
 
     auto* update_config_action = new UpdateConfigAction(_env);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/update_config", update_config_action);

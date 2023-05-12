@@ -34,6 +34,7 @@ public:
 
 protected:
     void test_reset_and_reopen(bool is_reset);
+    void test_load(bool append_meta);
 
     std::shared_ptr<FileSystem> _fs;
     std::string _binlog_file_dir = "binlog_file_test";
@@ -72,6 +73,7 @@ TEST_F(BinlogFileTest, test_basic_write_read) {
     expect_file_meta.set_end_version(1);
     expect_file_meta.set_end_seq_id(309);
     expect_file_meta.set_end_timestamp_in_us(1);
+    expect_file_meta.set_version_eof(true);
     expect_file_meta.set_num_pages(2);
     expect_file_meta.set_file_size(_fs->get_file_size(file_path).value());
     expect_file_meta.add_rowsets(1);
@@ -93,6 +95,7 @@ TEST_F(BinlogFileTest, test_basic_write_read) {
     expect_file_meta.set_end_version(2);
     expect_file_meta.set_end_seq_id(31);
     expect_file_meta.set_end_timestamp_in_us(2);
+    expect_file_meta.set_version_eof(true);
     expect_file_meta.set_num_pages(3);
     expect_file_meta.set_file_size(_fs->get_file_size(file_path).value());
     expect_file_meta.add_rowsets(2);
@@ -107,8 +110,9 @@ TEST_F(BinlogFileTest, test_basic_write_read) {
     ASSERT_OK(file_writer->commit(true));
 
     expect_file_meta.set_end_version(3);
-    expect_file_meta.set_end_seq_id(-1);
+    expect_file_meta.set_end_seq_id(0);
     expect_file_meta.set_end_timestamp_in_us(3);
+    expect_file_meta.set_version_eof(true);
     expect_file_meta.set_num_pages(4);
     expect_file_meta.set_file_size(_fs->get_file_size(file_path).value());
     expect_entries.emplace_back(build_empty_rowset_log_entry(3, 3));
@@ -125,6 +129,7 @@ TEST_F(BinlogFileTest, test_basic_write_read) {
     expect_file_meta.set_end_version(4);
     expect_file_meta.set_end_seq_id(59);
     expect_file_meta.set_end_timestamp_in_us(4);
+    expect_file_meta.set_version_eof(false);
     expect_file_meta.set_num_pages(5);
     expect_file_meta.set_file_size(_fs->get_file_size(file_path).value());
     expect_file_meta.add_rowsets(4);
@@ -198,6 +203,7 @@ TEST_F(BinlogFileTest, test_basic_begin_commit_abort) {
     expect_file_meta.set_end_version(3);
     expect_file_meta.set_end_seq_id(2);
     expect_file_meta.set_end_timestamp_in_us(3);
+    expect_file_meta.set_version_eof(true);
     expect_file_meta.set_num_pages(1);
     expect_file_meta.set_file_size(_fs->get_file_size(file_path).value());
     expect_file_meta.add_rowsets(3);
@@ -234,6 +240,7 @@ TEST_F(BinlogFileTest, test_basic_begin_commit_abort) {
     expect_file_meta.set_end_version(5);
     expect_file_meta.set_end_seq_id(209);
     expect_file_meta.set_end_timestamp_in_us(5);
+    expect_file_meta.set_version_eof(false);
     expect_file_meta.set_num_pages(3);
     expect_file_meta.set_file_size(_fs->get_file_size(file_path).value());
     expect_file_meta.add_rowsets(5);
@@ -417,11 +424,79 @@ TEST_F(BinlogFileTest, test_random_begin_commit_abort) {
     ASSERT_EQ(versions[0].version, file_meta->start_version());
     ASSERT_EQ(0, file_meta->start_seq_id());
     ASSERT_EQ(versions.back().version, file_meta->end_version());
-    ASSERT_EQ(versions.back().num_entries * versions.back().num_rows_per_entry - 1, file_meta->end_seq_id());
+    ASSERT_EQ(std::max(versions.back().num_entries * versions.back().num_rows_per_entry - 1, (int64_t)0),
+              file_meta->end_seq_id());
     verify_dup_key_multiple_versions(versions, _binlog_file_dir, {file_meta});
 }
 
 // TODO add tests for primary key
 TEST_F(BinlogFileTest, test_primary_key) {}
+
+void BinlogFileTest::test_load(bool append_meta) {
+    int64_t file_id = 1;
+    std::string file_path = BinlogUtil::binlog_file_path(_binlog_file_dir, file_id);
+    std::shared_ptr<BinlogFileWriter> file_writer =
+            std::make_shared<BinlogFileWriter>(file_id, file_path, 1024 * 1024 * 1024, LZ4_FRAME);
+    ASSERT_OK(file_writer->init());
+    int32_t num_version = 10;
+    int32_t num_segs_per_version = 10;
+    int32_t num_rows_per_seg = 100;
+    std::vector<BinlogFileMetaPBPtr> metas_for_each_page;
+    BinlogFileMetaPBPtr file_meta = std::make_shared<BinlogFileMetaPB>();
+    for (int version = 1; version <= num_version; version++) {
+        int64_t timestamp = version * 1000000;
+        int64_t rowset_id = version;
+        ASSERT_OK(file_writer->begin(version, 0, timestamp));
+        if (version == 1) {
+            file_meta->set_id(file_id);
+            file_meta->set_start_version(version);
+            file_meta->set_start_seq_id(0);
+            file_meta->set_start_timestamp_in_us(timestamp);
+            file_meta->set_num_pages(0);
+        }
+        file_meta->add_rowsets(rowset_id);
+        for (int32_t seg_index = 0; seg_index < num_segs_per_version; seg_index++) {
+            RowsetSegInfo info(rowset_id, seg_index);
+            ASSERT_OK(file_writer->add_insert_range(info, 0, num_rows_per_seg));
+            bool version_eof;
+            if (seg_index + 1 < num_segs_per_version) {
+                ASSERT_OK(file_writer->force_flush_page(false));
+                version_eof = false;
+            } else {
+                ASSERT_OK(file_writer->commit(true));
+                version_eof = true;
+            }
+            file_meta->set_end_version(version);
+            file_meta->set_end_seq_id((seg_index + 1) * num_rows_per_seg - 1);
+            file_meta->set_end_timestamp_in_us(timestamp);
+            file_meta->set_version_eof(version_eof);
+            file_meta->set_num_pages(file_meta->num_pages() + 1);
+            file_meta->set_file_size(_fs->get_file_size(file_path).value());
+            std::shared_ptr<BinlogFileMetaPB> meta = std::make_shared<BinlogFileMetaPB>();
+            meta->CopyFrom(*file_meta);
+            metas_for_each_page.push_back(meta);
+        }
+        std::shared_ptr<BinlogFileMetaPB> meta = std::make_shared<BinlogFileMetaPB>();
+        file_writer->copy_file_meta(meta.get());
+        verify_file_meta(meta.get(), file_meta);
+    }
+    ASSERT_OK(file_writer->close(append_meta));
+
+    for (int32_t i = 0; i < metas_for_each_page.size(); i++) {
+        auto& meta = metas_for_each_page[i];
+        BinlogLsn maxLsn(meta->end_version(), meta->end_seq_id() + 1);
+        auto status_or = BinlogFileReader::load_meta(file_id, file_path, maxLsn);
+        ASSERT_OK(status_or.status());
+        verify_file_meta(meta.get(), status_or.value());
+    }
+}
+
+TEST_F(BinlogFileTest, test_load_with_append_meta) {
+    test_load(true);
+}
+
+TEST_F(BinlogFileTest, test_load_without_append_meta) {
+    test_load(false);
+}
 
 } // namespace starrocks

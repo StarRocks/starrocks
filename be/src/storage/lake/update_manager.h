@@ -58,13 +58,16 @@ public:
     int64_t get_cache_expire_ms() const { return _cache_expire_ms; }
 
     // publish primary key tablet, update primary index and delvec, then update meta file
-    Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet,
-                                      MetaFileBuilder* builder, int64_t base_version);
+    Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadata& metadata,
+                                      Tablet* tablet, MetaFileBuilder* builder, int64_t base_version);
 
     // get rowids from primary index by each upserts
     Status get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
                                    const std::vector<ColumnUniquePtr>& upserts, int64_t base_version,
                                    const MetaFileBuilder* builder, std::vector<std::vector<uint64_t>*>* rss_rowids);
+    Status get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
+                                   const std::vector<ColumnUniquePtr>& upserts, const int64_t base_version,
+                                   const MetaFileBuilder* builder, std::vector<std::vector<uint64_t>>* rss_rowids);
 
     // get column data by rssid and rowids
     Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
@@ -101,6 +104,7 @@ public:
     void expire_cache();
 
     void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
+    void preload_update_state(const TxnLog& op_write, Tablet* tablet);
 
     // check if pk index's cache ref == ref_cnt
     bool TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint32_t ref_cnt);
@@ -124,6 +128,9 @@ private:
                                      PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes);
 
     int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
+
+    Status _handle_index_op(Tablet* tablet, const TabletMetadata& metadata, const int64_t base_version,
+                            const MetaFileBuilder* builder, std::function<void(LakePrimaryIndex&)> op);
 
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:
