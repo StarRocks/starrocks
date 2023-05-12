@@ -385,6 +385,114 @@ void CompactionManager::clear_tasks() {
     _cumulative_compaction_concurrency = 0;
 }
 
+// for http action
+void CompactionManager::get_running_status(std::string* json_result) {
+    int32_t max_task_num;
+    int64_t base_task_num;
+    int64_t cumulative_task_num;
+    int64_t running_task_num;
+    int64_t candidate_num;
+    std::unordered_map<std::string, uint16_t> data_dir_to_base_task_num;
+    std::unordered_map<std::string, uint16_t> data_dir_to_cumulative_task_num;
+    vector<int64_t> running_tablet_ids;
+    {
+        std::lock_guard lg(_tasks_mutex);
+        max_task_num = _max_task_num;
+        base_task_num = _base_compaction_concurrency;
+        cumulative_task_num = _cumulative_compaction_concurrency;
+        running_task_num = _running_tasks.size();
+        running_tablet_ids.reserve(running_task_num);
+        for (auto it : _running_tasks) {
+            running_tablet_ids.push_back(it->tablet()->tablet_id());
+        }
+        for (auto it : _data_dir_to_base_task_num_map) {
+            data_dir_to_base_task_num[it.first->path()] = it.second;
+        }
+        for (auto it : _data_dir_to_cumulative_task_num_map) {
+            data_dir_to_cumulative_task_num[it.first->path()] = it.second;
+        }
+        candidate_num = candidates_size();
+    }
+
+    rapidjson::Document root;
+    root.SetObject();
+
+    rapidjson::Value max_task_num_value;
+    max_task_num_value.SetInt(max_task_num);
+    root.AddMember("max_task_num", max_task_num_value, root.GetAllocator());
+
+    rapidjson::Value base_task_num_value;
+    base_task_num_value.SetInt64(base_task_num);
+    root.AddMember("base_task_num", base_task_num_value, root.GetAllocator());
+
+    rapidjson::Value cumulative_task_num_value;
+    cumulative_task_num_value.SetInt64(cumulative_task_num);
+    root.AddMember("cumulative_task_num", cumulative_task_num_value, root.GetAllocator());
+
+    rapidjson::Value running_task_num_value;
+    running_task_num_value.SetInt64(running_task_num);
+    root.AddMember("running_task_num", running_task_num_value, root.GetAllocator());
+
+    rapidjson::Value base_task_num_detail;
+    base_task_num_detail.SetArray();
+    for (const auto& it : data_dir_to_base_task_num) {
+        rapidjson::Value value;
+        value.SetObject();
+
+        rapidjson::Value path;
+        path.SetString(it.first.c_str(), it.first.size(), root.GetAllocator());
+        value.AddMember("path", path, root.GetAllocator());
+
+        rapidjson::Value task_num;
+        task_num.SetUint64(it.second);
+        value.AddMember("base_task_num", task_num, root.GetAllocator());
+
+        base_task_num_detail.PushBack(value, root.GetAllocator());
+    }
+    root.AddMember("base_task_num_detail", base_task_num_detail, root.GetAllocator());
+
+    rapidjson::Value cumulative_task_num_detail;
+    cumulative_task_num_detail.SetArray();
+    for (const auto& it : data_dir_to_cumulative_task_num) {
+        rapidjson::Value value;
+        value.SetObject();
+
+        rapidjson::Value path;
+        path.SetString(it.first.c_str(), it.first.size(), root.GetAllocator());
+        value.AddMember("path", path, root.GetAllocator());
+
+        rapidjson::Value task_num;
+        task_num.SetUint64(it.second);
+        value.AddMember("cumulative_task_num", task_num, root.GetAllocator());
+
+        cumulative_task_num_detail.PushBack(value, root.GetAllocator());
+    }
+    root.AddMember("cumulative_task_num_detail", cumulative_task_num_detail, root.GetAllocator());
+
+    rapidjson::Value tablet_num;
+    tablet_num.SetInt(running_tablet_ids.size());
+    root.AddMember("tablet_num", tablet_num, root.GetAllocator());
+
+    rapidjson::Value running_tablet_list;
+    running_tablet_list.SetArray();
+    for (auto it : running_tablet_ids) {
+        rapidjson::Value value;
+        value.SetInt64(it);
+        running_tablet_list.PushBack(value, root.GetAllocator());
+    }
+    root.AddMember("running_tablet_list", running_tablet_list, root.GetAllocator());
+
+    rapidjson::Value candidate_num_value;
+    candidate_num_value.SetInt64(candidate_num);
+    root.AddMember("candidate_num", candidate_num_value, root.GetAllocator());
+
+    // to json string
+    rapidjson::StringBuffer strbuf;
+    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(strbuf);
+    root.Accept(writer);
+    *json_result = std::string(strbuf.GetString());
+}
+
 Status CompactionManager::update_max_threads(int max_threads) {
     if (_compaction_pool != nullptr) {
         return _compaction_pool->update_max_threads(max_threads);
