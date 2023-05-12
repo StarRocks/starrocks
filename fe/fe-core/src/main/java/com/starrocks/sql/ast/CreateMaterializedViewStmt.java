@@ -214,7 +214,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             if (selectListItemExpr instanceof SlotRef) {
                 SlotRef slotRef = (SlotRef) selectListItemExpr;
                 if (alias != null) {
-                    result.put(alias, null);
+                    result.put(alias, selectListItemExpr);
                 } else {
                     result.put(slotRef.getColumnName(), null);
                 }
@@ -370,6 +370,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         }
     }
 
+    /// TODO Need check alias is not same as column names in base scheme
     private static int genColumnAndSetIntoStmt(CreateMaterializedViewStmt statement, SelectRelation selectRelation) {
         List<MVColumnItem> mvColumnItemList = Lists.newArrayList();
 
@@ -505,31 +506,33 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     }
                     defineExpr = functionChild0;
                     break;
+
                 case "min":
                 case "max":
                     mvAggregateType = AggregateType.valueOf(functionName.toUpperCase());
                     type = funcArgType;
                     defineExpr = functionChild0;
                     break;
+
                 case FunctionSet.BITMAP_UNION:
                     // Compatible aggregation models
                     defineExpr = functionChild0;
-
                     mvAggregateType = AggregateType.valueOf(functionName.toUpperCase());
                     type = Type.BITMAP;
                     break;
+
                 case FunctionSet.HLL_UNION:
                     defineExpr = functionChild0;
-
                     mvAggregateType = AggregateType.valueOf(functionName.toUpperCase());
                     type = Type.HLL;
                     break;
+
                 case FunctionSet.PERCENTILE_UNION:
                     defineExpr = functionChild0;
-
                     mvAggregateType = AggregateType.valueOf(functionName.toUpperCase());
                     type = Type.PERCENTILE;
                     break;
+
                 case FunctionSet.COUNT:
                     mvAggregateType = AggregateType.SUM;
                     defineExpr = new CaseExpr(null, Lists.newArrayList(new CaseWhenClause(
