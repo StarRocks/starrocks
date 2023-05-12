@@ -104,17 +104,57 @@ inline void memcpy_inlined(void* __restrict _dst, const void* __restrict _src, s
     auto src = static_cast<const uint8_t*>(_src);
 
     [[maybe_unused]] tail : if (size <= 16) {
-        if (size >= 8) {
-            __builtin_memcpy(dst + size - 8, src + size - 8, 8);
-            __builtin_memcpy(dst, src, 8);
-        } else if (size >= 4) {
-            __builtin_memcpy(dst + size - 4, src + size - 4, 4);
-            __builtin_memcpy(dst, src, 4);
-        } else if (size >= 2) {
-            __builtin_memcpy(dst + size - 2, src + size - 2, 2);
+        switch (size) {
+        case 0:
+            break;
+        case 1:
+            __builtin_memcpy(dst, src, 1);
+            break;
+        case 2:
             __builtin_memcpy(dst, src, 2);
-        } else if (size >= 1) {
-            *dst = *src;
+            break;
+        case 3:
+            __builtin_memcpy(dst, src, 3);
+            break;
+        case 4:
+            __builtin_memcpy(dst, src, 4);
+            break;
+        case 5:
+            __builtin_memcpy(dst, src, 5);
+            break;
+        case 6:
+            __builtin_memcpy(dst, src, 6);
+            break;
+        case 7:
+            __builtin_memcpy(dst, src, 7);
+            break;
+        case 8:
+            __builtin_memcpy(dst, src, 8);
+            break;
+        case 9:
+            __builtin_memcpy(dst, src, 9);
+            break;
+        case 10:
+            __builtin_memcpy(dst, src, 10);
+            break;
+        case 11:
+            __builtin_memcpy(dst, src, 11);
+            break;
+        case 12:
+            __builtin_memcpy(dst, src, 12);
+            break;
+        case 13:
+            __builtin_memcpy(dst, src, 13);
+            break;
+        case 14:
+            __builtin_memcpy(dst, src, 14);
+            break;
+        case 15:
+            __builtin_memcpy(dst, src, 15);
+            break;
+        case 16:
+            __builtin_memcpy(dst, src, 16);
+            break;
         }
     }
     else {
