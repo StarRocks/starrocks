@@ -34,6 +34,7 @@ namespace starrocks {
 
 Status VerticalCompactionTask::run_impl() {
     Statistics statistics;
+    RETURN_IF_ERROR(_shortcut_compact(&statistics));
     RETURN_IF_ERROR(_vertical_compaction_data(&statistics));
     TRACE_COUNTER_INCREMENT("merged_rows", statistics.merged_rows);
     TRACE_COUNTER_INCREMENT("filtered_rows", statistics.filtered_rows);
@@ -49,6 +50,9 @@ Status VerticalCompactionTask::run_impl() {
 }
 
 Status VerticalCompactionTask::_vertical_compaction_data(Statistics* statistics) {
+    if (_output_rowset != nullptr) {
+        return Status::OK();
+    }
     TRACE("[Compaction] start vertical comapction data");
     int64_t max_rows_per_segment = CompactionUtils::get_segment_max_rows(
             config::max_segment_file_size, _task_info.input_rows_num, _task_info.input_rowsets_size);

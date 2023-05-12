@@ -33,6 +33,7 @@ namespace starrocks {
 
 Status HorizontalCompactionTask::run_impl() {
     Statistics statistics;
+    RETURN_IF_ERROR(_shortcut_compact(&statistics));
     RETURN_IF_ERROR(_horizontal_compact_data(&statistics));
 
     TRACE_COUNTER_INCREMENT("merged_rows", statistics.merged_rows);
@@ -49,6 +50,9 @@ Status HorizontalCompactionTask::run_impl() {
 }
 
 Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics) {
+    if (_output_rowset != nullptr) {
+        return Status::OK();
+    }
     TRACE("[Compaction] start horizontal comapction data");
     // 1: init
     int64_t max_rows_per_segment = CompactionUtils::get_segment_max_rows(
