@@ -627,20 +627,29 @@ Status MapColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
 }
 
 // keep the last identical key
-void MapColumn::remove_duplicated_keys() {
+void MapColumn::remove_duplicated_keys(bool need_recursive) {
+    // recursively distinct keys
+    if (need_recursive && _values->is_map()) {
+        down_cast<MapColumn*>(ColumnHelper::get_data_column(_values.get()))->remove_duplicated_keys(true);
+    }
     Filter filter(_keys->size(), 1);
+    // compute hash for all keys
+    auto hash = std::make_unique<uint32_t[]>(_keys->size());
+    memset(hash.get(), 0, _keys->size() * sizeof(uint32_t));
+    _keys->fnv_hash(hash.get(), 0, _keys->size());
 
     bool has_duplicated_keys = false;
+    size_t size = this->size();
     UInt32Column::Ptr new_offsets = UInt32Column::create();
+    new_offsets->reserve(size + 1);
     auto& offsets_vec = new_offsets->get_data();
     offsets_vec.push_back(0);
 
     uint32_t new_offset = 0;
-    size_t size = this->size();
     for (auto i = 0; i < size; ++i) {
         for (auto j = _offsets->get_data()[i]; j < _offsets->get_data()[i + 1]; ++j) {
             for (auto k = j + 1; k < _offsets->get_data()[i + 1]; ++k) {
-                if (_keys->equals(j, *_keys, k)) {
+                if (hash[j] == hash[k] && _keys->equals(j, *_keys, k)) {
                     filter[j] = 0;
                     has_duplicated_keys = true;
                     break;

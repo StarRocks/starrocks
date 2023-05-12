@@ -285,4 +285,74 @@ void MapFunctions::_filter_map_items(const MapColumn* src_column, const ColumnPt
     dest_column->values_column()->append_selective(src_column->values(), indexes);
 }
 
+StatusOr<ColumnPtr> MapFunctions::distinct_map_keys(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 1);
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    Column* arg0 = columns[0].get();
+
+    auto* col_map = down_cast<MapColumn*>(ColumnHelper::get_data_column(arg0));
+    auto keys = col_map->keys_column();
+    auto values = col_map->values_column();
+    auto offsets = col_map->offsets_column();
+
+    // recursively distinct values
+    if (values->is_map()) {
+        values = distinct_map_keys(context, {values}).value();
+    }
+
+    Filter filter(keys->size(), 1);
+    // compute hash for all keys
+    auto hash = std::make_unique<uint32_t[]>(keys->size());
+    memset(hash.get(), 0, keys->size() * sizeof(uint32_t));
+    keys->fnv_hash(hash.get(), 0, keys->size());
+
+    bool has_duplicated_keys = false;
+    size_t size = col_map->size();
+    UInt32Column::Ptr new_offsets = UInt32Column::create();
+    new_offsets->reserve(size + 1);
+    auto& offsets_vec = new_offsets->get_data();
+    offsets_vec.push_back(0);
+
+    uint32_t new_offset = 0;
+    for (auto i = 0; i < size; ++i) {
+        for (auto j = offsets->get_data()[i]; j < offsets->get_data()[i + 1]; ++j) {
+            for (auto k = j + 1; k < offsets->get_data()[i + 1]; ++k) {
+                if (hash[j] == hash[k] && keys->equals(j, *keys, k)) {
+                    filter[j] = 0;
+                    has_duplicated_keys = true;
+                    break;
+                }
+            }
+            new_offset += filter[j];
+        }
+        offsets_vec.push_back(new_offset);
+    }
+    ColumnPtr new_keys, new_values;
+    if (has_duplicated_keys) {
+        new_keys = keys->clone_empty();
+        new_values = values->clone_empty();
+        int start = 0, i = 0;
+        for (; i <= filter.size(); ++i) {
+            if (i == filter.size() || !filter.data()[i]) {
+                if (i > start) {
+                    new_keys->append(*keys, start, i - start);
+                    new_values->append(*values, start, i - start);
+                }
+                start = i + 1;
+            }
+        }
+    } else { // avoid changing original map column
+        new_keys = keys->clone_shared();
+        new_values = values->clone_shared();
+    }
+    auto map = MapColumn::create(new_keys, new_values, new_offsets);
+    if (arg0->has_null()) {
+        return NullableColumn::create(
+                std::move(map),
+                std::static_pointer_cast<NullColumn>(down_cast<NullableColumn*>(arg0)->null_column()->clone_shared()));
+    }
+    return map;
+}
+
 } // namespace starrocks
