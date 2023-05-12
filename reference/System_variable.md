@@ -53,7 +53,7 @@ SET GLOBAL query_mem_limit = 137438953472;
 * sql_mode
 * time_zone
 * use_compute_nodes
-* vectorized_engine_enable
+* vectorized_engine_enable (2.4 版本开始弃用)
 * wait_timeout
 * sql_dialect
 
@@ -430,9 +430,9 @@ SELECT /*+ SET_VAR
 
   用于控制查询使用 segment v2 存储格式的 Rollup 索引获取数据。该变量用于上线 segment v2 的时进行验证使用。其他情况不建议使用。
 
-* vectorized_engine_enable
+* vectorized_engine_enable (2.4 版本开始弃用)
 
-  用于控制是否使用向量化引擎执行查询。值为 true 时表示使用向量化引擎，否则使用非向量化引擎。默认值为 true。
+  用于控制是否使用向量化引擎执行查询。值为 true 时表示使用向量化引擎，否则使用非向量化引擎。默认值为 true。2.4 版本开始默认打开，所以弃用该变量。
 
 * version
 
