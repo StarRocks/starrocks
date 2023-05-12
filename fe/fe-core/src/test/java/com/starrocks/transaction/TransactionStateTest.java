@@ -21,8 +21,6 @@ import com.baidu.bjf.remoting.protobuf.Codec;
 import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.common.FeMetaVersion;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TxnFinishStatePB;
 import com.starrocks.thrift.TUniqueId;
@@ -58,10 +56,6 @@ public class TransactionStateTest {
 
     @Test
     public void testSerDe() throws IOException {
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_83);
-        metaContext.setThreadLocalInfo();
-
         // 1. Write objects to file
         File file = new File(fileName);
         file.createNewFile();
@@ -128,10 +122,6 @@ public class TransactionStateTest {
 
     @Test
     public void testSerDeTxnStateNewFinish() throws IOException {
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_83);
-        metaContext.setThreadLocalInfo();
-
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         DataOutputStream dataOut = new DataOutputStream(out);
         UUID uuid = UUID.randomUUID();

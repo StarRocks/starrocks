@@ -39,10 +39,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.alter.DecommissionType;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDisk;
@@ -338,43 +336,29 @@ public class Backend extends ComputeNode {
         setHeartbeatPort(in.readInt());
         setBePort(in.readInt());
         setHttpPort(in.readInt());
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_31) {
-            setBeRpcPort(in.readInt());
-        }
+        setBeRpcPort(in.readInt());
         setAlive(in.readBoolean());
-
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= 5) {
-            setDecommissioned(in.readBoolean());
-        }
+        setDecommissioned(in.readBoolean());
 
         setLastUpdateMs(in.readLong());
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= 2) {
-            setLastStartTime(in.readLong());
+        setLastStartTime(in.readLong());
 
-            Map<String, DiskInfo> disks = Maps.newHashMap();
-            int size = in.readInt();
-            for (int i = 0; i < size; i++) {
-                String rootPath = Text.readString(in);
-                DiskInfo diskInfo = DiskInfo.read(in);
-                disks.put(rootPath, diskInfo);
-            }
-
-            disksRef = ImmutableMap.copyOf(disks);
-        }
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
-            // ignore clusterName
-            Text.readString(in);
-            setBackendState(in.readInt());
-            setDecommissionType(in.readInt());
-        } else {
-            setBackendState(BackendState.using.ordinal());
-            setDecommissionType(DecommissionType.SystemDecommission.ordinal());
+        Map<String, DiskInfo> disks = Maps.newHashMap();
+        int size = in.readInt();
+        for (int i = 0; i < size; i++) {
+            String rootPath = Text.readString(in);
+            DiskInfo diskInfo = DiskInfo.read(in);
+            disks.put(rootPath, diskInfo);
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_40) {
-            setBrpcPort(in.readInt());
-        }
+        disksRef = ImmutableMap.copyOf(disks);
+        // ignore clusterName
+        Text.readString(in);
+        setBackendState(in.readInt());
+        setDecommissionType(in.readInt());
+
+        setBrpcPort(in.readInt());
     }
 
     @Override
