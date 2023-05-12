@@ -242,12 +242,15 @@ public:
     void set_need_parse_levels(bool needs_levels) override { _need_parse_levels = needs_levels; }
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
-        // _needs_levels must be true
-        DCHECK(_need_parse_levels);
-
-        *def_levels = &_def_levels[0];
-        *rep_levels = nullptr;
-        *num_levels = _levels_parsed;
+        if (_need_parse_levels) {
+            *def_levels = &_def_levels[0];
+            *rep_levels = nullptr;
+            *num_levels = _levels_parsed;
+        } else {
+            *def_levels = nullptr;
+            *rep_levels = nullptr;
+            *num_levels = 0;
+        }
     }
 
     StatusOr<size_t> do_read_or_skip_rows(size_t rows_to_do, ColumnContentType* content_type, Column* dst) override {

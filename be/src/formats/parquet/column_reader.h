@@ -51,20 +51,30 @@ public:
     // If meet EOF, will return 0
     virtual StatusOr<size_t> prepare_batch(size_t rows_to_read, ColumnContentType* content_type, Column* dst) = 0;
 
+    // Skip specific rows in this ColumnReader
     // Will return actually rows skipped or InternalError
     // If meet EOF, will return 0
     virtual StatusOr<size_t> skip(const size_t rows_to_skip) = 0;
 
+    // Will be called when finish next_batch()
+    // You can do some clean work
     virtual Status finish_batch() = 0;
 
+    // Batch read n rows into column
     StatusOr<size_t> next_batch(size_t rows_to_read, ColumnContentType* content_type, Column* dst) {
         ASSIGN_OR_RETURN(size_t rows_read, prepare_batch(rows_to_read, content_type, dst));
         RETURN_IF_ERROR(finish_batch());
         return rows_read;
     }
 
+    // Get last next_batch()'s def/rep levels, like complex types will need this.
+    // For required column, will return def_levels=nullptr, rep_levels=nullptr, *num_levels=0
+    // For repeated column, will return def_levels=xxx, rep_levels=xxx, *num_levels=xxx
+    // For optional column, if you do set_need_parse_levels(), will return def_levels=xxx, rep_levels=nullptr, *num_levels=xxx
+    //                      otherwise, def_levels=nullptr, rep_levels=nullptr, *num_levels=0
     virtual void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) = 0;
 
+    // Only works for optional column, if you want to read complex types, you should call this function.
     virtual void set_need_parse_levels(bool need_parse_levels) = 0;
 
     virtual Status get_dict_values(Column* column) { return Status::NotSupported("get_dict_values is not supported"); }

@@ -69,7 +69,6 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     }
 
     bool has_filter = false;
-    int chunk_size = -1;
     Filter chunk_filter(rows_read, 1);
     DCHECK_EQ(active_chunk->num_rows(), rows_read);
 
@@ -92,16 +91,20 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         has_filter = _dict_filter_ctx.filter_chunk(&active_chunk, &chunk_filter);
     }
 
+    int32_t filtered_chunk_size = -1;
     // other filter that not dict
     if (has_more_filter) {
         SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
-        ASSIGN_OR_RETURN(chunk_size,
+        ASSIGN_OR_RETURN(filtered_chunk_size,
                          ExecNode::eval_conjuncts_into_filter(_left_conjunct_ctxs, active_chunk.get(), &chunk_filter));
         has_filter = true;
     }
 
+    // If filtered_chunk_size has values, means filter_selected_count has already been calculated, just use it.
+    size_t hit_count =
+            filtered_chunk_size >= 0 ? filtered_chunk_size : SIMD::count_nonzero(chunk_filter.data(), rows_read);
+
     if (has_filter) {
-        size_t hit_count = chunk_size >= 0 ? chunk_size : SIMD::count_nonzero(chunk_filter.data(), rows_read);
         if (hit_count == 0) {
             active_chunk->set_num_rows(0);
         } else if (hit_count != rows_read) {
@@ -125,20 +128,32 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             DCHECK_EQ(rows_skip, _previous_rows_to_skip);
             _previous_rows_to_skip = 0;
         }
-        for (size_t index = 0; index < chunk_filter.size();) {
-            bool is_selected = chunk_filter[index++];
-            size_t run = 1;
-            while (index < chunk_filter.size() && chunk_filter[index] == is_selected) {
-                index++;
-                run++;
+        double selectivity = (double)hit_count / (double)chunk_filter.size();
+        // 0.1 just an YY number
+        if (selectivity >= 0.1) {
+            // using batch way avoid frequently call skip() function, it will introduce lots of virtual function calls
+            ASSIGN_OR_RETURN(size_t tmp_rows_read, _read(_lazy_column_indices, rows_read, &lazy_chunk));
+            DCHECK_EQ(rows_read, tmp_rows_read);
+            if (has_filter) {
+                lazy_chunk->filter_range(chunk_filter, 0, rows_read);
             }
-            if (is_selected) {
-                ASSIGN_OR_RETURN(size_t tmp_rows_read, _read(_lazy_column_indices, run, &lazy_chunk));
-                DCHECK_EQ(tmp_rows_read, run);
-            } else {
-                _param.stats->skip_read_rows += run;
-                ASSIGN_OR_RETURN(size_t tmp_rows_skip, _skip(_lazy_column_indices, run));
-                DCHECK_EQ(tmp_rows_skip, run);
+        } else {
+            // using incremental way
+            for (size_t index = 0; index < chunk_filter.size();) {
+                bool is_selected = chunk_filter[index++];
+                size_t run = 1;
+                while (index < chunk_filter.size() && chunk_filter[index] == is_selected) {
+                    index++;
+                    run++;
+                }
+                if (is_selected) {
+                    ASSIGN_OR_RETURN(size_t tmp_rows_read, _read(_lazy_column_indices, run, &lazy_chunk));
+                    DCHECK_EQ(tmp_rows_read, run);
+                } else {
+                    _param.stats->skip_read_rows += run;
+                    ASSIGN_OR_RETURN(size_t tmp_rows_skip, _skip(_lazy_column_indices, run));
+                    DCHECK_EQ(tmp_rows_skip, run);
+                }
             }
         }
         if (lazy_chunk->num_rows() != active_rows) {
