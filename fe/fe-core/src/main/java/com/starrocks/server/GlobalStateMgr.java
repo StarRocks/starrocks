@@ -1189,6 +1189,11 @@ public class GlobalStateMgr {
                 initDefaultWarehouse();
             }
 
+            // must behind startLeaderOnlyDaemonThreads(), because creating workerGroup depends on serviceId
+            if (!isDefaultWarehouseCreated) {
+                initDefaultWarehouse();
+            }
+
             MetricRepo.init();
 
             isReady.set(true);
