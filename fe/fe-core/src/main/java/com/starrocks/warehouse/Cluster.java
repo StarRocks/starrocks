@@ -44,14 +44,6 @@ public class Cluster implements Writable {
 
     public Cluster(long id) {
         this.id = id;
-    }
-
-    public Cluster(long id, long workerGroupId) {
-        this.id = id;
-        this.workerGroupId = workerGroupId;
-    }
-
-    public void init() {
         if (RunMode.allowCreateLakeTable()) {
             try {
                 workerGroupId = GlobalStateMgr.getCurrentStarOSAgent().createWorkerGroup("x0");
