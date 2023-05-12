@@ -113,7 +113,7 @@ void LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const Typ
         break;
     }
     case TYPE_ARRAY: {
-        _write_array_column_chunk_branchless(ctx, type_desc, node, col, write_leaf_callback);
+        _write_array_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
         break;
     }
     case TYPE_MAP: {
