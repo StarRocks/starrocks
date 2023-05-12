@@ -227,16 +227,12 @@ public abstract class AstVisitor<R, C> {
 
     // ---------------------------------------- View Statement ---------------------------------------------------------
 
-    public R visitBaseViewStatement(BaseViewStmt statement, C context) {
+    public R visitCreateViewStatement(CreateViewStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
-    public R visitCreateViewStatement(CreateViewStmt statement, C context) {
-        return visitBaseViewStatement(statement, context);
-    }
-
     public R visitAlterViewStatement(AlterViewStmt statement, C context) {
-        return visitBaseViewStatement(statement, context);
+        return visitStatement(statement, context);
     }
 
     public R visitSubmitTaskStatement(SubmitTaskStmt statement, C context) {
@@ -920,6 +916,11 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitPartitionRenameClause(PartitionRenameClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    // Alter View
+    public R visitAlterViewClause(AlterViewClause clause, C context) {
         return visitNode(clause, context);
     }
 
