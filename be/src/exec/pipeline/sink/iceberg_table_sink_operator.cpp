@@ -229,7 +229,7 @@ std::vector<parquet::FileColumnId> IcebergTableSinkOperatorFactory::generate_par
                 std::static_pointer_cast<::parquet::TypedStatistics<::parquet::PhysicalType<ParquetType>>>(left);  \
         auto typed_right_stat =                                                                                    \
                 std::static_pointer_cast<::parquet::TypedStatistics<::parquet::PhysicalType<ParquetType>>>(right); \
-        typed_left_stat->Merge(*typed_left_stat);                                                                  \
+        typed_left_stat->Merge(*typed_right_stat);                                                                 \
         return;                                                                                                    \
     }
 
@@ -250,7 +250,7 @@ void merge_stats(const std::shared_ptr<::parquet::Statistics>& left,
     }
 }
 
-void populate_column_stats(const std::shared_ptr<::parquet::FileMetaData>& meta, TIcebergColumnStats& t_column_stats) {
+void calculate_column_stats(const std::shared_ptr<::parquet::FileMetaData>& meta, TIcebergColumnStats& t_column_stats) {
     // field_id -> column_stat
     std::map<int32_t, std::shared_ptr<::parquet::Statistics>> column_stats;
     std::map<int32_t, int64_t> column_sizes;
@@ -304,7 +304,7 @@ void populate_column_stats(const std::shared_ptr<::parquet::FileMetaData>& meta,
 
 static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state) {
     TIcebergColumnStats iceberg_column_stats;
-    populate_column_stats(writer->metadata(), iceberg_column_stats);
+    calculate_column_stats(writer->metadata(), iceberg_column_stats);
 
     TIcebergDataFile iceberg_data_file;
     iceberg_data_file.__set_partition_path(writer->partition_location());
