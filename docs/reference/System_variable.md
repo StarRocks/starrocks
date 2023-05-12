@@ -432,7 +432,7 @@ SELECT /*+ SET_VAR
 
 * vectorized_engine_enable (deprecated from v2.4 onwards)
 
-  Used to control whether the vectorized engine is used to execute queries. A value of `true` indicates that the vectorized engine is used, otherwise the non-vectorized engine is used. The default is `true`.
+  Used to control whether the vectorized engine is used to execute queries. A value of `true` indicates that the vectorized engine is used, otherwise the non-vectorized engine is used. The default is `true`. This feature is enabled by default from v2.4 onwards and therefore, is deprecated.
 
 * version
 
