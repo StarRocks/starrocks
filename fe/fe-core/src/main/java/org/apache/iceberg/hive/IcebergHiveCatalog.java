@@ -23,6 +23,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
+import com.starrocks.connector.iceberg.CachingBaseMetastoreCatalog;
+import com.starrocks.connector.iceberg.CachingHiveTableOps;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
@@ -34,7 +36,6 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
-import org.apache.iceberg.BaseMetastoreCatalog;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.CatalogUtil;
@@ -70,7 +71,7 @@ import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static org.apache.iceberg.TableMetadata.newTableMetadata;
 import static org.apache.iceberg.Transactions.createTableTransaction;
 
-public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergCatalog, Configurable<Configuration> {
+public class IcebergHiveCatalog extends CachingBaseMetastoreCatalog implements IcebergCatalog, Configurable<Configuration> {
     public static final String LOCATION_PROPERTY = "location";
     private static final Logger LOG = LogManager.getLogger(IcebergHiveCatalog.class);
 
@@ -114,7 +115,7 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
                             Optional<IcebergMetricsReporter> metricsReporter) throws StarRocksConnectorException {
         Preconditions.checkState(tableId != null);
         try {
-            TableOperations ops = this.newTableOps(tableId);
+            TableOperations ops = newTableOps(tableId);
             if (metricsReporter.isPresent()) {
                 return new BaseTable(ops, fullTableName(this.name(), tableId), metricsReporter.get());
             }
@@ -168,10 +169,21 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
     }
 
     @Override
-    public TableOperations newTableOps(TableIdentifier tableIdentifier) {
+    public TableOperations doNewTableOps(TableIdentifier tableIdentifier) {
         String dbName = tableIdentifier.namespace().level(0);
         String tableName = tableIdentifier.name();
         return new HiveTableOperations(conf, clients, fileIO, name, dbName, tableName);
+    }
+
+    @Override
+    public TableOperations doNewCachingTableOps(TableIdentifier tableIdentifier, TableMetadata tableMetadata) {
+        String dbName = tableIdentifier.namespace().level(0);
+        String tableName = tableIdentifier.name();
+        CachingHiveTableOps
+                tableOperations = new CachingHiveTableOps(this, conf, clients, fileIO, name, dbName, tableName);
+        tableOperations.initWithMetadata(tableMetadata);
+        tableOperations.requestRefresh();
+        return tableOperations;
     }
 
     @Override
@@ -301,7 +313,7 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
             String location,
             Map<String, String> properties) {
         TableMetadata metadata = newTableMetadata(schema, partitionSpec, location, properties);
-        TableOperations ops = newTableOps(TableIdentifier.of(Namespace.of(dbName), tableName));
+        TableOperations ops = doNewTableOps(TableIdentifier.of(Namespace.of(dbName), tableName));
         return createTableTransaction(tableName, ops, metadata);
     }
 
@@ -313,7 +325,7 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
 
         String database = identifier.namespace().level(0);
 
-        TableOperations ops = newTableOps(identifier);
+        TableOperations ops = doNewTableOps(identifier);
         TableMetadata lastMetadata = null;
         if (purge) {
             try {
