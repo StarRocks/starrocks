@@ -254,7 +254,9 @@
 
 ### 行为变更
 
-默认开启 Page Cache，Cache Size 为系统内存大小的 20% 。
+- 默认开启 Page Cache ("disable_storage_page_cache" = "false")。cache size (`storage_page_cache_limit`) 为系统内存大小的 20%。
+- 默认开启 CBO 优化器，弃用 session 变量 `enable_cbo`。
+- 默认开启向量化引擎，弃用 session 变量 `vectorized_engine_enable`。
 
 ### 其他
 
