@@ -19,8 +19,10 @@
 #include <utility>
 
 #include "butil/time.h"
+#include "exprs/anyval_util.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -100,8 +102,10 @@ void test_pad(int num_rows, TestCaseArray const& cases, NullColumnsType null_col
         ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, state);
     }
 
+    ASSERT_OK(StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ColumnPtr lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
     ColumnPtr rpad_result = StringFunctions::rpad(ctx.get(), columns).value();
+    ASSERT_OK(StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 
     ASSERT_EQ(lpad_result->size(), num_rows);
     ASSERT_EQ(rpad_result->size(), num_rows);
@@ -243,10 +247,10 @@ void test_const_pad(size_t num_rows, TestCaseType& c) {
     auto const_pad_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice{fill.data(), fill.size()}, 1);
     ctx->set_constant_columns({nullptr, nullptr, const_pad_col});
     columns[2] = const_pad_col;
-    StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+    ASSERT_OK(StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     auto lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
     auto rpad_result = StringFunctions::rpad(ctx.get(), columns).value();
-    StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+    ASSERT_OK(StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ASSERT_EQ(lpad_result->size(), num_rows);
     ASSERT_EQ(rpad_result->size(), num_rows);
     auto lpad_actual = lpad_result->get(num_rows - 1);
@@ -325,10 +329,10 @@ void test_const_len_and_pad(size_t num_rows, TestCaseType& c) {
     ctx->set_constant_columns({nullptr, const_len_col, const_pad_col});
     columns[1] = const_len_col;
     columns[2] = const_pad_col;
-    StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+    ASSERT_OK(StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     auto lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
     auto rpad_result = StringFunctions::rpad(ctx.get(), columns).value();
-    StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+    ASSERT_OK(StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     if (lpad_result->is_constant()) {
         ASSERT_EQ(lpad_result->size(), 1);
         ASSERT_EQ(rpad_result->size(), 1);
@@ -428,7 +432,9 @@ TEST_F(StringFunctionPadTest, lpadNullTest) {
     columns.emplace_back(len);
     columns.emplace_back(NullableColumn::create(fill, null));
 
+    ASSERT_OK(StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ColumnPtr result = StringFunctions::lpad(ctx.get(), columns).value();
+    ASSERT_OK(StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ASSERT_EQ(2, result->size());
     ASSERT_TRUE(result->is_nullable());
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
@@ -438,6 +444,40 @@ TEST_F(StringFunctionPadTest, lpadNullTest) {
 
     ASSERT_TRUE(result->is_null(1));
     ASSERT_EQ("", v->get_data()[1].to_string());
+}
+
+TEST_F(StringFunctionPadTest, lpadDefaultFillTest) {
+    std::vector<FunctionContext::TypeDesc> arg_types;
+    arg_types.push_back(AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)));
+    arg_types.push_back(AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT)));
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    Columns columns;
+    auto str = BinaryColumn::create();
+    auto len = Int32Column::create();
+
+    str->append("test");
+    len->append(8);
+
+    str->append("test");
+    len->append(2);
+
+    columns.emplace_back(str);
+    columns.emplace_back(len);
+
+    ASSERT_OK(StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
+    ColumnPtr result = StringFunctions::lpad(ctx.get(), columns).value();
+    ASSERT_OK(StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
+    ASSERT_EQ(2, result->size());
+    ASSERT_FALSE(result->is_nullable());
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    ASSERT_FALSE(result->is_null(0));
+    ASSERT_EQ("    test", v->get_data()[0].to_string());
+
+    ASSERT_FALSE(result->is_null(1));
+    ASSERT_EQ("te", v->get_data()[1].to_string());
 }
 
 TEST_F(StringFunctionPadTest, rpadTest) {
@@ -459,9 +499,11 @@ TEST_F(StringFunctionPadTest, rpadTest) {
     columns.emplace_back(len);
     columns.emplace_back(fill);
 
+    ASSERT_OK(StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ColumnPtr result = StringFunctions::rpad(ctx.get(), columns).value();
-    ASSERT_EQ(2, result->size());
+    ASSERT_OK(StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 
+    ASSERT_EQ(2, result->size());
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     ASSERT_EQ("test1231231", v->get_data()[0].to_string());
@@ -487,8 +529,10 @@ TEST_F(StringFunctionPadTest, rpadChineseTest) {
     columns.emplace_back(len);
     columns.emplace_back(fill);
 
+    ASSERT_OK(StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ColumnPtr result = StringFunctions::rpad(ctx.get(), columns).value();
     ASSERT_EQ(2, result->size());
+    ASSERT_OK(StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
@@ -514,7 +558,9 @@ TEST_F(StringFunctionPadTest, rpadConstTest) {
     columns.emplace_back(len);
     columns.emplace_back(ConstColumn::create(fill));
 
+    ASSERT_OK(StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ColumnPtr result = StringFunctions::rpad(ctx.get(), columns).value();
+    ASSERT_OK(StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ASSERT_EQ(2, result->size());
     ASSERT_TRUE(result->is_nullable());
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
@@ -588,7 +634,9 @@ TEST_P(PadNullableStrConstLenFillTestFixture, pad) {
     columns.emplace_back(fill);
 
     // Check rpad result.
+    ASSERT_OK(StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ColumnPtr rpad_result = StringFunctions::rpad(ctx.get(), columns).value();
+    ASSERT_OK(StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ASSERT_EQ(num_rows, rpad_result->size());
     ASSERT_EQ(c.rpad_expected_null, rpad_result->is_nullable());
     std::shared_ptr<BinaryColumn> rpad_v;
@@ -606,7 +654,9 @@ TEST_P(PadNullableStrConstLenFillTestFixture, pad) {
     }
 
     // Check lpad result.
+    ASSERT_OK(StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ColumnPtr lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
+    ASSERT_OK(StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ASSERT_EQ(num_rows, lpad_result->size());
     ASSERT_EQ(c.lpad_expected_null, lpad_result->is_nullable());
     std::shared_ptr<BinaryColumn> lpad_v;

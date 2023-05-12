@@ -1049,6 +1049,14 @@ Status StringFunctions::pad_prepare(FunctionContext* context, FunctionContext::F
     state->fill_is_const = false;
     context->set_function_state(FunctionContext::FRAGMENT_LOCAL, state);
 
+    if (context->get_num_args() == 2) {
+        state->is_const = context->is_notnull_constant_column(1);
+        state->fill = " ";
+        state->fill_is_const = true;
+        state->fill_is_utf8 = state->fill.size > get_utf8_index(state->fill, &state->fill_utf8_index);
+        return Status::OK();
+    }
+
     // const null case is handled by non_const implementation.
     if (!context->is_notnull_constant_column(2)) {
         return Status::OK();
@@ -1226,7 +1234,7 @@ static inline ColumnPtr pad_utf8_const(Columns const& columns, BinaryColumn* src
 template <PadType pad_type>
 static inline ColumnPtr pad_const_not_null(const Columns& columns, BinaryColumn* src, const PadState* pad_state) {
     auto len = ColumnHelper::get_const_value<TYPE_INT>(columns[1]);
-    auto fill = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[2]);
+    auto fill = pad_state->fill;
 
     // illegal length  or too-big length, return NULL
     if (len < 0 || len > OLAP_STRING_MAX_LENGTH) {
@@ -1266,7 +1274,8 @@ template <bool src_is_ascii, bool pad_is_const, PadType pad_type>
 ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState* state) {
     ColumnViewer<TYPE_VARCHAR> str_viewer(columns[0]);
     ColumnViewer<TYPE_INT> len_viewer(columns[1]);
-    ColumnViewer<TYPE_VARCHAR> fill_viewer(columns[2]);
+    std::shared_ptr<ColumnViewer<TYPE_VARCHAR>> fill_viewer_ptr =
+            columns.size() == 2 ? nullptr : std::make_shared<ColumnViewer<TYPE_VARCHAR>>(columns[2]);
 
     std::vector<size_t> non_const_fill_index;
     const std::vector<size_t>* fill_index = nullptr;
@@ -1293,7 +1302,8 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
     bool has_null = false;
     for (int i = 0; i < num_rows; ++i) {
         // NULL if any [str, len, pad] is NULL
-        if (str_viewer.is_null(i) || len_viewer.is_null(i) || fill_viewer.is_null(i)) {
+        if (str_viewer.is_null(i) || len_viewer.is_null(i) ||
+            (fill_viewer_ptr != nullptr && fill_viewer_ptr->is_null(i))) {
             has_null = true;
             dst_offsets[i + 1] = dst_off;
             dst_nulls[i] = 1;
@@ -1316,7 +1326,7 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
         auto str = str_viewer.value(i);
         // compute utf8 index per slice if pad_is_const is false
         if constexpr (!pad_is_const) {
-            non_const_fill = fill_viewer.value(i);
+            non_const_fill = fill_viewer_ptr->value(i);
             non_const_fill_index.clear();
             get_utf8_index(*fill, &non_const_fill_index);
         }
