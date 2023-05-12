@@ -11,7 +11,7 @@
 
 ## 开启 CBO 优化器
 
-使用 Lateral Join 功能前，您需要开启 CBO 优化器。
+使用 Lateral Join 功能前，您需要开启 CBO 优化器。该功能从 2.4 版本开始默认开启。
 
 ~~~SQL
 SET global enable_cbo = true;
