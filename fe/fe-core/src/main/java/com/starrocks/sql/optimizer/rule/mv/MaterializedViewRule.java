@@ -21,7 +21,6 @@ import com.google.common.collect.ImmutableSetMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
