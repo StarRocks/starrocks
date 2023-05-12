@@ -484,7 +484,7 @@ public class OlapTableSink extends DataSink {
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                 for (Tablet tablet : index.getTablets()) {
                     if (table.isCloudNativeTableOrMaterializedView()) {
-                        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
                         long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
                         locationParam.addToTablets(new TTabletLocation(tablet.getId(),
                                 Lists.newArrayList(((LakeTablet) tablet).getPrimaryComputeNodeId(workerGroupId))));
