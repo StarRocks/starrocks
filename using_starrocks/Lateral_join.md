@@ -9,10 +9,6 @@
 > * 当前版本中，Lateral Join 仅用于和 Unnest 函数配合使用，实现列转行的功能。后续会支持配合其他 Table Function 或 UDTF。
 > * 当前版本中，Lateral Join 暂不支持子查询。
 
-## 开启 CBO 优化器
-
-StarRocks 2.4 版本已集成并启用 CBO 优化器，您无需进行额外操作。
-
 ## 使用 Lateral Join
 
 Lateral Join 功能的语法如下：
