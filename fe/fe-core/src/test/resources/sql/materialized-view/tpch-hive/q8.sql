@@ -12,14 +12,14 @@ from
             l_extendedprice * (1 - l_discount) as volume,
             n2.n_name as nation
         from
-            part,
-            supplier,
-            lineitem,
-            orders,
-            customer,
-            nation n1,
-            nation n2,
-            region
+            hive0.tpch.part,
+            hive0.tpch.supplier,
+            hive0.tpch.lineitem,
+            hive0.tpch.orders,
+            hive0.tpch.customer,
+            hive0.tpch.nation n1,
+            hive0.tpch.nation n2,
+            hive0.tpch.region
         where
                 p_partkey = l_partkey
           and s_suppkey = l_suppkey
@@ -42,6 +42,6 @@ TOP-N (order by [[61: year ASC NULLS FIRST]])
         AGGREGATE ([GLOBAL] aggregate [{65: sum=sum(65: sum), 64: sum=sum(64: sum)}] group by [[61: year]] having [null]
             EXCHANGE SHUFFLE[61]
                 AGGREGATE ([LOCAL] aggregate [{65: sum=sum(62: expr), 64: sum=sum(63: case)}] group by [[61: year]] having [null]
-                    SCAN (mv[lineitem_mv] columns[148: o_orderdate, 157: p_type, 161: l_saleprice, 164: o_orderyear, 165: n_name1, 170: r_name2] predicate[148: o_orderdate <= 1996-12-31 AND 157: p_type = ECONOMY ANODIZED STEEL AND 170: r_name2 = MIDDLE EAST AND 148: o_orderdate >= 1995-01-01])
+                    SCAN (mv[lineitem_mv] columns[107: o_orderdate, 116: p_type, 120: l_saleprice, 123: o_orderyear, 124: n_name1, 129: r_name2] predicate[107: o_orderdate >= 1995-01-01 AND 107: o_orderdate <= 1996-12-31 AND 129: r_name2 = MIDDLE EAST AND 116: p_type = ECONOMY ANODIZED STEEL])
 [end]
 
