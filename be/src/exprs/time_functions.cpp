@@ -2420,9 +2420,9 @@ StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format_optional(FunctionContex
         }
 
         DateValue date = (DateValue)data_column.value(row);
-        auto format_content = format_column.value(row);
+        Slice format_content = format_column.value(row);
         if (!(format_content == "year" || format_content == "month" || format_content == "quarter")) {
-            Status::InvalidArgument( "last day optional in {month, quarter, year}, but optional is " + format_content);
+            Status::InvalidArgument( "last day optional in {month, quarter, year}, but optional is " + format_content.to_string());
         }
 
         if (format_content == "year") {
