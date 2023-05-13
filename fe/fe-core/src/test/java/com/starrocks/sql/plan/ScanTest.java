@@ -445,4 +445,12 @@ public class ScanTest extends PlanTestBase {
                 "sum[([count_t1a, VARCHAR, true]); args: BIGINT; result: BIGINT; " +
                 "args nullable: true; result nullable: true]");
     }
+
+    @Test
+    public void testImplicitCast() throws Exception {
+        String sql = "select count(distinct v1||v2) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count((CAST(1: v1 AS BOOLEAN)) OR (CAST(2: v2 AS BOOLEAN)))");
+    }
 }

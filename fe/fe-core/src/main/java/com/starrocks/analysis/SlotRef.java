@@ -58,6 +58,8 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 public class SlotRef extends Expr {
     private TableName tblName;
     private String col;
@@ -105,7 +107,7 @@ public class SlotRef extends Expr {
         List<String> parts = qualifiedName.getParts();
         // If parts.size() = 1, it must be a column name. Like `Select a FROM table`.
         // If parts.size() = [2, 3, 4], it maybe a column name or specific struct subfield name.
-        Preconditions.checkArgument(parts.size() > 0);
+        checkArgument(parts.size() > 0);
         this.qualifiedName = QualifiedName.of(qualifiedName.getParts(), qualifiedName.getPos());
         if (parts.size() == 1) {
             this.col = parts.get(0);
@@ -186,8 +188,8 @@ public class SlotRef extends Expr {
     // When SlotRef is accessing struct subfield, we need to reset SlotRef's type and col name
     // Do this is for compatible with origin SlotRef
     public void resetStructInfo() {
-        Preconditions.checkArgument(type.isStructType());
-        Preconditions.checkArgument(usedStructFieldPos.size() > 0);
+        checkArgument(type.isStructType());
+        checkArgument(usedStructFieldPos.size() > 0);
 
         StringBuilder colStr = new StringBuilder();
         colStr.append(col);
@@ -278,7 +280,7 @@ public class SlotRef extends Expr {
         if (tblName != null) {
             return tblName.toSql() + "." + "`" + col + "`";
         } else if (label != null) {
-            return label + sb.toString();
+            return label;
         } else if (desc.getSourceExprs() != null) {
             sb.append("<slot ").append(desc.getId().asInt()).append(">");
             for (Expr expr : desc.getSourceExprs()) {
@@ -287,7 +289,7 @@ public class SlotRef extends Expr {
             }
             return sb.toString();
         } else {
-            return "<slot " + desc.getId().asInt() + ">" + sb.toString();
+            return "<slot " + desc.getId().asInt() + ">";
         }
     }
 
@@ -306,20 +308,18 @@ public class SlotRef extends Expr {
 
     @Override
     public String toMySql() {
-        if (col != null) {
-            return col;
-        } else {
-            return "<slot " + Integer.toString(desc.getId().asInt()) + ">";
+        if (label == null) {
+            throw new IllegalArgumentException("should set label for cols in MySQLScanNode. SlotRef: " + debugString());
         }
+        return label;
     }
 
     @Override
     public String toJDBCSQL(boolean isMySQL) {
-        if (col != null) {
-            return isMySQL ? "`" + col + "`" : col;
-        } else {
-            return "<slot " + Integer.toString(desc.getId().asInt()) + ">";
+        if (label == null) {
+            throw new IllegalArgumentException("should set label for cols in JDBCScanNode. SlotRef: " + debugString());
         }
+        return isMySQL ? "`" + label + "`" : label;
     }
 
     public TableName getTableName() {

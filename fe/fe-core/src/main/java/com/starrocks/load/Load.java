@@ -719,7 +719,7 @@ public class Load {
                 }
 
                 SlotRef slotRef = (SlotRef) child;
-                String columnName = slotRef.getColumn().getName();
+                String columnName = slotRef.getColumnName();
                 if (excludedColumns.contains(columnName)) {
                     continue;
                 }
