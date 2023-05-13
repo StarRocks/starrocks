@@ -1373,6 +1373,7 @@ public class ShowExecutor {
                 } else if (showStmt.hasLimit()) {
                     sizeLimit = showStmt.getLimit();
                 }
+
                 boolean stop = false;
                 Collection<Partition> partitions = new ArrayList<Partition>();
                 if (showStmt.hasPartition()) {
@@ -1420,11 +1421,6 @@ public class ShowExecutor {
                         }
                     }
                 }
-                if (sizeLimit > -1 && tabletInfos.size() < sizeLimit) {
-                    tabletInfos.clear();
-                } else if (sizeLimit > -1) {
-                    tabletInfos = tabletInfos.subList((int) showStmt.getOffset(), (int) sizeLimit);
-                }
 
                 // order by
                 List<OrderByPair> orderByPairs = showStmt.getOrderByPairs();
@@ -1437,6 +1433,10 @@ public class ShowExecutor {
                     comparator = new ListComparator<>(0, 1);
                 }
                 Collections.sort(tabletInfos, comparator);
+
+                if (sizeLimit > -1 && tabletInfos.size() > sizeLimit) {
+                    tabletInfos = tabletInfos.subList((int) showStmt.getOffset(), (int) sizeLimit);
+                }
 
                 for (List<Comparable> tabletInfo : tabletInfos) {
                     List<String> oneTablet = new ArrayList<String>(tabletInfo.size());
