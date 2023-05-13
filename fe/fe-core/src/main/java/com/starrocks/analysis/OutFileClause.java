@@ -36,12 +36,20 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.Type;
+import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.StructType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TFileFormatType;
@@ -55,6 +63,9 @@ import java.util.Map;
 
 // For syntax select * from tbl INTO OUTFILE xxxx
 public class OutFileClause implements ParseNode {
+    private static final String CSV_FORMAT = "csv";
+    private static final String PARQUET_FORMAT = "parquet";
+
     public static final Map<String, TCompressionType> PARQUET_COMPRESSION_TYPE_MAP =
             Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
@@ -84,9 +95,9 @@ public class OutFileClause implements ParseNode {
     private static final long MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 * 1024L; // 2GB
     public static final long DEFAULT_MAX_PARQUET_ROW_GROUP_BYTES = 128 * 1024 * 1024; // 128MB
 
-    private String filePath;
-    private String format;
-    private Map<String, String> properties;
+    private final String filePath;
+    private final String format;
+    private final Map<String, String> properties;
 
     // set following members after analyzing
     private String columnSeparator = "\t";
@@ -107,7 +118,7 @@ public class OutFileClause implements ParseNode {
     public OutFileClause(String filePath, String format, Map<String, String> properties, NodePosition pos) {
         this.pos = pos;
         this.filePath = filePath;
-        this.format = Strings.isNullOrEmpty(format) ? "csv" : format.toLowerCase();
+        this.format = Strings.isNullOrEmpty(format) ? CSV_FORMAT : format.toLowerCase();
         this.properties = properties;
     }
 
@@ -138,27 +149,44 @@ public class OutFileClause implements ParseNode {
         return brokerDesc;
     }
 
-    public void analyze() throws AnalysisException {
+    public void analyze(Scope scope) throws SemanticException {
         if (Strings.isNullOrEmpty(filePath)) {
-            throw new AnalysisException("Must specify file in OUTFILE clause");
+            throw new SemanticException("Must specify file in OUTFILE clause");
         }
 
-        if (format.equals("csv")) {
+        if (format.equals(CSV_FORMAT)) {
             fileFormatType = TFileFormatType.FORMAT_CSV_PLAIN;
-        } else if (format.equals("parquet")) {
+        } else if (format.equals(PARQUET_FORMAT)) {
             fileFormatType = TFileFormatType.FORMAT_PARQUET;
         } else {
-            throw new AnalysisException("Only support CSV and PARQUET format");
+            throw new SemanticException("Only support CSV and PARQUET format");
         }
 
         analyzeProperties();
 
         if (brokerDesc == null) {
-            throw new AnalysisException("Must specify BROKER properties in OUTFILE clause");
+            throw new SemanticException("Must specify BROKER properties in OUTFILE clause");
+        }
+
+        // check if types are supported
+        if (format.equals(PARQUET_FORMAT)) {
+            for (Field field : scope.getRelationFields().getAllFields()) {
+                if (!isSupportedTypeForParquetOutFile(field.getType())) {
+                    throw new SemanticException(String.format("Type %s is not supported for PARQUET outfile", field.getType()));
+                }
+            }
+        }
+
+        if (format.equals(CSV_FORMAT)) {
+            for (Field field : scope.getRelationFields().getAllFields()) {
+                if (!isSupportedTypeForCSVOutFile(field.getType())) {
+                    throw new SemanticException(String.format("Type %s is not supported for CSV outfile", field.getType()));
+                }
+            }
         }
     }
 
-    private void analyzeProperties() throws AnalysisException {
+    private void analyzeProperties() throws SemanticException {
         setBrokerProperties();
         if (brokerDesc == null) {
             return;
@@ -166,50 +194,109 @@ public class OutFileClause implements ParseNode {
 
         if (properties.containsKey(PROP_COLUMN_SEPARATOR)) {
             if (!isCsvFormat()) {
-                throw new AnalysisException(PROP_COLUMN_SEPARATOR + " is only for CSV format");
+                throw new SemanticException(PROP_COLUMN_SEPARATOR + " is only for CSV format");
             }
             columnSeparator = properties.get(PROP_COLUMN_SEPARATOR);
         }
 
         if (properties.containsKey(PROP_LINE_DELIMITER)) {
             if (!isCsvFormat()) {
-                throw new AnalysisException(PROP_LINE_DELIMITER + " is only for CSV format");
+                throw new SemanticException(PROP_LINE_DELIMITER + " is only for CSV format");
             }
             rowDelimiter = properties.get(PROP_LINE_DELIMITER);
         }
 
         if (properties.containsKey(PARQUET_COMPRESSION_TYPE)) {
             if (!isParquetFormat()) {
-                throw new AnalysisException(PARQUET_COMPRESSION_TYPE + " is only for PARQUET format");
+                throw new SemanticException(PARQUET_COMPRESSION_TYPE + " is only for PARQUET format");
             }
             String type = properties.get(PARQUET_COMPRESSION_TYPE);
             if (PARQUET_COMPRESSION_TYPE_MAP.containsKey(type)) {
                 compressionType = PARQUET_COMPRESSION_TYPE_MAP.get(type);
             } else {
-                throw new AnalysisException("compression type is invalid, type: " + type);
+                throw new SemanticException("compression type is invalid, type: " + type);
             }
         }
 
         if (properties.containsKey(PARQUET_USE_DICT)) {
             if (!isParquetFormat()) {
-                throw new AnalysisException(PARQUET_USE_DICT + " is only for PARQUET format");
+                throw new SemanticException(PARQUET_USE_DICT + " is only for PARQUET format");
             }
             useDict = Boolean.getBoolean(properties.get(PARQUET_USE_DICT));
         }
 
         if (properties.containsKey(PARQUET_MAX_ROW_GROUP_SIZE)) {
             if (!isParquetFormat()) {
-                throw new AnalysisException(PARQUET_MAX_ROW_GROUP_SIZE + " is only for PARQUET format");
+                throw new SemanticException(PARQUET_MAX_ROW_GROUP_SIZE + " is only for PARQUET format");
             }
             maxParquetRowGroupBytes = Long.getLong(properties.get(PARQUET_MAX_ROW_GROUP_SIZE));
         }
 
         if (properties.containsKey(PROP_MAX_FILE_SIZE)) {
-            maxFileSizeBytes = ParseUtil.analyzeDataVolumn(properties.get(PROP_MAX_FILE_SIZE));
+            try {
+                maxFileSizeBytes = ParseUtil.analyzeDataVolumn(properties.get(PROP_MAX_FILE_SIZE));
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
             if (maxFileSizeBytes > MAX_FILE_SIZE_BYTES || maxFileSizeBytes < MIN_FILE_SIZE_BYTES) {
-                throw new AnalysisException("max file size should between 5MB and 2GB. Given: " + maxFileSizeBytes);
+                throw new SemanticException("max file size should between 5MB and 2GB. Given: " + maxFileSizeBytes);
             }
         }
+    }
+
+    private boolean isSupportedTypeForParquetOutFile(Type type) {
+        if (type.isScalarType()) {
+            PrimitiveType primitiveType = type.getPrimitiveType();
+
+            switch (primitiveType) {
+                case BOOLEAN:
+                case TINYINT:
+                case SMALLINT:
+                case INT:
+                case BIGINT:
+                case FLOAT:
+                case DOUBLE:
+                case DATE:
+                case DATETIME:
+                case VARCHAR:
+                case CHAR:
+                case DECIMAL32:
+                case DECIMAL64:
+                case DECIMAL128:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        // handle complex type
+        if (type.isArrayType()) {
+            ArrayType arrayType = (ArrayType) type;
+            return isSupportedTypeForParquetOutFile(arrayType.getItemType());
+        }
+
+        if (type.isMapType()) {
+            MapType mapType = (MapType) type;
+            return isSupportedTypeForParquetOutFile(mapType.getKeyType()) && isSupportedTypeForParquetOutFile(mapType.getValueType());
+        }
+
+        if (type.isStructType()) {
+            StructType structType = (StructType) type;
+            for (StructField structField : structType.getFields()) {
+                if (!isSupportedTypeForParquetOutFile(structField.getType())) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // unreachable
+        return false;
+    }
+
+    private boolean isSupportedTypeForCSVOutFile(Type type) {
+        // TODO: check csv supported types
+        return true;
     }
 
     private void setBrokerProperties() {
