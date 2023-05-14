@@ -29,7 +29,6 @@ import java.util.Map;
 
 public class LogicalTempExtTableScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
-    private boolean hasUnknownColumn;
     public LogicalTempExtTableScanOperator(Table table,
                                            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
@@ -45,17 +44,6 @@ public class LogicalTempExtTableScanOperator extends LogicalScanOperator {
         Preconditions.checkState(table instanceof TempExternalTable);
     }
 
-    private LogicalTempExtTableScanOperator(LogicalTempExtTableScanOperator.Builder builder) {
-        super(OperatorType.LOGICAL_FILE_SCAN,
-                builder.table,
-                builder.colRefToColumnMetaMap,
-                builder.columnMetaToColRefMap,
-                builder.getLimit(),
-                builder.getPredicate(),
-                builder.getProjection());
-    }
-
-
     @Override
     public ScanOperatorPredicates getScanOperatorPredicates() {
         return this.predicates;
@@ -66,34 +54,8 @@ public class LogicalTempExtTableScanOperator extends LogicalScanOperator {
         this.predicates = predicates;
     }
 
-    public boolean hasUnknownColumn() {
-        return hasUnknownColumn;
-    }
-
-    public void setHasUnknownColumn(boolean hasUnknownColumn) {
-        this.hasUnknownColumn = hasUnknownColumn;
-    }
-
-
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalTempExtTableScan(this, context);
-    }
-
-    public static class Builder
-            extends LogicalScanOperator.Builder<LogicalTempExtTableScanOperator, LogicalTempExtTableScanOperator.Builder> {
-        private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
-
-        @Override
-        public LogicalTempExtTableScanOperator build() {
-            return new LogicalTempExtTableScanOperator(this);
-        }
-
-        @Override
-        public LogicalTempExtTableScanOperator.Builder withOperator(LogicalTempExtTableScanOperator scanOperator) {
-            super.withOperator(scanOperator);
-
-            return this;
-        }
     }
 }
