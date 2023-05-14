@@ -138,6 +138,10 @@ public class TempExternalTable extends Table {
         } catch (UserException e) {
             throw new DdlException("failed to parse files: " + e.getMessage());
         }
+
+        if (fileStatuses.isEmpty()) {
+            throw new DdlException("no file found with given path pattern: " + path);
+        }
     }
 
     private PGetFileSchemaRequest getGetFileSchemaRequest(List<TBrokerFileStatus> filelist) throws TException {

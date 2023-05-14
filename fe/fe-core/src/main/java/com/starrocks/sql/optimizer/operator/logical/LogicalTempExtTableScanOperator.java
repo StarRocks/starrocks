@@ -44,6 +44,10 @@ public class LogicalTempExtTableScanOperator extends LogicalScanOperator {
         Preconditions.checkState(table instanceof TempExternalTable);
     }
 
+    private LogicalTempExtTableScanOperator() {
+        super(OperatorType.LOGICAL_TEMP_EXT_TABLE_SCAN);
+    }
+
     @Override
     public ScanOperatorPredicates getScanOperatorPredicates() {
         return this.predicates;
@@ -57,5 +61,22 @@ public class LogicalTempExtTableScanOperator extends LogicalScanOperator {
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalTempExtTableScan(this, context);
+    }
+
+    public static class Builder
+            extends LogicalScanOperator.Builder<LogicalTempExtTableScanOperator, LogicalTempExtTableScanOperator.Builder> {
+
+        @Override
+        protected LogicalTempExtTableScanOperator newInstance() {
+            return new LogicalTempExtTableScanOperator();
+        }
+
+        @Override
+        public LogicalTempExtTableScanOperator.Builder withOperator(LogicalTempExtTableScanOperator scanOperator) {
+            super.withOperator(scanOperator);
+
+            builder.predicates = scanOperator.predicates.clone();
+            return this;
+        }
     }
 }
