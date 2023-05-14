@@ -499,12 +499,10 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         DCHECK(field->children[0].children.size() == 2);
 
         if (!col_type.children[0].is_unknown_type()) {
-            RETURN_IF_ERROR(
-                    ColumnReader::create(opts, &(field->children[0].children[0]), col_type.children[0], &key_reader));
+            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[0]), col_type.children[0], &key_reader));
         }
         if (!col_type.children[1].is_unknown_type()) {
-            RETURN_IF_ERROR(
-                    ColumnReader::create(opts, &(field->children[0].children[1]), col_type.children[1], &value_reader));
+            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[1]), col_type.children[1], &value_reader));
         }
 
         std::unique_ptr<MapColumnReader> reader(new MapColumnReader(opts));
@@ -576,11 +574,11 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         const TIcebergSchemaField* value_iceberg_schema = &iceberg_schema_field->children[1];
 
         if (!col_type.children[0].is_unknown_type()) {
-            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[0].children[0]), col_type.children[0],
-                                                 key_iceberg_schema, &key_reader));
+            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[0]), col_type.children[0], key_iceberg_schema,
+                                                 &key_reader));
         }
         if (!col_type.children[1].is_unknown_type()) {
-            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[0].children[1]), col_type.children[1],
+            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[1]), col_type.children[1],
                                                  value_iceberg_schema, &value_reader));
         }
 

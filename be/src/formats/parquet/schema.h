@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "common/statusor.h"
 #include "gen_cpp/parquet_types.h"
 #include "runtime/types.h"
 
@@ -34,10 +35,23 @@ struct LevelInfo {
 
     int16_t increment_repeated() {
         auto origin_ancestor_rep_levels = immediate_repeated_ancestor_def_level;
+
+        // Repeated fields add both a repetition and definition level. This is used
+        // to distinguish between an empty list and a list with an item in it.
         max_def_level++;
         max_rep_level++;
+
+        // For levels >= immediate_repeated_ancestor_def_level it indicates the list was
+        // non-null and had at least one element. This is important
+        // for later decoding because we need to add a slot for these
+        // values. For levels < current_def_level no slots are added
+        // to arrays.
         immediate_repeated_ancestor_def_level = max_def_level;
         return origin_ancestor_rep_levels;
+    }
+
+    void increment_optional() {
+        max_def_level++;
     }
 
     std::string debug_string() const;
@@ -98,20 +112,47 @@ private:
     void leaf_to_field(const tparquet::SchemaElement& t_schema, const LevelInfo& cur_level_info, bool is_nullable,
                        ParquetField* field);
 
+    Status new_leaf_to_field(const tparquet::SchemaElement* t_schema, const LevelInfo& cur_level_info, bool is_nullable,
+                             ParquetField* field);
+
     Status list_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
+                         ParquetField* field, size_t* next_pos);
+
+    Status new_list_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
                          ParquetField* field, size_t* next_pos);
 
     Status map_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
                         ParquetField* field, size_t* next_pos);
 
+    Status new_map_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
+                        ParquetField* field, size_t* next_pos);
+
     Status group_to_struct_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos,
+                                 LevelInfo cur_level_info, ParquetField* field, size_t* next_pos);
+
+    Status new_group_to_struct_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos,
                                  LevelInfo cur_level_info, ParquetField* field, size_t* next_pos);
 
     Status group_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
                           ParquetField* field, size_t* next_pos);
 
+    Status new_group_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
+                              ParquetField* field, size_t* next_pos);
+
     Status node_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos, LevelInfo cur_level_info,
                          ParquetField* field, size_t* next_pos);
+
+    Status new_node_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos,
+                             LevelInfo cur_level_info, ParquetField* field, size_t* next_pos);
+
+    StatusOr<const tparquet::SchemaElement*> _get_schema_element(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos) {
+        if (pos >= t_schemas.size()) {
+            return Status::InvalidArgument("Access out-of-bounds SchemaElement");
+        }
+        return &t_schemas[pos];
+    }
+
+    void _increment(const tparquet::SchemaElement* t_schema, LevelInfo* level_info);
 
     std::vector<ParquetField> _fields;
     std::vector<ParquetField*> _physical_fields;

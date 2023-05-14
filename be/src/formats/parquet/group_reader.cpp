@@ -273,14 +273,8 @@ void GroupReader::_collect_field_io_range(const ParquetField& field,
     // and it may not be equal to col_idx_in_chunk.
     // 3. For array type, the physical_column_index is 0, we need to iterate the children and
     // collect their io ranges.
-    if (field.type.type == LogicalType::TYPE_ARRAY || field.type.type == LogicalType::TYPE_STRUCT) {
+    if (field.type.is_complex_type()) {
         for (auto& child : field.children) {
-            _collect_field_io_range(child, ranges, end_offset);
-        }
-    } else if (field.type.type == LogicalType::TYPE_MAP) {
-        // ParquetFiled Map -> Map<Struct<key,value>>
-        DCHECK(field.children[0].type.type == TYPE_STRUCT);
-        for (auto& child : field.children[0].children) {
             _collect_field_io_range(child, ranges, end_offset);
         }
     } else {
