@@ -366,6 +366,10 @@ public class Alter {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
             excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
         }
+        int maxMVRewriteStaleness = INVALID;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+            maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
+        }
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
             uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db, materializedView);
@@ -413,7 +417,12 @@ public class Alter {
             materializedView.setForeignKeyConstraints(foreignKeyConstraints);
             isChanged = true;
         }
-
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND,
+                    propClone.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND));
+            materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
+            isChanged = true;
+        }
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
         if (isChanged) {
             ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(materializedView.getDbId(),
