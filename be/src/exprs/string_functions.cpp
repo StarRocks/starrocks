@@ -45,7 +45,7 @@
 
 namespace starrocks {
 // A regex to match any regex pattern is equivalent to a substring search.
-static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]*)(?:\.\*)*)", re2::RE2::Quiet);
+static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+)(?:\.\*)*)", re2::RE2::Quiet);
 
 #define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                          \
     if (UNLIKELY(col->capacity_limit_reached())) {                                   \
@@ -2574,7 +2574,7 @@ Status StringFunctions::hs_compile_and_alloc_scratch(const std::string& pattern,
     if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SOM_LEFTMOST,
                    HS_MODE_BLOCK, nullptr, &state->database, &state->compile_err) != HS_SUCCESS) {
         std::stringstream error;
-        error << "Invalid regex expression: " << slice.data << ": " << state->compile_err->message;
+        error << "Invalid regex expression: " << slice << ": " << state->compile_err->message;
         context->set_error(error.str().c_str());
         hs_free_compile_error(state->compile_err);
         return Status::InvalidArgument(error.str());
@@ -2874,20 +2874,21 @@ static ColumnPtr regexp_replace_use_hyperscan(StringFunctionsState* state, const
                 [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
                    void* ctx) -> int {
                     auto* value = (MatchInfoChain*)ctx;
-                    if (from >= value->last_to) {
-                        MatchInfo info;
-                        info.from = from;
-                        info.to = to;
-                        value->info_chain.emplace_back(info);
-                        value->last_to = to;
+                    if (value->info_chain.empty()) {
+                        value->info_chain.emplace_back(MatchInfo{.from = from, .to = to});
+                    } else if (value->info_chain.back().from == from) {
+                        value->info_chain.back().to = to;
+                    } else {
+                        value->info_chain.emplace_back(MatchInfo{.from = from, .to = to});
                     }
+                    value->last_to = to;
                     return 0;
                 },
                 &match_info_chain);
         DCHECK(status == HS_SUCCESS || status == HS_SCAN_TERMINATED) << " status: " << status;
 
         std::string result_str;
-        result_str.reserve(value_size + match_info_chain.info_chain.size() * (rpl_value.size - state->size_of_pattern));
+        result_str.reserve(value_size);
 
         const char* start = str_viewer.value(row).data;
         size_t last_to = 0;
