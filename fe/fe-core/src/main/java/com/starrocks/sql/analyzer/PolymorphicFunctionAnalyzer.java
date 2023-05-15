@@ -28,6 +28,7 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.common.TypeManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -162,6 +163,25 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private static class DistinctMapKeysDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            return types[0];
+        }
+    }
+
+    private static class MapConcatDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            Type commonType = TypeManager.getCommonSuperType(Arrays.asList(types));
+            Arrays.fill(types, commonType);
+            return commonType;
+        }
+    }
+
+>>>>>>> 0b2f6a3f7 ([Feature] implement cardinality(), element_at() and map_concat() (#22846))
     private static class RowDeduce implements java.util.function.Function<Type[], Type> {
         @Override
         public Type apply(Type[] types) {
@@ -176,6 +196,12 @@ public class PolymorphicFunctionAnalyzer {
             .put("map_from_arrays", new MapFromArraysDeduce())
             .put("row", new RowDeduce())
             .put("map_apply", new MapApplyDeduce())
+<<<<<<< HEAD
+=======
+            .put("map_filter", new MapFilterDeduce())
+            .put("distinct_map_keys", new DistinctMapKeysDeduce())
+            .put("map_concat", new MapConcatDeduce())
+>>>>>>> 0b2f6a3f7 ([Feature] implement cardinality(), element_at() and map_concat() (#22846))
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {

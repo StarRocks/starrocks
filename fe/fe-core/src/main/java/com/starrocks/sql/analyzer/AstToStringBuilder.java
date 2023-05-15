@@ -767,9 +767,20 @@ public class AstToStringBuilder {
 
         public String visitMapExpr(MapExpr node, Void context) {
             StringBuilder sb = new StringBuilder();
+<<<<<<< HEAD
             sb.append('(');
             sb.append(visitAstList(node.getChildren()));
             sb.append(')');
+=======
+            sb.append('{');
+            for (int i = 0; i < node.getChildren().size(); i = i + 2) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                sb.append(visit(node.getChild(i)) + ":" + visit(node.getChild(i + 1)));
+            }
+            sb.append('}');
+>>>>>>> 0b2f6a3f7 ([Feature] implement cardinality(), element_at() and map_concat() (#22846))
             return sb.toString();
         }
 

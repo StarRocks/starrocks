@@ -251,4 +251,51 @@ public class AnalyzeExprTest {
         analyzeFail("select array_agg([1,1]);");
         analyzeFail("select array_agg(1 order by 1 nulls first desc)");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testMapTypeConstructor() {
+        analyzeSuccess("select map()");
+        analyzeSuccess("select map(NULL,NULL)");
+        analyzeSuccess("select map(1,NULL)");
+        analyzeSuccess("select {}");
+        analyzeSuccess("select {NULL:NULL}");
+        analyzeSuccess("select map<int,map<varchar,int>>{2:{3:3}}");
+        analyzeSuccess("select map<int,map<int,int>>{2:{'3':3}}");
+        analyzeSuccess("select map<int,map<int,int>>{{3:3}:2}"); // runtime error will report when cast
+        analyzeSuccess("select map<int,map<int,int>>{'2s':{3:3}}");
+
+        analyzeFail("select map(null)");
+        analyzeFail("select map(1:4)");
+        analyzeFail("select map(1,3,4)");
+        analyzeFail("select {)");
+        analyzeFail("select {NULL}");
+        analyzeFail("select {1,3}");
+        analyzeFail("select {1:3:3}");
+        analyzeFail("select {1:3,}");
+        analyzeFail("select map<hll,int>{1:3}");
+        analyzeFail("select map<map<int,int>,int>{{1:3}:11}");
+    }
+
+
+    @Test
+    public void testAnalyzeMapFunc() {
+        analyzeSuccess("select cardinality({1:3,3:5,2:45})");
+        analyzeSuccess("select cardinality({})");
+        analyzeSuccess("select element_at({1:2,3:3,4:3},3)");
+        analyzeSuccess("select element_at({1:2,3:3,4:3},312)");
+        analyzeSuccess("select element_at({1:2,3:3,4:3},null)");
+        analyzeSuccess("select map_concat(NULL)");
+        analyzeSuccess("select map_concat(NULL,NULL)");
+        analyzeSuccess("select map_concat(NULL,{})");
+
+        analyzeFail("select cardinality();");
+        analyzeFail("select cardinality({},{})");
+        analyzeFail("select cardinality(1)");
+        analyzeFail("select element_at({1:2,3:3,4:3})");
+        analyzeFail("select map_concat()");
+    }
+
+>>>>>>> 0b2f6a3f7 ([Feature] implement cardinality(), element_at() and map_concat() (#22846))
 }

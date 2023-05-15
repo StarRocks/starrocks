@@ -881,6 +881,17 @@ vectorized_functions = [
     [170002, 'map_values', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_values'],
     [170003, 'map_from_arrays', 'ANY_MAP', ['ANY_ARRAY', 'ANY_ARRAY'], 'MapFunctions::map_from_arrays'],
     [170004, 'map_apply', 'ANY_MAP', ['FUNCTION', 'ANY_MAP'], 'nullptr'],
+<<<<<<< HEAD
+=======
+    [170005, 'map_filter', 'ANY_MAP',  ['ANY_MAP', 'ARRAY_BOOLEAN'], 'MapFunctions::map_filter'],
+    [170006, 'distinct_map_keys', 'ANY_MAP',  ['ANY_MAP'], 'MapFunctions::distinct_map_keys'],
+    [170007, 'map_concat', 'ANY_MAP',  ['ANY_MAP', "..."], 'MapFunctions::map_concat'],
+
+    # map, array common functions
+    [170100, 'cardinality', 'INT', ['ANY_MAP'], 'MapFunctions::map_size'],
+    [170101, 'cardinality', 'INT', ['ANY_ARRAY'], 'ArrayFunctions::array_length'],
+
+>>>>>>> 0b2f6a3f7 ([Feature] implement cardinality(), element_at() and map_concat() (#22846))
     # struct functions
     # [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],
 ]

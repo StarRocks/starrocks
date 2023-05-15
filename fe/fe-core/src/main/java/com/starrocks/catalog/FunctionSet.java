@@ -400,6 +400,9 @@ public class FunctionSet {
     public static final String TRANSFORM = "transform";
     public static final String MAP_APPLY = "map_apply";
 
+    public static final String ELEMENT_AT = "element_at";
+
+    public static final String CARDINALITY = "cardinality";
     // Struct functions:
     public static final String ROW = "row";
 
