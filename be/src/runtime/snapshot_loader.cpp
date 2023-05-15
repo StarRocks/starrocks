@@ -535,6 +535,19 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
         LOG(FATAL) << "only support overwrite now";
     }
 
+    // We just replace the table_schema in tabletMeta using the schema
+    // in snapshot_meta.
+    TabletMetaSharedPtr new_tablet_meta = std::make_shared<TabletMeta>();
+    std::shared_lock rdlock(tablet->get_header_lock());
+    tablet->generate_tablet_meta_copy_unlocked(new_tablet_meta);
+    rdlock.unlock();
+
+    TabletMetaPB metapb;
+    new_tablet_meta->to_meta_pb(&metapb);
+    new_tablet_meta->init_from_pb(&metapb, &snapshot_meta.tablet_meta().schema());
+    tablet->set_tablet_meta(new_tablet_meta);
+    tablet->save_meta();
+
     RETURN_IF_ERROR(tablet->updates()->load_snapshot(snapshot_meta, true));
     tablet->updates()->remove_expired_versions(time(nullptr));
     LOG(INFO) << "Loaded snapshot of tablet " << tablet->tablet_id() << ", removing directory " << snapshot_path;
