@@ -1,9 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.google.common.base.Function;
 import com.google.common.base.Joiner;
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
+=======
+import com.google.common.base.Strings;
+>>>>>>> 4f2125ce8 (Preserve ` symbol in Load Table command audit log (#23365))
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -169,26 +172,22 @@ public class AstToStringBuilder {
             return sb.toString();
         }
 
-
         @Override
         public String visitLoadStatement(LoadStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
 
             sb.append("LOAD LABEL ").append(stmt.getLabel().toString());
-            sb.append("(");
-            Joiner.on(",").appendTo(sb, Lists.transform(stmt.getDataDescriptions(), new Function<DataDescription, Object>() {
-                @Override
-                public Object apply(DataDescription dataDescription) {
-                    return dataDescription.toString();
-                }
-            })).append(")");
+            sb.append(" (");
+            sb.append(Joiner.on(",").join(
+                    stmt.getDataDescriptions().stream().map(DataDescription::toString).collect(toList())));
+            sb.append(")");
 
             if (stmt.getBrokerDesc() != null) {
                 sb.append(stmt.getBrokerDesc());
             }
 
             if (stmt.getCluster() != null) {
-                sb.append("BY '");
+                sb.append(" BY '");
                 sb.append(stmt.getCluster());
                 sb.append("'");
             }
@@ -197,8 +196,8 @@ public class AstToStringBuilder {
             }
 
             if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
-                sb.append("PROPERTIES (");
-                sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
+                sb.append(" PROPERTIES (");
+                sb.append(new PrintableMap<>(stmt.getProperties(), "=", true, false));
                 sb.append(")");
             }
             return sb.toString();
