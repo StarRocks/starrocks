@@ -2,9 +2,9 @@
 
 ## Description
 
-Creates a materialized view. 
+Creates a materialized view.
 
-Creating a materialized view is asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted, but has not been refreshed. You can view the refresh status via [SHOW MATERIALIZED VIEWS](../data-manipulation/SHOW%20MATERIALIZED%20VIEW.md) command. For usage information about materialized views, see [materialized view](../../../using_starrocks/Materialized_view.md).
+Creating a materialized view is asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted, but has not been refreshed. You can view the refresh status via [SHOW MATERIALIZED VIEWS](../data-manipulation/SHOW%20MATERIALIZED%20VIEW.md) command. For usage information about materialized views, see [Synchronous materialized view](../../../using_starrocks/Materialized_view-single_table.md) and [Asynchronous materialized view](../../../using_starrocks/Materialized_view.md).
 
 StarRocks supports asynchronous materialized views from v2.4. The major differences between asynchronous materialized views and synchronous materialized views in previous versions are as follows:
 
