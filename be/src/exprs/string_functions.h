@@ -288,6 +288,14 @@ public:
     static Status split_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
+    * @param: [array_string, delimiter]
+    * @paramType: [ArrayBinaryColumn, BinaryColumn]
+    * @return: MapColumn map<string,string>
+    */
+
+    DEFINE_VECTORIZED_FN(str_to_map);
+
+    /**
      * @param: [string_value, delimiter, field]
      * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
      * @return: BinaryColumn

@@ -79,6 +79,7 @@ set(EXPR_FILES
   runtime_filter.cpp
   split.cpp
   split_part.cpp
+  str_to_map.cpp
   string_functions.cpp
   time_functions.cpp
   utility_functions.cpp

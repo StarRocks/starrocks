@@ -20,6 +20,7 @@
 #include "column/column_viewer.h"
 #include "exprs/function_context.h"
 #include "exprs/string_functions.h"
+#include "util/utf8.h"
 
 namespace starrocks {
 
@@ -65,7 +66,17 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
             if (part_number > haystack.size) {
                 res.append_null();
             } else {
-                res.append(Slice(haystack.data + part_number - 1, 1));
+                int char_size = 0, h = 0;
+                for (auto num = 0; h < haystack.size && num < part_number - 1; h += char_size) {
+                    char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(haystack.data[h])];
+                    ++num;
+                }
+                if (h >= haystack.size) {
+                    res.append_null();
+                } else {
+                    char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(haystack.data[h])];
+                    res.append(Slice(haystack.data + h, char_size));
+                }
             }
         } else if (delimiter.size == 1) {
             // if delimiter is a char, use memchr to split
