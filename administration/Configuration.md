@@ -209,7 +209,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | cluster_name                         | StarRocks Cluster | FE 所在 StarRocks 集群的名称，显示为网页标题。               |
 | rpc_port                             | 9020              | FE 节点上 Thrift 服务器的端口。                              |
 | thrift_backlog_num                   | 1024              | Thrift 服务器支持的 Backlog 队列长度。                       |
-| thrift_server_type                   | THREAD_POOL       | Thrift 服务器的服务模型。取值范围：`SIMPLE`、`THREADED`、`THREAD_POOL`。 |
 | thrift_server_max_worker_threads     | 4096              | Thrift 服务器支持的最大工作线程数。                          |
 | thrift_client_timeout_ms             | 0                 | Thrift 客户端建立连接的超时时间。单位：ms。默认值 `0` 表示永远不会超时。 |
 | brpc_idle_wait_max_time              | 10000             | BRPC 的空闲等待时间。单位：ms。                              |
