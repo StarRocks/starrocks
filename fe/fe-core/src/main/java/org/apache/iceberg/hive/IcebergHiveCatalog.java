@@ -44,6 +44,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
+import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -73,6 +74,8 @@ import static org.apache.iceberg.Transactions.createTableTransaction;
 public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergCatalog, Configurable<Configuration> {
     public static final String LOCATION_PROPERTY = "location";
     private static final Logger LOG = LogManager.getLogger(IcebergHiveCatalog.class);
+    private static final String DEFAULT_METADATA_FOLDER_NAME = "metadata";
+    private static final String DEFAULT_DATA_FOLDER_NAME = "data";
 
     private String name;
     private Configuration conf;
@@ -245,6 +248,7 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
             String value = entry.getValue();
             if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
                 try {
+                    // TODO: check location that does not contains other objects
                     URI uri = new Path(value).toUri();
                     FileSystem fileSystem = FileSystem.get(uri, conf);
                     fileSystem.exists(new Path(value));
@@ -336,9 +340,8 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
 
             if (purge && lastMetadata != null) {
                 CatalogUtil.dropTableData(ops.io(), lastMetadata);
+                deleteTableFolder(ops.io(), lastMetadata);
             }
-
-            deletePath(ops.current().location());
             LOG.info("Dropped table: {}", identifier);
             return true;
         } catch (NoSuchTableException | NoSuchObjectException e) {
@@ -368,6 +371,27 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
             LOG.error("Failed to delete location {}", location, e);
             throw new StarRocksConnectorException("Failed to delete location %s. msg: %s", location, e.getMessage());
         }
+    }
+
+    private void deleteTableFolder(FileIO io, TableMetadata metadata) {
+        String location = metadata.location();
+
+        // delete metadata folder
+        String metadataLocation = metadata.properties().get(TableProperties.WRITE_METADATA_LOCATION);
+        if (metadataLocation == null) {
+            metadataLocation = DEFAULT_METADATA_FOLDER_NAME;
+        }
+        io.deleteFile(location + "/" + metadataLocation);
+
+        // delete data folder
+        String dataLocation = metadata.properties().get(TableProperties.WRITE_DATA_LOCATION);
+        if (dataLocation == null) {
+            dataLocation = DEFAULT_DATA_FOLDER_NAME;
+        }
+        io.deleteFile(location + "/" + dataLocation);
+
+        // delete table root folder
+        io.deleteFile(location);
     }
 
     @Override
