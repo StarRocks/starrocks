@@ -24,6 +24,8 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.RunMode;
@@ -48,7 +50,8 @@ import static java.util.stream.Collectors.toList;
  * and get more extensions by extracting objects
  * in the future this will replace all expr range partition info
  */
-public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo {
+public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
+        implements GsonPreProcessable, GsonPostProcessable {
 
     private static final Logger LOG = LogManager.getLogger(ExpressionRangePartitionInfoV2.class);
 
@@ -74,16 +77,29 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo {
         String json = Text.readString(in);
         ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 = GsonUtils.GSON.fromJson(json,
                 ExpressionRangePartitionInfoV2.class);
-        List<String> serializedPartitionExprs = expressionRangePartitionInfoV2.getSerializedPartitionExprs();
-        List<Expr> exprs = Lists.newArrayList();
+        return expressionRangePartitionInfoV2;
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        super.gsonPreProcess();
+        this.serializedPartitionExprs = new ArrayList<>();
+        for (Expr partitionExpr : partitionExprs) {
+            serializedPartitionExprs.add(partitionExpr.toSql());
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
+        partitionExprs = Lists.newArrayList();
         for (String expressionSql : serializedPartitionExprs) {
             Expr expr = SqlParser.parseSqlToExpr(expressionSql, SqlModeHelper.MODE_DEFAULT);
-            exprs.add(expr);
+            partitionExprs.add(expr);
         }
-        expressionRangePartitionInfoV2.setPartitionExprs(exprs);
         // Analyze partition expr
         SlotRef slotRef;
-        for (Expr expr : exprs) {
+        for (Expr expr : partitionExprs) {
             if (expr instanceof FunctionCallExpr) {
                 slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
             } else if (expr instanceof CastExpr) {
@@ -97,18 +113,13 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo {
 
             PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
             // The current expression partition only supports 1 column
-            slotRef.setType(expressionRangePartitionInfoV2.getSourcePartitionTypes().get(0));
+            slotRef.setType(sourcePartitionTypes.get(0));
         }
-        return expressionRangePartitionInfoV2;
+        serializedPartitionExprs = null;
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
-        List<String> serializedPartitionExprs = new ArrayList<>();
-        for (Expr partitionExpr : partitionExprs) {
-            serializedPartitionExprs.add(partitionExpr.toSql());
-        }
-        this.serializedPartitionExprs  = serializedPartitionExprs;
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
