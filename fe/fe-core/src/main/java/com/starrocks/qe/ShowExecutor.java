@@ -202,6 +202,7 @@ import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1845,7 +1846,8 @@ public class ShowExecutor {
                             tabletInfos.addAll(procDir.fetchComparableResult(
                                     showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState()));
                         }
-                        if (sizeLimit > -1 && tabletInfos.size() >= sizeLimit) {
+                        if (sizeLimit > -1 && CollectionUtils.isEmpty(showStmt.getOrderByPairs())
+                                && tabletInfos.size() >= sizeLimit) {
                             stop = true;
                             break;
                         }
@@ -1864,7 +1866,7 @@ public class ShowExecutor {
                 }
                 tabletInfos.sort(comparator);
 
-                if (sizeLimit > -1 && tabletInfos.size() > sizeLimit) {
+                if (sizeLimit > -1 && tabletInfos.size() >= sizeLimit) {
                     tabletInfos = tabletInfos.subList((int) showStmt.getOffset(), (int) sizeLimit);
                 }
 
