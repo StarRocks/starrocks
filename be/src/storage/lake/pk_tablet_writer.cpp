@@ -17,37 +17,19 @@
 #include <fmt/format.h>
 
 #include "column/chunk.h"
-#include "common/config.h"
 #include "fs/fs_util.h"
 #include "serde/column_array_serde.h"
-#include "storage/lake/filenames.h"
 #include "storage/rowset/segment_writer.h"
 
 namespace starrocks::lake {
 
-PkTabletWriter::PkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> tschema)
-        : TabletWriter(tablet, std::move(tschema)), _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {}
+HorizontalPkTabletWriter::HorizontalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> tschema)
+        : HorizontalGeneralTabletWriter(tablet, std::move(tschema)),
+          _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {}
 
-PkTabletWriter::~PkTabletWriter() = default;
+HorizontalPkTabletWriter::~HorizontalPkTabletWriter() = default;
 
-// To developers: Do NOT perform any I/O in this method, because this method may be invoked
-// in a bthread.
-Status PkTabletWriter::open() {
-    return Status::OK();
-}
-
-Status PkTabletWriter::write(const starrocks::Chunk& data) {
-    if (_seg_writer == nullptr || _seg_writer->estimate_segment_size() >= config::max_segment_file_size ||
-        _seg_writer->num_rows_written() + data.num_rows() >= INT32_MAX /*TODO: configurable*/) {
-        RETURN_IF_ERROR(flush_segment_writer());
-        RETURN_IF_ERROR(reset_segment_writer());
-    }
-    RETURN_IF_ERROR(_seg_writer->append_chunk(data));
-    _num_rows += data.num_rows();
-    return Status::OK();
-}
-
-Status PkTabletWriter::flush_del_file(const Column& deletes) {
+Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
     auto name = fmt::format("{}.del", generate_uuid_string());
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.del_location(name)));
     _files.emplace_back(std::move(name));
@@ -61,45 +43,7 @@ Status PkTabletWriter::flush_del_file(const Column& deletes) {
     return Status::OK();
 }
 
-Status PkTabletWriter::flush() {
-    return flush_segment_writer();
-}
-
-Status PkTabletWriter::finish() {
-    RETURN_IF_ERROR(flush_segment_writer());
-    _finished = true;
-    return Status::OK();
-}
-
-void PkTabletWriter::close() {
-    if (!_finished && !_files.empty()) {
-        // Delete files
-        auto maybe_fs = FileSystem::CreateSharedFromString(_tablet.root_location());
-        if (maybe_fs.ok()) {
-            auto fs = std::move(maybe_fs).value();
-            for (const auto& name : _files) {
-                auto path = _tablet.segment_location(name);
-                (void)fs->delete_file(path);
-            }
-        }
-    }
-    std::vector<std::string> tmp;
-    std::swap(tmp, _files);
-}
-
-Status PkTabletWriter::reset_segment_writer() {
-    DCHECK(_schema != nullptr);
-    auto name = random_segment_filename();
-    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.segment_location(name)));
-    SegmentWriterOptions opts;
-    auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema.get(), opts);
-    RETURN_IF_ERROR(w->init());
-    _seg_writer = std::move(w);
-    _files.emplace_back(std::move(name));
-    return Status::OK();
-}
-
-Status PkTabletWriter::flush_segment_writer() {
+Status HorizontalPkTabletWriter::flush_segment_writer() {
     if (_seg_writer != nullptr) {
         uint64_t segment_size = 0;
         uint64_t index_size = 0;
@@ -114,5 +58,11 @@ Status PkTabletWriter::flush_segment_writer() {
     }
     return Status::OK();
 }
+
+VerticalPkTabletWriter::VerticalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> tschema,
+                                               uint32_t max_rows_per_segment)
+        : VerticalGeneralTabletWriter(tablet, std::move(tschema), max_rows_per_segment) {}
+
+VerticalPkTabletWriter::~VerticalPkTabletWriter() = default;
 
 } // namespace starrocks::lake

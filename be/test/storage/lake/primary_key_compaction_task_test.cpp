@@ -28,6 +28,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_policy.h"
+#include "storage/lake/compaction_test_utils.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/gc.h"
@@ -36,6 +37,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/vertical_compaction_task.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
@@ -62,9 +64,9 @@ public:
     std::string _dir;
 };
 
-class PrimaryKeyHorizontalCompactionTest : public testing::Test {
+class PrimaryKeyCompactionTest : public testing::Test, public testing::WithParamInterface<CompactionParam> {
 public:
-    PrimaryKeyHorizontalCompactionTest() {
+    PrimaryKeyCompactionTest() {
         _parent_mem_tracker = std::make_unique<MemTracker>(-1);
         _mem_tracker = std::make_unique<MemTracker>(-1, "", _parent_mem_tracker.get());
         _location_provider = std::make_unique<TestLocationProvider>(kTestGroupPath);
@@ -114,6 +116,7 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
+        config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
@@ -207,6 +210,15 @@ protected:
         }
     }
 
+    void check_task(CompactionTaskPtr& task) {
+        if (GetParam().algorithm == HORIZONTAL_COMPACTION) {
+            ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(task.get()) != nullptr);
+        } else {
+            ASSERT_EQ(GetParam().algorithm, VERTICAL_COMPACTION);
+            ASSERT_TRUE(dynamic_cast<VerticalCompactionTask*>(task.get()) != nullptr);
+        }
+    }
+
     std::unique_ptr<MemTracker> _parent_mem_tracker;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<TestLocationProvider> _location_provider;
@@ -221,7 +233,7 @@ protected:
 };
 
 // each time overwrite last rows
-TEST_F(PrimaryKeyHorizontalCompactionTest, test1) {
+TEST_P(PrimaryKeyCompactionTest, test1) {
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize, 0);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -260,6 +272,7 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test1) {
     _txn_id++;
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
+    check_task(task);
     ASSERT_OK(task->execute(nullptr));
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
     version++;
@@ -279,7 +292,7 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test1) {
 }
 
 // test write 3 diff chunk
-TEST_F(PrimaryKeyHorizontalCompactionTest, test2) {
+TEST_P(PrimaryKeyCompactionTest, test2) {
     // Prepare data for writing
     std::vector<Chunk> chunks;
     for (int i = 0; i < 3; i++) {
@@ -310,6 +323,7 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test2) {
     _txn_id++;
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
+    check_task(task);
     ASSERT_OK(task->execute(nullptr));
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
     version++;
@@ -320,7 +334,7 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test2) {
 }
 
 // test write empty chunk
-TEST_F(PrimaryKeyHorizontalCompactionTest, test3) {
+TEST_P(PrimaryKeyCompactionTest, test3) {
     // Prepare data for writing
     std::vector<Chunk> chunks;
     for (int i = 0; i < 3; i++) {
@@ -360,6 +374,7 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test3) {
     _txn_id++;
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
+    check_task(task);
     ASSERT_OK(task->execute(nullptr));
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
     version++;
@@ -369,7 +384,7 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test3) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
 }
 
-TEST_F(PrimaryKeyHorizontalCompactionTest, test_compaction_policy) {
+TEST_P(PrimaryKeyCompactionTest, test_compaction_policy) {
     // Prepare data for writing
     std::vector<Chunk> chunks;
     for (int i = 0; i < 3; i++) {
@@ -399,6 +414,7 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test_compaction_policy) {
 
     ASSIGN_OR_ABORT(auto compaction_policy,
                     CompactionPolicy::create_compaction_policy(std::make_shared<Tablet>(tablet)));
+    config::max_update_compaction_num_singleton_deltas = 1000;
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(3, input_rowsets.size());
 
@@ -411,7 +427,7 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test_compaction_policy) {
     EXPECT_EQ(1, input_rowsets3.size());
 }
 
-TEST_F(PrimaryKeyHorizontalCompactionTest, test_compaction_policy2) {
+TEST_P(PrimaryKeyCompactionTest, test_compaction_policy2) {
     // Prepare data for writing
     std::vector<Chunk> chunks;
     std::vector<std::vector<uint32_t>> indexes_list;
@@ -467,7 +483,7 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test_compaction_policy2) {
     EXPECT_EQ(input_rowsets[3]->id(), 3);
 }
 
-TEST_F(PrimaryKeyHorizontalCompactionTest, test_compaction_sorted) {
+TEST_P(PrimaryKeyCompactionTest, test_compaction_sorted) {
     // Prepare data for writing
     std::vector<Chunk> chunks;
     for (int i = 0; i < 3; i++) {
@@ -500,6 +516,7 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test_compaction_sorted) {
     _txn_id++;
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
+    check_task(task);
     ASSERT_OK(task->execute(nullptr));
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
     version++;
@@ -515,5 +532,10 @@ TEST_F(PrimaryKeyHorizontalCompactionTest, test_compaction_sorted) {
         EXPECT_TRUE(key_list[i] < key_list[i + 1]);
     }
 }
+
+INSTANTIATE_TEST_SUITE_P(PrimaryKeyCompactionTest, PrimaryKeyCompactionTest,
+                         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
+                                           CompactionParam{VERTICAL_COMPACTION, 1}),
+                         to_string_param_name);
 
 } // namespace starrocks::lake

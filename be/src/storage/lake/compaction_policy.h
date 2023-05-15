@@ -32,12 +32,16 @@ class TabletMetadataPB;
 // Compaction policy for lake tablet
 class CompactionPolicy {
 public:
+    explicit CompactionPolicy(TabletPtr tablet) : _tablet(std::move(tablet)) {}
     virtual ~CompactionPolicy() = default;
-    virtual StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) = 0;
 
-    virtual StatusOr<CompactionAlgorithm> choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) = 0;
+    virtual StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) = 0;
+    virtual StatusOr<CompactionAlgorithm> choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets);
 
     static StatusOr<CompactionPolicyPtr> create_compaction_policy(TabletPtr tablet);
+
+protected:
+    TabletPtr _tablet;
 };
 
 double compaction_score(const TabletMetadataPB& metadata);

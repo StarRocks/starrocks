@@ -78,8 +78,12 @@ Status Tablet::delete_tablet_metadata_lock(int64_t version, int64_t expire_time)
 StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, uint32_t max_rows_per_segment) {
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        // TODO: support vertical primary key writer
-        return std::make_unique<PkTabletWriter>(*this, tablet_schema);
+        if (type == kHorizontal) {
+            return std::make_unique<HorizontalPkTabletWriter>(*this, tablet_schema);
+        } else {
+            DCHECK(type == kVertical);
+            return std::make_unique<VerticalPkTabletWriter>(*this, tablet_schema, max_rows_per_segment);
+        }
     } else {
         if (type == kHorizontal) {
             return std::make_unique<HorizontalGeneralTabletWriter>(*this, tablet_schema);

@@ -29,7 +29,7 @@
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
-#include "storage/compaction_utils.h"
+#include "storage/lake/compaction_test_utils.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
@@ -47,18 +47,6 @@ using namespace starrocks;
 
 using VSchema = starrocks::Schema;
 using VChunk = starrocks::Chunk;
-
-struct CompactionParam {
-    CompactionAlgorithm algorithm = HORIZONTAL_COMPACTION;
-    uint32_t vertical_compaction_max_columns_per_group = 5;
-};
-
-std::string to_string_param_name(const testing::TestParamInfo<CompactionParam>& info) {
-    std::stringstream ss;
-    ss << CompactionUtils::compaction_algorithm_to_string(info.param.algorithm) << "_"
-       << info.param.vertical_compaction_max_columns_per_group;
-    return ss.str();
-}
 
 class LakeCompactionTest : public testing::Test, public testing::WithParamInterface<CompactionParam> {
 public:
