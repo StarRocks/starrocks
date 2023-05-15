@@ -48,9 +48,9 @@ import static java.util.stream.Collectors.toList;
  * and get more extensions by extracting objects
  * in the future this will replace all expr range partition info
  */
-public class ExpressionPartitionInfoV2 extends RangePartitionInfo {
+public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo {
 
-    private static final Logger LOG = LogManager.getLogger(ExpressionPartitionInfoV2.class);
+    private static final Logger LOG = LogManager.getLogger(ExpressionRangePartitionInfoV2.class);
 
     private List<Expr> partitionExprs;
 
@@ -63,7 +63,7 @@ public class ExpressionPartitionInfoV2 extends RangePartitionInfo {
     @SerializedName(value = "sourcePartitionTypes")
     private List<Type> sourcePartitionTypes;
 
-    public ExpressionPartitionInfoV2(List<Expr> partitionExprs, List<Column> columns) {
+    public ExpressionRangePartitionInfoV2(List<Expr> partitionExprs, List<Column> columns) {
         super(columns);
         this.type = PartitionType.EXPR_RANGE_V2;
         this.partitionExprs = partitionExprs;
@@ -72,14 +72,14 @@ public class ExpressionPartitionInfoV2 extends RangePartitionInfo {
 
     public static PartitionInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        ExpressionPartitionInfoV2 expressionPartitionInfoV2 = GsonUtils.GSON.fromJson(json, ExpressionPartitionInfoV2.class);
-        List<String> serializedPartitionExprs = expressionPartitionInfoV2.getSerializedPartitionExprs();
+        ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 = GsonUtils.GSON.fromJson(json, ExpressionRangePartitionInfoV2.class);
+        List<String> serializedPartitionExprs = expressionRangePartitionInfoV2.getSerializedPartitionExprs();
         List<Expr> exprs = Lists.newArrayList();
         for (String expressionSql : serializedPartitionExprs) {
             Expr expr = SqlParser.parseSqlToExpr(expressionSql, SqlModeHelper.MODE_DEFAULT);
             exprs.add(expr);
         }
-        expressionPartitionInfoV2.setPartitionExprs(exprs);
+        expressionRangePartitionInfoV2.setPartitionExprs(exprs);
         // Analyze partition expr
         SlotRef slotRef;
         for (Expr expr : exprs) {
@@ -96,9 +96,9 @@ public class ExpressionPartitionInfoV2 extends RangePartitionInfo {
 
             PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
             // The current expression partition only supports 1 column
-            slotRef.setType(expressionPartitionInfoV2.getSourcePartitionTypes().get(0));
+            slotRef.setType(expressionRangePartitionInfoV2.getSourcePartitionTypes().get(0));
         }
-        return expressionPartitionInfoV2;
+        return expressionRangePartitionInfoV2;
     }
 
     @Override

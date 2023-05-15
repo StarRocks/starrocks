@@ -1543,7 +1543,7 @@ public class OlapTable extends Table {
         } else if (partType == PartitionType.EXPR_RANGE) {
             partitionInfo = ExpressionRangePartitionInfo.read(in);
         } else if (partType == PartitionType.EXPR_RANGE_V2) {
-            partitionInfo = ExpressionPartitionInfoV2.read(in);
+            partitionInfo = ExpressionRangePartitionInfoV2.read(in);
         } else {
             throw new IOException("invalid partition type: " + partType);
         }

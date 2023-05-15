@@ -23,7 +23,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ExpressionPartitionInfoV2;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
@@ -161,10 +161,10 @@ public class ExpressionPartitionDesc extends PartitionDesc {
                     PartitionType.EXPR_RANGE);
         } else {
             // for partition by range expr
-            ExpressionPartitionInfoV2 expressionPartitionInfoV2 = new ExpressionPartitionInfoV2(Collections.singletonList(expr),
+            ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 = new ExpressionRangePartitionInfoV2(Collections.singletonList(expr),
                     partitionColumns);
-            expressionPartitionInfoV2.setSourcePartitionTypes(Collections.singletonList(sourcePartitionColumn.getType()));
-            partitionInfo = expressionPartitionInfoV2;
+            expressionRangePartitionInfoV2.setSourcePartitionTypes(Collections.singletonList(sourcePartitionColumn.getType()));
+            partitionInfo = expressionRangePartitionInfoV2;
         }
 
         for (SingleRangePartitionDesc desc : getRangePartitionDesc().getSingleRangePartitionDescs()) {
