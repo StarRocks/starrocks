@@ -14,6 +14,7 @@
 
 package com.starrocks.server;
 
+import autovalue.shaded.com.google.common.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
@@ -23,6 +24,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.warehouse.LocalWarehouse;
 import com.starrocks.warehouse.Warehouse;
@@ -50,7 +52,8 @@ public class WarehouseManager implements Writable {
     @SerializedName(value = "fullNameToWh")
     private Map<String, Warehouse> fullNameToWh = new HashMap<>();
 
-    private Warehouse defaultWarehouse;
+    private final GlobalStateMgr stateMgr;
+    private EditLog editLog;
 
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final WarehouseProcNode procNode = new WarehouseProcNode();
@@ -60,23 +63,33 @@ public class WarehouseManager implements Writable {
             .add("ClusterCount")
             .build();
 
-    public WarehouseManager() {
+    public WarehouseManager(GlobalStateMgr stateMgr) {
+        this.stateMgr = stateMgr;
     }
 
-    public Warehouse initDefaultWarehouse() {
+    public void setEditLog(EditLog editLog) {
+        this.editLog = editLog;
+    }
+
+    public void initDefaultWarehouse() {
         // gen a default warehouse
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            defaultWarehouse = new LocalWarehouse(GlobalStateMgr.getCurrentState().getNextId(),
+            Warehouse warehouse = new LocalWarehouse(stateMgr.getNextId(),
                     DEFAULT_WAREHOUSE_NAME);
-            fullNameToWh.put(defaultWarehouse.getFullName(), defaultWarehouse);
-            idToWh.put(defaultWarehouse.getId(), defaultWarehouse);
-            defaultWarehouse.setExist(true);
-            return defaultWarehouse;
+
+            final List<Long> cnIds = stateMgr.getClusterInfo().getBackendIds();
+            cnIds.addAll(stateMgr.getClusterInfo().getComputeNodeIds(false));
+            warehouse.getAnyAvailableCluster().setComputeNodeIds(cnIds.stream().collect(Collectors.toSet()));
+
+            fullNameToWh.put(warehouse.getFullName(), warehouse);
+            idToWh.put(warehouse.getId(), warehouse);
+            warehouse.setExist(true);
+            editLog.logCreateWarehouse(warehouse);
         }
     }
 
     public Warehouse getDefaultWarehouse() {
-        return defaultWarehouse;
+        return getWarehouse(DEFAULT_WAREHOUSE_NAME);
     }
 
     public Warehouse getWarehouse(String warehouseName) {
@@ -105,17 +118,11 @@ public class WarehouseManager implements Writable {
             WarehouseManager data = GsonUtils.GSON.fromJson(s, WarehouseManager.class);
             if (data != null) {
                 if (data.fullNameToWh != null) {
-                    // do nothing
                     this.fullNameToWh = data.fullNameToWh;
                 }
                 warehouseCount = data.fullNameToWh.size();
             }
             checksum ^= warehouseCount;
-            // set compute node id list for default warehouse
-            List<Long> latestBackendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds();
-            latestBackendIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(false));
-            defaultWarehouse.getAnyAvailableCluster().
-                    setComputeNodeIds(latestBackendIds.stream().collect(Collectors.toSet()));
             LOG.info("finished replaying WarehouseMgr from image");
         } catch (EOFException e) {
             LOG.info("no WarehouseMgr to replay.");
@@ -124,8 +131,10 @@ public class WarehouseManager implements Writable {
     }
 
     public void replayCreateWarehouse(Warehouse warehouse) {
+        String whName = warehouse.getFullName();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            fullNameToWh.put(warehouse.getFullName(), warehouse);
+            Preconditions.checkState(!fullNameToWh.containsKey(whName), "Warehouse '%s' already exists", whName);
+            fullNameToWh.put(whName, warehouse);
             idToWh.put(warehouse.getId(), warehouse);
             warehouse.setExist(true);
         }

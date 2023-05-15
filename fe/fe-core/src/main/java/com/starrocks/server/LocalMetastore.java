@@ -1851,6 +1851,8 @@ public class LocalMetastore implements ConnectorMetadata {
                     Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
                     primaryComputeNodeId = ((LakeTablet) tablet).
                                 getPrimaryComputeNodeId(warehouse.getAnyAvailableCluster().getWorkerGroupId());
+                    // for debug
+                    LOG.info("primaryComputeNodeId is {}", primaryComputeNodeId);
                 } catch (UserException e) {
                     throw new DdlException(e.getMessage());
                 }

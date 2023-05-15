@@ -373,9 +373,6 @@ public class GlobalStateMgr {
     // false if default_cluster is not created.
     private boolean isDefaultClusterCreated = false;
 
-    // false if default_warehouse is not created.
-    private boolean isDefaultWarehouseCreated = false;
-
     private FrontendNodeType feType;
     // replica and observer use this value to decide provide read service or not
     private long synchronizedTimeMs;
@@ -680,7 +677,7 @@ public class GlobalStateMgr {
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeManager = new AnalyzeManager();
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
-        this.warehouseMgr = new WarehouseManager();
+        this.warehouseMgr = new WarehouseManager(this);
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
         this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr, connectorTblMetaInfoMgr);
@@ -1068,6 +1065,7 @@ public class GlobalStateMgr {
         this.globalTransactionMgr.setEditLog(editLog);
         this.idGenerator.setEditLog(editLog);
         this.localMetastore.setEditLog(editLog);
+        this.warehouseMgr.setEditLog(editLog);
     }
 
     // wait until FE is ready.
@@ -1192,7 +1190,7 @@ public class GlobalStateMgr {
             insertOverwriteJobManager.cancelRunningJobs();
 
             // must behind startLeaderOnlyDaemonThreads(), because creating workerGroup depends on serviceId
-            if (!isDefaultWarehouseCreated) {
+            if (warehouseMgr.getDefaultWarehouse() == null) {
                 initDefaultWarehouse();
             }
 
@@ -3361,7 +3359,6 @@ public class GlobalStateMgr {
 
     public void replayCreateWarehouse(Warehouse warehouse) {
         warehouseMgr.replayCreateWarehouse(warehouse);
-        isDefaultWarehouseCreated = true;
     }
 
     public void setIsDefaultClusterCreated(boolean isDefaultClusterCreated) {
@@ -3469,9 +3466,7 @@ public class GlobalStateMgr {
     }
 
     public void initDefaultWarehouse() {
-        Warehouse warehouse = warehouseMgr.initDefaultWarehouse();
-        isDefaultWarehouseCreated = true;
-        editLog.logCreateWarehouse(warehouse);
+        warehouseMgr.initDefaultWarehouse();
     }
 
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {

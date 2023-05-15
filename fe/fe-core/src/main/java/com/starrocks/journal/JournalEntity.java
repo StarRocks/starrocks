@@ -137,6 +137,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -449,6 +450,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_CREATE_CLUSTER: {
                 data = Cluster.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_WAREHOUSE: {
+                data = Warehouse.read(in);
                 isRead = true;
                 break;
             }
