@@ -97,7 +97,7 @@ public class DataDescriptionTest {
         desc = new DataDescription("testTable", null, Lists.newArrayList("abc.txt"),
                 Lists.newArrayList("col1", "col2"), null, null, null, true, null);
         desc.analyze("testDb");
-        Assert.assertEquals("DATA INFILE ('abc.txt') NEGATIVE INTO TABLE testTable (col1, col2)", desc.toString());
+        Assert.assertEquals("DATA INFILE ('abc.txt') NEGATIVE INTO TABLE testTable (`col1`, `col2`)", desc.toString());
         Assert.assertEquals("testTable", desc.getTableName());
         Assert.assertEquals("[col1, col2]", desc.getFileFieldNames().toString());
         Assert.assertEquals("[abc.txt]", desc.getFilePaths().toString());
@@ -108,8 +108,7 @@ public class DataDescriptionTest {
                 Lists.newArrayList("col1", "col2"), new ColumnSeparator("\t"),
                 null, null, true, null);
         desc.analyze("testDb");
-        Assert.assertEquals("DATA INFILE ('abc.txt', 'bcd.txt') NEGATIVE INTO TABLE testTable"
-                        + " COLUMNS TERMINATED BY '\t' (col1, col2)",
+        Assert.assertEquals("DATA INFILE ('abc.txt', 'bcd.txt') NEGATIVE INTO TABLE testTable COLUMNS TERMINATED BY '\t' (`col1`, `col2`)",
                 desc.toString());
 
         // hive \x01 column separator
@@ -117,8 +116,7 @@ public class DataDescriptionTest {
                 Lists.newArrayList("col1", "col2"), new ColumnSeparator("\\x01"),
                 null, null, true, null);
         desc.analyze("testDb");
-        Assert.assertEquals("DATA INFILE ('abc.txt', 'bcd.txt') NEGATIVE INTO TABLE testTable"
-                        + " COLUMNS TERMINATED BY '\\x01' (col1, col2)",
+        Assert.assertEquals("DATA INFILE ('abc.txt', 'bcd.txt') NEGATIVE INTO TABLE testTable COLUMNS TERMINATED BY '\\x01' (`col1`, `col2`)",
                 desc.toString());
 
         // with partition
@@ -139,8 +137,7 @@ public class DataDescriptionTest {
                 Lists.newArrayList("k2", "k3"), null, null, null, false,
                 Lists.newArrayList((Expr) predicate));
         desc.analyze("testDb");
-        String sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (k2, k3)"
-                + " SET (`k1` = alignment_timestamp('day', `k2`))";
+        String sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (`k2`, `k3`) SET (`k1` = (alignment_timestamp('day', `k2`)))";
         Assert.assertEquals(sql, desc.toString());
 
         // replace_value func
@@ -154,8 +151,7 @@ public class DataDescriptionTest {
                 Lists.newArrayList("k2", "k3"), null, null, null,
                 false, Lists.newArrayList((Expr) predicate));
         desc.analyze("testDb");
-        sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (k2, k3)"
-                + " SET (`k1` = replace_value('-', '10'))";
+        sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (`k2`, `k3`) SET (`k1` = (replace_value('-', '10')))";
         Assert.assertEquals(sql, desc.toString());
 
         // replace_value null
@@ -169,8 +165,7 @@ public class DataDescriptionTest {
                 Lists.newArrayList("k2", "k3"), null, null, null, false,
                 Lists.newArrayList((Expr) predicate));
         desc.analyze("testDb");
-        sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (k2, k3)"
-                + " SET (`k1` = replace_value('', NULL))";
+        sql = "DATA INFILE ('abc.txt') INTO TABLE testTable PARTITIONS (p1, p2) (`k2`, `k3`) SET (`k1` = (replace_value('', NULL)))";
         Assert.assertEquals(sql, desc.toString());
 
         // data from table and set bitmap_dict
@@ -181,7 +176,7 @@ public class DataDescriptionTest {
         desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
                 "testHiveTable", false, Lists.newArrayList(predicate), null);
         desc.analyze("testDb");
-        sql = "DATA FROM TABLE testHiveTable INTO TABLE testTable PARTITIONS (p1, p2) SET (`k1` = bitmap_dict(`k2`))";
+        sql = "DATA FROM TABLE testHiveTable INTO TABLE testTable PARTITIONS (p1, p2) SET (`k1` = (bitmap_dict(`k2`)))";
         Assert.assertEquals(sql, desc.toString());
     }
 

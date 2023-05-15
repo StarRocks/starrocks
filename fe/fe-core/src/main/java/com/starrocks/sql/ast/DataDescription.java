@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -44,6 +43,7 @@ import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TNetworkAddress;
@@ -55,6 +55,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 // used to describe data info which is needed to import.
 //
 //      data_desc:
@@ -719,7 +720,9 @@ public class DataDescription implements ParseNode {
             sb.append("DATA FROM TABLE ").append(srcTableName);
         } else {
             sb.append("DATA INFILE (");
-            Joiner.on(", ").appendTo(sb, Lists.transform(filePaths, s -> "'" + s + "'")).append(")");
+            assert filePaths != null;
+            Joiner.on(", ").appendTo(sb, filePaths.stream().map(s -> "'" + s + "'")
+                    .collect(Collectors.toList())).append(")");
         }
         if (isNegative) {
             sb.append(" NEGATIVE");
@@ -741,11 +744,15 @@ public class DataDescription implements ParseNode {
         }
         if (fileFieldNames != null && !fileFieldNames.isEmpty()) {
             sb.append(" (");
-            Joiner.on(", ").appendTo(sb, fileFieldNames).append(")");
+            sb.append(Joiner.on(", ").join(
+                    fileFieldNames.stream().map(f -> "`" + f + "`").collect(Collectors.toList())));
+            sb.append(")");
         }
         if (columnMappingList != null && !columnMappingList.isEmpty()) {
             sb.append(" SET (");
-            Joiner.on(", ").appendTo(sb, Lists.transform(columnMappingList, (Function<Expr, Object>) Expr::toSql)).append(")");
+            sb.append(Joiner.on(", ").join(columnMappingList.stream()
+                    .map(AstToSQLBuilder::toSQL).collect(Collectors.toList())));
+            sb.append(")");
         }
         return sb.toString();
     }
