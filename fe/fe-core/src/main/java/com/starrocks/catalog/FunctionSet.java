@@ -413,6 +413,9 @@ public class FunctionSet {
     public static final String TRANSFORM_VALUES = "transform_values";
     public static final String TRANSFORM_KEYS = "transform_keys";
 
+    public static final String ELEMENT_AT = "element_at";
+
+    public static final String CARDINALITY = "cardinality";
     // Struct functions:
     public static final String ROW = "row";
 

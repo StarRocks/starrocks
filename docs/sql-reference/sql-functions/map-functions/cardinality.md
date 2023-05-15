@@ -1,8 +1,8 @@
-# map_size
+# cardinality
 
 ## Description
 
-Returns the number of elements in a MAP value, it has an alias [cardinality()](cardinality.md).
+Returns the number of elements in a MAP value, it is an alias of [map_size()](map_size.md).
 
 From version 2.5, StarRocks supports querying complex data types MAP and STRUCT from data lakes. MAP is an unordered collection of key-value pairs, for example, `{"a":1, "b":2}`. One key-value pair constitutes one element, for example, `{"a":1, "b":2}` contains two elements.
 
@@ -11,7 +11,7 @@ You can use external catalogs provided by StarRocks to query MAP and STRUCT data
 ## Syntax
 
 ```Haskell
-INT map_size(any_map)
+INT cardinality(any_map)
 ```
 
 ## Parameters
@@ -42,16 +42,16 @@ select * from hive_map order by col_int;
 3 rows in set (0.05 sec)
 ```
 
-After a Hive catalog is created in your database, you can use this catalog and the map_size() function to obtain the number of elements in each row of the `col_map` column.
+After a Hive catalog is created in your database, you can use this catalog and the cardinality() function to obtain the number of elements in each row of the `cardinality` column.
 
 ```Plaintext
-select map_size(col_map) from hive_map order by col_int;
-+-------------------+
-| map_size(col_map) |
-+-------------------+
-|                 2 |
-|                 1 |
-|                 2 |
-+-------------------+
+select cardinality(col_map) from hive_map order by col_int;
++----------------------+
+| cardinality(col_map) |
++----------------------+
+|                    2 |
+|                    1 |
+|                    2 |
++----------------------+
 3 rows in set (0.05 sec)
 ```
