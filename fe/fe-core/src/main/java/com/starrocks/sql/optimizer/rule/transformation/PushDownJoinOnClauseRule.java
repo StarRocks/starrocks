@@ -54,8 +54,7 @@ public class PushDownJoinOnClauseRule extends PushDownJoinPredicateBase {
         on = rangePredicateDerive(on);
         on = equivalenceDeriveOnPredicate(on, input, join);
 
-        OptExpression root = pushDownOnPredicate(input, on,
-                !context.getOptimizerConfig().isMVRewritePlan());
+        OptExpression root = pushDownOnPredicate(input, on);
         ((LogicalJoinOperator) root.getOp()).setHasPushDownJoinOnClause(true);
         if (root.getOp().equals(input.getOp()) && on.equals(join.getOnPredicate()) &&
                 children.equals(root.getInputs())) {

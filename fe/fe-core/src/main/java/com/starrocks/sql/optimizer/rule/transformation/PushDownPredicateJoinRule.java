@@ -219,7 +219,7 @@ public class PushDownPredicateJoinRule extends PushDownJoinPredicateBase {
             ScalarOperator predicate =
                     rangePredicateDerive(Utils.compoundAnd(join.getOnPredicate(), filter.getPredicate()));
             predicate = equivalenceDerive(predicate, true);
-            return Lists.newArrayList(pushDownOnPredicate(input.getInputs().get(0), predicate, !isMVRewritePlan));
+            return Lists.newArrayList(pushDownOnPredicate(input.getInputs().get(0), predicate));
         } else {
             if (join.getJoinType().isOuterJoin()) {
                 convertOuterToInner(input, context);
@@ -230,7 +230,7 @@ public class PushDownPredicateJoinRule extends PushDownJoinPredicateBase {
                 ScalarOperator predicate =
                         rangePredicateDerive(Utils.compoundAnd(join.getOnPredicate(), filter.getPredicate()));
                 predicate = equivalenceDerive(predicate, true);
-                return Lists.newArrayList(pushDownOnPredicate(input.getInputs().get(0), predicate, !isMVRewritePlan));
+                return Lists.newArrayList(pushDownOnPredicate(input.getInputs().get(0), predicate));
             } else {
                 ScalarOperator predicate = rangePredicateDerive(filter.getPredicate());
                 List<ScalarOperator> leftPushDown = Lists.newArrayList();
