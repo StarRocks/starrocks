@@ -2562,4 +2562,101 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             testRewriteOK(mv, query);
         }
     }
+
+    // Single Predicates
+    @Test
+    public void testRangePredicates1() {
+        // =
+        {
+            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno = 10";
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno = 10");
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno = 20");
+        }
+
+        // >
+        {
+            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno > 10";
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno > 10");
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno > 20");
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno < 10");
+        }
+
+        // >=
+        {
+            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno >= 10";
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno >= 10");
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno = 10");
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno >= 20");
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno <= 10");
+        }
+
+        // <
+        {
+            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno < 10";
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno < 10");
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno < 5");
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno > 10");
+        }
+
+        // <=
+        {
+            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno <= 10";
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno <= 10");
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno = 10");
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno <= 5");
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno >= 10");
+        }
+
+        // !=
+        {
+            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno != 10";
+            testRewriteOK(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno != 10");
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno = 10");
+            // TODO: Support != as Range Predicates
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno > 10");
+            // TODO: Support != as Range Predicates
+            testRewriteFail(mv, "select count(*) from " +
+                    "emps  left join locations on emps.locationid = locations.locationid where emps.deptno < 10");
+        }
+    }
+
+    // Multi Predicates
+    @Test
+    public void testRangePredicates2() {
+        // !=
+        {
+            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno < 10 or emps.deptno > 10";
+            testRewriteOK(mv, "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno < 10 or emps.deptno > 10");
+            // TODO: support OrPredicates as Range Predicates.
+            testRewriteFail(mv, "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                    " left join locations on emps.locationid = locations.locationid where emps.deptno < 5 or emps.deptno > 20");
+        }
+    }
 }

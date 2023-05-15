@@ -121,8 +121,12 @@ public class BinaryPredicateOperator extends PredicateOperator {
                     || type.equals(GE.type);
         }
 
-        public boolean isRangeOrNe() {
-            return isRange() || type.equals(NE.type);
+        public boolean isEqualOrRange() {
+            return isEqual() || isRange();
+        }
+
+        public boolean isNotEqualOrRange() {
+            return isRange() || isNotEqual();
         }
     }
 
