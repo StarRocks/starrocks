@@ -222,6 +222,8 @@ public class LeaderImpl {
                             String failMsg = "Backend: " + task.getBackendId() + "Tablet: " + pushTask.getTabletId() +
                                              " error msg: " + taskStatus.getError_msgs().toString();
                             pushTask.countDownLatch(pushTask.getBackendId(), pushTask.getTabletId(), failMsg);
+                            AgentTaskQueue.removeTask(pushTask.getBackendId(), TTaskType.REALTIME_PUSH, 
+                                                      task.getSignature());
                         }
                     }
 >>>>>>> d6d0e27ec (BugFix: Failed delete job do not return until timeout)
