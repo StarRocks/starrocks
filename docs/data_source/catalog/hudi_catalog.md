@@ -393,7 +393,7 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hudi_table
 ```
 
-## Synchronize metadata updates
+## Manually/Automatically update metadata
 
 ### Manual update
 
