@@ -34,6 +34,21 @@ struct ConcatState {
     std::string tail;
 };
 
+<<<<<<< HEAD:be/src/exprs/vectorized/string_functions.h
+=======
+struct StringFunctionsState;
+
+struct MatchInfo {
+    size_t from;
+    size_t to;
+};
+
+struct MatchInfoChain {
+    std::vector<MatchInfo> info_chain;
+    unsigned long long last_to = 0;
+};
+
+>>>>>>> 7d4314927 ([BugFix] Fix some problem when regex_replace using hyperscan replace (#23371)):be/src/exprs/string_functions.h
 class StringFunctions {
 public:
     /**

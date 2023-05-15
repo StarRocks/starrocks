@@ -26,7 +26,13 @@
 #include "util/sm3.h"
 #include "util/utf8.h"
 
+<<<<<<< HEAD:be/src/exprs/vectorized/string_functions.cpp
 namespace starrocks::vectorized {
+=======
+namespace starrocks {
+// A regex to match any regex pattern is equivalent to a substring search.
+static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+)(?:\.\*)*)", re2::RE2::Quiet);
+>>>>>>> 7d4314927 ([BugFix] Fix some problem when regex_replace using hyperscan replace (#23371)):be/src/exprs/string_functions.cpp
 
 #define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                          \
     if (UNLIKELY(col->reach_capacity_limit())) {                                     \
@@ -2546,8 +2552,34 @@ struct StringFunctionsState {
     }
 };
 
+<<<<<<< HEAD:be/src/exprs/vectorized/string_functions.cpp
 Status StringFunctions::regexp_prepare(starrocks_udf::FunctionContext* context,
                                        starrocks_udf::FunctionContext::FunctionStateScope scope) {
+=======
+Status StringFunctions::hs_compile_and_alloc_scratch(const std::string& pattern, StringFunctionsState* state,
+                                                     FunctionContext* context, const Slice& slice) {
+    if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SOM_LEFTMOST,
+                   HS_MODE_BLOCK, nullptr, &state->database, &state->compile_err) != HS_SUCCESS) {
+        std::stringstream error;
+        error << "Invalid regex expression: " << slice << ": " << state->compile_err->message;
+        context->set_error(error.str().c_str());
+        hs_free_compile_error(state->compile_err);
+        return Status::InvalidArgument(error.str());
+    }
+
+    if (hs_alloc_scratch(state->database, &state->scratch) != HS_SUCCESS) {
+        std::stringstream error;
+        error << "ERROR: Unable to allocate scratch space.";
+        context->set_error(error.str().c_str());
+        hs_free_database(state->database);
+        return Status::InvalidArgument(error.str());
+    }
+
+    return Status::OK();
+}
+
+Status StringFunctions::regexp_extract_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+>>>>>>> 7d4314927 ([BugFix] Fix some problem when regex_replace using hyperscan replace (#23371)):be/src/exprs/string_functions.cpp
     if (scope != FunctionContext::THREAD_LOCAL) {
         return Status::OK();
     }
@@ -2748,7 +2780,79 @@ ColumnPtr StringFunctions::regexp_replace_const(re2::RE2* const_re, const Column
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/string_functions.cpp
 ColumnPtr StringFunctions::regexp_replace(FunctionContext* context, const Columns& columns) {
+=======
+static ColumnPtr regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns) {
+    auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
+
+    hs_scratch_t* scratch = nullptr;
+    hs_error_t status;
+    if ((status = hs_clone_scratch(state->scratch, &scratch)) != HS_SUCCESS) {
+        CHECK(false) << "ERROR: Unable to clone scratch space."
+                     << " status: " << status;
+    }
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+
+    MatchInfoChain match_info_chain;
+    match_info_chain.info_chain.reserve(64);
+
+    for (int row = 0; row < size; ++row) {
+        if (str_viewer.is_null(row) || rpl_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        match_info_chain.info_chain.clear();
+        match_info_chain.last_to = 0;
+
+        auto rpl_value = rpl_viewer.value(row);
+
+        auto value_size = str_viewer.value(row).size;
+        const char* data =
+                (value_size) ? str_viewer.value(row).data : &StringFunctions::_DUMMY_STRING_FOR_EMPTY_PATTERN;
+
+        auto status = hs_scan(
+                // Use &_DUMMY_STRING_FOR_EMPTY_PATTERN instead of nullptr to avoid crash.
+                state->database, data, value_size, 0, scratch,
+                [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
+                   void* ctx) -> int {
+                    auto* value = (MatchInfoChain*)ctx;
+                    if (value->info_chain.empty()) {
+                        value->info_chain.emplace_back(MatchInfo{.from = from, .to = to});
+                    } else if (value->info_chain.back().from == from) {
+                        value->info_chain.back().to = to;
+                    } else {
+                        value->info_chain.emplace_back(MatchInfo{.from = from, .to = to});
+                    }
+                    value->last_to = to;
+                    return 0;
+                },
+                &match_info_chain);
+        DCHECK(status == HS_SUCCESS || status == HS_SCAN_TERMINATED) << " status: " << status;
+
+        std::string result_str;
+        result_str.reserve(value_size);
+
+        const char* start = str_viewer.value(row).data;
+        size_t last_to = 0;
+        for (const auto& info : match_info_chain.info_chain) {
+            result_str.append(start + last_to, info.from - last_to);
+            result_str.append(rpl_value.data, rpl_value.size);
+            last_to = info.to;
+        }
+        result_str.append(start + last_to, value_size - last_to);
+
+        result.append(Slice(result_str.data(), result_str.size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, const Columns& columns) {
+>>>>>>> 7d4314927 ([BugFix] Fix some problem when regex_replace using hyperscan replace (#23371)):be/src/exprs/string_functions.cpp
     auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     if (state->const_pattern) {
