@@ -38,10 +38,11 @@ namespace starrocks {
 struct TableInfo;
 
 struct TableInfo {
-    TCompressionType::type _compress_type = TCompressionType::SNAPPY;
-    bool _enable_dictionary = true;
-    std::string _partition_location = "";
-    std::shared_ptr<::parquet::schema::GroupNode> _schema;
+    TCompressionType::type compress_type = TCompressionType::SNAPPY;
+    bool enable_dictionary = true;
+    std::string partition_location = "";
+    std::shared_ptr<::parquet::schema::GroupNode> schema;
+    TCloudConfiguration cloud_conf;
 };
 
 class RollingAsyncParquetWriter {
@@ -66,7 +67,7 @@ private:
     Status close_current_writer(RuntimeState* state);
 
 private:
-    std::shared_ptr<FileSystem> _fs;
+    std::unique_ptr<FileSystem> _fs;
     std::shared_ptr<starrocks::parquet::AsyncFileWriter> _writer;
     std::shared_ptr<::parquet::WriterProperties> _properties;
     std::shared_ptr<::parquet::schema::GroupNode> _schema;

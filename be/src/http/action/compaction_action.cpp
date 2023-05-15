@@ -73,17 +73,17 @@ std::atomic_bool CompactionAction::_running = false;
 // for viewing the compaction status
 Status CompactionAction::_handle_show_compaction(HttpRequest* req, std::string* json_result) {
     const std::string& req_tablet_id = req->param(TABLET_ID_KEY);
-    const std::string& req_schema_hash = req->param(TABLET_SCHEMA_HASH_KEY);
-    if (req_tablet_id == "" && req_schema_hash == "") {
-        // TODO(cmy): View the overall compaction status
-        return Status::NotSupported("The overall compaction status is not supported yet");
+    if (req_tablet_id == "") {
+        std::string msg = fmt::format("The argument 'tablet_id' is required.");
+        LOG(WARNING) << msg;
+        return Status::NotSupported(msg);
     }
 
     uint64_t tablet_id;
     try {
         tablet_id = std::stoull(req_tablet_id);
     } catch (const std::exception& e) {
-        LOG(WARNING) << "invalid argument.tablet_id:" << req_tablet_id << ", schema_hash:" << req_schema_hash;
+        LOG(WARNING) << "invalid argument.tablet_id:" << req_tablet_id;
         return Status::InternalError(strings::Substitute("convert failed, $0", e.what()));
     }
 
@@ -324,6 +324,12 @@ Status CompactionAction::_handle_submit_repairs(HttpRequest* req, std::string* j
     return Status::OK();
 }
 
+Status CompactionAction::_handle_running_task(HttpRequest* req, std::string* json_result) {
+    CompactionManager* compaction_manager = StorageEngine::instance()->compaction_manager();
+    compaction_manager->get_running_status(json_result);
+    return Status::OK();
+}
+
 void CompactionAction::handle(HttpRequest* req) {
     LOG(INFO) << req->debug_string();
     req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_JSON.c_str());
@@ -338,6 +344,8 @@ void CompactionAction::handle(HttpRequest* req) {
         st = _handle_show_repairs(req, &json_result);
     } else if (_type == CompactionActionType::SUBMIT_REPAIR) {
         st = _handle_submit_repairs(req, &json_result);
+    } else if (_type == CompactionActionType::SHOW_RUNNING_TASK) {
+        st = _handle_running_task(req, &json_result);
     } else {
         st = Status::NotSupported("Action not supported");
     }

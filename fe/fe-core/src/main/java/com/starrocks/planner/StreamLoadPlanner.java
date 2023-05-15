@@ -39,6 +39,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
@@ -62,6 +64,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
@@ -94,13 +97,19 @@ public class StreamLoadPlanner {
     private OlapTable destTable;
     private StreamLoadInfo streamLoadInfo;
 
+    private TExecPlanFragmentParams execPlanFragmentParams;
+
     private Analyzer analyzer;
     private DescriptorTable descTable;
+
+    // just for using session variable
+    private ConnectContext connectContext;
 
     public StreamLoadPlanner(Database db, OlapTable destTable, StreamLoadInfo streamLoadInfo) {
         this.db = db;
         this.destTable = destTable;
         this.streamLoadInfo = streamLoadInfo;
+        this.connectContext = new ConnectContext();
     }
 
     private void resetAnalyzer() {
@@ -111,6 +120,10 @@ public class StreamLoadPlanner {
     // can only be called after "plan()", or it will return null
     public OlapTable getDestTable() {
         return destTable;
+    }
+
+    public ConnectContext getConnectContext() {
+        return connectContext;
     }
 
     // create the plan. the plan's query id and load id are same, using the parameter 'loadId'
@@ -248,6 +261,11 @@ public class StreamLoadPlanner {
         // for stream load, we use exec_mem_limit to limit the memory usage of load channel.
         queryOptions.setMem_limit(streamLoadInfo.getExecMemLimit());
         queryOptions.setLoad_mem_limit(streamLoadInfo.getLoadMemLimit());
+
+        if (connectContext.getSessionVariable().isEnableLoadProfile()) {
+            queryOptions.setEnable_profile(true);
+        }
+
         params.setQuery_options(queryOptions);
         TQueryGlobals queryGlobals = new TQueryGlobals();
         queryGlobals.setNow_string(DATE_FORMAT.format(new Date()));
@@ -255,12 +273,18 @@ public class StreamLoadPlanner {
         queryGlobals.setTime_zone(streamLoadInfo.getTimezone());
         params.setQuery_globals(queryGlobals);
 
+        // Since stream load has only one fragment,
+        // the backend number can be directly assigned to 0
+        params.setBackend_num(0);
+        TNetworkAddress coordAddress = new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port);
+        params.setCoord(coordAddress);
 
         LOG.info("load job id: {} tx id {} parallel {} compress {} replicated {} quorum {}", DebugUtil.printId(loadId),
                 streamLoadInfo.getTxnId(),
                 queryOptions.getLoad_dop(),
                 queryOptions.getLoad_transmission_compression_type(), destTable.enableReplicatedStorage(),
                 writeQuorum);
+        this.execPlanFragmentParams = params;
         return params;
     }
 
@@ -288,5 +312,9 @@ public class StreamLoadPlanner {
         }
 
         return partitionIds;
+    }
+
+    public TExecPlanFragmentParams getExecPlanFragmentParams() {
+        return execPlanFragmentParams;
     }
 }

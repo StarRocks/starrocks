@@ -63,6 +63,7 @@ import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
@@ -346,7 +347,7 @@ public class PrivilegeCheckerV2 {
         Set<TableName> tableNames = Sets.newHashSet();
         if (StatsConstants.DEFAULT_ALL_ID != tableId && StatsConstants.DEFAULT_ALL_ID != dbId) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            if (db != null && !db.isInfoSchemaDb()) {
+            if (db != null && !db.isSystemDatabase()) {
                 Table table = db.getTable(tableId);
                 if (table != null && table.isOlapOrCloudNativeTable()) {
                     tableNames.add(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -367,7 +368,7 @@ public class PrivilegeCheckerV2 {
 
     private static void getTableNamesInDb(Set<TableName> tableNames, Long id) {
         Database db = GlobalStateMgr.getCurrentState().getDb(id);
-        if (db != null && !db.isInfoSchemaDb()) {
+        if (db != null && !db.isSystemDatabase()) {
             for (Table table : db.getTables()) {
                 if (table == null || !table.isOlapOrCloudNativeTable()) {
                     continue;
@@ -1180,7 +1181,8 @@ public class PrivilegeCheckerV2 {
             // 1. check if user can alter view in this db
             checkViewAction(context, statement.getTableName(), PrivilegeType.ALTER);
             // 2. check if user can query
-            check(statement.getQueryStatement(), context);
+            AlterViewClause alterViewClause = (AlterViewClause) statement.getAlterClause();
+            check(alterViewClause.getQueryStatement(), context);
             return null;
         }
 

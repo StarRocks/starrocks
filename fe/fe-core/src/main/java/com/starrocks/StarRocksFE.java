@@ -78,9 +78,12 @@ public class StarRocksFE {
     public static final String STARROCKS_HOME_DIR = System.getenv("STARROCKS_HOME");
     public static final String PID_DIR = System.getenv("PID_DIR");
 
+    public static volatile boolean stopped = false;
+
     public static void main(String[] args) {
         start(STARROCKS_HOME_DIR, PID_DIR, args);
     }
+
 
     // entrance for starrocks frontend
     public static void start(String starRocksDir, String pidDir, String[] args) {
@@ -177,13 +180,16 @@ public class StarRocksFE {
 
             addShutdownHook();
 
-            while (true) {
+            while (!stopped) {
                 Thread.sleep(2000);
             }
+
         } catch (Throwable e) {
             LOG.error("StarRocksFE start failed", e);
             System.exit(-1);
         }
+
+        System.exit(0);
     }
 
     /*

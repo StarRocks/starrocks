@@ -22,6 +22,7 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
+// TODO: implements reset_state
 class SpillableAggregateBlockingSinkOperator : public AggregateBlockingSinkOperator {
 public:
     template <class... Args>
@@ -39,9 +40,6 @@ public:
 
     Status prepare(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
-    bool pending_finish() const override {
-        return _aggregator->has_pending_data() || _aggregator->has_pending_restore();
-    }
 
     void mark_need_spill() override {
         Operator::mark_need_spill();
@@ -51,10 +49,7 @@ public:
 
 private:
     Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
-    Status _spill_aggregated_data(RuntimeState* state);
-
-    std::function<StatusOr<ChunkPtr>()> _generate_spill_task(RuntimeState* state);
-
+    std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state);
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
 
     bool _is_finished = false;

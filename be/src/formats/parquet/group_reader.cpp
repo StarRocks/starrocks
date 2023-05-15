@@ -184,7 +184,8 @@ Status GroupReader::_init_column_readers() {
 
 Status GroupReader::_create_column_reader(const GroupReaderParam::Column& column) {
     std::unique_ptr<ColumnReader> column_reader = nullptr;
-    const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_idx(column.col_idx_in_parquet);
+    const auto* schema_node =
+            _param.file_metadata->schema().get_stored_column_by_field_idx(column.field_idx_in_parquet);
     {
         SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
         if (column.t_iceberg_schema_field == nullptr) {
@@ -198,7 +199,7 @@ Status GroupReader::_create_column_reader(const GroupReaderParam::Column& column
         if (column.col_type_in_chunk.is_complex_type()) {
             // For complex type columns, we need parse def & rep levels.
             // For OptionalColumnReader, by default, we will not parse it's def level for performance. But if
-            // column is complex type, we have to parse def level to calculate nullbility.
+            // column is a complex type, we have to parse def level to calculate nullability.
             column_reader->set_need_parse_levels(true);
         }
     }
@@ -214,8 +215,11 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     for (auto& column : _param.read_cols) {
         int chunk_index = column.col_idx_in_chunk;
         SlotId slot_id = column.slot_id;
+        const auto* parquet_field =
+                _param.file_metadata->schema().get_stored_column_by_field_idx(column.field_idx_in_parquet);
+        DCHECK(parquet_field != nullptr);
         const tparquet::ColumnMetaData& column_metadata =
-                _row_group_metadata->columns[column.col_idx_in_parquet].meta_data;
+                _row_group_metadata->columns[parquet_field->physical_column_index].meta_data;
         if (_can_use_as_dict_filter_column(slots[chunk_index], conjunct_ctxs_by_slot, column_metadata)) {
             _dict_filter_ctx.use_as_dict_filter_column(read_col_idx, slot_id, conjunct_ctxs_by_slot.at(slot_id));
             _active_column_indices.emplace_back(read_col_idx);
@@ -254,7 +258,7 @@ ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& column_indices)
 void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset) {
     int64_t end = 0;
     for (const auto& column : _param.read_cols) {
-        auto schema_node = _param.file_metadata->schema().get_stored_column_by_idx(column.col_idx_in_parquet);
+        auto schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.field_idx_in_parquet);
         _collect_field_io_range(*schema_node, ranges, &end);
     }
     *end_offset = end;

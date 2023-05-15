@@ -99,6 +99,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String ENABLE_PROFILE = "enable_profile";
+
+    public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
     public static final String PROFILING = "profiling";
     public static final String SQL_MODE = "sql_mode";
     /**
@@ -337,6 +339,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
     public static final String ENABLE_CONNECTOR_ADAPTIVE_IO_TASKS = "enable_connector_adaptive_io_tasks";
     public static final String CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS = "connector_io_tasks_slow_io_latency_ms";
+    public static final String SCAN_USE_QUERY_MEM_RATIO = "scan_use_query_mem_ratio";
+    public static final String CONNECTOR_SCAN_USE_QUERY_MEM_RATIO = "connector_scan_use_query_mem_ratio";
 
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
@@ -537,6 +541,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if true, need report to coordinator when plan fragment execute successfully.
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
+
+    // if true, will generate profile when load finished
+    @VariableMgr.VarAttr(name = ENABLE_LOAD_PROFILE)
+    private boolean enableLoadProfile = false;
 
     // Default sqlMode is ONLY_FULL_GROUP_BY
     @VariableMgr.VarAttr(name = SQL_MODE_STORAGE_NAME, alias = SQL_MODE, show = SQL_MODE)
@@ -958,6 +966,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS, flag = VariableMgr.INVISIBLE)
     private int connectorIoTasksSlowIoLatency = 50;
 
+    @VariableMgr.VarAttr(name = SCAN_USE_QUERY_MEM_RATIO)
+    private double scanUseQueryMemRatio = 0.3;
+
+    @VariableMgr.VarAttr(name = CONNECTOR_SCAN_USE_QUERY_MEM_RATIO)
+    private double connectorScanUseQueryMemRatio = 0.3;
+
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateBlockCache = true;
 
@@ -1229,6 +1243,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableProfile(boolean enableProfile) {
         this.enableProfile = enableProfile;
+    }
+
+    public boolean isEnableLoadProfile() {
+        return enableLoadProfile;
+    }
+
+    public void setEnableLoadProfile(boolean enableLoadProfile) {
+        this.enableLoadProfile = enableLoadProfile;
     }
 
     public int getWaitTimeoutS() {
@@ -2171,6 +2193,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setEnable_connector_adaptive_io_tasks(enableConnectorAdaptiveIoTasks);
         tResult.setConnector_io_tasks_slow_io_latency_ms(connectorIoTasksSlowIoLatency);
+        tResult.setConnector_scan_use_query_mem_ratio(connectorScanUseQueryMemRatio);
+        tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
         return tResult;
     }
 

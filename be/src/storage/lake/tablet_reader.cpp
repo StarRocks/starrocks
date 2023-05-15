@@ -52,10 +52,13 @@ TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, std::v
           _rowsets_inited(true),
           _rowsets(std::move(rowsets)) {}
 
-TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, bool is_key, RowSourceMaskBuffer* mask_buffer)
+TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets, bool is_key,
+                           RowSourceMaskBuffer* mask_buffer)
         : ChunkIterator(std::move(schema)),
           _tablet(tablet),
           _version(version),
+          _rowsets_inited(true),
+          _rowsets(std::move(rowsets)),
           _is_vertical_merge(true),
           _is_key(is_key),
           _mask_buffer(mask_buffer) {
@@ -139,8 +142,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
-        ASSIGN_OR_RETURN(auto iter, rowset->read(schema(), rs_opts));
-        iters->emplace_back(std::move(iter));
+        ASSIGN_OR_RETURN(auto seg_iters, rowset->read(schema(), rs_opts));
+        iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
     }
     return Status::OK();
 }

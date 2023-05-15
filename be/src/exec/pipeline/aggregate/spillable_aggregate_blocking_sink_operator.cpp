@@ -43,21 +43,28 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
         RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
         return Status::OK();
     }
+    if (state->is_cancelled()) {
+        _aggregator->spiller()->cancel();
+    }
     // ugly code
     // TODO: fixme
     auto io_executor = _aggregator->spill_channel()->io_executor();
 
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
-        return _aggregator->spiller()->flush(state, *io_executor, spill::MemTrackerGuard(tls_mem_tracker));
+        return _aggregator->spiller()->flush(
+                state, *io_executor,
+                spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
     };
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
         _aggregator->spill_channel()->set_finishing();
         return _aggregator->spiller()->set_flush_all_call_back(
-                [this]() {
+                [this, state]() {
                     _is_finished = true;
+                    RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
-                state, *io_executor, spill::MemTrackerGuard(tls_mem_tracker));
+                state, *io_executor,
+                spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
     };
 
     if (_aggregator->spill_channel()->is_working()) {
@@ -118,34 +125,11 @@ Status SpillableAggregateBlockingSinkOperator::_spill_all_inputs(RuntimeState* s
     _aggregator->hash_map_variant().visit(
             [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
     CHECK(!_aggregator->spill_channel()->has_task());
-    RETURN_IF_ERROR(_spill_aggregated_data(state));
+    RETURN_IF_ERROR(_aggregator->spill_aggregate_data(state, _build_spill_task(state)));
     return Status::OK();
 }
 
-Status SpillableAggregateBlockingSinkOperator::_spill_aggregated_data(RuntimeState* state) {
-    auto io_executor = _aggregator->spill_channel()->io_executor();
-    auto spiller = _aggregator->spiller();
-    auto spill_channel = _aggregator->spill_channel();
-    auto process_task = _generate_spill_task(state);
-    while (!_aggregator->spiller()->is_full()) {
-        auto chunk_st = process_task();
-        if (chunk_st.ok()) {
-            RETURN_IF_ERROR(
-                    spiller->spill(state, chunk_st.value(), *io_executor, spill::MemTrackerGuard(tls_mem_tracker)));
-        } else if (chunk_st.status().is_end_of_file()) {
-            // no more data in aggregator, reset state
-            RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr));
-            return Status::OK();
-        } else {
-            return chunk_st.status();
-        }
-    }
-    spill_channel->add_spill_task(std::move(process_task));
-
-    return Status::OK();
-}
-
-std::function<StatusOr<ChunkPtr>()> SpillableAggregateBlockingSinkOperator::_generate_spill_task(RuntimeState* state) {
+std::function<StatusOr<ChunkPtr>()> SpillableAggregateBlockingSinkOperator::_build_spill_task(RuntimeState* state) {
     return [this, state]() -> StatusOr<ChunkPtr> {
         bool use_intermediate_as_output = true;
         if (!_aggregator->is_ht_eos()) {

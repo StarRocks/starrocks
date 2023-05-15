@@ -59,7 +59,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
@@ -97,7 +96,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -215,6 +213,7 @@ public class OlapScanNode extends ScanNode {
         return bucketColumns;
     }
 
+    // TODO: Determine local shuffle keys by FE to make local shuffle use bucket columns of OlapScanNode.
     public void setBucketColumns(List<ColumnRefOperator> bucketColumns) {
         this.bucketColumns = bucketColumns;
     }

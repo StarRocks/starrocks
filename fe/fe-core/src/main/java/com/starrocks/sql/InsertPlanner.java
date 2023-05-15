@@ -666,6 +666,13 @@ public class InsertPlanner {
         SelectRelation selectRelation = (SelectRelation) queryRelation;
         List<SelectListItem> listItems = selectRelation.getSelectList().getItems();
         List<Integer> partitionIndexes = icebergTable.partitionColumnIndexes();
+
+        for (SelectListItem item : listItems) {
+            if (item.isStar()) {
+                return false;
+            }
+        }
+
         for (int partitionIndex : partitionIndexes) {
             Expr expr = listItems.get(partitionIndex).getExpr();
             if (!expr.isConstant()) {

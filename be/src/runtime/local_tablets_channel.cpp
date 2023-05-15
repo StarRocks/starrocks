@@ -118,6 +118,7 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
 void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                                     PTabletWriterAddBatchResult* response) {
     auto t0 = std::chrono::steady_clock::now();
+    int64_t wait_memtable_flush_time_us = 0;
 
     if (UNLIKELY(!request.has_sender_id())) {
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
@@ -215,6 +216,19 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         auto it = _delta_writers.find(tablet_id);
         DCHECK(it != _delta_writers.end());
         auto& delta_writer = it->second;
+
+        // back pressure OlapTableSink since there are too many memtables need to flush
+        while (delta_writer->get_flush_stats().queueing_memtable_num >= config::max_queueing_memtable_per_tablet) {
+            auto t1 = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000 > request.timeout_ms()) {
+                LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                          << " wait tablet " << tablet_id << " flush memtable " << request.timeout_ms()
+                          << "ms still has queueing num " << delta_writer->get_flush_stats().queueing_memtable_num;
+                break;
+            }
+            bthread_usleep(10000); // 10ms
+            wait_memtable_flush_time_us += 10000;
+        }
 
         AsyncDeltaWriterRequest req;
         req.chunk = chunk;
@@ -350,6 +364,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     response->set_execution_time_us(last_execution_time_us +
                                     std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
     response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
+    response->set_wait_memtable_flush_time_us(wait_memtable_flush_time_us);
 }
 
 void LocalTabletsChannel::_commit_tablets(const PTabletWriterAddChunkRequest& request,

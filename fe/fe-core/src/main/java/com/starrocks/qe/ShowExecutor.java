@@ -946,11 +946,24 @@ public class ShowExecutor {
     // Show create database
     private void handleShowCreateDb() throws AnalysisException {
         ShowCreateDbStmt showStmt = (ShowCreateDbStmt) stmt;
+        String catalogName = showStmt.getCatalogName();
+        String dbName = showStmt.getDb();
         List<List<String>> rows = Lists.newArrayList();
-        Database db = connectContext.getGlobalStateMgr().getDb(showStmt.getDb());
+
+        Database db;
+        if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
+            db = connectContext.getGlobalStateMgr().getDb(dbName);
+        } else {
+            db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        }
         MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
-        rows.add(Lists.newArrayList(showStmt.getDb(),
-                "CREATE DATABASE `" + showStmt.getDb() + "`"));
+
+        StringBuilder createSqlBuilder = new StringBuilder();
+        createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
+        if (!Strings.isNullOrEmpty(db.getLocation())) {
+            createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
+        }
+        rows.add(Lists.newArrayList(showStmt.getDb(), createSqlBuilder.toString()));
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
@@ -1820,6 +1833,7 @@ public class ShowExecutor {
                 } else if (showStmt.hasLimit()) {
                     sizeLimit = showStmt.getLimit();
                 }
+
                 boolean stop = false;
                 Collection<Partition> partitions = new ArrayList<>();
                 if (showStmt.hasPartition()) {
@@ -1867,11 +1881,6 @@ public class ShowExecutor {
                         }
                     }
                 }
-                if (sizeLimit > -1 && tabletInfos.size() < sizeLimit) {
-                    tabletInfos.clear();
-                } else if (sizeLimit > -1) {
-                    tabletInfos = tabletInfos.subList((int) showStmt.getOffset(), (int) sizeLimit);
-                }
 
                 // order by
                 List<OrderByPair> orderByPairs = showStmt.getOrderByPairs();
@@ -1884,6 +1893,10 @@ public class ShowExecutor {
                     comparator = new ListComparator<>(0, 1);
                 }
                 tabletInfos.sort(comparator);
+
+                if (sizeLimit > -1 && tabletInfos.size() > sizeLimit) {
+                    tabletInfos = tabletInfos.subList((int) showStmt.getOffset(), (int) sizeLimit);
+                }
 
                 for (List<Comparable> tabletInfo : tabletInfos) {
                     List<String> oneTablet = new ArrayList<>(tabletInfo.size());

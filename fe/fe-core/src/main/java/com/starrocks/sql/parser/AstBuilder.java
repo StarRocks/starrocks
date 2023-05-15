@@ -129,6 +129,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
+import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.AnalyzeBasicDesc;
@@ -896,7 +897,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         final StarRocksParser.MaterializedColumnDescContext materializedColumnDescContext =
-                                                            context.materializedColumnDesc();
+                context.materializedColumnDesc();
         Expr expr = null;
         if (materializedColumnDescContext != null) {
             if (isAllowNull != null && isAllowNull == false) {
@@ -1235,9 +1236,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.columnNameWithComment().size() > 0) {
             colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
         }
+        QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
+        AlterClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
 
-        return new AlterViewStmt(targetTableName, colWithComments, (QueryStatement) visit(context.queryStatement()),
-                createPos(context));
+        return new AlterViewStmt(targetTableName, alterClause, createPos(context));
     }
 
     @Override
@@ -1448,6 +1450,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.mvName);
         TableName tableName = qualifiedNameToTableName(qualifiedName);
 
+        List<ColWithComment> colWithComments = null;
+        if (!context.columnNameWithComment().isEmpty()) {
+            colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
+        }
+
         String comment =
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
         QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
@@ -1539,7 +1546,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException(PARSER_ERROR_MSG.feConfigDisable("enable_experimental_mv"), NodePosition.ZERO);
         }
 
-        return new CreateMaterializedViewStatement(tableName, ifNotExist, comment, refreshSchemeDesc,
+        return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments, comment, refreshSchemeDesc,
                 expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement, createPos(context));
     }
 
@@ -3483,23 +3490,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.rollupName != null) {
             rollupName = getIdentifierName(context.rollupName);
         }
-        Map<String, String> properties = new HashMap<>();;
+        Map<String, String> properties = new HashMap<>();
+        ;
         properties = getProperties(context.properties());
 
         if (columnDef.isMaterializedColumn()) {
             if (rollupName != null) {
                 throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("rollupName", "ADD MATERIALIZED COLUMN"),
-                    columnDef.getPos());
+                        columnDef.getPos());
             }
 
             if (columnPosition != null) {
                 throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("columnPosition", "ADD MATERIALIZED COLUMN"),
-                    columnDef.getPos());
+                        columnDef.getPos());
             }
 
             if (properties.size() != 0) {
                 throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("properties", "ADD MATERIALIZED COLUMN"),
-                    columnDef.getPos());
+                        columnDef.getPos());
             }
         }
 
@@ -3558,12 +3566,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (columnDef.isMaterializedColumn()) {
             if (rollupName != null) {
                 throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("rollupName",
-                    "MODIFY MATERIALIZED COLUMN"), columnDef.getPos());
+                        "MODIFY MATERIALIZED COLUMN"), columnDef.getPos());
             }
 
             if (columnPosition != null) {
                 throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("columnPosition",
-                    "MODIFY MATERIALIZED COLUMN"), columnDef.getPos());
+                        "MODIFY MATERIALIZED COLUMN"), columnDef.getPos());
             }
         }
         return new ModifyColumnClause(columnDef, columnPosition, rollupName, getProperties(context.properties()),
@@ -5281,6 +5289,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     intervalLiteral.getUnitIdentifier().getDescription(), pos);
         }
 
+        if (functionName.equals(FunctionSet.ELEMENT_AT)) {
+            List<Expr> params = visit(context.expression(), Expr.class);
+            if (params.size() != 2) {
+                throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
+            }
+            return new CollectionElementExpr(params.get(0), params.get(1));
+        }
+
         if (functionName.equals(FunctionSet.ISNULL)) {
             List<Expr> params = visit(context.expression(), Expr.class);
             if (params.size() != 1) {
@@ -5302,7 +5318,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (fnName.getFunction().equalsIgnoreCase("CONNECTION_ID")) {
             return new InformationFunction("CONNECTION_ID");
         }
-        
+
         if (functionName.equals(FunctionSet.MAP)) {
             List<Expr> exprs;
             if (context.expression() != null) {
@@ -6202,7 +6218,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitUserWithoutHost(StarRocksParser.UserWithoutHostContext context) {
         Identifier user = (Identifier) visit(context.identifierOrString());
-        return new UserIdentity(user.getValue(), "%", false,  createPos(context), false);
+        return new UserIdentity(user.getValue(), "%", false, createPos(context), false);
     }
 
     // ------------------------------------------- Util Functions -------------------------------------------

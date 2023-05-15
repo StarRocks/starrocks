@@ -95,13 +95,17 @@ mysql> select * from tj where id = 1;
 +------+---------------------+
 ```
 
-Example 2: Filter the data of the JSON column to retrieve the data that meets the specified filter condition.
+Example 2: Filter data of the JSON column `j` to retrieve the data that meets the specified filter condition.
 
-> `j->'a'` returns JSON data. You can interpret SQL data as JSON data by using the PARSE_JSON function and then compare the data. Alternatively, you can convert JSON data to INT data by using the CAST function and then compare the data.
+> `j->'a'` returns JSON data. You can use the first example to compare data (Note that implicit conversion is performed in this example). Alternatively, you can convert JSON data to INT by using the CAST function and then compare the data.
 
 ```Plain%20Text
-mysql> select * from tj where j->'a' = parse_json('1');
-Empty set (0.05 sec)
+mysql> select * from tj where j->'a' = 1;
++------+---------------------+
+| id   | j                   |
++------+---------------------+
+|    1 | {"a": 1, "b": true} |
+
 
 mysql> select * from tj where cast(j->'a' as INT) = 1;
 +------+---------------------+
@@ -109,7 +113,6 @@ mysql> select * from tj where cast(j->'a' as INT) = 1;
 +------+---------------------+
 |    1 | {"a": 1, "b": true} |
 +------+---------------------+
-1 row in set (0.05 sec)
 ```
 
 Example 3: Use the CAST function to convert the values in the JSON column of the table to BOOLEAN values. Then, filter the data of the JSON column to retrieve the data that meets the specified filter condition.
@@ -166,7 +169,7 @@ You can use JSON functions and operators to construct and process JSON data. For
 
 ## Limits and usage notes
 
-- The maximum length per JSON value is the same as the maximum length per STRING value.
+- The maximum length of a JSON value is 16 MB.
 
 - The ORDER BY, GROUP BY, and JOIN clauses do not support references to JSON columns. If you want to create references to JSON columns, use the CAST function to convert JSON columns to SQL columns before you create the references. For more information, see [cast](../../sql-functions/json-functions/json-query-and-processing-functions/cast.md).
 

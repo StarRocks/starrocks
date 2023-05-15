@@ -53,7 +53,7 @@ Variables that can be set both globally or partially effective include:
 * sql_mode
 * time_zone
 * use_compute_nodes
-* vectorized_engine_enable
+* vectorized_engine_enable (deprecated from v2.4 onwards)
 * wait_timeout
 * sql_dialect
 
@@ -146,7 +146,7 @@ SELECT /*+ SET_VAR
 
 * enable_insert_strict
 
-  Used to enable the strict mode when importing data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md)".
+  Used to enable the strict mode when loading data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md)".
 
 * enable_spilling
 
@@ -430,9 +430,9 @@ SELECT /*+ SET_VAR
 
   Used to control the query to fetch data using the rollup index of the segment v2 storage format. This variable is used for validation when going online with segment v2. It is not recommended for other cases.
 
-* vectorized_engine_enable
+* vectorized_engine_enable (deprecated from v2.4 onwards)
 
-  Used to control whether the vectorized engine is used to execute queries. A value of `true` indicates that the vectorized engine is used, otherwise the non-vectorized engine is used. The default is `true`.
+  Used to control whether the vectorized engine is used to execute queries. A value of `true` indicates that the vectorized engine is used, otherwise the non-vectorized engine is used. The default is `true`. This feature is enabled by default from v2.4 onwards and therefore, is deprecated.
 
 * version
 
@@ -478,6 +478,10 @@ SELECT /*+ SET_VAR
 * sql_dialect  (v3.0 and later)
 
   The SQL dialect that is used. For example, you can run the `set sql_dialect = 'trino';` command to set the SQL dialect to Trino, so you can use Trino-specific SQL syntax and functions in your queries.
+  
+  > **NOTICE**
+  >
+  > After you configure StarRocks to use the Trino dialect, identifiers in queries are not case-sensitive by default. Therefore, you must specify names in lowercase for your databases and tables at database and table creation. If you specify database and table names in uppercase, queries against these databases and tables will fail.
 
 * io_tasks_per_scan_operator (v3.0 and later)
 

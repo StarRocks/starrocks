@@ -45,14 +45,12 @@
 
 #include "common/tracer.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
-#include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/binlog_builder.h"
 #include "storage/compaction_candidate.h"
 #include "storage/compaction_context.h"
 #include "storage/compaction_manager.h"
-#include "storage/compaction_policy.h"
 #include "storage/compaction_task.h"
 #include "storage/default_compaction_policy.h"
 #include "storage/olap_common.h"
@@ -239,6 +237,77 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
     return st;
 }
 
+Status Tablet::load_rowset(const RowsetSharedPtr& rowset) {
+    Status st = add_rowset(rowset, false);
+    if (!st.ok() && !st.is_already_exist()) {
+        return st;
+    }
+
+    std::unique_lock wrlock(_meta_lock);
+    auto config = _tablet_meta->get_binlog_config();
+    if (config == nullptr || !config->binlog_enable) {
+        return st;
+    }
+
+    if (rowset->version().second < _tablet_meta->get_binlog_min_lsn().version()) {
+        return st;
+    }
+
+    auto rs = _inc_rs_version_map.find(rowset->version());
+    if (rs != _inc_rs_version_map.end()) {
+        // this should not happen
+        DCHECK(rowset->rowset_id() == rs->second->rowset_id())
+                << "Find an incremental rowset with the same version but different ids for tablet: " << full_name()
+                << ". The version is " << rowset->version() << ", and ids are " << rowset->rowset_id() << " and "
+                << rs->second->rowset_id();
+    } else {
+        _tablet_meta->add_inc_rs_meta(rowset->rowset_meta());
+        _inc_rs_version_map[rowset->version()] = rowset;
+    }
+
+    return st;
+}
+
+Status Tablet::finish_load_rowsets() {
+    if (keys_type() != DUP_KEYS) {
+        return Status::OK();
+    }
+
+    std::unique_lock wrlock(_meta_lock);
+    auto config = _tablet_meta->get_binlog_config();
+    if (config == nullptr || !config->binlog_enable) {
+        return Status::OK();
+    }
+
+    // find valid versions
+    BinlogLsn min_lsn = _tablet_meta->get_binlog_min_lsn();
+    std::vector<int64_t> valid_versions;
+    for (auto& item : _inc_rs_version_map) {
+        int64_t version = item.first.first;
+        if (version < min_lsn.version()) {
+            continue;
+        }
+        valid_versions.push_back(version);
+    }
+    std::sort(valid_versions.begin(), valid_versions.end());
+
+    // TabletMeta#binlog_min_lsn may be not accurate for the minimum version. Consider that when
+    // enable binlog in Tablet#update_binlog_config, we don't know the first incremental version
+    // for add_inc_rowset, so just set the min version to (_tablet_meta->max_version + 1), and
+    // after some ingestion, the actual min version may be larger than it
+    int64_t min_valid_version = valid_versions.empty() ? min_lsn.version() : valid_versions.front();
+    if (min_valid_version > min_lsn.version()) {
+        min_lsn = BinlogLsn(min_valid_version, 0);
+    }
+
+    Status status = _binlog_manager->init(min_lsn, valid_versions);
+    if (!status.ok()) {
+        LOG(WARNING) << "Fail to initialize binlog for tablet " << full_name() << ", " << status;
+    }
+
+    return status;
+}
+
 Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
     CHECK(!_updates) << "updatable tablet should not call add_rowset";
     DCHECK(rowset != nullptr);
@@ -375,6 +444,24 @@ Status Tablet::support_binlog() {
     return Status::InternalError("Not support binlog, keys type: " + KeysType_Name(keys_type()));
 }
 
+void Tablet::update_binlog_config(const BinlogConfig& new_config) {
+    std::shared_ptr<BinlogConfig> old_config = _tablet_meta->get_binlog_config();
+    if (old_config != nullptr && old_config->version >= new_config.version) {
+        VLOG(3) << "skip to update binlog config of tablet: " << tablet_id()
+                << ", current version: " << old_config->version << ", new version: " << new_config.version;
+        return;
+    }
+    _tablet_meta->set_binlog_config(new_config);
+    // set minimum lsn if this will enable binlog
+    if (new_config.binlog_enable && (old_config == nullptr || !old_config->binlog_enable)) {
+        BinlogLsn lsn(_tablet_meta->max_version().second + 1, 0);
+        _tablet_meta->set_binlog_min_lsn(lsn);
+    }
+
+    LOG(INFO) << "set binlog config of tablet: " << tablet_id() << ", " << new_config.to_string()
+              << ", minimum version: " << _tablet_meta->get_binlog_min_lsn();
+}
+
 StatusOr<bool> Tablet::_prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version) {
     auto config = _tablet_meta->get_binlog_config();
     if (config == nullptr || !config->binlog_enable) {
@@ -420,6 +507,28 @@ void Tablet::_commit_binlog(int64_t version) {
 void Tablet::_abort_binlog(const RowsetSharedPtr& rowset, int64_t version) {
     _binlog_manager->delete_ingestion(version);
     rowset->close();
+}
+
+bool Tablet::_check_useless_binlog_and_update_meta(int64_t current_second) {
+    auto config = _tablet_meta->get_binlog_config();
+    if (config == nullptr || !config->binlog_enable) {
+        return false;
+    }
+
+    bool expired_or_overcapacity = _binlog_manager->check_expire_and_capacity(current_second, config->binlog_ttl_second,
+                                                                              config->binlog_max_size);
+    if (!expired_or_overcapacity) {
+        return false;
+    }
+    BinlogRange binlog_range = _binlog_manager->current_binlog_range();
+    BinlogLsn lsn;
+    if (binlog_range.is_empty()) {
+        lsn = {_tablet_meta->max_version().second + 1, 0};
+    } else {
+        lsn = {binlog_range.start_version(), binlog_range.start_seq_id()};
+    }
+    _tablet_meta->set_binlog_min_lsn(lsn);
+    return true;
 }
 
 Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
@@ -506,32 +615,11 @@ void Tablet::_delete_stale_rowset_by_version(const Version& version) {
     VLOG(3) << "delete stale rowset. tablet=" << full_name() << ", version=" << version;
 }
 
-void Tablet::_delete_unused_binlog() {
-    if (_binlog_manager == nullptr) {
-        return;
-    }
-
-    bool binlog_enable = false;
-    {
-        int64_t now = UnixSeconds();
-        std::shared_lock rdlock(_meta_lock);
-        auto config = _tablet_meta->get_binlog_config();
-        binlog_enable = config != nullptr && config->binlog_enable;
-        if (binlog_enable) {
-            _binlog_manager->check_expire_and_capacity(now, config->binlog_ttl_second, config->binlog_max_size);
-        }
-    }
-
-    if (binlog_enable) {
-        _binlog_manager->delete_unused_binlog();
-    }
-}
-
 void Tablet::delete_expired_inc_rowsets() {
-    _delete_unused_binlog();
     int64_t now = UnixSeconds();
     std::vector<Version> expired_versions;
     std::unique_lock wrlock(_meta_lock);
+    bool binlog_meta_changed = _check_useless_binlog_and_update_meta(now);
     for (auto& rs_meta : _tablet_meta->all_inc_rs_metas()) {
         int64_t diff = now - rs_meta->creation_time();
         bool inc_rowset_expired = diff >= config::inc_rowset_expired_sec;
@@ -548,7 +636,7 @@ void Tablet::delete_expired_inc_rowsets() {
         }
     }
 
-    if (expired_versions.empty()) {
+    if (!binlog_meta_changed && expired_versions.empty()) {
         return;
     }
 
@@ -558,6 +646,15 @@ void Tablet::delete_expired_inc_rowsets() {
     }
 
     save_meta();
+    wrlock.unlock();
+
+    if (binlog_meta_changed) {
+        // delete binlog files after the tablet meta is persisted, so that we can recover the
+        // binlog file accurately according to the binlog_min_version and inc_rs_metas in
+        // the table meta. Otherwise, binlog files may be not found for some versions if the
+        // mate is not persisted successfully, but the binlog file has been deleted
+        _binlog_manager->delete_unused_binlog();
+    }
 }
 
 void Tablet::delete_expired_stale_rowset() {
@@ -1030,17 +1127,26 @@ void Tablet::get_compaction_status(std::string* json_result) {
     rapidjson::Document root;
     root.SetObject();
 
-    rapidjson::Document path_arr;
-    path_arr.SetArray();
+    rapidjson::Document stale_path_arr;
+    stale_path_arr.SetArray();
 
     std::vector<RowsetSharedPtr> rowsets;
     std::vector<bool> delete_flags;
+
+    bool compaction_running;
+    uint64_t compaction_task_id;
+    double compaction_score;
+    std::string compaction_type;
+    vector<RowsetSharedPtr> compaction_rowsets;
+    int64_t compaction_start_time;
+
     {
         std::shared_lock rdlock(_meta_lock);
         rowsets.reserve(_rs_version_map.size());
         for (auto& it : _rs_version_map) {
             rowsets.push_back(it.second);
         }
+
         std::sort(rowsets.begin(), rowsets.end(), Rowset::comparator);
 
         delete_flags.reserve(rowsets.size());
@@ -1048,44 +1154,143 @@ void Tablet::get_compaction_status(std::string* json_result) {
             delete_flags.push_back(version_for_delete_predicate(rs->version()));
         }
         // get snapshot version path json_doc
-        _timestamped_version_tracker.get_stale_version_path_json_doc(path_arr);
+        _timestamped_version_tracker.get_stale_version_path_json_doc(stale_path_arr);
+
+        std::lock_guard lock(_compaction_task_lock);
+        compaction_running = _compaction_task != nullptr;
+        if (compaction_running) {
+            compaction_task_id = _compaction_task->task_id();
+            compaction_score = _compaction_task->compaction_score();
+            compaction_type = to_string(_compaction_task->compaction_type());
+            compaction_rowsets.reserve(_compaction_task->input_rowsets().size());
+            for (auto& it : _compaction_task->input_rowsets()) {
+                compaction_rowsets.push_back(it);
+            }
+            compaction_start_time = _compaction_task->get_start_time();
+            std::sort(compaction_rowsets.begin(), compaction_rowsets.end(), Rowset::comparator);
+        }
     }
 
-    root.AddMember("cumulative point", _cumulative_point.load(), root.GetAllocator());
+    rapidjson::Value compaction_detail;
+    compaction_detail.SetObject();
+
+    rapidjson::Value enable_compaction;
+    enable_compaction.SetBool(_enable_compaction);
+    compaction_detail.AddMember("enable_compaction", enable_compaction, root.GetAllocator());
+
+    rapidjson::Value compaction_status;
+    std::string compaction_status_value = compaction_running ? "RUNNING" : "NO_RUNNING_TASK";
+    compaction_status.SetString(compaction_status_value.c_str(), compaction_status_value.length(), root.GetAllocator());
+    compaction_detail.AddMember("compaction_status", compaction_status, root.GetAllocator());
+
+    if (compaction_running) {
+        rapidjson::Value compaction_task_id_value;
+        compaction_task_id_value.SetUint64(compaction_task_id);
+        compaction_detail.AddMember("task_id", compaction_task_id_value, root.GetAllocator());
+
+        rapidjson::Value elapsed_time;
+        int64_t elapsed = (UnixMillis() - compaction_start_time) / MILLIS_PER_SEC;
+        elapsed_time.SetInt64(elapsed);
+        compaction_detail.AddMember("elapsed_time", elapsed_time, root.GetAllocator());
+
+        rapidjson::Value compaction_score_value;
+        compaction_score_value.SetDouble(compaction_score);
+        compaction_detail.AddMember("score", compaction_score_value, root.GetAllocator());
+
+        rapidjson::Value compaction_type_value;
+        compaction_type_value.SetString(compaction_type.c_str(), compaction_type.length(), root.GetAllocator());
+        compaction_detail.AddMember("type", compaction_type_value, root.GetAllocator());
+
+        rapidjson::Value compaction_rowsets_count;
+        compaction_rowsets_count.SetUint64(compaction_rowsets.size());
+        compaction_detail.AddMember("rowsets_count", compaction_rowsets_count, root.GetAllocator());
+
+        rapidjson::Document input_rowset_details;
+        input_rowset_details.SetArray();
+        for (auto& compaction_rowset : compaction_rowsets) {
+            rapidjson::Value value;
+            value.SetObject();
+
+            rapidjson::Value rowset_id;
+            std::string rowset_id_value = compaction_rowset->rowset_id().to_string();
+            rowset_id.SetString(rowset_id_value.c_str(), rowset_id_value.length(), root.GetAllocator());
+            value.AddMember("rowset_id", rowset_id, root.GetAllocator());
+
+            rapidjson::Value version;
+            const Version& ver = compaction_rowset->version();
+            std::string version_value = strings::Substitute("$0-$1", ver.first, ver.second);
+            version.SetString(version_value.c_str(), version_value.length(), root.GetAllocator());
+            value.AddMember("version", version, root.GetAllocator());
+
+            input_rowset_details.PushBack(value, input_rowset_details.GetAllocator());
+        }
+        compaction_detail.AddMember("input_rowset_details", input_rowset_details, root.GetAllocator());
+    }
+    root.AddMember("compaction_detail", compaction_detail, root.GetAllocator());
+
+    root.AddMember("cumulative_point", _cumulative_point.load(), root.GetAllocator());
     rapidjson::Value cumu_value;
     std::string format_str = ToStringFromUnixMillis(_last_cumu_compaction_failure_millis.load());
     cumu_value.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
-    root.AddMember("last cumulative failure time", cumu_value, root.GetAllocator());
+    root.AddMember("last_cumulative_failure_time", cumu_value, root.GetAllocator());
     rapidjson::Value base_value;
     format_str = ToStringFromUnixMillis(_last_base_compaction_failure_millis.load());
     base_value.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
-    root.AddMember("last base failure time", base_value, root.GetAllocator());
+    root.AddMember("last_base_failure_time", base_value, root.GetAllocator());
     rapidjson::Value cumu_success_value;
     format_str = ToStringFromUnixMillis(_last_cumu_compaction_success_millis.load());
     cumu_success_value.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
-    root.AddMember("last cumulative success time", cumu_success_value, root.GetAllocator());
+    root.AddMember("last_cumulative_success_time", cumu_success_value, root.GetAllocator());
     rapidjson::Value base_success_value;
     format_str = ToStringFromUnixMillis(_last_base_compaction_success_millis.load());
     base_success_value.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
-    root.AddMember("last base success time", base_success_value, root.GetAllocator());
+    root.AddMember("last_base_success_time", base_success_value, root.GetAllocator());
 
-    // print all rowsets' version as an array
-    rapidjson::Document versions_arr;
-    versions_arr.SetArray();
-    for (int i = 0; i < rowsets.size(); ++i) {
-        const Version& ver = rowsets[i]->version();
+    rapidjson::Value rowsets_count;
+    rowsets_count.SetUint64(rowsets.size());
+    root.AddMember("rowsets_count", rowsets_count, root.GetAllocator());
+
+    rapidjson::Value rowset_details(rapidjson::kArrayType);
+    rowset_details.Reserve(rowsets.size(), root.GetAllocator());
+    for (int i = 0; i < rowsets.size(); i++) {
         rapidjson::Value value;
-        std::string version_str =
-                strings::Substitute("[$0-$1] $2 $3 $4", ver.first, ver.second, rowsets[i]->num_segments(),
-                                    (delete_flags[i] ? "DELETE" : "DATA"),
-                                    SegmentsOverlapPB_Name(rowsets[i]->rowset_meta()->segments_overlap()));
-        value.SetString(version_str.c_str(), version_str.length(), versions_arr.GetAllocator());
-        versions_arr.PushBack(value, versions_arr.GetAllocator());
+        value.SetObject();
+
+        rapidjson::Value rowset_id;
+        std::string rowset_id_value = rowsets[i]->rowset_id().to_string();
+        rowset_id.SetString(rowset_id_value.c_str(), rowset_id_value.length(), root.GetAllocator());
+        value.AddMember("rowset_id", rowset_id, root.GetAllocator());
+
+        rapidjson::Value version;
+        const Version& ver = rowsets[i]->version();
+        std::string version_value = strings::Substitute("$0-$1", ver.first, ver.second);
+        version.SetString(version_value.c_str(), version_value.length(), root.GetAllocator());
+        value.AddMember("version", version, root.GetAllocator());
+
+        rapidjson::Value num_segments;
+        num_segments.SetInt64(rowsets[i]->num_segments());
+        value.AddMember("num_segments", num_segments, root.GetAllocator());
+
+        rapidjson::Value type;
+        std::string type_value = delete_flags[i] ? "DELETE" : "DATA";
+        type.SetString(type_value.c_str(), type_value.length(), root.GetAllocator());
+        value.AddMember("type", type, root.GetAllocator());
+
+        rapidjson::Value overlap;
+        std::string overlap_value = SegmentsOverlapPB_Name(rowsets[i]->rowset_meta()->segments_overlap());
+        overlap.SetString(overlap_value.c_str(), overlap_value.length(), root.GetAllocator());
+        value.AddMember("overlap", overlap, root.GetAllocator());
+
+        rapidjson::Value rowset_size;
+        rowset_size.SetInt64(rowsets[i]->data_disk_size());
+        value.AddMember("rowset_size", rowset_size, root.GetAllocator());
+
+        rowset_details.PushBack(value, root.GetAllocator());
     }
-    root.AddMember("rowsets", versions_arr, root.GetAllocator());
+    root.AddMember("rowset_details", rowset_details, root.GetAllocator());
 
     // add stale version rowsets
-    root.AddMember("stale version path", path_arr, root.GetAllocator());
+    root.AddMember("stale_version_path", stale_path_arr, root.GetAllocator());
 
     // to json string
     rapidjson::StringBuffer strbuf;

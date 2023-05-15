@@ -20,8 +20,16 @@
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
 
 namespace starrocks::pipeline {
+Status SpillableAggregateBlockingSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(AggregateBlockingSourceOperator::prepare(state));
+    RETURN_IF_ERROR(_stream_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
+    RETURN_IF_ERROR(_stream_aggregator->open(state));
+    return Status::OK();
+}
+
 void SpillableAggregateBlockingSourceOperator::close(RuntimeState* state) {
     AggregateBlockingSourceOperator::close(state);
+    _stream_aggregator->close(state);
 }
 
 bool SpillableAggregateBlockingSourceOperator::has_output() const {
@@ -50,7 +58,17 @@ bool SpillableAggregateBlockingSourceOperator::is_finished() const {
     if (!_aggregator->spiller()->spilled()) {
         return AggregateBlockingSourceOperator::is_finished();
     }
+    if (_aggregator->spiller()->is_cancel()) {
+        return true;
+    }
     return _aggregator->is_spilled_eos() && !_has_last_chunk;
+}
+
+Status SpillableAggregateBlockingSourceOperator::set_finishing(RuntimeState* state) {
+    if (state->is_cancelled()) {
+        _aggregator->spiller()->cancel();
+    }
+    return Status::OK();
 }
 
 Status SpillableAggregateBlockingSourceOperator::set_finished(RuntimeState* state) {
@@ -63,7 +81,6 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::pull_chunk(RuntimeS
     if (!_aggregator->spiller()->spilled()) {
         return AggregateBlockingSourceOperator::pull_chunk(state);
     }
-
     ASSIGN_OR_RETURN(auto res, _pull_spilled_chunk(state));
 
     if (res != nullptr) {
@@ -77,14 +94,6 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::pull_chunk(RuntimeS
 
 StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk(RuntimeState* state) {
     DCHECK(_accumulator.need_input());
-
-    // first time, lazy init
-    if (!_stream_aggregator_inited) {
-        RETURN_IF_ERROR(_stream_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
-        RETURN_IF_ERROR(_stream_aggregator->open(state));
-        _stream_aggregator_inited = true;
-    }
-
     ChunkPtr res;
 
     if (!_aggregator->is_spilled_eos()) {

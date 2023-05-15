@@ -20,6 +20,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "gen_cpp/olap_common.pb.h"
 #include "gutil/macros.h"
+#include "storage/memtable_flush_executor.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/tablet.h"
@@ -145,6 +146,8 @@ public:
 
     Status get_err_status() const;
 
+    const FlushStatistic& get_flush_stats() const { return _flush_token->get_stats(); }
+
 private:
     DeltaWriter(DeltaWriterOptions opt, MemTracker* parent, StorageEngine* storage_engine);
 
@@ -154,6 +157,7 @@ private:
     const char* _state_name(State state) const;
     const char* _replica_state_name(ReplicaState state) const;
     Status _fill_auto_increment_id(const Chunk& chunk);
+    Status _check_partial_update_with_sort_key(const Chunk& chunk);
 
     void _garbage_collection();
 
@@ -184,6 +188,7 @@ private:
     bool _with_rollback_log;
     // initial value is max value
     size_t _memtable_buffer_row = -1;
+    bool _partial_schema_with_sort_key = false;
 };
 
 } // namespace starrocks

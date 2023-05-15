@@ -40,6 +40,7 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
+#include "storage/lake/vertical_compaction_task.h"
 #include "storage/metadata_util.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
@@ -111,6 +112,10 @@ std::string TabletManager::tablet_schema_cache_key(int64_t tablet_id) {
     return fmt::format("schema_{}", tablet_id);
 }
 
+std::string TabletManager::tablet_latest_metadata_key(int64_t tablet_id) {
+    return fmt::format("meta_latest_{}", tablet_id);
+}
+
 bool TabletManager::fill_metacache(std::string_view key, CacheValue* ptr, int size) {
     Cache::Handle* handle = _metacache->insert(CacheKey(key), ptr, size, cache_value_deleter);
     if (handle == nullptr) {
@@ -131,6 +136,25 @@ TabletMetadataPtr TabletManager::lookup_tablet_metadata(std::string_view key) {
     auto metadata = std::get<TabletMetadataPtr>(*value);
     _metacache->release(handle);
     return metadata;
+}
+
+TabletMetadataPtr TabletManager::lookup_tablet_latest_metadata(std::string_view key) {
+    auto handle = _metacache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        return nullptr;
+    }
+    auto value = static_cast<CacheValue*>(_metacache->value(handle));
+    auto metadata = std::get<TabletMetadataPtr>(*value);
+    _metacache->release(handle);
+    return metadata;
+}
+
+void TabletManager::cache_tablet_latest_metadata(TabletMetadataPtr metadata) {
+    if (is_primary_key(metadata.get())) {
+        auto value_ptr = std::make_unique<CacheValue>(metadata);
+        fill_metacache(tablet_latest_metadata_key(metadata->id()), value_ptr.release(),
+                       static_cast<int>(metadata->SpaceUsedLong()));
+    }
 }
 
 TabletSchemaPtr TabletManager::lookup_tablet_schema(std::string_view key) {
@@ -297,6 +321,7 @@ Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
     auto value_ptr = std::make_unique<CacheValue>(metadata);
     bool inserted = fill_metacache(metadata_location, value_ptr.release(), static_cast<int>(metadata->SpaceUsedLong()));
     LOG_IF(WARNING, !inserted) << "Failed to put into meta cache " << metadata_location;
+    cache_tablet_latest_metadata(metadata);
     return Status::OK();
 }
 
@@ -309,6 +334,10 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& me
     MetaFileReader reader(metadata_location, fill_cache);
     RETURN_IF_ERROR(reader.load());
     return reader.get_meta();
+}
+
+TabletMetadataPtr TabletManager::get_latest_cached_tablet_metadata(int64_t tablet_id) {
+    return lookup_tablet_latest_metadata(tablet_latest_metadata_key(tablet_id));
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version) {
@@ -617,7 +646,15 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t ve
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_RETURN(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets(version));
-    return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet_ptr), std::move(input_rowsets));
+    ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
+    if (algorithm == VERTICAL_COMPACTION) {
+        return std::make_shared<VerticalCompactionTask>(txn_id, version, std::move(tablet_ptr),
+                                                        std::move(input_rowsets));
+    } else {
+        DCHECK(algorithm == HORIZONTAL_COMPACTION);
+        return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet_ptr),
+                                                          std::move(input_rowsets));
+    }
 }
 
 void TabletManager::abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size) {

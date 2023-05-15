@@ -20,7 +20,9 @@
 
 namespace starrocks::pipeline {
 
-[[maybe_unused]] static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state);
+static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state);
+
+static const std::string ICEBERG_UNPARTITIONED_TABLE_LOCATION = "iceberg_unpartitioned_table_fake_location";
 
 Status IcebergTableSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
@@ -86,67 +88,60 @@ StatusOr<ChunkPtr> IcebergTableSinkOperator::pull_chunk(RuntimeState* state) {
 
 Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     TableInfo tableInfo;
-    tableInfo._schema = _parquet_file_schema;
-    tableInfo._compress_type = _compression_codec;
+    tableInfo.schema = _parquet_file_schema;
+    tableInfo.compress_type = _compression_codec;
+    tableInfo.cloud_conf = _cloud_conf;
 
     if (_iceberg_table->is_unpartitioned_table()) {
         if (_partition_writers.empty()) {
-            tableInfo._partition_location = _location + "/data/";
+            tableInfo.partition_location = _iceberg_table_data_location;
             auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _common_metrics.get(),
                                                                       add_iceberg_commit_info, state, _driver_sequence);
-            _partition_writers.insert({"", std::move(writer)});
+            _partition_writers.insert({ICEBERG_UNPARTITIONED_TABLE_LOCATION, std::move(writer)});
         }
 
-        _partition_writers[""]->append_chunk(chunk.get(), state);
+        _partition_writers[ICEBERG_UNPARTITIONED_TABLE_LOCATION]->append_chunk(chunk.get(), state);
         return Status::OK();
     } else {
-        // TODO(stephen) wait https://github.com/StarRocks/starrocks/pull/22115 to merge
+        Columns partitions_columns;
+        partitions_columns.resize(_partition_expr.size());
+        for (size_t i = 0; i < partitions_columns.size(); ++i) {
+            ASSIGN_OR_RETURN(partitions_columns[i], _partition_expr[i]->evaluate(chunk.get()));
+            DCHECK(partitions_columns[i] != nullptr);
+        }
 
-        //        Columns partitions_columns;
-        //        partitions_columns.resize(_partition_expr.size());
-        //        for (size_t i = 0; i < partitions_columns.size(); ++i) {
-        //            ASSIGN_OR_RETURN(partitions_columns[i], _partition_expr[i]->evaluate(chunk.get()));
-        //            DCHECK(partitions_columns[i] != nullptr);
-        //        }
-        //
-        //        std::vector<std::string> partition_column_names = _iceberg_table->partition_column_names();
-        //
-        //        std::vector<std::string> partition_column_values;
-        //        for (const ColumnPtr& column : partitions_columns) {
-        //            partition_column_values.emplace_back(_value_to_string(column, 0));
-        //        }
-        //
-        //        DCHECK(partition_column_names.size() == partition_column_values.size());
-        //
-        //        string partition_location = _get_partition_location(partition_column_names, partition_column_values);
-        //        if (_partition_writers.find(partition_location) == _partition_writers.end()) {
-        //            tableInfo._partition_location = partition_location;
-        //            auto writer =
-        //                    new RollingAsyncParquetWriter(tableInfo, _output_expr, _common_metrics.get(), add_iceberg_commit_info);
-        //            _partition_writers.emplace(partition_location, writer);
-        //            LOG(WARNING) << "==========[insert writer on [" << partition_location << "]=============== size["
-        //                         << chunk->num_rows() << "]==";
-        //        }
-        //
-        //        _partition_writers[partition_location]->append_chunk(chunk.get(), state);
-        //
+        const std::vector<std::string>& partition_column_names = _iceberg_table->partition_column_names();
+        std::vector<std::string> partition_column_values;
+        for (const ColumnPtr& column : partitions_columns) {
+            partition_column_values.emplace_back(_value_to_string(column, 0));
+        }
+
+        DCHECK(partition_column_names.size() == partition_column_values.size());
+
+        string partition_location = _get_partition_location(partition_column_names, partition_column_values);
+
+        auto partition_writer = _partition_writers.find(partition_location);
+        if (partition_writer == _partition_writers.end()) {
+            tableInfo.partition_location = partition_location;
+            auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _common_metrics.get(),
+                                                                      add_iceberg_commit_info, state, _driver_sequence);
+            _partition_writers.insert({partition_location, std::move(writer)});
+            writer->append_chunk(chunk.get(), state);
+        } else {
+            partition_writer->second->append_chunk(chunk.get(), state);
+        }
+
         return Status::OK();
     }
 }
 
-std::string IcebergTableSinkOperator::_get_partition_location(std::vector<std::string> names,
-                                                              std::vector<std::string> values) {
-    std::stringstream partition_location;
-    partition_location << _location;
-    partition_location << "/data/";
+std::string IcebergTableSinkOperator::_get_partition_location(const std::vector<std::string>& names,
+                                                              const std::vector<std::string>& values) {
+    std::string partition_location = _iceberg_table_data_location;
     for (size_t i = 0; i < names.size(); i++) {
-        partition_location << names[i];
-        partition_location << "=";
-        partition_location << values[i];
-        partition_location << "/";
+        partition_location += names[i] + "=" + values[i] + "/";
     }
-
-    return partition_location.str();
+    return partition_location;
 }
 
 std::string IcebergTableSinkOperator::_value_to_string(const ColumnPtr& column, size_t index) {
@@ -182,7 +177,13 @@ IcebergTableSinkOperatorFactory::IcebergTableSinkOperatorFactory(int32_t id, Fra
           _location(thrift_sink.location),
           _file_format(thrift_sink.file_format),
           _compression_codec(thrift_sink.compression_type),
-          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {}
+          _cloud_conf(thrift_sink.cloud_configuration),
+          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {
+    DCHECK(thrift_sink.__isset.location);
+    DCHECK(thrift_sink.__isset.file_format);
+    DCHECK(thrift_sink.__isset.compression_type);
+    DCHECK(thrift_sink.__isset.cloud_configuration);
+}
 
 Status IcebergTableSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
@@ -222,8 +223,89 @@ std::vector<parquet::FileColumnId> IcebergTableSinkOperatorFactory::generate_par
     return file_column_ids;
 }
 
-[[maybe_unused]] static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state) {
-    TSinkCommitInfo commit_info;
+#define MERGE_STATS_CASE(ParquetType)                                                                              \
+    case ParquetType: {                                                                                            \
+        auto typed_left_stat =                                                                                     \
+                std::static_pointer_cast<::parquet::TypedStatistics<::parquet::PhysicalType<ParquetType>>>(left);  \
+        auto typed_right_stat =                                                                                    \
+                std::static_pointer_cast<::parquet::TypedStatistics<::parquet::PhysicalType<ParquetType>>>(right); \
+        typed_left_stat->Merge(*typed_right_stat);                                                                 \
+        return;                                                                                                    \
+    }
+
+void merge_stats(const std::shared_ptr<::parquet::Statistics>& left,
+                 const std::shared_ptr<::parquet::Statistics>& right) {
+    DCHECK(left->physical_type() == right->physical_type());
+    switch (left->physical_type()) {
+        MERGE_STATS_CASE(::parquet::Type::BOOLEAN);
+        MERGE_STATS_CASE(::parquet::Type::INT32);
+        MERGE_STATS_CASE(::parquet::Type::INT64);
+        MERGE_STATS_CASE(::parquet::Type::INT96);
+        MERGE_STATS_CASE(::parquet::Type::FLOAT);
+        MERGE_STATS_CASE(::parquet::Type::DOUBLE);
+        MERGE_STATS_CASE(::parquet::Type::BYTE_ARRAY);
+        MERGE_STATS_CASE(::parquet::Type::FIXED_LEN_BYTE_ARRAY);
+    default: {
+    }
+    }
+}
+
+void calculate_column_stats(const std::shared_ptr<::parquet::FileMetaData>& meta, TIcebergColumnStats& t_column_stats) {
+    // field_id -> column_stat
+    std::map<int32_t, std::shared_ptr<::parquet::Statistics>> column_stats;
+    std::map<int32_t, int64_t> column_sizes;
+    std::map<int32_t, int64_t> value_counts;
+    std::map<int32_t, int64_t> null_value_counts;
+    std::map<int32_t, std::string> lower_bounds;
+    std::map<int32_t, std::string> upper_bounds;
+    bool has_null_count = false;
+    bool has_min_max = false;
+
+    // traverse stat of column chunk in each row group
+    for (int col_idx = 0; col_idx < meta->num_columns(); col_idx++) {
+        auto field_id = meta->schema()->Column(col_idx)->schema_node()->field_id();
+
+        for (int rg_idx = 0; rg_idx < meta->num_row_groups(); rg_idx++) {
+            auto column_chunk_meta = meta->RowGroup(rg_idx)->ColumnChunk(col_idx);
+            column_sizes[field_id] += column_chunk_meta->total_compressed_size();
+
+            auto column_stat = column_chunk_meta->statistics();
+            if (rg_idx == 0) {
+                column_stats[field_id] = column_stat;
+            } else {
+                merge_stats(column_stats[field_id], column_stat);
+            }
+        }
+    }
+
+    for (auto& [field_id, column_stat] : column_stats) {
+        value_counts[field_id] = column_stat->num_values();
+        if (column_stat->HasNullCount()) {
+            has_null_count = true;
+            null_value_counts[field_id] = column_stat->null_count();
+        }
+        if (column_stat->HasMinMax()) {
+            has_min_max = true;
+            lower_bounds[field_id] = column_stat->EncodeMin();
+            upper_bounds[field_id] = column_stat->EncodeMax();
+        }
+    }
+
+    t_column_stats.__set_column_sizes(column_sizes);
+    t_column_stats.__set_value_counts(value_counts);
+    if (has_null_count) {
+        t_column_stats.__set_null_value_counts(null_value_counts);
+    }
+    if (has_min_max) {
+        t_column_stats.__set_lower_bounds(lower_bounds);
+        t_column_stats.__set_upper_bounds(upper_bounds);
+    }
+}
+
+static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state) {
+    TIcebergColumnStats iceberg_column_stats;
+    calculate_column_stats(writer->metadata(), iceberg_column_stats);
+
     TIcebergDataFile iceberg_data_file;
     iceberg_data_file.__set_partition_path(writer->partition_location());
     iceberg_data_file.__set_path(writer->file_location());
@@ -233,73 +315,13 @@ std::vector<parquet::FileColumnId> IcebergTableSinkOperatorFactory::generate_par
     std::vector<int64_t> split_offsets;
     writer->split_offsets(split_offsets);
     iceberg_data_file.__set_split_offsets(split_offsets);
+    iceberg_data_file.__set_column_stats(iceberg_column_stats);
 
-    std::unordered_map<int32_t, int64_t> column_sizes;
-    std::unordered_map<int32_t, int64_t> value_counts;
-    std::unordered_map<int32_t, int64_t> null_value_counts;
-    std::unordered_map<int32_t, std::string> min_values;
-    std::unordered_map<int32_t, std::string> max_values;
-
-    const auto& metadata = writer->metadata();
-
-    for (int i = 0; i < metadata->num_row_groups(); ++i) {
-        auto row_group = metadata->RowGroup(i);
-        for (int j = 0; j < row_group->num_columns(); j++) {
-            auto column_meta = row_group->ColumnChunk(j);
-            int32_t field_id = metadata->schema()->Column(j)->schema_node()->field_id();
-
-            if (null_value_counts.find(field_id) == null_value_counts.end()) {
-                null_value_counts.insert({field_id, column_meta->statistics()->null_count()});
-            } else {
-                null_value_counts[field_id] += column_meta->statistics()->null_count();
-            }
-
-            if (column_sizes.find(field_id) == column_sizes.end()) {
-                column_sizes.insert({field_id, column_meta->total_compressed_size()});
-            } else {
-                column_sizes[field_id] += column_meta->total_compressed_size();
-            }
-
-            if (value_counts.find(field_id) == value_counts.end()) {
-                value_counts.insert({field_id, column_meta->num_values()});
-            } else {
-                value_counts[field_id] += column_meta->num_values();
-            }
-
-            // TODO(stephen): use arrow merge function
-            min_values[field_id] = column_meta->statistics()->EncodeMin();
-            max_values[field_id] = column_meta->statistics()->EncodeMax();
-        }
-    }
-
-    TIcebergColumnStats stats;
-    stats.__set_column_sizes(std::map<int32_t, int64_t>());
-    stats.__set_value_counts(std::map<int32_t, int64_t>());
-    stats.__set_null_value_counts(std::map<int32_t, int64_t>());
-    stats.__set_lower_bounds(std::map<int32_t, std::string>());
-    stats.__set_upper_bounds(std::map<int32_t, std::string>());
-
-    for (auto& i : column_sizes) {
-        stats.column_sizes.insert({i.first, i.second});
-    }
-    for (auto& i : value_counts) {
-        stats.value_counts.insert({i.first, i.second});
-    }
-    for (auto& i : null_value_counts) {
-        stats.null_value_counts.insert({i.first, i.second});
-    }
-    for (auto& i : min_values) {
-        stats.lower_bounds.insert({i.first, i.second});
-    }
-    for (auto& i : max_values) {
-        stats.upper_bounds.insert({i.first, i.second});
-    }
-
-    iceberg_data_file.__set_column_stats(stats);
-
+    TSinkCommitInfo commit_info;
     commit_info.__set_iceberg_data_file(iceberg_data_file);
-    state->add_sink_commit_info(commit_info);
 
+    // update runtime state
+    state->add_sink_commit_info(commit_info);
     state->update_num_rows_load_sink(iceberg_data_file.record_count);
 }
 
