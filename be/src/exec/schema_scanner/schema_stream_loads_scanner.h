@@ -19,23 +19,19 @@
 
 namespace starrocks {
 
-class SchemaLoadTrackingLogsScanner : public SchemaScanner {
+class SchemaStreamLoadsScanner : public SchemaScanner {
 public:
-    SchemaLoadTrackingLogsScanner();
-    ~SchemaLoadTrackingLogsScanner() override;
+    SchemaStreamLoadsScanner();
+    ~SchemaStreamLoadsScanner() override;
 
     Status start(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
     Status fill_chunk(ChunkPtr* chunk);
-    void _fill_tracking_msg(std::string url);
 
-    std::vector<std::string> _tracking_msg_vec;
-    int64_t _start_ts;
-    RuntimeState* _state;
     int _cur_idx = 0;
-    TGetTrackingLoadsResult _result;
+    TGetStreamLoadsResult _result;
     static SchemaScanner::ColumnDesc _s_tbls_columns[];
 };
 

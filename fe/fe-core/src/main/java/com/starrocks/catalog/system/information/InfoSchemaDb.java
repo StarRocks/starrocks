@@ -57,6 +57,8 @@ public class InfoSchemaDb extends Database {
         super.createTable(MaterializedViewsSystemTable.create());
         super.createTable(LoadsSystemTable.create());
         super.createTable(LoadTrackingLogsSystemTable.create());
+        super.createTable(RoutineLoadJobsSystemTable.create());
+        super.createTable(StreamLoadsSystemTable.create());
         super.createTable(TablesConfigSystemTable.create());
         super.createTable(BeCompactionsSystemTable.create());
         super.createTable(BeTabletsSystemTable.create());
