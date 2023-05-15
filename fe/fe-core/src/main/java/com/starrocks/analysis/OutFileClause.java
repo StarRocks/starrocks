@@ -35,6 +35,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.StructField;
@@ -60,6 +61,7 @@ import com.starrocks.thrift.TResultFileSinkOptions;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 // For syntax select * from tbl INTO OUTFILE xxxx
 public class OutFileClause implements ParseNode {
@@ -79,6 +81,45 @@ public class OutFileClause implements ParseNode {
         PARQUET_COMPRESSION_TYPE_MAP.put("bz2", TCompressionType.BZIP2);
         PARQUET_COMPRESSION_TYPE_MAP.put("default", TCompressionType.DEFAULT_COMPRESSION);
     }
+
+    public static final Set<PrimitiveType> PARQUET_SUPPORTED_PRIMITIVE_TYPES = ImmutableSet.of(
+        PrimitiveType.BOOLEAN,
+        PrimitiveType.TINYINT,
+        PrimitiveType.SMALLINT,
+        PrimitiveType.INT,
+        PrimitiveType.BIGINT,
+        PrimitiveType.FLOAT,
+        PrimitiveType.DOUBLE,
+        PrimitiveType.DATE,
+        PrimitiveType.DATETIME,
+        PrimitiveType.CHAR,
+        PrimitiveType.VARCHAR,
+        PrimitiveType.DECIMAL32,
+        PrimitiveType.DECIMAL64,
+        PrimitiveType.DECIMAL128
+    );
+
+    public static final Set<PrimitiveType> CSV_SUPPORTED_PRIMITIVE_TYPES = ImmutableSet.of(
+        PrimitiveType.BOOLEAN,
+        PrimitiveType.TINYINT,
+        PrimitiveType.SMALLINT,
+        PrimitiveType.INT,
+        PrimitiveType.BIGINT,
+        PrimitiveType.LARGEINT,
+        PrimitiveType.FLOAT,
+        PrimitiveType.DOUBLE,
+        PrimitiveType.DATE,
+        PrimitiveType.DATETIME,
+        PrimitiveType.CHAR,
+        PrimitiveType.VARCHAR,
+        PrimitiveType.DECIMALV2,
+        PrimitiveType.DECIMAL32,
+        PrimitiveType.DECIMAL64,
+        PrimitiveType.DECIMAL128,
+        PrimitiveType.JSON,
+        PrimitiveType.VARBINARY
+    );
+
 
     // Old properties still use this prefix, new properties will not.
     private static final String OLD_BROKER_PROP_PREFIX = "broker.";
@@ -247,26 +288,7 @@ public class OutFileClause implements ParseNode {
     private boolean isSupportedTypeForParquetOutFile(Type type) {
         if (type.isScalarType()) {
             PrimitiveType primitiveType = type.getPrimitiveType();
-
-            switch (primitiveType) {
-                case BOOLEAN:
-                case TINYINT:
-                case SMALLINT:
-                case INT:
-                case BIGINT:
-                case FLOAT:
-                case DOUBLE:
-                case DATE:
-                case DATETIME:
-                case VARCHAR:
-                case CHAR:
-                case DECIMAL32:
-                case DECIMAL64:
-                case DECIMAL128:
-                    return true;
-                default:
-                    return false;
-            }
+            return PARQUET_SUPPORTED_PRIMITIVE_TYPES.contains(primitiveType);
         }
 
         // handle complex type
@@ -295,8 +317,28 @@ public class OutFileClause implements ParseNode {
     }
 
     private boolean isSupportedTypeForCSVOutFile(Type type) {
-        // TODO: check csv supported types
-        return true;
+        if (type.isScalarType()) {
+            PrimitiveType primitiveType = type.getPrimitiveType();
+            return CSV_SUPPORTED_PRIMITIVE_TYPES.contains(primitiveType);
+        }
+
+        // handle complex type
+        if (type.isStructType()) {
+            return false;
+        }
+
+        if (type.isArrayType()) {
+            ArrayType arrayType = (ArrayType) type;
+            return isSupportedTypeForParquetOutFile(arrayType.getItemType());
+        }
+
+        if (type.isMapType()) {
+            MapType mapType = (MapType) type;
+            return isSupportedTypeForParquetOutFile(mapType.getKeyType()) && isSupportedTypeForParquetOutFile(mapType.getValueType());
+        }
+
+        // unreachable
+        return false;
     }
 
     private void setBrokerProperties() {
