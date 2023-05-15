@@ -337,6 +337,8 @@
       + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
     + Array Functions
+      + [cardinality](./sql-reference/sql-functions/array-functions/cardinality.md)
+      + [element_at](./sql-reference/sql-functions/array-functions/element_at.md)
       + [array_agg](./sql-reference/sql-functions/array-functions/array_agg.md)
       + [array_append](./sql-reference/sql-functions/array-functions/array_append.md)
       + [array_avg](./sql-reference/sql-functions/array-functions/array_avg.md)
@@ -416,8 +418,11 @@
         + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
     + Map Functions
+      + [cardinality](./sql-reference/sql-functions/map-functions/cardinality.md)
       + [distinct_map_keys](./sql-reference/sql-functions/map-functions/distinct_map_keys.md)
+      + [element_at](./sql-reference/sql-functions/map-functions/element_at.md)
       + [map_apply](./sql-reference/sql-functions/map-functions/map_apply.md)
+      + [map_concat](./sql-reference/sql-functions/map-functions/map_concat.md)
       + [map_filter](./sql-reference/sql-functions/map-functions/map_filter.md)
       + [map_from_arrays](./sql-reference/sql-functions/map-functions/map_from_arrays.md)
       + [map_keys](./sql-reference/sql-functions/map-functions/map_keys.md)

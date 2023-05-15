@@ -318,4 +318,23 @@ public class AnalyzeExprTest {
         analyzeFail("select map<map<int,int>,int>{{1:3}:11}");
     }
 
+
+    @Test
+    public void testAnalyzeMapFunc() {
+        analyzeSuccess("select cardinality({1:3,3:5,2:45})");
+        analyzeSuccess("select cardinality({})");
+        analyzeSuccess("select element_at({1:2,3:3,4:3},3)");
+        analyzeSuccess("select element_at({1:2,3:3,4:3},312)");
+        analyzeSuccess("select element_at({1:2,3:3,4:3},null)");
+        analyzeSuccess("select map_concat(NULL)");
+        analyzeSuccess("select map_concat(NULL,NULL)");
+        analyzeSuccess("select map_concat(NULL,{})");
+
+        analyzeFail("select cardinality();");
+        analyzeFail("select cardinality({},{})");
+        analyzeFail("select cardinality(1)");
+        analyzeFail("select element_at({1:2,3:3,4:3})");
+        analyzeFail("select map_concat()");
+    }
+
 }
