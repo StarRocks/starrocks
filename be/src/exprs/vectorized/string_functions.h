@@ -35,7 +35,7 @@ struct ConcatState {
     std::string tail;
 };
 
-class StringFunctionsState;
+struct StringFunctionsState;
 
 struct MatchInfo {
     size_t from;
