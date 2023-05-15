@@ -248,6 +248,7 @@ However, if the frequency of data updates in Hive is high, you can tune these pa
 | remote_file_cache_refresh_interval_sec | No       | The time interval at which StarRocks asynchronously updates the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `60`. |
 | metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Hive tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
 | remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
+| enable_cache_list_names                | No       | Specifies whether StarRocks caches Hive partition names. Valid values: `true` and `false`. The value `true` enables the cache, and the value `false` disables the cache. |
 
 For more information, see the "[Understand automatic asynchronous update](../catalog/hive_catalog.md#appendix-understand-automatic-asynchronous-update)" section of this topic.
 
@@ -409,6 +410,15 @@ By default, StarRocks caches the metadata of Hive and automatically updates the 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name>
 ```
+
+You need to manually update metadata in the following situations:
+
+- A data file in an existing partition is changed, for example, by running the `INSERT OVERWRITE ... PARTITION ...` command.
+- Schema changes are made on a Hive table.
+- An existing Hive table is deleted by using the DROP statement, and a new Hive table with the same name as the deleted Hive table is created.
+- You have specified `"enable_cache_list_names" = "true"` in `PROPERTIES` at the creation of your Hive catalog, and you want to query new partitions immediately after the new partitions are created on your Hive cluster.
+
+Note that the REFRESH EXTERNAL TABLE refreshes only the tables and partitions cached in your FEs.
 
 ### Automatic incremental update
 
