@@ -416,7 +416,7 @@ You need to manually update metadata in the following situations:
 - A data file in an existing partition is changed, for example, by running the `INSERT OVERWRITE ... PARTITION ...` command.
 - Schema changes are made on a Hive table.
 - An existing Hive table is deleted by using the DROP statement, and a new Hive table with the same name as the deleted Hive table is created.
-- You have specified `"enable_cache_list_names" = "true"` in `PROPERTIES` at the creation of your Hive catalog, and you want to query new partitions immediately after the new partitions are created on your Hive cluster.
+- You have specified `"enable_cache_list_names" = "true"` in `PROPERTIES` at the creation of your Hive catalog, and you want to query new partitions that you just created on your Hive cluster.
 
 Note that the REFRESH EXTERNAL TABLE refreshes only the tables and partitions cached in your FEs.
 
