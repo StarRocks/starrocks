@@ -71,7 +71,7 @@ public:
     const std::shared_ptr<arrow::RecordBatch>& get_batch();
     int64_t num_rows() { return _num_rows; }
 
-    Status get_schema(std::vector<std::string>* col_names, std::vector<TypeDescriptor>* col_types);
+    Status get_schema(std::vector<SlotDescriptor>* schema);
 
 private:
     Status column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs);
@@ -117,7 +117,7 @@ public:
     ~ParquetChunkReader();
     Status next_batch(RecordBatchPtr* batch);
     int64_t total_num_rows() const;
-    Status get_schema(std::vector<std::string>* col_names, std::vector<TypeDescriptor>* col_types);
+    Status get_schema(std::vector<SlotDescriptor>* schema);
 
 private:
     std::shared_ptr<ParquetReaderWrap> _parquet_reader;

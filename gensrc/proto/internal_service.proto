@@ -502,8 +502,7 @@ message PGetFileSchemaRequest {
 
 message PGetFileSchemaResult {
     required StatusPB status = 1;
-    repeated string column_names = 2;
-    repeated PTypeDesc column_types = 3;
+    repeated PSlotDescriptor schema = 2;
 };
 
 message PMVMaintenanceTaskRequest {

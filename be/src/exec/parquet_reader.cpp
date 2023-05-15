@@ -180,12 +180,12 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
     }
 }
 
-Status ParquetReaderWrap::get_schema(std::vector<std::string>* col_names, std::vector<TypeDescriptor>* col_types) {
+Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
     RETURN_IF_ERROR(_init_parquet_reader());
 
-    auto schema = _file_metadata->schema();
-    for (int i = 0; i < schema->num_columns(); ++i) {
-        auto column = schema->Column(i);
+    auto file_schema = _file_metadata->schema();
+    for (int i = 0; i < file_schema->num_columns(); ++i) {
+        auto column = file_schema->Column(i);
         auto name = column->name();
         auto physical_type = column->physical_type();
         auto logical_type = column->logical_type();
@@ -226,9 +226,7 @@ Status ParquetReaderWrap::get_schema(std::vector<std::string>* col_names, std::v
             return Status::NotSupported(
                     fmt::format("Unkown supported parquet physical type: {}, column name: {}", physical_type, name));
         }
-
-        col_names->emplace_back(std::move(name));
-        col_types->emplace_back(std::move(tp));
+        schema->emplace_back(i, name, tp);
     }
     return Status::OK();
 }
@@ -375,9 +373,9 @@ Status ParquetChunkReader::next_batch(RecordBatchPtr* batch) {
     return Status::OK();
 }
 
-Status ParquetChunkReader::get_schema(std::vector<std::string>* col_names, std::vector<TypeDescriptor>* col_types) {
+Status ParquetChunkReader::get_schema(std::vector<SlotDescriptor>* schema) {
     RETURN_IF_ERROR(_parquet_reader->init_parquet_reader(_src_slot_descs, _time_zone));
-    return _parquet_reader->get_schema(col_names, col_types);
+    return _parquet_reader->get_schema(schema);
 }
 
 using StarRocksStatusCode = ::starrocks::TStatusCode::type;

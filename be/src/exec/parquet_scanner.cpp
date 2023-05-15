@@ -395,7 +395,7 @@ Status ParquetScanner::open_next_reader() {
     }
 }
 
-Status ParquetScanner::get_schema(std::vector<std::string>* col_names, std::vector<TypeDescriptor>* col_types) {
+Status ParquetScanner::get_schema(std::vector<SlotDescriptor>* schema) {
     std::shared_ptr<RandomAccessFile> file;
     // TODO(fw): Infer schema from more files.
     const TBrokerRangeDesc& range_desc = _scan_range.ranges[0];
@@ -409,7 +409,7 @@ Status ParquetScanner::get_schema(std::vector<std::string>* col_names, std::vect
     auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0);
     auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file,
                                                               range_desc.start_offset, range_desc.size);
-    return parquet_reader->get_schema(col_names, col_types);
+    return parquet_reader->get_schema(schema);
 }
 
 void ParquetScanner::close() {

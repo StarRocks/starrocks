@@ -59,9 +59,7 @@ public:
 
     virtual void close();
 
-    virtual Status get_schema(std::vector<std::string>* col_names, std::vector<TypeDescriptor>* col_types) {
-        return Status::NotSupported("not implemented");
-    }
+    virtual Status get_schema(std::vector<SlotDescriptor>* schema) { return Status::NotSupported("not implemented"); }
 
     Status create_random_access_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                      const TBrokerScanRangeParams& params, CompressionTypePB compression,

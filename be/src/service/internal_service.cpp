@@ -64,6 +64,7 @@
 #include "runtime/buffer_control_block.h"
 #include "runtime/command_executor.h"
 #include "runtime/data_stream_mgr.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_channel_mgr.h"
@@ -787,17 +788,12 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
 
     DeferOp defer2([&p_scanner] { p_scanner->close(); });
 
-    std::vector<std::string> col_names; 
-    std::vector<TypeDescriptor> col_types;
-    st = p_scanner->get_schema(&col_names, &col_types);
+    std::vector<SlotDescriptor> schema;
+    st = p_scanner->get_schema(&schema);
 
-    DCHECK(col_names.size() == col_types.size());
-    for (size_t i= 0; i < col_names.size(); ++i) {
-        response->add_column_names(col_names[i]);
-        auto ptype = response->add_column_types();
-        *ptype = col_types[i].to_protobuf();
+    for (const auto& slot : schema) {
+        slot.to_protobuf(response->add_schema());
     }
-
     return;
 }
 
