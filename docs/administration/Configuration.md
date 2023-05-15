@@ -206,7 +206,6 @@ This section provides an overview of the static parameters that you can configur
 | cluster_name                         | StarRocks Cluster | The name of the StarRocks cluster to which the FE belongs. The cluster name is displayed for `Title` on the web page. |
 | rpc_port                             | 9020              | The port on which the Thrift server in the FE node listens.  |
 | thrift_backlog_num                   | 1024              | The length of the backlog queue held by the Thrift server in the FE node. |
-| thrift_server_type                   | THREAD_POOL       | The service model that is used by the Thrift server in the FE node. Valid values: `SIMPLE`, `THREADED`, and `THREAD_POOL`. |
 | thrift_server_max_worker_threads     | 4096              | The maximum number of worker threads that are supported by the Thrift server in the FE node. |
 | thrift_client_timeout_ms             | 5000                 | The length of time after which idle client connections time out. Unit: ms. |
 | thrift_server_queue_size             | 4096              | The length of queue where requests are pending. If the number of threads that are being processed in the thrift server exceeds the value specified in `thrift_server_max_worker_threads`, new requests are added to the pending queue. |
