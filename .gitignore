@@ -37,6 +37,12 @@ fs_brokers/apache_hdfs_broker/src/main/resources/
 fs_brokers/apache_hdfs_broker/src/main/thrift/
 fs_brokers/apache_hdfs_broker/jindosdk-4.6.2
 dependency-reduced-pom.xml
+<<<<<<< HEAD
+=======
+test/conf/
+test/conf/sr.conf
+test/nosetests.xml
+>>>>>>> 03dfe3197 ([BugFix] Fix use wrong hash table when spill left/right outer join has other conjuncts (#23302))
 tags
 .tags
 .cache
