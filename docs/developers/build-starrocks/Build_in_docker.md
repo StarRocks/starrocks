@@ -1,4 +1,4 @@
-# Compile StarRocks in Docker
+# Compile StarRocks with Docker
 
 This topic describes how to compile StarRocks using Docker.
 

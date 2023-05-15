@@ -2,13 +2,17 @@
 
 This topic describes how to deploy Broker nodes. With Broker nodes, StarRocks can read data from sources such as HDFS and S3, and pre-process, load, and backup the data with its own computing resources.
 
+We recommend you deploy ONE Broker node on each instance that hosts a BE node, and add all Broker nodes using the same `broker_name`. Broker nodes automatically balance the data transmission load when processing tasks.
+
+Broker nodes use the network connection to transmit data to BE nodes. When a Broker node and a BE node are deployed on the same machine, the Broker node transmit the data to the local BE node.
+
 ## Start Broker service
 
-The following procedures are performed on the BE instances, because Broker nodes are usually deployed on the same instances that hosts BE nodes.
+The following procedures are performed on the BE instances.
 
 1. Navigate to the directory that stores the [StarRocks Broker deployment files](../deployment/prepare_deployment_files.md) you prepared earlier, and modify the Broker configuration file **apache_hdfs_broker/conf/apache_hdfs_broker.conf**.
 
-   If the HDFS thrift RPC port (Default: `8000`) on the Broker node is occupied, you must assign a valid alternative in the Broker configuration file.
+   If the HDFS Thrift RPC port (`broker_ipc_port`, Default: `8000`) on the instance is occupied, you must assign a valid alternative in the Broker configuration file.
 
    ```YAML
    broker_ipc_port = aaaa        # Default: 8000
@@ -63,12 +67,13 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
 2. Run the following command to add the Broker node to the cluster.
 
    ```sql
-   ALTER SYSTEM ADD BROKER <broker_name> "<broker_ip>:<broker_ipc_port>";
+   ALTER SYSTEM ADD BROKER <broker_name> "<broker_address>:<broker_ipc_port>";
    ```
 
    > **NOTE**
    >
-   > You can add multiple Brokers nodes with the same `broker_name`.
+   > - You can use the preceding command to add multiple Broker nodes at a time. Each `<broker_address>:<broker_ipc_port>` pair represents one Broker node.
+   > - You can add multiple Brokers nodes with the same `broker_name`.
 
 3. Verify if the Broker node is properly added to the via MySQL client.
 
