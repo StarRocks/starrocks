@@ -286,6 +286,7 @@ import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -3358,6 +3359,11 @@ public class GlobalStateMgr {
         localMetastore.replayCreateCluster(cluster);
     }
 
+    public void replayCreateWarehouse(Warehouse warehouse) {
+        warehouseMgr.replayCreateWarehouse(warehouse);
+        isDefaultWarehouseCreated = true;
+    }
+
     public void setIsDefaultClusterCreated(boolean isDefaultClusterCreated) {
         this.isDefaultClusterCreated = isDefaultClusterCreated;
     }
@@ -3463,8 +3469,9 @@ public class GlobalStateMgr {
     }
 
     public void initDefaultWarehouse() {
-        warehouseMgr.initDefaultWarehouse();
+        Warehouse warehouse = warehouseMgr.initDefaultWarehouse();
         isDefaultWarehouseCreated = true;
+        editLog.logCreateWarehouse(warehouse);
     }
 
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {

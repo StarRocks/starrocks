@@ -83,6 +83,14 @@ public class Cluster implements Writable {
         computeNodeIds.remove(cnId);
     }
 
+    public Set<Long> getComputeNodeIds() {
+        return computeNodeIds;
+    }
+
+    public void setComputeNodeIds(Set<Long> computeNodeIds) {
+        this.computeNodeIds = computeNodeIds;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);

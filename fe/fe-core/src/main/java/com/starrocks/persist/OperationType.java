@@ -316,6 +316,9 @@ public class OperationType {
     // constraint properties
     public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;
 
+    // warehouse
+    public static final short OP_CREATE_WAREHOUSE = 11140;
+
     //Database and Table DDL
     public static final short OP_CREATE_DB_V2 = 12001;
 }

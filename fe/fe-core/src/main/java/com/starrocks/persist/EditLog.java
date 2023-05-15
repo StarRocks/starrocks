@@ -104,6 +104,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -526,6 +527,11 @@ public class EditLog {
                 case OperationType.OP_CREATE_CLUSTER: {
                     final Cluster value = (Cluster) journal.getData();
                     globalStateMgr.replayCreateCluster(value);
+                    break;
+                }
+                case OperationType.OP_CREATE_WAREHOUSE: {
+                    final Warehouse value = (Warehouse) journal.getData();
+                    globalStateMgr.replayCreateWarehouse(value);
                     break;
                 }
                 case OperationType.OP_ADD_BROKER: {
@@ -1342,6 +1348,10 @@ public class EditLog {
 
     public void logCreateCluster(Cluster cluster) {
         logEdit(OperationType.OP_CREATE_CLUSTER, cluster);
+    }
+
+    public void logCreateWarehouse(Warehouse warehouse) {
+        logEdit(OperationType.OP_CREATE_WAREHOUSE, warehouse);
     }
 
     public void logAddBroker(BrokerMgr.ModifyBrokerInfo info) {

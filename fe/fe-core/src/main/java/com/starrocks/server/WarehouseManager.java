@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 public class WarehouseManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
@@ -48,6 +49,8 @@ public class WarehouseManager implements Writable {
     private Map<Long, Warehouse> idToWh = new HashMap<>();
     @SerializedName(value = "fullNameToWh")
     private Map<String, Warehouse> fullNameToWh = new HashMap<>();
+
+    private Warehouse defaultWarehouse;
 
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final WarehouseProcNode procNode = new WarehouseProcNode();
@@ -60,19 +63,20 @@ public class WarehouseManager implements Writable {
     public WarehouseManager() {
     }
 
-    public void initDefaultWarehouse() {
+    public Warehouse initDefaultWarehouse() {
         // gen a default warehouse
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Warehouse wh = new LocalWarehouse(GlobalStateMgr.getCurrentState().getNextId(),
+            defaultWarehouse = new LocalWarehouse(GlobalStateMgr.getCurrentState().getNextId(),
                     DEFAULT_WAREHOUSE_NAME);
-            fullNameToWh.put(wh.getFullName(), wh);
-            idToWh.put(wh.getId(), wh);
-            wh.setExist(true);
+            fullNameToWh.put(defaultWarehouse.getFullName(), defaultWarehouse);
+            idToWh.put(defaultWarehouse.getId(), defaultWarehouse);
+            defaultWarehouse.setExist(true);
+            return defaultWarehouse;
         }
     }
 
     public Warehouse getDefaultWarehouse() {
-        return getWarehouse(DEFAULT_WAREHOUSE_NAME);
+        return defaultWarehouse;
     }
 
     public Warehouse getWarehouse(String warehouseName) {
@@ -101,16 +105,30 @@ public class WarehouseManager implements Writable {
             WarehouseManager data = GsonUtils.GSON.fromJson(s, WarehouseManager.class);
             if (data != null) {
                 if (data.fullNameToWh != null) {
-                    // Do nothing
+                    // do nothing
+                    this.fullNameToWh = data.fullNameToWh;
                 }
                 warehouseCount = data.fullNameToWh.size();
             }
             checksum ^= warehouseCount;
+            // set compute node id list for default warehouse
+            List<Long> latestBackendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds();
+            latestBackendIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(false));
+            defaultWarehouse.getAnyAvailableCluster().
+                    setComputeNodeIds(latestBackendIds.stream().collect(Collectors.toSet()));
             LOG.info("finished replaying WarehouseMgr from image");
         } catch (EOFException e) {
             LOG.info("no WarehouseMgr to replay.");
         }
         return checksum;
+    }
+
+    public void replayCreateWarehouse(Warehouse warehouse) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            fullNameToWh.put(warehouse.getFullName(), warehouse);
+            idToWh.put(warehouse.getId(), warehouse);
+            warehouse.setExist(true);
+        }
     }
 
     public List<List<String>> getWarehousesInfo() {
