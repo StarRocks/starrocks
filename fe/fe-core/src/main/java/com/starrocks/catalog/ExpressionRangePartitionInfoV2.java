@@ -72,7 +72,8 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo {
 
     public static PartitionInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 = GsonUtils.GSON.fromJson(json, ExpressionRangePartitionInfoV2.class);
+        ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 = GsonUtils.GSON.fromJson(json,
+                ExpressionRangePartitionInfoV2.class);
         List<String> serializedPartitionExprs = expressionRangePartitionInfoV2.getSerializedPartitionExprs();
         List<Expr> exprs = Lists.newArrayList();
         for (String expressionSql : serializedPartitionExprs) {
