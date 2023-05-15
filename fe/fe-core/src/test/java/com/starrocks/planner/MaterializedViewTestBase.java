@@ -88,7 +88,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         new MockUp<PlanTestBase>() {
             @Mock
-            boolean isIgnoreColRefIds() {
+            boolean isIgnoreExplicitColRefIds() {
                 return true;
             }
         };
@@ -204,7 +204,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 .withTable(locationsTable)
                 .withTable(ependentsTable)
                 .withTable(empsWithBigintTable)
-                .withTable(empsTableWithoutConstraints);
+                .withTable(empsTableWithoutConstraints)
                 .withTable(nullableEmps)
                 .withTable(nullableDepts);
 

@@ -132,6 +132,7 @@ public abstract class ScalarOperator implements Cloneable {
         try {
             operator = (ScalarOperator) super.clone();
             operator.hints = Lists.newArrayList(hints);
+            operator.isRedundant = this.isRedundant;
         } catch (CloneNotSupportedException ignored) {
         }
         return operator;

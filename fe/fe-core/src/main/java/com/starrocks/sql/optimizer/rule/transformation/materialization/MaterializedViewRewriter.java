@@ -270,8 +270,8 @@ public class MaterializedViewRewriter {
             final Map<Table, Set<Integer>> compensationRelations = Maps.newHashMap();
             final Map<Integer, Integer> expectedExtraQueryToMVRelationIds = Maps.newHashMap();
             if (!compensateViewDelta(viewEquivalenceClasses, mvTableScanDescs, mvExtraTableScanDescs,
-                    materializationContext.getQueryRefFactory(), materializationContext.getMvColumnRefFactory(),
-                    compensationJoinColumns, compensationRelations, expectedExtraQueryToMVRelationIds)) {
+                    compensationJoinColumns, compensationRelations, expectedExtraQueryToMVRelationIds, 
+                    materializationContext)) {
                 continue;
             }
 
