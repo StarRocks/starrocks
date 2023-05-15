@@ -63,6 +63,7 @@ import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
@@ -1180,7 +1181,8 @@ public class PrivilegeCheckerV2 {
             // 1. check if user can alter view in this db
             checkViewAction(context, statement.getTableName(), PrivilegeType.ALTER);
             // 2. check if user can query
-            check(statement.getQueryStatement(), context);
+            AlterViewClause alterViewClause = (AlterViewClause) statement.getAlterClause();
+            check(alterViewClause.getQueryStatement(), context);
             return null;
         }
 

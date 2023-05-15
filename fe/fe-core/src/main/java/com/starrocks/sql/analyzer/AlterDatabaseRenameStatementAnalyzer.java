@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 
@@ -31,11 +30,6 @@ public class AlterDatabaseRenameStatementAnalyzer {
         }
 
         String newName = statement.getNewDbName();
-
-        try {
-            FeNameFormat.checkDbName(newName);
-        } catch (AnalysisException e) {
-            throw new SemanticException(PARSER_ERROR_MSG.invalidDbFormat(newName));
-        }
+        FeNameFormat.checkDbName(newName);
     }
 }

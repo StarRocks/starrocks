@@ -98,6 +98,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     private String brokerList;
     private String topic;
+
     // optional, user want to load partitions.
     private List<Integer> customKafkaPartitions = Lists.newArrayList();
     // current kafka partitions is the actually partition which will be fetched

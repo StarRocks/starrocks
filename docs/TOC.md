@@ -297,9 +297,11 @@
         + [DATETIME](./sql-reference/sql-statements/data-types/DATETIME.md)
       + Others
         + [ARRAY](./sql-reference/sql-statements/data-types/Array.md)
-        + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
+        + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
+        + [MAP](./sql-reference/sql-statements/data-types/Map.md)
+
     + [Keywords](./sql-reference/sql-statements/keywords.md)
     + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
   + Function Reference
@@ -335,6 +337,8 @@
       + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
     + Array Functions
+      + [cardinality](./sql-reference/sql-functions/array-functions/cardinality.md)
+      + [element_at](./sql-reference/sql-functions/array-functions/element_at.md)
       + [array_agg](./sql-reference/sql-functions/array-functions/array_agg.md)
       + [array_append](./sql-reference/sql-functions/array-functions/array_append.md)
       + [array_avg](./sql-reference/sql-functions/array-functions/array_avg.md)
@@ -414,7 +418,11 @@
         + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
     + Map Functions
+      + [cardinality](./sql-reference/sql-functions/map-functions/cardinality.md)
+      + [distinct_map_keys](./sql-reference/sql-functions/map-functions/distinct_map_keys.md)
+      + [element_at](./sql-reference/sql-functions/map-functions/element_at.md)
       + [map_apply](./sql-reference/sql-functions/map-functions/map_apply.md)
+      + [map_concat](./sql-reference/sql-functions/map-functions/map_concat.md)
       + [map_filter](./sql-reference/sql-functions/map-functions/map_filter.md)
       + [map_from_arrays](./sql-reference/sql-functions/map-functions/map_from_arrays.md)
       + [map_keys](./sql-reference/sql-functions/map-functions/map_keys.md)
@@ -602,6 +610,7 @@
       + [starts_with](./sql-reference/sql-functions/string-functions/starts_with.md)
       + [strleft](./sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](./sql-reference/sql-functions/string-functions/strright.md)
+      + [str_to_map](./sql-reference/sql-functions/string-functions/str_to_map.md)
       + [substring](./sql-reference/sql-functions/string-functions/substring.md)
       + [trim](./sql-reference/sql-functions/string-functions/trim.md)
       + [ucase](./sql-reference/sql-functions/string-functions/ucase.md)

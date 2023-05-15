@@ -182,6 +182,7 @@ public class FunctionSet {
     public static final String RPAD = "rpad";
     public static final String SPLIT = "split";
     public static final String SPLIT_PART = "split_part";
+    public static final String STR_TO_MAP = "str_to_map";
     public static final String STARTS_WITH = "starts_with";
     public static final String STRLEFT = "strleft";
     public static final String STRRIGHT = "strright";
@@ -413,6 +414,9 @@ public class FunctionSet {
     public static final String TRANSFORM_VALUES = "transform_values";
     public static final String TRANSFORM_KEYS = "transform_keys";
 
+    public static final String ELEMENT_AT = "element_at";
+
+    public static final String CARDINALITY = "cardinality";
     // Struct functions:
     public static final String ROW = "row";
 
