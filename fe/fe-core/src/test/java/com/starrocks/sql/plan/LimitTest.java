@@ -393,8 +393,7 @@ public class LimitTest extends PlanTestBase {
                 + "  |  \n"
                 + "  |----3:EXCHANGE\n"
                 + "  |    \n"
-                + "  1:EXCHANGE\n"
-                + "     limit: 10\n"));
+                + "  1:EXCHANGE\n"));
 
         sql = "select * from t0, t1 limit 10";
         plan = getFragmentPlan(sql);

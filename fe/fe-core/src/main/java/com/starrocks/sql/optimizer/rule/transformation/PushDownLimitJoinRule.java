@@ -57,7 +57,9 @@ public class PushDownLimitJoinRule extends TransformationRule {
             return Lists.newArrayList(result);
         }
 
-        if (joinType.isSemiAntiJoin()) {
+        // TODO: Push down the limit to the full outer join if BE can output
+        // the matched rows first.
+        if (joinType.isSemiAntiJoin() || joinType.isFullOuterJoin()) {
             return Lists.newArrayList(result);
         } else if (joinType.isInnerJoin() && newJoin.getOnPredicate() != null) {
             return Lists.newArrayList(result);
@@ -73,10 +75,6 @@ public class PushDownLimitJoinRule extends TransformationRule {
             pushDownChildIdx = new int[] {0};
         } else if (joinType.isRightOuterJoin()) {
             pushDownChildIdx = new int[] {1};
-        } else if (joinType.isFullOuterJoin()) {
-            // For full outer join, only can push down limit to one side:
-            // TODO: Push down the limit to the bigger side by the stats?
-            pushDownChildIdx = new int[] {0};
         }
 
         for (int index : pushDownChildIdx) {
