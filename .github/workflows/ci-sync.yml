@@ -12,9 +12,9 @@ on:
 jobs:
   sync:
     runs-on: self-hosted
-    if: github.event.pull_request.merged == true
-    env:
-      PR_NUMBER: ${{ github.event.number }}
+#    if: github.event.pull_request.merged == true
+#    env:
+#      PR_NUMBER: ${{ github.event.number }}
     steps:
       - run: |
           echo ${{ github.repository }}
