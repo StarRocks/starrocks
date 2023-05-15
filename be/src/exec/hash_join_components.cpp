@@ -34,7 +34,7 @@ StatusOr<ChunkPtr> HashJoinProber::probe_chunk(RuntimeState* state, JoinHashTabl
     if (!_current_probe_has_remain) {
         _probe_chunk = nullptr;
     }
-    RETURN_IF_ERROR(_hash_joiner.filter_probe_output_chunk(chunk));
+    RETURN_IF_ERROR(_hash_joiner.filter_probe_output_chunk(chunk, *hash_table));
     TRY_CATCH_ALLOC_SCOPE_END()
     return chunk;
 }

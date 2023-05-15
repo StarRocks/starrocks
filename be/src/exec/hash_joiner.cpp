@@ -439,7 +439,8 @@ void HashJoiner::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_c
     }
 }
 
-Status HashJoiner::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count) {
+Status HashJoiner::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
+                                                           JoinHashTable& hash_table) {
     bool filter_all = false;
     bool hit_all = false;
     Filter filter;
@@ -447,56 +448,53 @@ Status HashJoiner::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size
     RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
     _process_row_for_other_conjunct(chunk, start_column, column_count, filter_all, hit_all, filter);
 
-    auto& ht = _hash_join_builder->hash_table();
-    ht.remove_duplicate_index(&filter);
+    hash_table.remove_duplicate_index(&filter);
     (*chunk)->filter(filter);
 
     return Status::OK();
 }
 
-Status HashJoiner::_process_semi_join_with_other_conjunct(ChunkPtr* chunk) {
+Status HashJoiner::_process_semi_join_with_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table) {
     bool filter_all = false;
     bool hit_all = false;
     Filter filter;
 
-    _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
+    RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
 
-    auto& ht = _hash_join_builder->hash_table();
-    ht.remove_duplicate_index(&filter);
+    hash_table.remove_duplicate_index(&filter);
 
     (*chunk)->filter(filter);
 
     return Status::OK();
 }
 
-Status HashJoiner::_process_right_anti_join_with_other_conjunct(ChunkPtr* chunk) {
+Status HashJoiner::_process_right_anti_join_with_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table) {
     bool filter_all = false;
     bool hit_all = false;
     Filter filter;
 
-    _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
-    auto& ht = _hash_join_builder->hash_table();
-    ht.remove_duplicate_index(&filter);
+    RETURN_IF_ERROR(_calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all));
+    hash_table.remove_duplicate_index(&filter);
 
     (*chunk)->set_num_rows(0);
 
     return Status::OK();
 }
 
-Status HashJoiner::_process_other_conjunct(ChunkPtr* chunk) {
+Status HashJoiner::_process_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table) {
     SCOPED_TIMER(probe_metrics().other_join_conjunct_evaluate_timer);
     switch (_join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
-        return _process_outer_join_with_other_conjunct(chunk, _probe_column_count, _build_column_count);
+        return _process_outer_join_with_other_conjunct(chunk, _probe_column_count, _build_column_count, hash_table);
     case TJoinOp::RIGHT_OUTER_JOIN:
     case TJoinOp::LEFT_SEMI_JOIN:
     case TJoinOp::LEFT_ANTI_JOIN:
     case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
     case TJoinOp::RIGHT_SEMI_JOIN:
-        return _process_semi_join_with_other_conjunct(chunk);
+        return _process_semi_join_with_other_conjunct(chunk, hash_table);
     case TJoinOp::RIGHT_ANTI_JOIN:
-        return _process_right_anti_join_with_other_conjunct(chunk);
+        return _process_right_anti_join_with_other_conjunct(chunk, hash_table);
     default:
         // the other join conjunct for inner join will be convert to other predicate
         // so can't reach here
