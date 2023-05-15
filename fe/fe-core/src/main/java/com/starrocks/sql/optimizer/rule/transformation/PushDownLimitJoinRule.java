@@ -73,6 +73,10 @@ public class PushDownLimitJoinRule extends TransformationRule {
             pushDownChildIdx = new int[] {0};
         } else if (joinType.isRightOuterJoin()) {
             pushDownChildIdx = new int[] {1};
+        } else if (joinType.isFullOuterJoin()) {
+            // For full outer join, only can push down limit to one side:
+            // TODO: Push down the limit to the bigger side by the stats?
+            pushDownChildIdx = new int[] {0};
         }
 
         for (int index : pushDownChildIdx) {

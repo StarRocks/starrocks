@@ -384,6 +384,7 @@ public class LimitTest extends PlanTestBase {
         String plan;
         sql = "select * from t0 full outer join t1 on t0.v1 = t1.v4 limit 10";
         plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("  4:HASH JOIN\n"
                 + "  |  join op: FULL OUTER JOIN (PARTITIONED)\n"
                 + "  |  colocate: false, reason: \n"
@@ -391,7 +392,6 @@ public class LimitTest extends PlanTestBase {
                 + "  |  limit: 10\n"
                 + "  |  \n"
                 + "  |----3:EXCHANGE\n"
-                + "  |       limit: 10\n"
                 + "  |    \n"
                 + "  1:EXCHANGE\n"
                 + "     limit: 10\n"));
