@@ -41,7 +41,7 @@ public enum PartitionType {
     RANGE("RANGE"),
     LIST("LIST"),
     EXPR_RANGE("EXPR_RANGE"),
-    EXPR_RANGE_EX("EXPR_RANGE_EX");
+    EXPR_RANGE_V2("EXPR_RANGE_V2");
 
     public String typeString;
 

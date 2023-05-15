@@ -41,6 +41,7 @@ import static java.util.stream.Collectors.toList;
  * Some Descriptions:
  * 1. no overwrite old serialized method: read、write and readFields, because we use gson now
  */
+@Deprecated
 public class ExpressionRangePartitionInfo extends RangePartitionInfo {
 
 

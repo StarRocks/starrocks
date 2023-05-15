@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
@@ -24,9 +25,11 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
+import com.starrocks.sql.parser.SqlParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -45,12 +48,14 @@ import static java.util.stream.Collectors.toList;
  * and get more extensions by extracting objects
  * in the future this will replace all expr range partition info
  */
-public class ExprRangePartitionInfo extends RangePartitionInfo {
+public class ExpressionPartitionInfoV2 extends RangePartitionInfo {
 
-    private static final Logger LOG = LogManager.getLogger(ExprRangePartitionInfo.class);
+    private static final Logger LOG = LogManager.getLogger(ExpressionPartitionInfoV2.class);
 
-    @SerializedName(value = "partitionExprs")
     private List<Expr> partitionExprs;
+
+    @SerializedName("serializedPartitionExprs")
+    private List<String> serializedPartitionExprs;
 
     @SerializedName(value = "automaticPartition")
     private Boolean automaticPartition = false;
@@ -58,18 +63,24 @@ public class ExprRangePartitionInfo extends RangePartitionInfo {
     @SerializedName(value = "sourcePartitionTypes")
     private List<Type> sourcePartitionTypes;
 
-    public ExprRangePartitionInfo(List<Expr> partitionExprs, List<Column> columns) {
+    public ExpressionPartitionInfoV2(List<Expr> partitionExprs, List<Column> columns) {
         super(columns);
-        this.type = PartitionType.EXPR_RANGE_EX;
+        this.type = PartitionType.EXPR_RANGE_V2;
         this.partitionExprs = partitionExprs;
     }
 
 
     public static PartitionInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        ExprRangePartitionInfo exprRangePartitionInfo = GsonUtils.GSON.fromJson(json, ExprRangePartitionInfo.class);
+        ExpressionPartitionInfoV2 expressionPartitionInfoV2 = GsonUtils.GSON.fromJson(json, ExpressionPartitionInfoV2.class);
+        List<String> serializedPartitionExprs = expressionPartitionInfoV2.getSerializedPartitionExprs();
+        List<Expr> exprs = Lists.newArrayList();
+        for (String expressionSql : serializedPartitionExprs) {
+            Expr expr = SqlParser.parseSqlToExpr(expressionSql, SqlModeHelper.MODE_DEFAULT);
+            exprs.add(expr);
+        }
+        expressionPartitionInfoV2.setPartitionExprs(exprs);
         // Analyze partition expr
-        List<Expr> exprs = exprRangePartitionInfo.getPartitionExprs();
         SlotRef slotRef;
         for (Expr expr : exprs) {
             if (expr instanceof FunctionCallExpr) {
@@ -85,13 +96,18 @@ public class ExprRangePartitionInfo extends RangePartitionInfo {
 
             PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
             // The current expression partition only supports 1 column
-            slotRef.setType(exprRangePartitionInfo.getSourcePartitionTypes().get(0));
+            slotRef.setType(expressionPartitionInfoV2.getSourcePartitionTypes().get(0));
         }
-        return exprRangePartitionInfo;
+        return expressionPartitionInfoV2;
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
+        List<String> serializedPartitionExprs = new ArrayList<>();
+        for (Expr partitionExpr : partitionExprs) {
+            serializedPartitionExprs.add(partitionExpr.toSql());
+        }
+        this.serializedPartitionExprs  = serializedPartitionExprs;
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
@@ -177,6 +193,14 @@ public class ExprRangePartitionInfo extends RangePartitionInfo {
 
     public void setPartitionExprs(List<Expr> partitionExprs) {
         this.partitionExprs = partitionExprs;
+    }
+
+    public List<String> getSerializedPartitionExprs() {
+        return serializedPartitionExprs;
+    }
+
+    public void setSerializedPartitionExprs(List<String> serializedPartitionExprs) {
+        this.serializedPartitionExprs = serializedPartitionExprs;
     }
 
     public Boolean getAutomaticPartition() {

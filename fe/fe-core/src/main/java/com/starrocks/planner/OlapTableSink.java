@@ -47,7 +47,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.ExprRangePartitionInfo;
+import com.starrocks.catalog.ExpressionPartitionInfoV2;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -321,7 +321,7 @@ public class OlapTableSink extends DataSink {
         switch (partType) {
             case RANGE:
             case EXPR_RANGE:
-            case EXPR_RANGE_EX: {
+            case EXPR_RANGE_V2: {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
                 for (Column partCol : rangePartitionInfo.getPartitionColumns()) {
                     partitionParam.addToPartition_columns(partCol.getName());
@@ -339,9 +339,9 @@ public class OlapTableSink extends DataSink {
                 if (rangePartitionInfo instanceof ExpressionRangePartitionInfo) {
                     ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) rangePartitionInfo;
                     partitionParam.setPartition_exprs(Expr.treesToThrift(exprPartitionInfo.getPartitionExprs()));
-                } else if (rangePartitionInfo instanceof ExprRangePartitionInfo) {
-                    ExprRangePartitionInfo exprRangePartitionInfo = (ExprRangePartitionInfo) rangePartitionInfo;
-                    partitionParam.setPartition_exprs(Expr.treesToThrift(exprRangePartitionInfo.getPartitionExprs()));
+                } else if (rangePartitionInfo instanceof ExpressionPartitionInfoV2) {
+                    ExpressionPartitionInfoV2 expressionPartitionInfoV2 = (ExpressionPartitionInfoV2) rangePartitionInfo;
+                    partitionParam.setPartition_exprs(Expr.treesToThrift(expressionPartitionInfoV2.getPartitionExprs()));
                 }
                 break;
             }
