@@ -162,10 +162,6 @@ public class MaterializedViewRewriter {
         return true;
     }
 
-    private boolean isSupportViewDeltaJoin(Table table) {
-        return table.isNativeTableOrMaterializedView() || table.isHiveTable();
-    }
-
     public OptExpression rewrite() {
         final OptExpression queryExpression = mvRewriteContext.getQueryExpression();
         final OptExpression mvExpression = materializationContext.getMvExpression();
@@ -219,11 +215,11 @@ public class MaterializedViewRewriter {
         List<TableScanDesc> mvTableScanDescs = MvUtils.getTableScanDescs(mvExpression);
         // do not support external table now
         if (queryTableScanDescs.stream().anyMatch(
-                tableScanDesc -> !isSupportViewDeltaJoin(tableScanDesc.getTable()))) {
+                tableScanDesc -> !tableScanDesc.getTable().isNativeTableOrMaterializedView())) {
             return null;
         }
         if (mvTableScanDescs.stream().anyMatch(
-                tableScanDesc -> !isSupportViewDeltaJoin(tableScanDesc.getTable()))) {
+                tableScanDesc -> !tableScanDesc.getTable().isNativeTableOrMaterializedView())) {
             return null;
         }
 
