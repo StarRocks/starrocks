@@ -111,7 +111,7 @@ public class BrokerDesc implements Writable {
 
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("WITH BROKER ").append(name);
+        sb.append(" WITH BROKER ").append(name);
         if (properties != null && !properties.isEmpty()) {
             PrintableMap<String, String> printableMap = new PrintableMap<>(properties, " = ", true, false, true);
             sb.append(" (").append(printableMap.toString()).append(")");

@@ -699,6 +699,12 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
     }
 
+
+    /**
+     * toSql is an obsolete interface, because of historical reasons, the implementation of toSql is not rigorous enough.
+     * Newly developed code should use AstToSQLBuilder::toSQL instead
+     */
+    @Deprecated
     public String toSql() {
         return (printSqlInParens) ? "(" + toSqlImpl() + ")" : toSqlImpl();
     }
