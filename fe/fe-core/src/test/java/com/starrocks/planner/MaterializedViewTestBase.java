@@ -26,6 +26,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
@@ -66,6 +67,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+
         FeConstants.runningUnitTest = true;
         starRocksAssert = new StarRocksAssert(connectContext);
 
@@ -149,6 +152,22 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
 
+        String empsTableWithoutConstraints = "" +
+                "CREATE TABLE emps_no_constraint\n" +
+                "(\n" +
+                "    empid      INT         NOT NULL,\n" +
+                "    deptno     INT         NOT NULL,\n" +
+                "    locationid INT         NOT NULL,\n" +
+                "    commission INT         NOT NULL,\n" +
+                "    name       VARCHAR(20) NOT NULL,\n" +
+                "    salary     DECIMAL(18, 2)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`empid`)\n" +
+                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+
         String empsWithBigintTable = "" +
                 "CREATE TABLE emps_bigint\n" +
                 "(\n" +
@@ -169,8 +188,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 .withTable(empsTable)
                 .withTable(locationsTable)
                 .withTable(ependentsTable)
-                .withTable(empsWithBigintTable);
-
+                .withTable(empsWithBigintTable)
+                .withTable(empsTableWithoutConstraints);
     }
 
     @AfterClass
@@ -187,14 +206,20 @@ public class MaterializedViewTestBase extends PlanTestBase {
         private final String query;
         private String rewritePlan;
         private Exception exception;
+        private String properties;
 
         public MVRewriteChecker(String query) {
             this.query = query;
         }
 
         public MVRewriteChecker(String mv, String query) {
+            this(mv, query, null);
+        }
+
+        public MVRewriteChecker(String mv, String query, String properties) {
             this.mv = mv;
             this.query = query;
+            this.properties = properties;
         }
 
         public MVRewriteChecker rewrite() {
@@ -208,9 +233,11 @@ public class MaterializedViewTestBase extends PlanTestBase {
                     LOG.info("start to create mv:" + mv);
                     ExecPlan mvPlan = getExecPlan(mv);
                     List<String> outputNames = mvPlan.getColNames();
+                    String properties = this.properties != null ? "PROPERTIES (\n" +
+                            this.properties + ")" : "";
                     String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +
                             "   DISTRIBUTED BY HASH(`"+ outputNames.get(0) +"`) BUCKETS 12\n" +
-                            " AS " +
+                            properties + " AS " +
                             mv;
                     starRocksAssert.withMaterializedView(mvSQL);
                 }
@@ -283,13 +310,21 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     protected MVRewriteChecker testRewriteOK(String mv, String query) {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query);
+        return testRewriteOK(mv, query, null);
+    }
+
+    protected MVRewriteChecker testRewriteOK(String mv, String query, String properties) {
+        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
         return fixture.rewrite().ok();
     }
 
-    protected MVRewriteChecker testRewriteFail(String mv, String query) {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query);
+    protected MVRewriteChecker testRewriteFail(String mv, String query, String properties) {
+        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
         return fixture.rewrite().nonMatch();
+    }
+
+    protected MVRewriteChecker testRewriteFail(String mv, String query) {
+        return testRewriteFail(mv, query, null);
     }
 
     protected static Table getTable(String dbName, String mvName) {
