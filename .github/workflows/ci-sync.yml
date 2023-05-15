@@ -35,3 +35,4 @@ jobs:
           workflow: repo-sync.yml
           repo: StarRocks/SyncTest
           inputs: '{ "PR_ID": "21441", "COMMIT_ID": "e72907d9e01bfb28bb08770049551b1eaa1e1982" }'
+          ref: 'main'
