@@ -194,7 +194,7 @@ public class FileScanNode extends LoadScanNode {
                 }
                 brokerDesc = new BrokerDesc(brokerTable.getBrokerName(), brokerTable.getBrokerProperties());
             } else if (tbl instanceof TempExternalTable) {
-                TempExternalTable tempTable = (TempExternalTable) desc.getTable();
+                TempExternalTable tempTable = (TempExternalTable) tbl;
                 try {
                     fileGroups = Lists.newArrayList(new BrokerFileGroup(tempTable));
                 } catch (AnalysisException e) {
