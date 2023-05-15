@@ -887,6 +887,16 @@ You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file o
 | enable_hms_parallel_process_evens | Specifies whether StarRocks processes events in parallel as it reads the events. Valid values: `true` and `false`. Default value: `true`. The value `true` enables parallelism, and the value `false` disables parallelism. |
 | hms_process_events_parallel_num   | The maximum number of events that StarRocks can process in parallel. Default value: `4`. |
 
+## Periodically refresh metadata
+
+From v2.5.5 onwards, StarRocks can periodically refresh the metadata of the frequently accessed Hive catalogs to perceive data changes. You can configure the Hive metadata refresh through the following [FE parameters](../../administration/Configuration.md#fe-configuration-items):
+
+| Configuration item                                           | Default                              | Description                          |
+| ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
+| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic Hive metadata refresh. After it is enabled, StarRocks polls the Hive Metastore of the frequently accessed Hive catalogs to perceive data changes, and caches the information in the catalog metadata. `true` indicates to enable the Hive metadata refresh, and `false` indicates to disable it. This item is an [FE static parameter](../../administration/Configuration.md#configure-fe-static-parameters). You need to modify it in the FE configuration file **fe.conf**. |
+| background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | The interval between two consecutive Hive metadata refreshes. Unit: millisecond. This item is an [FE dynamic parameter](../../administration/Configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) command. |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | The expiration time of a Hive metadata refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its metadata. Unit: second. This item is an [FE dynamic parameter](../../administration/Configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) command. |
+
 ## Appendix: Understand automatic asynchronous update
 
 Automatic asynchronous update is the default policy that StarRocks uses to update the metadata in Hive catalogs.
