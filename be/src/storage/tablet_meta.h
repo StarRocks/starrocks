@@ -104,7 +104,7 @@ public:
 
     Status serialize(std::string* meta_binary);
     Status deserialize(std::string_view data);
-    void init_from_pb(TabletMetaPB* ptablet_meta_pb);
+    void init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaPB* ptablet_schema_pb = nullptr);
 
     void to_meta_pb(TabletMetaPB* tablet_meta_pb);
     void to_json(std::string* json_string, json2pb::Pb2JsonOptions& options);
