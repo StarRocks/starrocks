@@ -34,6 +34,6 @@ jobs:
         with:
           workflow: repo-sync.yml
           repo: StarRocks/SyncTest
-          inputs: '{ "PR_ID": "${PR_NUMBER}", "COMMIT_ID": "${{ steps.commit_sha.outputs.commit_sha }}" }'
+          inputs: "{ \"PR_ID\": ${{ github.event.number }}, \"COMMIT_ID\": \"${{ steps.commit_sha.outputs.commit_sha }}\" }"
           ref: ${{ github.base_ref }}
           token: ${{ secrets.PAT }}
