@@ -24,7 +24,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PScalarType;
-import com.starrocks.proto.PTypeDesc;
+import com.starrocks.proto.PSlotDescriptor;
 import com.starrocks.proto.PTypeNode;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PGetFileSchemaRequest;
@@ -205,18 +205,17 @@ public class TempExternalTable extends Table {
             PGetFileSchemaResult result = future.get();
 
             List<Column> columns = new ArrayList<>();
-            for (int i = 0; i < result.columnNames.size(); ++i) {
-                PTypeDesc typeDesc  = result.columnTypes.get(i);
-                if (typeDesc.types.size() != 1) {
-                    throw new DdlException("unsupported column type");
-                }
+            for (PSlotDescriptor slot : result.schema) {
 
-                for (PTypeNode typeNode : typeDesc.types) {
-                    PScalarType scalarType = typeNode.scalarType;
-                    TPrimitiveType tPrimitiveType = TPrimitiveType.findByValue(scalarType.type);
-                    columns.add(new Column(result.columnNames.get(i),
-                            ScalarType.createType(PrimitiveType.fromThrift(tPrimitiveType)), true));
+                List<PTypeNode> types = slot.slotType.types;
+                if (types.size() != 1) {
+                    throw new DdlException("non-scalar type is not supported: " + slot.colName);
                 }
+                PScalarType scalarType = slot.slotType.types.get(0).scalarType;
+
+                TPrimitiveType tPrimitiveType = TPrimitiveType.findByValue(scalarType.type);
+
+                columns.add(new Column(slot.colName, ScalarType.createType(PrimitiveType.fromThrift(tPrimitiveType)), true));
             }
             return columns;
         } catch (Exception e) {
