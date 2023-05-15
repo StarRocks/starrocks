@@ -16,6 +16,9 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
+      - run: |
+          echo ${{ github.repository }}
+          exit 1
       - name: commit_sha
         id: commit_sha
         run: |
