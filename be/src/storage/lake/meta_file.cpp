@@ -120,6 +120,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
 
 Status MetaFileBuilder::_finalize_delvec(int64_t version) {
     if (!is_primary_key(_tablet_meta.get())) return Status::OK();
+
     // 1. update delvec page in meta
     for (auto&& each_delvec : *(_tablet_meta->mutable_delvec_meta()->mutable_delvecs())) {
         auto iter = _delvecs.find(each_delvec.first);
@@ -141,7 +142,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version) {
     if (_buf.size() > 0) {
         MonotonicStopWatch watch;
         watch.start();
-        auto delvec_file_name = tablet_delvec_filename();
+        auto delvec_file_name = random_tablet_delvec_filename();
         auto delvec_file_path = _tablet.delvec_location(delvec_file_name);
         // keep delete vector file name in tablet meta
         (*_tablet_meta->mutable_delvec_meta()->mutable_version_to_delvec())[version] = delvec_file_name;
@@ -156,6 +157,26 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version) {
             LOG(INFO) << "MetaFileBuilder sync delvec cost(ms): " << watch.elapsed_time() / 1000000;
         }
     }
+
+    // 4. clear delvel file name record in version_to_delvec if it's not refered any more
+    // collect all versions still refered
+    std::set<int64_t> refered_versions;
+    for (const auto item : _tablet_meta->delvec_meta().delvecs()) {
+        refered_versions.insert(item.second.version());
+    }
+
+    auto itr = _tablet_meta->mutable_delvec_meta()->mutable_version_to_delvec()->begin();
+    for (; itr != _tablet_meta->mutable_delvec_meta()->mutable_version_to_delvec()->end();) {
+        // this delvec file not be refered any more, clear this record safely
+        if (refered_versions.find(itr->first) == refered_versions.end()) {
+            VLOG(2) << "Remove delvec file record from delvec meta, version: " << itr->first
+                    << ", file: " << itr->second;
+            _tablet_meta->mutable_delvec_meta()->mutable_version_to_delvec()->erase(itr++);
+        } else {
+            itr++;
+        }
+    }
+
     return Status::OK();
 }
 

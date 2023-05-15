@@ -380,7 +380,7 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
             }
 
             auto src = base_tablet->delvec_location(itr_src->second);
-            auto dst = new_tablet->delvec_location(tablet_delvec_filename());
+            auto dst = new_tablet->delvec_location(random_tablet_delvec_filename());
             RETURN_IF_ERROR(fs::copy_file(src, dst));
         }
         op_schema_change->mutable_delvec_meta()->CopyFrom(base_metadata->delvec_meta());

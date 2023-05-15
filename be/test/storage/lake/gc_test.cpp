@@ -368,7 +368,7 @@ TEST_F(GCTest, test_delvec_gc) {
 
     // create delvec files
     for (int i = 1; i < 10; i++) {
-        auto delvec_file = tablet_delvec_filename();
+        auto delvec_file = random_tablet_delvec_filename();
         auto location = location_provider_1->delvec_location(tablet_id_1, delvec_file);
         ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(location));
         ASSERT_OK(wf->close());
