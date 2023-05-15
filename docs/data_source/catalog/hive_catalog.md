@@ -809,11 +809,19 @@ INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hive_table
 
 ### Manual update
 
-By default, StarRocks caches the metadata of Hive and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Hive table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
+By default, StarRocks caches the metadata of Hive and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Hive table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to manually update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name>
 ```
+
+You need to manually update metadata in the following situations:
+
+- A data file in an existing partition is changed, for example, by running the `INSERT OVERWRITE ... PARTITION ...` command.
+- Schema changes are made on a Hive table.
+- An existing Hive table is deleted by using the DROP statement, and a new Hive table with the same name as the deleted Hive table is created.
+
+Note that the REFRESH EXTERNAL TABLE refreshes only the tables and partitions cached in your FEs.
 
 ### Automatic incremental update
 
