@@ -59,9 +59,9 @@ public:
 
     RowsetTxnMetaPB* rowset_txn_meta() override { return nullptr; }
 
-private:
+protected:
     Status reset_segment_writer();
-    Status flush_segment_writer();
+    virtual Status flush_segment_writer();
 
     std::unique_ptr<SegmentWriter> _seg_writer;
 };

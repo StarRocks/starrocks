@@ -26,19 +26,16 @@ namespace starrocks::lake {
 
 class BaseAndCumulativeCompactionPolicy : public CompactionPolicy {
 public:
-    explicit BaseAndCumulativeCompactionPolicy(TabletPtr tablet) : _tablet(std::move(tablet)) {}
+    explicit BaseAndCumulativeCompactionPolicy(TabletPtr tablet) : CompactionPolicy(tablet) {}
     ~BaseAndCumulativeCompactionPolicy() override = default;
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
-
-    StatusOr<CompactionAlgorithm> choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) override;
 
 private:
     StatusOr<std::vector<RowsetPtr>> pick_cumulative_rowsets();
     StatusOr<std::vector<RowsetPtr>> pick_base_rowsets();
     void debug_rowsets(CompactionType type, const std::vector<uint32_t>& input_rowset_ids);
 
-    TabletPtr _tablet;
     TabletMetadataPtr _tablet_metadata;
 };
 
@@ -74,21 +71,14 @@ public:
 
 class PrimaryCompactionPolicy : public CompactionPolicy {
 public:
-    explicit PrimaryCompactionPolicy(TabletPtr tablet) : _tablet(std::move(tablet)) {}
+    explicit PrimaryCompactionPolicy(TabletPtr tablet) : CompactionPolicy(tablet) {}
     ~PrimaryCompactionPolicy() override = default;
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
 
-    StatusOr<CompactionAlgorithm> choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) override {
-        return HORIZONTAL_COMPACTION;
-    }
-
 private:
     static const size_t kCompactionResultBytesThreashold = 1000000000;
     static const size_t kCompactionResultRowsThreashold = 10000000;
-
-private:
-    TabletPtr _tablet;
 };
 
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(int64_t version) {
@@ -255,8 +245,7 @@ StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_rowsets
     }
 }
 
-StatusOr<CompactionAlgorithm> BaseAndCumulativeCompactionPolicy::choose_compaction_algorithm(
-        const std::vector<RowsetPtr>& rowsets) {
+StatusOr<CompactionAlgorithm> CompactionPolicy::choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) {
     // TODO: support row source mask buffer based on starlet fs
     // The current row source mask buffer is based on posix tmp file,
     // if there is no storage root path, use horizontal compaction.
