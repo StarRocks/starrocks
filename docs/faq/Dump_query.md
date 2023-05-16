@@ -1,12 +1,12 @@
 # query_dump interface
 
-This topic describes how to use the query_dump interface to query the details of an SQL and its related information.
+This topic describes how to use the query_dump interface to obtain the details of an SQL query and its related information.
 
 If you encounter any of the following issues when executing SQL queries with StarRocks, you can use query_dump to obtain the SQL details and send the information to StarRocks technical support for troubleshooting:
 
-* `Unknown Error` is returned when you execute SQL or EXPLAIN.
-* An error message or exception is returned when you execute SQL.
-* Executing SQL is not as efficient as expected, or the execution plan can be optimized (for example, partitions can be pruned or Join order can be adjusted).
+* `Unknown Error` is returned when you execute an SQL query or EXPLAIN.
+* An error message or exception is returned when you execute an SQL query.
+* Executing an SQL query is not as efficient as expected, or the execution plan can be optimized (for example, partitions can be pruned or Join order can be adjusted).
 
 ## Function overview
 
@@ -35,7 +35,7 @@ Parameter description:
 
 * query_file: the file containing the query
 * dump_file: the output file
-* db: the database where the SQL is executed. The `db` parameter is optional if the query includes `use db`. Otherwise, it must be specified.
+* db: the database where the SQL query is executed. The `db` parameter is optional if the query includes `use db`. Otherwise, it must be specified.
 
 Example
 
