@@ -352,9 +352,8 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
     };
 
     auto check_delvecs = [&](int64_t tablet_id, const DelvecMetadataPB& delvec_meta) {
-        for (const auto& delvec : delvec_meta.delvecs()) {
-            std::string delvec_name = tablet_delvec_filename(tablet_id, delvec.second.version());
-            datafiles.erase(delvec_name);
+        for (const auto& vd : delvec_meta.version_to_delvec()) {
+            datafiles.erase(vd.second);
         }
     };
 

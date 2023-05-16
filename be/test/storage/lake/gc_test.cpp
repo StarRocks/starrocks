@@ -358,32 +358,35 @@ TEST_F(GCTest, test_delvec_gc) {
             std::make_unique<lake::TabletManager>(location_provider_1.get(), update_manager_1.get(), 16384);
     // tablet_id_1 owned by worker A
     location_provider_1->_owned_shards.insert(tablet_id_1);
-    {
-        auto metadata = std::make_shared<TabletMetadata>();
-        metadata->set_id(tablet_id_1);
-        metadata->set_version(1);
-        metadata->set_next_rowset_id(1);
-        for (int i = 1; i < 5; i++) {
-            (*metadata->mutable_delvec_meta()->mutable_delvecs())[i].set_version(i);
-        }
-        ASSERT_OK(tablet_manager_1->put_tablet_metadata(metadata));
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id_1);
+    metadata->set_version(1);
+    metadata->set_next_rowset_id(1);
+    for (int i = 1; i < 5; i++) {
+        (*metadata->mutable_delvec_meta()->mutable_delvecs())[i].set_version(i);
     }
+
     // create delvec files
     for (int i = 1; i < 10; i++) {
-        auto location = location_provider_1->tablet_delvec_location(tablet_id_1, i);
+        auto delvec_file = random_tablet_delvec_filename();
+        auto location = location_provider_1->delvec_location(tablet_id_1, delvec_file);
         ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(location));
         ASSERT_OK(wf->close());
+        if (i < 5) {
+            (*metadata->mutable_delvec_meta()->mutable_version_to_delvec())[i] = delvec_file;
+        }
     }
+    ASSERT_OK(tablet_manager_1->put_tablet_metadata(metadata));
+
     // gc
     config::lake_gc_segment_expire_seconds = 0;
     ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get()));
-    for (int i = 1; i < 10; i++) {
-        auto location = location_provider_1->tablet_delvec_location(tablet_id_1, i);
-        if (i < 5) {
-            ASSERT_OK(fs->path_exists(location));
-        } else {
-            ASSERT_ERROR(fs->path_exists(location));
-        }
+    for (int i = 1; i < 5; i++) {
+        auto itr = metadata->delvec_meta().version_to_delvec().find(i);
+        EXPECT_TRUE(itr != metadata->delvec_meta().version_to_delvec().end());
+        auto delvec_file = itr->second;
+        auto location = location_provider_1->delvec_location(tablet_id_1, delvec_file);
+        ASSERT_OK(fs->path_exists(location));
     }
 }
 
