@@ -114,14 +114,11 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitQueryStatement(QueryStatement node, Scope parent) {
+            Scope scope = visitQueryRelation(node.getQueryRelation(), parent);
             if (node.hasOutFileClause()) {
-                try {
-                    node.getOutFileClause().analyze();
-                } catch (AnalysisException e) {
-                    throw new SemanticException(e.getMessage());
-                }
+                node.getOutFileClause().analyze(scope);
             }
-            return visitQueryRelation(node.getQueryRelation(), parent);
+            return scope;
         }
 
         @Override
