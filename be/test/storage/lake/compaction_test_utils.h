@@ -14,30 +14,22 @@
 
 #pragma once
 
-#include <string>
-#include <vector>
+#include <gtest/gtest.h>
 
-namespace starrocks {
+#include "storage/compaction_utils.h"
 
-struct DirSpace {
-    std::string path;
-    size_t size;
+namespace starrocks::lake {
+
+struct CompactionParam {
+    CompactionAlgorithm algorithm = HORIZONTAL_COMPACTION;
+    uint32_t vertical_compaction_max_columns_per_group = 5;
 };
 
-struct CacheOptions {
-    // basic
-    size_t mem_space_size;
-    std::vector<DirSpace> disk_spaces;
-    std::string meta_path;
+static std::string to_string_param_name(const testing::TestParamInfo<CompactionParam>& info) {
+    std::stringstream ss;
+    ss << CompactionUtils::compaction_algorithm_to_string(info.param.algorithm) << "_"
+       << info.param.vertical_compaction_max_columns_per_group;
+    return ss.str();
+}
 
-    // advanced
-    size_t block_size;
-    bool checksum;
-    std::string engine;
-    size_t max_concurrent_inserts;
-    // The following options are only valid for cachelib engine currently
-    size_t max_parcel_memory_mb;
-    uint8_t lru_insertion_point;
-};
-
-} // namespace starrocks
+} // namespace starrocks::lake
