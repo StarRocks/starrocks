@@ -1344,4 +1344,16 @@ public class CreateTableTest {
                                 "PROPERTIES(\"replication_num\" = \"1\");"
                 ));
     }
+
+    @Test
+    public void testCreateTextTable() {
+        // duplicate tabl
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.text_tbl\n" +
+                        "(k1 int, j text)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+    }
 }
