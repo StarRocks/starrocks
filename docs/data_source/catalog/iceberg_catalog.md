@@ -73,8 +73,7 @@ PROPERTIES
 (
     "type" = "iceberg",
     MetastoreParams,
-    StorageCredentialParams,
-    MetadataUpdateParams
+    StorageCredentialParams
 )
 ```
 
@@ -427,31 +426,6 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
     | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | The data service account that you want to impersonate.       |
-
-#### `MetadataUpdateParams`
-
-A set of parameters about how StarRocks updates the cached metadata of Iceberg. This parameter set is optional.
-
-StarRocks implements the automatic asynchronous update policy by default.
-
-In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance.
-
-However, if the frequency of data updates in Iceberg is high, you can tune these parameters to further optimize the performance of automatic asynchronous updates.
-
-> **NOTE**
->
-> In most cases, if your Iceberg data is updated at a granularity of 1 hour or less, the data update frequency is considered high.
-
-| Parameter                              | Required | Description                                                  |
-| -------------------------------------- | -------- | ------------------------------------------------------------ |
-| enable_hive_metastore_cache            | No       | Specifies whether StarRocks caches the metadata of Iceberg tables. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
-| enable_remote_file_cache               | No       | Specifies whether StarRocks caches the metadata of the underlying data files of Iceberg tables or partitions. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
-| metastore_cache_refresh_interval_sec   | No       | The time interval at which StarRocks asynchronously updates the metadata of Iceberg tables or partitions cached in itself. Unit: seconds. Default value: `7200`, which is 2 hours. |
-| remote_file_cache_refresh_interval_sec | No       | The time interval at which StarRocks asynchronously updates the metadata of the underlying data files of Iceberg tables or partitions cached in itself. Unit: seconds. Default value: `60`. |
-| metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Iceberg tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
-| remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Iceberg tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
-
-For more information, see the "[Understand automatic asynchronous update](../catalog/iceberg_catalog.md#appendix-understand-automatic-asynchronous-update)" section of this topic.
 
 ### Examples
 
@@ -816,123 +790,16 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM iceberg_table
 ```
 
-## Synchronize metadata updates
+## Configure metadata caching
 
-### Manual update
-
-By default, StarRocks caches the metadata of Iceberg and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on an Iceberg table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
-
-```SQL
-REFRESH EXTERNAL TABLE <table_name>
-```
-
-### Automatic incremental update
-
-Unlike the automatic asynchronous update policy, the automatic incremental update policy enables the FEs in your StarRocks cluster to read events, such as adding columns, removing partitions, and updating data, from your Hive metastore. StarRocks can automatically update the metadata cached in the FEs based on these events. This means you do not need to manually update the metadata of your Iceberg tables.
-
-To enable automatic incremental update, follow these steps:
-
-#### Step 1: Configure event listener for your Hive metastore
-
-Both Hive metastore v2.x and v3.x support configuring an event listener. This step uses the event listener configuration used for Hive metastore v3.1.2 as an example. Add the following configuration items to the **$HiveMetastore/conf/hive-site.xml** file, and then restart your Hive metastore:
-
-```XML
-<property>
-    <name>hive.metastore.event.db.notification.api.auth</name>
-    <value>false</value>
-</property>
-<property>
-    <name>hive.metastore.notifications.add.thrift.objects</name>
-    <value>true</value>
-</property>
-<property>
-    <name>hive.metastore.alter.notifications.basic</name>
-    <value>false</value>
-</property>
-<property>
-    <name>hive.metastore.dml.events</name>
-    <value>true</value>
-</property>
-<property>
-    <name>hive.metastore.transactional.event.listeners</name>
-    <value>org.apache.hive.hcatalog.listener.DbNotificationListener</value>
-</property>
-<property>
-    <name>hive.metastore.event.db.listener.timetolive</name>
-    <value>172800s</value>
-</property>
-<property>
-    <name>hive.metastore.server.max.message.size</name>
-    <value>858993459</value>
-</property>
-```
-
-You can search for `event id` in the FE log file to check whether the event listener is successfully configured. If the configuration fails, `event id` values are `0`.
-
-#### Step 2: Enable automatic incremental update on StarRocks
-
-You can enable automatic incremental update for a single Iceberg catalog or for all Iceberg catalogs in your StarRocks cluster.
-
-- To enable automatic incremental update for a single Iceberg catalog, set the `enable_hms_events_incremental_sync` parameter to `true` in `PROPERTIES` like below when you create the Iceberg catalog:
-
-  ```SQL
-  CREATE EXTERNAL CATALOG <catalog_name>
-  [COMMENT <comment>]
-  PROPERTIES
-  (
-      "type" = "iceberg",
-      "hive.metastore.uris" = "thrift://102.168.xx.xx:9083",
-       ....
-      "enable_hms_events_incremental_sync" = "true"
-  );
-  ```
-
-- To enable automatic incremental update for all Iceberg catalogs, add `"enable_hms_events_incremental_sync" = "true"` to the `$FE_HOME/conf/fe.conf` file of each FE, and then restart each FE to make the parameter setting take effect.
-
-You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file of each FE based on your business requirements, and then restart each FE to make the parameter settings take effect.
-
-| Parameter                         | Description                                                  |
-| --------------------------------- | ------------------------------------------------------------ |
-| hms_events_polling_interval_ms    | The time interval at which StarRocks reads events from your Hive metastore. Default value: `5000`. Unit: milliseconds. |
-| hms_events_batch_size_per_rpc     | The maximum number of events that StarRocks can read at a time. Default value: `500`. |
-| enable_hms_parallel_process_evens | Specifies whether StarRocks processes events in parallel as it reads the events. Valid values: `true` and `false`. Default value: `true`. The value `true` enables parallelism, and the value `false` disables parallelism. |
-| hms_process_events_parallel_num   | The maximum number of events that StarRocks can process in parallel. Default value: `4`. |
-
-## Appendix: Understand automatic asynchronous update
-
-Automatic asynchronous update is the default policy that StarRocks uses to update the metadata in Iceberg catalogs.
-
-By default (namely, when the `enable_hive_metastore_cache` and `enable_remote_file_cache` parameters are both set to `true`), if a query hits a partition of an Iceberg table, StarRocks automatically caches the metadata of the partition and the metadata of the underlying data files of the partition. The cached metadata is updated by using the lazy update policy.
-
-For example, there is an Iceberg table named `table2`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. A query hits `p1`, and StarRocks caches the metadata of `p1` and the metadata of the underlying data files of `p1`. Assume that the default time intervals to update and discard the cached metadata are as follows:
-
-- The time interval (specified by the `metastore_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of `p1` is 2 hours.
-- The time interval (specified by the `remote_file_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of the underlying data files of `p1` is 60 seconds.
-- The time interval (specified by the `metastore_cache_ttl_sec` parameter) to automatically discard the cached metadata of `p1` is 24 hours.
-- The time interval (specified by the `remote_file_cache_ttl_sec` parameter) to automatically discard the cached metadata of the underlying data files of `p1` is 36 hours.
-
-The following figure shows the time intervals on a timeline for easier understanding.
-
-![Timeline for updating and discarding cached metadata](../../assets/catalog_timeline.png)
-
-Then StarRocks updates or discards the metadata in compliance with the following rules:
-
-- If another query hits `p1` again and the current time from the last update is less than 60 seconds, StarRocks does not update the cached metadata of `p1` or the cached metadata of the underlying data files of `p1`.
-- If another query hits `p1` again and the current time from the last update is more than 60 seconds, StarRocks updates the cached metadata of the underlying data files of `p1`.
-- If another query hits `p1` again and the current time from the last update is more than 2 hours, StarRocks updates the cached metadata of `p1`.
-- If `p1` has not been accessed within 24 hours from the last update, StarRocks discards the cached metadata of `p1`. The metadata will be cached at the next query.
-- If `p1` has not been accessed within 36 hours from the last update, StarRocks discards the cached metadata of the underlying data files of `p1`. The metadata will be cached at the next query.
-
-## Appendix: Understand Two-level metadata cache
-
-The metadata files of your Iceberg cluster may be stored in remote storage such as AWS S3 or HDFS. To accelerate queries in these situations, StarRocks adopts a two-level metadata caching mechanism, with which it can cache metadata both in memory and on disk. For each initial query, StarRocks caches their computation results. If any subsequent query that is semantically equivalent to a previous query is issued, StarRocks first attempts to retrieve the requested metadata from its caches, and it retrieves the metadata from the remote storage only when the metadata cannot be hit in its caches.
+The metadata files of your Iceberg cluster may be stored in remote storage such as AWS S3 or HDFS. By default, StarRocks caches Iceberg metadata in memory. To accelerate queries, StarRocks adopts a two-level metadata caching mechanism, with which it can cache metadata both in memory and on disk. For each initial query, StarRocks caches their computation results. If any subsequent query that is semantically equivalent to a previous query is issued, StarRocks first attempts to retrieve the requested metadata from its caches, and it retrieves the metadata from the remote storage only when the metadata cannot be hit in its caches.
 
 StarRocks uses the Least Recently Used (LRU) algorithm to cache and evict data. The basic rules are as follows:
 
 - StarRocks first attempts to retrieve the requested metadata from the memory. If the metadata cannot be hit in the memory, StarRock attempts to retrieve the metadata from the disks. The metadata that StarRocks has retrieved from the disks will be loaded into the memory. If the metadata cannot be hit in the disks either, StarRock retrieves the metadata from the remote storage and caches the retrieved metadata in the memory.
 - StarRocks writes the metadata evicted out of the memory into the disks, but it directly discards the metadata evicted out of the disks.
 
-The following table describes the FE configuration items that you can use to configure your caching mechanism.
+The following table describes the FE configuration items that you can use to configure your Iceberg metadata caching mechanism.
 
 | **Configuration item**                           | **Unit** | **Default value**                                    | **Description**                                              |
 | ------------------------------------------------ | -------- | ---------------------------------------------------- | ------------------------------------------------------------ |
