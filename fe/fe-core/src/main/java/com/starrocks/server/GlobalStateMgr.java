@@ -1542,7 +1542,7 @@ public class GlobalStateMgr {
 
         isDefaultClusterCreated = dis.readBoolean();
 
-        LOG.info("finished replay header from image");
+        LOG.info("finished to replay header from image");
         return checksum;
     }
 
@@ -1554,7 +1554,7 @@ public class GlobalStateMgr {
 
         isDefaultClusterCreated = header.isDefaultClusterCreated();
 
-        LOG.info("finished replay header from image");
+        LOG.info("finished to replay header from image");
         return checksum;
     }
 

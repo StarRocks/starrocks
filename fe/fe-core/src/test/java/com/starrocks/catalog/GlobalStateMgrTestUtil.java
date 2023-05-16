@@ -118,7 +118,6 @@ public class GlobalStateMgrTestUtil {
             Partition masterPartition = table.getPartition(testPartition1);
             Partition slavePartition = slaveTable.getPartition(testPartition1);
             if (masterPartition == null && slavePartition == null) {
-                new Exception().printStackTrace();
                 return true;
             }
             if (masterPartition.getId() != slavePartition.getId()) {
