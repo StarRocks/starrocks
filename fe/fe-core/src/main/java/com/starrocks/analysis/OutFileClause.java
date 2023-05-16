@@ -329,12 +329,12 @@ public class OutFileClause implements ParseNode {
 
         if (type.isArrayType()) {
             ArrayType arrayType = (ArrayType) type;
-            return isSupportedTypeForParquetOutFile(arrayType.getItemType());
+            return isSupportedTypeForCSVOutFile(arrayType.getItemType());
         }
 
         if (type.isMapType()) {
             MapType mapType = (MapType) type;
-            return isSupportedTypeForParquetOutFile(mapType.getKeyType()) && isSupportedTypeForParquetOutFile(mapType.getValueType());
+            return isSupportedTypeForCSVOutFile(mapType.getKeyType()) && isSupportedTypeForCSVOutFile(mapType.getValueType());
         }
 
         // unreachable
