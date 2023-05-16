@@ -42,7 +42,6 @@ public class Cluster implements Writable {
 
     public Cluster(long id) {
         this.id = id;
-        // use default workerGroupId for community version
         workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
     }
 
