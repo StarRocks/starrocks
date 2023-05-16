@@ -810,15 +810,6 @@ By default, StarRocks caches the metadata of Hudi and automatically updates the 
 REFRESH EXTERNAL TABLE <table_name>
 ```
 
-You need to manually update metadata in the following situations:
-
-- A data file in an existing partition is changed, for example, by running the `INSERT OVERWRITE ... PARTITION ...` command.
-- Schema changes are made on a Hive table.
-- An existing Hive table is deleted by using the DROP statement, and a new Hive table with the same name as the deleted Hive table is created.
-- You have specified `"enable_cache_list_names" = "true"` in `PROPERTIES` at the creation of your Hive catalog, and you want to query new partitions that you just created on your Hive cluster.
-
-Note that the REFRESH EXTERNAL TABLE refreshes only the tables and partitions cached in your FEs.
-
 ### Automatic incremental update
 
 Unlike the automatic asynchronous update policy, the automatic incremental update policy enables the FEs in your StarRocks cluster to read events, such as adding columns, removing partitions, and updating data, from your Hive metastore. StarRocks can automatically update the metadata cached in the FEs based on these events. This means you do not need to manually update the metadata of your Hudi tables.
