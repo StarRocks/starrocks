@@ -133,6 +133,10 @@ public class AnalyzeManager implements Writable {
         analyzeStatusMap.put(status.getId(), status);
     }
 
+    public void addOrUpdateAnalyzeStatus(AnalyzeStatus status) {
+        analyzeStatusMap.put(status.getId(), status);
+    }
+
     public void replayRemoveAnalyzeStatus(AnalyzeStatus status) {
         analyzeStatusMap.remove(status.getId());
     }
@@ -158,7 +162,7 @@ public class AnalyzeManager implements Writable {
     public void dropAnalyzeStatus(Long tableId) {
         List<AnalyzeStatus> expireList = Lists.newArrayList();
         for (AnalyzeStatus analyzeStatus : analyzeStatusMap.values()) {
-            if (analyzeStatus instanceof NativeAnalyzeStatus &&
+            if (analyzeStatus.isNative() &&
                     ((NativeAnalyzeStatus) analyzeStatus).getTableId() == tableId) {
                 expireList.add(analyzeStatus);
             }
@@ -524,7 +528,7 @@ public class AnalyzeManager implements Writable {
         SerializeData data = new SerializeData();
         data.jobs = getAllAnalyzeJobList();
         data.nativeStatus = new ArrayList<>(getAnalyzeStatusMap().values().stream().
-                filter(status -> status instanceof NativeAnalyzeStatus).
+                filter(AnalyzeStatus::isNative).
                 map(status -> (NativeAnalyzeStatus) status).collect(Collectors.toSet()));
         data.basicStatsMeta = new ArrayList<>(getBasicStatsMetaMap().values());
         data.histogramStatsMeta = new ArrayList<>(getHistogramStatsMetaMap().values());

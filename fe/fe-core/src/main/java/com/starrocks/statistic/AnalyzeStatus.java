@@ -36,6 +36,8 @@ public interface AnalyzeStatus {
 
     long getId();
 
+    boolean isNative();
+
     String getCatalogName() throws MetaNotFoundException;
 
     String getDbName() throws MetaNotFoundException;

@@ -1587,13 +1587,13 @@ public class EditLog {
     }
 
     public void logAddAnalyzeStatus(AnalyzeStatus status) {
-        if (status instanceof NativeAnalyzeStatus) {
+        if (status.isNative()) {
             logEdit(OperationType.OP_ADD_ANALYZE_STATUS, (NativeAnalyzeStatus) status);
         }
     }
 
     public void logRemoveAnalyzeStatus(AnalyzeStatus status) {
-        if (status instanceof NativeAnalyzeStatus) {
+        if (status.isNative()) {
             logEdit(OperationType.OP_REMOVE_ANALYZE_STATUS, (NativeAnalyzeStatus) status);
         }
     }

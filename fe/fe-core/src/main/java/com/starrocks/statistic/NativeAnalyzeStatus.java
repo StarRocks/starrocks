@@ -94,6 +94,11 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
         return id;
     }
 
+    @Override
+    public boolean isNative() {
+        return true;
+    }
+
     public long getDbId() {
         return dbId;
     }
