@@ -1,76 +1,139 @@
-# Introduction of the dev-env-ubuntu image
+# Compile StarRocks with Docker
 
-## Image
+This topic describes how to compile StarRocks using Docker.
 
-The name of the development environment images is in the form of dev-env-xxx. If you use Ubuntu 22.04, you can download the image initiated with `dev-env-ubuntu`. If you use CentOS 7, you can download the image initiated with `dev-env-centos`.
+## Overview
 
-StarRocks supports both AMD64-based Linux and ARM64-based Linux. The Docker daemon automatically pulls the corresponding image based on the CPU you use.
+StarRocks provides development environment images for both Ubuntu 22.04 and CentOS 7.0. With the image, you can launch a Docker container and compile StarRocks in the container.
 
-| branch-name      | image-name                          |
-| ---------------- | ----------------------------------- |
-| main             | starrocks/dev-env-ubuntu:latest     |
-| branch-3.0       | starrocks/dev-env-ubuntu:3.0-latest |
-| branch-2.5       | starrocks/dev-env-ubuntu:2.5-latest |
+### StarRocks version and DEV ENV image
 
-## Download the image
+Different branches of StarRocks correspond to different development environment images provided on [StarRocks Docker Hub](https://hub.docker.com/u/starrocks).
 
-```shell
-# download image from dockerhub
-docker pull {image-name}
+- For Ubuntu 22.04:
+
+  | **Branch name** | **Ima****ge na****me**              |
+  | --------------- | ----------------------------------- |
+  | main            | starrocks/dev-env-ubuntu:latest     |
+  | branch-3.0      | starrocks/dev-env-ubuntu:3.0-latest |
+  | branch-2.5      | starrocks/dev-env-ubuntu:2.5-latest |
+
+- For CentOS 7:
+
+  | **Branch name** | **Image name**                       |
+  | --------------- | ------------------------------------ |
+  | main            | starrocks/dev-env-centos7:latest     |
+  | branch-3.0      | starrocks/dev-env-centos7:3.0-latest |
+  | branch-2.5      | starrocks/dev-env-centos7:2.5-latest |
+
+### Third-party tools
+
+The following third-party tools have been integrated into the images:
+
+- LLVM
+- Clang
+
+## Prerequisites
+
+Before compiling StarRocks, make sure the following requirements are satisfied:
+
+- **Hardware**
+
+  Your machine must have at least 8 GB RAM.
+
+- **Software**
+
+  - Your machine must be running on Ubuntu 22.04 or CentOS 7.
+  - You must have Docker installed on your machine.
+
+## Step 1: Download the image
+
+Download the development environment image by running the following command:
+
+```Bash
+# Replace <image_name> with the name of the image that you want to download, 
+# for example, `starrocks/dev-env-ubuntu:latest`.
+# Make sure you have choose the correct image for your OS.
+docker pull <image_name>
 ```
 
-## How to use
+Docker automatically identifies the CPU architecture of your machine and pulls the corresponding image that suits your machine. The `linux/amd64` images are for the x86-based CPUs, and `linux/arm64` images are for the ARM-based CPUs.
 
-- Run the container as usual
+## Step 2: Compile StarRocks in a Docker container
 
-  ```shell
-  # mount the docker and login
-  docker run -it --name {branch-name} -d {image-name}
-  docker exec -it {branch-name} /bin/bash
+You can launch the development environment Docker container with or without the local host path mounted. We recommend you launch the container with the local host path mounted, so that you can avoid re-downloading the Java dependency during the next compilation, and you do not need to manually copy the binary files from the container to your local host.
 
-  # Download the code repository
-  git clone https://github.com/StarRocks/starrocks.git
+- **Launch the container with the local host path mounted**:
 
-  # build the starrocks
-  cd starrocks && ./build.sh
-  ```
+  1. Clone the StarRocks source code to your local host.
 
-- Run the container by mounting the local path (**recommended**)
+     ```Bash
+     git clone https://github.com/StarRocks/starrocks.git
+     ```
 
-  - Avoid re-downloading java dependency
-  - No need to copy the compiled binary package in starrocks/output from the container
+  2. Launch the container.
 
-  ```shell
-  # download the code repository
-  git clone https://github.com/StarRocks/starrocks.git
+     ```Bash
+     # Replace <code_dir> with the directory that stores the StarRocks source code.
+     # Replace <branch_name> with the name of the branch that corresponds to the image name.
+     # Replace <image_name> with the name of the image that you downloaded.
+     docker run -it -v <code_dir>/.m2:/root/.m2 \
+         -v <code_dir>/starrocks:/root/starrocks \
+         --name <branch_name> -d <image_name>
+     ```
 
-  # mount the docker and login
-  docker run -it -v $(pwd)/.m2:/root/.m2 -v $(pwd)/starrocks:/root/starrocks --name {branch-name} -d {image-name}
-  docker exec -it {branch-name} /bin/bash
+  3. Launch a bash shell inside the container you have launched.
 
-  # build the starrocks
-  cd /root/starrocks &&./build.sh
-  ```
+     ```Bash
+     # Replace <branch_name> with the name of the branch that corresponds to the image name.
+     docker exec -it <branch_name> /bin/bash
+     ```
 
-## Third party tool
+  4. Compile StarRocks in the container.
 
-> We have integrated some tools in the image so that you can easily use them
+     ```Bash
+     cd /root/starrocks && ./build.sh
+     ```
 
-- llvm
-- clang
+- **Launch the container without the local host path mounted**:
 
-## Required
+  1. Launch the container.
 
-Memory: 8GB+
+     ```Bash
+     # Replace <branch_name> with the name of the branch that corresponds to the image name.
+     # Replace <image_name> with the name of the image that you downloaded.
+     docker run -it --name <branch_name> -d <image_name>
+     ```
 
-## FAQ
+  2. Launch a bash shell inside the container.
 
-1. Fail to compile StarRocks BE.
+     ```Bash
+     # Replace <branch_name> with the name of the branch that corresponds to the image name.
+     docker exec -it <branch_name> /bin/bash
+     ```
 
-```shell
+  3. Clone the StarRocks source code to the container.
+
+     ```Bash
+     git clone https://github.com/StarRocks/starrocks.git
+     ```
+
+  4. Compile StarRocks in the container.
+
+     ```Bash
+     cd starrocks && ./build.sh
+     ```
+
+## Troubleshooting
+
+Q: The StarRocks BE building fails, and the following error message has been returned:
+
+```Bash
 g++: fatal error: Killed signal terminated program cc1plus
 compilation terminated.
 ```
 
-When above error message is encounted, it may be caused by insufficient of memory.
-Either give more memory to the container or reduce the parallism when running `./build.sh` by provideing a `-j <number_of_parallel_tasks>` option. Usually 8GB RAM is a good start.
+What should I do?
+
+A: This error message indicates a lack of memory in the Docker container. You need to allocate at least 8 GB of memory resources to the container.
+
