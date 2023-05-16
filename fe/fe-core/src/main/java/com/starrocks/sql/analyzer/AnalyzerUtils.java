@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AnalyticExpr;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -771,4 +772,69 @@ public class AnalyzerUtils {
         }
         return null;
     }
+<<<<<<< HEAD
+=======
+
+    public static SlotRef getSlotRefFromCast(Expr expr) {
+        if (expr instanceof CastExpr) {
+            CastExpr castExpr = (CastExpr) expr;
+            ArrayList<Expr> children = castExpr.getChildren();
+            for (Expr child : children) {
+                SlotRef slotRef = null;
+                if (child instanceof SlotRef) {
+                    slotRef = (SlotRef) child;
+                } else if (child instanceof CastExpr) {
+                    slotRef = getSlotRefFromCast(child);
+                } else if (child instanceof FunctionCallExpr) {
+                    slotRef = getSlotRefFromFunctionCall(child);
+                }
+                if (slotRef != null) {
+                    return slotRef;
+                }
+            }
+        }
+        return null;
+    }
+
+    public static Type replaceNullType2Boolean(Type type) {
+        if (type.isNull()) {
+            return Type.BOOLEAN;
+        } else if (type.isArrayType()) {
+            Type childType = ((ArrayType) type).getItemType();
+            Type newType = replaceNullType2Boolean(childType);
+            if (!childType.equals(newType)) {
+                return new ArrayType(newType);
+            }
+        } else if (type.isMapType()) {
+            Type keyType = ((MapType) type).getKeyType();
+            Type valueType = ((MapType) type).getValueType();
+            Type nkt = replaceNullType2Boolean(keyType);
+            Type nvt = replaceNullType2Boolean(valueType);
+            if (!keyType.equals(nkt) || !valueType.equals(nvt)) {
+                return new MapType(nkt, nvt);
+            }
+        } else if (type.isStructType()) {
+            ArrayList<StructField> newFields = Lists.newArrayList();
+            for (StructField sf : ((StructType) type).getFields()) {
+                newFields.add(new StructField(sf.getName(), replaceNullType2Boolean(sf.getType()), sf.getComment()));
+            }
+            return new StructType(newFields);
+        }
+        return type;
+    }
+
+    public static void checkNondeterministicFunction(ParseNode node) {
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
+                if (expr.isNondeterministicBuiltinFnName()) {
+                    throw new SemanticException("Materialized view query statement select item " +
+                            expr.toSql() + " not supported nondeterministic function", expr.getPos());
+                }
+                return null;
+            }
+        }.visit(node);
+    }
+
+>>>>>>> ceb2b88fe ([Feature] Support basic partition by range expr table writeable (#23059))
 }

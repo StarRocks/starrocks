@@ -198,22 +198,22 @@ public class CreateTableTest {
                         "distributed by hash(key1) buckets 1 properties('replication_num' = '1', 'storage_medium' = 'ssd');"));
 
         ExceptionChecker
-                 .expectThrowsNoException(() -> createTable("create table test.tb8(key1 int, key2 varchar(10)) \n"
+                .expectThrowsNoException(() -> createTable("create table test.tb8(key1 int, key2 varchar(10)) \n"
                         + "distributed by hash(key1) buckets 1 \n"
                         + "properties('replication_num' = '1', 'compression' = 'lz4_frame');"));
 
         ExceptionChecker
-                 .expectThrowsNoException(() -> createTable("create table test.tb9(key1 int, key2 varchar(10)) \n"
+                .expectThrowsNoException(() -> createTable("create table test.tb9(key1 int, key2 varchar(10)) \n"
                         + "distributed by hash(key1) buckets 1 \n"
                         + "properties('replication_num' = '1', 'compression' = 'lz4');"));
 
         ExceptionChecker
-                 .expectThrowsNoException(() -> createTable("create table test.tb10(key1 int, key2 varchar(10)) \n"
+                .expectThrowsNoException(() -> createTable("create table test.tb10(key1 int, key2 varchar(10)) \n"
                         + "distributed by hash(key1) buckets 1 \n"
                         + "properties('replication_num' = '1', 'compression' = 'zstd');"));
 
         ExceptionChecker
-                 .expectThrowsNoException(() -> createTable("create table test.tb11(key1 int, key2 varchar(10)) \n"
+                .expectThrowsNoException(() -> createTable("create table test.tb11(key1 int, key2 varchar(10)) \n"
                         + "distributed by hash(key1) buckets 1 \n"
                         + "properties('replication_num' = '1', 'compression' = 'zlib');"));
 
@@ -321,6 +321,62 @@ public class CreateTableTest {
                                 + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
                                 + "properties('replication_num' = '1', 'replicated_storage' = 'FALSE');"));
 
+<<<<<<< HEAD
+=======
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Unknown properties: {wrong_key=value}",
+                () -> createTable("create table test.atbl13 (k1 int, k2 int) duplicate key(k1)\n"
+                        + "distributed by hash(k2) buckets 1\n"
+                        + "properties('replication_num' = '1', 'wrong_key' = 'value'); "));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Unknown properties: {wrong_key=value}",
+                () -> createTable("create table test.atbl14 (k1 int, k2 int, k3 float) duplicate key(k1)\n"
+                        + "partition by range(k1) (partition p1 values less than(\"10\") ('wrong_key' = 'value'))\n"
+                        + "distributed by hash(k2) buckets 1 properties('replication_num' = '1'); "));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illege expression type for Materialized Column "
+                        + "Column Type: INT, Expression Type: DOUBLE",
+                () -> createTable("CREATE TABLE test.atbl15 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                        + "mc INT AS (array_avg(array_data)) ) Primary KEY (id) \n"
+                        + "DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized Column must be nullable column.",
+                () -> createTable("CREATE TABLE test.atbl16 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                        + "mc DOUBLE NOT NULL AS (array_avg(array_data)) ) \n"
+                        + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
+                        + " ('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Input 'AS' is not "
+                        + "valid at this position.",
+                () -> createTable("CREATE TABLE test.atbl17 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                        + "mc DOUBLE AUTO_INCREMENT AS (array_avg(array_data)) ) \n"
+                        + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
+                        + "('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Input 'AS' is not "
+                        + "valid at this position.",
+                () -> createTable("CREATE TABLE test.atbl18 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                        + "mc DOUBLE DEFAULT '1.0' AS (array_avg(array_data)) ) \n"
+                        + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
+                        + "('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Expression can not refers to AUTO_INCREMENT columns",
+                () -> createTable("CREATE TABLE test.atbl19 ( id BIGINT NOT NULL,  incr BIGINT AUTO_INCREMENT, \n"
+                        + "array_data ARRAY<int> NOT NULL, mc BIGINT AS (incr) )\n"
+                        + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
+                        + "('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Expression can not refers to other materialized columns",
+                () -> createTable("CREATE TABLE test.atbl20 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                        + "mc DOUBLE AS (array_avg(array_data)), \n"
+                        + "mc_1 DOUBLE AS (mc) ) Primary KEY (id) \n"
+                        + "DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized Column don't support aggregation function",
+                () -> createTable("CREATE TABLE test.atbl21 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                        + "mc BIGINT AS (sum(id)) ) \n"
+                        + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES \n"
+                        + "('replication_num' = '1');\n"));
+>>>>>>> ceb2b88fe ([Feature] Support basic partition by range expr table writeable (#23059))
     }
 
     @Test
@@ -537,6 +593,7 @@ public class CreateTableTest {
                 .getTable("test_create_default_current_timestamp");
         Assert.assertEquals(2, table.getColumns().size());
     }
+
     @Test
     public void testCreateTableDefaultUUID() throws Exception {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -962,49 +1019,49 @@ public class CreateTableTest {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "processing constraint failed when creating table",
                 () -> createTable(
-                "CREATE TABLE test.base_table2(\n" +
-                        "k1 INT,\n" +
-                        "k2 VARCHAR(20),\n" +
-                        "k3 INT,\n" +
-                        "k4 VARCHAR(20),\n" +
-                        "k5 INT,\n" +
-                        "k6 VARCHAR(20),\n" +
-                        "k7 INT,\n" +
-                        "k8 VARCHAR(20),\n" +
-                        "k9 INT,\n" +
-                        "k10 VARCHAR(20)\n" +
-                        ") ENGINE=OLAP\n" +
-                        "DUPLICATE KEY(k1)\n" +
-                        "COMMENT \"OLAP\"\n" +
-                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\",\n" +
-                        "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table1(k2, k1)\"\n" +
-                        ");"
-        ));
+                        "CREATE TABLE test.base_table2(\n" +
+                                "k1 INT,\n" +
+                                "k2 VARCHAR(20),\n" +
+                                "k3 INT,\n" +
+                                "k4 VARCHAR(20),\n" +
+                                "k5 INT,\n" +
+                                "k6 VARCHAR(20),\n" +
+                                "k7 INT,\n" +
+                                "k8 VARCHAR(20),\n" +
+                                "k9 INT,\n" +
+                                "k10 VARCHAR(20)\n" +
+                                ") ENGINE=OLAP\n" +
+                                "DUPLICATE KEY(k1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\",\n" +
+                                "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table1(k2, k1)\"\n" +
+                                ");"
+                ));
 
         // key size does not match
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "processing constraint failed when creating table",
                 () -> createTable(
-                "CREATE TABLE test.base_table2(\n" +
-                        "k1 INT,\n" +
-                        "k2 VARCHAR(20),\n" +
-                        "k3 INT,\n" +
-                        "k4 VARCHAR(20),\n" +
-                        "k5 INT,\n" +
-                        "k6 VARCHAR(20),\n" +
-                        "k7 INT,\n" +
-                        "k8 VARCHAR(20)\n" +
-                        ") ENGINE=OLAP\n" +
-                        "DUPLICATE KEY(k1)\n" +
-                        "COMMENT \"OLAP\"\n" +
-                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\",\n" +
-                        "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table2(k1, k2)\"\n" +
-                        ");"
-        ));
+                        "CREATE TABLE test.base_table2(\n" +
+                                "k1 INT,\n" +
+                                "k2 VARCHAR(20),\n" +
+                                "k3 INT,\n" +
+                                "k4 VARCHAR(20),\n" +
+                                "k5 INT,\n" +
+                                "k6 VARCHAR(20),\n" +
+                                "k7 INT,\n" +
+                                "k8 VARCHAR(20)\n" +
+                                ") ENGINE=OLAP\n" +
+                                "DUPLICATE KEY(k1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\",\n" +
+                                "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table2(k1, k2)\"\n" +
+                                ");"
+                ));
 
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "processing constraint failed when creating table",
@@ -1156,4 +1213,58 @@ public class CreateTableTest {
                                 ");"
                 ));
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testCreateTableInSystemDb() {
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Can't create table 'goods' (errno: create denied)",
+                () -> createTable(
+                        "CREATE TABLE information_schema.goods(\n" +
+                                "    item_id1          INT,\n" +
+                                "    item_name         STRING,\n" +
+                                "    price             FLOAT\n" +
+                                ") DISTRIBUTED BY HASH(item_id1)\n" +
+                                "PROPERTIES(\"replication_num\" = \"1\");"
+                ));
+    }
+
+    @Test
+
+    public void testCreatePartitionByExprTable() {
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable(
+                        "CREATE TABLE test.`bill_detail` (\n" +
+                                "  `bill_code` varchar(200) NOT NULL DEFAULT \"\" COMMENT \"\"\n" +
+                                ") ENGINE=OLAP \n" +
+                                "PRIMARY KEY(`bill_code`)\n" +
+                                "PARTITION BY RANGE(cast(substring(bill_code, 3) as bigint))\n" +
+                                "(PARTITION p1 VALUES [('0'), ('5000000')),\n" +
+                                "PARTITION p2 VALUES [('5000000'), ('10000000')),\n" +
+                                "PARTITION p3 VALUES [('10000000'), ('15000000')),\n" +
+                                "PARTITION p4 VALUES [('15000000'), ('20000000'))\n" +
+                                ")\n" +
+                                "DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10 \n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\",\n" +
+                                "\"in_memory\" = \"false\",\n" +
+                                "\"storage_format\" = \"DEFAULT\"\n" +
+                                ");"
+                ));
+    }
+
+    @Test
+    public void testCreateTextTable() {
+        // duplicate tabl
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.text_tbl\n" +
+                        "(k1 int, j text)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+    }
+}
+>>>>>>> ceb2b88fe ([Feature] Support basic partition by range expr table writeable (#23059))
