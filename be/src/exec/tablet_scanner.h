@@ -28,6 +28,7 @@
 #include "storage/conjunctive_predicates.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
+#include "column/column_access_path.h"
 
 namespace starrocks {
 
@@ -39,6 +40,7 @@ struct TabletScannerParams {
     const std::vector<ExprContext*>* conjunct_ctxs = nullptr;
 
     const std::vector<std::string>* unused_output_columns = nullptr;
+    const std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
     bool skip_aggregation = false;
     bool need_agg_finalize = true;

@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "column/column_access_path.h"
 #include "runtime/global_dict/types.h"
 #include "storage/olap_common.h"
 #include "storage/olap_runtime_range_pruner.h"
@@ -74,6 +75,8 @@ public:
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
     OlapRuntimeScanRangePruner runtime_range_pruner;
+
+    std::unordered_map<uint32_t, ColumnAccessPathPtr>* column_access_paths;
 };
 
 } // namespace starrocks

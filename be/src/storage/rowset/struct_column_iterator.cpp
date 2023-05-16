@@ -23,7 +23,7 @@ namespace starrocks {
 class StructColumnIterator final : public ColumnIterator {
 public:
     StructColumnIterator(std::unique_ptr<ColumnIterator> null_iter,
-                         std::vector<std::unique_ptr<ColumnIterator>> field_iters);
+                         std::vector<std::unique_ptr<ColumnIterator>> field_iters, std::vector<uint8_t> access_flags);
 
     ~StructColumnIterator() override = default;
 
@@ -51,23 +51,32 @@ public:
 private:
     std::unique_ptr<ColumnIterator> _null_iter;
     std::vector<std::unique_ptr<ColumnIterator>> _field_iters;
+    std::vector<uint8_t> _access_flags;
 };
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_struct_iter(std::unique_ptr<ColumnIterator> null_iter,
-                                                             std::vector<std::unique_ptr<ColumnIterator>> field_iters) {
-    return std::make_unique<StructColumnIterator>(std::move(null_iter), std::move(field_iters));
+                                                             std::vector<std::unique_ptr<ColumnIterator>> field_iters,
+                                                             std::vector<uint8_t> access_flags) {
+    return std::make_unique<StructColumnIterator>(std::move(null_iter), std::move(field_iters),
+                                                  std::move(access_flags));
 }
 
 StructColumnIterator::StructColumnIterator(std::unique_ptr<ColumnIterator> null_iter,
-                                           std::vector<std::unique_ptr<ColumnIterator>> field_iters)
-        : _null_iter(std::move(null_iter)), _field_iters(std::move(field_iters)) {}
+                                           std::vector<std::unique_ptr<ColumnIterator>> field_iters,
+                                           std::vector<uint8_t> access_flags)
+        : _null_iter(std::move(null_iter)),
+          _field_iters(std::move(field_iters)),
+          _access_flags(std::move(access_flags)) {}
 
 Status StructColumnIterator::init(const ColumnIteratorOptions& opts) {
     if (_null_iter != nullptr) {
         RETURN_IF_ERROR(_null_iter->init(opts));
     }
-    for (auto& iter : _field_iters) {
-        RETURN_IF_ERROR(iter->init(opts));
+
+    for (int i = 0; i < _field_iters.size(); ++i) {
+        if (_access_flags[i]) {
+            RETURN_IF_ERROR(_field_iters[i]->init(opts));
+        }
     }
     return Status::OK();
 }
@@ -94,8 +103,10 @@ Status StructColumnIterator::next_batch(size_t* n, Column* dst) {
     // TODO(Alvin): _field_iters may have different order with struct_column
     // FIXME:
     for (int i = 0; i < _field_iters.size(); ++i) {
-        auto num_to_read = *n;
-        RETURN_IF_ERROR(_field_iters[i]->next_batch(&num_to_read, struct_column->fields()[i].get()));
+        if (_access_flags[i]) {
+            auto num_to_read = *n;
+            RETURN_IF_ERROR(_field_iters[i]->next_batch(&num_to_read, struct_column->fields()[i].get()));
+        }
     }
 
     return Status::OK();
@@ -119,7 +130,9 @@ Status StructColumnIterator::next_batch(const SparseRange& range, Column* dst) {
     }
     // Read all fields
     for (int i = 0; i < _field_iters.size(); ++i) {
-        RETURN_IF_ERROR(_field_iters[i]->next_batch(range, struct_column->fields()[i].get()));
+        if (_access_flags[i]) {
+            RETURN_IF_ERROR(_field_iters[i]->next_batch(range, struct_column->fields()[i].get()));
+        }
     }
     return Status::OK();
 }
@@ -143,8 +156,10 @@ Status StructColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t
 
     // read all fields
     for (int i = 0; i < _field_iters.size(); ++i) {
-        auto& col = struct_column->fields()[i];
-        RETURN_IF_ERROR(_field_iters[i]->fetch_values_by_rowid(rowids, size, col.get()));
+        if (_access_flags[i]) {
+            auto& col = struct_column->fields()[i];
+            RETURN_IF_ERROR(_field_iters[i]->fetch_values_by_rowid(rowids, size, col.get()));
+        }
     }
     return Status::OK();
 }
@@ -153,8 +168,10 @@ Status StructColumnIterator::seek_to_first() {
     if (_null_iter != nullptr) {
         RETURN_IF_ERROR(_null_iter->seek_to_first());
     }
-    for (auto& iter : _field_iters) {
-        RETURN_IF_ERROR(iter->seek_to_first());
+    for (int i = 0; i < _field_iters.size(); ++i) {
+        if (_access_flags[i]) {
+            RETURN_IF_ERROR(_field_iters[i]->seek_to_first());
+        }
     }
     return Status::OK();
 }
@@ -163,8 +180,10 @@ Status StructColumnIterator::seek_to_ordinal(ordinal_t ord) {
     if (_null_iter != nullptr) {
         RETURN_IF_ERROR(_null_iter->seek_to_ordinal(ord));
     }
-    for (auto& iter : _field_iters) {
-        RETURN_IF_ERROR(iter->seek_to_ordinal(ord));
+    for (int i = 0; i < _field_iters.size(); ++i) {
+        if (_access_flags[i]) {
+            RETURN_IF_ERROR(_field_iters[i]->seek_to_ordinal(ord));
+        }
     }
     return Status::OK();
 }
