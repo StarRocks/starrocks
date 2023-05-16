@@ -49,6 +49,6 @@ TOP-N (order by [[15: s_acctbal DESC NULLS LAST, 23: n_name ASC NULLS FIRST, 11:
             ANALYTIC ({121: min=min(20: ps_supplycost)} [1: p_partkey] [] )
                 TOP-N (order by [[1: p_partkey ASC NULLS FIRST]])
                     EXCHANGE SHUFFLE[1]
-                        SCAN (mv[partsupp_mv] columns[59: n_name, 60: p_mfgr, 61: p_size, 62: p_type, 63: ps_partkey, 65: ps_supplycost, 66: r_name, 67: s_acctbal, 68: s_address, 69: s_comment, 70: s_name, 72: s_phone] predicate[61: p_size = 12 AND 66: r_name = AMERICA AND 62: p_type LIKE %COPPER])
+                        SCAN (mv[partsupp_mv] columns[102: n_name, 103: p_mfgr, 104: p_size, 105: p_type, 106: ps_partkey, 108: ps_supplycost, 109: r_name, 110: s_acctbal, 111: s_address, 112: s_comment, 113: s_name, 115: s_phone] predicate[104: p_size = 12 AND 109: r_name = AMERICA AND 105: p_type LIKE %COPPER])
 [end]
 

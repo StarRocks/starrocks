@@ -37,11 +37,11 @@ TOP-N (order by [[13: o_totalprice DESC NULLS LAST, 10: o_orderdate ASC NULLS FI
         AGGREGATE ([GLOBAL] aggregate [{52: sum=sum(23: l_quantity)}] group by [[2: c_name, 1: c_custkey, 9: o_orderkey, 10: o_orderdate, 13: o_totalprice]] having [null]
             LEFT SEMI JOIN (join-predicate [9: o_orderkey = 35: l_orderkey] post-join-predicate [null])
                 EXCHANGE SHUFFLE[9]
-                    SCAN (mv[lineitem_mv] columns[90: c_name, 96: l_orderkey, 98: l_quantity, 105: o_custkey, 106: o_orderdate, 110: o_totalprice] predicate[null])
+                    SCAN (mv[lineitem_mv] columns[57: c_name, 63: l_orderkey, 65: l_quantity, 72: o_custkey, 73: o_orderdate, 77: o_totalprice] predicate[null])
                 EXCHANGE SHUFFLE[35]
-                    AGGREGATE ([GLOBAL] aggregate [{163: sum=sum(163: sum)}] group by [[137: l_orderkey]] having [163: sum > 315]
-                        EXCHANGE SHUFFLE[137]
-                            AGGREGATE ([LOCAL] aggregate [{163: sum=sum(141: sum_qty)}] group by [[137: l_orderkey]] having [null]
-                                SCAN (mv[lineitem_agg_mv1] columns[137: l_orderkey, 141: sum_qty] predicate[null])
+                    AGGREGATE ([GLOBAL] aggregate [{159: sum=sum(159: sum)}] group by [[100: l_orderkey]] having [159: sum > 315]
+                        EXCHANGE SHUFFLE[100]
+                            AGGREGATE ([LOCAL] aggregate [{159: sum=sum(104: sum_qty)}] group by [[100: l_orderkey]] having [null]
+                                SCAN (mv[lineitem_agg_mv1] columns[100: l_orderkey, 104: sum_qty] predicate[null])
 [end]
 

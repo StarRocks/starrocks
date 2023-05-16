@@ -5007,6 +5007,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     intervalLiteral.getUnitIdentifier().getDescription());
         }
 
+        if (functionName.equals(FunctionSet.ELEMENT_AT)) {
+            List<Expr> params = visit(context.expression(), Expr.class);
+            if (params.size() != 2) {
+                throw new ParsingException("element_at() should accept 2 arguments, but there are " + params.size());
+            }
+            return new CollectionElementExpr(params.get(0), params.get(1));
+        }
+
         if (functionName.equals(FunctionSet.ISNULL)) {
             List<Expr> params = visit(context.expression(), Expr.class);
             if (params.size() != 1) {

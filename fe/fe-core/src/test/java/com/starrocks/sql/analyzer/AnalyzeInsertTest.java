@@ -55,4 +55,5 @@ public class AnalyzeInsertTest {
         analyzeSuccess("insert into t0 with label l1 select * from t0");
         analyzeSuccess("insert into t0 with label `l1` select * from t0");
     }
+
 }

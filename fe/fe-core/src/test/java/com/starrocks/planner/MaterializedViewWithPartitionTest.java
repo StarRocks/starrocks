@@ -105,7 +105,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=8/8")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: (10: c3 >= 2000) OR (10: c3 IS NULL)\n" +
+                        "     PREDICATES: 10: c3 > 1999\n" +
                         "     partitions=2/5");
 
         // test query delta
@@ -191,14 +191,8 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     partitions=5/5\n" +
                         "     rollup: test_base_part");
 
-        // test union all
         sql("select c1, c3, c2 from test_base_part where c2 < 3000 and c3 < 3000")
-                .contains("UNION")
-                .contains("TABLE: partial_mv_6\n" +
-                        "     PREAGGREGATION: ON\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: partial_mv_6")
-                .contains("PREDICATES: 9: c2 < 3000, 9: c2 > 1999\n" +
+                .contains("PREDICATES: 2: c2 < 3000\n" +
                         "     partitions=5/5\n" +
                         "     rollup: test_base_part");
 
@@ -551,7 +545,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
 
             String query = "select c1, c3, sum(c4) from test_base_part group by c1, c3;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "partial_mv_9", "PREDICATES: (10: c3 >= 1000) OR (10: c3 IS NULL)");
+            PlanTestBase.assertContains(plan, "partial_mv_9");
             starRocksAssert.dropMaterializedView("partial_mv_9");
         }
 

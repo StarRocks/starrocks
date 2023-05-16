@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -111,6 +112,34 @@ public class ColumnRewriter {
                 .withEnableRelationRewrite(true)
                 .build();
         return predicate.accept(visitor, null);
+    }
+
+    public ScalarOperator rewriteByEc(ScalarOperator predicate, boolean isMVBased) {
+        if (isMVBased) {
+            return rewriteByViewEc(predicate);
+        } else {
+            return rewriteByQueryEc(predicate);
+        }
+    }
+
+    public ScalarOperator rewriteToTargetWithEc(ScalarOperator predicate, boolean isMVBased) {
+        if (isMVBased) {
+            return rewriteViewToQueryWithViewEc(predicate);
+        } else {
+            return rewriteViewToQueryWithQueryEc(predicate);
+        }
+    }
+
+    public Pair<ScalarOperator, ScalarOperator> rewriteSrcTargetWithEc(ScalarOperator src,
+                                                                       ScalarOperator target,
+                                                                       boolean isQueryToMV) {
+        if (isQueryToMV) {
+            // for view, swap column by relation mapping and query ec
+            return Pair.create(rewriteByQueryEc(src), rewriteViewToQueryWithQueryEc(target));
+        } else {
+            return Pair.create(rewriteViewToQueryWithViewEc(src), rewriteByViewEc(target));
+        }
+
     }
 
     public class ColumnWriterBuilder {

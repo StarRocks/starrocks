@@ -32,6 +32,10 @@ public abstract class ScalarOperator implements Cloneable {
     protected boolean notEvalEstimate = false;
     // Used to determine if it is derive from predicate range extractor
     protected boolean fromPredicateRangeDerive = false;
+    // Check weather the scalar operator is redundant which will not affect the final
+    // if it's not considered. eg, `IsNullPredicateOperator` which is pushed down
+    // from JoinNode.
+    protected boolean isRedundant = false;
 
     private List<String> hints = Collections.emptyList();
 
@@ -141,6 +145,7 @@ public abstract class ScalarOperator implements Cloneable {
         try {
             operator = (ScalarOperator) super.clone();
             operator.hints = Lists.newArrayList(hints);
+            operator.isRedundant = this.isRedundant;
         } catch (CloneNotSupportedException ignored) {
         }
         return operator;
@@ -187,5 +192,13 @@ public abstract class ScalarOperator implements Cloneable {
 
     public List<String> getHints() {
         return hints;
+    }
+
+    public boolean isRedundant() {
+        return isRedundant;
+    }
+
+    public void setRedundant(boolean redundant) {
+        isRedundant = redundant;
     }
 }
