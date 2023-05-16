@@ -17,6 +17,7 @@
 #include "column/schema.h"
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/pk_tablet_writer.h"
@@ -166,8 +167,8 @@ std::string Tablet::del_location(std::string_view del_name) const {
     return _mgr->del_location(_id, del_name);
 }
 
-std::string Tablet::delvec_location(int64_t version) const {
-    return _mgr->delvec_location(_id, version);
+std::string Tablet::delvec_location(std::string_view delvec_name) const {
+    return _mgr->delvec_location(_id, delvec_name);
 }
 
 std::string Tablet::root_location() const {
