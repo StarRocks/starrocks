@@ -292,6 +292,10 @@ public class AlterTableStatementAnalyzer {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), columnDef.getPos());
             }
 
+            if (columnDef.getType().isTime()) {
+                throw new SemanticException("Unsupported data type: TIME");
+            }
+
             if (columnDef.isMaterializedColumn()) {
                 if (!table.isOlapTable()) {
                     throw new SemanticException("Materialized Column only support olap table");
@@ -439,6 +443,10 @@ public class AlterTableStatementAnalyzer {
                 columnDef.analyze(true);
             } catch (AnalysisException e) {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), columnDef.getPos());
+            }
+
+            if (columnDef.getType().isTime()) {
+                throw new SemanticException("Unsupported data type: TIME");
             }
 
             if (columnDef.isMaterializedColumn()) {
