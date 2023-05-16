@@ -8,12 +8,27 @@
   + [系统架构](/introduction/Architecture.md)
   + [产品特性](/introduction/Features.md)
 + 快速开始
-  + 部署 StarRocks
-    + [在 Linux 中部署](/quick_start/Deploy.md)
-    + [使用 Docker 部署](/quick_start/deploy_with_docker.md)
-  + [手动部署 StarRocks](/quick_start/Deploy.md)
+  + [使用 Docker 部署](/quick_start/deploy_with_docker.md)
   + [创建表](/quick_start/Create_table.md)
   + [导入和查询数据](/quick_start/Import_and_query.md)
++ 部署 StarRocks
+  + [部署总览](/deployment/deployment_overview.md)
+  + 前期准备
+    + [前提条件](/deployment/deployment_prerequisites.md)
+    + [规划集群](/deployment/plan_cluster.md)
+    + [环境配置](/deployment/environment_configurations.md)
+    + [部署文件](/deployment/prepare_deployment_files.md)
+  + 部署集群
+    + 经典模式部署
+      + [手动部署](/deployment/deploy_manually.md)
+      + Kubernetes 部署
+        + [使用 Operator 部署](/deployment/sr_operator.md)
+        + [使用 Helm 部署](/deployment/helm.md)
+    + [存算分离模式部署](/deployment/deploy_shared_data.md)
+  + 后期管理
+    + [部署后设置](/deployment/post_deployment_setup.md)
+    + [升级 StarRocks](/deployment/upgrade.md)
+    + [降级 StarRocks](/deployment/downgrade.md)
 + 表设计
   + [理解表设计](/table_design/StarRocks_table_design.md)
   + 数据模型
@@ -90,24 +105,12 @@
     + [DBeaver](/integrations/IDE_integrations/DBeaver.md)
   + [其他集成](/integrations/other_integrations/intro.md)
 + 管理手册
-  + 部署集群
-    + [部署使用 StarRocks 存算分离集群](/administration/deploy_shared_data.md)
-    + [通过 StarGo 部署](/administration/stargo.md)
-    + [通过 StarRocks Manager 部署](/administration/deploy_with_manager.md)
-    + [通过 Docker 镜像部署](/administration/deploy_with_docker.md)
-    + 在 Kubernetes 上部署
-      + [使用 Operator 部署](/administration/sr_operator.md)
-      + [使用 Helm 部署](/administration/helm.md)
-    + [通过源码编译](/administration/Build_in_docker.md)
-    + [部署 FE 高可用集群](/administration/Deployment.md)
-    + [手动部署 CN](/administration/deploy_cn.md)
   + 运维集群
     + [扩容缩容](/administration/Scale_up_down.md)
     + [备份恢复](/administration/Backup_and_restore.md)
     + [参数配置](/administration/Configuration.md)
     + [监控报警](/administration/Monitor_and_Alert.md)
     + [通过 Audit Loader 管理 StarRocks 中的审计日志](/administration/audit_loader.md)
-    + [集群管理](/administration/Cluster_administration.md)
     + [启用 FQDN 访问](/administration/enable_fqdn.md)
     + [升级 DorisDB 到 StarRocks](/administration/update_from_dorisdb.md)
     + [升级 Apache Doris 到 StarRocks](/administration/update_from_doris.md)
@@ -662,6 +665,7 @@
   + [SSB 性能测试](/benchmarking/SSB_Benchmarking.md)
   + [TPC-H 基准测试](/benchmarking/TPC-H_Benchmark.md)
 + 开发指南
+  + [编译 StarRocks](/developers/build-starrocks/Build_in_docker.md)
   + [使用 debuginfo 文件进行调试](/developers/debuginfo.md)
 + Release Notes
   + [v3.0](/release_notes/release-3.0.md)

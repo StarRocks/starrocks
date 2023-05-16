@@ -2,7 +2,7 @@
 
 本文介绍如何以二进制安装包方式手动部署 StarRocks。
 
-如需从 [源码](https://github.com/StarRocks/starrocks) 编译安装 StarRocks，参考 [Docker 编译](../administration/Build_in_docker.md)。
+如需从 [源码](https://github.com/StarRocks/starrocks) 编译安装 StarRocks，参考 [Docker 编译](/developers/build-starrocks/Build_in_docker.md)。
 
 您还可以通过 [Docker 镜像](../administration/deploy_with_docker.md)，[StarRocks Manager](../administration/deploy_with_manager.md)，或者 [StarGo](../administration/stargo.md) 安装 StarRocks。
 

@@ -20,7 +20,7 @@ StarRocks 存算分离集群架构如下：
 
 ## 部署 StarRocks 存算分离集群
 
-StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署方式类似。唯一不同的是 FE 和 BE 的配置文件 **fe.conf** 和 **be.conf** 中的配置项。本小节仅列出部署 StarRocks 存算分离集群时需要添加到配置文件中的 FE 和 BE 配置项。有关部署 StarRocks 集群的详细说明，请参阅 [部署 StarRocks](../quick_start/Deploy.md)。
+StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署方式类似。唯一不同的是 FE 和 BE 的配置文件 **fe.conf** 和 **be.conf** 中的配置项。本小节仅列出部署 StarRocks 存算分离集群时需要添加到配置文件中的 FE 和 BE 配置项。有关部署 StarRocks 集群的详细说明，请参阅 [部署 StarRocks](/deployment/deploy_manually.md)。
 
 ### 配置存算分离集群 FE 节点
 
