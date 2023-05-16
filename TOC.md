@@ -540,7 +540,7 @@
       + [CloudCanal 数据导入](/faq/loading/CloudCanal_load_faq.md)
     + [导出](/faq/Exporting_faq.md)
   + [SQL FAQ](/faq/Sql_faq.md)
-  + [Query Dump](/faq/Dump_query.md)
+  + [query_dump 接口](/faq/Dump_query.md)
   + [视频资源](/faq/Video.md)
   + [其他](/faq/Others.md)
 + 性能测试

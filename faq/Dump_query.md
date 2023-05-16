@@ -1,16 +1,16 @@
-# QueryDump 接口文档
+# query_dump 接口
 
-本文介绍如何使用 StarRocks 的 QueryDump 功能。
+本文介绍如何使用 StarRocks 的 query_dump 接口来查看 SQL 查询的相关信息。
 
-使用 StarRocks 执行查询 SQL 时，如果遇到以下问题，可以通过 StarRocks 的 QueryDump 功能将 SQL 以及相关的信息发送给 StarRocks 技术支持人员。StarRocks 会第一时间协助排查问题。
+使用 StarRocks 执行查询 SQL 时，如果遇到以下问题，可以通过 StarRocks 的 query_dump 功能将 SQL 以及相关的信息发送给 StarRocks 技术支持人员进行问题排查。
 
 * 执行 SQL 或者 Explain SQL 时返回 `Unknown Error`。
 * 执行 SQL 时遇到非正常返回的报错信息或异常。
 * 执行 SQL 时效率不符合预期，或者发现执行计划有优化点（例如，可以裁剪分区或进行 Join 顺序调整）。
 
-## 功能
+## 功能介绍
 
-QueryDump 功能会根据查询的SQL，返回 FE 执行 SQL 时依赖的信息，包括：
+query_dump 会根据查询的 SQL，返回 FE 执行 SQL 时依赖的信息，包括：
 
 * 查询语句
 * 查询中引用的表结构
@@ -74,3 +74,7 @@ wget --user=root --password=123 --post-file query_file http://127.0.0.1:8030/api
   "exception": []
 }
 ```
+
+## Keywords
+
+query_dump, query dump
