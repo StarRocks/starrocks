@@ -136,7 +136,7 @@
 
       ```YAML
       be_port = vvvv                   # 默认值：9060
-      be_http_port = xxxx              # 默认值：8040
+      webserver_port = xxxx            # 默认值：8040
       heartbeat_service_port = yyyy    # 默认值：9050
       brpc_port = zzzz                 # 默认值：8060
       ```
@@ -197,7 +197,7 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
 
       ```YAML
       thrift_port = vvvv               # 默认值：9060
-      be_http_port = xxxx              # 默认值：8040
+      webserver_port = xxxx            # 默认值：8040
       heartbeat_service_port = yyyy    # 默认值：9050
       brpc_port = zzzz                 # 默认值：8060
       ```
