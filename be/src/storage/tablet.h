@@ -119,6 +119,7 @@ public:
     size_t field_index(const string& field_name) const;
     std::string schema_debug_string() const;
     std::string debug_string() const;
+    bool is_disable_shortcut_compaction() const;
 
     // Load incremental rowsets to the tablet in DataDir#load.
     Status load_rowset(const RowsetSharedPtr& rowset);
@@ -434,6 +435,11 @@ inline size_t Tablet::next_unique_id() const {
 
 inline size_t Tablet::field_index(const string& field_name) const {
     return _tablet_meta->tablet_schema().field_index(field_name);
+}
+
+inline bool Tablet::is_disable_shortcut_compaction() const {
+    std::shared_lock rdlock(_meta_lock);
+    return _tablet_meta->is_disable_shortcut_compaction();
 }
 
 } // namespace starrocks

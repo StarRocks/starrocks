@@ -205,6 +205,12 @@ public:
 
     void set_binlog_min_lsn(BinlogLsn& binlog_lsn) { _binlog_min_lsn = binlog_lsn; }
 
+    bool is_disable_shortcut_compaction() const { return _disable_shortcut_compaction; }
+
+    void set_disable_shortcut_compaction(bool disable_shortcut_compaction) {
+        _disable_shortcut_compaction = disable_shortcut_compaction;
+    }
+
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }
 
@@ -260,6 +266,8 @@ private:
     // 2. config::inc_rowset_expired_sec is larger than the expired time of binlog, so
     //    a rowset will not be removed from _inc_rs_metas if only the binlog is expired
     BinlogLsn _binlog_min_lsn;
+
+    bool _disable_shortcut_compaction = false;
 
     std::shared_mutex _meta_lock;
 };

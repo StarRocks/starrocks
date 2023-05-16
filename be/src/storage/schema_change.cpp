@@ -745,6 +745,11 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
             // do not drop the new tablet and its data. GC thread will
             return res;
         }
+        // link schema change will not generate low cardinality dict for new column
+        // so that we need disable shortchut compaction make sure dict will generate by further compaction
+        if (!sc_params.sc_directly && !sc_params.sc_sorting) {
+            new_tablet->tablet_meta()->set_disable_shortcut_compaction(true);
+        }
         new_tablet->save_meta();
     }
 
