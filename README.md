@@ -124,3 +124,4 @@ This project is used by the following companies. Learn more about their use case
 - [Trip.com](https://starrocks.medium.com/trip-com-starrocks-efficiently-supports-high-concurrent-queries-dramatically-reduces-labor-and-1e1921dd6bf8) 
 - [Zepp Health](https://starrocks.io/blog/zeppheath) 
 - [Lenovo](https://starrocks.io/blog/lenovo_en) 
+- [PITS Global Data Recovery Services](https://www.pitsdatarecovery.net/)
