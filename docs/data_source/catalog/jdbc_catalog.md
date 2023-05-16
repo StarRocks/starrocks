@@ -143,4 +143,4 @@ DROP Catalog jdbc0;
 
 What do I do if an error suggesting "Malformed database URL, failed to parse the main URL sections" is thrown?
 
-If you encounter such an error, the URI that you passed in `jdbc_uri` is invalid. You can check the URI at `https://www.soscisurvey.de/tools/view-chars.php`.
+If you encounter such an error, the URI that you passed in `jdbc_uri` is invalid. Check the URI that you pass and make sure it is valid. For more information, see the parameter descriptions in the "[PROPERTIES](#properties)" section of this topic.
