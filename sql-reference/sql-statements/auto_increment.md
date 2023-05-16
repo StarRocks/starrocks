@@ -10,7 +10,7 @@ StarRocks 自 3.0 版本起支持 `AUTO_INCREMENT` 列属性，可以简化数�
 - 关联表：在多个表之间进行关联时，可以使用自增列作为 Join Key，相比使用如 UUID 等字符串类型的列能够提高查询速度。
 - 高基数列的精确去重计数：将自增列的 ID 值作为字典唯一值列，相比用字符串直接精确去重计数，查询速度能提升数倍甚至十数倍。
 
-您需要在 CREATE TABLE 语句中通过 `AUTO_INCREMENT` 属性指定自增列。自增列的数据类型只支持 BIGINT，从 1 开始增加，自增步长为 1。 并且 StarRocks 支持[隐式分配](#隐式分配自增列的值)和[显式指定自增 ID](#显式指定自增列的值)。
+您需要在 CREATE TABLE 语句中通过 `AUTO_INCREMENT` 属性指定自增列。自增列的数据类型只支持 BIGINT，从 1 开始增加，自增步长为 1。 并且 StarRocks 支持[隐式分配自增列的值和显式指定自增 ID](#分配自增列的值)。
 
 ## 基本用法
 
@@ -31,35 +31,78 @@ PROPERTIES("replicated_storage" = "true");
 
 ### 分配自增列的值
 
-#### 隐式分配自增列的值
+**隐式分配自增列的值**
 
-导入时，您无需指定自增列的值，或者指定自增列的值为 `DEFAULT`，StarRocks 会自动为该自增列分配唯一的整数值，并插入到表中。
+导入时，您无需指定自增列的值，StarRocks 会自动为该自增列分配唯一的整数值，并插入到表中。
 
 ```SQL
 INSERT INTO test_tbl1 (id) VALUES (1);
-INSERT INTO test_tbl1 (id, number) VALUES (2, DEFAULT);
+INSERT INTO test_tbl1 (id) VALUES (2);
+INSERT INTO test_tbl1 (id) VALUES (3),(4),(5);
+```
 
--- 查看表的数据
+查看表的数据。
+
+```SQL
+mysql > SELECT * FROM test_tbl1 ORDER BY id;
++------+--------+
+| id   | number |
++------+--------+
+|    1 |      1 |
+|    2 |      2 |
+|    3 |      3 |
+|    4 |      4 |
+|    5 |      5 |
++------+--------+
+5 rows in set (0.02 sec)
+```
+
+您也可以指定自增列的值为 `DEFAULT`，StarRocks 会自动为该自增列分配唯一的整数值，并插入到表中。
+
+```SQL
+INSERT INTO test_tbl1 (id, number) VALUES (6, DEFAULT);
+```
+
+查看表的数据。
+
+```SQL
+mysql > SELECT * FROM test_tbl1 ORDER BY id;
++------+--------+
+| id   | number |
++------+--------+
+|    1 |      1 |
+|    2 |      2 |
+|    3 |      3 |
+|    4 |      4 |
+|    5 |      5 |
+|    6 |      6 |
++------+--------+
+6 rows in set (0.02 sec)
+```
+
+在实际使用中，您查看表的数据时可能会返回如下结果。这是因为 StarRocks 无法保证自增列的值按照时间顺序严格递增，但是能保证自增列的值大致上是递增的。更多介绍，请参见[单调性保证](#单调性保证)。
+
+```SQL
 mysql > SELECT * FROM test_tbl1 ORDER BY id;
 +------+--------+
 | id   | number |
 +------+--------+
 |    1 |      1 |
 |    2 | 100001 |
+|    3 | 200001 |
+|    4 | 200002 |
+|    5 | 200003 |
+|    6 | 200004 |
 +------+--------+
-2 rows in set (0.08 sec)
+6 rows in set (0.01 sec)
 ```
 
-> **说明**
->
-> 您在实际使用时，StarRocks 无法保证自增列的值按照时间顺序严格递增，但是能保证自增列的值大致上是递增的。更多介绍，请参见[单调性保证](#单调性保证)。
-
-#### 显式指定自增列的值
+**显式指定自增列的值**
 
 您也可以显式地指定自增列的值，并插入到表中。
 
 ```SQL
-INSERT INTO test_tbl1 (id, number) VALUES (3, 100);
+INSERT INTO test_tbl1 (id, number) VALUES (7, 100);
 
 -- 查看表的数据
 mysql > SELECT * FROM test_tbl1 ORDER BY id;
@@ -68,18 +111,19 @@ mysql > SELECT * FROM test_tbl1 ORDER BY id;
 +------+--------+
 |    1 |      1 |
 |    2 | 100001 |
-|    3 |    100 |
+|    3 | 200001 |
+|    4 | 200002 |
+|    5 | 200003 |
+|    6 | 200004 |
+|    7 |    100 |
 +------+--------+
-3 rows in set (0.01 sec)
+7 rows in set (0.01 sec)
 ```
 
 并且，后续插入新数据时不会影响 StarRocks 新生成的自增列的值。
-> **注意**
->
-> 因为同时隐式分配和显式指定自增 ID 可能会破坏自增 ID 的[全局唯一性](#唯一性保证)，建议您不要混用。
 
 ```SQL
-INSERT INTO test_tbl1 (id) VALUES (4);
+INSERT INTO test_tbl1 (id) VALUES (8);
 
 -- 查看表的数据
 mysql > SELECT * FROM test_tbl1 ORDER BY id;
@@ -88,11 +132,19 @@ mysql > SELECT * FROM test_tbl1 ORDER BY id;
 +------+--------+
 |    1 |      1 |
 |    2 | 100001 |
-|    3 |    100 |
-|    4 |      2 |
+|    3 | 200001 |
+|    4 | 200002 |
+|    5 | 200003 |
+|    6 | 200004 |
+|    7 |    100 |
+|    8 |      2 |
 +------+--------+
-4 rows in set (0.02 sec)
+8 rows in set (0.01 sec)
 ```
+
+**注意事项**
+
+因为同时隐式分配和显式指定自增 ID 可能会破坏自增 ID 的[全局唯一性](#唯一性保证)，建议您不要混用。
 
 ## 基本特性
 
