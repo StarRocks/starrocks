@@ -128,6 +128,13 @@ public class Table extends MetaObject implements Writable {
     // record all materialized views based on this Table
     private Set<MvId> relatedMaterializedViews;
 
+    // unique constraints for mv rewrite
+    // a table may have multi unique constraints
+    protected List<UniqueConstraint> uniqueConstraints;
+
+    // foreign key constraint for mv rewrite
+    protected List<ForeignKeyConstraint> foreignKeyConstraints;
+
     public Table(TableType type) {
         this.type = type;
         this.fullSchema = Lists.newArrayList();
@@ -541,5 +548,26 @@ public class Table extends MetaObject implements Writable {
 
     public boolean supportsUpdate() {
         return false;
+    }
+
+    public boolean hasUniqueConstraints() {
+        List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
+        return uniqueConstraint != null;
+    }
+
+    public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
+        this.uniqueConstraints = uniqueConstraints;
+    }
+
+    public List<UniqueConstraint> getUniqueConstraints() {
+        return this.uniqueConstraints;
+    }
+
+    public void setForeignKeyConstraints(List<ForeignKeyConstraint> foreignKeyConstraints) {
+        this.foreignKeyConstraints = foreignKeyConstraints;
+    }
+
+    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
+        return this.foreignKeyConstraints;
     }
 }

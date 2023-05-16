@@ -91,14 +91,17 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                     mvContext, queryTables, queryExpression, queryColumnRefRewriter, queryPredicateSplit, onPredicates);
             MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
             OptExpression candidate = mvRewriter.rewrite();
-            if (candidate != null) {
-                candidate = postRewriteMV(context, mvRewriteContext, candidate);
-                if (queryExpression.getGroupExpression() != null) {
-                    int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
-                    mvContext.addMatchedGroup(currentRootGroupId);
-                }
-                results.add(candidate);
+            if (candidate == null) {
+                continue;
             }
+
+            candidate = postRewriteMV(context, mvRewriteContext, candidate);
+            if (queryExpression.getGroupExpression() != null) {
+                int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
+                mvContext.addMatchedGroup(currentRootGroupId);
+            }
+            results.add(candidate);
+            mvContext.updateMVUsedCount();
         }
 
         return results;

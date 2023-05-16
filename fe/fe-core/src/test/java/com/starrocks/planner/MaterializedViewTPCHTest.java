@@ -28,7 +28,6 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-@Ignore
 public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
     public static void setUp() throws Exception {
@@ -45,11 +44,6 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @Test
     public void testQuery1() {
         runFileUnitTest("materialized-view/tpch/q1");
-    }
-
-    @Test
-    public void testQuery1_1() {
-        runFileUnitTest("materialized-view/tpch/q1-1");
     }
 
     @Test
@@ -74,18 +68,6 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
-    public void testQuery5_1() {
-        runFileUnitTest("materialized-view/tpch/q5-1");
-    }
-
-    @Test
-    @Ignore
-    public void testQuery5_2() {
-        runFileUnitTest("materialized-view/tpch/q5-2");
-    }
-
-    @Test
     public void testQuery6() {
         runFileUnitTest("materialized-view/tpch/q6");
     }
@@ -96,23 +78,11 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testQuery7_1() {
-        runFileUnitTest("materialized-view/tpch/q7-1");
-    }
-
-    @Test
-    @Ignore
     public void testQuery8() {
         runFileUnitTest("materialized-view/tpch/q8");
     }
 
     @Test
-    public void testQuery8_1() {
-        runFileUnitTest("materialized-view/tpch/q8-1");
-    }
-
-    @Test
-    @Ignore
     public void testQuery9() {
         runFileUnitTest("materialized-view/tpch/q9");
     }
@@ -120,11 +90,6 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @Test
     public void testQuery10() {
         runFileUnitTest("materialized-view/tpch/q10");
-    }
-
-    @Test
-    public void testQuery10_1() {
-        runFileUnitTest("materialized-view/tpch/q10-1");
     }
 
     @Test
@@ -154,23 +119,8 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testQuery15_1() {
-        runFileUnitTest("materialized-view/tpch/q15-1");
-    }
-
-    @Test
-    public void testQuery15_2() {
-        runFileUnitTest("materialized-view/tpch/q15-2");
-    }
-
-    @Test
     public void testQuery16() {
         runFileUnitTest("materialized-view/tpch/q16");
-    }
-
-    @Test
-    public void testQuery16_1() {
-        runFileUnitTest("materialized-view/tpch/q16-1");
     }
 
     @Test
@@ -194,11 +144,6 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testQuery20_1() {
-        runFileUnitTest("materialized-view/tpch/q20-1");
-    }
-
-    @Test
     public void testQuery21() {
         runFileUnitTest("materialized-view/tpch/q21");
     }
@@ -206,11 +151,6 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @Test
     public void testQuery22() {
         runFileUnitTest("materialized-view/tpch/q22");
-    }
-
-    @Test
-    public void testQuery22_1() {
-        runFileUnitTest("materialized-view/tpch/q22-1");
     }
 
     /**

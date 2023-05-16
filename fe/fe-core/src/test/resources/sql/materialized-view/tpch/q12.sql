@@ -33,6 +33,6 @@ TOP-N (order by [[24: l_shipmode ASC NULLS FIRST]])
         AGGREGATE ([GLOBAL] aggregate [{28: sum=sum(28: sum), 29: sum=sum(29: sum)}] group by [[24: l_shipmode]] having [null]
             EXCHANGE SHUFFLE[24]
                 AGGREGATE ([LOCAL] aggregate [{28: sum=sum(26: case), 29: sum=sum(27: case)}] group by [[24: l_shipmode]] having [null]
-                    SCAN (mv[lineitem_mv] columns[85: l_commitdate, 91: l_receiptdate, 93: l_shipdate, 95: l_shipmode, 99: o_orderpriority] predicate[91: l_receiptdate >= 1997-01-01 AND 91: l_receiptdate < 1998-01-01 AND 95: l_shipmode IN (REG AIR, MAIL) AND 85: l_commitdate < 91: l_receiptdate AND 93: l_shipdate < 85: l_commitdate])
+                    SCAN (mv[lineitem_mv] columns[66: l_commitdate, 72: l_receiptdate, 74: l_shipdate, 76: l_shipmode, 80: o_orderpriority] predicate[72: l_receiptdate >= 1997-01-01 AND 72: l_receiptdate < 1998-01-01 AND 76: l_shipmode IN (REG AIR, MAIL) AND 66: l_commitdate < 72: l_receiptdate AND 74: l_shipdate < 66: l_commitdate])
 [end]
 

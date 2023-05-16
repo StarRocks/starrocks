@@ -18,6 +18,8 @@ public class OptimizerConfig {
     private BitSet ruleSetSwitches;
     private BitSet ruleSwitches;
 
+    private boolean isMVRewritePlan;
+
     private static final OptimizerConfig DEFAULT_CONFIG = new OptimizerConfig();
 
     public static OptimizerConfig defaultConfig() {
@@ -54,5 +56,13 @@ public class OptimizerConfig {
 
     public boolean isRuleDisable(RuleType ruleType) {
         return !ruleSwitches.get(ruleType.ordinal());
+    }
+
+    public boolean isMVRewritePlan() {
+        return this.isMVRewritePlan;
+    }
+
+    public void setMVRewritePlan(boolean isMVRewritePlan) {
+        this.isMVRewritePlan = isMVRewritePlan;
     }
 }
