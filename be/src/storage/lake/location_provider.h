@@ -73,7 +73,7 @@ public:
         return join_path(segment_root_location(tablet_id), del_name);
     }
 
-    std::string delvec_location(int64_t tablet_id, const std::string_view delvec_name) const {
+    std::string delvec_location(int64_t tablet_id, std::string_view delvec_name) const {
         return join_path(segment_root_location(tablet_id), delvec_name);
     }
 

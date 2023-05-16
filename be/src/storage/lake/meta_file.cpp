@@ -161,7 +161,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version) {
     // 4. clear delvel file name record in version_to_delvec if it's not refered any more
     // collect all versions still refered
     std::set<int64_t> refered_versions;
-    for (const auto item : _tablet_meta->delvec_meta().delvecs()) {
+    for (const auto& item : _tablet_meta->delvec_meta().delvecs()) {
         refered_versions.insert(item.second.version());
     }
 
@@ -171,9 +171,9 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version) {
         if (refered_versions.find(itr->first) == refered_versions.end()) {
             VLOG(2) << "Remove delvec file record from delvec meta, version: " << itr->first
                     << ", file: " << itr->second;
-            _tablet_meta->mutable_delvec_meta()->mutable_version_to_delvec()->erase(itr++);
+            itr = _tablet_meta->mutable_delvec_meta()->mutable_version_to_delvec()->erase(itr);
         } else {
-            itr++;
+            ++itr;
         }
     }
 
@@ -286,7 +286,7 @@ Status MetaFileReader::get_del_vec(TabletManager* tablet_mgr, uint32_t segment_i
                        << ", version: " << iter->second.version();
             return Status::InternalError("Can't find delvec file name");
         }
-        auto delvec_name = iter2->second;
+        const auto& delvec_name = iter2->second;
         RandomAccessFileOptions opts{.skip_fill_local_cache = true};
         auto rf = fs::new_random_access_file(opts, tablet_mgr->delvec_location(_tablet_meta->id(), delvec_name));
         if (!rf.ok()) {
