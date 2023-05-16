@@ -31,7 +31,7 @@ If any of the above ports are occupied, you must find alternatives and specify t
 On the instances used for the BE deployment, you need to check the following ports:
 
 - `9060`: BE Thrift server port (`be_port`)
-- `8040`: BE HTTP server port (`be_http_port`)
+- `8040`: BE HTTP server port (`webserver_port`)
 - `9050`: BE heartbeat service port (`heartbeat_service_port`)
 - `8060`: BE BRPC port (`brpc_port`)
 
@@ -51,7 +51,7 @@ If any of the above ports are occupied, you must find alternatives and specify t
 On the instances used for the CN deployment, you need to check the following ports:
 
 - `9060`: CN Thrift server port (`thrift_port`)
-- `8040`: CN HTTP server port (`be_http_port`)
+- `8040`: CN HTTP server port (`webserver_port`)
 - `9050`: CN heartbeat service port (`heartbeat_service_port`)
 - `8060`: CN BRPC port (`brpc_port`)
 
