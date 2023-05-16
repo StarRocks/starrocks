@@ -26,12 +26,42 @@
 namespace starrocks::parquet {
 
 struct LevelInfo {
+    // The definition level at which the value for the field
+    // is considered not null (definition levels greater than
+    // or equal to this value indicate a not-null
+    // value for the field). For list fields definition levels
+    // greater than or equal to this field indicate a present,
+    // possibly null, child value.
     int16_t max_def_level = 0;
+
+    // The repetition level corresponding to this element
+    // or the closest repeated ancestor. Any repetition
+    // level less than this indicates either a new list OR
+    // an empty list (which is determined in conjunction
+    // with definition levels).
     int16_t max_rep_level = 0;
 
+    // The definition level indicating the level at which the closest
+    // repeated ancestor is not empty. This is used to discriminate
+    // between a value less than |def_level| being null or excluded entirely.
+    // For instance if we have an arrow schema like:
+    // list(struct(f0: int)).  Then then there are the following
+    // definition levels:
+    //   0 = null list
+    //   1 = present but empty list.
+    //   2 = a null value in the list
+    //   3 = a non null struct but null integer.
+    //   4 = a present integer.
+    // When reconstructing, the struct and integer arrays'
+    // repeated_ancestor_def_level would be 2.  Any
+    // def_level < 2 indicates that there isn't a corresponding
+    // child value in the list.
+    // i.e. [null, [], [null], [{f0: null}], [{f0: 1}]]
+    // has the def levels [0, 1, 2, 3, 4].  The actual
+    // struct array is only of length 3: [not-set, set, set] and
+    // the int array is also of length 3: [N/A, null, 1].
+    //
     int16_t immediate_repeated_ancestor_def_level = 0;
-
-    bool is_nullable() const { return max_def_level > immediate_repeated_ancestor_def_level; }
 
     int16_t increment_repeated() {
         auto origin_ancestor_rep_levels = immediate_repeated_ancestor_def_level;
@@ -103,6 +133,7 @@ public:
     const ParquetField* get_stored_column_by_field_idx(size_t field_idx) const { return &_fields[field_idx]; }
     const ParquetField* get_stored_column_by_field_id(int32_t field_id) const;
     const ParquetField* get_stored_column_by_column_name(const std::string& column_name) const;
+    const std::vector<ParquetField>& get_parquet_fields() const { return _fields; }
     const size_t get_fields_size() const { return _fields.size(); }
     const bool contain_field_id(int32_t field_id) const {
         return _field_id_2_field_idx.find(field_id) != _field_id_2_field_idx.end();

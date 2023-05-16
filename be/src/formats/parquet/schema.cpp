@@ -338,7 +338,7 @@ Status SchemaDescriptor::new_map_to_field(const std::vector<tparquet::SchemaElem
     // SR doesn't support 1 column maps (i.e. Sets).  The options are to either
     // make the values column nullable, or process the map as a list.  We choose the latter
     // as it is simpler.
-    if (key_schema->num_children == 1) {
+    if (key_value_schema->num_children == 1) {
         return new_list_to_field(t_schemas, pos, cur_level_info, field, next_pos);
     }
 
@@ -631,6 +631,7 @@ Status SchemaDescriptor::node_to_field(const std::vector<tparquet::SchemaElement
     return Status::OK();
 }
 
+// The schema resolve logic is copied from https://github.com/apache/arrow/blob/main/cpp/src/parquet/arrow/schema.cc
 Status SchemaDescriptor::from_thrift(const std::vector<tparquet::SchemaElement>& t_schemas, bool case_sensitive) {
     if (t_schemas.size() == 0) {
         return Status::InvalidArgument("Empty parquet Schema");
@@ -673,14 +674,14 @@ Status SchemaDescriptor::from_thrift(const std::vector<tparquet::SchemaElement>&
 
 std::string SchemaDescriptor::debug_string() const {
     std::stringstream ss;
-    ss << "fields=[";
+    ss << "fields=[\n";
     for (int i = 0; i < _fields.size(); ++i) {
         if (i != 0) {
-            ss << ",";
+            ss << ",\n";
         }
         ss << _fields[i].debug_string();
     }
-    ss << "]";
+    ss << "\n]";
     return ss.str();
 }
 
