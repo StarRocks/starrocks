@@ -6341,7 +6341,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.typeParameter() != null) {
             length = Integer.parseInt(context.typeParameter().INTEGER_VALUE().toString());
         }
-        if (context.STRING() != null) {
+        if (context.STRING() != null || context.TEXT() != null) {
             ScalarType type = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
             type.setAssignedStrLenInColDefinition();
             return type;
