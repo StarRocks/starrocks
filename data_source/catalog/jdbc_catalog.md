@@ -138,3 +138,9 @@ DROP Catalog jdbc0;
    ```SQL
    SELECT * FROM <table_name>;
    ```
+
+## 常见问题
+
+系统返回 "Malformed database URL, failed to parse the main URL sections" 报错应该如何处理？
+
+该报错通常是由于 `jdbc_uri` 中传入的 URI 有误而引起的。请检查并确保传入的 URI 是否正确无误。参见本文“[PROPERTIES](#properties)”小节相关的参数说明。
