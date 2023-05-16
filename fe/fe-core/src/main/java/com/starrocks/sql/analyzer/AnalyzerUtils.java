@@ -409,6 +409,12 @@ public class AnalyzerUtils {
         return tableRelations;
     }
 
+    public static List<ViewRelation> collectViewRelations(StatementBase statementBase) {
+        List<ViewRelation> viewRelations = Lists.newArrayList();
+        new AnalyzerUtils.ViewRelationsCollector(viewRelations).visit(statementBase);
+        return viewRelations;
+    }
+
     public static boolean isOnlyHasOlapTables(StatementBase statementBase) {
         Map<TableName, Table> nonOlapTables = Maps.newHashMap();
         new AnalyzerUtils.NonOlapTableCollector(nonOlapTables).visit(statementBase);
@@ -579,6 +585,21 @@ public class AnalyzerUtils {
         public Void visitTable(TableRelation node, Void context) {
             String tblName = node.getTable() != null ? node.getTable().getName() : node.getName().getTbl();
             tableRelations.put(tblName, node);
+            return null;
+        }
+    }
+
+    private static class ViewRelationsCollector extends AstTraverser<Void, Void> {
+
+        private final List<ViewRelation> viewRelations;
+
+        public ViewRelationsCollector(List<ViewRelation> viewRelations) {
+            this.viewRelations = viewRelations;
+        }
+
+        @Override
+        public Void visitView(ViewRelation node, Void context) {
+            viewRelations.add(node);
             return null;
         }
     }
