@@ -129,7 +129,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             } else {
                 throw new DdlException("Currently only support range or list partition with engine type olap");
             }
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false, true);
+            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
 
             // Automatic partitioning needs to ensure that at least one tablet is opened.
             if (partitionInfo instanceof ExpressionRangePartitionInfo) {

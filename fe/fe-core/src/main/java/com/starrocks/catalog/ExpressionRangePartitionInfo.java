@@ -41,6 +41,7 @@ import static java.util.stream.Collectors.toList;
  * Some Descriptions:
  * 1. no overwrite old serialized method: read、write and readFields, because we use gson now
  */
+@Deprecated
 public class ExpressionRangePartitionInfo extends RangePartitionInfo {
 
 
@@ -113,10 +114,13 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
         for (Expr expr : exprs) {
             if (expr instanceof FunctionCallExpr) {
                 SlotRef slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
+                // TODO: Later, for automatically partitioned tables,
+                //  partitions of materialized views (also created automatically),
+                //  and partition by expr tables will use ExpressionRangePartitionInfoV2
                 for (Column partitionColumn : partitionColumns) {
                     if (slotRef.getColumnName().equalsIgnoreCase(partitionColumn.getName())) {
-                        PartitionExprAnalyzer.analyzePartitionExpr(expr, partitionColumn.getType());
                         slotRef.setType(partitionColumn.getType());
+                        PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
                     }
                 }
             }

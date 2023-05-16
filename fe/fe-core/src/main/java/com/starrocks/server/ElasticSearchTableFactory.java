@@ -63,7 +63,7 @@ public class ElasticSearchTableFactory implements AbstractTableFactory {
         PartitionInfo partitionInfo = null;
         Map<String, Long> partitionNameToId = Maps.newHashMap();
         if (partitionDesc != null) {
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false, false);
+            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
         } else if (null != metastore) {
             long partitionId = metastore.getNextId();
             // use table name as single partition name

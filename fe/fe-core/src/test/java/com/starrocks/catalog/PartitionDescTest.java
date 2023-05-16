@@ -67,7 +67,7 @@ public class PartitionDescTest {
         List<Column> columns = Lists.newArrayList(id);
         Map<String, Long> partitionNameToId = new HashMap<>();
         partitionNameToId.put("p1", 1003L);
-        this.partitionDesc.toPartitionInfo(columns, partitionNameToId, false, false);
+        this.partitionDesc.toPartitionInfo(columns, partitionNameToId, false);
         throw new NotImplementedException();
     }
 
