@@ -235,8 +235,8 @@ public class StatementPlanner {
                 isSchemaValid = olapTables.stream().noneMatch(t ->
                         t.lastSchemaUpdateTime.get() > planStartTime);
                 isPartitionVersionConsistent = olapTables.stream().allMatch(t ->
-                        t.lastVersionUpdateEndTime.get() < buildFragmentStartTime &&
-                                t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
+                        t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get() &&
+                                t.lastVersionUpdateEndTime.get() < buildFragmentStartTime);
                 if (isSchemaValid && isPartitionVersionConsistent) {
                     return plan;
                 }
