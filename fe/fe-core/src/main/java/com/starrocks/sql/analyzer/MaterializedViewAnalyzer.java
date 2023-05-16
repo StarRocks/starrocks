@@ -174,56 +174,17 @@ public class MaterializedViewAnalyzer {
             statement.setSimpleViewDef(AstToSQLBuilder.buildSimple(queryStatement));
             // collect table from query statement
 
-            List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
             Database db = context.getGlobalStateMgr().getDb(statement.getTableName().getDb());
             if (db == null) {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb(),
                         statement.getTableName().getPos());
             }
-            processBaseTables(queryStatement, baseTableInfos);
+            List<BaseTableInfo> baseTableInfos = getAndCheckBaseTables(queryStatement);
             // now do not support empty base tables
             // will be relaxed after test
             if (baseTableInfos.isEmpty()) {
                 throw new SemanticException("Can not find base table in query statement");
             }
-            /*
-            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
-            if (tableNameTableMap.isEmpty()) {
-                throw new SemanticException("Can not find base table in query statement");
-            }
-            tableNameTableMap.forEach((tableNameInfo, table) -> {
-                Preconditions.checkState(table != null, "Materialized view base table is null");
-                if (!isSupportBasedOnTable(table)) {
-                    throw new SemanticException("Create materialized view do not support the table type: " +
-                            table.getType(), tableNameInfo.getPos());
-                }
-                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
-                    throw new SemanticException(
-                            "Create materialized view from inactive materialized view: " + table.getName(),
-                            tableNameInfo.getPos());
-                }
-
-                if (table.isView()) {
-                    return;
-                }
-
-                if (isExternalTableFromResource(table)) {
-                    throw new SemanticException(
-                            "Only supports creating materialized views based on the external table " +
-                                    "which created by catalog", tableNameInfo.getPos());
-                }
-                Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
-                        tableNameInfo.getDb());
-                if (isInternalCatalog(tableNameInfo.getCatalog())) {
-                    baseTableInfos.add(new BaseTableInfo(database.getId(), database.getFullName(),
-                            table.getId()));
-                } else {
-                    baseTableInfos.add(new BaseTableInfo(tableNameInfo.getCatalog(),
-                            tableNameInfo.getDb(), table.getTableIdentifier()));
-                }
-            });
-
-             */
             statement.setBaseTableInfos(baseTableInfos);
 
             // set the columns into createMaterializedViewStatement
@@ -255,7 +216,16 @@ public class MaterializedViewAnalyzer {
             return null;
         }
 
-        void processBaseTables(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos) {
+        private List<BaseTableInfo> getAndCheckBaseTables(QueryStatement queryStatement) {
+            List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+            processBaseTables(queryStatement, baseTableInfos);
+            Set<BaseTableInfo> baseTableInfoSet = Sets.newHashSet(baseTableInfos);
+            baseTableInfos.clear();
+            baseTableInfos.addAll(baseTableInfoSet);
+            return baseTableInfos;
+        }
+
+        private void processBaseTables(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos) {
             Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
             tableNameTableMap.forEach((tableNameInfo, table) -> {
                 Preconditions.checkState(table != null, "Materialized view base table is null");
@@ -291,7 +261,7 @@ public class MaterializedViewAnalyzer {
             processViews(queryStatement, baseTableInfos);
         }
 
-        void processViews(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos) {
+        private void processViews(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos) {
             List<ViewRelation> viewRelations = AnalyzerUtils.collectViewRelations(queryStatement);
             if (viewRelations.isEmpty()) {
                 return;

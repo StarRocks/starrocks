@@ -630,7 +630,7 @@ public class MvRewriteOptimizationTest {
             dropMv("test", "join_mv_1");
         }
 
-        // nested view
+        // nested views
         {
             starRocksAssert.withView("create view view1 as " +
                     " SELECT v1 from t0");
@@ -664,6 +664,26 @@ public class MvRewriteOptimizationTest {
 
             starRocksAssert.dropView("view1");
             starRocksAssert.dropView("view2");
+            starRocksAssert.dropView("view3");
+            dropMv("test", "join_mv_1");
+        }
+
+        // duplicate views
+        {
+            starRocksAssert.withView("create view view1 as " +
+                    " SELECT v1 from t0");
+
+            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+                    " distributed by hash(v11)" +
+                    " as " +
+                    " SELECT vv1.v1 v11, vv2.v1 v12 from view1 vv1 join view1 vv2 on vv1.v1 = vv2.v1");
+            {
+                String query = "SELECT vv1.v1, vv2.v1 from view1 vv1 join view1 vv2 on vv1.v1 = vv2.v1";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "join_mv_1");
+            }
+
+            starRocksAssert.dropView("view1");
             dropMv("test", "join_mv_1");
         }
     }
