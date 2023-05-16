@@ -68,8 +68,7 @@ PROPERTIES
 (
     "type" = "iceberg",
     MetastoreParams,
-    StorageCredentialParams,
-    MetadataUpdateParams
+    StorageCredentialParams
 )
 ```
 
@@ -237,6 +236,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key                | Yes      | The access key of your IAM user. |
 | aws.s3.secret_key                | Yes      | The secret key of your IAM user. |
 
+<<<<<<< HEAD
 #### `MetadataUpdateParams`
 
 A set of parameters about how StarRocks updates the cached metadata of Iceberg. This parameter set is optional.
@@ -261,6 +261,191 @@ However, if the frequency of data updates in Iceberg is high, you can tune these
 | remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Iceberg tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
 
 For more information, see the "[Understand automatic asynchronous update](../catalog/iceberg_catalog.md#appendix-understand-automatic-asynchronous-update)" section of this topic.
+=======
+##### Microsoft Azure Storage
+
+###### Azure Blob Storage
+
+If you choose Blob Storage as storage for your Iceberg cluster, take one of the following actions:
+
+- To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.blob.storage_account" = "<blob_storage_account_name>",
+  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**              | **Required** | **Description**                              |
+  | -------------------------- | ------------ | -------------------------------------------- |
+  | azure.blob.storage_account | Yes          | The username of your Blob Storage account.   |
+  | azure.blob.shared_key      | Yes          | The shared key of your Blob Storage account. |
+
+- To choose the SAS Token authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.blob.account_name" = "<blob_storage_account_name>",
+  "azure.blob.container_name" = "<blob_container_name>",
+  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**             | **Required** | **Description**                                              |
+  | ------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.account_name   | Yes          | The username of your Blob Storage account.                   |
+  | azure.blob.container_name | Yes          | The name of the blob container that stores your data.        |
+  | azure.blob.sas_token      | Yes          | The SAS token that is used to access your Blob Storage account. |
+
+###### Azure Data Lake Storage Gen1
+
+If you choose Data Lake Storage Gen1 as storage for your Iceberg cluster, take one of the following actions:
+
+- To choose the Managed Service Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls1.use_managed_service_identity" = "true"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                            | **Required** | **Description**                                              |
+  | ---------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.use_managed_service_identity | Yes          | Specifies whether to enable the Managed Service Identity authentication method. Set the value to `true`. |
+
+- To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls1.oauth2_client_id" = "<application_client_id>",
+  "azure.adls1.oauth2_credential" = "<application_client_credential>",
+  "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                 | **Required** | **Description**                                              |
+  | ----------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.oauth2_client_id  | Yes          | The client (application) ID of the service principal.        |
+  | azure.adls1.oauth2_credential | Yes          | The value of the new client (application) secret created.    |
+  | azure.adls1.oauth2_endpoint   | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
+
+###### Azure Data Lake Storage Gen2
+
+If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take one of the following actions:
+
+- To choose the Managed Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_use_managed_identity | Yes          | Specifies whether to enable the Managed Identity authentication method. Set the value to `true`. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client (application) ID of the managed identity.         |
+
+- To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>",
+  "azure.adls2.shared_key" = "<shared_key>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**               | **Required** | **Description**                                              |
+  | --------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.storage_account | Yes          | The username of your Data Lake Storage Gen2 storage account. |
+  | azure.adls2.shared_key      | Yes          | The shared key of your Data Lake Storage Gen2 storage account. |
+
+- To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>
+  ```
+
+  The following table describes the parameters you need to configure `in StorageCredentialParams`.
+
+  | **Parameter**                      | **Required** | **Description**                                              |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | Yes          | The client (application) ID of the service principal.        |
+  | azure.adls2.oauth2_client_secret   | Yes          | The value of the new client (application) secret created.    |
+  | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
+
+##### Google GCS
+
+If you choose Google GCS as storage for your Iceberg cluster, take one of the following actions:
+
+- To choose the VM-based authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "gcp.gcs.use_compute_engine_service_account" = "true"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
+  | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
+  | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
+
+- To choose the service account-based authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
+  | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+  | gcp.gcs.service_account_email          | ""                | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | The email address in the JSON file generated at the creation of the service account. |
+  | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the service account. |
+  | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the service account. |
+
+- To choose the impersonation-based authentication method, configure `StorageCredentialParams` as follows:
+
+  - Make a VM instance impersonate a service account:
+  
+    ```SQL
+    "gcp.gcs.use_compute_engine_service_account" = "true",
+    "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
+    ```
+
+    The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+    | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
+    | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
+    | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
+    | gcp.gcs.impersonation_service_account      | ""                | "hello"               | The service account that you want to impersonate.            |
+
+  - Make a service account (temporarily named as meta service account) impersonate another service account (temporarily named as data service account):
+
+    ```SQL
+    "gcp.gcs.service_account_email" = "<google_service_account_email>",
+    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
+    "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
+    ```
+
+    The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+    | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
+    | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+    | gcp.gcs.service_account_email          | ""                | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | The email address in the JSON file generated at the creation of the meta service account. |
+    | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the meta service account. |
+    | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the meta service account. |
+    | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | The data service account that you want to impersonate.       |
+>>>>>>> 0d229a051 ([Doc] Update metadata caching in Iceberg catalog (#23487))
 
 ### Examples
 
@@ -409,8 +594,9 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM iceberg_table
 ```
 
-## Synchronize metadata updates
+## Configure metadata caching
 
+<<<<<<< HEAD
 ### Manual update
 
 By default, StarRocks caches the metadata of Iceberg and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on an Iceberg table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
@@ -515,3 +701,23 @@ Then StarRocks updates or discards the metadata in compliance with the following
 - If another query hits `p1` again and the current time from the last update is more than 2 hours, StarRocks updates the cached metadata of `p1`.
 - If `p1` has not been accessed within 24 hours from the last update, StarRocks discards the cached metadata of `p1`. The metadata will be cached at the next query.
 - If `p1` has not been accessed within 36 hours from the last update, StarRocks discards the cached metadata of the underlying data files of `p1`. The metadata will be cached at the next query.
+=======
+The metadata files of your Iceberg cluster may be stored in remote storage such as AWS S3 or HDFS. By default, StarRocks caches Iceberg metadata in memory. To accelerate queries, StarRocks adopts a two-level metadata caching mechanism, with which it can cache metadata both in memory and on disk. For each initial query, StarRocks caches their computation results. If any subsequent query that is semantically equivalent to a previous query is issued, StarRocks first attempts to retrieve the requested metadata from its caches, and it retrieves the metadata from the remote storage only when the metadata cannot be hit in its caches.
+
+StarRocks uses the Least Recently Used (LRU) algorithm to cache and evict data. The basic rules are as follows:
+
+- StarRocks first attempts to retrieve the requested metadata from the memory. If the metadata cannot be hit in the memory, StarRock attempts to retrieve the metadata from the disks. The metadata that StarRocks has retrieved from the disks will be loaded into the memory. If the metadata cannot be hit in the disks either, StarRock retrieves the metadata from the remote storage and caches the retrieved metadata in the memory.
+- StarRocks writes the metadata evicted out of the memory into the disks, but it directly discards the metadata evicted out of the disks.
+
+The following table describes the FE configuration items that you can use to configure your Iceberg metadata caching mechanism.
+
+| **Configuration item**                           | **Unit** | **Default value**                                    | **Description**                                              |
+| ------------------------------------------------ | -------- | ---------------------------------------------------- | ------------------------------------------------------------ |
+| enable_iceberg_metadata_disk_cache               | N/A      | `false`                                              | Specifies whether to enable the disk cache.                  |
+| iceberg_metadata_cache_disk_path                 | N/A      | `StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg"` | The save path of cached metadata files on disk.              |
+| iceberg_metadata_disk_cache_capacity             | Bytes    | `2147483648`, equivalent to 2 GB                     | The maximum size of cached metadata allowed on disk.         |
+| iceberg_metadata_memory_cache_capacity           | Bytes    | `536870912`, equivalent to 512 MB                    | The maximum size of cached metadata allowed in memory.       |
+| iceberg_metadata_memory_cache_expiration_seconds | Seconds  | `86500`                                              | The amount of time after which a cache entry in memory expires counting from its last access. |
+| iceberg_metadata_disk_cache_expiration_seconds   | Seconds  | `604800`, equivalent to one week                     | The amount of time after which a cache entry on disk expires counting from its last access. |
+| iceberg_metadata_cache_max_entry_size            | Bytes    | `8388608`, equivalent to 8 MB                        | The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage. |
+>>>>>>> 0d229a051 ([Doc] Update metadata caching in Iceberg catalog (#23487))
