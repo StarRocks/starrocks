@@ -469,7 +469,8 @@ std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, 
 
 std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
                                                  int64_t max_buffer_size, MemTracker* mem_tracker) {
-    return std::make_unique<DeltaWriter>(new DeltaWriterImpl(tablet_manager, tablet_id, max_buffer_size, mem_tracker));
+    return std::make_unique<DeltaWriter>(
+            new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, max_buffer_size, mem_tracker));
 }
 
 } // namespace starrocks::lake
