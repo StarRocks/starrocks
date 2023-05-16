@@ -1,4 +1,4 @@
-# UNINTALL PLUGIN
+# UNINSTALL PLUGIN
 
 ## 功能
 
