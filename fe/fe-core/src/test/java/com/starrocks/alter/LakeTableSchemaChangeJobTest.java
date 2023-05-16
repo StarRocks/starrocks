@@ -698,6 +698,9 @@ public class LakeTableSchemaChangeJobTest {
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
+        // LakeTablet alter job will not mark tablet force delete into TabletInvertedIndex
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getForceDeleteTablets().isEmpty());
+
         // Drop the table, now it's ok to cancel the job
         db.dropTable(table.getName());
         schemaChangeJob.cancel("table does not exist anymore");
