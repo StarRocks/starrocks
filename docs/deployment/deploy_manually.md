@@ -134,7 +134,7 @@ The following procedures are performed on the BE instances.
 
       ```YAML
       be_port = vvvv                   # Default: 9060
-      be_http_port = xxxx              # Default: 8040
+      webserver_port = xxxx            # Default: 8040
       heartbeat_service_port = yyyy    # Default: 9050
       brpc_port = zzzz                 # Default: 8060
       ```
@@ -193,7 +193,7 @@ A Compute Node (CN) is a stateless computing service that does not maintain data
 
       ```YAML
       thrift_port = vvvv               # Default: 9060
-      be_http_port = xxxx              # Default: 8040
+      webserver_port = xxxx            # Default: 8040
       heartbeat_service_port = yyyy    # Default: 9050
       brpc_port = zzzz                 # Default: 8060
       ```
