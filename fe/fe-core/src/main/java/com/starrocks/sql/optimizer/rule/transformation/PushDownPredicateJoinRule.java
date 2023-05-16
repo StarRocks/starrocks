@@ -212,6 +212,7 @@ public class PushDownPredicateJoinRule extends PushDownJoinPredicateBase {
         LogicalFilterOperator filter = (LogicalFilterOperator) input.getOp();
         OptExpression joinOpt = input.getInputs().get(0);
         LogicalJoinOperator join = (LogicalJoinOperator) joinOpt.getOp();
+        boolean isMVRewritePlan = context.getOptimizerConfig().isMVRewritePlan();
 
         if (join.getJoinType().isCrossJoin() || join.getJoinType().isInnerJoin()) {
             // The effect will be better, first do the range derive, and then do the equivalence derive
