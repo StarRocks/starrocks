@@ -33,6 +33,7 @@ protected:
     double _score;
     CompactionType _compaction_type;
     int64_t _max_level_size;
+    int64_t _level_multiple;
 };
 
 } // namespace starrocks::vectorized
