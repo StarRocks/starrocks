@@ -713,6 +713,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         // Mark schema changed tablet not to move to trash.
                         long baseTabletId = partitionIndexTabletMap.get(
                                                     partitionId, shadowIdxId).get(shadowTablet.getId());
+                        // NOTE: known for sure that only LocalTablet uses this SchemaChangeJobV2 class
                         GlobalStateMgr.getCurrentInvertedIndex().
                                     markTabletForceDelete(baseTabletId, shadowTablet.getBackendIds());
                         List<Replica> replicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
