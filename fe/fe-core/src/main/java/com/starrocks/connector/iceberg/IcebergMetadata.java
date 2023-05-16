@@ -365,6 +365,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                     .map(TIcebergDataFile::getPath)
                     .collect(Collectors.toList());
             icebergCatalog.deleteUncommittedDataFiles(toDeleteFiles);
+            LOG.error("Failed to commit iceberg transaction on {}.{}", dbName, tableName, e);
+            throw new StarRocksConnectorException(e.getMessage());
         }
     }
 
