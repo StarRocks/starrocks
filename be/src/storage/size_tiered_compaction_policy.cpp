@@ -14,10 +14,6 @@
 namespace starrocks::vectorized {
 
 SizeTieredCompactionPolicy::SizeTieredCompactionPolicy(Tablet* tablet) : _tablet(tablet) {
-<<<<<<< HEAD
-    _max_level_size =
-            config::size_tiered_min_level_size * pow(config::size_tiered_level_multiple, config::size_tiered_level_num);
-=======
     _compaction_type = INVALID_COMPACTION;
     if (_tablet->keys_type() == KeysType::DUP_KEYS) {
         _level_multiple = std::max(config::size_tiered_level_multiple_dupkey, config::size_tiered_level_multiple);
@@ -26,7 +22,6 @@ SizeTieredCompactionPolicy::SizeTieredCompactionPolicy(Tablet* tablet) : _tablet
     }
 
     _max_level_size = config::size_tiered_min_level_size * pow(_level_multiple, config::size_tiered_level_num);
->>>>>>> 84766215d ([Enhancement] Increase the level multiple of duplicate key to reduce compaction frequency (#22580))
 }
 
 bool SizeTieredCompactionPolicy::need_compaction(double* score, CompactionType* type) {
