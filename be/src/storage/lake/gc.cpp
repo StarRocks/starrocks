@@ -320,6 +320,10 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
         }
         std::optional<int64_t> opt_txn_id = extract_txn_id_prefix(entry.name);
         if (opt_txn_id.has_value()) {
+            // Using the transaction ID as the logical creation timestamp for the file, if the logical
+            // creation time (txn_id) is smaller than the |min_active_txn_id|, it indicates that the
+            // transaction that created this file has completed, and if the file is not referenced by
+            // any metadata, it's safe to delete it.
             if (opt_txn_id.value() < min_active_txn_id) {
                 datafiles.emplace(entry.name);
             } else {
