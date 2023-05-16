@@ -50,6 +50,9 @@ public class PruneSubColumnsRule implements TreeRewriteRule {
         return root.getOp().accept(computer, root, null);
     }
 
+    /*
+     * collect all complex expressions, such as: MAP_KEYS, MAP_VALUES, map['key'], struct.a.b.c ...
+     */
     private static class ComplexExpressionCollector extends ScalarOperatorVisitor<Void, Void> {
         private static final List<String> SUPPORT_FUNCTIONS = ImmutableList.<String>builder()
                 .add(FunctionSet.MAP_KEYS, FunctionSet.MAP_SIZE, FunctionSet.MAP_VALUES)
@@ -93,6 +96,10 @@ public class PruneSubColumnsRule implements TreeRewriteRule {
         }
     }
 
+    /*
+     * compute all complex column access path in whole plan, we only need check the expression
+     * which one in project and predicate (the rule execute order promise this)
+     */
     private static class SubColumnAccessPathComputer extends OptExpressionVisitor<OptExpression, Void> {
         private final ComplexExpressionCollector collector = new ComplexExpressionCollector();
 
@@ -196,6 +203,9 @@ public class PruneSubColumnsRule implements TreeRewriteRule {
         }
     }
 
+    /*
+     * normalize expression to ColumnAccessPath
+     */
     private static class ComplexColumnAccessPathNormalizer extends ScalarOperatorVisitor<Void, Void> {
         private static final List<String> NORMALIZE_FUNCTIONS =
                 ImmutableList.of(FunctionSet.MAP_KEYS, FunctionSet.MAP_SIZE, FunctionSet.MAP_VALUES);

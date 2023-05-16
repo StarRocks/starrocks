@@ -22,6 +22,30 @@ import com.starrocks.thrift.TColumnAccessPath;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/*
+ * ColumnAccessPath is used to describe the access path of a complex(Map/Struct/Json) column.
+ *
+ * eg:
+ *  select struct_a.col_b.col_c.col_d
+ *
+ * ColumnAccessPath will be:
+ *  struct_a (ROOT)
+ *  -- col_b (FIELD)
+ *    -- col_c (FIELD)
+ *      -- col_d (FIELD)
+ *
+ * in complex sql, eg:
+ *  select  struct_a.col_g, struct_a.col_b.col_c.col_d, struct_a.col_b.col_e.col_f
+ * ColumnAccessPath will be:
+ *  struct_a (ROOT)
+ *  -- col_g (FIELD)
+ *  -- col_b (FIELD)
+ *    -- col_c (FIELD)
+ *      -- col_d (FIELD)
+ *    -- col_e (FIELD)
+ *      -- col_f (FIELD)
+ *
+ */
 public class ColumnAccessPath {
     // The top one must be ROOT
     private final TAccessPathType type;
