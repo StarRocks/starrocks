@@ -446,7 +446,7 @@ TEST_F(DuplicateTabletReaderWithDeleteTest, test_read_success) {
 
     {
         // write rowset 1 with 2 segments
-        int64_t txn_id =next_id();
+        int64_t txn_id = next_id();
         ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
         ASSERT_OK(writer->open());
 

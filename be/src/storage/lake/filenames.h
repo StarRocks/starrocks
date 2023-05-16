@@ -63,8 +63,8 @@ inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) 
     return fmt::format("{:016X}_{:016X}.meta", tablet_id, version);
 }
 
-inline std::string random_tablet_delvec_filename() {
-    return fmt::format("{}.delvec", generate_uuid_string());
+inline std::string gen_delvec_filename(int64_t txn_id) {
+    return fmt::format("{:016x}.delvec", txn_id, generate_uuid_string());
 }
 
 inline std::string txn_log_filename(int64_t tablet_id, int64_t txn_id) {

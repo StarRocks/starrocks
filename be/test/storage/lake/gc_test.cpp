@@ -393,7 +393,8 @@ TEST_F(GCTest, test_delvec_gc) {
 
     // create delvec files
     for (int i = 1; i < 10; i++) {
-        auto delvec_file = random_tablet_delvec_filename();
+        auto txn_id = next_id();
+        auto delvec_file = gen_delvec_filename(txn_id);
         auto location = location_provider_1->delvec_location(tablet_id_1, delvec_file);
         ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(location));
         ASSERT_OK(wf->close());
@@ -405,7 +406,7 @@ TEST_F(GCTest, test_delvec_gc) {
 
     // gc
     config::lake_gc_segment_expire_seconds = 0;
-    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get(), INT64_MAX));
+    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get(), next_id()));
     for (int i = 1; i < 5; i++) {
         auto itr = metadata->delvec_meta().version_to_delvec().find(i);
         EXPECT_TRUE(itr != metadata->delvec_meta().version_to_delvec().end());
