@@ -53,7 +53,7 @@ If strict mode is enabled, StarRocks loads only the rows that hold `\N` or `1` a
 
 If you run a [Stream Load](../../loading/StreamLoad.md), [Broker Load](../../loading/BrokerLoad.md), [Routine Load](../../loading/RoutineLoad.md), or [Spark Load](../../loading/SparkLoad.md) job to load data, use the `strict_mode` parameter to set strict mode for the load job. Valid values are `true` and `false`. The default value is `false`. The value `true` enables strict mode, and the value `false` disables strict mode.
 
-If you execute [INSERT](../../loading/InsertInto.md) to load data, use the `enable_insert_strict` session variable to set strict mode. Valid values are `true` and `false`. The default value is `false`. The value `true` enables strict mode, and the value `false` disables strict mode.
+If you execute [INSERT](../../loading/InsertInto.md) to load data, use the `enable_insert_strict` session variable to set strict mode. Valid values are `true` and `false`. The default value is `true`. The value `true` enables strict mode, and the value `false` disables strict mode.
 
 Examples are as follows:
 
@@ -61,7 +61,7 @@ Examples are as follows:
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
-    -H "strict_mode: true | false" \
+    -H "strict_mode: {true | false}" \
     -T <file_name> -XPUT \
     http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 ```
@@ -83,7 +83,7 @@ WITH BROKER
 )
 PROPERTIES
 (
-    "strict_mode" = "true | false"
+    "strict_mode" = "{true | false}"
 )
 ```
 
@@ -95,7 +95,7 @@ The preceding code snippet uses HDFS as an example. For detailed syntax and para
 CREATE ROUTINE LOAD [<database_name>.]<job_name> ON <table_name>
 PROPERTIES
 (
-    "strict_mode" = "true | false"
+    "strict_mode" = "{true | false}"
 ) 
 FROM KAFKA
 (
@@ -122,7 +122,7 @@ WITH RESOURCE <resource_name>
 )
 PROPERTIES
 (
-    "strict_mode" = "true | false"   
+    "strict_mode" = "{true | false}"   
 )
 ```
 
@@ -131,7 +131,7 @@ The preceding code snippet uses HDFS as an example. For detailed syntax and para
 ### INSERT
 
 ```SQL
-SET enable_insert_strict = true | false;
+SET enable_insert_strict = {true | false};
 INSERT INTO <table_name> ...
 ```
 
