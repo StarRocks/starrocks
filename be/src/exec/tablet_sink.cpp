@@ -247,7 +247,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
 
     // This ref is for RPC's reference
     open_closure->ref();
-    open_closure->cntl.set_timeout_ms(config::tablet_writer_open_rpc_timeout_sec * 1000);
+    open_closure->cntl.set_timeout_ms(_rpc_timeout_ms);
     if (request.ByteSizeLong() > _parent->_rpc_http_min_size) {
         TNetworkAddress brpc_addr;
         brpc_addr.hostname = _node_info->host;
