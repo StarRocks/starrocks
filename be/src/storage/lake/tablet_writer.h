@@ -46,7 +46,7 @@ public:
     // The file paths are relative to the tablet group path.
     //
     // PREREQUISITES: the writer has successfully `finish()`ed but not yet `close()`ed.
-    const std::vector<std::string>& files() const { return _files; }
+    std::vector<std::string> files() const { return _files; }
 
     // The sum of all segment file sizes, in bytes.
     int64_t data_size() const { return _data_size; }
