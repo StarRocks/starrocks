@@ -54,6 +54,7 @@ import org.apache.iceberg.hadoop.Configurable;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.relocated.com.google.common.base.MoreObjects;
+import org.apache.iceberg.util.LocationUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -261,7 +262,8 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
             }
         }
 
-        org.apache.hadoop.hive.metastore.api.Database hiveDb = HiveMetastoreApiConverter.toMetastoreApiDatabase(database);
+        org.apache.hadoop.hive.metastore.api.Database hiveDb =
+                HiveMetastoreApiConverter.toMetastoreApiDatabase(database);
         createHiveDatabase(hiveDb);
     }
 
@@ -289,7 +291,8 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
         String database = namespace.level(0);
         try {
             List<String> tableNames = clients.run(client -> client.getAllTables(database));
-            return tableNames.stream().map(tblName -> TableIdentifier.of(namespace, tblName)).collect(Collectors.toList());
+            return tableNames.stream().map(tblName -> TableIdentifier.of(namespace, tblName))
+                    .collect(Collectors.toList());
         } catch (TException | InterruptedException e) {
             throw new RuntimeException(e);
         }
@@ -339,7 +342,7 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
 
             if (purge && lastMetadata != null) {
                 CatalogUtil.dropTableData(ops.io(), lastMetadata);
-                deleteTableFolder(ops.io(), lastMetadata);
+                deleteTableFolder(lastMetadata);
             }
             LOG.info("Dropped table: {}", identifier);
             return true;
@@ -361,25 +364,27 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
         }
     }
 
-    private void deleteTableFolder(FileIO io, TableMetadata metadata) {
+    private void deleteTableFolder(TableMetadata metadata) {
         String location = metadata.location();
 
         // delete metadata folder
         String metadataLocation = metadata.properties().get(TableProperties.WRITE_METADATA_LOCATION);
         if (metadataLocation == null) {
-            metadataLocation = DEFAULT_METADATA_FOLDER_NAME;
+            metadataLocation = location + "/" + DEFAULT_METADATA_FOLDER_NAME;
         }
-        io.deleteFile(location + "/" + metadataLocation);
+        metadataLocation = LocationUtil.stripTrailingSlash(metadataLocation);
+        fileIO.deleteFile(metadataLocation);
 
         // delete data folder
         String dataLocation = metadata.properties().get(TableProperties.WRITE_DATA_LOCATION);
         if (dataLocation == null) {
-            dataLocation = DEFAULT_DATA_FOLDER_NAME;
+            dataLocation = location + "/" + DEFAULT_DATA_FOLDER_NAME;
         }
-        io.deleteFile(location + "/" + dataLocation);
+        metadataLocation = LocationUtil.stripTrailingSlash(metadataLocation);
+        fileIO.deleteFile(dataLocation);
 
         // delete table root folder
-        io.deleteFile(location);
+        fileIO.deleteFile(location);
     }
 
     @Override
