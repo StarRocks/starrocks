@@ -184,12 +184,11 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     rollup: test_base_part");
 
         // test query delta
-        // TODO: support remove redundant predicates.
         sql("select c1, c3, c2 from test_base_part where c2 < 1000 and c3 < 1000")
                 .contains("partial_mv_6")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 7: c2 <= 999, 6: c3 <= 999\n" +
+                        "     PREDICATES: 7: c2 <= 999\n" +
                         "     partitions=3/5\n" +
                         "     rollup: partial_mv_6\n" +
                         "     tabletRatio=6/6");
@@ -233,7 +232,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         " where t1.c3 < 2000 and t2.c3 > 100;")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 11: c3 <= 1999, 11: c3 >= 101\n" +
+                        "     PREDICATES: 11: c3 >= 101\n" +
                         "     partitions=3/5\n" +
                         "     rollup: partial_mv_6\n" +
                         "     tabletRatio=6/6");
@@ -436,7 +435,6 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         sql("select c1, c3, c2 from test_base_part where c3 < 1000 and c1 = 1")
                 .contains("TABLE: partial_mv_7\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 6: c3 <= 999\n" +
                         "     partitions=3/5\n" +
                         "     rollup: partial_mv_7\n" +
                         "     tabletRatio=3/6");
@@ -493,7 +491,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         sql("select c1, c3, c2 from test_base_part where c2 > 10 and c3 < 1000 and c1 = 1")
                 .contains("TABLE: partial_mv_8\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 5: c1 = 1, 6: c3 <= 999\n" +
+                        "     PREDICATES: 5: c1 = 1\n" +
                         "     partitions=3/5\n" +
                         "     rollup: partial_mv_8\n" +
                         "     tabletRatio=3/6");
@@ -502,7 +500,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         sql("select c1, c3, c2 from test_base_part where c2 > 100 and c3 < 1000 and c1 = 1")
                 .contains("TABLE: partial_mv_8\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 7: c2 >= 101, 5: c1 = 1, 6: c3 <= 999\n" +
+                        "     PREDICATES: 7: c2 >= 101, 5: c1 = 1\n" +
                         "     partitions=3/5\n" +
                         "     rollup: partial_mv_8\n" +
                         "     tabletRatio=3/6");

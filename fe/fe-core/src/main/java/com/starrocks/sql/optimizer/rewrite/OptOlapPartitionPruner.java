@@ -121,10 +121,25 @@ public class OptOlapPartitionPruner {
         List<Range<PartitionKey>> partitionRanges =
                 selectedPartitionIds.stream().map(partitionInfo::getRange).collect(Collectors.toList());
 
+        // we convert range to [minRange, maxRange]
         PartitionKey minRange =
-                Collections.min(partitionRanges.stream().map(Range::lowerEndpoint).collect(Collectors.toList()));
+                Collections.min(partitionRanges.stream().map(range -> {
+                    PartitionKey lower = range.lowerEndpoint();
+                    if (range.contains(lower)) {
+                        return lower;
+                    } else {
+                        return lower.successor();
+                    }
+                }).collect(Collectors.toList()));
         PartitionKey maxRange =
-                Collections.max(partitionRanges.stream().map(Range::upperEndpoint).collect(Collectors.toList()));
+                Collections.max(partitionRanges.stream().map(range -> {
+                    PartitionKey upper = range.upperEndpoint();
+                    if (range.contains(upper)) {
+                        return upper;
+                    } else {
+                        return upper.predecessor();
+                    }
+                }).collect(Collectors.toList()));
 
         for (ScalarOperator predicate : scanPredicates) {
             if (!Utils.containColumnRef(predicate, columnName)) {
@@ -168,7 +183,7 @@ public class OptOlapPartitionPruner {
                 PartitionKey max = new PartitionKey();
                 max.pushColumn(pcf.upperBound, column.getPrimitiveType());
                 int cmp = maxRange.compareTo(max);
-                if (cmp < 0 || (0 == cmp && !pcf.upperBoundInclusive)) {
+                if (cmp < 0 || (0 == cmp && pcf.upperBoundInclusive)) {
                     upperBind = true;
                 }
             }

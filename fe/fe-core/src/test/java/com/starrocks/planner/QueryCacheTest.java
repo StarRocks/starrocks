@@ -532,6 +532,7 @@ public class QueryCacheTest {
         for (String agg : aggrFunctions) {
             testNoGroupBy(agg, whereClauses);
         }
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         // count/min/max without filters will use meta scan, so we should test them separately
         aggrFunctions = Lists.newArrayList("count(v1)", "max(v1)", "min(v1)");
         whereClauses = Lists.newArrayList("where dt between '2022-01-02' and '2022-01-03'",
@@ -539,7 +540,6 @@ public class QueryCacheTest {
         for (String agg : aggrFunctions) {
             testNoGroupBy(agg, whereClauses);
         }
-        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test
