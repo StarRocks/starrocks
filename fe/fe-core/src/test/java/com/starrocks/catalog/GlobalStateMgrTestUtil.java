@@ -113,41 +113,31 @@ public class GlobalStateMgrTestUtil {
         for (Table table : tables) {
             Table slaveTable = slaveDb.getTable(table.getId());
             if (slaveTable == null) {
-                System.out.println("table not exist");
                 return false;
             }
-            System.out.println("slave table " + slaveTable.getName() + " partitions " + slaveTable.getPartitions());
-            System.out.println("master table " + table.getName() + " partitions " + table.getPartitions());
             Partition masterPartition = table.getPartition(testPartition1);
             Partition slavePartition = slaveTable.getPartition(testPartition1);
             if (masterPartition == null && slavePartition == null) {
-                System.out.println("partition not exist");
                 new Exception().printStackTrace();
                 return true;
             }
             if (masterPartition.getId() != slavePartition.getId()) {
-                System.out.println("partition id not equal");
                 return false;
             }
             if (masterPartition.getVisibleVersion() != slavePartition.getVisibleVersion()
                     || masterPartition.getNextVersion() != slavePartition.getNextVersion()) {
-                System.out.println("partition version not equal");
-                System.out.println("master partition next version " + masterPartition.getNextVersion());
-                System.out.println("slave partition next version " + slavePartition.getNextVersion());
                 return false;
             }
             List<MaterializedIndex> allMaterializedIndices = masterPartition.getMaterializedIndices(IndexExtState.ALL);
             for (MaterializedIndex masterIndex : allMaterializedIndices) {
                 MaterializedIndex slaveIndex = slavePartition.getIndex(masterIndex.getId());
                 if (slaveIndex == null) {
-                    System.out.println("slave index not exist");
                     return false;
                 }
                 List<Tablet> allTablets = masterIndex.getTablets();
                 for (Tablet masterTablet : allTablets) {
                     Tablet slaveTablet = slaveIndex.getTablet(masterTablet.getId());
                     if (slaveTablet == null) {
-                        System.out.println("slave tablet not exist");
                         return false;
                     }
                     List<Replica> allReplicas = ((LocalTablet) masterTablet).getImmutableReplicas();
@@ -157,14 +147,12 @@ public class GlobalStateMgrTestUtil {
                                 || slaveReplica.getVersion() != masterReplica.getVersion()
                                 || slaveReplica.getLastFailedVersion() != masterReplica.getLastFailedVersion()
                                 || slaveReplica.getLastSuccessVersion() != slaveReplica.getLastSuccessVersion()) {
-                            System.out.println("replica not exist");
                             return false;
                         }
                     }
                 }
             }
         }
-        System.out.println("util return true");
         return true;
     }
 
