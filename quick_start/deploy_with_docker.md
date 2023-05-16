@@ -6,7 +6,7 @@
 
 > **注意**
 >
-> Docker 容器中部署的 StarRocks 集群仅适用于小数据集验证 DEMO 的情况。不建议您将其用于大规模测试或生产环境。
+> Docker 容器中部署的 StarRocks 集群仅适用于小数据集验证 DEMO 的情况。不建议您将其用于大规模测试或生产环境。如需部署高可用 StarRocks 集群，请参见[部署概览](../deployment/deployment_overview.md)了解其他适合您场景的部署方式。
 
 ## 前提条件
 

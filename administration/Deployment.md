@@ -13,7 +13,7 @@ FE 集群从 Follower 中自动选出 Leader 节点，所有更改状态操作�
 
 ## 下载并配置新 FE 节点
 
-详细操作请参考 [手动部署 StarRocks FE 节点](../quick_start/Deploy.md#部署-FE-节点)。
+详细操作请参考 [手动部署 StarRocks FE 节点](/deployment/deploy_manually.md)。
 
 ## 添加新 FE 节点
 
