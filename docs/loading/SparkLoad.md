@@ -74,7 +74,7 @@ The basic process of data pre-processing is as follows:
 
 If you continue to load data through Broker process, you must ensure that Broker process are deployed in your StarRocks cluster.
 
-You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for Broker that are deployed in your StarRocks cluster. If no Broker are deployed, you must deploy Broker by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#deploy-broker).
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for Broker that are deployed in your StarRocks cluster. If no Broker are deployed, you must deploy Broker by following the instructions provided in [Deploy Broker](../deployment/deploy_broker.md).
 
 ### Configuring ETL Clusters
 

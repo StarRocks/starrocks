@@ -24,7 +24,7 @@ By default, FE nodes in a new cluster are started via IP address access. To star
 
 The property `--host_type` specifies the access method that is used to start the node. Valid values include `FQDN` and `IP`. You only need to specify this property ONCE when you start the node for the first time.
 
-See [Deploy StarRocks](../quick_start/Deploy.md) for detailed instructions on how to install StarRocks.
+See [Deploy StarRocks](../deployment/deploy_manually.md) for detailed instructions on how to install StarRocks.
 
 Each BE node identifies itself with `BE Address` defined in the FE metadata. Therefore, you DO NOT need to specify `--host_type` when you start BE nodes. If the `BE Address` defines a BE node with an FQDN, the BE node identifies itself with this FQDN.
 
