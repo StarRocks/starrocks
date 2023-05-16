@@ -4,7 +4,7 @@ Since version 3.0, StarRocks supports the `AUTO_INCREMENT` column attribute, whi
 
 ## Introduction
 
-When a new data row is loaded into a table and values are not specified for the `AUTO_INCREMENT column`, StarRocks automatically assigns a integer value for the row's `AUTO_INCREMENT` column as its unique ID across the table. The subsequent values for the `AUTO_INCREMENT` column automatically increase at a specific step starting from the ID of the row. An `AUTO_INCREMENT` column can be used to simplify data management and speed up some queries. Here are some application scenarios of an `AUTO_INCREMENT` column:
+When a new data row is loaded into a table and values are not specified for the `AUTO_INCREMENT` column, StarRocks automatically assigns an integer value for the row's `AUTO_INCREMENT` column as its unique ID across the table. The subsequent values for the `AUTO_INCREMENT` column automatically increase at a specific step starting from the ID of the row. An `AUTO_INCREMENT` column can be used to simplify data management and speed up some queries. Here are some application scenarios of an `AUTO_INCREMENT` column:
 
 - Serve as primary keys: An `AUTO_INCREMENT` column can be used as the primary key to ensure that each row has a unique ID and make it easy to query and manage data.
 - Join tables: When multiple tables are joined, an `AUTO_INCREMENT` column can be used as the Join Key, which can expedite queries compared to using a column whose data type is STRING, for example, UUID.
