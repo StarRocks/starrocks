@@ -45,6 +45,10 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
+    bool pending_finish() const override {
+        return _join_builder->spiller()->has_pending_data() || !_join_builder->spiller()->restore_finished();
+    }
+
     void mark_need_spill() override;
 
 private:
