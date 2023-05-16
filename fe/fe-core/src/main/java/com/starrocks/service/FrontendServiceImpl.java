@@ -76,6 +76,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
+import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
@@ -89,7 +90,6 @@ import com.starrocks.http.UnauthorizedException;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.loadv2.LoadJob;
-import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadMgr;
@@ -1237,23 +1237,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
                 break;
             case MANUAL_LOAD:
-                if (!(attachment instanceof ManualLoadTxnCommitAttachment)) {
-                    break;
-                }
-                ManualLoadTxnCommitAttachment streamAttachment = (ManualLoadTxnCommitAttachment) attachment;
-                entity.counterStreamLoadFinishedTotal.increase(1L);
-                entity.counterStreamLoadBytesTotal.increase(streamAttachment.getReceivedBytes());
-                entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
-
-                if (streamLoadtask != null) {
-                    streamLoadtask.setLoadState(streamAttachment.getLoadedBytes(),
-                            streamAttachment.getLoadedRows(),
-                            streamAttachment.getFilteredRows(),
-                            streamAttachment.getUnselectedRows(),
-                            streamAttachment.getErrorLogUrl(), "");
-                }
-
-                break;
+                throw new LoadException("Deprecated MANUAL LOAD");
             default:
                 break;
         }

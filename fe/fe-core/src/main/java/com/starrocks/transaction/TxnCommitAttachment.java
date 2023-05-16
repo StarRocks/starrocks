@@ -35,11 +35,10 @@
 package com.starrocks.transaction;
 
 import com.google.gson.annotations.SerializedName;
+import com.google.common.base.Preconditions;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
-import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
-import com.starrocks.load.loadv2.MiniLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
 import com.starrocks.thrift.TTxnCommitAttachment;
@@ -69,12 +68,8 @@ public abstract class TxnCommitAttachment implements Writable {
                 case ROUTINE_LOAD:
                     return new RLTaskTxnCommitAttachment(txnCommitAttachment.getRlTaskTxnCommitAttachment());
                 case MINI_LOAD:
-                    return new MiniLoadTxnCommitAttachment(txnCommitAttachment.getMlTxnCommitAttachment());
                 case MANUAL_LOAD:
-                    if (!txnCommitAttachment.isSetManualLoadTxnCommitAttachment()) {
-                        return null;
-                    }
-                    return new ManualLoadTxnCommitAttachment(txnCommitAttachment.getManualLoadTxnCommitAttachment());
+                    Preconditions.checkState(false, "Deprecated load type " + txnCommitAttachment.getLoadType());
                 default:
                     return null;
             }
@@ -91,8 +86,7 @@ public abstract class TxnCommitAttachment implements Writable {
         } else if (type == LoadJobSourceType.BATCH_LOAD_JOB) {
             attachment = new LoadJobFinalOperation();
         } else if (type == LoadJobSourceType.BACKEND_STREAMING) {
-            // TODO: Any compatibility problem here with mini load?
-            attachment = new ManualLoadTxnCommitAttachment();
+            Preconditions.checkState(false, "Deprecated MANUAL LOAD");
         } else if (type == LoadJobSourceType.FRONTEND) {
             // spark load
             attachment = new LoadJobFinalOperation();
