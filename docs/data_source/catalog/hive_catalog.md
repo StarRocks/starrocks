@@ -439,7 +439,7 @@ However, if the frequency of data updates in Hive is high, you can tune these pa
 | remote_file_cache_refresh_interval_sec | No       | The time interval at which StarRocks asynchronously updates the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `60`. |
 | metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Hive tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
 | remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
-| enable_cache_list_names                | No       | Specifies whether StarRocks caches Hive partition names. Valid values: `true` and `false`. The value `true` enables the cache, and the value `false` disables the cache. |
+| enable_cache_list_names                | No       | Specifies whether StarRocks caches Hive partition names. Valid values: `true` and `false`. Default value: `false`. The value `true` enables the cache, and the value `false` disables the cache. |
 
 For more information, see the "[Understand automatic asynchronous update](../catalog/hive_catalog.md#appendix-understand-automatic-asynchronous-update)" section of this topic.
 
