@@ -51,7 +51,7 @@
 
 使用 [Stream Load](../../loading/StreamLoad.md)、[Broker Load](../../loading/BrokerLoad.md)、[Routine Load](../../loading/RoutineLoad.md) 和 [Spark Load](../../loading/SparkLoad.md) 执行数据导入时，需要通过参数 `strict_mode` 来设置严格模式。参数取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。
 
-使用 [INSERT](../../loading/InsertInto.md) 执行数据导入时，需要通过会话变量 `enable_insert_strict` 来设置严格模式。变量取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。
+使用 [INSERT](../../loading/InsertInto.md) 执行数据导入时，需要通过会话变量 `enable_insert_strict` 来设置严格模式。变量取值范围：`true` 和 `false`。默认值：`true`。`true` 表示开启，`false` 表示关闭。
 
 下面介绍使用不同的导入方式时设置严格模式的方法。
 
@@ -59,7 +59,7 @@
 
 ```Bash
 curl --location-trusted -u <username>:<password> \
-    -H "strict_mode: true | false" \
+    -H "strict_mode: {true | false}" \
     -T <file_name> -XPUT \
     http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 ```
@@ -81,7 +81,7 @@ WITH BROKER
 )
 PROPERTIES
 (
-    "strict_mode" = "true | false"
+    "strict_mode" = "{true | false}"
 )
 ```
 
@@ -93,7 +93,7 @@ PROPERTIES
 CREATE ROUTINE LOAD [<database_name>.]<job_name> ON <table_name>
 PROPERTIES
 (
-    "strict_mode" = "true | false"
+    "strict_mode" = "{true | false}"
 ) 
 FROM KAFKA
 (
@@ -120,7 +120,7 @@ WITH RESOURCE <resource_name>
 )
 PROPERTIES
 (
-    "strict_mode" = "true | false"   
+    "strict_mode" = "{true | false}"   
 )
 ```
 
@@ -129,7 +129,7 @@ PROPERTIES
 ### INSERT
 
 ```SQL
-SET enable_insert_strict = true | false;
+SET enable_insert_strict = {true | false};
 INSERT INTO <table_name> ...
 ```
 

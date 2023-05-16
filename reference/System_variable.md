@@ -139,7 +139,7 @@ SELECT /*+ SET_VAR
 
 * enable_insert_strict
 
-  用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。默认为 true，即开启严格模式。关于该模式的介绍，可以参阅[严格模式](../loading/load_concept/strict_mode.md)。
+  用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。默认为 `true`，即开启严格模式。关于该模式的介绍，可以参阅[严格模式](../loading/load_concept/strict_mode.md)。
 
 * enable_spilling
 
