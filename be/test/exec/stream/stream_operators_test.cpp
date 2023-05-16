@@ -102,7 +102,7 @@ protected:
 };
 
 TEST_F(StreamOperatorsTest, Dop_1) {
-    DCHECK_IF_ERROR(start_mv([&]() {
+    ASSERT_IF_ERROR(start_mv([&]() {
         _pipeline_builder = [&](RuntimeState* state) {
             OpFactories op_factories{
                     std::make_shared<GeneratorStreamSourceOperatorFactory>(
@@ -124,7 +124,7 @@ TEST_F(StreamOperatorsTest, Dop_1) {
 }
 
 TEST_F(StreamOperatorsTest, MultiDop_4) {
-    DCHECK_IF_ERROR(start_mv([&]() {
+    ASSERT_IF_ERROR(start_mv([&]() {
         _pipeline_builder = [&](RuntimeState* state) {
             OpFactories op_factories;
             auto source_factory = std::make_shared<GeneratorStreamSourceOperatorFactory>(
@@ -155,7 +155,7 @@ TEST_F(StreamOperatorsTest, MultiDop_4) {
 }
 
 TEST_F(StreamOperatorsTest, Test_StreamAggregator_Dop1) {
-    DCHECK_IF_ERROR(start_mv([&]() {
+    ASSERT_IF_ERROR(start_mv([&]() {
         _pipeline_builder = [&](RuntimeState* state) {
             _slot_infos = std::vector<std::vector<SlotTypeInfo>>{
                     // input slots
@@ -207,7 +207,7 @@ TEST_F(StreamOperatorsTest, Test_StreamAggregator_Dop1) {
 }
 
 TEST_F(StreamOperatorsTest, Test_StreamAggregator_MultiDop) {
-    DCHECK_IF_ERROR(start_mv([&]() {
+    ASSERT_IF_ERROR(start_mv([&]() {
         _pipeline_builder = [&](RuntimeState* state) {
             _slot_infos = std::vector<std::vector<SlotTypeInfo>>{
                     // input slots
