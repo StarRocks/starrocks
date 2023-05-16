@@ -9,7 +9,7 @@
 ```SQL
 ALTER RESOURCE GROUP <resource_group_name>
 {  ADD CLASSIFIER1, CLASSIFIER2, ...
- | DROP (CLASSIFER_ID_1, CLASSIFIER_ID_2, ...)
+ | DROP (CLASSIFIER_ID_1, CLASSIFIER_ID_2, ...)
  | DROP ALL
  | WITH resource_limit 
 }
