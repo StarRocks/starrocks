@@ -35,7 +35,7 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | id                         | 物化视图 ID。                                               |
 | database_name              | 物化视图所属的数据库名称。                                     |
 | name                       | 物化视图名称。                                               |
-| refresh_type               | 物化视图的更新方式，包括 ROLLUP、MANNUL、ASYNC、INCREMENTAL。   |
+| refresh_type               | 物化视图的更新方式，包括 ROLLUP、MANUAL、ASYNC、INCREMENTAL。   |
 | is_active                  | 物化视图状态是否为 active。有效值：`true` 和 `false`。          |
 | partition_type             | 物化视图的分区类型，包括 RANGE 和 UNPARTITIONED。|
 | task_id                    | 物化视图的刷新任务 ID。                                       |
