@@ -26,6 +26,7 @@
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/status.h"
 #include "common/logging.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
@@ -386,9 +387,12 @@ Status SyncFileWriter::close() {
     _flush_row_group();
     _writer->Close();
 
-    auto st = _outstream->Close();
+    auto arrow_st = _outstream->Close();
+    auto st = Status::IOError(arrow_st.message());
     if (!st.ok()) {
-        return Status::InternalError("Close file failed!");
+        st = st.clone_and_prepend("close file error");
+        LOG(WARNING) << st;
+        return st;
     }
 
     _closed = true;

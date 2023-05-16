@@ -95,13 +95,15 @@ Status RollingAsyncParquetWriter::append_chunk(Chunk* chunk, RuntimeState* state
 
 Status RollingAsyncParquetWriter::close_current_writer(RuntimeState* state) {
     Status st = _writer->close(state, _commit_func);
-    if (st.ok()) {
-        _pending_commits.emplace_back(_writer);
-        return Status::OK();
-    } else {
-        LOG(WARNING) << "close file error: " << _outfile_location;
-        return Status::IOError("close file error!");
+
+    if (!st.ok()) {
+        st = st.clone_and_prepend("close file error");
+        LOG(WARNING) << st;
+        return st;
     }
+
+    _pending_commits.emplace_back(_writer);
+    return st;
 }
 
 Status RollingAsyncParquetWriter::close(RuntimeState* state) {
