@@ -142,7 +142,7 @@ public class AnalyzeJob implements Writable {
 
         boolean hasFailedCollectJob = false;
         for (StatisticsCollectJob statsJob : statisticsCollectJobList) {
-            AnalyzeStatus analyzeStatus = new AnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+            AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                     statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumns(),
                     statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(), LocalDateTime.now());
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
