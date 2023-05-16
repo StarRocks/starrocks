@@ -1189,8 +1189,7 @@ public class GlobalStateMgr {
             // start other daemon threads that should run on all FEs
             startAllNodeTypeDaemonThreads();
             insertOverwriteJobManager.cancelRunningJobs();
-
-            // must behind startLeaderOnlyDaemonThreads(), because creating workerGroup depends on serviceId
+            
             if (!isDefaultWarehouseCreated) {
                 initDefaultWarehouse();
             }
