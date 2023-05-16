@@ -54,15 +54,14 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
     public String ip;
     @SerializedName(value = "port")
     public int port;
-    // msg for ping result
-    public String heartbeatErrMsg = "";
-    public long lastUpdateTime = -1;
-
     @SerializedName(value = "lastStartTime")
     public long lastStartTime = -1;
     @SerializedName(value = "isAlive")
     public boolean isAlive;
 
+    // msg for ping result
+    public String heartbeatErrMsg = "";
+    public long lastUpdateTime = -1;
     private int heartbeatRetryTimes = 0;
 
     public FsBroker() {
@@ -108,7 +107,7 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
         }
         if (!isReplay) {
             hbResponse.aliveStatus = isAlive ?
-                HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
+                    HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
         } else {
             if (hbResponse.aliveStatus != null) {
                 // The metadata before the upgrade does not contain hbResponse.aliveStatus,

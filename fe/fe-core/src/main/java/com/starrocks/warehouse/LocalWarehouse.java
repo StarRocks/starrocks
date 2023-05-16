@@ -16,7 +16,6 @@ package com.starrocks.warehouse;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.server.GlobalStateMgr;
@@ -27,7 +26,6 @@ import java.util.Map;
 // on-premise
 public class LocalWarehouse extends Warehouse {
 
-    @SerializedName(value = "cluster")
     Cluster cluster;
 
     public LocalWarehouse(long id, String name) {

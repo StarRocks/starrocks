@@ -34,6 +34,7 @@
 
 package com.starrocks.system;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
@@ -48,9 +49,13 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class Frontend implements Writable {
+    @SerializedName(value = "r")
     private FrontendNodeType role;
+    @SerializedName(value = "n")
     private String nodeName;
+    @SerializedName(value = "h")
     private String host;
+    @SerializedName(value = "e")
     private int editLogPort;
 
     private int queryPort;

@@ -39,6 +39,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.DecommissionType;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
@@ -74,6 +75,7 @@ public class Backend extends ComputeNode {
     private static final Logger LOG = LogManager.getLogger(Backend.class);
 
     // rootPath -> DiskInfo
+    @SerializedName(value = "d")
     private volatile ImmutableMap<String, DiskInfo> disksRef;
 
     // This is used for the first time we init pathHashToDishInfo in SystemInfoService.
