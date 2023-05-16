@@ -15,7 +15,7 @@ Spark Load 通过外部的 Spark 资源实现对导入数据的预处理，提�
 ## 使用说明
 
 如果您继续通过 Broker 进程执行导入，则必须确保您的 StarRocks 集群中已部署 Broker。
-您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。
+您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/deployment/deploy_broker.md)完成 Broker 部署。
 
 ## 支持的数据格式
 

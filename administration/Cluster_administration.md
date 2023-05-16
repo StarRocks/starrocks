@@ -173,7 +173,7 @@ sh bin/stop_cn.sh
 
 ### 下载安装文件
 
-在完成数据正确性验证后，将新版本的 BE 和 FE 节点的安装包下载并分发至各自路径下。您也可以 [在 Docker 中编译](Build_in_docker.md) 对应 tag 的源码。建议您选择小版本号最高的版本。
+在完成数据正确性验证后，将新版本的 BE 和 FE 节点的安装包下载并分发至各自路径下。您也可以 [在 Docker 中编译](/developers/build-starrocks/Build_in_docker.md) 对应 tag 的源码。建议您选择小版本号最高的版本。
 
 ### 升级 BE 前的准备
 
