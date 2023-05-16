@@ -1848,15 +1848,12 @@ public class LocalMetastore implements ConnectorMetadata {
             if (table.isCloudNativeTableOrMaterializedView()) {
                 long primaryComputeNodeId = -1;
                 try {
-                    // it is ok for cloudnative table to build tablet in any warehouse
                     Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-                    if (warehouse != null) {
-                        primaryComputeNodeId = ((LakeTablet) tablet).
-                                getPrimaryComputeNodeId(warehouse.getAnyAvailableCluster().getWorkerGroupId());
-                    } else {
-                        primaryComputeNodeId = ((LakeTablet) tablet).
-                                getPrimaryComputeNodeId();
-                    }
+                    // for debug
+                    LOG.info("workerGroupId is {}", warehouse.getAnyAvailableCluster().getWorkerGroupId());
+
+                    primaryComputeNodeId = ((LakeTablet) tablet).
+                            getPrimaryComputeNodeId(warehouse.getAnyAvailableCluster().getWorkerGroupId());
                 } catch (UserException e) {
                     throw new DdlException(e.getMessage());
                 }
