@@ -31,7 +31,7 @@ netstat -tunlp | grep 9010
 在用于 BE 部署的实例上，您需要检查以下端口：
 
 - `9060`：BE Thrift Server 端口（`be_port`）
-- `8040`：BE HTTP Server 端口（`be_http_port`）
+- `8040`：BE HTTP Server 端口（`webserver_port`）
 - `9050`：BE 心跳服务端口（`heartbeat_service_port`）
 - `8060`：BE BRPC 端口（`brpc_port`）
 
@@ -51,7 +51,7 @@ netstat -tunlp | grep 8060
 在用于 CN 部署的实例上，您需要检查以下端口：
 
 - `9060`：CN Thrift Server 端口（`thrift_port`）
-- `8040`：CN HTTP Server 端口（`be_http_port`）
+- `8040`：CN HTTP Server 端口（`webserver_port`）
 - `9050`：CN 心跳服务端口（`heartbeat_service_port`）
 - `8060`：CN BRPC 端口（`brpc_port`）
 
