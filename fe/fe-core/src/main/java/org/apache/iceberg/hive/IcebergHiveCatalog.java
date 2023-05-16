@@ -58,7 +58,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -357,19 +356,8 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
 
     @Override
     public void deleteUncommittedDataFiles(List<String> fileLocations) {
-        fileLocations.forEach(this::deletePath);
-    }
-
-    // TODO(stephen): use CachingFileIO to access file system After adaptation
-    private void deletePath(String location) {
-        Path path = new Path(location);
-        URI uri = path.toUri();
-        try {
-            FileSystem fileSystem = FileSystem.get(uri, conf);
-            fileSystem.delete(path, true);
-        } catch (IOException e) {
-            LOG.error("Failed to delete location {}", location, e);
-            throw new StarRocksConnectorException("Failed to delete location %s. msg: %s", location, e.getMessage());
+        for (String location : fileLocations) {
+            fileIO.deleteFile(location);
         }
     }
 
