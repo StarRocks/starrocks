@@ -2,33 +2,27 @@
 
 This topic describes how to compile StarRocks using Docker.
 
-<<<<<<< HEAD
-The dev environment image was named as `dev-env`, and was a CentOS7 based image, since branch-2.5, Ubuntu-22.04 is recommended over CentOS7 distribution, the image is renamed to `dev-env-ubuntu` accordingly.
-
-| branch-name      | image-name                          |
-| ---------------- | ----------------------------------- |
-| main             | starrocks/dev-env-ubuntu:latest     |
-| branch-3.0       | starrocks/dev-env-ubuntu:3.0-latest |
-| branch-2.5       | starrocks/dev-env-ubuntu:2.5-latest |
-| branch-2.4       | starrocks/dev-env:branch-2.4        |
-| branch-2.3       | starrocks/dev-env:branch-2.3        |
-=======
 ## Overview
 
 StarRocks provides development environment images for both Ubuntu 22.04 and CentOS 7.0. With the image, you can launch a Docker container and compile StarRocks in the container.
 
 ### StarRocks version and DEV ENV image
->>>>>>> 6516ba1f3 ([Doc] Init Deployment renovation (#23386))
 
 Different branches of StarRocks correspond to different development environment images provided on [StarRocks Docker Hub](https://hub.docker.com/u/starrocks).
 
 - For Ubuntu 22.04:
 
-  | **Branch name** | **Ima****ge na****me**              |
+  | **Branch name** | **Image name**              |
   | --------------- | ----------------------------------- |
   | main            | starrocks/dev-env-ubuntu:latest     |
   | branch-3.0      | starrocks/dev-env-ubuntu:3.0-latest |
   | branch-2.5      | starrocks/dev-env-ubuntu:2.5-latest |
+  | branch-2.4      | starrocks/dev-env:branch-2.4        |
+  | branch-2.3      | starrocks/dev-env:branch-2.3        |
+  
+  > **NOTE**
+  >
+  > This development environment image and was a CentOS 7 based image before the `branch-2.5`. Since the `branch-2.5`, Ubuntu-22.04 is recommended over CentOS7 distribution, and this image is renamed to `dev-env-ubuntu` accordingly.
 
 - For CentOS 7:
 
