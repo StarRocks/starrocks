@@ -359,6 +359,8 @@
       + [array_sum](./sql-reference/sql-functions/array-functions/array_sum.md)
       + [arrays_overlap](./sql-reference/sql-functions/array-functions/arrays_overlap.md)
       + [array_to_bitmap](./sql-reference/sql-functions/array-functions/array_to_bitmap.md)
+      + [cardinality](./sql-reference/sql-functions/array-functions/cardinality.md)
+      + [element_at](./sql-reference/sql-functions/array-functions/element_at.md)
       + [reverse](./sql-reference/sql-functions/array-functions/reverse.md)
       + [unnest](./sql-reference/sql-functions/array-functions/unnest.md)
     + Bit Functions
@@ -414,6 +416,8 @@
         + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
     + Map Functions
+      + [cardinality](./sql-reference/sql-functions/map-functions/cardinality.md)
+      + [element_at](./sql-reference/sql-functions/map-functions/element_at.md)
       + [map_apply](./sql-reference/sql-functions/map-functions/map_apply.md)
       + [map_filter](./sql-reference/sql-functions/map-functions/map_filter.md)
       + [map_from_arrays](./sql-reference/sql-functions/map-functions/map_from_arrays.md)
