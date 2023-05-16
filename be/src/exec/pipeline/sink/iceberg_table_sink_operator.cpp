@@ -113,7 +113,7 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
         const std::vector<std::string>& partition_column_names = _iceberg_table->partition_column_names();
         std::vector<std::string> partition_column_values;
         for (const ColumnPtr& column : partitions_columns) {
-            partition_column_values.emplace_back(_value_to_string(column, 0));
+            partition_column_values.emplace_back(_value_to_string(column));
         }
 
         DCHECK(partition_column_names.size() == partition_column_values.size());
@@ -126,7 +126,7 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
             auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _common_metrics.get(),
                                                                       add_iceberg_commit_info, state, _driver_sequence);
             _partition_writers.insert({partition_location, std::move(writer)});
-            writer->append_chunk(chunk.get(), state);
+            _partition_writers[partition_location]->append_chunk(chunk.get(), state);
         } else {
             partition_writer->second->append_chunk(chunk.get(), state);
         }
@@ -144,8 +144,8 @@ std::string IcebergTableSinkOperator::_get_partition_location(const std::vector<
     return partition_location;
 }
 
-std::string IcebergTableSinkOperator::_value_to_string(const ColumnPtr& column, size_t index) {
-    auto v = column->get(index);
+std::string IcebergTableSinkOperator::_value_to_string(const ColumnPtr& column) {
+    auto v = column->get(0);
     std::string res;
     v.visit([&](auto& variant) {
         std::visit(
