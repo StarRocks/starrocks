@@ -1973,11 +1973,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return tableProperty.getCompressionType();
     }
 
-    public boolean hasUniqueConstraints() {
-        List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
-        return uniqueConstraint != null;
-    }
-
+    @Override
     public List<UniqueConstraint> getUniqueConstraints() {
         if (tableProperty == null) {
             return null;
@@ -1985,6 +1981,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return tableProperty.getUniqueConstraints();
     }
 
+    @Override
     public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -1996,6 +1993,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         tableProperty.setUniqueConstraints(uniqueConstraints);
     }
 
+    @Override
     public List<ForeignKeyConstraint> getForeignKeyConstraints() {
         if (tableProperty == null) {
             return null;
@@ -2003,7 +2001,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return tableProperty.getForeignKeyConstraints();
     }
 
-    public void setForeignKeyConstraint(List<ForeignKeyConstraint> foreignKeyConstraints) {
+    @Override
+    public void setForeignKeyConstraints(List<ForeignKeyConstraint> foreignKeyConstraints) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }

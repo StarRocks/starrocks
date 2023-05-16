@@ -28,7 +28,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.planner.MaterializedViewTPCHTest;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -571,7 +570,7 @@ public class PlanTestNoneDBBase {
     }
 
     public static String getFileContent(String fileName) throws Exception {
-        ClassLoader loader = MaterializedViewTPCHTest.class.getClassLoader();
+        ClassLoader loader = PlanTestNoneDBBase.class.getClassLoader();
         System.out.println("file name:" + fileName);
         String content = "";
         try {
