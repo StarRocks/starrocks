@@ -1244,7 +1244,6 @@ void TabletUpdatesTest::test_save_meta(bool enable_persistent_index) {
         keys.push_back(i);
     }
     for (int i = 0; i < 30; i++) {
-        std::cout << "rowset " << i << std::endl;
         ASSERT_TRUE(_tablet->rowset_commit(i + 2, create_rowset(_tablet, keys)).ok());
     }
     ASSERT_EQ(31, _tablet->updates()->version_history_count());
