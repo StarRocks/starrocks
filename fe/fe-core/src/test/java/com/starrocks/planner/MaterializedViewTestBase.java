@@ -88,7 +88,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         new MockUp<PlanTestBase>() {
             @Mock
-            boolean isIgnoreColRefIds() {
+            boolean isIgnoreExplicitColRefIds() {
                 return true;
             }
         };
@@ -183,13 +183,31 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
+        String nullableEmps = "create table emps_null (\n" +
+                "empid int null,\n" +
+                "deptno int null,\n" +
+                "name varchar(25) null,\n" +
+                "salary double\n" +
+                ")\n" +
+                "distributed by hash(`empid`) buckets 10\n" +
+                "properties (\"replication_num\" = \"1\");";
+        String nullableDepts = "create table depts_null (\n" +
+                "deptno int null,\n" +
+                "name varchar(25) null\n" +
+                ")\n" +
+                "distributed by hash(`deptno`) buckets 10\n" +
+                "properties (\"replication_num\" = \"1\");";
+
         starRocksAssert
                 .withTable(deptsTable)
                 .withTable(empsTable)
                 .withTable(locationsTable)
                 .withTable(ependentsTable)
                 .withTable(empsWithBigintTable)
-                .withTable(empsTableWithoutConstraints);
+                .withTable(empsTableWithoutConstraints)
+                .withTable(nullableEmps)
+                .withTable(nullableDepts);
+
     }
 
     @AfterClass
@@ -263,8 +281,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
         }
 
         public MVRewriteChecker match(String targetMV) {
+            contains(targetMV);
             Assert.assertTrue(this.exception == null);
-            Assert.assertTrue(this.rewritePlan.contains(targetMV));
             return this;
         }
 

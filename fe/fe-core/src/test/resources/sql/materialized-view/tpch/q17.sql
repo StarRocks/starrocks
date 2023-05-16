@@ -25,6 +25,6 @@ AGGREGATE ([GLOBAL] aggregate [{45: sum=sum(45: sum)}] group by [[]] having [nul
                 ANALYTIC ({149: avg=avg(6: l_quantity)} [17: p_partkey] [] )
                     TOP-N (order by [[17: p_partkey ASC NULLS FIRST]])
                         EXCHANGE SHUFFLE[17]
-                            SCAN (mv[lineitem_mv] columns[115: l_extendedprice, 117: l_partkey, 118: l_quantity, 131: p_brand, 132: p_container] predicate[131: p_brand = Brand#35 AND 132: p_container = JUMBO CASE])
+                            SCAN (mv[lineitem_mv] columns[85: l_extendedprice, 87: l_partkey, 88: l_quantity, 101: p_brand, 102: p_container] predicate[101: p_brand = Brand#35 AND 102: p_container = JUMBO CASE])
 [end]
 
