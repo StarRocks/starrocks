@@ -33,7 +33,7 @@ PROPERTIES("replicated_storage" = "true");
 
 **Assign values implicitly**
 
-When data is loaded into a StarRocks table, you do not need to specify the values or specify the values as `DEFAULT` for the `AUTO_INCREMENT` column. StarRocks automatically assigns unique integer values for that column and inserts them into the table.
+When data is loaded into a StarRocks table, you do not need to specify the values for the `AUTO_INCREMENT` column. StarRocks automatically assigns unique integer values for that column and inserts them into the table.
 
 ```SQL
 INSERT INTO test_tbl1 (id) VALUES (1);
@@ -80,9 +80,7 @@ mysql > SELECT * FROM test_tbl1 ORDER BY id;
 6 rows in set (0.02 sec)
 ```
 
-In actual usage, when you view the data in the table, the following result may be returned. This is because StarRocks cannot guarantee that the values for the `AUTO_INCREMENT` column are strictly monotonic. But StarRocks can guarantee that the values roughly increase in chronological order. For more information, see [Monotonicity](#monotonicity).
-
-View data in the table.
+In actual usage, the following result may be returned when you view the data in the table. This is because StarRocks cannot guarantee that the values for the `AUTO_INCREMENT` column are strictly monotonic. But StarRocks can guarantee that the values roughly increase in chronological order. For more information, see [Monotonicity](#monotonicity).
 
 ```SQL
 mysql > SELECT * FROM test_tbl1 ORDER BY id;
@@ -105,11 +103,9 @@ You can also explicitly specify the values for the `AUTO_INCREMENT` column and i
 
 ```SQL
 INSERT INTO test_tbl1 (id, number) VALUES (7, 100);
-```
 
-View data in the table.
+-- view data in the table.
 
-```SQL
 mysql > SELECT * FROM test_tbl1 ORDER BY id;
 +------+--------+
 | id   | number |
@@ -129,11 +125,9 @@ Moreover, explicitly specifying values does not affect the subsequent values gen
 
 ```SQL
 INSERT INTO test_tbl1 (id) VALUES (8);
-```
 
-View data in the table.
+-- view data in the table.
 
-```SQL
 mysql > SELECT * FROM test_tbl1 ORDER BY id;
 +------+--------+
 | id   | number |
