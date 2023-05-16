@@ -93,17 +93,6 @@
     + [Apache Superset](./integrations/superset_support.md)
   + [Other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
-<<<<<<< HEAD
-  + Deployment
-    + [Deploy StarRocks with StarGo](./administration/stargo.md)
-    + Deploy StarRocks on Kubernetes
-      + [Deploy StarRocks with Operator](./administration/sr_operator.md)
-      + [Deploy StarRocks with Helm](./administration/helm.md)
-    + [Deploy CN](./administration/deploy_cn.md)
-    + [Deploy FE cluster with high availability](./administration/Deployment.md)
-    + [Deploy StarRocks on AWS](./administration/starrocks_on_aws.md)
-=======
->>>>>>> 6516ba1f3 ([Doc] Init Deployment renovation (#23386))
   + Management
     + [Scale in and out](./administration/Scale_up_down.md)
     + [Backup and restore](./administration/Backup_and_restore.md)
