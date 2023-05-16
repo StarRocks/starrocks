@@ -19,6 +19,8 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.CachingBaseMetastoreCatalog;
+import com.starrocks.connector.iceberg.CachingHiveTableOps;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
@@ -26,12 +28,12 @@ import com.starrocks.connector.iceberg.glue.CachedGlueClientPool;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
-import org.apache.iceberg.BaseMetastoreCatalog;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.ClientPool;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -51,7 +53,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
-public class IcebergGlueCatalog extends BaseMetastoreCatalog implements IcebergCatalog, Configurable<Configuration> {
+public class IcebergGlueCatalog extends CachingBaseMetastoreCatalog implements IcebergCatalog, Configurable<Configuration> {
     private static final Logger LOG = LogManager.getLogger(IcebergGlueCatalog.class);
 
     private String name;
@@ -91,7 +93,7 @@ public class IcebergGlueCatalog extends BaseMetastoreCatalog implements IcebergC
                             Optional<IcebergMetricsReporter> metricsReporter) throws StarRocksConnectorException {
         Preconditions.checkState(tableId != null);
         try {
-            TableOperations ops = this.newTableOps(tableId);
+            TableOperations ops = newTableOps(tableId);
             if (metricsReporter.isPresent()) {
                 return new BaseTable(ops, fullTableName(this.name(), tableId), metricsReporter.get());
             }
@@ -134,10 +136,20 @@ public class IcebergGlueCatalog extends BaseMetastoreCatalog implements IcebergC
     }
 
     @Override
-    public TableOperations newTableOps(TableIdentifier tableIdentifier) {
+    public TableOperations doNewTableOps(TableIdentifier tableIdentifier) {
         String dbName = tableIdentifier.namespace().level(0);
         String tableName = tableIdentifier.name();
         return new HiveTableOperations(conf, clients, fileIO, name, dbName, tableName);
+    }
+
+    @Override
+    protected TableOperations doNewCachingTableOps(TableIdentifier tableIdentifier, TableMetadata tableMetadata) {
+        String dbName = tableIdentifier.namespace().level(0);
+        String tableName = tableIdentifier.name();
+        CachingHiveTableOps tableOperations = new CachingHiveTableOps(this, conf, clients, fileIO, name, dbName, tableName);
+        tableOperations.initWithMetadata(tableMetadata);
+        tableOperations.requestRefresh();
+        return tableOperations;
     }
 
     @Override
