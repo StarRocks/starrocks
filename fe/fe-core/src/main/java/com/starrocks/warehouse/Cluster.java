@@ -16,7 +16,6 @@ package com.starrocks.warehouse;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
@@ -43,18 +42,8 @@ public class Cluster implements Writable {
 
     public Cluster(long id) {
         this.id = id;
+        // use default workerGroupId for community version
         workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
-    }
-
-    public void init() {
-        if (RunMode.allowCreateLakeTable()) {
-            try {
-                workerGroupId = GlobalStateMgr.getCurrentStarOSAgent().createWorkerGroup("x0");
-            } catch (DdlException e) {
-                LOG.warn(e);
-                System.exit(-1);
-            }
-        }
     }
 
     public long getId() {
