@@ -185,7 +185,7 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
         ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
         RETURN_IF_ERROR(handle_partial_update());
-        ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer(kHorizontal));
+        ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer(kHorizontal, _txn_id));
         if (_partial_update_tablet_schema != nullptr) {
             _tablet_writer->set_tablet_schema(_partial_update_tablet_schema);
         }
@@ -337,7 +337,7 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
             }
             // generate rewrite segment names to avoid gc in rewrite operation
             for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
-                op_write->add_rewrite_segments(random_segment_filename());
+                op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
             }
         }
         // handle condition update
