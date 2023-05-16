@@ -437,6 +437,19 @@ struct TSchemaScanNode {
   25: optional i64 log_limit;
 }
 
+enum TAccessPathType {
+    ROOT,
+    KEY,
+    VALUE,
+    FIELD,
+}
+
+struct TColumnAccessPath {
+    1: optional TAccessPathType type
+    2: optional Exprs.TExpr path
+    3: optional list<TColumnAccessPath> children
+}
+
 // If you find yourself changing this struct, see also TLakeScanNode
 struct TOlapScanNode {
   1: required Types.TTupleId tuple_id
@@ -456,6 +469,7 @@ struct TOlapScanNode {
   26: optional list<Exprs.TExpr> bucket_exprs
   27: optional list<string> sort_key_column_names
   28: optional i32 max_parallel_scan_instance_num
+  29: optional list<TColumnAccessPath> column_access_paths
 }
 
 struct TJDBCScanNode {
@@ -482,6 +496,7 @@ struct TLakeScanNode {
   10: optional list<string> unused_output_column_name
   11: optional list<string> sort_key_column_names
   12: optional list<Exprs.TExpr> bucket_exprs
+  13: optional list<TColumnAccessPath> column_access_paths
 }
 
 struct TEqJoinCondition {

@@ -58,6 +58,7 @@ import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
+import com.starrocks.sql.optimizer.rule.tree.PruneSubColumnsRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
@@ -210,7 +211,8 @@ public class Optimizer {
         if (connectContext.getExecutor() == null) {
             traceInfo = new OptimizerTraceInfo(connectContext.getQueryId(), null);
         } else {
-            traceInfo = new OptimizerTraceInfo(connectContext.getQueryId(), connectContext.getExecutor().getParsedStmt());
+            traceInfo =
+                    new OptimizerTraceInfo(connectContext.getQueryId(), connectContext.getExecutor().getParsedStmt());
         }
         context.setTraceInfo(traceInfo);
 
@@ -256,6 +258,8 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
+        tree = pruneSubfieldsForComplexType(tree, rootTaskContext);
+
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         deriveLogicalProperty(tree);
 
@@ -268,8 +272,8 @@ public class Optimizer {
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-        //Limit push must be after the column prune,
-        //otherwise the Node containing limit may be prune
+        // Limit push must be after the column prune,
+        // otherwise the Node containing limit may be prune
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MERGE_LIMIT);
         ruleRewriteIterative(tree, rootTaskContext, new PushDownProjectLimitRule());
 
@@ -371,7 +375,7 @@ public class Optimizer {
         // if mv has multi table sources, we will process it in memo to support view delta join rewrite
         if (sessionVariable.isEnableMaterializedViewViewDeltaRewrite() &&
                 rootTaskContext.getOptimizerContext().getCandidateMvs()
-                        .stream().anyMatch(context -> context.hasMultiTables())) {
+                        .stream().anyMatch(MaterializationContext::hasMultiTables)) {
             return false;
         }
         return true;
@@ -401,6 +405,15 @@ public class Optimizer {
 
         rootTaskContext.setRequiredColumns(requiredColumns.clone());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+        return tree;
+    }
+
+    private OptExpression pruneSubfieldsForComplexType(OptExpression tree, TaskContext rootTaskContext) {
+        if (!context.getSessionVariable().isCboPruneSubColumn()) {
+            return tree;
+        }
+
+        tree = new PruneSubColumnsRule().rewrite(tree, rootTaskContext);
         return tree;
     }
 
@@ -443,7 +456,7 @@ public class Optimizer {
         }
 
         if (!sessionVariable.isMVPlanner()) {
-            //add join implementRule
+            // add join implementRule
             String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
             if ("merge".equalsIgnoreCase(joinImplementationMode)) {
                 context.getRuleSet().addMergeJoinImplementationRule();
@@ -461,7 +474,7 @@ public class Optimizer {
         if (isEnableMultiTableRewrite(connectContext, tree)) {
             if (sessionVariable.isEnableMaterializedViewViewDeltaRewrite() &&
                     rootTaskContext.getOptimizerContext().getCandidateMvs()
-                            .stream().anyMatch(context -> context.hasMultiTables())) {
+                            .stream().anyMatch(MaterializationContext::hasMultiTables)) {
                 context.getRuleSet().addSingleTableMvRewriteRule();
             }
             context.getRuleSet().addMultiTableMvRewriteRule();
