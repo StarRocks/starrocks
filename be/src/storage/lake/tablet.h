@@ -116,7 +116,7 @@ public:
 
     [[nodiscard]] std::string del_location(std::string_view del_name) const;
 
-    [[nodiscard]] std::string delvec_location(int64_t version) const;
+    [[nodiscard]] std::string delvec_location(std::string_view delvec_name) const;
 
     Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
 

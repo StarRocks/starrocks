@@ -104,8 +104,8 @@ std::string TabletManager::del_location(int64_t tablet_id, std::string_view del_
     return _location_provider->del_location(tablet_id, del_name);
 }
 
-std::string TabletManager::delvec_location(int64_t tablet_id, int64_t version) const {
-    return _location_provider->tablet_delvec_location(tablet_id, version);
+std::string TabletManager::delvec_location(int64_t tablet_id, std::string_view delvec_name) const {
+    return _location_provider->delvec_location(tablet_id, delvec_name);
 }
 
 std::string TabletManager::tablet_metadata_lock_location(int64_t tablet_id, int64_t version,
