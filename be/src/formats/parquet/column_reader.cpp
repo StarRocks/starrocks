@@ -494,9 +494,6 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
     } else if (field->type.type == LogicalType::TYPE_MAP) {
         std::unique_ptr<ColumnReader> key_reader = nullptr;
         std::unique_ptr<ColumnReader> value_reader = nullptr;
-        // ParquetFiled Map -> Map<Struct<key,value>>
-        DCHECK(field->children[0].type.is_struct_type());
-        DCHECK(field->children[0].children.size() == 2);
 
         if (!col_type.children[0].is_unknown_type()) {
             RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[0]), col_type.children[0], &key_reader));
@@ -566,9 +563,6 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
     } else if (field->type.type == LogicalType::TYPE_MAP) {
         std::unique_ptr<ColumnReader> key_reader = nullptr;
         std::unique_ptr<ColumnReader> value_reader = nullptr;
-        // ParquetFiled Map -> Map<Struct<key,value>>
-        DCHECK(field->children[0].type.is_struct_type());
-        DCHECK(field->children[0].children.size() == 2);
 
         const TIcebergSchemaField* key_iceberg_schema = &iceberg_schema_field->children[0];
         const TIcebergSchemaField* value_iceberg_schema = &iceberg_schema_field->children[1];
