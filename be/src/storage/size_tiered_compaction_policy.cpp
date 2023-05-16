@@ -14,8 +14,14 @@
 namespace starrocks::vectorized {
 
 SizeTieredCompactionPolicy::SizeTieredCompactionPolicy(Tablet* tablet) : _tablet(tablet) {
-    _max_level_size =
-            config::size_tiered_min_level_size * pow(config::size_tiered_level_multiple, config::size_tiered_level_num);
+    _compaction_type = INVALID_COMPACTION;
+    if (_tablet->keys_type() == KeysType::DUP_KEYS) {
+        _level_multiple = std::max(config::size_tiered_level_multiple_dupkey, config::size_tiered_level_multiple);
+    } else {
+        _level_multiple = config::size_tiered_level_multiple;
+    }
+
+    _max_level_size = config::size_tiered_min_level_size * pow(_level_multiple, config::size_tiered_level_num);
 }
 
 bool SizeTieredCompactionPolicy::need_compaction(double* score, CompactionType* type) {
@@ -78,7 +84,7 @@ double SizeTieredCompactionPolicy::_cal_compaction_score(int64_t segment_num, in
     // level bonus: The lower the level means the smaller the data volume of the compaction, the higher the execution priority
     int64_t level_bonus = 0;
     for (int64_t v = level_size; v < _max_level_size && level_bonus <= 7; ++level_bonus) {
-        v = v * config::size_tiered_level_multiple;
+        v = v * _level_multiple;
     }
     score += level_bonus;
 
@@ -144,11 +150,9 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
     std::set<SizeTieredLevel*, LevelComparator> priority_levels;
     std::vector<RowsetSharedPtr> transient_rowsets;
     size_t segment_num = 0;
-    int64_t level_multiple = config::size_tiered_level_multiple;
     auto keys_type = _tablet->keys_type();
     auto min_compaction_segment_num = std::max(
-            static_cast<int64_t>(2),
-            std::min(config::min_cumulative_compaction_num_singleton_deltas, config::size_tiered_level_multiple));
+            static_cast<int64_t>(2), std::min(config::min_cumulative_compaction_num_singleton_deltas, _level_multiple));
     // make sure compact to one nonoverlapping segment
     if (force_base_compaction) {
         min_compaction_segment_num = 2;
@@ -239,7 +243,7 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
         } else if ((!force_base_compaction ||
                     (!transient_rowsets.empty() && transient_rowsets[0]->start_version() != 0)) &&
                    level_size > config::size_tiered_min_level_size && rowset_size < level_size &&
-                   level_size / rowset_size > (level_multiple - 1)) {
+                   level_size / rowset_size > (_level_multiple - 1)) {
             if (!transient_rowsets.empty()) {
                 auto level = std::make_unique<SizeTieredLevel>(
                         transient_rowsets, segment_num, level_size, total_size,
