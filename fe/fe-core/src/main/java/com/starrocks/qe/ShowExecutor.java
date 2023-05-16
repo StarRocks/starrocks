@@ -1804,7 +1804,6 @@ public class ShowExecutor {
                 } else if (showStmt.hasLimit()) {
                     sizeLimit = showStmt.getLimit();
                 }
-
                 boolean stop = false;
                 Collection<Partition> partitions = new ArrayList<>();
                 if (showStmt.hasPartition()) {
