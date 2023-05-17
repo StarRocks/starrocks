@@ -18,9 +18,9 @@
 
 namespace starrocks::pipeline {
 
-StreamScanOperatorFactory::StreamScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop,
+StreamScanOperatorFactory::StreamScanOperatorFactory(int32_t id, ScanNode* scan_node, RuntimeState* state, size_t dop,
                                                      ChunkBufferLimiterPtr buffer_limiter, bool is_stream_pipeline)
-        : ConnectorScanOperatorFactory(id, scan_node, dop, std::move(buffer_limiter)),
+        : ConnectorScanOperatorFactory(id, scan_node, state, dop, std::move(buffer_limiter)),
           _is_stream_pipeline(is_stream_pipeline) {}
 
 OperatorPtr StreamScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
