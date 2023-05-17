@@ -125,4 +125,19 @@ public class AnalyzeAlterTableStatementTest {
         analyzeSuccess("alter table t0 drop rollup test1");
         analyzeSuccess("alter table t0 drop rollup test1, test2");
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testAlterTableComment() {
+        analyzeSuccess("alter table t0 comment = \"new comment\"");
+    }
+
+    @Test
+    public void testAlterWithTimeType() {
+        analyzeFail("alter table t0 add column testcol TIME");
+        analyzeFail("alter table t0 modify column v0 TIME");
+    }
+}
+>>>>>>> e5b8a483d ([BugFix] check time type in DDL (#23473) (#23474))
