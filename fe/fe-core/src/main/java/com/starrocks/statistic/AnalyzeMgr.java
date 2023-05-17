@@ -466,6 +466,9 @@ public class AnalyzeMgr implements Writable {
             return;
         }
         TxnCommitAttachment attachment = transactionState.getTxnCommitAttachment();
+        if (attachment == null) {
+            return;
+        }
         if (attachment instanceof RLTaskTxnCommitAttachment) {
             BasicStatsMeta basicStatsMeta =
                     GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
