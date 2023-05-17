@@ -139,7 +139,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         return new Histogram(buckets, mcv);
     }
 
-    private List<Bucket> convertBuckets(String histogramString, Type type) {
+    private List<Bucket> convertBuckets(String histogramString, Type type) throws AnalysisException {
         JsonObject jsonObject = JsonParser.parseString(histogramString).getAsJsonObject();
 
         JsonElement jsonElement = jsonObject.get("buckets");
@@ -160,10 +160,10 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
                 high = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
                         bucketJsonArray.get(1).getAsString(), DateUtils.DATE_FORMATTER_UNIX));
             } else if (type.isDatetime()) {
-                low = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        bucketJsonArray.get(0).getAsString(), DateUtils.DATE_TIME_FORMATTER_UNIX));
-                high = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        bucketJsonArray.get(1).getAsString(), DateUtils.DATE_TIME_FORMATTER_UNIX));
+                low = (double) getLongFromDateTime(DateUtils.parseDatTimeString(
+                        bucketJsonArray.get(0).getAsString()));
+                high = (double) getLongFromDateTime(DateUtils.parseDatTimeString(
+                        bucketJsonArray.get(1).getAsString()));
             } else {
                 low = Double.parseDouble(bucketJsonArray.get(0).getAsString());
                 high = Double.parseDouble(bucketJsonArray.get(1).getAsString());
