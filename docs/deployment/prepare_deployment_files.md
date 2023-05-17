@@ -6,7 +6,7 @@ Currently, the binary distribution packages StarRocks provides on [the StarRocks
 
 ## For x86-based CentOS 7.0
 
-StarRocks binary distribution packages are named in the **StarRocks-*****version*****.tar.gz** format, where ***version*** is a number (for example, ***2.5.2***) that indicates the version information of the binary distribution package. Make sure that you have chosen the correct version of the package.
+StarRocks binary distribution packages are named in the **StarRocks-version.tar.gz** format, where **version** is a number (for example, **2.5.2**) that indicates the version information of the binary distribution package. Make sure that you have chosen the correct version of the package.
 
 Follow these steps to prepare deployment files for the x86-based CentOS platform:
 
