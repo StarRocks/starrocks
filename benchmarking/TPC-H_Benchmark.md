@@ -558,7 +558,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 24
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT"
 );
 
@@ -587,7 +586,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 96
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "colocate_with" = "tpch2"
 );
@@ -605,7 +603,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`N_NATIONKEY`) BUCKETS 1
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT"
 );
 
@@ -627,7 +624,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 96
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "colocate_with" = "tpch2"
 );
@@ -650,7 +646,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 24
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "colocate_with" = "tpch2p"
 );
@@ -669,7 +664,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`ps_partkey`) BUCKETS 24
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "colocate_with" = "tpch2p"
 );
@@ -686,7 +680,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`r_regionkey`) BUCKETS 1
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT"
 );
 
@@ -706,7 +699,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 12
 PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT"
 );
 
