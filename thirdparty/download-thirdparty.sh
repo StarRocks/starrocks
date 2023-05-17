@@ -352,6 +352,27 @@ fi
 cd -
 echo "Finished patching $LIBRDKAFKA_SOURCE"
 
+<<<<<<< HEAD
+=======
+# patch roaring-bitmap
+cd $TP_SOURCE_DIR/$CROARINGBITMAP_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $CROARINGBITMAP_SOURCE = "CRoaring-0.2.60" ]; then
+    patch -p1 < $TP_PATCH_DIR/roaring-bitmap-patch-v0.2.60.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $CROARINGBITMAP_SOURCE"
+
+# patch pulsar
+cd $TP_SOURCE_DIR/$PULSAR_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $PULSAR_SOURCE = "pulsar-2.10.1" ]; then
+    patch -p1 < $TP_PATCH_DIR/pulsar.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $PULSAR_SOURCE"
+
+>>>>>>> 7946bb609 ([BugFix] Patch roaring-bitmap lib to fix bitmap index bug (#23484))
 # patch mariadb-connector-c-3.2.5
 cd $TP_SOURCE_DIR/$MARIADB_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; then
