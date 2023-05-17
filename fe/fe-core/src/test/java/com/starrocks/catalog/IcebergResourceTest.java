@@ -91,7 +91,7 @@ public class IcebergResourceTest {
         String name = "iceberg1";
         String type = "iceberg";
         String catalogType = "CUSTOM";
-        String catalogImpl = "org.apache.iceberg.hive.IcebergHiveCatalog";
+        String catalogImpl = "com.starrocks.connector.iceberg.IcebergHiveCatalog";
         Map<String, String> properties = Maps.newHashMap();
         properties.put("type", type);
         properties.put("iceberg.catalog.type", catalogType);

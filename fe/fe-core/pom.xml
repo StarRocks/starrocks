@@ -287,7 +287,6 @@ under the License.
             <groupId>org.apache.iceberg</groupId>
             <artifactId>iceberg-aws</artifactId>
             <version>${iceberg.version}</version>
-            <scope>runtime</scope>
         </dependency>
 
         <dependency>
