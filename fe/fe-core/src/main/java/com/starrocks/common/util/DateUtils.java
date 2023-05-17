@@ -30,6 +30,17 @@ public class DateUtils {
             DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s").toFormatter();
     public static final DateTimeFormatter DATE_TIME_MS_FORMATTER_UNIX =
             DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.%f").toFormatter();
+<<<<<<< HEAD
+=======
+    public static final DateTimeFormatter MINUTE_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y%m%d%H%i").toFormatter();
+    public static final DateTimeFormatter HOUR_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y%m%d%H").toFormatter();
+    public static final DateTimeFormatter YEAR_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y").toFormatter();
+    public static final DateTimeFormatter MONTH_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y%m").toFormatter();
+>>>>>>> 9a4bb43fc ([BugFix] Support millisecond datetime type in statistics (#23499))
 
     public static DateTimeFormatter probeFormat(String dateTimeStr) throws AnalysisException {
         if (dateTimeStr.length() == 8) {
@@ -37,7 +48,13 @@ public class DateUtils {
         } else if (dateTimeStr.length() == 10) {
             return DateUtils.DATE_FORMATTER;
         } else if (dateTimeStr.length() == 19) {
+<<<<<<< HEAD
             return DateUtils.DATE_TIME_FORMATTER;
+=======
+            return DateUtils.DATE_TIME_FORMATTER_UNIX;
+        } else if (dateTimeStr.length() == 26) {
+            return DateUtils.DATE_TIME_MS_FORMATTER_UNIX;
+>>>>>>> 9a4bb43fc ([BugFix] Support millisecond datetime type in statistics (#23499))
         } else {
             throw new AnalysisException("can not probe datetime format:" + dateTimeStr);
         }
@@ -54,6 +71,11 @@ public class DateUtils {
         } else {
             return LocalDateTime.of(LocalDate.from(temporal), LocalTime.of(0, 0, 0));
         }
+    }
+
+    public static LocalDateTime parseDatTimeString(String datetime) throws AnalysisException {
+        DateTimeFormatter dateTimeFormatter = probeFormat(datetime);
+        return parseStringWithDefaultHSM(datetime, dateTimeFormatter);
     }
 
     public static DateTimeFormatterBuilder unixDatetimeFormatBuilder(String pattern) {

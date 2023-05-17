@@ -222,8 +222,7 @@ public class StatisticUtils {
                     return Optional.of((double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
                             statistic, DateUtils.DATE_FORMATTER_UNIX)));
                 case DATETIME:
-                    return Optional.of((double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                            statistic, DateUtils.DATE_TIME_FORMATTER_UNIX)));
+                    return Optional.of((double) getLongFromDateTime(DateUtils.parseDatTimeString(statistic)));
                 case CHAR:
                 case VARCHAR:
                     return Optional.empty();
