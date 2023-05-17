@@ -52,7 +52,6 @@ Together with unnest(), you can achieve the following column-to-row conversion f
     DISTRIBUTED BY HASH(`v1`) BUCKETS 1
     PROPERTIES (
         "replication_num" = "1",
-        "in_memory" = "false",
         "storage_format" = "DEFAULT"
     );
 
@@ -124,7 +123,6 @@ Together with unnest(), you can achieve the following column-to-row conversion f
     DISTRIBUTED BY HASH(`v1`) BUCKETS 1
     PROPERTIES (
         "replication_num" = "1",
-        "in_memory" = "false",
         "storage_format" = "DEFAULT"
     );
 
