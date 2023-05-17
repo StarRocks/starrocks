@@ -36,7 +36,6 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Replica.ReplicaState;
-import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -73,10 +72,6 @@ public class LocalTabletTest {
         invertedIndex = new TabletInvertedIndex();
         new Expectations(globalStateMgr) {
             {
-                GlobalStateMgr.getCurrentStateJournalVersion();
-                minTimes = 0;
-                result = FeConstants.META_VERSION;
-
                 GlobalStateMgr.getCurrentInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;

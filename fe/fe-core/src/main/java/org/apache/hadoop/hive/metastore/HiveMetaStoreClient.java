@@ -1377,8 +1377,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             hook.preAlterTable(table, environmentContext);
         }
 
-        client.alter_table_with_environment_context(prependCatalogToDbName(databaseName, conf),
-                tblName, table, environmentContext);
+        client.alter_table_with_environment_context(databaseName, tblName, table, environmentContext);
     }
 
     @Override

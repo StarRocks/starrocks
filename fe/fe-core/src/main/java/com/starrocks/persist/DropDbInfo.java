@@ -37,11 +37,9 @@ package com.starrocks.persist;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -74,19 +72,9 @@ public class DropDbInfo implements Writable {
         return forceDrop;
     }
 
-    private void readFields(DataInput in) throws IOException {
-        dbName = Text.readString(in);
-    }
-
     public static DropDbInfo read(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_89) {
-            DropDbInfo info = new DropDbInfo();
-            info.readFields(in);
-            return info;
-        } else {
-            String json = Text.readString(in);
-            return GsonUtils.GSON.fromJson(json, DropDbInfo.class);
-        }
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, DropDbInfo.class);
     }
 
     @Override

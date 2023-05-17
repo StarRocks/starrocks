@@ -43,7 +43,6 @@ import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
@@ -336,41 +335,23 @@ public abstract class BulkLoadJob extends LoadJob {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         brokerDesc = BrokerDesc.read(in);
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_61) {
-            fileGroupAggInfo.readFields(in);
-        }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_58) {
-            if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_76) {
-                String stmt = Text.readString(in);
-                originStmt = new OriginStatement(stmt, 0);
-            } else {
-                originStmt = OriginStatement.read(in);
-            }
-        } else {
-            originStmt = new OriginStatement("", 0);
-        }
+        originStmt = OriginStatement.read(in);
         // The origin stmt does not be analyzed in here.
         // The reason is that it will thrown MetaNotFoundException when the tableId could not be found by tableName.
         // The origin stmt will be analyzed after the replay is completed.
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_66) {
-            int size = in.readInt();
-            for (int i = 0; i < size; i++) {
-                String key = Text.readString(in);
-                String value = Text.readString(in);
-                sessionVariables.put(key, value);
-            }
-            if (sessionVariables.containsKey(PRIORITY_SESSION_VARIABLE_KEY)) {
-                priority = Integer.parseInt(sessionVariables.get(PRIORITY_SESSION_VARIABLE_KEY));
-            }
-            if (sessionVariables.containsKey(LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)) {
-                logRejectedRecordNum = Long.parseLong(sessionVariables.get(LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY));
-            }
-        } else {
-            // old version of load does not have sqlmode, set it to default
-            sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
+        int size = in.readInt();
+        for (int i = 0; i < size; i++) {
+            String key = Text.readString(in);
+            String value = Text.readString(in);
+            sessionVariables.put(key, value);
+        }
+        if (sessionVariables.containsKey(PRIORITY_SESSION_VARIABLE_KEY)) {
+            priority = Integer.parseInt(sessionVariables.get(PRIORITY_SESSION_VARIABLE_KEY));
+        }
+        if (sessionVariables.containsKey(LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)) {
+            logRejectedRecordNum = Long.parseLong(sessionVariables.get(LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY));
         }
     }
-
 }

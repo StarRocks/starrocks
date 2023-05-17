@@ -8,17 +8,34 @@
   + [Architecture](./introduction/Architecture.md)
   + [Features](./introduction/Features.md)
 + Quick Start
-  + Deploy
-    + [Deploy StarRocks in Linux](./quick_start/Deploy.md)
-    + [Deploy StarRocks with Docker](./quick_start/deploy_with_docker.md)
+  + [Deploy StarRocks with Docker](./quick_start/deploy_with_docker.md)
   + [Create a table](./quick_start/Create_table.md)
   + [Load and query data](./quick_start/Import_and_query.md)
++ Deployment
+  + [Deployment overview](./deployment/deployment_overview.md)
+  + Prepare
+    + [Deployment prerequisites](./deployment/deployment_prerequisites.md)
+    + [Plan StarRocks cluster](./deployment/plan_cluster.md)
+    + [Check environment configurations](./deployment/environment_configurations.md)
+    + [Prepare deployment files](./deployment/prepare_deployment_files.md)
+  + Deploy
+    + Deploy classic StarRocks
+      + [Deploy StarRocks manually](./deployment/deploy_manually.md)
+      + Deploy on Kubernetes
+        + [Deploy StarRocks with Operator](./deployment/sr_operator.md)
+        + [Deploy StarRocks with Helm](./deployment/helm.md)
+      + [Deploy StarRocks on AWS](./deployment/starrocks_on_aws.md)
+    + [Deploy and use shared-data StarRocks](./deployment/deploy_shared_data.md)
+  + Manage
+    + [Post-deployment setup](./deployment/post_deployment_setup.md)
+    + [Upgrade StarRocks](./deployment/upgrade.md)
+    + [Downgrade StarRocks](./deployment/downgrade.md)
 + Table Design
   + [Understand StarRocks table design](./table_design/StarRocks_table_design.md)
   + Table types
     + [Overview of table types](./table_design/table_types/table_types.md)
     + [Duplicate Key table](./table_design/table_types/duplicate_key_table.md)
-    + [Aggragete table](./table_design/table_types/aggregate_table.md)
+    + [Aggregate table](./table_design/table_types/aggregate_table.md)
     + [Unique Key table](./table_design/table_types/unique_key_table.md)
     + [Primary Key table](./table_design/table_types/primary_key_table.md)
   + Data distribution
@@ -86,22 +103,12 @@
     + [DBeaver](./integrations/IDE_integrations/DBeaver.md)
   + [Other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
-  + Deployment
-    + [Deploy a shared-data StarRocks cluster](./administration/deploy_shared_data.md)
-    + [Deploy StarRocks with StarGo](./administration/stargo.md)
-    + Deploy StarRocks on Kubernetes
-      + [Deploy StarRocks with Operator](./administration/sr_operator.md)
-      + [Deploy StarRocks with Helm](./administration/helm.md)
-    + [Deploy CN](./administration/deploy_cn.md)
-    + [Deploy FE cluster with high availability](./administration/Deployment.md)
-    + [Deploy StarRocks on AWS](./administration/starrocks_on_aws.md)
   + Management
     + [Scale in and out](./administration/Scale_up_down.md)
     + [Backup and restore](./administration/Backup_and_restore.md)
     + [Configuration](./administration/Configuration.md)
     + [Monitor and alert](./administration/Monitor_and_Alert.md)
     + [Manage audit logs within StarRocks via Audit Loader](./administration/audit_loader.md)
-    + [Manage a cluster](./administration/Cluster_administration.md)
     + [Enable FQDN access](./administration/enable_fqdn.md)
     + [Configure a time zone](./administration/timezone.md)
     + [Information Schema](./administration/information_schema.md)
@@ -660,7 +667,7 @@
       + [DataX](./faq/loading/DataX_faq.md)
     + [Data Unloading](./faq/Exporting_faq.md)
   + [SQL](./faq/Sql_faq.md)
-  + [Query Dump](./faq/Dump_query.md)
+  + [query_dump](./faq/Dump_query.md)
   + [Other FAQs](./faq/Others.md)
 + Benchmark
   + [SSB Benchmark](./benchmarking/SSB_Benchmarking.md)

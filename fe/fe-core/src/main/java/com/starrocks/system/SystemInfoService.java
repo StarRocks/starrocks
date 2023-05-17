@@ -55,7 +55,6 @@ import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
@@ -119,8 +118,8 @@ public class SystemInfoService implements GsonPostProcessable {
         idToBackendRef = new ConcurrentHashMap<>();
         idToComputeNodeRef = new ConcurrentHashMap<>();
 
-        idToReportVersionRef = ImmutableMap.<Long, AtomicLong>of();
-        pathHashToDishInfoRef = ImmutableMap.<Long, DiskInfo>of();
+        idToReportVersionRef = ImmutableMap.of();
+        pathHashToDishInfoRef = ImmutableMap.of();
     }
 
     public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs)
@@ -178,7 +177,7 @@ public class SystemInfoService implements GsonPostProcessable {
 
     private void addComputeNodeIntoWarehouse(ComputeNode computeNode) {
         final Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                getDefaultWarehouse();
         if (warehouse != null) {
             warehouse.getAnyAvailableCluster().addNode(computeNode.getId());
         }
@@ -186,7 +185,7 @@ public class SystemInfoService implements GsonPostProcessable {
 
     private void dropComputeNodeFromWarehouse(ComputeNode computeNode) {
         Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                getDefaultWarehouse();
         if (warehouse != null) {
             warehouse.getAnyAvailableCluster().dropNode(computeNode.getId());
         }
@@ -827,11 +826,11 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public ImmutableCollection<ComputeNode> getComputeNodes(boolean needAlive) {
-        ImmutableMap<Long, ComputeNode> idToBackend = ImmutableMap.copyOf(idToComputeNodeRef);
+        ImmutableMap<Long, ComputeNode> idToComputeNode = ImmutableMap.copyOf(idToComputeNodeRef);
         List<Long> computeNodeIds = getComputeNodeIds(needAlive);
         List<ComputeNode> computeNodes = new ArrayList<>();
         for (Long computeNodeId : computeNodeIds) {
-            computeNodes.add(idToBackend.get(computeNodeId));
+            computeNodes.add(idToComputeNode.get(computeNodeId));
         }
         return ImmutableList.copyOf(computeNodes);
     }
@@ -1014,7 +1013,7 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // add it to DEFAULT_WAREHOUSE
         final Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                getDefaultWarehouse();
         if (warehouse != null) {
             warehouse.getAnyAvailableCluster().addNode(newComputeNode.getId());
         } else {
@@ -1024,9 +1023,6 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public void replayAddBackend(Backend newBackend) {
         // update idToBackend
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            newBackend.setBackendState(BackendState.using);
-        }
         idToBackendRef.put(newBackend.getId(), newBackend);
 
         // set new backend's report version as 0L
@@ -1048,7 +1044,7 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // add it to DEFAULT_WAREHOUSE
         final Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                getDefaultWarehouse();
         if (warehouse != null) {
             warehouse.getAnyAvailableCluster().addNode(newBackend.getId());
         } else {

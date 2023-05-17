@@ -115,7 +115,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
@@ -488,7 +487,8 @@ public class GlobalStateMgr {
     private InsertOverwriteJobManager insertOverwriteJobManager;
 
     private LocalMetastore localMetastore;
-    private NodeMgr nodeMgr;
+    private final NodeMgr nodeMgr;
+    private HeartbeatMgr heartbeatMgr;
     private GlobalFunctionMgr globalFunctionMgr;
 
     @Deprecated
@@ -540,7 +540,7 @@ public class GlobalStateMgr {
     }
 
     private HeartbeatMgr getHeartbeatMgr() {
-        return nodeMgr.getHeartbeatMgr();
+        return heartbeatMgr;
     }
 
     public TabletInvertedIndex getTabletInvertedIndex() {
@@ -603,6 +603,10 @@ public class GlobalStateMgr {
             this.starOSAgent = new StarOSAgent();
         }
 
+        // System Manager
+        this.nodeMgr = new NodeMgr();
+        this.heartbeatMgr = new HeartbeatMgr(!isCkptGlobalState);
+
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
@@ -652,7 +656,7 @@ public class GlobalStateMgr {
         this.metaContext.setThreadLocalInfo();
 
         this.stat = new TabletSchedulerStat();
-        this.nodeMgr = new NodeMgr(isCkptGlobalState);
+
         this.globalFunctionMgr = new GlobalFunctionMgr();
         this.tabletScheduler = new TabletScheduler(this, nodeMgr.getClusterInfo(), tabletInvertedIndex, stat);
         this.tabletChecker = new TabletChecker(this, nodeMgr.getClusterInfo(), tabletScheduler, stat);
@@ -844,12 +848,7 @@ public class GlobalStateMgr {
         return getCurrentState().getRecycleBin();
     }
 
-    // use this to get correct GlobalStateMgr's journal version
-    public static int getCurrentStateJournalVersion() {
-        return MetaContext.get().getMetaVersion();
-    }
-
-    public static int getCurrentStateStarRocksJournalVersion() {
+    public static int getCurrentStateStarRocksMetaVersion() {
         return MetaContext.get().getStarRocksMetaVersion();
     }
 
@@ -1151,12 +1150,9 @@ public class GlobalStateMgr {
 
         try {
             // Log meta_version
-            int communityMetaVersion = MetaContext.get().getMetaVersion();
             int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
-            if (communityMetaVersion < FeConstants.META_VERSION ||
-                    starrocksMetaVersion < FeConstants.STARROCKS_META_VERSION) {
-                editLog.logMetaVersion(new MetaVersion(FeConstants.META_VERSION, FeConstants.STARROCKS_META_VERSION));
-                MetaContext.get().setMetaVersion(FeConstants.META_VERSION);
+            if (starrocksMetaVersion < FeConstants.STARROCKS_META_VERSION) {
+                editLog.logMetaVersion(new MetaVersion(FeConstants.STARROCKS_META_VERSION));
                 MetaContext.get().setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
             }
 
@@ -1171,10 +1167,6 @@ public class GlobalStateMgr {
 
             if (!isDefaultClusterCreated) {
                 initDefaultCluster();
-            }
-
-            if (!isDefaultWarehouseCreated) {
-                initDefaultWarehouse();
             }
 
             // MUST set leader ip before starting checkpoint thread.
@@ -1199,6 +1191,10 @@ public class GlobalStateMgr {
             // start other daemon threads that should run on all FEs
             startAllNodeTypeDaemonThreads();
             insertOverwriteJobManager.cancelRunningJobs();
+
+            if (!isDefaultWarehouseCreated) {
+                initDefaultWarehouse();
+            }
 
             MetricRepo.init();
 
@@ -1251,7 +1247,8 @@ public class GlobalStateMgr {
         LOG.info("checkpointer thread started. thread id is {}", checkpointThreadId);
 
         // heartbeat mgr
-        nodeMgr.startHearbeat(epoch);
+        heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), epoch);
+        heartbeatMgr.start();
         // New load scheduler
         pendingLoadTaskScheduler.start();
         loadingLoadTaskScheduler.start();
@@ -1380,10 +1377,10 @@ public class GlobalStateMgr {
         try {
             // ** NOTICE **: always add new code at the end
             checksum = loadVersion(dis, checksum);
-            if (GlobalStateMgr.getCurrentStateStarRocksJournalVersion() >= StarRocksFEMetaVersion.VERSION_4) {
+            if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
                 try {
                     checksum = loadHeaderV2(dis, checksum);
-                    nodeMgr = NodeMgr.load(dis);
+                    nodeMgr.load(dis);
                 } catch (SRMetaBlockException | SRMetaBlockEOFException e) {
                     LOG.error(e.getMessage());
                 }
@@ -1580,31 +1577,27 @@ public class GlobalStateMgr {
         checksum = checksum ^ flag;
         int starrocksMetaVersion;
         if (flag < 0) {
-            int communityMetaVersion = dis.readInt();
-            checksum ^= communityMetaVersion;
-            MetaContext.get().setMetaVersion(communityMetaVersion);
-
+            checksum ^= dis.readInt();
             starrocksMetaVersion = dis.readInt();
             checksum ^= starrocksMetaVersion;
         } else {
             // when flag is positive, this is new version format
-            MetaContext.get().setMetaVersion(FeConstants.META_VERSION);
             starrocksMetaVersion = flag;
         }
 
-        if (starrocksMetaVersion > FeConstants.STARROCKS_META_VERSION) {
-            LOG.error("invalid meta data version found, cat not bigger than FeConstants.starrocks_meta_version."
-                            + "please update FeConstants.starrocks_meta_version bigger or equal to {} and restart.",
-                    starrocksMetaVersion);
+        if (!MetaVersion.isCompatible(starrocksMetaVersion, FeConstants.STARROCKS_META_VERSION)) {
+            LOG.error("Not compatible with meta version {}, current version is {}",
+                    starrocksMetaVersion, FeConstants.STARROCKS_META_VERSION);
             System.exit(-1);
         }
+
         MetaContext.get().setStarRocksMetaVersion(starrocksMetaVersion);
 
         return checksum;
     }
 
     public long loadHeader(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateStarRocksJournalVersion() >= StarRocksFEMetaVersion.VERSION_4) {
+        if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
             return loadHeaderV2(dis, checksum);
         } else {
             return loadHeaderV1(dis, checksum);
@@ -1621,7 +1614,7 @@ public class GlobalStateMgr {
 
         isDefaultClusterCreated = dis.readBoolean();
 
-        LOG.info("finished replay header from image");
+        LOG.info("finished to replay header from image");
         return checksum;
     }
 
@@ -1633,20 +1626,14 @@ public class GlobalStateMgr {
 
         isDefaultClusterCreated = header.isDefaultClusterCreated();
 
-        LOG.info("finished replay header from image");
+        LOG.info("finished to replay header from image");
         return checksum;
     }
 
     public long loadAlterJob(DataInputStream dis, long checksum) throws IOException {
         long newChecksum = checksum;
         for (AlterJobV2.JobType type : AlterJobV2.JobType.values()) {
-            if (type == AlterJobV2.JobType.DECOMMISSION_BACKEND) {
-                if (GlobalStateMgr.getCurrentStateJournalVersion() >= 5) {
-                    newChecksum = loadAlterJob(dis, newChecksum, type);
-                }
-            } else {
-                newChecksum = loadAlterJob(dis, newChecksum, type);
-            }
+            newChecksum = loadAlterJob(dis, newChecksum, type);
         }
         LOG.info("finished replay alterJob from image");
         return newChecksum;
@@ -1669,39 +1656,35 @@ public class GlobalStateMgr {
                     "and then from version 2.4 to the current version.");
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= 2) {
-            // finished or cancelled jobs
-            size = dis.readInt();
-            if (size > 0) {
-                // It may be upgraded from an earlier version, which is dangerous
-                throw new RuntimeException("Old metadata was found, please upgrade to version 2.4 first " +
-                        "and then from version 2.4 to the current version.");
-            }
+        // finished or cancelled jobs
+        size = dis.readInt();
+        if (size > 0) {
+            // It may be upgraded from an earlier version, which is dangerous
+            throw new RuntimeException("Old metadata was found, please upgrade to version 2.4 first " +
+                    "and then from version 2.4 to the current version.");
         }
 
         long newChecksum = checksum;
         // alter job v2
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_61) {
-            size = dis.readInt();
-            newChecksum ^= size;
-            for (int i = 0; i < size; i++) {
-                AlterJobV2 alterJobV2 = AlterJobV2.read(dis);
-                if (type == AlterJobV2.JobType.ROLLUP || type == AlterJobV2.JobType.SCHEMA_CHANGE) {
-                    if (type == AlterJobV2.JobType.ROLLUP) {
-                        this.getRollupHandler().addAlterJobV2(alterJobV2);
-                    } else {
-                        this.getSchemaChangeHandler().addAlterJobV2(alterJobV2);
-                    }
-                    // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
-                    // to prevent TabletInvertedIndex data loss,
-                    // So just use AlterJob.replay() instead of AlterHandler.replay().
-                    if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
-                        alterJobV2.replay(alterJobV2);
-                        LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
-                    }
+        size = dis.readInt();
+        newChecksum ^= size;
+        for (int i = 0; i < size; i++) {
+            AlterJobV2 alterJobV2 = AlterJobV2.read(dis);
+            if (type == AlterJobV2.JobType.ROLLUP || type == AlterJobV2.JobType.SCHEMA_CHANGE) {
+                if (type == AlterJobV2.JobType.ROLLUP) {
+                    this.getRollupHandler().addAlterJobV2(alterJobV2);
                 } else {
-                    LOG.warn("Unknown job type:" + type.name());
+                    this.getSchemaChangeHandler().addAlterJobV2(alterJobV2);
                 }
+                // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
+                // to prevent TabletInvertedIndex data loss,
+                // So just use AlterJob.replay() instead of AlterHandler.replay().
+                if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
+                    alterJobV2.replay(alterJobV2);
+                    LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
+                }
+            } else {
+                LOG.warn("Unknown job type:" + type.name());
             }
         }
 
@@ -1709,9 +1692,7 @@ public class GlobalStateMgr {
     }
 
     public long loadDeleteHandler(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_82) {
-            this.deleteHandler = DeleteHandler.read(dis);
-        }
+        this.deleteHandler = DeleteHandler.read(dis);
         LOG.info("finished replay deleteHandler from image");
         return checksum;
     }
@@ -1731,9 +1712,7 @@ public class GlobalStateMgr {
     }
 
     public long loadResources(DataInputStream in, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_87) {
-            resourceMgr = ResourceMgr.read(in);
-        }
+        resourceMgr = ResourceMgr.read(in);
         LOG.info("finished replay resources from image");
 
         LOG.info("start to replay resource mapping catalog");

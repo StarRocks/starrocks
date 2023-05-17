@@ -27,7 +27,7 @@ CREATE FILE "file_name" [IN database]
 | ---------------------- | ------------ | ------------------------------------------------------------ |
 | url                    | Yes          | The URL from which you can download the file. Only an unauthenticated HTTP URL is supported. After the file is stored in StarRocks, the URL is no longer needed. |
 | catalog                | Yes          | The category to which the file belongs. You can specify a catalog based on your business requirements. However, in some situations, you must set this parameter to a specific catalog. For example, if you load data from Kafka, StarRocks searches for files in the catalog from the Kafka data source. |
-| MD5                    | No           | The message-digest algorithm that is used to check a file. If you specify this parameter, StarRoocks checks the file after the file is downloaded. |
+| MD5                    | No           | The message-digest algorithm that is used to check a file. If you specify this parameter, StarRocks checks the file after the file is downloaded. |
 
 ## Examples
 
@@ -42,7 +42,7 @@ PROPERTIES
 );
 ```
 
-- Create a file named **client.key** under the category named my_catelog.
+- Create a file named **client.key** under the category named my_catalog.
 
 ```SQL
 CREATE FILE "client.key"

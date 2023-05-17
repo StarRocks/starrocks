@@ -25,13 +25,13 @@ public class NodeMgrTest {
 
     @Test(expected = UnknownHostException.class)
     public void testCheckFeExistByIpOrFqdnException() throws UnknownHostException {
-        NodeMgr nodeMgr = new NodeMgr(false);
+        NodeMgr nodeMgr = new NodeMgr();
         nodeMgr.checkFeExistByIpOrFqdn("not-exist-host.com");
     }
 
     @Test
     public void testCheckFeExistByIpOrFqdn() throws UnknownHostException {
-        NodeMgr nodeMgr = new NodeMgr(false);
+        NodeMgr nodeMgr = new NodeMgr();
         nodeMgr.replayAddFrontend(new Frontend(FrontendNodeType.FOLLOWER, "node1", "localhost", 9010));
         Assert.assertTrue(nodeMgr.checkFeExistByIpOrFqdn("localhost"));
         Assert.assertTrue(nodeMgr.checkFeExistByIpOrFqdn("127.0.0.1"));

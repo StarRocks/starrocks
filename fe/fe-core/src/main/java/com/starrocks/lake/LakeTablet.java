@@ -28,6 +28,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -79,13 +80,22 @@ public class LakeTablet extends Tablet {
     }
 
     public long getPrimaryComputeNodeId() throws UserException {
-        return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryComputeNodeIdByShard(getShardId());
+        return getPrimaryComputeNodeId(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+    }
+
+    public long getPrimaryComputeNodeId(long clusterId) throws UserException {
+        return GlobalStateMgr.getCurrentStarOSAgent().
+                getPrimaryComputeNodeIdByShard(getShardId(), clusterId);
     }
 
     @Override
     public Set<Long> getBackendIds() {
+        if (GlobalStateMgr.isCheckpointThread()) {
+            // NOTE: defensive code: don't touch any backend RPC if in checkpoint thread
+            return Collections.emptySet();
+        }
         try {
-            return GlobalStateMgr.getCurrentState().getStarOSAgent().getBackendIdsByShard(getShardId());
+            return GlobalStateMgr.getCurrentStarOSAgent().getBackendIdsByShard(getShardId());
         } catch (UserException e) {
             LOG.warn("Failed to get backends by shard. tablet id: {}", getId(), e);
             return Sets.newHashSet();
@@ -115,5 +125,23 @@ public class LakeTablet extends Tablet {
     public static LakeTablet read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, LakeTablet.class);
+    }
+
+    @Override
+    public int hashCode() {
+        return Long.hashCode(id);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (!(obj instanceof LakeTablet)) {
+            return false;
+        }
+
+        LakeTablet tablet = (LakeTablet) obj;
+        return (id == tablet.id && dataSize == tablet.dataSize && rowCount == tablet.rowCount);
     }
 }

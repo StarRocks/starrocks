@@ -133,7 +133,7 @@ public class EditLogTest {
     private GlobalStateMgr mockGlobalStateMgr() throws Exception {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
-        NodeMgr nodeMgr = new NodeMgr(false);
+        NodeMgr nodeMgr = new NodeMgr();
         Field field1 = nodeMgr.getClass().getDeclaredField("frontends");
         field1.setAccessible(true);
 

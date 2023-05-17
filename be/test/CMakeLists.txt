@@ -208,6 +208,7 @@ set(EXEC_FILES
         ./storage/lake/condition_update_test.cpp
         ./storage/lake/primary_key_compaction_task_test.cpp
         ./storage/lake/primary_key_publish_test.cpp
+        ./storage/lake/meta_file_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp

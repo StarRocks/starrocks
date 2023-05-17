@@ -77,7 +77,7 @@ public class StarOSAgent2ndTest {
 
         new Expectations() {
             {
-                client.getShardInfo("1", Lists.newArrayList(shardId));
+                client.getShardInfo("1", Lists.newArrayList(shardId), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 minTimes = 0;
                 result = Lists.newArrayList(shardInfo);
             }

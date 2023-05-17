@@ -69,6 +69,8 @@ public class StarOSAgent {
 
     public static final String SERVICE_NAME = "starrocks";
 
+    public static final long DEFAULT_WORKER_GROUP_ID = 0L;
+
     private StarClient client;
     private String serviceId;
     private Map<String, Long> workerToId;
@@ -180,7 +182,7 @@ public class StarOSAgent {
         return workerId;
     }
 
-    public void addWorker(long backendId, String workerIpPort) {
+    public void addWorker(long nodeId, String workerIpPort, long workerGroupId) {
         prepare();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             if (serviceId.equals("")) {
@@ -194,7 +196,7 @@ public class StarOSAgent {
 
             long workerId = -1;
             try {
-                workerId = client.addWorker(serviceId, workerIpPort);
+                workerId = client.addWorker(serviceId, workerIpPort, workerGroupId);
             } catch (StarClientException e) {
                 if (e.getCode() != StatusCode.ALREADY_EXIST) {
                     LOG.warn("Failed to addWorker. Error: {}", e);
@@ -211,10 +213,10 @@ public class StarOSAgent {
                     LOG.info("worker {} already added in starMgr", workerId);
                 }
             }
-            tryRemovePreviousWorker(backendId);
+            tryRemovePreviousWorker(nodeId);
             workerToId.put(workerIpPort, workerId);
-            workerToBackend.put(workerId, backendId);
-            LOG.info("add worker {} success, backendId is {}", workerId, backendId);
+            workerToBackend.put(workerId, nodeId);
+            LOG.info("add worker {} success, backendId is {}", workerId, nodeId);
         }
     }
 
@@ -390,10 +392,13 @@ public class StarOSAgent {
     }
 
     private List<ReplicaInfo> getShardReplicas(long shardId) throws UserException {
+        return getShardReplicas(shardId, DEFAULT_WORKER_GROUP_ID);
+    }
+
+    private List<ReplicaInfo> getShardReplicas(long shardId, long workerGroupId) throws UserException {
         prepare();
         try {
-            List<ShardInfo> shardInfos = client.getShardInfo(serviceId, Lists.newArrayList(shardId));
-
+            List<ShardInfo> shardInfos = client.getShardInfo(serviceId, Lists.newArrayList(shardId), workerGroupId);
             Preconditions.checkState(shardInfos.size() == 1);
             return shardInfos.get(0).getReplicaInfoList();
         } catch (StarClientException e) {
@@ -412,7 +417,11 @@ public class StarOSAgent {
     }
 
     public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
-        List<ReplicaInfo> replicas = getShardReplicas(shardId);
+        return getPrimaryComputeNodeIdByShard(shardId, DEFAULT_WORKER_GROUP_ID);
+    }
+
+    public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
+        List<ReplicaInfo> replicas = getShardReplicas(shardId, workerGroupId);
 
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             for (ReplicaInfo replicaInfo : replicas) {
@@ -428,13 +437,11 @@ public class StarOSAgent {
                         if (backendId == -1L) {
                             throw new UserException("Failed to get backend by worker. worker id: " + workerId);
                         }
-
                         // put it into map
                         workerToId.put(workerAddr, workerId);
                         workerToBackend.put(workerId, backendId);
                         return backendId;
                     }
-
                     return workerToBackend.get(workerId);
                 }
             }
