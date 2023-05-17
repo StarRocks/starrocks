@@ -189,38 +189,38 @@ public class TempExternalTable extends Table {
 
     private List<Column> getFileSchema() throws DdlException {
         TNetworkAddress address;
-        try {
-            List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
-            if (backendIds.isEmpty()) {
-                throw new DdlException("Failed to send proxy request. No alive backends");
-            }
-            Collections.shuffle(backendIds);
-            Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
-            address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+        if (backendIds.isEmpty()) {
+            throw new DdlException("Failed to send proxy request. No alive backends");
+        }
+        Collections.shuffle(backendIds);
+        Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
+        address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
+        PGetFileSchemaResult result;
+        try {
             // TODO(fw): more format support.
             PGetFileSchemaRequest request = getGetFileSchemaRequest(fileStatuses);
-
             Future<PGetFileSchemaResult> future = BackendServiceClient.getInstance().getFileSchema(address, request);
-            PGetFileSchemaResult result = future.get();
-
-            List<Column> columns = new ArrayList<>();
-            for (PSlotDescriptor slot : result.schema) {
-
-                List<PTypeNode> types = slot.slotType.types;
-                if (types.size() != 1) {
-                    throw new DdlException("non-scalar type is not supported: " + slot.colName);
-                }
-                PScalarType scalarType = slot.slotType.types.get(0).scalarType;
-
-                TPrimitiveType tPrimitiveType = TPrimitiveType.findByValue(scalarType.type);
-
-                columns.add(new Column(slot.colName, ScalarType.createType(PrimitiveType.fromThrift(tPrimitiveType)), true));
-            }
-            return columns;
+            result = future.get();
         } catch (Exception e) {
             throw new DdlException("failed to get file schema: " + e.getMessage());
         }
+
+        List<Column> columns = new ArrayList<>();
+        for (PSlotDescriptor slot : result.schema) {
+
+            List<PTypeNode> types = slot.slotType.types;
+            if (types.size() != 1) {
+                throw new DdlException("non-scalar type is not supported: " + slot.colName);
+            }
+            PScalarType scalarType = slot.slotType.types.get(0).scalarType;
+
+            TPrimitiveType tPrimitiveType = TPrimitiveType.findByValue(scalarType.type);
+
+            columns.add(new Column(slot.colName, ScalarType.createType(PrimitiveType.fromThrift(tPrimitiveType)), true));
+        }
+        return columns;
     }
 
     public List<ImportColumnDesc> getColumnExprList() {
