@@ -37,10 +37,8 @@ package com.starrocks.persist;
 import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -95,18 +93,10 @@ public class TablePropertyInfo implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        long dbId = -1;
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_55) {
-            dbId = in.readLong();
-        }
         tableId = in.readLong();
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_55) {
-            if (in.readBoolean()) {
-                groupId = GroupId.read(in);
-            }
-        } else {
-            groupId = new GroupId(dbId, tableId);
+        if (in.readBoolean()) {
+            groupId = GroupId.read(in);
         }
 
         int size = in.readInt();

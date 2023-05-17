@@ -52,7 +52,6 @@ public class StarRocksRepository extends FrontendDaemon {
 
     public void init() {
         MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeConstants.META_VERSION);
         metaContext.setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
         metaContext.setThreadLocalInfo();
         inited = true;

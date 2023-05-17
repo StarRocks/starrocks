@@ -69,7 +69,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
@@ -1079,25 +1078,19 @@ public class Load {
         Preconditions.checkArgument(jobSize == 0, "Number of jobs must be 0");
 
         // delete jobs
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_11) {
-            jobSize = dis.readInt();
-            newChecksum ^= jobSize;
-            Preconditions.checkArgument(jobSize == 0, "Number of delete job infos must be 0");
-        }
+        jobSize = dis.readInt();
+        newChecksum ^= jobSize;
+        Preconditions.checkArgument(jobSize == 0, "Number of delete job infos must be 0");
 
         // load error hub info
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_24) {
-            LoadErrorHub.Param param = new LoadErrorHub.Param();
-            param.readFields(dis);
-            setLoadErrorHubInfo(param);
-        }
+        LoadErrorHub.Param param = new LoadErrorHub.Param();
+        param.readFields(dis);
+        setLoadErrorHubInfo(param);
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
-            // 4. load delete jobs
-            int deleteJobSize = dis.readInt();
-            newChecksum ^= deleteJobSize;
-            Preconditions.checkArgument(deleteJobSize == 0, "Number of delete jobs must be 0");
-        }
+        // 4. load delete jobs
+        int deleteJobSize = dis.readInt();
+        newChecksum ^= deleteJobSize;
+        Preconditions.checkArgument(deleteJobSize == 0, "Number of delete jobs must be 0");
 
         LOG.info("finished replay loadJob from image");
         return newChecksum;

@@ -36,11 +36,9 @@ package com.starrocks.persist;
 
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -90,21 +88,9 @@ public class DropPartitionInfo implements Writable {
         return forceDrop;
     }
 
-    private void readFields(DataInput in) throws IOException {
-        dbId = in.readLong();
-        tableId = in.readLong();
-        partitionName = Text.readString(in);
-    }
-
     public static DropPartitionInfo read(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_74) {
-            DropPartitionInfo info = new DropPartitionInfo();
-            info.readFields(in);
-            return info;
-        } else {
-            String json = Text.readString(in);
-            return GsonUtils.GSON.fromJson(json, DropPartitionInfo.class);
-        }
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, DropPartitionInfo.class);
     }
 
     @Override

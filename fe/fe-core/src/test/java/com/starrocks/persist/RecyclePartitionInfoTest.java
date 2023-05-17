@@ -27,8 +27,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.FeMetaVersion;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TStorageMedium;
 import org.junit.Assert;
@@ -44,10 +42,6 @@ import java.util.List;
 public class RecyclePartitionInfoTest {
     @Test
     public void testRangeSerialization() throws Exception {
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_89);
-        metaContext.setThreadLocalInfo();
-
         // 1. Write objects to file
         File file = new File("./RecycleRangePartitionInfo");
         file.createNewFile();
@@ -83,10 +77,6 @@ public class RecyclePartitionInfoTest {
 
     @Test
     public void testSerializationV1() throws Exception {
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_89);
-        metaContext.setThreadLocalInfo();
-
         // 1. Write objects to file
         File file = new File("./RecyclePartitionInfoV1");
         file.createNewFile();

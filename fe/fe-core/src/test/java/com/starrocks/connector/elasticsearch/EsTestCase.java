@@ -40,8 +40,6 @@ import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.BeforeClass;
 
@@ -69,9 +67,6 @@ public class EsTestCase {
         fakeEditLog = new FakeEditLog();
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
         masterGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_40);
-        metaContext.setThreadLocalInfo();
         // masterGlobalStateMgr.setJournalVersion(FeMetaVersion.VERSION_40);
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
     }

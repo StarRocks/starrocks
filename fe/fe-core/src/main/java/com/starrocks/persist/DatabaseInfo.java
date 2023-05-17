@@ -35,10 +35,8 @@
 package com.starrocks.persist;
 
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
 
 import java.io.DataInput;
@@ -106,18 +104,12 @@ public class DatabaseInfo implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         this.dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_10) {
-            newDbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        }
+        newDbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
         this.quota = in.readLong();
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
-            this.clusterName = Text.readString(in);
-            // Compatible with dbState
-            Text.readString(in);
-        }
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_81) {
-            this.quotaType = QuotaType.valueOf(Text.readString(in));
-        }
+        this.clusterName = Text.readString(in);
+        // Compatible with dbState
+        Text.readString(in);
+        this.quotaType = QuotaType.valueOf(Text.readString(in));
     }
 
     public String getClusterName() {

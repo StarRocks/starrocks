@@ -45,7 +45,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
@@ -413,21 +412,19 @@ public class ExportMgr {
     public long loadExportJob(DataInputStream dis, long checksum) throws IOException, DdlException {
         long currentTimeMs = System.currentTimeMillis();
         long newChecksum = checksum;
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_32) {
-            int size = dis.readInt();
-            newChecksum = checksum ^ size;
-            for (int i = 0; i < size; ++i) {
-                long jobId = dis.readLong();
-                newChecksum ^= jobId;
-                ExportJob job = new ExportJob();
-                job.readFields(dis);
-                // discard expired job right away
-                if (isJobExpired(job, currentTimeMs)) {
-                    LOG.info("discard expired job: {}", job);
-                    continue;
-                }
-                unprotectAddJob(job);
+        int size = dis.readInt();
+        newChecksum = checksum ^ size;
+        for (int i = 0; i < size; ++i) {
+            long jobId = dis.readLong();
+            newChecksum ^= jobId;
+            ExportJob job = new ExportJob();
+            job.readFields(dis);
+            // discard expired job right away
+            if (isJobExpired(job, currentTimeMs)) {
+                LOG.info("discard expired job: {}", job);
+                continue;
             }
+            unprotectAddJob(job);
         }
         LOG.info("finished replay exportJob from image");
         return newChecksum;

@@ -43,11 +43,8 @@ import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.meta.MetaContext;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -201,18 +198,6 @@ public class Partition extends MetaObject implements Writable {
 
     public void updateVisibleVersion(long visibleVersion, long visibleVersionTime) {
         this.setVisibleVersion(visibleVersion, visibleVersionTime);
-        if (MetaContext.get() != null) {
-            // MetaContext is not null means we are in a edit log replay thread.
-            // if it is upgrade from old StarRocks cluster, then should update next version info
-            if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_45) {
-                // the partition is created and not import any data
-                if (visibleVersion == PARTITION_INIT_VERSION + 1) {
-                    this.nextVersion = PARTITION_INIT_VERSION + 1;
-                } else {
-                    this.nextVersion = visibleVersion + 1;
-                }
-            }
-        }
     }
 
     public long getVisibleVersion() {
@@ -440,33 +425,18 @@ public class Partition extends MetaObject implements Writable {
             idToVisibleRollupIndex.put(rollupTable.getId(), rollupTable);
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_61) {
-            int shadowIndexCount = in.readInt();
-            for (int i = 0; i < shadowIndexCount; i++) {
-                MaterializedIndex shadowIndex = MaterializedIndex.read(in);
-                idToShadowIndex.put(shadowIndex.getId(), shadowIndex);
-            }
+        int shadowIndexCount = in.readInt();
+        for (int i = 0; i < shadowIndexCount; i++) {
+            MaterializedIndex shadowIndex = MaterializedIndex.read(in);
+            idToShadowIndex.put(shadowIndex.getId(), shadowIndex);
         }
 
         visibleVersion = in.readLong();
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_88) {
-            visibleVersionTime = in.readLong();
-        } else {
-            visibleVersionTime = System.currentTimeMillis();
-        }
+        visibleVersionTime = in.readLong();
         in.readLong(); // read a version_hash for compatibility
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
-            nextVersion = in.readLong();
-            in.readLong(); // read a version_hash for compatibility
-            in.readLong(); // read a version_hash for compatibility
-        } else {
-            // the partition is created and not import any data
-            if (visibleVersion == PARTITION_INIT_VERSION + 1) {
-                this.nextVersion = PARTITION_INIT_VERSION + 1;
-            } else {
-                this.nextVersion = visibleVersion + 1;
-            }
-        }
+        nextVersion = in.readLong();
+        in.readLong(); // read a version_hash for compatibility
+        in.readLong(); // read a version_hash for compatibility
         DistributionInfoType distriType = DistributionInfoType.valueOf(Text.readString(in));
         if (distriType == DistributionInfoType.HASH) {
             distributionInfo = HashDistributionInfo.read(in);

@@ -37,8 +37,6 @@ package com.starrocks.catalog;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.common.FeMetaVersion;
-import com.starrocks.meta.MetaContext;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -81,10 +79,6 @@ public class OdbcCatalogResourceTest {
 
     @Test
     public void testSerialization() throws Exception {
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_92);
-        metaContext.setThreadLocalInfo();
-
         // 1. Write objects to file
         File file = new File("./odbcCatalogResource");
         file.createNewFile();

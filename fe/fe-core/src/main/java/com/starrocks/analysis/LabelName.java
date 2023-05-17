@@ -35,12 +35,10 @@
 package com.starrocks.analysis;
 
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang.builder.HashCodeBuilder;
@@ -118,11 +116,7 @@ public class LabelName implements ParseNode, Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            dbName = Text.readString(in);
-        } else {
-            dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        }
+        dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
         labelName = Text.readString(in);
     }
 

@@ -37,10 +37,8 @@ package com.starrocks.persist;
 import com.google.common.base.Objects;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.server.GlobalStateMgr;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -78,11 +76,7 @@ public class CreateTableInfo implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            dbName = Text.readString(in);
-        } else {
-            dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        }
+        dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
 
         table = Table.read(in);
     }

@@ -37,7 +37,6 @@ package com.starrocks.catalog;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.connector.elasticsearch.EsMajorVersion;
 import com.starrocks.connector.elasticsearch.EsMetaStateTracker;
@@ -349,25 +348,8 @@ public class EsTable extends Table {
         adler32.update(name.getBytes(StandardCharsets.UTF_8));
         // type
         adler32.update(type.name().getBytes(StandardCharsets.UTF_8));
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_68) {
-            for (Map.Entry<String, String> entry : tableContext.entrySet()) {
-                adler32.update(entry.getValue().getBytes(StandardCharsets.UTF_8));
-            }
-        } else {
-            // host
-            adler32.update(hosts.getBytes(StandardCharsets.UTF_8));
-            // username
-            adler32.update(userName.getBytes(StandardCharsets.UTF_8));
-            // passwd
-            adler32.update(passwd.getBytes(StandardCharsets.UTF_8));
-            // index name
-            adler32.update(indexName.getBytes(StandardCharsets.UTF_8));
-            // mappingType
-            if (mappingType != null) {
-                adler32.update(mappingType.getBytes(StandardCharsets.UTF_8));
-            }
-            // transport
-            adler32.update(transport.getBytes(StandardCharsets.UTF_8));
+        for (Map.Entry<String, String> entry : tableContext.entrySet()) {
+            adler32.update(entry.getValue().getBytes(StandardCharsets.UTF_8));
         }
 
         return Math.abs((int) adler32.getValue());
@@ -387,87 +369,58 @@ public class EsTable extends Table {
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_68) {
-            int size = in.readInt();
-            for (int i = 0; i < size; ++i) {
-                String key = Text.readString(in);
-                String value = Text.readString(in);
-                tableContext.put(key, value);
+        int size = in.readInt();
+        for (int i = 0; i < size; ++i) {
+            String key = Text.readString(in);
+            String value = Text.readString(in);
+            tableContext.put(key, value);
+        }
+        hosts = tableContext.get("hosts");
+        seeds = hosts.split(",");
+        userName = tableContext.get("userName");
+        passwd = tableContext.get("passwd");
+        indexName = tableContext.get("indexName");
+        mappingType = tableContext.get("mappingType");
+        transport = tableContext.get("transport");
+        if (tableContext.containsKey("majorVersion")) {
+            try {
+                majorVersion = EsMajorVersion.parse(tableContext.get("majorVersion"));
+            } catch (Exception e) {
+                majorVersion = EsMajorVersion.V_5_X;
             }
-            hosts = tableContext.get("hosts");
-            seeds = hosts.split(",");
-            userName = tableContext.get("userName");
-            passwd = tableContext.get("passwd");
-            indexName = tableContext.get("indexName");
-            mappingType = tableContext.get("mappingType");
-            transport = tableContext.get("transport");
-            if (tableContext.containsKey("majorVersion")) {
-                try {
-                    majorVersion = EsMajorVersion.parse(tableContext.get("majorVersion"));
-                } catch (Exception e) {
-                    majorVersion = EsMajorVersion.V_5_X;
-                }
-            }
+        }
 
-            enableDocValueScan = Boolean.parseBoolean(tableContext.get("enableDocValueScan"));
-            if (tableContext.containsKey("enableKeywordSniff")) {
-                enableKeywordSniff = Boolean.parseBoolean(tableContext.get("enableKeywordSniff"));
-            } else {
-                enableKeywordSniff = true;
-            }
-            if (tableContext.containsKey("maxDocValueFields")) {
-                try {
-                    maxDocValueFields = Integer.parseInt(tableContext.get("maxDocValueFields"));
-                } catch (Exception e) {
-                    maxDocValueFields = DEFAULT_MAX_DOCVALUE_FIELDS;
-                }
-            }
-            if (tableContext.containsKey(WAN_ONLY)) {
-                wanOnly = Boolean.parseBoolean(tableContext.get(WAN_ONLY));
-            } else {
-                wanOnly = false;
-            }
-            if (tableContext.containsKey(ES_NET_SSL)) {
-                sslEnabled = Boolean.parseBoolean(tableContext.get(ES_NET_SSL));
-            } else {
-                sslEnabled = false;
-            }
-
-            PartitionType partType = PartitionType.valueOf(Text.readString(in));
-            if (partType == PartitionType.UNPARTITIONED) {
-                partitionInfo = SinglePartitionInfo.read(in);
-            } else if (partType == PartitionType.RANGE) {
-                partitionInfo = RangePartitionInfo.read(in);
-            } else {
-                throw new IOException("invalid partition type: " + partType);
-            }
+        enableDocValueScan = Boolean.parseBoolean(tableContext.get("enableDocValueScan"));
+        if (tableContext.containsKey("enableKeywordSniff")) {
+            enableKeywordSniff = Boolean.parseBoolean(tableContext.get("enableKeywordSniff"));
         } else {
-            hosts = Text.readString(in);
-            seeds = hosts.split(",");
-            userName = Text.readString(in);
-            passwd = Text.readString(in);
-            indexName = Text.readString(in);
-            mappingType = Text.readString(in);
-            PartitionType partType = PartitionType.valueOf(Text.readString(in));
-            if (partType == PartitionType.UNPARTITIONED) {
-                partitionInfo = SinglePartitionInfo.read(in);
-            } else if (partType == PartitionType.RANGE) {
-                partitionInfo = RangePartitionInfo.read(in);
-            } else {
-                throw new IOException("invalid partition type: " + partType);
+            enableKeywordSniff = true;
+        }
+        if (tableContext.containsKey("maxDocValueFields")) {
+            try {
+                maxDocValueFields = Integer.parseInt(tableContext.get("maxDocValueFields"));
+            } catch (Exception e) {
+                maxDocValueFields = DEFAULT_MAX_DOCVALUE_FIELDS;
             }
-            transport = Text.readString(in);
-            // for upgrading write
-            tableContext.put("hosts", hosts);
-            tableContext.put("userName", userName);
-            tableContext.put("passwd", passwd);
-            tableContext.put("indexName", indexName);
-            tableContext.put("mappingType", mappingType);
-            tableContext.put("transport", transport);
-            tableContext.put("enableDocValueScan", "false");
-            tableContext.put(KEYWORD_SNIFF, "true");
-            tableContext.put(WAN_ONLY, "false");
-            tableContext.put(ES_NET_SSL, "false");
+        }
+        if (tableContext.containsKey(WAN_ONLY)) {
+            wanOnly = Boolean.parseBoolean(tableContext.get(WAN_ONLY));
+        } else {
+            wanOnly = false;
+        }
+        if (tableContext.containsKey(ES_NET_SSL)) {
+            sslEnabled = Boolean.parseBoolean(tableContext.get(ES_NET_SSL));
+        } else {
+            sslEnabled = false;
+        }
+
+        PartitionType partType = PartitionType.valueOf(Text.readString(in));
+        if (partType == PartitionType.UNPARTITIONED) {
+            partitionInfo = SinglePartitionInfo.read(in);
+        } else if (partType == PartitionType.RANGE) {
+            partitionInfo = RangePartitionInfo.read(in);
+        } else {
+            throw new IOException("invalid partition type: " + partType);
         }
     }
 

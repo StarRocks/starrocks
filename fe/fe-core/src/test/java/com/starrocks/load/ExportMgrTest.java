@@ -16,7 +16,6 @@ package com.starrocks.load;
 
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -41,13 +40,6 @@ public class ExportMgrTest {
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
-            }
-        };
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getCurrentStateJournalVersion();
-                minTimes = 0;
-                result = FeMetaVersion.VERSION_CURRENT;
             }
         };
         Config.history_job_keep_max_second = 10;

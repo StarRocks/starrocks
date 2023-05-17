@@ -60,7 +60,6 @@ public class DeepCopy {
         // Backup the current MetaContext before assigning a new one.
         MetaContext oldContext = MetaContext.get();
         MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeConstants.META_VERSION);
         metaContext.setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
         metaContext.setThreadLocalInfo();
 
@@ -94,7 +93,6 @@ public class DeepCopy {
         // Backup the current MetaContext before assigning a new one.
         MetaContext oldContext = MetaContext.get();
         MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeConstants.META_VERSION);
         metaContext.setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
         metaContext.setThreadLocalInfo();
         try {

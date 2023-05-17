@@ -51,7 +51,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
@@ -666,9 +665,7 @@ public class BackupHandler extends FrontendDaemon implements Writable {
     }
 
     public long loadBackupHandler(DataInputStream dis, long checksum, GlobalStateMgr globalStateMgr) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_42) {
-            readFields(dis);
-        }
+        readFields(dis);
         setGlobalStateMgr(globalStateMgr);
         LOG.info("finished replay backupHandler from image");
         return checksum;

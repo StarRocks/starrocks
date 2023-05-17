@@ -403,11 +403,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             }
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= 6) {
-            checkedVersion = in.readLong();
-            in.readLong(); // read a version_hash for compatibility
-            isConsistent = in.readBoolean();
-        }
+        checkedVersion = in.readLong();
+        in.readLong(); // read a version_hash for compatibility
+        isConsistent = in.readBoolean();
     }
 
     public static LocalTablet read(DataInput in) throws IOException {

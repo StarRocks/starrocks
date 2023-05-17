@@ -35,9 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
-import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -77,13 +75,8 @@ public class MetaObject implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_22) {
-            this.signature = in.readLong();
-        }
-
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= 6) {
-            this.lastCheckTime = in.readLong();
-        }
+        this.signature = in.readLong();
+        this.lastCheckTime = in.readLong();
     }
 
 }

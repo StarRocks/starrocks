@@ -49,7 +49,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.EditLog;
@@ -151,10 +150,6 @@ public class RestoreJobTest {
                 globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = db;
-
-                GlobalStateMgr.getCurrentStateJournalVersion();
-                minTimes = 0;
-                result = FeConstants.META_VERSION;
 
                 globalStateMgr.getNextId();
                 minTimes = 0;

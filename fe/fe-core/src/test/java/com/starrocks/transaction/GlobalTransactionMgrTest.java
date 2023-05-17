@@ -46,7 +46,6 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -57,7 +56,6 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadManager;
 import com.starrocks.load.routineload.RoutineLoadTaskInfo;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
@@ -67,7 +65,6 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
-import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -111,9 +108,6 @@ public class GlobalTransactionMgrTest {
         fakeTransactionIDGenerator = new FakeTransactionIDGenerator();
         masterGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
         slaveGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_40);
-        metaContext.setThreadLocalInfo();
 
         masterTransMgr = masterGlobalStateMgr.getGlobalTransactionMgr();
         masterTransMgr.setEditLog(masterGlobalStateMgr.getEditLog());
@@ -493,6 +487,7 @@ public class GlobalTransactionMgrTest {
         transTablets.add(tabletCommitInfo3);
         masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets);
         TransactionState transactionState = fakeEditLog.getTransaction(transactionId);
+        slaveTransMgr.replayUpsertTransactionState(transactionState);
         assertEquals(TransactionStatus.COMMITTED, transactionState.getTransactionStatus());
         Set<Long> errorReplicaIds = Sets.newHashSet();
         errorReplicaIds.add(GlobalStateMgrTestUtil.testReplicaId1);
@@ -664,13 +659,6 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void replayWithExpiredJob() throws Exception {
-        new Expectations(masterGlobalStateMgr) {
-            {
-                masterGlobalStateMgr.getCurrentStateJournalVersion();
-                minTimes = 0;
-                result = FeMetaVersion.VERSION_CURRENT;
-            }
-        };
         Config.label_keep_max_second = 1;
         long dbId = 1;
         Assert.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
@@ -756,6 +744,7 @@ public class GlobalTransactionMgrTest {
         }
         transactionState = fakeEditLog.getTransaction(transactionId);
         assertEquals(TransactionStatus.COMMITTED, transactionState.getTransactionStatus());
+        slaveTransMgr.replayUpsertTransactionState(transactionState);
 
         Set<Long> errorReplicaIds = Sets.newHashSet();
         errorReplicaIds.add(GlobalStateMgrTestUtil.testReplicaId1);
