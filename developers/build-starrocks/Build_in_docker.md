@@ -26,13 +26,6 @@ StarRocks 的不同版本对应 [StarRocks Docker Hub](https://hub.docker.com/u/
   | branch-3.0 | starrocks/dev-env-centos7:3.0-latest |
   | branch-2.5 | starrocks/dev-env-centos7:2.5-latest |
 
-### 第三方工具
-
-镜像中整合了以下第三方工具：
-
-- LLVM
-- Clang
-
 ## 前提条件
 
 在编译 StarRocks 前，请确保满足以下要求：
