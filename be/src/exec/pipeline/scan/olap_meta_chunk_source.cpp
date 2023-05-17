@@ -7,10 +7,9 @@
 
 namespace starrocks::pipeline {
 
-OlapMetaChunkSource::OlapMetaChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+OlapMetaChunkSource::OlapMetaChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                                          const OlapMetaScanContextPtr& scan_ctx)
-        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()),
-          _scan_ctx(scan_ctx) {}
+        : ChunkSource(op, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()), _scan_ctx(scan_ctx) {}
 
 OlapMetaChunkSource::~OlapMetaChunkSource() = default;
 
