@@ -139,6 +139,15 @@ public class AlterMaterializedViewTest {
         }
     }
 
+    // TODO: consider to support alterjob for mv
+    @Test
+    public void testAlterMVColocateGroup() throws Exception {
+        String alterMvSql = "alter materialized view mv1 set (\"colocate_with\" = \"group1\")";
+        AlterMaterializedViewStmt stmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        Assert.assertThrows(DdlException.class, () -> currentState.alterMaterializedView(stmt));
+    }
+
     @Test
     public void testAlterMVRewriteStalenessProperties() throws Exception {
         {
