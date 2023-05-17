@@ -258,7 +258,12 @@ private:
 
     Status _get_del_vec_st;
     DelVectorPtr _del_vec;
+<<<<<<< HEAD
     roaring_uint32_iterator_t _roaring_iter;
+=======
+    DeltaColumnGroupList _dcgs;
+    roaring::api::roaring_uint32_iterator_t _roaring_iter;
+>>>>>>> e6ee2f353 ([Enhancement] upgrade roaring bitmap lib to v1.1.3 (#23502))
 
     std::unordered_map<ColumnId, std::unique_ptr<RandomAccessFile>> _column_files;
 
