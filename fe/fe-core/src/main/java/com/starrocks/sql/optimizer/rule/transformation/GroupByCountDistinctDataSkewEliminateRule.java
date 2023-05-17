@@ -146,9 +146,6 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
         secondGroupBy.add(bucketColRef);
         Map<ColumnRefOperator, CallOperator> secondStageAggregations = Maps.newHashMap();
         CallOperator multiDistinctCountAgg = ScalarOperatorUtil.buildMultiCountDistinct(aggCall);
-        if (multiDistinctCountAgg == null) {
-            return Lists.newArrayList(input);
-        }
         secondStageAggregations.put(aggColRef, multiDistinctCountAgg);
 
         LogicalAggregationOperator secondAggOp =

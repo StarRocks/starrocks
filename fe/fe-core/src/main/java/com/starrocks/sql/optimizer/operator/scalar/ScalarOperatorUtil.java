@@ -32,9 +32,6 @@ public class ScalarOperatorUtil {
         Function searchDesc = new Function(new FunctionName(FunctionSet.MULTI_DISTINCT_COUNT),
                 oldFunctionCall.getFunction().getArgs(), Type.INVALID, false);
         Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
-        if (fn == null) {
-            return null;
-        }
 
         ScalarOperatorRewriter scalarOpRewriter = new ScalarOperatorRewriter();
         return (CallOperator) scalarOpRewriter.rewrite(
