@@ -16,7 +16,7 @@
   + Table types
     + [Overview of table types](./table_design/table_types/table_types.md)
     + [Duplicate Key table](./table_design/table_types/duplicate_key_table.md)
-    + [Aggragete table](./table_design/table_types/aggregate_table.md)
+    + [Aggregate table](./table_design/table_types/aggregate_table.md)
     + [Unique Key table](./table_design/table_types/unique_key_table.md)
     + [Primary Key table](./table_design/table_types/primary_key_table.md)
   + Data distribution

@@ -1187,7 +1187,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             sql = "select sum(v1) from colocate_t0 group by v1";
             execPlan = getExecPlan(sql);
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-            Assert.assertEquals(1, olapScanNode.getBucketExprs().size());
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
             Assert.assertTrue(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "1:AGGREGATE (update finalize)\n" +

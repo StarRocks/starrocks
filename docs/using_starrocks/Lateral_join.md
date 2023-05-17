@@ -7,14 +7,6 @@ Column-to-row conversion is a common operation in ETL processing. Lateral is a s
 * Currently, Lateral Join is only used with unnest() to achieve column-to-row conversion. Other table functions and UDTFs will be supported later.
 * Currently, Lateral Join does not support subqueries.
 
-## Prerequisites
-
-To use Lateral Join, you must use the new version of optimizer:
-
-~~~SQL
-set global enable_cbo = true;
-~~~
-
 ## Use Lateral Join
 
 Syntax:
@@ -38,7 +30,7 @@ The second syntax here is a shortened version of the first one, where the Latera
 
 > **NOTE**
 >
-> If you want to perform unnest on multiple volumns, you must specify an alias for each column, for example, `select v1, t1.unnest as v2, t2.unnest as v3 from lateral_test, unnest(v2) t1, unnest(v3) t2;`.
+> If you want to perform unnest on multiple columns, you must specify an alias for each column, for example, `select v1, t1.unnest as v2, t2.unnest as v3 from lateral_test, unnest(v2) t1, unnest(v3) t2;`.
 
 The current version of StarRocks supports type conversion between Bitmap, String, Array, and Column.
 ![Some type conversions in Lateral Join](../assets/lateral_join_type_conversion.png)
