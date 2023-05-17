@@ -73,7 +73,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT"
 );
 

@@ -40,7 +40,6 @@ Create a database named `bitmapdb` and a table named `bitmap`. Use Stream Load t
     DISTRIBUTED BY HASH(`tagname`) BUCKETS 1
     PROPERTIES (
     "replication_num" = "3",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT"
     );
     ```

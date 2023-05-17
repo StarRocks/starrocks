@@ -289,7 +289,6 @@ For more information about how to create a ClickHouse table and import data to t
     DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
     PROPERTIES (
     "replication_num" = "1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT"
     );
     ```
