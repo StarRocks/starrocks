@@ -167,7 +167,7 @@ jobs:
             rm -rf ./elastic-service
             cp -rf /var/lib/elastic-service ./elastic-service
             cd elastic-service && git pull
-            ./bin/elastic-cluster.sh --template thirdparty
+            ./bin/elastic-cluster.sh --template ci-image --run
             ip=$(grep hosts conf/starrocks_deploy.conf | head -n 1 | awk '{print $NF}')
             instance_id=$(grep instances conf/starrocks_deploy.conf | head -n 1 | awk '{print $NF}')
             echo "ip=${ip}" >> $GITHUB_OUTPUT
@@ -490,7 +490,7 @@ jobs:
     name: DEPLOY SR
     env:
       PR_NUMBER: ${{ github.event.number }}
-      CLUSTER_NAME: admit-default
+      CLUSTER_NAME: ci-admit
     outputs:
       fe: ${{steps.deploy_sr.outputs.fe}}
       be: ${{steps.deploy_sr.outputs.be}}
@@ -512,7 +512,7 @@ jobs:
           rm -rf ./elastic-service
           cp -rf /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
-          ./bin/elastic-cluster.sh --template admit-default
+          ./bin/elastic-cluster.sh --template ci-admit
           cp conf/starrocks_deploy.conf /var/local/env/${PR_NUMBER}-starrocks_deploy.conf
           echo "deploy_conf_file=/var/local/env/${PR_NUMBER}-starrocks_deploy.conf" >> $GITHUB_OUTPUT
 
@@ -534,7 +534,7 @@ jobs:
     timeout-minutes: 40
     env:
       PR_NUMBER: ${{ github.event.number }}
-      CLUSTER_NAME: admit-default
+      CLUSTER_NAME: ci-admit
       FE_NODE: ${{ needs.deploy.outputs.fe }}
       BE_NODE: ${{ needs.deploy.outputs.be }}
     steps:
@@ -584,7 +584,7 @@ jobs:
     timeout-minutes: 30
     env:
       PR_NUMBER: ${{ github.event.number }}
-      CLUSTER_NAME: admit-default
+      CLUSTER_NAME: ci-admit
       FE_NODE: ${{ needs.deploy.outputs.fe }}
       BE_NODE: ${{ needs.deploy.outputs.be }}
     steps:
