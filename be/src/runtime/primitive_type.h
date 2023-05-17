@@ -135,6 +135,27 @@ inline bool is_scalar_primitive_type(PrimitiveType ptype) {
     }
 }
 
+constexpr size_t type_estimated_overhead_bytes(PrimitiveType ptype) {
+    switch (ptype) {
+    case TYPE_VARCHAR:
+    case TYPE_CHAR:
+    case TYPE_ARRAY:
+        return 128;
+    case TYPE_JSON:
+        // 1KB.
+        return 1024;
+    case TYPE_HLL:
+        // 16KB.
+        return 16 * 1024;
+    case TYPE_OBJECT:
+    case TYPE_PERCENTILE:
+        // 1MB.
+        return 1024 * 1024;
+    default:
+        return 0;
+    }
+}
+
 VALUE_GUARD(PrimitiveType, BigIntPTGuard, pt_is_bigint, TYPE_BIGINT)
 VALUE_GUARD(PrimitiveType, BooleanPTGuard, pt_is_boolean, TYPE_BOOLEAN)
 VALUE_GUARD(PrimitiveType, LargeIntPTGuard, pt_is_largeint, TYPE_LARGEINT)

@@ -136,6 +136,7 @@ public:
     ~LakeDataSourceProvider() override = default;
 
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
+    const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
 protected:
     vectorized::ConnectorScanNode* _scan_node;
@@ -580,6 +581,10 @@ LakeDataSourceProvider::LakeDataSourceProvider(vectorized::ConnectorScanNode* sc
 
 DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<LakeDataSource>(this, scan_range);
+}
+
+const TupleDescriptor* LakeDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_t_lake_scan_node.tuple_id);
 }
 
 // ================================

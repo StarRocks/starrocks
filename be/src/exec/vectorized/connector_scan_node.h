@@ -36,8 +36,6 @@ public:
     connector::DataSourceProvider* data_source_provider() { return _data_source_provider.get(); }
     connector::ConnectorType connector_type() { return _connector_type; }
 
-    int io_tasks_per_scan_operator() const override;
-
 private:
     RuntimeState* _runtime_state = nullptr;
     connector::DataSourceProviderPtr _data_source_provider = nullptr;
@@ -56,6 +54,7 @@ private:
     void _close_pending_scanners();
     void _push_pending_scanner(ConnectorScanner* scanner);
     ConnectorScanner* _pop_pending_scanner();
+    void _adjust_io_tasks_per_scan_operator(RuntimeState* state);
 
     // non-pipeline fields.
     std::vector<TScanRangeParams> _scan_ranges;
@@ -106,5 +105,9 @@ private:
     Stack<ConnectorScanner*> _pending_scanners;
     UnboundedBlockingQueue<ChunkPtr> _result_chunks;
     Profile _profile;
+
+    void _estimate_scan_row_bytes();
+    int _estimated_max_concurrent_chunks() const;
+    size_t _estimated_scan_row_bytes = 0;
 };
 } // namespace starrocks::vectorized
