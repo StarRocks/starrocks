@@ -44,10 +44,6 @@ AggregateFuncResolver::AggregateFuncResolver() {
 
 AggregateFuncResolver::~AggregateFuncResolver() = default;
 
-template <LogicalType LT>
-AggregateFunctionPtr AggregateFactory::MakeBitmapUnionAggregateFunction() {
-    return std::make_shared<BitmapUnionAggregateFunction<LT>>();
-}
 
 AggregateFunctionPtr AggregateFactory::MakeBitmapIntersectAggregateFunction() {
     return std::make_shared<BitmapIntersectAggregateFunction>();

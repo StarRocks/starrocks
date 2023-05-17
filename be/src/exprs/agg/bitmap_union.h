@@ -24,7 +24,7 @@
 namespace starrocks {
 
 template <LogicalType LT>
-class BitmapUnionAggregateFunction
+class BitmapUnionAggregateFunction final
         : public AggregateFunctionBatchHelper<BitmapValue, BitmapUnionAggregateFunction<LT>> {
 public:
     using InputColumnType = RunTimeColumnType<LT>;
@@ -36,21 +36,27 @@ public:
         this->data(state).add(value);
     }
 
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
+        const auto& col = down_cast<const InputColumnType&>(*columns[0]);
+        const auto& values = reinterpret_cast<const std::vector<InputCppType>&>(col.get_data());
+        this->data(state).template add_batch<InputCppType>(reinterpret_cast<const InputCppType*>(values.data()), chunk_size);
+    }
+
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        const auto& col = down_cast<const InputColumnType&>(*column);
-        InputCppType value = col.get_data()[row_num];
-        this->data(state).add(value);
+        const auto& col = down_cast<const BitmapColumn&>(*column);
+        this->data(state) |= *(col.get_object(row_num));
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto* col = down_cast<BitmapColumn*>(to);
-        auto& bitmap = down_cast<BitmapValue&>(this->data(state));
-        col->append(std::move(bitmap));
+        auto& bitmap = this->data(state);
+        col->append(bitmap);
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
-        auto& src_column = down_cast<InputColumnType*>(src[0].get());
+        auto& src_column = down_cast<InputColumnType&>(*src[0].get());
         auto* dest_column = down_cast<BitmapColumn*>(dst->get());
         for (size_t i = 0; i < chunk_size; i++) {
             BitmapValue bitmap;

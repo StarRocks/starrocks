@@ -125,6 +125,12 @@ public enum AggregateType {
 
         primitiveTypeList.clear();
         primitiveTypeList.add(PrimitiveType.BITMAP);
+        primitiveTypeList.add(PrimitiveType.BOOLEAN);
+        primitiveTypeList.add(PrimitiveType.TINYINT);
+        primitiveTypeList.add(PrimitiveType.SMALLINT);
+        primitiveTypeList.add(PrimitiveType.INT);
+        primitiveTypeList.add(PrimitiveType.BIGINT);
+        primitiveTypeList.add(PrimitiveType.LARGEINT);
         compatibilityMap.put(BITMAP_UNION, EnumSet.copyOf(primitiveTypeList));
 
         primitiveTypeList.clear();

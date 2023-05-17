@@ -52,6 +52,8 @@
 #include "util/coding.h"
 #include "util/phmap/phmap_fwd_decl.h"
 #include "util/slice.h"
+#include "types/bitmap_value_detail.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -84,7 +86,56 @@ public:
     // Construct a bitmap from given elements.
     explicit BitmapValue(const std::vector<uint64_t>& bits);
 
-    void add(uint64_t value);
+    template <typename T>
+    void add(T value) {
+        switch (_type) {
+        case EMPTY:
+            _sv = value;
+            _type = SINGLE;
+            break;
+        case SINGLE:
+            //there is no need to convert the type if two variables are equal
+            if (_sv == value) {
+                break;
+            }
+
+            _set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
+            _set->insert(_sv);
+            _set->insert(value);
+            _type = SET;
+            break;
+        case BITMAP:
+            if constexpr (std::is_same_v<T, int128_t>) {
+                _bitmap->add(static_cast<uint64_t>(value));
+            } else if (std::is_same_v<T, int64_t>) {
+                _bitmap->add(static_cast<uint64_t>(value));
+            } else {
+                _bitmap->add(static_cast<uint32_t>(value));
+            }
+            break;
+        case SET:
+            if (_set->size() < 32) {
+                _set->insert(value);
+            } else {
+                _from_set_to_bitmap();
+                _bitmap->add(value);
+            }
+        }
+    }
+
+
+    template <typename T>
+    void add_batch(const T* values, size_t count) {
+        if (_type == BITMAP) {
+            _bitmap->addMany(count, values);
+        } else {
+            for (size_t i = 0; i < count; i++) {
+                add(values[i]);
+            }
+        }
+    }
+
+    //void add(uint64_t value);
 
     // Note: rhs BitmapValue is only readable after this method
     // Compute the union between the current bitmap and the provided bitmap.

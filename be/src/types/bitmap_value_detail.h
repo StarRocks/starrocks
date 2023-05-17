@@ -161,13 +161,71 @@ public:
      *
      */
     void add(uint32_t x) { roarings[0].add(x); }
+    void add(int32_t x) { roarings[0].add(x); }
 
     void add(uint64_t x) { roarings[highBytes(x)].add(lowBytes(x)); }
+    void add(int64_t x) { roarings[highBytes(x)].add(lowBytes(x)); }
+    void add(int128_t x) { roarings[highBytes(x)].add(lowBytes(x)); }
 
     /**
      * Add value n_args from pointer vals
      *
      */
+
+    void addMany(size_t n_args, const int8_t* vals) {
+        for (size_t lcv = 0; lcv < n_args; lcv++) {
+            roarings[0].add(vals[lcv]);
+            roarings[0].setCopyOnWrite(copyOnWrite);
+        }
+    }
+
+    void addMany(size_t n_args, const int16_t* vals) {
+        for (size_t lcv = 0; lcv < n_args; lcv++) {
+            roarings[0].add(vals[lcv]);
+            roarings[0].setCopyOnWrite(copyOnWrite);
+        }
+    }
+
+    void addMany(size_t n_args, const int32_t* vals) {
+        roarings[0].addMany(n_args, (const uint32_t*)(vals));
+        roarings[0].setCopyOnWrite(copyOnWrite);
+    }
+
+    void addMany(size_t n_args, const int64_t* vals) {
+        for (size_t lcv = 0; lcv < n_args; lcv++) {
+            roarings[highBytes(vals[lcv])].add(lowBytes(vals[lcv]));
+            roarings[highBytes(vals[lcv])].setCopyOnWrite(copyOnWrite);
+        }
+    }
+
+    void addMany(size_t n_args, const int128_t* vals) {
+        for (size_t lcv = 0; lcv < n_args; lcv++) {
+            roarings[highBytes(vals[lcv])].add(lowBytes(vals[lcv]));
+            roarings[highBytes(vals[lcv])].setCopyOnWrite(copyOnWrite);
+        }
+    }
+
+    void addMany(size_t n_args, const bool* vals) {
+        for (size_t lcv = 0; lcv < n_args; lcv++) {
+            roarings[0].add(vals[lcv]);
+            roarings[0].setCopyOnWrite(copyOnWrite);
+        }
+    }
+
+    void addMany(size_t n_args, const uint8_t* vals) {
+        for (size_t lcv = 0; lcv < n_args; lcv++) {
+            roarings[0].add(vals[lcv]);
+            roarings[0].setCopyOnWrite(copyOnWrite);
+        }
+    }
+
+    void addMany(size_t n_args, const uint16_t* vals) {
+        for (size_t lcv = 0; lcv < n_args; lcv++) {
+            roarings[0].add(vals[lcv]);
+            roarings[0].setCopyOnWrite(copyOnWrite);
+        }
+    }
+
     void addMany(size_t n_args, const uint32_t* vals) {
         for (size_t lcv = 0; lcv < n_args; lcv++) {
             roarings[0].add(vals[lcv]);
@@ -175,6 +233,13 @@ public:
         }
     }
     void addMany(size_t n_args, const uint64_t* vals) {
+        for (size_t lcv = 0; lcv < n_args; lcv++) {
+            roarings[highBytes(vals[lcv])].add(lowBytes(vals[lcv]));
+            roarings[highBytes(vals[lcv])].setCopyOnWrite(copyOnWrite);
+        }
+    }
+
+    void addMany(size_t n_args, const uint128_t* vals) {
         for (size_t lcv = 0; lcv < n_args; lcv++) {
             roarings[highBytes(vals[lcv])].add(lowBytes(vals[lcv]));
             roarings[highBytes(vals[lcv])].setCopyOnWrite(copyOnWrite);

@@ -876,7 +876,7 @@ public class FunctionSet {
         // Bitmap
         for (Type t : Type.getIntegerTypes()) {
             addBuiltin(AggregateFunction.createBuiltin(BITMAP_UNION, Lists.newArrayList(t),
-                    Type.BITMAP, t, true, false, true));
+                    Type.BITMAP, Type.BITMAP, true, false, true));
         }
         addBuiltin(AggregateFunction.createBuiltin(BITMAP_UNION, Lists.newArrayList(Type.BITMAP),
                 Type.BITMAP,

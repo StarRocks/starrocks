@@ -316,8 +316,20 @@ public class FunctionAnalyzer {
             return;
         }
 
+        if (fnName.getFunction().equals(FunctionSet.BITMAP_UNION)) {
+            if (functionCallExpr.getChildren().size() != 1) {
+                throw new SemanticException(fnName + " function could only have one child", functionCallExpr.getPos());
+            }
+            Type inputType = functionCallExpr.getChild(0).getType();
+            if (!inputType.isBitmapType() && !inputType.isIntegerType()) {
+                throw new SemanticException(
+                        fnName + " function's argument should be of BITMAP getType(), but was " + inputType,
+                        functionCallExpr.getChild(0).getPos());
+            }
+            return;
+        }
+
         if (fnName.getFunction().equals(FunctionSet.BITMAP_COUNT)
-                || fnName.getFunction().equals(FunctionSet.BITMAP_UNION)
                 || fnName.getFunction().equals(FunctionSet.BITMAP_UNION_COUNT)
                 || fnName.getFunction().equals(FunctionSet.BITMAP_INTERSECT)) {
             if (functionCallExpr.getChildren().size() != 1) {

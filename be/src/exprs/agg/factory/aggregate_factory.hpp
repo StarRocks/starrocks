@@ -215,6 +215,11 @@ public:
 // The function should be placed by alphabetical order
 
 template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeBitmapUnionAggregateFunction() {
+    return std::make_shared<BitmapUnionAggregateFunction<LT>>();
+}
+
+template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakeIntersectCountAggregateFunction() {
     return std::make_shared<IntersectCountAggregateFunction<LT>>();
 }

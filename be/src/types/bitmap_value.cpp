@@ -131,6 +131,8 @@ BitmapValue::BitmapValue(const std::vector<uint64_t>& bits) {
     }
 }
 
+
+/*
 void BitmapValue::add(uint64_t value) {
     switch (_type) {
     case EMPTY:
@@ -160,6 +162,7 @@ void BitmapValue::add(uint64_t value) {
         }
     }
 }
+*/
 
 void BitmapValue::_from_set_to_bitmap() {
     _bitmap = std::make_shared<detail::Roaring64Map>();

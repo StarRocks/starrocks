@@ -36,15 +36,17 @@ void AggregateFuncResolver::register_bitmap() {
     add_aggregate_mapping<TYPE_OBJECT, TYPE_OBJECT, BitmapValue, AggregateFunctionPtr, false>(
             "bitmap_union", false, AggregateFactory::MakeBitmapUnionAggregateFunction<TYPE_OBJECT>());
     add_aggregate_mapping<TYPE_BOOLEAN, TYPE_OBJECT, BitmapValue, AggregateFunctionPtr, false>(
-            "bitmap_union", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_BOOLEAN>());
+            "bitmap_union", false, AggregateFactory::MakeBitmapUnionAggregateFunction<TYPE_BOOLEAN>());
     add_aggregate_mapping<TYPE_TINYINT, TYPE_OBJECT, BitmapValue, AggregateFunctionPtr, false>(
-            "bitmap_union", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_TINYINT>());
+            "bitmap_union", false, AggregateFactory::MakeBitmapUnionAggregateFunction<TYPE_TINYINT>());
     add_aggregate_mapping<TYPE_SMALLINT, TYPE_OBJECT, BitmapValue, AggregateFunctionPtr, false>(
-            "bitmap_union", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_SMALLINT>());
+            "bitmap_union", false, AggregateFactory::MakeBitmapUnionAggregateFunction<TYPE_SMALLINT>());
+    add_aggregate_mapping<TYPE_INT, TYPE_OBJECT, BitmapValue, AggregateFunctionPtr, false>(
+            "bitmap_union", false, AggregateFactory::MakeBitmapUnionAggregateFunction<TYPE_INT>());
     add_aggregate_mapping<TYPE_BIGINT, TYPE_OBJECT, BitmapValue, AggregateFunctionPtr, false>(
-            "bitmap_union", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_BIGINT>());
+            "bitmap_union", false, AggregateFactory::MakeBitmapUnionAggregateFunction<TYPE_BIGINT>());
     add_aggregate_mapping<TYPE_LARGEINT, TYPE_OBJECT, BitmapValue, AggregateFunctionPtr, false>(
-            "bitmap_union", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_LARGEINT>());
+            "bitmap_union", false, AggregateFactory::MakeBitmapUnionAggregateFunction<TYPE_LARGEINT>());
 
     add_aggregate_mapping<TYPE_OBJECT, TYPE_OBJECT, BitmapValuePacked>(
             "bitmap_intersect", false, AggregateFactory::MakeBitmapIntersectAggregateFunction());
