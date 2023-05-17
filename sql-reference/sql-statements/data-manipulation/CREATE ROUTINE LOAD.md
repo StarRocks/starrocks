@@ -48,9 +48,8 @@ FROM data_source
 [COLUMNS (<column1_name>[,<column2_name>,<column_assignment>,... ])],
 [WHERE <expr>],
 [PARTITION (<partition1_name>[,<partition2_name>,...])]
+[TEMPORARY PARTITION (<temporary_partition1_name>[,<temporary_partition2_name>,...])]
 ```
-
-`COLUMNS TERMINATED BY`
 
 如果导入 CSV 格式的数据，则可以指定列分隔符，默认为`\t`，即 Tab。例如可以输入 `COLUMNS TERMINATED BY ","`。指定列分隔符为逗号(,)。
 
