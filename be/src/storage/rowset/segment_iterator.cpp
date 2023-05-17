@@ -274,7 +274,7 @@ private:
     Status _get_dcg_st;
     DelVectorPtr _del_vec;
     DeltaColumnGroupList _dcgs;
-    roaring::api::roaring_uint32_iterator_t _roaring_iter;
+    roaring_uint32_iterator_t _roaring_iter;
 
     std::unordered_map<ColumnId, std::unique_ptr<RandomAccessFile>> _column_files;
 

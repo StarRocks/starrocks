@@ -52,7 +52,7 @@
 
 namespace starrocks {
 
-using Roaring = roaring::Roaring;
+namespace {
 
 class BitmapUpdateContext {
     static const size_t estimate_size_threshold = 1024;
@@ -268,6 +268,8 @@ private:
     mutable uint64_t _reverted_index_size = 0;
     mutable std::vector<BitmapUpdateContext*> _late_update_context_vector;
 };
+
+} // namespace
 
 struct BitmapIndexWriterBuilder {
     template <LogicalType ftype>

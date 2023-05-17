@@ -46,8 +46,6 @@
 
 namespace starrocks {
 
-using Roaring = roaring::Roaring;
-
 BitmapIndexReader::BitmapIndexReader() {
     MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bitmap_index_mem_tracker(), sizeof(BitmapIndexReader));
 }
