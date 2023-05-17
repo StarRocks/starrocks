@@ -186,7 +186,7 @@ public class FileScanNode extends LoadScanNode {
         if (desc.getTable() != null) {
             Table tbl = desc.getTable();
             if (tbl instanceof BrokerTable) {
-                BrokerTable brokerTable = (BrokerTable) desc.getTable();
+                BrokerTable brokerTable = (BrokerTable) tbl;
                 try {
                     fileGroups = Lists.newArrayList(new BrokerFileGroup(brokerTable));
                 } catch (AnalysisException e) {
