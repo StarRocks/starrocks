@@ -226,7 +226,7 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
         probe_partition->num_rows += size;
     };
     RETURN_IF_ERROR(_probe_spiller->partitioned_spill(state, chunk, hash_column.get(), partition_processer, executor,
-                                                      spill::MemTrackerGuard(tls_mem_tracker)));
+                                                      spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
 
     return Status::OK();
 }
@@ -244,8 +244,8 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(RuntimeState* 
         }
 
         RETURN_IF_ERROR(
-                reader->trigger_restore(state, spill::SyncTaskExecutor{}, spill::MemTrackerGuard(tls_mem_tracker)));
-        auto chunk_st = reader->restore(state, spill::SyncTaskExecutor{}, spill::MemTrackerGuard(tls_mem_tracker));
+                reader->trigger_restore(state, spill::SyncTaskExecutor{}, spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
+        auto chunk_st = reader->restore(state, spill::SyncTaskExecutor{}, spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
         if (chunk_st.ok() && chunk_st.value() != nullptr && !chunk_st.value()->is_empty()) {
             RETURN_IF_ERROR(builder->append_chunk(state, std::move(chunk_st.value())));
         } else if (chunk_st.status().is_end_of_file()) {
