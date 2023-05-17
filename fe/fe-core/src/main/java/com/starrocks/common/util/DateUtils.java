@@ -37,7 +37,9 @@ public class DateUtils {
         } else if (dateTimeStr.length() == 10) {
             return DateUtils.DATE_FORMATTER;
         } else if (dateTimeStr.length() == 19) {
-            return DateUtils.DATE_TIME_FORMATTER;
+            return DateUtils.DATE_TIME_FORMATTER_UNIX;
+        } else if (dateTimeStr.length() == 26) {
+            return DateUtils.DATE_TIME_MS_FORMATTER_UNIX;
         } else {
             throw new AnalysisException("can not probe datetime format:" + dateTimeStr);
         }
@@ -54,6 +56,11 @@ public class DateUtils {
         } else {
             return LocalDateTime.of(LocalDate.from(temporal), LocalTime.of(0, 0, 0));
         }
+    }
+
+    public static LocalDateTime parseDatTimeString(String datetime) throws AnalysisException {
+        DateTimeFormatter dateTimeFormatter = probeFormat(datetime);
+        return parseStringWithDefaultHSM(datetime, dateTimeFormatter);
     }
 
     public static DateTimeFormatterBuilder unixDatetimeFormatBuilder(String pattern) {
