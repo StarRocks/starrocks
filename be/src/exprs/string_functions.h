@@ -431,6 +431,15 @@ public:
      */
     DEFINE_VECTORIZED_FN(strcmp);
 
+    /**
+    * @param: [string_value, from_value, to_value]
+    * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
+    * @return: BinaryColumn
+    */
+    DEFINE_VECTORIZED_FN(translate);
+    static Status translate_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status translate_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
 private:

@@ -2139,6 +2139,102 @@ StatusOr<ColumnPtr> StringFunctions::strcmp(FunctionContext* context, const Colu
     return VectorizedStrictBinaryFunction<strcmpImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(columns[0], columns[1]);
 }
 
+struct TranslateState {
+    phmap::flat_hash_map<char, char, phmap::Hash<char>, phmap::EqualTo<char>, phmap::Allocator<char>> map;
+};
+
+Status StringFunctions::translate_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+    auto* state = new TranslateState();
+    context->set_function_state(scope, state);
+    if (!context->is_constant_column(1) || !context->is_constant_column(2)) {
+        return Status::OK();
+    }
+
+    const auto from_str_col = context->get_constant_column(1);
+    if (from_str_col->only_null()) {
+        return Status::OK();
+    }
+    const auto from_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(from_str_col);
+    const auto from_str_size = from_str.get_size();
+    const auto from_str_val = from_str.to_string();
+
+    const auto to_str_col = context->get_constant_column(2);
+    if (to_str_col->only_null()) {
+        return Status::OK();
+    }
+    const auto to_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(to_str_col);
+    const auto to_str_size = to_str.get_size();
+    const auto to_str_val = to_str.to_string();
+
+    if (from_str_size < to_str_size) {
+        return Status::InvalidArgument("The third parameter is too long and would be truncated.");
+    }
+    for (size_t i = 0; i < to_str_size; i++) {
+        state->map[from_str_val[i]] = to_str_val[i];
+    }
+    for (size_t i = to_str_size; i < from_str_size; i++) {
+        state->map[from_str_val[i]] = {};
+    }
+    return Status::OK();
+}
+
+Status StringFunctions::translate_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state = reinterpret_cast<TranslateState*>(context->get_function_state(scope));
+        delete state;
+    }
+    
+    return Status::OK();
+}
+
+
+StatusOr<ColumnPtr> StringFunctions::translate(FunctionContext* context, const Columns& columns) {
+    const ColumnPtr& arg0 = columns[0];
+    if (arg0->only_null()) {
+        return arg0;
+    }
+
+    const auto state =
+            reinterpret_cast<const TranslateState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+
+    const auto num_rows = arg0->size();
+    const auto str_viewer = ColumnViewer<TYPE_VARCHAR>(arg0);
+    const auto& map = state->map;
+
+    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    for (int row = 0; row < num_rows; ++row) {
+        if (str_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        const auto str_slice = str_viewer.value(row);
+        if (str_slice.empty()) {
+            result.append(str_slice);
+            continue;
+        }
+
+        std::string str = str_slice.to_string();
+        for (auto iter = str.begin(); iter != str.end();) {
+            if (map.count(*iter)) {
+                if (map.at(*iter) == '\0') {
+                    str.erase(iter);
+                } else {
+                    *iter = map.at(*iter);
+                    ++iter;
+                }
+            } else {
+                ++iter;
+            }
+        }
+	result.append(Slice(str.data(), str.size()));
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
 static inline ColumnPtr concat_const_not_null(Columns const& columns, BinaryColumn* src, const ConcatState* state) {
     NullableBinaryColumnBuilder builder;
     auto* binary = down_cast<BinaryColumn*>(builder.data_column().get());

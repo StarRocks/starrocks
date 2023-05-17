@@ -3224,4 +3224,43 @@ PARALLEL_TEST(VecStringFunctionsTest, strcmpTest) {
     ASSERT_EQ(1, v->get_data()[5]);
 }
 
+PARALLEL_TEST(VecStringFunctionsTest, translateTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    auto from_str = BinaryColumn::create();
+    auto to_str = BinaryColumn::create();
+
+    const std::string strs[] = {"abcdefg", "s1m1a1rrfcks", "s1m1a1rrfcks", "aaaaa"};
+    const std::string from_strs[] = {"", "mf1", "s1m1a1rrfcks", "b"};
+    const std::string to_strs[] = {"", "to", "", "1"};
+
+    const std::string res[] = {"abcdefg", "starrocks", "", "aaaaa"};
+
+    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+        str->append(strs[i]);
+        from_str->append(from_strs[i]);
+        to_str->append(to_strs[i]);
+    }
+    columns.emplace_back(str);
+    columns.emplace_back(from_str);
+    columns.emplace_back(to_str);
+
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            StringFunctions::translate_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = StringFunctions::translate(context, columns).value();
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
+
+    for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+        ASSERT_EQ(res[i], v->get_data()[i].to_string());
+    }
+    ASSERT_TRUE(StringFunctions::translate_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+}
+
 } // namespace starrocks

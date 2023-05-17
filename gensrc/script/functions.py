@@ -313,7 +313,9 @@ vectorized_functions = [
     [30410, 'parse_url', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::parse_url',
      'StringFunctions::parse_url_prepare', 'StringFunctions::parse_url_close'],
     [30420, 'strcmp', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::strcmp'],
-
+    [30430, 'translate', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::translate',
+     'StringFunctions::translate_prepare', 'StringFunctions::translate_close'],
+    
     # Binary Functions
     # to_binary
     [30600, 'to_binary', 'VARBINARY', ['VARCHAR', 'VARCHAR'], 'BinaryFunctions::to_binary',
