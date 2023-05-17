@@ -70,7 +70,9 @@ public class PruneSubColumnsRule implements TreeRewriteRule {
 
         @Override
         public Void visitVariableReference(ColumnRefOperator variable, Void context) {
-            complexExpressions.add(variable);
+            if (variable.getType().isComplexType()) {
+                complexExpressions.add(variable);
+            }
             return null;
         }
 
@@ -101,8 +103,6 @@ public class PruneSubColumnsRule implements TreeRewriteRule {
      * which one in project and predicate (the rule execute order promise this)
      */
     private static class SubColumnAccessPathComputer extends OptExpressionVisitor<OptExpression, Void> {
-        private final ComplexExpressionCollector collector = new ComplexExpressionCollector();
-
         private final Map<ScalarOperator, ColumnRefSet> allComplexColumns = Maps.newHashMap();
 
         public void visitPredicate(OptExpression optExpression) {
@@ -110,7 +110,7 @@ public class PruneSubColumnsRule implements TreeRewriteRule {
                 return;
             }
 
-            collector.complexExpressions.clear();
+            ComplexExpressionCollector collector = new ComplexExpressionCollector();
             optExpression.getOp().getPredicate().accept(collector, null);
             for (ScalarOperator expr : collector.complexExpressions) {
                 allComplexColumns.put(expr, expr.getUsedColumns());
@@ -151,7 +151,7 @@ public class PruneSubColumnsRule implements TreeRewriteRule {
             }
 
             // collect complex column
-            collector.complexExpressions.clear();
+            ComplexExpressionCollector collector = new ComplexExpressionCollector();
             for (ScalarOperator value : lpo.getColumnRefMap().values()) {
                 value.accept(collector, null);
             }
@@ -188,7 +188,7 @@ public class PruneSubColumnsRule implements TreeRewriteRule {
                 String columnName = scan.getColRefToColumnMetaMap().get(ref).getName();
                 ColumnAccessPath p = normalizer.normalizePath(ref, columnName);
 
-                if (p.hashChildPath()) {
+                if (p.hasChildPath()) {
                     accessPaths.add(p);
                 }
             }

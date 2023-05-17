@@ -258,7 +258,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
-        tree = pruneSubfieldsForComplexType(tree, rootTaskContext);
+        tree = pruneSubColumns(tree, rootTaskContext);
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         deriveLogicalProperty(tree);
@@ -408,7 +408,7 @@ public class Optimizer {
         return tree;
     }
 
-    private OptExpression pruneSubfieldsForComplexType(OptExpression tree, TaskContext rootTaskContext) {
+    private OptExpression pruneSubColumns(OptExpression tree, TaskContext rootTaskContext) {
         if (!context.getSessionVariable().isCboPruneSubColumn()) {
             return tree;
         }

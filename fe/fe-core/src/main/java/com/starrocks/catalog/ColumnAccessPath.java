@@ -64,7 +64,7 @@ public class ColumnAccessPath {
         return children.stream().anyMatch(p -> p.path.equals(path));
     }
 
-    public boolean hashChildPath() {
+    public boolean hasChildPath() {
         return !children.isEmpty();
     }
 
