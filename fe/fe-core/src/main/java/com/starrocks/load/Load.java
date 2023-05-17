@@ -70,6 +70,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.qe.ConnectContext;
@@ -1072,6 +1073,14 @@ public class Load {
     }
 
     public long loadLoadJob(DataInputStream dis, long checksum) throws IOException {
+        if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() <= StarRocksFEMetaVersion.VERSION_3) {
+            return loadLoadJobV1(dis, checksum);
+        } else {
+            return checksum;
+        }
+    }
+
+    public long loadLoadJobV1(DataInputStream dis, long checksum) throws IOException {
         // load jobs
         int jobSize = dis.readInt();
         long newChecksum = checksum ^ jobSize;
@@ -1096,6 +1105,7 @@ public class Load {
         return newChecksum;
     }
 
+    // TODO [meta-format-change] deprecated
     public long saveLoadJob(DataOutputStream dos, long checksum) throws IOException {
         // 1. save load.dbToLoadJob
         int jobSize = 0;
