@@ -56,7 +56,6 @@ FROM tests, UNNEST(scores) AS t;
     DISTRIBUTED BY HASH(`v1`) BUCKETS 1
     PROPERTIES (
         "replication_num" = "1",
-        "in_memory" = "false",
         "storage_format" = "DEFAULT"
     );
 
@@ -128,7 +127,6 @@ FROM tests, UNNEST(scores) AS t;
     DISTRIBUTED BY HASH(`v1`) BUCKETS 1
     PROPERTIES (
         "replication_num" = "1",
-        "in_memory" = "false",
         "storage_format" = "DEFAULT"
     );
 

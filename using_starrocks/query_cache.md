@@ -263,7 +263,6 @@ PROPERTIES
 (
     "replication_num" = "1",
     "colocate_with" = "groupxx1",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false",
     "compression" = "LZ4"
@@ -325,7 +324,6 @@ DISTRIBUTED BY HASH(`ts`, `k0`, `k1`) BUCKETS 1
 PROPERTIES
 (
     "replication_num" = "1", 
-    "in_memory" = "false",
     "storage_format" = "default"
 );
 ```
@@ -564,7 +562,6 @@ Query Cache 的存储占用 BE 的少量内存，默认缓存大小为 512 MB，
    PROPERTIES
    (
        "replication_num" = "1",
-       "in_memory" = "false",
        "storage_format" = "DEFAULT",
        "enable_persistent_index" = "false"
    );

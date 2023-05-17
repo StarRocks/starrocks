@@ -319,7 +319,6 @@ PARTITION BY RANGE(`lo_orderdate`)
 DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT"
 );
 ```

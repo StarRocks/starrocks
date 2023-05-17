@@ -54,7 +54,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`record_id`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT"
 );
 ```
