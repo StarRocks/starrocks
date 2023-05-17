@@ -34,7 +34,7 @@ The MPP framework and vectorized execution engine enable users to choose between
 
 ### Real-time analytics
 
-StarRocks uses the Primary Key model to implement real-time updates. Data changes in a TP database can be synchronized to StarRocks in a matter of seconds to build a real-time warehouse.
+StarRocks uses the Primary Key table to implement real-time updates. Data changes in a TP database can be synchronized to StarRocks in a matter of seconds to build a real-time warehouse.
 
 Scenarios:
 

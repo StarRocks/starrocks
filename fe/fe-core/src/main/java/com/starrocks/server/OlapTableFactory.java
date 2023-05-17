@@ -64,7 +64,6 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.thrift.TCompressionType;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
@@ -129,14 +128,17 @@ public class OlapTableFactory implements AbstractTableFactory {
             } else {
                 throw new DdlException("Currently only support range or list partition with engine type olap");
             }
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false, true);
+            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
 
             // Automatic partitioning needs to ensure that at least one tablet is opened.
             if (partitionInfo instanceof ExpressionRangePartitionInfo) {
                 ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
                 long partitionId = metastore.getNextId();
-                String replicateNum = stmt.getProperties().getOrDefault("replication_num",
-                        String.valueOf(RunMode.defaultReplicationNum()));
+                String replicateNum = String.valueOf(RunMode.defaultReplicationNum());
+                if (stmt.getProperties() != null) {
+                    replicateNum = stmt.getProperties().getOrDefault("replication_num",
+                            String.valueOf(RunMode.defaultReplicationNum()));
+                }
                 expressionRangePartitionInfo.createAutomaticShadowPartition(partitionId, replicateNum);
                 partitionNameToId.put(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME, partitionId);
             }
@@ -407,7 +409,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             Preconditions.checkNotNull(rollupIndexStorageType);
             // set rollup index meta to olap table
             List<Column> rollupColumns = stateMgr.getRollupHandler().checkAndPrepareMaterializedView(addRollupClause,
-                    table, baseRollupIndex, false);
+                    table, baseRollupIndex);
             short rollupShortKeyColumnCount =
                     GlobalStateMgr.calcShortKeyColumnCount(rollupColumns, alterClause.getProperties());
             int rollupSchemaHash = Util.schemaHash(schemaVersion, rollupColumns, bfColumns, bfFpp);
@@ -425,14 +427,10 @@ public class OlapTableFactory implements AbstractTableFactory {
         }
         Preconditions.checkNotNull(version);
 
-        // get storage format
-        TStorageFormat storageFormat = TStorageFormat.DEFAULT; // default means it's up to BE's config
-        try {
-            storageFormat = PropertyAnalyzer.analyzeStorageFormat(properties);
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
+        // storage_format is not necessary, remove storage_format if exist.
+        if (properties != null && properties.containsKey("storage_format")) {
+            properties.remove("storage_format");
         }
-        table.setStorageFormat(storageFormat);
 
         // get storage volume
         String storageVolume = RunMode.allowCreateLakeTable() ? "default" : "local";
@@ -555,7 +553,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
                 createTblSuccess = db.createTableWithLock(table, false);
                 if (!createTblSuccess) {
-                    if (db.isInfoSchemaDb()) {
+                    if (db.isSystemDatabase()) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "create denied");
                     } else if (!stmt.isSetIfNotExists()) {
                         ErrorReport
@@ -614,7 +612,7 @@ public class OlapTableFactory implements AbstractTableFactory {
 
     private void processConstraint(
             Database db, OlapTable olapTable, Map<String, String> properties) throws AnalysisException {
-        List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, olapTable);
+        List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db, olapTable);
         if (uniqueConstraints != null) {
             olapTable.setUniqueConstraints(uniqueConstraints);
         }
@@ -622,7 +620,7 @@ public class OlapTableFactory implements AbstractTableFactory {
         List<ForeignKeyConstraint> foreignKeyConstraints =
                 PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, olapTable);
         if (foreignKeyConstraints != null) {
-            olapTable.setForeignKeyConstraint(foreignKeyConstraints);
+            olapTable.setForeignKeyConstraints(foreignKeyConstraints);
         }
     }
 

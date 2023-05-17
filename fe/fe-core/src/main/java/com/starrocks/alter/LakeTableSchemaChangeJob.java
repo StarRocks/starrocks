@@ -59,7 +59,6 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -122,8 +121,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     // The schema change job will wait all transactions before this txn id finished, then send the schema change tasks.
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
-    @SerializedName(value = "storageFormat")
-    private TStorageFormat storageFormat = TStorageFormat.DEFAULT;
     @SerializedName(value = "startTime")
     private long startTime;
 
@@ -151,10 +148,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     void setStartTime(long startTime) {
         this.startTime = startTime;
-    }
-
-    void setStorageFormat(TStorageFormat storageFormat) {
-        this.storageFormat = storageFormat;
     }
 
     void addTabletIdMap(long partitionId, long shadowIdxId, long shadowTabletId, long originTabletId) {
@@ -312,7 +305,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         Long baseTabletId = partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
                         assert baseTabletId != null;
                         createReplicaTask.setBaseTablet(baseTabletId, 0/*unused*/);
-                        createReplicaTask.setStorageFormat(this.storageFormat);
                         batchTask.addTask(createReplicaTask);
                     }
                 }
@@ -659,7 +651,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             this.indexChange = other.indexChange;
             this.indexes = other.indexes;
             this.watershedTxnId = other.watershedTxnId;
-            this.storageFormat = other.storageFormat;
             this.startTime = other.startTime;
             this.commitVersionMap = other.commitVersionMap;
             // this.schemaChangeBatchTask = other.schemaChangeBatchTask;
@@ -813,11 +804,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         // update index
         if (indexChange) {
             table.setIndexes(indexes);
-        }
-
-        // set storage format of table, only set if format is v2
-        if (storageFormat == TStorageFormat.V2) {
-            table.setStorageFormat(storageFormat);
         }
 
         table.setState(OlapTable.OlapTableState.NORMAL);

@@ -225,9 +225,12 @@ StatusOr<int64_t> Rowset::estimate_compaction_segment_iterator_num() {
         // When creating segment iterators for compaction, we don't provide rowid_range_option and predicates_for_zone_map,
         // So here we don't need to consider the following two situation:
         //
-        //    if (options.rowid_range_option != nullptr && !options.rowid_range_option->match_segment(seg_ptr.get())) {
-        //       continue;
+        // if (options.rowid_range_option != nullptr) {
+        //    seg_options.rowid_range_option = options.rowid_range_option->get_segment_rowid_range(this, seg_ptr.get());
+        //    if (seg_options.rowid_range_option == nullptr) {
+        //        continue;
         //    }
+        // }
         //    auto res = seg_ptr->new_iterator(segment_schema, seg_options);
         //    if (res.status().is_end_of_file()) {
         //     continue;
@@ -272,9 +275,12 @@ Status Rowset::remove() {
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
     }
-    auto st = _remove_delta_column_group_files(fs);
-    merge_status(st);
     return result;
+}
+
+Status Rowset::remove_delta_column_group() {
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    return _remove_delta_column_group_files(fs);
 }
 
 Status Rowset::_remove_delta_column_group_files(std::shared_ptr<FileSystem> fs) {
@@ -294,7 +300,7 @@ Status Rowset::_remove_delta_column_group_files(std::shared_ptr<FileSystem> fs) 
                                                                        _rowset_meta->get_rowset_seg_id() + i, 0,
                                                                        INT64_MAX, &list));
             for (const auto& dcg : list) {
-                auto st = fs->delete_file(dcg->column_file());
+                auto st = fs->delete_file(dcg->column_file(_rowset_path));
                 if (st.ok() || st.is_not_found()) {
                     VLOG(1) << "Deleting delta column group's file: " << dcg->debug_string() << " st: " << st;
                 } else {
@@ -337,11 +343,11 @@ Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id) {
             VLOG(1) << "success to link " << src_file_path << " to " << dst_link_path;
         }
     }
-    RETURN_IF_ERROR(_link_delta_column_group_files(dir, new_rowset_id));
+    RETURN_IF_ERROR(_link_delta_column_group_files(dir));
     return Status::OK();
 }
 
-Status Rowset::_link_delta_column_group_files(const std::string& dir, RowsetId new_rowset_id) {
+Status Rowset::_link_delta_column_group_files(const std::string& dir) {
     if (num_segments() > 0) {
         std::filesystem::path schema_hash_path(_rowset_path);
         std::filesystem::path data_dir_path = schema_hash_path.parent_path().parent_path().parent_path().parent_path();
@@ -358,8 +364,8 @@ Status Rowset::_link_delta_column_group_files(const std::string& dir, RowsetId n
                                                                        _rowset_meta->get_rowset_seg_id() + i, 0,
                                                                        INT64_MAX, &list));
             for (const auto& dcg : list) {
-                std::string src_file_path = dcg->column_file();
-                std::string dst_link_path = delta_column_group_path(dir, new_rowset_id, i, dcg->version());
+                std::string src_file_path = dcg->column_file(_rowset_path);
+                std::string dst_link_path = dcg->column_file(dir);
                 if (link(src_file_path.c_str(), dst_link_path.c_str()) != 0) {
                     PLOG(WARNING) << "Fail to link " << src_file_path << " to " << dst_link_path;
                     return Status::RuntimeError(fmt::format("Fail to link segment update file, src: {}, dst {}",
@@ -498,7 +504,6 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
         seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(options.meta);
         seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(options.meta);
     }
-    seg_options.rowid_range_option = options.rowid_range_option;
     seg_options.short_key_ranges = options.short_key_ranges;
     if (options.runtime_state != nullptr) {
         seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
@@ -526,8 +531,11 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
             continue;
         }
 
-        if (options.rowid_range_option != nullptr && !options.rowid_range_option->match_segment(seg_ptr.get())) {
-            continue;
+        if (options.rowid_range_option != nullptr) {
+            seg_options.rowid_range_option = options.rowid_range_option->get_segment_rowid_range(this, seg_ptr.get());
+            if (seg_options.rowid_range_option == nullptr) {
+                continue;
+            }
         }
 
         auto res = seg_ptr->new_iterator(segment_schema, seg_options);

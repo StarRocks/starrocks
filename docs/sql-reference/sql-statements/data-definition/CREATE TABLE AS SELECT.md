@@ -83,7 +83,7 @@ If you asynchronously query a table and create a new table based on the query re
 - The CTAS statement can only create a new table that meets the following requirements:
   - `ENGINE` is `OLAP`.
 
-  - The data model is the Duplicate Key model.
+  - The table is a Duplicate Key table.
 
   - The sort keys are the first three columns, and the storage space of the data types of these three columns does not exceed 36 bytes.
 

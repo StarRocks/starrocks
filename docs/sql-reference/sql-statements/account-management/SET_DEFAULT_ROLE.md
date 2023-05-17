@@ -10,11 +10,11 @@ This command is supported from v3.0.
 
 ```SQL
 -- Set specified roles as default roles.
-SET DEFAULT ROLE <role_name>[,<role_name>,..] [TO <user_identity>];
+SET DEFAULT ROLE <role_name>[,<role_name>,..] TO <user_identity>;
 -- Set all roles of the user, including roles that will be assigned to this user, as default roles. 
-SET DEFAULT ROLE ALL [TO <user_identity>];
+SET DEFAULT ROLE ALL TO <user_identity>;
 -- No default role is set but the public role is still enabled after a user login. 
-SET DEFAULT ROLE NONE [TO <user_identity>]; 
+SET DEFAULT ROLE NONE TO <user_identity>; 
 ```
 
 ## Parameters

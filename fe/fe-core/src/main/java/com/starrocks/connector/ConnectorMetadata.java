@@ -18,12 +18,14 @@ package com.starrocks.connector;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -93,6 +95,17 @@ public interface ConnectorMetadata {
      * @return a Table instance
      */
     default Table getTable(String dbName, String tblName) {
+        return null;
+    }
+
+    /**
+     * Get Table descriptor and materialized index for the materialized view index specific by `dbName`.`tblName`
+     *
+     * @param dbName  - the string represents the database name
+     * @param tblName - the string represents the table name
+     * @return a Table instance
+     */
+    default Pair<Table, MaterializedIndex> getMaterializedViewIndex(String dbName, String tblName) {
         return null;
     }
 

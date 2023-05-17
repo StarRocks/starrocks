@@ -70,6 +70,11 @@ public class AnalyzeInsertTest {
 
         analyzeSuccess("insert into t0 with label l1 select * from t0");
         analyzeSuccess("insert into t0 with label `l1` select * from t0");
+
+        analyzeSuccess("insert into tmc values (1,2)");
+        analyzeSuccess("insert into tmc (id,name) values (1,2)");
+        analyzeFail("insert into tmc values (1,2,3)", "Column count doesn't match value count");
+        analyzeFail("insert into tmc (id,name,mc) values (1,2,3)", "materialized column 'mc' can not be specified.");
     }
 
     @Test
@@ -170,7 +175,7 @@ public class AnalyzeInsertTest {
                 "Expected: p1, but actual: p2");
 
         analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=1, p2=\"aaffsssaa\") values (1)",
-                "annot cast '1' from TINYINT to ARRAY<DATE>");
+                "Type[ARRAY<date>] not supported.");
 
         new Expectations() {
             {

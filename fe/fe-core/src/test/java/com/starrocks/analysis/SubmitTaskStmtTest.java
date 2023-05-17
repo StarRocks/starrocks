@@ -112,6 +112,7 @@ public class SubmitTaskStmtTest {
 
     @Test
     public void testSubmitInsert() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.test_insert\n" +
                         "(\n" +
@@ -123,9 +124,13 @@ public class SubmitTaskStmtTest {
                         "PROPERTIES('replication_num' = '1');");
 
         String sql1 = "submit task task1 as insert into test.test_insert select * from test.test_insert";
-        UtFrameUtils.parseStmtWithNewParser(sql1, starRocksAssert.getCtx());
+        UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
 
         String sql2 = "submit task task1 as insert overwrite test.test_insert select * from test.test_insert";
-        UtFrameUtils.parseStmtWithNewParser(sql2, starRocksAssert.getCtx());
+        UtFrameUtils.parseStmtWithNewParser(sql2, ctx);
+
+        SubmitTaskStmt submitStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
+        Assert.assertNotNull(submitStmt.getDbName());
+        Assert.assertNotNull(submitStmt.getSqlText());
     }
 }

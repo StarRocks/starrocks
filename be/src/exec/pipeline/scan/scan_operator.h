@@ -29,7 +29,7 @@ namespace pipeline {
 
 class ChunkBufferToken;
 using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
-
+class PipelineDriver;
 class ScanOperator : public SourceOperator {
 public:
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node);
@@ -75,6 +75,16 @@ public:
     void set_ticket_checker(query_cache::TicketCheckerPtr& ticket_checker) { _ticket_checker = ticket_checker; }
 
     void set_query_ctx(const QueryContextPtr& query_ctx);
+
+    virtual int available_pickup_morsel_count() { return _io_tasks_per_scan_operator; }
+    void begin_pull_chunk(ChunkPtr res) {
+        _op_pull_chunks += 1;
+        _op_pull_rows += res->num_rows();
+    }
+    void end_pull_chunk(int64_t time) { _op_running_time_ns += time; }
+    virtual void begin_driver_process() {}
+    virtual void end_driver_process(PipelineDriver* driver) {}
+    virtual bool is_running_all_io_tasks() const;
 
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
@@ -150,6 +160,10 @@ protected:
     RuntimeProfile::Counter* _buffer_unplug_counter = nullptr;
     RuntimeProfile::Counter* _submit_task_counter = nullptr;
 
+    int64_t _op_pull_chunks = 0;
+    int64_t _op_pull_rows = 0;
+    int64_t _op_running_time_ns = 0;
+
 private:
     int32_t _io_task_retry_cnt = 0;
     workgroup::ScanExecutor* _scan_executor = nullptr;
@@ -173,6 +187,7 @@ private:
     RuntimeProfile::HighWaterMarkCounter* _peak_scan_task_queue_size_counter = nullptr;
     // The total number of the original tablets in this fragment instance.
     RuntimeProfile::Counter* _tablets_counter = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* _peak_io_tasks_counter = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {

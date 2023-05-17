@@ -62,6 +62,7 @@ import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -611,7 +612,7 @@ public class PrivilegeCheckerV2Test {
             PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         } catch (SemanticException e) {
             System.out.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on db2.tbl1"));
+            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on default_catalog.db2.tbl1"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db2.tbl1 to test");
         PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
@@ -636,7 +637,7 @@ public class PrivilegeCheckerV2Test {
         try {
             PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         } catch (SemanticException e) {
-            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on db1.tbl2"));
+            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on default_catalog.db1.tbl2"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
         PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
@@ -658,7 +659,7 @@ public class PrivilegeCheckerV2Test {
         try {
             PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         } catch (SemanticException e) {
-            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on db1.tbl1"));
+            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on default_catalog.db1.tbl1"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
         PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
@@ -689,7 +690,7 @@ public class PrivilegeCheckerV2Test {
         Database db1 = globalStateMgr.getDb("db1");
         Table tbl1 = db1.getTable("tbl1");
 
-        AnalyzeStatus analyzeStatus = new AnalyzeStatus(1, db1.getId(), tbl1.getId(),
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(1, db1.getId(), tbl1.getId(),
                 Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 LocalDateTime.of(2020, 1, 1, 1, 1));
@@ -732,7 +733,7 @@ public class PrivilegeCheckerV2Test {
 
         Database db2 = globalStateMgr.getDb("db2");
         tbl1 = db2.getTable("tbl1");
-        analyzeStatus = new AnalyzeStatus(1, db2.getId(), tbl1.getId(),
+        analyzeStatus = new NativeAnalyzeStatus(1, db2.getId(), tbl1.getId(),
                 Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 LocalDateTime.of(2020, 1, 1, 1, 1));
@@ -2695,8 +2696,7 @@ public class PrivilegeCheckerV2Test {
                 "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         ctxToRoot();

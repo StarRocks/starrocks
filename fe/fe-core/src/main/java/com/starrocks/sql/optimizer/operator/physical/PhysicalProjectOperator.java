@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.operator.physical;
 import com.google.common.base.Objects;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -89,5 +90,11 @@ public class PhysicalProjectOperator extends PhysicalOperator {
     public List<ColumnRefOperator> getOutputColumns() {
         return new ArrayList<>(columnRefMap.keySet());
     }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return new RowOutputInfo(columnRefMap, commonSubOperatorMap);
+    }
+
 
 }

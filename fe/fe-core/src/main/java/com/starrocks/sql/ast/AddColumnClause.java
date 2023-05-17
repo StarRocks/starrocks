@@ -25,10 +25,14 @@ import java.util.Map;
 public class AddColumnClause extends AlterTableColumnClause {
     private final ColumnDef columnDef;
     // Column position
-    private final ColumnPosition colPos;
+    private ColumnPosition colPos;
 
     public ColumnPosition getColPos() {
         return colPos;
+    }
+
+    public void setColPos(ColumnPosition colPos) {
+        this.colPos = colPos;
     }
 
     public ColumnDef getColumnDef() {

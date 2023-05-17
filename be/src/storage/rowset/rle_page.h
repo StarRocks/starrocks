@@ -161,7 +161,7 @@ private:
 template <LogicalType Type>
 class RlePageDecoder final : public PageDecoder {
 public:
-    RlePageDecoder(Slice slice, const PageDecoderOptions& options) : _data(slice), _options(options) {}
+    RlePageDecoder(Slice slice) : _data(slice) {}
 
     Status init() override {
         CHECK(!_parsed);
@@ -247,7 +247,6 @@ private:
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
 
     Slice _data;
-    PageDecoderOptions _options;
     bool _parsed{false};
     uint32_t _num_elements{0};
     uint32_t _cur_index{0};

@@ -151,6 +151,8 @@ public abstract class Type implements Cloneable {
     public static final Type ARRAY_DECIMAL64 = new ArrayType(Type.DECIMAL64);
     public static final Type ARRAY_DECIMAL128 = new ArrayType(Type.DECIMAL128);
 
+    public static final Type MAP_VARCHAR_VARCHAR = new MapType(Type.VARCHAR, Type.VARCHAR);
+
     public static final ImmutableList<ScalarType> INTEGER_TYPES =
             ImmutableList.of(BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT);
 
@@ -668,6 +670,10 @@ public abstract class Type implements Cloneable {
                 isScalarType(PrimitiveType.PERCENTILE);
     }
 
+    public boolean isValidMapKeyType() {
+        return !isComplexType() && !isJsonType() && !isOnlyMetricType() && !isFunctionType();
+    }
+
     public static List<Type> getSupportedTypes() {
         return SUPPORTED_TYPES;
     }
@@ -1052,6 +1058,8 @@ public abstract class Type implements Cloneable {
             return ScalarType.canCastTo((ScalarType) from, (ScalarType) to);
         } else if (from.isArrayType() && to.isArrayType()) {
             return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
+        } else if (from.isMapType() && to.isMapType()) {
+            return canCastTo(from, to);
         } else {
             return false;
         }

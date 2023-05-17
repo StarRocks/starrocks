@@ -131,7 +131,8 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
 
     if (!_is_writer_opened) {
         if (Status status = _writer->open(_state); !status.ok()) {
-            LOG(WARNING) << "open file writer failed, error: " << status.to_string();
+            status = status.clone_and_prepend("open file writer failed, error");
+            LOG(WARNING) << status;
             _fragment_ctx->cancel(status);
             return;
         }

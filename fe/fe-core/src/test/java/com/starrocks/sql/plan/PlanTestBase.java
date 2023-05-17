@@ -37,8 +37,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `t1` (\n" +
@@ -50,8 +49,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v4`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `t2` (\n" +
@@ -63,8 +61,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v7`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `t3` (\n" +
@@ -76,8 +73,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v10`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `t4` (\n" +
@@ -89,8 +85,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v13`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `t5` (\n" +
@@ -102,8 +97,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v16`, `v17`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `t6` (\n" +
@@ -116,8 +110,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `colocate_t0` (\n" +
@@ -130,7 +123,6 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"colocate_with\" = \"colocate_group_1\"" +
                 ");");
 
@@ -144,7 +136,6 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"colocate_with\" = \"colocate_group_1\"" +
                 ");");
 
@@ -158,7 +149,6 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"colocate_with\" = \"colocate_group_2\"" +
                 ");");
 
@@ -172,7 +162,6 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"colocate_with\" = \"colocate_group_2\"" +
                 ");");
 
@@ -193,8 +182,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `test_all_type_not_null` (\n" +
@@ -214,8 +202,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `test_object` (\n" +
@@ -275,8 +262,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`ta`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE region ( R_REGIONKEY  INTEGER NOT NULL,\n" +
@@ -289,8 +275,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`r_regionkey`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE supplier ( S_SUPPKEY     INTEGER NOT NULL,\n" +
@@ -307,8 +292,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE partsupp ( PS_PARTKEY     INTEGER NOT NULL,\n" +
@@ -323,8 +307,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`ps_partkey`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE orders  ( O_ORDERKEY       INTEGER NOT NULL,\n" +
@@ -343,8 +326,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE customer ( C_CUSTKEY     INTEGER NOT NULL,\n" +
@@ -362,8 +344,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `nation` (\n" +
@@ -378,8 +359,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`N_NATIONKEY`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE part  ( P_PARTKEY     INTEGER NOT NULL,\n" +
@@ -398,8 +378,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE lineitem ( L_ORDERKEY    INTEGER NOT NULL,\n" +
@@ -425,8 +404,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 20\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `lineorder_flat_for_mv` (\n" +
@@ -482,8 +460,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`LO_ORDERKEY`) BUCKETS 150 \n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ")");
 
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lo_count_mv as " +
@@ -521,8 +498,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`L_ORDERKEY`) BUCKETS 48\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `lineitem_partition_colocate` (\n" +
@@ -558,8 +534,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"colocate_with\" = \"colocate_group\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"colocate_with\" = \"colocate_group\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `emp` (\n" +
@@ -573,8 +548,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ")");
 
         starRocksAssert.withTable("CREATE TABLE `dept` (\n" +
@@ -586,8 +560,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`dept_id`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ")");
 
         starRocksAssert.withTable("CREATE TABLE `bonus` (\n" +
@@ -598,8 +571,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`emp_name`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ")\n");
 
         starRocksAssert.withView("create view tview as select * from t0;");
@@ -613,8 +585,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `tmap` (\n" +
@@ -626,8 +597,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `ods_order` (\n" +
@@ -780,8 +750,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                         "DISTRIBUTED BY HASH(`k1`) BUCKETS 5\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
-                        "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");")
                 .withTable("create table test.jointest\n" +
                         "(k1 int, k2 int) distributed by hash(k1) buckets 1\n" +
@@ -857,8 +826,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `test_bool` (\n" +
@@ -879,8 +847,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `test_all_type_distributed_by_datetime` (\n" +
@@ -900,8 +867,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`id_datetime`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `test_all_type_distributed_by_date` (\n" +
@@ -921,8 +887,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`id_date`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `test_all_type_partition_by_datetime` (\n" +
@@ -946,8 +911,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `test_all_type_partition_by_date` (\n" +
@@ -971,8 +935,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `test_partition_prune_optimize_by_date` (\n" +
@@ -991,8 +954,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`session_id`) BUCKETS 5 \n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("create table test.colocate1\n" +
@@ -1017,8 +979,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"replicated_storage\" = \"false\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `tprimary_auto_increment` (\n" +
@@ -1031,8 +992,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `tprimary1` (\n" +
@@ -1044,8 +1004,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`pk1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `tjson` (\n" +
@@ -1056,8 +1015,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v_int`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 1));

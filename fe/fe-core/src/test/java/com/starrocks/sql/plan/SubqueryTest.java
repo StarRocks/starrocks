@@ -16,8 +16,10 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -330,16 +332,14 @@ public class SubqueryTest extends PlanTestBase {
                 "    ) IS NULL\n" +
                 "  );";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "20:HASH JOIN\n" +
+        assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 6: v9 = 13: v4\n" +
                 "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)\n" +
                 "  |  \n" +
-                "  |----19:EXCHANGE\n" +
-                "  |    \n" +
-                "  13:NESTLOOP JOIN");
-        assertContains(plan, "13:NESTLOOP JOIN\n" +
+                "  |----12:EXCHANGE");
+        assertContains(plan, "20:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)");
@@ -1875,10 +1875,7 @@ public class SubqueryTest extends PlanTestBase {
                 "select case when id = abs(0) then 'a' else " +
                 "case when exists (select 1 from tmp) then id in (select id > (select type1 from tmp) from tmp )" +
                 " else null end end from tmp a;";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "33:Project\n" +
-                "  |  <slot 31> : if(CAST(7: expr AS SMALLINT) = abs(0), 'a', " +
-                "CAST(if(17: expr, CASE WHEN (35: countRows IS NULL) OR (35: countRows = 0) THEN FALSE");
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        assertContains(pair.first, "CTEAnchor(cteid=2)");
     }
-
 }

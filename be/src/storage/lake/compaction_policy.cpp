@@ -26,7 +26,7 @@ namespace starrocks::lake {
 
 class BaseAndCumulativeCompactionPolicy : public CompactionPolicy {
 public:
-    explicit BaseAndCumulativeCompactionPolicy(TabletPtr tablet) : _tablet(std::move(tablet)) {}
+    explicit BaseAndCumulativeCompactionPolicy(TabletPtr tablet) : CompactionPolicy(tablet) {}
     ~BaseAndCumulativeCompactionPolicy() override = default;
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
@@ -36,7 +36,6 @@ private:
     StatusOr<std::vector<RowsetPtr>> pick_base_rowsets();
     void debug_rowsets(CompactionType type, const std::vector<uint32_t>& input_rowset_ids);
 
-    TabletPtr _tablet;
     TabletMetadataPtr _tablet_metadata;
 };
 
@@ -72,7 +71,7 @@ public:
 
 class PrimaryCompactionPolicy : public CompactionPolicy {
 public:
-    explicit PrimaryCompactionPolicy(TabletPtr tablet) : _tablet(std::move(tablet)) {}
+    explicit PrimaryCompactionPolicy(TabletPtr tablet) : CompactionPolicy(tablet) {}
     ~PrimaryCompactionPolicy() override = default;
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
@@ -80,9 +79,6 @@ public:
 private:
     static const size_t kCompactionResultBytesThreashold = 1000000000;
     static const size_t kCompactionResultRowsThreashold = 10000000;
-
-private:
-    TabletPtr _tablet;
 };
 
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(int64_t version) {
@@ -247,6 +243,25 @@ StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_rowsets
     } else {
         return pick_cumulative_rowsets();
     }
+}
+
+StatusOr<CompactionAlgorithm> CompactionPolicy::choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) {
+    // TODO: support row source mask buffer based on starlet fs
+    // The current row source mask buffer is based on posix tmp file,
+    // if there is no storage root path, use horizontal compaction.
+    if (ExecEnv::GetInstance()->store_paths().empty()) {
+        return HORIZONTAL_COMPACTION;
+    }
+
+    size_t total_iterator_num = 0;
+    for (auto& rowset : rowsets) {
+        ASSIGN_OR_RETURN(auto rowset_iterator_num, rowset->get_read_iterator_num());
+        total_iterator_num += rowset_iterator_num;
+    }
+    ASSIGN_OR_RETURN(auto tablet_schema, _tablet->get_schema());
+    size_t num_columns = tablet_schema->num_columns();
+    return CompactionUtils::choose_compaction_algorithm(num_columns, config::vertical_compaction_max_columns_per_group,
+                                                        total_iterator_num);
 }
 
 StatusOr<CompactionPolicyPtr> CompactionPolicy::create_compaction_policy(TabletPtr tablet) {

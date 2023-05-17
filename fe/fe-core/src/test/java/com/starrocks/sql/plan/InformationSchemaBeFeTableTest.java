@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.SchemaTable;
+import com.starrocks.catalog.system.information.BeConfigsSystemTable;
+import com.starrocks.catalog.system.information.BeMetricsSystemTable;
+import com.starrocks.catalog.system.information.BeTabletsSystemTable;
+import com.starrocks.catalog.system.information.BeTxnsSystemTable;
 import com.starrocks.pseudocluster.PseudoCluster;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -41,18 +44,41 @@ public class InformationSchemaBeFeTableTest {
         Statement stmt = connection.createStatement();
         try {
             Assert.assertTrue(stmt.execute("select * from information_schema.be_tablets"));
-            Assert.assertEquals(SchemaTable.TABLE_MAP.get("be_tablets").getColumns().size(),
+            Assert.assertEquals(BeTabletsSystemTable.create().getColumns().size(),
                     stmt.getResultSet().getMetaData().getColumnCount());
             System.out.printf("get %d rows\n", stmt.getUpdateCount());
             Assert.assertTrue(stmt.execute("select * from information_schema.be_txns"));
-            Assert.assertEquals(SchemaTable.TABLE_MAP.get("be_txns").getColumns().size(),
+            Assert.assertEquals(BeTxnsSystemTable.create().getColumns().size(),
                     stmt.getResultSet().getMetaData().getColumnCount());
             Assert.assertTrue(stmt.execute("select * from information_schema.be_configs"));
-            Assert.assertEquals(SchemaTable.TABLE_MAP.get("be_configs").getColumns().size(),
+            Assert.assertEquals(BeConfigsSystemTable.create().getColumns().size(),
                     stmt.getResultSet().getMetaData().getColumnCount());
             Assert.assertTrue(stmt.execute("select * from information_schema.be_metrics"));
-            Assert.assertEquals(SchemaTable.TABLE_MAP.get("be_metrics").getColumns().size(),
+            Assert.assertEquals(BeMetricsSystemTable.create().getColumns().size(),
                     stmt.getResultSet().getMetaData().getColumnCount());
+        } finally {
+            stmt.close();
+            connection.close();
+        }
+    }
+
+    @Test
+    public void testBeSchemaTableAgg() throws Exception {
+        Connection connection = PseudoCluster.getInstance().getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            // https://github.com/StarRocks/starrocks/issues/23306
+            // verify aggregation behavior is correct
+            Assert.assertTrue(stmt.execute(
+                    "explain select table_id, count(*) as cnt from information_schema.be_tablets group by table_id"));
+            int numExchange = 0;
+            while (stmt.getResultSet().next()) {
+                String line = stmt.getResultSet().getString(1);
+                if (line.contains(":EXCHANGE")) {
+                    numExchange++;
+                }
+            }
+            Assert.assertEquals(2, numExchange);
         } finally {
             stmt.close();
             connection.close();

@@ -127,7 +127,7 @@ TEST_F(DuplicateTabletReaderTest, test_read_success) {
 
     {
         // write rowset 1 with 2 segments
-        ASSIGN_OR_ABORT(auto writer, tablet.new_writer());
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal));
         ASSERT_OK(writer->open());
 
         // write rowset data
@@ -274,7 +274,7 @@ TEST_F(AggregateTabletReaderTest, test_read_success) {
 
     {
         // write rowset 1 with 2 segments
-        ASSIGN_OR_ABORT(auto writer, tablet.new_writer());
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal));
         ASSERT_OK(writer->open());
 
         // write rowset data
@@ -305,7 +305,7 @@ TEST_F(AggregateTabletReaderTest, test_read_success) {
 
     {
         // write rowset 2 with 1 segment
-        ASSIGN_OR_ABORT(auto writer, tablet.new_writer());
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal));
         ASSERT_OK(writer->open());
 
         // write rowset data
@@ -443,7 +443,7 @@ TEST_F(DuplicateTabletReaderWithDeleteTest, test_read_success) {
 
     {
         // write rowset 1 with 2 segments
-        ASSIGN_OR_ABORT(auto writer, tablet.new_writer());
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal));
         ASSERT_OK(writer->open());
 
         // write rowset data

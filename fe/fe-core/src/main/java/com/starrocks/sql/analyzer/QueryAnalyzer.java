@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -31,6 +32,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
@@ -40,9 +42,11 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -69,8 +73,10 @@ import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -108,14 +114,11 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitQueryStatement(QueryStatement node, Scope parent) {
+            Scope scope = visitQueryRelation(node.getQueryRelation(), parent);
             if (node.hasOutFileClause()) {
-                try {
-                    node.getOutFileClause().analyze();
-                } catch (AnalysisException e) {
-                    throw new SemanticException(e.getMessage());
-                }
+                node.getOutFileClause().analyze(scope);
             }
-            return visitQueryRelation(node.getQueryRelation(), parent);
+            return scope;
         }
 
         @Override
@@ -189,6 +192,16 @@ public class QueryAnalyzer {
             Scope sourceScope = process(resolvedRelation, scope);
             sourceScope.setParent(scope);
 
+            Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitTable(TableRelation tableRelation, Void context) {
+                    generatedExprToColumnRef.putAll(tableRelation.getGeneratedExprToColumnRef());
+                    return null;
+                }
+            }.visit(resolvedRelation);
+            analyzeState.setGeneratedExprToColumnRef(generatedExprToColumnRef);
+
             SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
             selectAnalyzer.analyze(
                     analyzeState,
@@ -260,7 +273,7 @@ public class QueryAnalyzer {
                             resolveTableName.getTbl()));
                 }
 
-                Table table = resolveTable(tableRelation.getName());
+                Table table = resolveTable(tableRelation);
                 if (table instanceof View) {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
@@ -304,21 +317,32 @@ public class QueryAnalyzer {
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
             ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
 
-            List<Column> fullSchema = node.isBinlogQuery()
-                    ? appendBinlogMetaColumns(table.getFullSchema()) : table.getFullSchema();
-            List<Column> baseSchema = node.isBinlogQuery()
-                    ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema();
-            for (Column column : fullSchema) {
-                Field field;
-                if (baseSchema.contains(column)) {
-                    field = new Field(column.getName(), column.getType(), tableName,
+            if (node.isSyncMVQuery()) {
+                OlapTable olapTable = (OlapTable) table;
+                List<Column> mvSchema = olapTable.getSchemaByIndexId(olapTable.getBaseIndexId());
+                for (Column column : mvSchema) {
+                    Field field = new Field(column.getName(), column.getType(), tableName,
                             new SlotRef(tableName, column.getName(), column.getName()), true, column.isAllowNull());
-                } else {
-                    field = new Field(column.getName(), column.getType(), tableName,
-                            new SlotRef(tableName, column.getName(), column.getName()), false, column.isAllowNull());
+                    columns.put(field, column);
+                    fields.add(field);
                 }
-                columns.put(field, column);
-                fields.add(field);
+            } else {
+                List<Column> fullSchema = node.isBinlogQuery()
+                        ? appendBinlogMetaColumns(table.getFullSchema()) : table.getFullSchema();
+                List<Column> baseSchema = node.isBinlogQuery()
+                        ? appendBinlogMetaColumns(table.getBaseSchema()) : table.getBaseSchema();
+                for (Column column : fullSchema) {
+                    Field field;
+                    if (baseSchema.contains(column)) {
+                        field = new Field(column.getName(), column.getType(), tableName,
+                                new SlotRef(tableName, column.getName(), column.getName()), true, column.isAllowNull());
+                    } else {
+                        field = new Field(column.getName(), column.getType(), tableName,
+                                new SlotRef(tableName, column.getName(), column.getName()), false, column.isAllowNull());
+                    }
+                    columns.put(field, column);
+                    fields.add(field);
+                }
             }
 
             node.setColumns(columns.build());
@@ -342,6 +366,19 @@ public class QueryAnalyzer {
 
             Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
             node.setScope(scope);
+
+            Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
+            for (Column column : table.getBaseSchema()) {
+                if (column.materializedColumnExpr() != null) {
+                    Expr materializedExpression = column.materializedColumnExpr();
+                    ExpressionAnalyzer.analyzeExpression(materializedExpression, new AnalyzeState(), scope, session);
+                    SlotRef slotRef = new SlotRef(null, column.getName());
+                    ExpressionAnalyzer.analyzeExpression(slotRef, new AnalyzeState(), scope, session);
+                    generatedExprToColumnRef.put(materializedExpression, slotRef);
+                }
+            }
+            node.setGeneratedExprToColumnRef(generatedExprToColumnRef);
+
             return scope;
         }
 
@@ -818,7 +855,8 @@ public class QueryAnalyzer {
         }
     }
 
-    private Table resolveTable(TableName tableName) {
+    private Table resolveTable(TableRelation tableRelation) {
+        TableName tableName = tableRelation.getName();
         try {
             MetaUtils.normalizationTableName(session, tableName);
             String catalogName = tableName.getCatalog();
@@ -835,7 +873,29 @@ public class QueryAnalyzer {
             Database database = metadataMgr.getDb(catalogName, dbName);
             MetaUtils.checkDbNullAndReport(database, dbName);
 
-            Table table = metadataMgr.getTable(catalogName, dbName, tbName);
+            Table table = null;
+            if (tableRelation.isSyncMVQuery()) {
+                Pair<Table, MaterializedIndex> materializedIndex =
+                        metadataMgr.getMaterializedViewIndex(catalogName, dbName, tbName);
+                if (materializedIndex != null) {
+                    Table mvTable = materializedIndex.first;
+                    Preconditions.checkState(mvTable != null);
+                    Preconditions.checkState(mvTable instanceof OlapTable);
+                    try {
+                        // Add read lock to avoid concurrent problems.
+                        database.readLock();
+                        OlapTable mvOlapTable = ((OlapTable) mvTable).copyOnlyForQuery();
+                        // Copy the necessary olap table meta to avoid changing original meta;
+                        mvOlapTable.setBaseIndexId(materializedIndex.second.getId());
+                        table = mvOlapTable;
+                    } finally {
+                        database.readUnlock();
+                    }
+                }
+            } else {
+                table = metadataMgr.getTable(catalogName, dbName, tbName);
+            }
+
             if (table == null) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName + "." + tbName);
             }

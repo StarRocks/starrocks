@@ -4,13 +4,13 @@ Since version 3.0, StarRocks supports the `AUTO_INCREMENT` column attribute, whi
 
 ## Introduction
 
-When a new data row is loaded into a table, StarRocks automatically assigns a globally unique integer value for the row's `AUTO_INCREMENT` column as its unique ID across the table, and the subsequent values for the `AUTO_INCREMENT` column automatically increase at a specific step starting from the ID of the row. An `AUTO_INCREMENT` column can be used to simplify data management and speed up some queries. Here are some application scenarios of an `AUTO_INCREMENT` column:
+When a new data row is loaded into a table and values are not specified for the `AUTO_INCREMENT` column, StarRocks automatically assigns an integer value for the row's `AUTO_INCREMENT` column as its unique ID across the table. The subsequent values for the `AUTO_INCREMENT` column automatically increase at a specific step starting from the ID of the row. An `AUTO_INCREMENT` column can be used to simplify data management and speed up some queries. Here are some application scenarios of an `AUTO_INCREMENT` column:
 
 - Serve as primary keys: An `AUTO_INCREMENT` column can be used as the primary key to ensure that each row has a unique ID and make it easy to query and manage data.
 - Join tables: When multiple tables are joined, an `AUTO_INCREMENT` column can be used as the Join Key, which can expedite queries compared to using a column whose data type is STRING, for example, UUID.
 - Count the number of distinct values in a high-cardinality column: An `AUTO_INCREMENT` column can be used to represent the unique value column in a dictionary. Compared to directly counting distinct STRING values, counting distinct integer values of the `AUTO_INCREMENT` column can sometimes improve the query speed by several times or even tens of times.
 
-You need to specify an `AUTO_INCREMENT` column in the CREATE TABLE statement. The data types of an `AUTO_INCREMENT` column must be BIGINT. The value for an AUTO_INCREMENT column can be [implicitly assigned](#assign-values-implicitly) or [explicitly specified](#specify-values-explicitly). It starts from 1, and increments by 1 for each new row.
+You need to specify an `AUTO_INCREMENT` column in the CREATE TABLE statement. The data types of an `AUTO_INCREMENT` column must be BIGINT. The value for an AUTO_INCREMENT column can be [implicitly assigned or explicitly specified](#assign-values-for-auto_increment-column). It starts from 1, and increments by 1 for each new row.
 
 ## Basic operations
 
@@ -31,68 +31,122 @@ PROPERTIES("replicated_storage" = "true");
 
 ### Assign values for `AUTO_INCREMENT` column
 
-#### Assign values implicitly
+**Assign values implicitly**
 
-When data is loaded into a StarRocks table, you do not need to specify the values or specify the values as `DEFAULT` for the `AUTO_INCREMENT` column. StarRocks automatically assigns unique integer values for that column and inserts them into the table.
+When you load data into a StarRocks table, you do not need to specify the values for the `AUTO_INCREMENT` column. StarRocks automatically assigns unique integer values for that column and inserts them into the table.
 
 ```SQL
 INSERT INTO test_tbl1 (id) VALUES (1);
-INSERT INTO test_tbl1 (id, number) VALUES (2, DEFAULT);
+INSERT INTO test_tbl1 (id) VALUES (2);
+INSERT INTO test_tbl1 (id) VALUES (3),(4),(5);
+```
 
--- view table data
+View data in the table.
+
+```SQL
+mysql > SELECT * FROM test_tbl1 ORDER BY id;
++------+--------+
+| id   | number |
++------+--------+
+|    1 |      1 |
+|    2 |      2 |
+|    3 |      3 |
+|    4 |      4 |
+|    5 |      5 |
++------+--------+
+5 rows in set (0.02 sec)
+```
+
+When you load data into a StarRocks table, you can also specify the values as `DEFAULT` for the `AUTO_INCREMENT` column. StarRocks automatically assigns unique integer values for that column and inserts them into the table.
+
+```SQL
+INSERT INTO test_tbl1 (id, number) VALUES (6, DEFAULT);
+```
+
+View data in the table.
+
+```SQL
+mysql > SELECT * FROM test_tbl1 ORDER BY id;
++------+--------+
+| id   | number |
++------+--------+
+|    1 |      1 |
+|    2 |      2 |
+|    3 |      3 |
+|    4 |      4 |
+|    5 |      5 |
+|    6 |      6 |
++------+--------+
+6 rows in set (0.02 sec)
+```
+
+In actual usage, the following result may be returned when you view the data in the table. This is because StarRocks cannot guarantee that the values for the `AUTO_INCREMENT` column are strictly monotonic. But StarRocks can guarantee that the values roughly increase in chronological order. For more information, see [Monotonicity](#monotonicity).
+
+```SQL
 mysql > SELECT * FROM test_tbl1 ORDER BY id;
 +------+--------+
 | id   | number |
 +------+--------+
 |    1 |      1 |
 |    2 | 100001 |
+|    3 | 200001 |
+|    4 | 200002 |
+|    5 | 200003 |
+|    6 | 200004 |
 +------+--------+
-2 rows in set (0.08 sec)
+6 rows in set (0.01 sec)
 ```
 
-> **NOTE**
->
-> When you use this feature, it is not guaranteed that the values for the `AUTO_INCREMENT` column are strictly monotonic. It can only be ensured that the values roughly increase in chronological order. For more information, see [Monotonicity](#monotonicity).
-
-#### Specify values explicitly
+**Specify values explicitly**
 
 You can also explicitly specify the values for the `AUTO_INCREMENT` column and insert them into the table.
 
 ```SQL
-INSERT INTO test_tbl1 (id, number) VALUES (3, 100);
+INSERT INTO test_tbl1 (id, number) VALUES (7, 100);
 
--- view table
+-- view data in the table.
+
 mysql > SELECT * FROM test_tbl1 ORDER BY id;
 +------+--------+
 | id   | number |
 +------+--------+
 |    1 |      1 |
 |    2 | 100001 |
-|    3 |    100 |
+|    3 | 200001 |
+|    4 | 200002 |
+|    5 | 200003 |
+|    6 | 200004 |
+|    7 |    100 |
 +------+--------+
-3 rows in set (0.01 sec)
+7 rows in set (0.01 sec)
 ```
 
 Moreover, explicitly specifying values does not affect the subsequent values generated by StarRocks for newly inserted data rows.
-> **NOTICE**
->
-> It is recommended that you do not use implicit assignment and explicit specification together. Because the specified values may be the same as the values generated by StarRocks, breaking the [global uniqueness of auto-incremented IDs](#uniqueness).
 
 ```SQL
-INSERT INTO test_tbl1 (id) VALUES (4);
+INSERT INTO test_tbl1 (id) VALUES (8);
 
--- view table
+-- view data in the table.
+
 mysql > SELECT * FROM test_tbl1 ORDER BY id;
 +------+--------+
 | id   | number |
 +------+--------+
 |    1 |      1 |
 |    2 | 100001 |
-|    3 |    100 |
-|    4 |      2 |
+|    3 | 200001 |
+|    4 | 200002 |
+|    5 | 200003 |
+|    6 | 200004 |
+|    7 |    100 |
+|    8 |      2 |
 +------+--------+
-4 rows in set (0.02 sec)
+8 rows in set (0.01 sec)
 ```
+
+**NOTICE**
+
+We recommend that you do not use implicitly assigned values and explicitly specified values for the `AUTO_INCREMENT` column at the same time. Because the specified values may be the same as the values generated by StarRocks, breaking the [global uniqueness of auto-incremented IDs](#uniqueness).
 
 ## Basic features
 
@@ -111,7 +165,7 @@ DISTRIBUTED BY HASH(id)
 PROPERTIES("replicated_storage" = "true");
 ```
 
-Implicitly assign and explicitly specify the values for the `AUTO_INCREMENT` column `number` in the table `test_tbl2`。
+Implicitly assign and explicitly specify the values for the `AUTO_INCREMENT` column `number` in the table `test_tbl2`.
 
 ```SQL
 INSERT INTO test_tbl2 (id, number) VALUES (1, DEFAULT);
@@ -256,7 +310,7 @@ If the `AUTO_INCREMENT` column is not a primary key or a part of the primary key
 - If the row already exists in the table, StarRocks does not update the auto-incremented ID.
 - If the row is newly loaded into the table, StarRocks generates a new auto-incremented ID.
 
-This feature can be used to build a dictionary table for fastly computing distinct STRING values.
+This feature can be used to build a dictionary table for quickly computing distinct STRING values.
 
 1. In the database `example_db`, create a table `test_tbl5` and specify the column `job1` as the `AUTO_INCREMENT` column and insert a data row into the table `test_tbl5`.
 
@@ -335,3 +389,7 @@ This feature can be used to build a dictionary table for fastly computing distin
 - Adding the `AUTO_INCREMENT` attribute by using ALTER TABLE is not supported.
 - Currently, StarRocks's shared-data mode does not support the `AUTO_INCREMENT` attribute.
 - StarRocks does not support specifying the starting value and step size for the `AUTO_INCREMENT` column.
+
+## Keywords
+
+AUTO_INCREMENT, AUTO INCREMENT

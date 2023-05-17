@@ -72,6 +72,9 @@ public interface IHiveMetastore {
     default void invalidatePartition(HivePartitionName partitionName) {
     }
 
+    default void invalidatePartitionKeys(HiveTableName tableName) {
+    }
+
     default long getCurrentEventId() {
         return -1;
     }

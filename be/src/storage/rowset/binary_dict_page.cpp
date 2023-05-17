@@ -176,12 +176,8 @@ bool BinaryDictPageBuilder::is_valid_global_dict(const GlobalDictMap* global_dic
 }
 
 template <LogicalType Type>
-BinaryDictPageDecoder<Type>::BinaryDictPageDecoder(Slice data, const PageDecoderOptions& options)
-        : _data(data),
-          _options(options),
-          _data_page_decoder(nullptr),
-          _parsed(false),
-          _encoding_type(UNKNOWN_ENCODING) {}
+BinaryDictPageDecoder<Type>::BinaryDictPageDecoder(Slice data)
+        : _data(data), _data_page_decoder(nullptr), _parsed(false), _encoding_type(UNKNOWN_ENCODING) {}
 
 template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::init() {
@@ -196,10 +192,10 @@ Status BinaryDictPageDecoder<Type>::init() {
     if (_encoding_type == DICT_ENCODING) {
         // copy the codewords into a temporary buffer first
         // And then copy the strings corresponding to the codewords to the destination buffer
-        _data_page_decoder = std::make_unique<BitShufflePageDecoder<TYPE_INT>>(_data, _options);
+        _data_page_decoder = std::make_unique<BitShufflePageDecoder<TYPE_INT>>(_data);
     } else if (_encoding_type == PLAIN_ENCODING) {
         DCHECK_EQ(_encoding_type, PLAIN_ENCODING);
-        _data_page_decoder.reset(new BinaryPlainPageDecoder<Type>(_data, _options));
+        _data_page_decoder.reset(new BinaryPlainPageDecoder<Type>(_data));
     } else {
         LOG(WARNING) << "invalid encoding type:" << _encoding_type;
         return Status::Corruption(strings::Substitute("invalid encoding type:$0", _encoding_type));
@@ -250,17 +246,18 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange& range, Column*
     using cast_type = CppTypeTraits<TYPE_INT>::CppType;
     const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
     std::vector<Slice> slices;
-    slices.reserve(nread);
+    raw::stl_vector_resize_uninitialized(&slices, nread);
+
     if constexpr (Type == TYPE_CHAR) {
         for (int i = 0; i < nread; ++i) {
             Slice element = _dict_decoder->string_at_index(codewords[i]);
             // Strip trailing '\x00'
             element.size = strnlen(element.data, element.size);
-            slices.emplace_back(element);
+            slices[i] = element;
         }
     } else {
         for (int i = 0; i < nread; ++i) {
-            slices.emplace_back(_dict_decoder->string_at_index(codewords[i]));
+            slices[i] = _dict_decoder->string_at_index(codewords[i]);
         }
     }
 

@@ -722,7 +722,9 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                     }
                 }
 
-                tablet->set_binlog_config(tablet_meta_info.binlog_config);
+                BinlogConfig binlog_config;
+                binlog_config.update(tablet_meta_info.binlog_config);
+                tablet->update_binlog_config(binlog_config);
                 break;
             case TTabletMetaType::ENABLE_PERSISTENT_INDEX:
                 LOG(INFO) << "update tablet:" << tablet->tablet_id()

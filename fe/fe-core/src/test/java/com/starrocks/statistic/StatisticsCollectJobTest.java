@@ -38,6 +38,7 @@ import org.junit.Test;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,8 +67,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0_stats");
@@ -86,8 +86,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v4`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1_stats");
@@ -116,8 +115,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
         OlapTable t0p = (OlapTable) globalStateMgr.getDb("test").getTable("t0_stats_partition");
         new ArrayList<>(t0p.getPartitions()).get(0).updateVisibleVersion(2);
@@ -134,8 +132,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         OlapTable tps = (OlapTable) globalStateMgr.getDb("stats").getTable("tprimary_stats");
@@ -151,8 +148,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         OlapTable tus = (OlapTable) globalStateMgr.getDb("stats").getTable("tunique_stats");
@@ -167,8 +163,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         OlapTable tcount = (OlapTable) globalStateMgr.getDb("stats").getTable("tcount");
@@ -191,12 +186,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         LocalDateTime.MIN));
         Assert.assertEquals(6, jobs.size());
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
+        jobs = jobs.stream().sorted(Comparator.comparingLong(o -> o.getTable().getId())).collect(Collectors.toList());
         FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
-        Assert.assertTrue("[pk, v1, v2][v1, v2, v3, v4, v5][v4, v5, v6][v1, v2, v3, v4, v5]".contains(
+        Assert.assertTrue("[v1, v2, v3, v4, v5]".contains(
                 fullStatisticsCollectJob.getColumns().toString()));
         Assert.assertTrue(jobs.get(1) instanceof FullStatisticsCollectJob);
         fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(1);
-        Assert.assertTrue("[pk, v1, v2][v1, v2, v3, v4, v5][v4, v5, v6][v1, v2, v3, v4, v5]".contains(
+        Assert.assertTrue("[v4, v5, v6]".contains(
                 fullStatisticsCollectJob.getColumns().toString()));
     }
 
@@ -211,11 +207,12 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         LocalDateTime.MIN));
         Assert.assertEquals(3, jobs.size());
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
+        jobs = jobs.stream().sorted(Comparator.comparingLong(o -> o.getTable().getId())).collect(Collectors.toList());
         FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumns().toString());
         Assert.assertTrue(jobs.get(1) instanceof FullStatisticsCollectJob);
         fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(1);
-        Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumns().toString());
+        Assert.assertEquals("[v4, v5, v6]", fullStatisticsCollectJob.getColumns().toString());
     }
 
     @Test
@@ -525,7 +522,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t0_stats_partition")));
         Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t1_stats")));
     }
-    
+
     @Test
     public void testCount() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb("stats");
@@ -539,7 +536,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         String sql = Deencapsulation.invoke(sampleStatisticsCollectJob, "buildSampleInsertSQL",
                 dbid, olapTable.getId(), Lists.newArrayList("v1", "count"), 100L);
-        assertContains(sql, "`stats`.`tcount`  Tablet(10117)");
+        assertContains(sql, "`stats`.`tcount`  Tablet(");
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
 
         FullStatisticsCollectJob fullStatisticsCollectJob = new FullStatisticsCollectJob(

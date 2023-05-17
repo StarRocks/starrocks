@@ -31,6 +31,7 @@ set(EXEC_FILES
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
         ./exec/es/es_scroll_parser_test.cpp
+        ./exec/iceberg/iceberg_delete_builder_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
@@ -131,6 +132,7 @@ set(EXEC_FILES
         ./formats/csv/decimalv2_converter_test.cpp
         ./formats/csv/float_converter_test.cpp
         ./formats/csv/json_converter_test.cpp
+        ./formats/csv/map_converter_test.cpp
         ./formats/csv/nullable_converter_test.cpp
         ./formats/csv/numeric_converter_test.cpp
         ./formats/csv/default_value_converter_test.cpp
@@ -152,7 +154,9 @@ set(EXEC_FILES
         ./formats/parquet/metadata_test.cpp
         ./formats/parquet/group_reader_test.cpp
         ./formats/parquet/file_reader_test.cpp
+        ./formats/parquet/file_writer_test.cpp
         ./formats/parquet/iceberg_schema_evolution_file_reader_test.cpp
+        ./formats/parquet/column_converter_test.cpp
         ./formats/parquet/parquet_footer_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
@@ -195,7 +199,7 @@ set(EXEC_FILES
         ./storage/lake/delta_writer_test.cpp
         ./storage/lake/gc_test.cpp
         ./storage/lake/location_provider_test.cpp
-        ./storage/lake/horizontal_compaction_task_test.cpp
+        ./storage/lake/compaction_task_test.cpp
         ./storage/lake/schema_change_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/partial_update_test.cpp
@@ -204,6 +208,7 @@ set(EXEC_FILES
         ./storage/lake/condition_update_test.cpp
         ./storage/lake/primary_key_compaction_task_test.cpp
         ./storage/lake/primary_key_publish_test.cpp
+        ./storage/lake/meta_file_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp

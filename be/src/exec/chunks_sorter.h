@@ -141,6 +141,8 @@ public:
 
     virtual bool has_pending_data() { return false; }
 
+    bool has_output() { return spiller() == nullptr || !spiller()->spilled() || spiller()->has_output_data(); }
+
     const std::shared_ptr<spill::Spiller>& spiller() const { return _spiller; }
 
     size_t revocable_mem_bytes() const { return _revocable_mem_bytes; }

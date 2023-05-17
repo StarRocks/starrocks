@@ -36,7 +36,6 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -47,7 +46,6 @@ public class TransStateProcDir implements ProcDirInterface {
             .build();
 
     private final String dbIdOrName;
-    private long dbId = -1;
 
     public TransStateProcDir(String dbIdOrName) {
         this.dbIdOrName = dbIdOrName;
@@ -55,18 +53,10 @@ public class TransStateProcDir implements ProcDirInterface {
 
     @Override
     public ProcResult fetchResult() throws AnalysisException {
-        try {
-            dbId = Long.parseLong(dbIdOrName);
-        } catch (NumberFormatException e) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbIdOrName);
-            if (db == null) {
-                throw new AnalysisException("Unknown database id or name \"" + dbIdOrName + "\"");
-            }
-            dbId = db.getId();
-        }
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        long dbId = ProcUtils.getDbId(dbIdOrName);
         result.setRows(transactionMgr.getDbTransStateInfo(dbId));
         return result;
     }
@@ -86,6 +76,7 @@ public class TransStateProcDir implements ProcDirInterface {
             throw new AnalysisException("State is invalid");
         }
 
+        long dbId = ProcUtils.getDbId(dbIdOrName);
         return new TransProcDir(dbId, state);
     }
 }

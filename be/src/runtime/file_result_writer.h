@@ -37,6 +37,7 @@
 #include "exec/parquet_builder.h"
 #include "fs/fs.h"
 #include "gen_cpp/DataSinks_types.h"
+#include "parquet/file_writer.h"
 #include "runtime/result_writer.h"
 #include "runtime/runtime_state.h"
 
@@ -60,7 +61,7 @@ struct ResultFileOptions {
     THdfsProperties hdfs_properties;
     bool use_broker;
     std::vector<std::string> file_column_names;
-    ParquetBuilderOptions parquet_options;
+    parquet::ParquetBuilderOptions parquet_options;
 
     ResultFileOptions(const TResultFileSinkOptions& t_opt) {
         file_path = t_opt.file_path;

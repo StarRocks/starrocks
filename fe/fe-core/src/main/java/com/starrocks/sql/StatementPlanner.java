@@ -62,6 +62,7 @@ public class StatementPlanner {
         }
 
         Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
+        boolean needWholePhaseLock = true;
 
         // 1. For all queries, we need db lock when analyze phase
         try {
@@ -76,17 +77,15 @@ public class StatementPlanner {
             }
 
             session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
-        } finally {
-            unLock(dbs);
-        }
 
-        boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(stmt);
-        if (isOnlyOlapTableQueries && stmt instanceof QueryStatement) {
-            return planQuery(stmt, resultSinkType, session, true);
-        }
+            // Note: we only could get the olap table after Analyzing phase
+            boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(stmt);
+            if (isOnlyOlapTableQueries && stmt instanceof QueryStatement) {
+                unLock(dbs);
+                needWholePhaseLock = false;
+                return planQuery(stmt, resultSinkType, session, true);
+            }
 
-        try {
-            lock(dbs);
             if (stmt instanceof QueryStatement) {
                 return planQuery(stmt, resultSinkType, session, false);
             } else if (stmt instanceof InsertStmt) {
@@ -97,8 +96,11 @@ public class StatementPlanner {
                 return new DeletePlanner().plan((DeleteStmt) stmt, session);
             }
         } finally {
-            unLock(dbs);
+            if (needWholePhaseLock) {
+                unLock(dbs);
+            }
         }
+
         return null;
     }
 
@@ -156,7 +158,6 @@ public class StatementPlanner {
         }
     }
 
-
     public static ExecPlan createQueryPlanWithReTry(QueryStatement queryStmt,
                                                     ConnectContext session,
                                                     TResultSinkType resultSinkType) {
@@ -179,11 +180,28 @@ public class StatementPlanner {
             long planStartTime = System.currentTimeMillis();
 
             Set<OlapTable> olapTables = Sets.newHashSet();
-            AnalyzerUtils.copyOlapTable(queryStmt, olapTables);
+            Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, queryStmt);
+            session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
+
+            try {
+                // Need lock to avoid olap table metas ConcurrentModificationException
+                lock(dbs);
+                AnalyzerUtils.copyOlapTable(queryStmt, olapTables);
+            } finally {
+                unLock(dbs);
+            }
 
             // Only need to re analyze and re transform when schema isn't valid
             if (i > 0 && !isSchemaValid) {
-                Analyzer.analyze(queryStmt, session);
+
+                try {
+                    // We always need db lock when analyze phase
+                    lock(dbs);
+                    Analyzer.analyze(queryStmt, session);
+                } finally {
+                    unLock(dbs);
+                }
+
                 try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Transformer")) {
                     logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
                 }

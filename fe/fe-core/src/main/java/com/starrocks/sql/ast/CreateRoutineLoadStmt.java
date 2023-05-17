@@ -93,6 +93,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String DESIRED_CONCURRENT_NUMBER_PROPERTY = "desired_concurrent_number";
     // max error number in ten thousand records
     public static final String MAX_ERROR_NUMBER_PROPERTY = "max_error_number";
+    // The maximum error rate that can be tolerated in a batch of data. 
+    // If the error rate exceeds this, the job will be paused.
+    public static final String MAX_FILTER_RATIO_PROPERTY = "max_filter_ratio";
 
     public static final String MAX_BATCH_INTERVAL_SEC_PROPERTY = "max_batch_interval";
     public static final String MAX_BATCH_ROWS_PROPERTY = "max_batch_rows";
@@ -136,6 +139,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private static final ImmutableSet<String> PROPERTIES_SET = new ImmutableSet.Builder<String>()
             .add(DESIRED_CONCURRENT_NUMBER_PROPERTY)
             .add(MAX_ERROR_NUMBER_PROPERTY)
+            .add(MAX_FILTER_RATIO_PROPERTY)
             .add(MAX_BATCH_INTERVAL_SEC_PROPERTY)
             .add(MAX_BATCH_ROWS_PROPERTY)
             .add(MAX_BATCH_SIZE_PROPERTY)
@@ -184,6 +188,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private RoutineLoadDesc routineLoadDesc;
     private int desiredConcurrentNum = 1;
     private long maxErrorNum = -1;
+    private double maxFilterRatio = 1;
     private long maxBatchIntervalS = -1;
     private long maxBatchRows = -1;
     private long logRejectedRecordNum = 0;
@@ -320,6 +325,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public long getMaxErrorNum() {
         return maxErrorNum;
+    }
+
+    public double getMaxFilterRatio() {
+        return maxFilterRatio;
     }
 
     public long getMaxBatchIntervalS() {
@@ -507,6 +516,18 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         maxErrorNum = Util.getLongPropertyOrDefault(jobProperties.get(MAX_ERROR_NUMBER_PROPERTY),
                 RoutineLoadJob.DEFAULT_MAX_ERROR_NUM, MAX_ERROR_NUMBER_PRED,
                 MAX_ERROR_NUMBER_PROPERTY + " should >= 0");
+
+        if (jobProperties.containsKey(MAX_FILTER_RATIO_PROPERTY)) {
+            String maxFilterRatioStr = jobProperties.get(MAX_FILTER_RATIO_PROPERTY);
+            try {
+                maxFilterRatio = Double.valueOf(maxFilterRatioStr);
+            } catch (NumberFormatException exception) {
+                throw new UserException("Incorrect format of max_filter_ratio", exception);
+            }
+            if (maxFilterRatio < 0.0 || maxFilterRatio > 1.0) {
+                throw new UserException(MAX_FILTER_RATIO_PROPERTY + " must between 0.0 and 1.0.");
+            }
+        }
 
         maxBatchIntervalS = Util.getLongPropertyOrDefault(jobProperties.get(MAX_BATCH_INTERVAL_SEC_PROPERTY),
                 RoutineLoadJob.DEFAULT_TASK_SCHED_INTERVAL_SECOND, MAX_BATCH_INTERVAL_PRED,

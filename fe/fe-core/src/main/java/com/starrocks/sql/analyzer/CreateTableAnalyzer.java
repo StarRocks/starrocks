@@ -18,8 +18,11 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.KeysDesc;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -45,6 +48,7 @@ import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
@@ -123,11 +127,7 @@ public class CreateTableAnalyzer {
         MetaUtils.normalizationTableName(context, tableNameObject);
 
         final String tableName = tableNameObject.getTbl();
-        try {
-            FeNameFormat.checkTableName(tableName);
-        } catch (AnalysisException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
-        }
+        FeNameFormat.checkTableName(tableName);
 
         final String catalogName = tableNameObject.getCatalog();
         try {
@@ -146,6 +146,7 @@ public class CreateTableAnalyzer {
         statement.setCharsetName(analyzeCharsetName(statement.getCharsetName()).toLowerCase());
 
         KeysDesc keysDesc = statement.getKeysDesc();
+        List<Integer> sortKeyIdxes = Lists.newArrayList();
         if (statement.getSortKeys() != null) {
             if (keysDesc == null || keysDesc.getKeysType() != KeysType.PRIMARY_KEYS) {
                 NodePosition keysPos = NodePosition.ZERO;
@@ -153,6 +154,17 @@ public class CreateTableAnalyzer {
                     keysPos = keysDesc.getPos();
                 }
                 throw new SemanticException("only primary key support sort key", keysPos);
+            } else {
+                List<String> columnNames = 
+                            statement.getColumnDefs().stream().map(ColumnDef::getName).collect(Collectors.toList());
+                
+                for (String column : statement.getSortKeys()) {
+                    int idx = columnNames.indexOf(column);
+                    if (idx == -1) {
+                        throw new SemanticException("Invalid column '%s' not exists in all columns. '%s', '%s'", column);
+                    }
+                    sortKeyIdxes.add(idx);
+                }
             }
         }
         List<ColumnDef> columnDefs = statement.getColumnDefs();
@@ -225,7 +237,7 @@ public class CreateTableAnalyzer {
             }
 
             keysDesc.analyze(columnDefs);
-            keysDesc.checkColumnDefs(columnDefs);
+            keysDesc.checkColumnDefs(columnDefs, sortKeyIdxes);
             for (int i = 0; i < keysDesc.keysColumnSize(); ++i) {
                 columnDefs.get(i).setIsKey(true);
             }
@@ -336,8 +348,11 @@ public class CreateTableAnalyzer {
                     }
                     distributionDesc = new HashDistributionDesc(0, Lists.newArrayList(columnDefs.get(0).getName()));
                 } else {
-                    throw new SemanticException("Create olap table should contain distribution desc");
+                    distributionDesc = new RandomDistributionDesc();
                 }
+            }
+            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS) {
+                throw new SemanticException("Random distribution must be used in DUP_KEYS", distributionDesc.getPos());
             }
             distributionDesc.analyze(columnSet);
             statement.setDistributionDesc(distributionDesc);
@@ -382,6 +397,75 @@ public class CreateTableAnalyzer {
                 }
             }
             columns.add(col);
+        }
+        boolean hasMaterializedColum = false;
+        for (Column column : columns) {
+            if (column.isMaterializedColumn()) {
+                hasMaterializedColum = true;
+                break;
+            }
+        }
+
+        Map<String, Column> columnsMap = Maps.newHashMap();
+        for (Column column : columns) {
+            columnsMap.put(column.getName(), column);
+            if (column.isMaterializedColumn() && keysDesc.containsCol(column.getName())) {
+                throw new SemanticException("Materialized Column can not be KEY");
+            }
+        }
+
+        if (hasMaterializedColum) {
+            if (!statement.isOlapEngine()) {
+                throw new SemanticException("Materialized Column only support olap table");
+            }
+
+            boolean found = false;
+            for (Column column : columns) {
+                if (found && !column.isMaterializedColumn()) {
+                    throw new SemanticException("All materialized columns must be defined after ordinary columns");
+                }
+
+                if (column.isMaterializedColumn()) {
+                    Expr expr = column.materializedColumnExpr();
+
+                    ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                            new RelationFields(columns.stream().map(col -> new Field(
+                                    col.getName(), col.getType(), tableNameObject, null))
+                                        .collect(Collectors.toList()))), context);
+
+                    // check if contain aggregation
+                    List<FunctionCallExpr> funcs = Lists.newArrayList();
+                    expr.collect(FunctionCallExpr.class, funcs);
+                    for (FunctionCallExpr fn : funcs) {
+                        if (fn.isAggregateFunction()) {
+                            throw new SemanticException("Materialized Column don't support aggregation function");
+                        }
+                    }
+
+                    // check if the expression refers to other materialized columns
+                    List<SlotRef> slots = Lists.newArrayList();
+                    expr.collect(SlotRef.class, slots);
+                    if (slots.size() != 0) {
+                        for (SlotRef slot : slots) {
+                            Column refColumn = columnsMap.get(slot.getColumnName());
+                            if (refColumn.isMaterializedColumn()) {
+                                throw new SemanticException("Expression can not refers to other materialized columns");
+                            }
+                            if (refColumn.isAutoIncrement()) {
+                                throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
+                            }
+                        }
+                    }
+
+                    if (!column.getType().matchesType(expr.getType())) {
+                        throw new SemanticException("Illege expression type for Materialized Column " +
+                                                    "Column Type: " + column.getType().toString() +
+                                                    ", Expression Type: " + expr.getType().toString());
+                    }
+
+                    found = true;
+                }
+            }
         }
         List<IndexDef> indexDefs = statement.getIndexDefs();
         if (CollectionUtils.isNotEmpty(indexDefs)) {

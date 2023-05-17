@@ -246,14 +246,17 @@ private:
     // search delta column group by column uniqueid, if this column exist in delta column group,
     // then return column iterator and delta column's fillname.
     // Or just return null
-    StatusOr<std::unique_ptr<ColumnIterator>> _new_dcg_column_iterator(DeltaColumnGroupList dcgs, uint32_t ucid,
-                                                                       std::string* filename);
+    StatusOr<std::unique_ptr<ColumnIterator>> _new_dcg_column_iterator(uint32_t ucid, std::string* filename);
 
     // This function is a unified entry for creating column iterators.
     // `ucid` means unique column id, use it for searching delta column group.
     Status _init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc);
 
     void _update_stats(RandomAccessFile* rfile);
+
+    //  This function will search and build the segment from delta column group,
+    // and also return the columns's index in this segment if need.
+    StatusOr<std::shared_ptr<Segment>> _get_dcg_segment(uint32_t ucid, int32_t* col_index);
 
 private:
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
@@ -421,23 +424,36 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
             _opts.stats->raw_rows_read);
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_iterator(DeltaColumnGroupList dcgs,
-                                                                                    uint32_t ucid,
+StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t ucid, int32_t* col_index) {
+    // iterate dcg from new ver to old ver
+    for (const auto& dcg : _dcgs) {
+        int32_t idx = dcg->get_column_idx(ucid);
+        if (idx >= 0) {
+            std::string column_file = dcg->column_file(parent_name(_segment->file_name()));
+            if (_dcg_segments.count(column_file) == 0) {
+                ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg));
+                _dcg_segments[column_file] = dcg_segment;
+            }
+            if (col_index != nullptr) {
+                *col_index = idx;
+            }
+            return _dcg_segments[column_file];
+        }
+    }
+    // the column not exist in delta column group
+    return nullptr;
+}
+
+StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_iterator(uint32_t ucid,
                                                                                     std::string* filename) {
     // build column iter from delta column group
-    // iterate dcg from new ver to old ver
-    for (const auto& dcg : dcgs) {
-        int idx = dcg->get_column_idx(ucid);
-        if (idx >= 0) {
-            if (_dcg_segments.count(dcg->column_file()) == 0) {
-                ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg));
-                _dcg_segments[dcg->column_file()] = dcg_segment;
-            }
-            if (filename != nullptr) {
-                *filename = dcg->column_file();
-            }
-            return _dcg_segments[dcg->column_file()]->new_column_iterator(idx);
+    int32_t col_index = 0;
+    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(ucid, &col_index));
+    if (dcg_segment != nullptr) {
+        if (filename != nullptr) {
+            *filename = dcg_segment->file_name();
         }
+        return dcg_segment->new_column_iterator(col_index);
     }
     return nullptr;
 }
@@ -454,7 +470,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         LOG(ERROR) << "invalid unique columnid in segment iterator, ucid: " << ucid
                    << ", segment: " << _segment->file_name();
     }
-    ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator(_dcgs, (uint32_t)ucid, &dcg_filename));
+    ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator((uint32_t)ucid, &dcg_filename));
     if (col_iter == nullptr) {
         // not found in delta column group, create normal column iterator
         ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator(cid));
@@ -1478,11 +1494,24 @@ Status SegmentIterator::_encode_to_global_id(ScanContext* ctx) {
 Status SegmentIterator::_init_bitmap_index_iterators() {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
     _bitmap_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
+    std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
+    for (auto& field : _schema.fields()) {
+        cid_2_ucid[field->id()] = field->uid();
+    }
     for (const auto& pair : _opts.predicates) {
         ColumnId cid = pair.first;
         if (_bitmap_index_iterators[cid] == nullptr) {
-            RETURN_IF_ERROR(
-                    _segment->new_bitmap_index_iterator(cid, &_bitmap_index_iterators[cid], _skip_fill_local_cache()));
+            ColumnUID ucid = cid_2_ucid[cid];
+            // the column's index in this segment file
+            int32_t col_index = 0;
+            ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid, &col_index));
+            if (segment_ptr == nullptr) {
+                // find segment from delta column group failed, using main segment
+                segment_ptr = _segment;
+                col_index = cid;
+            }
+            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(col_index, &_bitmap_index_iterators[cid],
+                                                                   _skip_fill_local_cache()));
             _has_bitmap_index |= (_bitmap_index_iterators[cid] != nullptr);
         }
     }
@@ -1612,7 +1641,7 @@ Status SegmentIterator::_get_row_ranges_by_rowid_range() {
         return Status::OK();
     }
 
-    _scan_range = _scan_range.intersection(_opts.rowid_range_option->rowid_range);
+    _scan_range = _scan_range.intersection(*_opts.rowid_range_option);
     return Status::OK();
 }
 
@@ -1656,11 +1685,13 @@ void SegmentIterator::close() {
     if (_del_vec) {
         _del_vec.reset();
     }
+    _dcgs.clear();
     _context_list[0].close();
     _context_list[1].close();
     _column_iterators.resize(0);
     _obj_pool.clear();
     _segment.reset();
+    _dcg_segments.clear();
     _column_decoders.clear();
 
     for (auto& [cid, rfile] : _column_files) {

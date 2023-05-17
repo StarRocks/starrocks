@@ -227,16 +227,12 @@ public abstract class AstVisitor<R, C> {
 
     // ---------------------------------------- View Statement ---------------------------------------------------------
 
-    public R visitBaseViewStatement(BaseViewStmt statement, C context) {
+    public R visitCreateViewStatement(CreateViewStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
-    public R visitCreateViewStatement(CreateViewStmt statement, C context) {
-        return visitBaseViewStatement(statement, context);
-    }
-
     public R visitAlterViewStatement(AlterViewStmt statement, C context) {
-        return visitBaseViewStatement(statement, context);
+        return visitStatement(statement, context);
     }
 
     public R visitSubmitTaskStatement(SubmitTaskStmt statement, C context) {
@@ -755,6 +751,40 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    // ---------------------------------------- Storage Volume Statement ----------------------------------------------------
+
+    public R visitCreateStorageVolumeStatement(CreateStorageVolumeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowStorageVolumesStatement(ShowStorageVolumesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitAlterStorageVolumeStatement(AlterStorageVolumeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropStorageVolumeStatement(DropStorageVolumeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDescStorageVolumeStatement(DescStorageVolumeStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitModifyStorageVolumePropertiesClause(ModifyStorageVolumePropertiesClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitAlterStorageVolumeCommentClause(AlterStorageVolumeCommentClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------
 
     public R visitUnsupportedStatement(UnsupportedStmt statement, C context) {
@@ -770,6 +800,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateImageClause(CreateImageClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitCleanTabletSchedQClause(CleanTabletSchedQClause clause, C context) {
         return visitNode(clause, context);
     }
 
@@ -882,6 +916,11 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitPartitionRenameClause(PartitionRenameClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    // Alter View
+    public R visitAlterViewClause(AlterViewClause clause, C context) {
         return visitNode(clause, context);
     }
 

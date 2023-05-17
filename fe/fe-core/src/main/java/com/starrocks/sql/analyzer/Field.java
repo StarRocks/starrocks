@@ -55,7 +55,7 @@ public class Field {
         this.relationAlias = relationAlias;
         this.originExpression = originExpression;
         this.visible = visible;
-        this.isNullable = false;
+        this.isNullable = true;
     }
 
     public Field(String name, Type type, TableName relationAlias, Expr originExpression, boolean visible, boolean isNullable) {

@@ -49,7 +49,7 @@ public class AstToSQLBuilder {
         return new AST2SQLBuilderVisitor(sameCatalogDb).visit(statement);
     }
 
-    public static String toSQL(StatementBase statement) {
+    public static String toSQL(ParseNode statement) {
         return new AST2SQLBuilderVisitor(false).visit(statement);
     }
 

@@ -41,6 +41,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -181,6 +182,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     @SerializedName(value = "mvs")
     protected Set<MvId> relatedMaterializedViews;
 
+    // unique constraints for mv rewrite
+    // a table may have multi unique constraints
+    protected List<UniqueConstraint> uniqueConstraints;
+
+    // foreign key constraint for mv rewrite
+    protected List<ForeignKeyConstraint> foreignKeyConstraints;
+
     public Table(TableType type) {
         this.type = type;
         this.fullSchema = Lists.newArrayList();
@@ -252,6 +260,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.OLAP;
     }
 
+    public boolean isOlapExternalTable() {
+        return type == TableType.OLAP_EXTERNAL;
+    }
+
     public boolean isOlapMaterializedView() {
         return type == TableType.MATERIALIZED_VIEW;
     }
@@ -282,6 +294,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public boolean isNativeTableOrMaterializedView() {
         return isOlapTableOrMaterializedView() || isCloudNativeTableOrMaterializedView();
+    }
+
+    public boolean isNativeTable() {
+        return isOlapTable() || isCloudNativeTable();
     }
 
     public boolean isHiveTable() {
@@ -491,7 +507,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             return "StarRocks";
         } else if (this instanceof MysqlTable) {
             return "MySQL";
-        } else if (this instanceof SchemaTable) {
+        } else if (this instanceof SystemTable) {
             return "MEMORY";
         } else if (this instanceof HiveTable) {
             return "Hive";
@@ -659,7 +675,29 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return false;
     }
 
+
     public boolean supportInsert() {
         return false;
+    }
+
+    public boolean hasUniqueConstraints() {
+        List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
+        return uniqueConstraint != null;
+    }
+
+    public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
+        this.uniqueConstraints = uniqueConstraints;
+    }
+
+    public List<UniqueConstraint> getUniqueConstraints() {
+        return this.uniqueConstraints;
+    }
+
+    public void setForeignKeyConstraints(List<ForeignKeyConstraint> foreignKeyConstraints) {
+        this.foreignKeyConstraints = foreignKeyConstraints;
+    }
+
+    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
+        return this.foreignKeyConstraints;
     }
 }

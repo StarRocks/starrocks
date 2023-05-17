@@ -23,6 +23,7 @@
 #include "common/status.h"
 #include "exec/spill/common.h"
 #include "exec/spill/serde.h"
+#include "exec/spill/spill_components.h"
 #include "exec/spill/spiller.h"
 #include "util/defer_op.h"
 
@@ -30,7 +31,7 @@ namespace starrocks::spill {
 template <class TaskExecutor, class MemGuard>
 Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard) {
     SCOPED_TIMER(_metrics.spill_timer);
-    RETURN_IF_ERROR(_spilled_task_status);
+    RETURN_IF_ERROR(task_status());
     DCHECK(!chunk->is_empty());
     DCHECK(!is_full());
 
@@ -41,6 +42,7 @@ Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&&
 
     if (_chunk_builder.chunk_schema()->empty()) {
         _chunk_builder.chunk_schema()->set_schema(chunk);
+        RETURN_IF_ERROR(_serde->prepare());
     }
 
     if (_opts.init_partition_nums > 0) {
@@ -54,13 +56,14 @@ template <class Processer, class TaskExecutor, class MemGuard>
 Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, SpillHashColumn* hash_column,
                                   Processer&& processer, TaskExecutor&& executor, MemGuard&& guard) {
     SCOPED_TIMER(_metrics.spill_timer);
-    RETURN_IF_ERROR(_spilled_task_status);
+    RETURN_IF_ERROR(task_status());
     DCHECK(!chunk->is_empty());
     COUNTER_UPDATE(_metrics.spill_rows, chunk->num_rows());
     DCHECK_GT(_opts.init_partition_nums, 0);
 
     if (_chunk_builder.chunk_schema()->empty()) {
         _chunk_builder.chunk_schema()->set_schema(chunk);
+        RETURN_IF_ERROR(_serde->prepare());
     }
 
     std::vector<uint32_t> indexs;
@@ -73,7 +76,7 @@ Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, Sp
 
 template <class TaskExecutor, class MemGuard>
 Status Spiller::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-    RETURN_IF_ERROR(_spilled_task_status);
+    RETURN_IF_ERROR(task_status());
     if (_opts.init_partition_nums > 0) {
         return _writer->as<PartitionedSpillerWriter*>()->flush(state, executor, guard);
     } else {
@@ -83,7 +86,7 @@ Status Spiller::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& g
 
 template <class TaskExecutor, class MemGuard>
 StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-    RETURN_IF_ERROR(_spilled_task_status);
+    RETURN_IF_ERROR(task_status());
 
     ASSIGN_OR_RETURN(auto chunk, _reader->restore(state, executor, guard));
     chunk->check_or_die();
@@ -103,6 +106,7 @@ template <class TaskExecutor, class MemGuard>
 Status RawSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard) {
     if (_mem_table == nullptr) {
         _mem_table = _acquire_mem_table_from_pool();
+        DCHECK(_mem_table != nullptr);
     }
 
     RETURN_IF_ERROR(_mem_table->append(chunk));
@@ -116,13 +120,18 @@ Status RawSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chunk, TaskE
 
 template <class TaskExecutor, class MemGuard>
 Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-    auto captured_mem_table = std::move(_mem_table);
+    MemTablePtr captured_mem_table;
+    {
+        std::lock_guard l(_mutex);
+        captured_mem_table = std::move(_mem_table);
+    }
     auto defer = DeferOp([&]() {
         if (captured_mem_table) {
             std::lock_guard _(_mutex);
             _mem_table_pool.emplace(std::move(captured_mem_table));
         }
     });
+
     if (captured_mem_table == nullptr) {
         return Status::OK();
     }
@@ -162,6 +171,7 @@ StatusOr<ChunkPtr> SpillerReader::restore(RuntimeState* state, TaskExecutor&& ex
     ASSIGN_OR_RETURN(auto chunk, _stream->get_next(_spill_read_ctx));
     RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));
     _read_rows += chunk->num_rows();
+    TRACE_SPILL_LOG << "restore rows: " << chunk->num_rows() << ", total restored: " << _read_rows << ", " << this;
     return chunk;
 }
 
@@ -170,6 +180,7 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
     if (_stream == nullptr) {
         return Status::OK();
     }
+
     DCHECK(_stream->enable_prefetch());
     // if all is well and input stream enable prefetch and not eof
     if (!_stream->eof()) {
@@ -267,6 +278,85 @@ Status PartitionedSpillerWriter::_spill_partition(SerdeContext& ctx, SpilledPart
         RETURN_IF_ERROR(_spiller->block_manager()->release_block(block));
         block.reset();
     }
+    return Status::OK();
+}
+
+template <class MemGuard>
+Status PartitionedSpillerWriter::_split_partition(SerdeContext& spill_ctx, SpillerReader* reader,
+                                                  SpilledPartition* partition, SpilledPartition* left_partition,
+                                                  SpilledPartition* right_partition, MemGuard& guard) {
+    size_t current_level = partition->level;
+    size_t restore_rows = 0;
+    while (true) {
+        RETURN_IF_ERROR(reader->trigger_restore(_runtime_state, SyncTaskExecutor{}, guard));
+        if (!reader->has_output_data()) {
+            DCHECK_EQ(restore_rows, partition->num_rows);
+            break;
+        }
+        ASSIGN_OR_RETURN(auto chunk, reader->restore(_runtime_state, SyncTaskExecutor{}, guard));
+        restore_rows += chunk->num_rows();
+        if (chunk->is_empty()) {
+            continue;
+        }
+        auto hash_column = down_cast<SpillHashColumn*>(chunk->columns().back().get());
+        const auto& hash_data = hash_column->get_data();
+        // hash data
+        std::vector<uint32_t> shuffle_result;
+        shuffle_result.resize(hash_data.size());
+        size_t left_channel_size = 0;
+        for (size_t i = 0; i < hash_data.size(); ++i) {
+            shuffle_result[i] = hash_data[i] >> current_level & 0x01;
+            left_channel_size += !shuffle_result[i];
+        }
+        size_t left_cursor = 0;
+        size_t right_cursor = left_channel_size;
+        std::vector<uint32_t> selection(hash_data.size());
+        for (size_t i = 0; i < hash_data.size(); ++i) {
+            if (shuffle_result[i] == 0) {
+                selection[left_cursor++] = i;
+            } else {
+                selection[right_cursor++] = i;
+            }
+        }
+
+#ifndef NDEBUG
+        for (size_t i = 0; i < left_cursor; i++) {
+            DCHECK_EQ(hash_data[selection[i]] & left_partition->mask(),
+                      left_partition->partition_id & left_partition->mask());
+        }
+
+        for (size_t i = left_cursor; i < right_cursor; i++) {
+            DCHECK_EQ(hash_data[selection[i]] & right_partition->mask(),
+                      right_partition->partition_id & right_partition->mask());
+        }
+#endif
+
+        if (left_channel_size > 0) {
+            ChunkPtr left_chunk = chunk->clone_empty();
+            left_chunk->append_selective(*chunk, selection.data(), 0, left_channel_size);
+            size_t old_rows = left_partition->num_rows;
+            RETURN_IF_ERROR(_spill_partition(spill_ctx, left_partition, [&](auto& consumer) {
+                consumer(left_chunk);
+                left_partition->num_rows += left_chunk->num_rows();
+                return Status::OK();
+            }));
+            DCHECK_EQ(left_channel_size, left_partition->num_rows - old_rows);
+        }
+        if (hash_data.size() != left_channel_size) {
+            ChunkPtr right_chunk = chunk->clone_empty();
+            right_chunk->append_selective(*chunk, selection.data(), left_channel_size,
+                                          hash_data.size() - left_channel_size);
+            size_t old_rows = right_partition->num_rows;
+            RETURN_IF_ERROR(_spill_partition(spill_ctx, right_partition, [&](auto& consumer) {
+                consumer(right_chunk);
+                right_partition->num_rows += right_chunk->num_rows();
+                return Status::OK();
+            }));
+
+            DCHECK_EQ(hash_data.size() - left_channel_size, right_partition->num_rows - old_rows);
+        }
+    }
+    DCHECK_EQ(restore_rows, partition->num_rows);
     return Status::OK();
 }
 

@@ -1,5 +1,28 @@
 # StarRocks version 2.3
 
+## 2.3.12
+
+Release date: April 25, 2023
+
+### Improvements
+
+Supports implicit conversion if the returned value of an expression can be converted to a valid Boolean value. [# 21792](https://github.com/StarRocks/starrocks/pull/21792)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- If a user's LOAD_PRIV is granted at the table level, an error message `Access denied; you need (at least one of) the LOAD privilege(s) for this operation`  is returned at transaction rollback in the event of a load job failure. [# 21129](https://github.com/StarRocks/starrocks/issues/21129)
+- After ALTER SYSTEM DROP BACKEND is executed to drop a BE, the replicas of tables whose replication number is set to 2 on that BE cannot be repaired. In this situation, data loads into these tables fail. [# 20681](https://github.com/StarRocks/starrocks/pull/20681)
+- NPE is returned when an unsupported data type is used in CREATE TABLE. [# 20999](https://github.com/StarRocks/starrocks/issues/20999)
+- The shortcircut logic of the Broadcast Join is abnormal, leading to incorrect query results. [# 20952](https://github.com/StarRocks/starrocks/issues/20952)
+- Disk usage may increase significantly after materialized views are used. [# 20590](https://github.com/StarRocks/starrocks/pull/20590)
+- The Audit Loader plugin cannot be completely uninstalled. [# 20468](https://github.com/StarRocks/starrocks/issues/20468)
+- The number of rows displayed in the result of `INSERT INTO XXX SELECT` may not match the result of `SELECT COUNT(*) FROM XXX`. [# 20084](https://github.com/StarRocks/starrocks/issues/20084)
+- If a subquery uses window functions and its parent query uses the GROUP BY clause, the query result cannot be aggregated. [# 19725](https://github.com/StarRocks/starrocks/issues/19725)
+- When a BE is started, the BE process exists but all the BE’s ports cannot be open. [# 19347](https://github.com/StarRocks/starrocks/pull/19347)
+- If the disk I/O is exceedingly high, transactions on Primary Key tables are slowly committed, and consequently queries on these tables may return an error "backend not found". [# 18835](https://github.com/StarRocks/starrocks/issues/18835)
+
 ## 2.3.11
 
 Release date: March 28, 2023
@@ -251,9 +274,8 @@ Release date: July 29, 2022
 
 ### New Features
 
-- The Primary Key model supports complete DELETE WHERE syntax. For more information, see [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md#delete-and-primary-key-model).
-
-- The Primary Key model supports persistent primary key indexes. You can choose to persist the primary key index on disk rather than in memory, significantly reducing memory usage. For more information, see [Primary Key model](../table_design/Data_model.md#how-to-use-it-3).
+- The Primary Key table supports complete DELETE WHERE syntax. For more information, see [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md#delete-data-by-primary-key).
+- The Primary Key table supports persistent primary key indexes. You can choose to persist the primary key index on disk rather than in memory, significantly reducing memory usage. For more information, see [Primary Key table](../table_design/table_types/primary_key_table.md).
 - Global dictionary can be updated during real-time data ingestion，optimizing query performance and delivering 2X query performance for string data.
 - The CREATE TABLE AS SELECT statement can be executed asynchronously. For more information, see [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20AS%20SELECT.md).
 - Support the following resource group-related features:

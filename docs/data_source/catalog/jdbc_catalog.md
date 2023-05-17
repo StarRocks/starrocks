@@ -1,14 +1,17 @@
-# [Preview] JDBC catalog
+# JDBC catalog
 
 A JDBC catalog is a kind of external catalog that enables you to query data from data sources accessed through JDBC without ingestion.
 
-Also, you can directly transform and load data from JDBC by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) based on JDBC catalogs. StarRocks supports JDBC catalogs from v3.0 onwards.
+Also, you can directly transform and load data from JDBC data sources by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) based on JDBC catalogs.
+
+StarRocks supports JDBC catalogs from v3.0 onwards, and the support for JDBC catalogs is now in preview.
 
 JDBC catalogs currently support MySQL and PostgreSQL.
 
 ## Prerequisites
 
-The FEs and BEs in your StarRocks cluster can download the JDBC driver from the download URL specified by the `driver_url` parameter.
+- The FEs and BEs in your StarRocks cluster can download the JDBC driver from the download URL specified by the `driver_url` parameter.
+- `JAVA_HOME` in the **$BE_HOME/bin/start_be.sh** file on each BE node is properly configured as a path in the JDK environment instead of a path in the JRE environment. For example, you can configure `export JAVA_HOME = <JDK_absolute_path>`.
 
 ## Create a JDBC catalog
 
@@ -41,12 +44,12 @@ The properties of the JDBC Catalog. `PROPERTIES` must include the following para
 
 | **Parameter**     | **Description**                                                     |
 | ----------------- | ------------------------------------------------------------ |
-| type              | the type of the resource. Set the value to `jdbc`.           |
-| user              | the username that is used to connect to the target database. |
-| password          | the password that is used to connect to the target database. |
-| jdbc_uri          | the URI that the JDBC driver uses to connect to the target database. For MySQL, the URI is in the `"jdbc:mysql://ip:port"` format. For PostgreSQL, the URI is in the `"jdbc:postgresql://ip:port/db_name"` format. For more information, visit the official websites of [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html) and [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html). |
-| driver_url        | the download URL of the JDBC driver JAR package. An HTTP URL or file URL is supported, for example, `https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` and `file:///home/disk1/postgresql-42.3.3.jar`.<br>**NOTE**<br>You can also put the JDBC driver to any same path on the FE and BE nodes and set `driver_url` to that path, which must be in the `file://<path>/to/the/dirver` format. |
-| driver_class      | the class name of the JDBC driver. The JDBC driver class names of common database engines are as follows:<ul><li>MySQL: com.mysql.jdbc.Driver (MySQL v5.x and earlier) and com.mysql.cj.jdbc.Driver (MySQL v6.x and later)</li><li>PostgreSQL: org.postgresql.Driver</li></ul> |
+| type              | The type of the resource. Set the value to `jdbc`.           |
+| user              | The username that is used to connect to the target database. |
+| password          | The password that is used to connect to the target database. |
+| jdbc_uri          | The URI that the JDBC driver uses to connect to the target database. For MySQL, the URI is in the `"jdbc:mysql://ip:port"` format. For PostgreSQL, the URI is in the `"jdbc:postgresql://ip:port/db_name"` format. For more information, visit the official websites of [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html) and [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html). |
+| driver_url        | The download URL of the JDBC driver JAR package. An HTTP URL or file URL is supported, for example, `https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` and `file:///home/disk1/postgresql-42.3.3.jar`.<br>**NOTE**<br>You can also put the JDBC driver to any same path on the FE and BE nodes and set `driver_url` to that path, which must be in the `file:///<path>/to/the/driver` format. |
+| driver_class      | The class name of the JDBC driver. The JDBC driver class names of common database engines are as follows:<ul><li>MySQL: `com.mysql.jdbc.Driver` (MySQL v5.x and earlier) and `com.mysql.cj.jdbc.Driver` (MySQL v6.x and later)</li><li>PostgreSQL: `org.postgresql.Driver`</li></ul> |
 
 > **NOTE**
 >
@@ -54,7 +57,7 @@ The properties of the JDBC Catalog. `PROPERTIES` must include the following para
 
 ### Examples
 
-The following example creates two JDBC catalogs: one named `jdbc0`, and the other named `jdbc1`.
+The following example creates two JDBC catalogs: `jdbc0` and `jdbc1`.
 
 ```SQL
 CREATE EXTERNAL CATALOG jdbc0
@@ -106,7 +109,7 @@ DROP Catalog jdbc0;
 
 ## Query a table in a JDBC catalog
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) to view the databases in your JDBC-compatible cluster.
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) to view the databases in your JDBC-compatible cluster:
 
    ```SQL
    SHOW DATABASES <catalog_name>;
@@ -135,3 +138,9 @@ DROP Catalog jdbc0;
    ```SQL
    SELECT * FROM <table_name>;
    ```
+
+## FAQ
+
+What do I do if an error suggesting "Malformed database URL, failed to parse the main URL sections" is thrown?
+
+If you encounter such an error, the URI that you passed in `jdbc_uri` is invalid. Check the URI that you pass and make sure it is valid. For more information, see the parameter descriptions in the "[PROPERTIES](#properties)" section of this topic.

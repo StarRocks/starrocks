@@ -40,10 +40,12 @@ public class JDBCMetadata implements ConnectorMetadata {
     private static Logger LOG = LogManager.getLogger(JDBCMetadata.class);
 
     private Map<String, String> properties;
+    private String catalogName;
     private JDBCSchemaResolver schemaResolver;
 
-    public JDBCMetadata(Map<String, String> properties) {
+    public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this.properties = properties;
+        this.catalogName = catalogName;
         try {
             Class.forName(properties.get(JDBCResource.DRIVER_CLASS));
         } catch (ClassNotFoundException e) {
@@ -112,7 +114,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                 return null;
             }
             return schemaResolver.getTable(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(),
-                    tblName, fullSchema, dbName, properties);
+                    tblName, fullSchema, dbName, catalogName, properties);
         } catch (SQLException | DdlException e) {
             LOG.warn(e.getMessage());
             return null;

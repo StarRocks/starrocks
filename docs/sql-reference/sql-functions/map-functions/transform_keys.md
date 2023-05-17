@@ -26,7 +26,7 @@ MAP transform_keys(any_map, lambda_func)
 
 - `any_map`: the Map.
 
-- `lambda_func`：the Lambda expression you want to apply to `any_map`.
+- `lambda_func`: the Lambda expression you want to apply to `any_map`.
 
 ## Return value
 

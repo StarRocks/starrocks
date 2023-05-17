@@ -46,12 +46,13 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -140,6 +141,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
+import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatisticsCollectJobFactory;
@@ -152,6 +154,7 @@ import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
@@ -173,6 +176,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -869,8 +874,12 @@ public class StmtExecutor {
             }
         }
 
+        if (analyzeStmt.isExternal()) {
+            // deal later
+            return;
+        }
         //Only for send sync command to client
-        AnalyzeStatus analyzeStatus = new AnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                 db.getId(), table.getId(), analyzeStmt.getColumnNames(),
                 analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
@@ -878,17 +887,21 @@ public class StmtExecutor {
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
         GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
-        if (analyzeStmt.isAsync()) {
-            try {
-                GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
-                        .submit(() -> executeAnalyze(true, analyzeStmt, analyzeStatus, db, table));
-            } catch (RejectedExecutionException e) {
-                analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
-                analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
-                GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        try {
+            Future<?> future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
+                    .submit(() -> executeAnalyze(analyzeStmt, analyzeStatus, db, table));
+
+            if (!analyzeStmt.isAsync()) {
+                future.get();
             }
-        } else {
-            executeAnalyze(false, analyzeStmt, analyzeStatus, db, table);
+        } catch (RejectedExecutionException e) {
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+            analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        } catch (ExecutionException | InterruptedException e) {
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+            analyzeStatus.setReason("The statistics tasks running failed");
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         }
 
         ShowResultSet resultSet = analyzeStatus.toShowResult();
@@ -901,52 +914,58 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
-    private void executeAnalyze(boolean isAsync, AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
+    private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         // from current session, may execute analyze stmt
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
-
-        if (isAsync) {
-            statsConnectCtx.setThreadLocalInfo();
-        }
+        statsConnectCtx.setThreadLocalInfo();
         executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
     }
 
     private void executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus,
                                 Database db, Table table) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
-            statisticExecutor.collectStatistics(statsConnectCtx,
-                    new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
-                            StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                            analyzeStmt.getProperties()),
-                    analyzeStatus,
-                    // Sync load cache, auto-populate column statistic cache after Analyze table manually
-                    false);
+        if (analyzeStmt.isExternal()) {
+            // deal later
         } else {
-            statisticExecutor.collectStatistics(statsConnectCtx,
-                    StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
-                            analyzeStmt.getColumnNames(),
-                            analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
-                                    StatsConstants.AnalyzeType.FULL,
-                            StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
-                    analyzeStatus,
-                    // Sync load cache, auto-populate column statistic cache after Analyze table manually
-                    false);
+            if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
+                statisticExecutor.collectStatistics(statsConnectCtx,
+                        new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
+                                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                                analyzeStmt.getProperties()),
+                        analyzeStatus,
+                        // Sync load cache, auto-populate column statistic cache after Analyze table manually
+                        false);
+            } else {
+                StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
+                        StatsConstants.AnalyzeType.FULL;
+                statisticExecutor.collectStatistics(statsConnectCtx,
+                        StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
+                                analyzeStmt.getColumnNames(),
+                                analyzeType,
+                                StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
+                        analyzeStatus,
+                        // Sync load cache, auto-populate column statistic cache after Analyze table manually
+                        false);
+            }
         }
     }
 
     private void handleDropStatsStmt() {
         DropStatsStmt dropStatsStmt = (DropStatsStmt) parsedStmt;
-        OlapTable table = (OlapTable) MetaUtils.getTable(context, dropStatsStmt.getTableName());
-        List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
-                .collect(Collectors.toList());
+        Table table = MetaUtils.getTable(context, dropStatsStmt.getTableName());
+        if (dropStatsStmt.isExternal()) {
+            // deal later
+        } else {
+            List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
+                    .collect(Collectors.toList());
 
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
-        GlobalStateMgr.getCurrentAnalyzeMgr()
-                .dropBasicStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
-        GlobalStateMgr.getCurrentStatisticStorage().expireTableAndColumnStatistics(table, columns);
+            GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
+            GlobalStateMgr.getCurrentAnalyzeMgr()
+                    .dropBasicStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
+            GlobalStateMgr.getCurrentStatisticStorage().expireTableAndColumnStatistics(table, columns);
+        }
     }
 
     private void handleDropHistogramStmt() {
@@ -991,8 +1010,14 @@ public class StmtExecutor {
         ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
     }
 
-    private void handleExecScriptStmt() throws PrivilegeException, UserException {
-        ExecuteScriptExecutor.execute((ExecuteScriptStmt) parsedStmt, context);
+    private void handleExecScriptStmt() throws IOException, UserException {
+        ShowResultSet resultSet = ExecuteScriptExecutor.execute((ExecuteScriptStmt) parsedStmt, context);
+        if (isProxy) {
+            proxyResultSet = resultSet;
+            context.getState().setEof();
+            return;
+        }
+        sendShowResult(resultSet);
     }
 
     private void handleSetRole() throws PrivilegeException, UserException {
@@ -1295,15 +1320,19 @@ public class StmtExecutor {
             return;
         }
 
-        if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite()
-                && !((InsertStmt) parsedStmt).hasOverwriteJob()) {
+        MetaUtils.normalizationTableName(context, stmt.getTableName());
+        String catalogName = stmt.getTableName().getCatalog();
+        String dbName = stmt.getTableName().getDb();
+        String tableName = stmt.getTableName().getTbl();
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Table targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+
+        if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite() &&
+                !((InsertStmt) parsedStmt).hasOverwriteJob() &&
+                !(targetTable instanceof IcebergTable)) {
             handleInsertOverwrite((InsertStmt) parsedStmt);
             return;
         }
-
-        MetaUtils.normalizationTableName(context, stmt.getTableName());
-        Database database = MetaUtils.getDatabase(context, stmt.getTableName());
-        Table targetTable = MetaUtils.getTable(context, stmt.getTableName());
 
         String label = DebugUtil.printId(context.getExecutionId());
         if (stmt instanceof InsertStmt) {
@@ -1338,10 +1367,10 @@ public class StmtExecutor {
                                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                                             FrontendOptions.getLocalHostAddress()),
                                     sourceType,
-                                    ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
+                                    context.getSessionVariable().getQueryTimeoutS(),
                                     authenticateParams);
-        } else if (targetTable instanceof SchemaTable) {
-            // schema table does not need txn
+        } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
+            // schema table and iceberg table does not need txn
         } else {
             transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                     database.getId(),
@@ -1350,7 +1379,7 @@ public class StmtExecutor {
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                             FrontendOptions.getLocalHostAddress()),
                     sourceType,
-                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                    context.getSessionVariable().getQueryTimeoutS());
 
             // add table indexes to transaction state
             TransactionState txnState =
@@ -1411,15 +1440,18 @@ public class StmtExecutor {
                 type = TLoadJobType.INSERT_VALUES;
             }
 
-            jobId = context.getGlobalStateMgr().getLoadManager().registerLoadJob(
-                    label,
-                    database.getFullName(),
-                    targetTable.getId(),
-                    EtlJobType.INSERT,
-                    createTime,
-                    estimateScanRows,
-                    type,
-                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+            if (!targetTable.isIcebergTable()) {
+                jobId = context.getGlobalStateMgr().getLoadManager().registerLoadJob(
+                        label,
+                        database.getFullName(),
+                        targetTable.getId(),
+                        EtlJobType.INSERT,
+                        createTime,
+                        estimateScanRows,
+                        type,
+                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+            }
+
             coord.setJobId(jobId);
             trackingSql = "select tracking_log from information_schema.load_tracking_logs where job_id=" + jobId;
 
@@ -1448,7 +1480,16 @@ public class StmtExecutor {
                     ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_EXCEPTION);
                 } else {
                     coord.cancel();
-                    ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT);
+                    if (coord.isThriftServerHighLoad()) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT,
+                                "Please check the thrift-server-pool metrics, " +
+                                        "if the pool size reaches thrift_server_max_worker_threads(default is 4096), " +
+                                        "you can set the config to a higher value in fe.conf, " +
+                                        "or set parallel_fragment_exec_instance_num to a lower value in session variable");
+                    } else {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT,
+                                "Increase the query_timeout session variable and retry");
+                    }
                 }
             }
 
@@ -1481,7 +1522,7 @@ public class StmtExecutor {
                                 externalTable.getSourceTablePort(),
                                 TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql
                         );
-                    } else if (targetTable instanceof SchemaTable) {
+                    } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
                         // schema table does not need txn
                     } else {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
@@ -1507,7 +1548,7 @@ public class StmtExecutor {
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),
                             TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
-                } else if (targetTable instanceof SchemaTable) {
+                } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
                     // schema table does not need txn
                 } else {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
@@ -1532,9 +1573,21 @@ public class StmtExecutor {
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
                 }
                 // TODO: wait remote txn finished
-            } else if (targetTable instanceof SchemaTable) {
+            } else if (targetTable instanceof SystemTable) {
                 // schema table does not need txn
                 txnStatus = TransactionStatus.VISIBLE;
+            } else if (targetTable instanceof IcebergTable) {
+                // TODO(stephen): support abort interface and delete data files when aborting.
+                List<TSinkCommitInfo> commitInfos = coord.getSinkCommitInfos();
+                if (stmt instanceof InsertStmt && ((InsertStmt) stmt).isOverwrite()) {
+                    for (TSinkCommitInfo commitInfo : commitInfos) {
+                        commitInfo.setIs_overwrite(true);
+                    }
+                }
+
+                context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos);
+                txnStatus = TransactionStatus.VISIBLE;
+                label = "FAKE_ICEBERG_SINK_LABEL";
             } else {
                 if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                         database,
@@ -1635,10 +1688,12 @@ public class StmtExecutor {
             errMsg = "Publish timeout " + timeoutInfo;
         }
         try {
-            context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId,
-                    EtlJobType.INSERT,
-                    "",
-                    coord.getTrackingUrl());
+            if (jobId != -1) {
+                context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId,
+                        EtlJobType.INSERT,
+                        "",
+                        coord.getTrackingUrl());
+            }
         } catch (MetaNotFoundException e) {
             LOG.warn("Record info of insert load with error {}", e.getMessage(), e);
             errMsg = "Record info of insert load with error " + e.getMessage();

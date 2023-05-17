@@ -682,3 +682,27 @@ select d1, dow_2, previous_day(d1, dow_2) from previous_day_test a join previous
 2023-04-14	Sa	2023-04-08
 2023-04-15	Su	2023-04-09
 -- !result
+
+-- name: test_week_iso
+select week_iso("2023-01-01");
+-- result:
+52
+-- !result
+select week_iso("2023-01-02");
+-- result:
+1
+-- !result
+select week_iso("2023-01-03");
+-- result:
+1
+-- !result
+select week_iso("");
+-- result:
+None
+-- !result
+select week_iso(NULL);
+-- result:
+None
+-- !result
+
+

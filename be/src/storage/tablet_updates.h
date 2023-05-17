@@ -163,6 +163,9 @@ public:
 
     // perform compaction with specified rowsets, this may be a manual compaction invoked by tools or data fixing jobs
     Status compaction(MemTracker* mem_tracker, const vector<uint32_t>& input_rowset_ids);
+    // picks rowsets whose size is below rowset_size_threshold for compaction
+    Status get_rowsets_for_compaction(int64_t rowset_size_threshold, std::vector<uint32_t>& rowset_ids,
+                                      size_t& total_bytes);
 
     // vertical compaction introduced a bug that may generate rowset with lots of small segment files
     // this method go through all rowsets and identify them for further repair

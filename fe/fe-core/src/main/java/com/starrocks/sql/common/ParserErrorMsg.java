@@ -64,11 +64,17 @@ public interface ParserErrorMsg {
     @BaseMessage("Unsupported type specification: ''{0}''")
     String unsupportedType(String a0);
 
+    @BaseMessage("Unsupported type specification: ''{0}'' {1}")
+    String unsupportedType(String a0, String a1);
+
     @BaseMessage("AUTO_INCREMENT column {0} must be NOT NULL")
     String nullColFoundInPK(String a0);
 
     @BaseMessage("Incorrect number of arguments in expr ''{0}''")
     String wrongNumOfArgs(String a0);
+
+    @BaseMessage("Incorrect number {0} of arguments in expr ''{1}'', {2}")
+    String wrongNumOfArgs(int a0, String a1, String a2);
 
     @BaseMessage("Incorrect type/value of arguments in expr ''{0}''")
     String wrongTypeOfArgs(String a0);
@@ -94,8 +100,14 @@ public interface ParserErrorMsg {
     @BaseMessage("Sql to be add black list is empty")
     String emptySql();
 
-    @BaseMessage("Column ''{0}'' can not be AUTO_INCREMENT when {1} COLUMN.")
+    @BaseMessage("Column ''{0}'' can not be AUTO_INCREMENT when {1} COLUMN")
     String autoIncrementForbid(String a0, String a1);
+
+    @BaseMessage("Column ''{0}'' can not be MATERIALIZED COLUMN when {1}")
+    String materializedColumnForbid(String a0, String a1);
+
+    @BaseMessage("{0} can not be set when {1}")
+    String materializedColumnLimit(String a0, String a1);
 
     @BaseMessage("No tables used")
     String noTableUsed();
@@ -115,11 +127,17 @@ public interface ParserErrorMsg {
     @BaseMessage("Binary literal can only contain hexadecimal digits and an even number of digits")
     String invalidBinaryFormat();
 
-    @BaseMessage("Refresh start time must be after current time")
-    String invalidStartTime();
-
     @BaseMessage("Invalid map format, which should be key:value")
     String invalidMapFormat();
+
+    @BaseMessage("{0} must be nullable column")
+    String foundNotNull(String a0);
+
+    @BaseMessage("{0} has no default values")
+    String hasDefaultValue(String a0);
+
+    @BaseMessage("{0} can not be KEY")
+    String isKey(String a0);
 
     // --------- error in analyzing phase ---------
     @BaseMessage("Invalid {0} id format ''{1}''")

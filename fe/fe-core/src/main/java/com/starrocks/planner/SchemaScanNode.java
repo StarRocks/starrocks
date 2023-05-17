@@ -38,7 +38,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.SchemaTable;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -119,6 +119,18 @@ public class SchemaScanNode extends ScanNode {
 
     public void setJobId(long jobId) {
         this.jobId = jobId;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public Long getJobId() {
+        return jobId;
+    }
+
+    public String getTableName() {
+        return tableName;
     }
 
     /**
@@ -269,7 +281,7 @@ public class SchemaScanNode extends ScanNode {
     }
 
     public boolean isBeSchemaTable() {
-        return SchemaTable.isBeSchemaTable(tableName);
+        return SystemTable.isBeSchemaTable(tableName);
     }
 
     public void computeBeScanRanges() {

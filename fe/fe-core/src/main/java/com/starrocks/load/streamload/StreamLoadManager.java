@@ -50,6 +50,15 @@ public class StreamLoadManager {
     private static final Logger LOG = LogManager.getLogger(StreamLoadManager.class);
 
     private Map<String, StreamLoadTask> idToStreamLoadTask;
+
+    // Only used for sync stream load
+    // txnId -> streamLoadTask
+    private Map<Long, StreamLoadTask> txnIdToSyncStreamLoadTasks;
+
+    // The reason of not using labelToSyncStreamLoadTasks fo sync stream load is that
+    // there may be lots of sync stream load,
+    // and these task would better not be showed through `show stream load`
+    private Map<String, StreamLoadTask> labelToSyncStreamLoadTasks;
     private Map<Long, Map<String, StreamLoadTask>> dbToLabelToStreamLoadTask;
     private ReentrantReadWriteLock lock;
 
@@ -76,6 +85,8 @@ public class StreamLoadManager {
     public void init() {
         LOG.debug("begin to init stream load manager");
         idToStreamLoadTask = Maps.newConcurrentMap();
+        txnIdToSyncStreamLoadTasks = Maps.newConcurrentMap();
+        labelToSyncStreamLoadTasks = Maps.newConcurrentMap();
         dbToLabelToStreamLoadTask = Maps.newConcurrentMap();
         lock = new ReentrantReadWriteLock(true);
     }
@@ -88,6 +99,7 @@ public class StreamLoadManager {
         // if task is already created, return directly
         readLock();
         try {
+            // indicate it is parallel stream load
             task = idToStreamLoadTask.get(label);
             if (task != null) {
                 task.beginTxn(channelId, channelNum, resp);
@@ -121,6 +133,44 @@ public class StreamLoadManager {
         }
     }
 
+    // for sync stream load task
+    public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,
+                              TransactionResult resp) throws UserException {
+        StreamLoadTask task = null;
+        Database db = checkDbName(dbName);
+        long dbId = db.getId();
+
+        writeLock();
+        try {
+            task = createLoadTask(db, tableName, label, timeoutMillis);
+            LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, task.getId())
+                    .add("msg", "create load task").build());
+
+            task.beginTxn(0, 1, resp);
+            addLoadTask(task);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    // for sync stream load
+    public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis)
+            throws UserException {
+        Table table;
+        db.readLock();
+        try {
+            unprotectedCheckMeta(db, tableName);
+            table = db.getTable(tableName);
+        } finally {
+            db.readUnlock();
+        }
+
+        // init stream load task
+        long id = GlobalStateMgr.getCurrentState().getNextId();
+        StreamLoadTask streamLoadTask = new StreamLoadTask(id, db, (OlapTable) table,
+                label, timeoutMillis, System.currentTimeMillis());
+        return streamLoadTask;
+    }
     public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis,
                                          int channelNum, int channelId) throws UserException {
         Table table;
@@ -141,6 +191,10 @@ public class StreamLoadManager {
 
     public void unprotectedCheckMeta(Database db, String tblName)
             throws UserException {
+        if (tblName == null) {
+            throw new AnalysisException("Table name must be specified when calling /begin/transaction/ first time");
+        }
+
         Table table = db.getTable(tblName);
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
@@ -175,7 +229,14 @@ public class StreamLoadManager {
     }
 
     // add load tasks and also add to to callback factory
-    private void addLoadTask(StreamLoadTask task) {
+    public void addLoadTask(StreamLoadTask task) {
+        if (task.isSyncStreamLoad()) {
+            labelToSyncStreamLoadTasks.put(task.getLabel(), task);
+            txnIdToSyncStreamLoadTasks.put(task.getTxnId(), task);
+            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(task);
+            LOG.info("add load task" + task.getTxnId() + " " + task.getLabel());
+            return;
+        }
         long dbId = task.getDBId();
         String label = task.getLabel();
         Map<String, StreamLoadTask> labelToStreamLoadTask = null;
@@ -193,7 +254,8 @@ public class StreamLoadManager {
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(task);
     }
 
-    public TNetworkAddress executeLoadTask(String label, int channelId, HttpHeaders headers, TransactionResult resp)
+    public TNetworkAddress executeLoadTask(String label, int channelId, HttpHeaders headers,
+                                           TransactionResult resp, String dbName, String tableName)
             throws UserException {
         boolean needUnLock = true;
         readLock();
@@ -202,6 +264,18 @@ public class StreamLoadManager {
                 throw new UserException("stream load task " + label + " does not exist");
             }
             StreamLoadTask task = idToStreamLoadTask.get(label);
+
+            // check whether the database and table are consistent with the transaction,
+            // for single database and single table are supported so far
+            if (!task.getDBName().equals(dbName)) {
+                throw new UserException(
+                        String.format("Request table %s not equal transaction table %s", dbName, task.getDBName()));
+            }
+            if (!task.getTableName().equals(tableName)) {
+                throw new UserException(
+                        String.format("Request table %s not equal transaction table %s", tableName, task.getTableName()));
+            }
+
             readUnlock();
             needUnLock = false;
             TNetworkAddress redirectAddress = task.tryLoad(channelId, resp);
@@ -317,6 +391,19 @@ public class StreamLoadManager {
                     );
                 }
             }
+
+            // remove old sync stream load
+            // Maybe the logic can be unified with the above
+            // by put the synchronous stream load into `idToStreamLoadTask`,
+            // but for now, leave it as this
+            iterator = labelToSyncStreamLoadTasks.entrySet().iterator();
+            while (iterator.hasNext()) {
+                StreamLoadTask streamLoadTask = iterator.next().getValue();
+                if (streamLoadTask.checkNeedRemove(currentMs)) {
+                    txnIdToSyncStreamLoadTasks.remove(streamLoadTask.getTxnId());
+                    iterator.remove();;
+                }
+            }
         } finally {
             writeUnlock();
         }
@@ -385,6 +472,15 @@ public class StreamLoadManager {
             readUnlock();
         }
     }
+
+    public StreamLoadTask getSyncSteamLoadTaskByTxnId(long txnId) {
+        return txnIdToSyncStreamLoadTasks.getOrDefault(txnId, null);
+    }
+
+    public StreamLoadTask getSyncSteamLoadTaskByLabel(String label) {
+        return labelToSyncStreamLoadTasks.getOrDefault(label, null);
+    }
+
 
     // put history task in the end
     private void sortStreamLoadTask(List<StreamLoadTask> streamLoadTaskList) {

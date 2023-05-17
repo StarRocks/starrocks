@@ -127,6 +127,11 @@ public:
 
     bool need_input() const override { return false; }
 
+    // Return true if the output of `has_output` shift frequently between true and false.
+    // We need to avoid this kind of mutable pipeline being moved frequently between ready queue and pending queue,
+    // which will lead to drastic performance deduction (the "ScheduleTime" in profile will be super high).
+    virtual bool is_mutable() const { return false; }
+
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override {
         return Status::InternalError("Shouldn't push chunk to source operator");
     }

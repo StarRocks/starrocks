@@ -59,6 +59,7 @@ using apache::thrift::transport::TProcessor;
 
 namespace starrocks {
 extern std::atomic<bool> k_starrocks_exit;
+extern std::atomic<bool> k_starrocks_exit_quick;
 
 static int64_t reboot_time = 0;
 
@@ -131,7 +132,7 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
     static const char* LOCALHOST = "127.0.0.1";
 
     // reject master's heartbeat when exit
-    if (k_starrocks_exit.load(std::memory_order_relaxed)) {
+    if (k_starrocks_exit.load(std::memory_order_relaxed) || k_starrocks_exit_quick.load(std::memory_order_relaxed)) {
         return Status::InternalError("BE is shutting down");
     }
 

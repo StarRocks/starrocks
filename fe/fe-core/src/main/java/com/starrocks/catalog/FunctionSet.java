@@ -182,6 +182,7 @@ public class FunctionSet {
     public static final String RPAD = "rpad";
     public static final String SPLIT = "split";
     public static final String SPLIT_PART = "split_part";
+    public static final String STR_TO_MAP = "str_to_map";
     public static final String STARTS_WITH = "starts_with";
     public static final String STRLEFT = "strleft";
     public static final String STRRIGHT = "strright";
@@ -404,6 +405,7 @@ public class FunctionSet {
     public static final String TRANSFORM = "transform";
 
     // map functions:
+    public static final String MAP = "map";
     public static final String MAP_APPLY = "map_apply";
     public static final String MAP_FILTER = "map_filter";
     public static final String MAP_VALUES = "map_values";
@@ -412,6 +414,9 @@ public class FunctionSet {
     public static final String TRANSFORM_VALUES = "transform_values";
     public static final String TRANSFORM_KEYS = "transform_keys";
 
+    public static final String ELEMENT_AT = "element_at";
+
+    public static final String CARDINALITY = "cardinality";
     // Struct functions:
     public static final String ROW = "row";
 
@@ -814,6 +819,7 @@ public class FunctionSet {
                     Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
                     true, false, true));
 
+            // HLL_RAW
             addBuiltin(AggregateFunction.createBuiltin(HLL_RAW,
                     Lists.newArrayList(t), Type.HLL, Type.VARBINARY,
                     true, false, true));

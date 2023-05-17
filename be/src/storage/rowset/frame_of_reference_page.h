@@ -115,10 +115,7 @@ private:
 template <LogicalType Type>
 class FrameOfReferencePageDecoder final : public PageDecoder {
 public:
-    FrameOfReferencePageDecoder(Slice data, const PageDecoderOptions& options)
-            : _data(data),
-
-              _decoder((uint8_t*)_data.data, _data.size) {}
+    FrameOfReferencePageDecoder(Slice data) : _data(data), _decoder((uint8_t*)_data.data, _data.size) {}
 
     ~FrameOfReferencePageDecoder() override = default;
 

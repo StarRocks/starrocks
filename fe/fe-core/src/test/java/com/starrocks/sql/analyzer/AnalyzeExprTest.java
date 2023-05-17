@@ -128,6 +128,7 @@ public class AnalyzeExprTest {
         analyzeSuccess("select v1, v2, count(v1) over (partition by v1 order by v2) from tarray");
         analyzeSuccess("select v1, v2, count(v1) over (partition by array_sum(array_map(x->x+1, [1])) order by v2) from tarray");
         analyzeSuccess("with x2 as (select array_map((ss) -> ss * v1, v3) from tarray) select * from x2;");
+        analyzeSuccess("select array_map(array_map(x2->x2+1,[1,2,3]),array_map(x1->x1+2,[1,2,3]),(x,y)->(x+y))");
 
         analyzeFail("select array_map(x,y -> x + y, [], [])"); // should be (x,y)
         analyzeFail("select array_map((x,y,z) -> x + y, [], [])");
@@ -292,4 +293,48 @@ public class AnalyzeExprTest {
         analyzeFail("select array_agg(1,1);");
         analyzeFail("select array_agg(1 order by 1 nulls first desc)");
     }
+
+    @Test
+    public void testMapTypeConstructor() {
+        analyzeSuccess("select map()");
+        analyzeSuccess("select map(NULL,NULL)");
+        analyzeSuccess("select map(1,NULL)");
+        analyzeSuccess("select {}");
+        analyzeSuccess("select {NULL:NULL}");
+        analyzeSuccess("select map<int,map<varchar,int>>{2:{3:3}}");
+        analyzeSuccess("select map<int,map<int,int>>{2:{'3':3}}");
+        analyzeSuccess("select map<int,map<int,int>>{{3:3}:2}"); // runtime error will report when cast
+        analyzeSuccess("select map<int,map<int,int>>{'2s':{3:3}}");
+
+        analyzeFail("select map(null)");
+        analyzeFail("select map(1:4)");
+        analyzeFail("select map(1,3,4)");
+        analyzeFail("select {)");
+        analyzeFail("select {NULL}");
+        analyzeFail("select {1,3}");
+        analyzeFail("select {1:3:3}");
+        analyzeFail("select {1:3,}");
+        analyzeFail("select map<hll,int>{1:3}");
+        analyzeFail("select map<map<int,int>,int>{{1:3}:11}");
+    }
+
+
+    @Test
+    public void testAnalyzeMapFunc() {
+        analyzeSuccess("select cardinality({1:3,3:5,2:45})");
+        analyzeSuccess("select cardinality({})");
+        analyzeSuccess("select element_at({1:2,3:3,4:3},3)");
+        analyzeSuccess("select element_at({1:2,3:3,4:3},312)");
+        analyzeSuccess("select element_at({1:2,3:3,4:3},null)");
+        analyzeSuccess("select map_concat(NULL)");
+        analyzeSuccess("select map_concat(NULL,NULL)");
+        analyzeSuccess("select map_concat(NULL,{})");
+
+        analyzeFail("select cardinality();");
+        analyzeFail("select cardinality({},{})");
+        analyzeFail("select cardinality(1)");
+        analyzeFail("select element_at({1:2,3:3,4:3})");
+        analyzeFail("select map_concat()");
+    }
+
 }

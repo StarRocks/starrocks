@@ -76,6 +76,9 @@ private:
     Status _append_array_val(const rapidjson::Value& col, const TypeDescriptor& type_desc, Column* column,
                              bool pure_doc_value);
 
+    Status _append_json_val(const rapidjson::Value& col, const TypeDescriptor& type_desc, Column* column,
+                            bool pure_doc_value);
+
     Status _append_array_val_from_docvalue(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
                                            Column* column);
 

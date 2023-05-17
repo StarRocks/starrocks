@@ -362,6 +362,15 @@ fi
 cd -
 echo "Finished patching $LIBRDKAFKA_SOURCE"
 
+# patch roaring-bitmap
+cd $TP_SOURCE_DIR/$CROARINGBITMAP_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $CROARINGBITMAP_SOURCE = "CRoaring-0.2.60" ]; then
+    patch -p1 < $TP_PATCH_DIR/roaring-bitmap-patch-v0.2.60.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $CROARINGBITMAP_SOURCE"
+
 # patch pulsar
 cd $TP_SOURCE_DIR/$PULSAR_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $PULSAR_SOURCE = "pulsar-2.10.1" ]; then
@@ -453,3 +462,13 @@ fi
 echo "Finished patching $SERDES_SOURCE"
 cd -
 
+# patch arrows to use our built jemalloc
+if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$ARROW_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-5.0.0" ] ; then
+        patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-force-use-external-jemalloc.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $ARROW_SOURCE"
+fi

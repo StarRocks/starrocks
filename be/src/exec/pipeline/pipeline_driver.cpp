@@ -52,9 +52,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
     _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCount", TUnit::UNIT);
-    _yield_by_time_limit_counter =
-            ADD_COUNTER_SKIP_MERGE(_runtime_profile, "YieldByTimeLimit", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
+    _yield_by_time_limit_counter = ADD_COUNTER(_runtime_profile, "YieldByTimeLimit", TUnit::UNIT);
     _yield_by_preempt_counter = ADD_COUNTER(_runtime_profile, "YieldByPreempt", TUnit::UNIT);
+    _yield_by_local_wait_counter = ADD_COUNTER(_runtime_profile, "YieldByLocalWait", TUnit::UNIT);
     _block_by_precondition_counter = ADD_COUNTER(_runtime_profile, "BlockByPrecondition", TUnit::UNIT);
     _block_by_output_full_counter = ADD_COUNTER(_runtime_profile, "BlockByOutputFull", TUnit::UNIT);
     _block_by_input_empty_counter = ADD_COUNTER(_runtime_profile, "BlockByInputEmpty", TUnit::UNIT);
@@ -217,7 +217,17 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
     size_t total_rows_moved = 0;
     int64_t time_spent = 0;
     Status return_status = Status::OK();
-    DeferOp defer([&]() { _update_statistics(total_chunks_moved, total_rows_moved, time_spent); });
+    DeferOp defer([&]() {
+        if (ScanOperator* scan = source_scan_operator()) {
+            scan->end_driver_process(this);
+        }
+        _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
+    });
+
+    if (ScanOperator* scan = source_scan_operator()) {
+        scan->begin_driver_process();
+    }
+
     while (true) {
         RETURN_IF_LIMIT_EXCEEDED(runtime_state, "Pipeline");
 
@@ -225,6 +235,17 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         bool should_yield = false;
         size_t num_operators = _operators.size();
         size_t new_first_unfinished = _first_unfinished;
+
+        int64_t process_time_ns = 0;
+
+        DeferOp defer2([&]() {
+            if (ScanOperator* scan = source_scan_operator()) {
+                scan->end_pull_chunk(process_time_ns);
+            }
+        });
+
+        SCOPED_RAW_TIMER(&process_time_ns);
+
         for (size_t i = _first_unfinished; i < num_operators - 1; ++i) {
             {
                 SCOPED_RAW_TIMER(&time_spent);
@@ -330,12 +351,15 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             }
             // yield when total chunks moved or time spent on-core for evaluation
             // exceed the designated thresholds.
-            if (time_spent >= YIELD_MAX_TIME_SPENT) {
+            if (time_spent >= YIELD_MAX_TIME_SPENT_NS ||
+                driver_acct().get_accumulated_local_wait_time_spent() >= YIELD_MAX_TIME_SPENT_NS) {
                 should_yield = true;
                 COUNTER_UPDATE(_yield_by_time_limit_counter, 1);
                 break;
             }
-            if (_workgroup != nullptr && time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
+            if (_workgroup != nullptr &&
+                (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT_NS ||
+                 driver_acct().get_accumulated_local_wait_time_spent() > YIELD_PREEMPT_MAX_TIME_SPENT_NS) &&
                 _workgroup->driver_sched_entity()->in_queue()->should_yield(this, time_spent)) {
                 should_yield = true;
                 COUNTER_UPDATE(_yield_by_preempt_counter, 1);
@@ -366,8 +390,13 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 set_driver_state(DriverState::OUTPUT_FULL);
                 COUNTER_UPDATE(_block_by_output_full_counter, 1);
             } else if (!source_operator()->is_finished() && !source_operator()->has_output()) {
-                set_driver_state(DriverState::INPUT_EMPTY);
-                COUNTER_UPDATE(_block_by_input_empty_counter, 1);
+                if (source_operator()->is_mutable()) {
+                    set_driver_state(DriverState::LOCAL_WAITING);
+                    COUNTER_UPDATE(_yield_by_local_wait_counter, 1);
+                } else {
+                    set_driver_state(DriverState::INPUT_EMPTY);
+                    COUNTER_UPDATE(_block_by_input_empty_counter, 1);
+                }
             } else {
                 set_driver_state(DriverState::READY);
             }

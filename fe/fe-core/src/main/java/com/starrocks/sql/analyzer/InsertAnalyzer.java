@@ -22,6 +22,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -50,6 +51,11 @@ public class InsertAnalyzer {
     public static void analyze(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
         new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
+
+        List<Table> tables = new ArrayList<>();
+        AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
+        tables.stream().map(table -> (HiveTable) table)
+                .forEach(table -> table.useMetadataCache(false));
 
         /*
          *  Target table
@@ -154,7 +160,8 @@ public class InsertAnalyzer {
                 LiteralExpr literalExpr = (LiteralExpr) partitionValue;
                 Column column = icebergTable.getColumn(actualName);
                 try {
-                    literalExpr.castTo(column.getType());
+                    Expr expr = LiteralExpr.create(literalExpr.getStringValue(), column.getType());
+                    insertStmt.getTargetPartitionNames().getPartitionColValues().set(i, expr);
                 } catch (AnalysisException e) {
                     throw new SemanticException(e.getMessage());
                 }
@@ -165,15 +172,25 @@ public class InsertAnalyzer {
         List<Column> targetColumns;
         Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         if (insertStmt.getTargetColumnNames() == null) {
-            targetColumns = new ArrayList<>(table.getBaseSchema());
-            mentionedColumns =
-                    table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
+            if (table instanceof OlapTable) {
+                targetColumns = new ArrayList<>(((OlapTable) table).getBaseSchemaWithoutMaterializedColumn());
+                mentionedColumns =
+                        ((OlapTable) table).getBaseSchemaWithoutMaterializedColumn().stream()
+                            .map(Column::getName).collect(Collectors.toSet());
+            } else {
+                targetColumns = new ArrayList<>(table.getBaseSchema());
+                mentionedColumns =
+                        table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
+            }
         } else {
             targetColumns = new ArrayList<>();
             for (String colName : insertStmt.getTargetColumnNames()) {
                 Column column = table.getColumn(colName);
                 if (column == null) {
                     throw new SemanticException("Unknown column '%s' in '%s'", colName, table.getName());
+                }
+                if (column.isMaterializedColumn()) {
+                    throw new SemanticException("materialized column '%s' can not be specified", colName);
                 }
                 if (!mentionedColumns.add(colName)) {
                     throw new SemanticException("Column '%s' specified twice", colName);
@@ -185,9 +202,14 @@ public class InsertAnalyzer {
         for (Column column : table.getBaseSchema()) {
             Column.DefaultValueType defaultValueType = column.getDefaultValueType();
             if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() &&
-                    !column.isAutoIncrement() && !mentionedColumns.contains(column.getName())) {
-                throw new SemanticException("'%s' must be explicitly mentioned in column permutation",
-                        column.getName());
+                    !column.isAutoIncrement() && !column.isMaterializedColumn() &&
+                    !mentionedColumns.contains(column.getName())) {
+                String msg = "";
+                for (String s : mentionedColumns) {
+                    msg = msg + " " + s + " ";
+                }
+                throw new SemanticException("'%s' must be explicitly mentioned in column permutation: %s",
+                        column.getName(), msg);
             }
         }
 

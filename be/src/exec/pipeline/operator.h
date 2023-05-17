@@ -177,6 +177,7 @@ public:
     static const int32_t s_pseudo_plan_node_id_for_export_sink;
     static const int32_t s_pseudo_plan_node_id_for_olap_table_sink;
     static const int32_t s_pseudo_plan_node_id_for_result_sink;
+    static const int32_t s_pseudo_plan_node_id_for_iceberg_table_sink;
     static const int32_t s_pseudo_plan_node_id_upper_bound;
 
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
@@ -228,6 +229,7 @@ public:
     size_t revocable_mem_bytes() { return _revocable_mem_bytes; }
     void set_revocable_mem_bytes(size_t bytes) { _revocable_mem_bytes = bytes; }
     int32_t get_driver_sequence() const { return _driver_sequence; }
+    OperatorFactory* get_factory() const { return _factory; }
 
 protected:
     OperatorFactory* _factory;

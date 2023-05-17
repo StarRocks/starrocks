@@ -227,6 +227,7 @@ vectorized_functions = [
     [20073, 'bit_shift_right_logical', 'BIGINT', ['BIGINT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_BIGINT>"],
     [20074, 'bit_shift_right_logical', 'LARGEINT', ['LARGEINT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_LARGEINT>"],
 
+
     # 30xxx: string functions
     [30010, 'substr', 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::substring', 'StringFunctions::sub_str_prepare', 'StringFunctions::sub_str_close'],
     [30011, 'substr', 'VARCHAR', ['VARCHAR', 'INT', 'INT'], 'StringFunctions::substring', 'StringFunctions::sub_str_prepare', 'StringFunctions::sub_str_close'],
@@ -290,6 +291,7 @@ vectorized_functions = [
     [30270, 'find_in_set', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::find_in_set'],
     [30310, 'split_part', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::split_part'],
     [30311, 'split', 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::split', 'StringFunctions::split_prepare', 'StringFunctions::split_close'],
+    [30316, 'str_to_map', 'MAP_VARCHAR_VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR'], 'StringFunctions::str_to_map'],
 
     [30320, 'regexp_extract', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'], 'StringFunctions::regexp_extract',
      'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
@@ -346,6 +348,7 @@ vectorized_functions = [
     [50063, 'weekofyear', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year'],
     [50064, 'week', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year_with_default_mode'],
     [50067, 'week', 'INT', ['DATETIME', 'INT'], 'TimeFunctions::week_of_year_with_mode'],
+    [50068, 'week_iso', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year_iso'],
 
     [50069, 'hour', 'TINYINT', ['DATETIME'], 'TimeFunctions::hourV2'],
     [50070, 'hour', 'INT', ['DATETIME'], 'TimeFunctions::hour'],
@@ -938,6 +941,12 @@ vectorized_functions = [
     [170003, 'map_from_arrays', 'ANY_MAP', ['ANY_ARRAY', 'ANY_ARRAY'], 'MapFunctions::map_from_arrays'],
     [170004, 'map_apply', 'ANY_MAP', ['FUNCTION', 'ANY_MAP'], 'nullptr'],
     [170005, 'map_filter', 'ANY_MAP',  ['ANY_MAP', 'ARRAY_BOOLEAN'], 'MapFunctions::map_filter'],
+    [170006, 'distinct_map_keys', 'ANY_MAP',  ['ANY_MAP'], 'MapFunctions::distinct_map_keys'],
+    [170007, 'map_concat', 'ANY_MAP',  ['ANY_MAP', "..."], 'MapFunctions::map_concat'],
+
+    # map, array common functions
+    [170100, 'cardinality', 'INT', ['ANY_MAP'], 'MapFunctions::map_size'],
+    [170101, 'cardinality', 'INT', ['ANY_ARRAY'], 'ArrayFunctions::array_length'],
 
     # struct functions
     # [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],

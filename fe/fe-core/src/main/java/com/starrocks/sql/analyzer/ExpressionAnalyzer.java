@@ -219,6 +219,10 @@ public class ExpressionAnalyzer {
             for (int i = 1; i < childSize; ++i) {
                 Expr expr = expression.getChild(i);
                 bottomUpAnalyze(visitor, expr, scope);
+            }
+            // putting lambda inputs should after analyze
+            for (int i = 1; i < childSize; ++i) {
+                Expr expr = expression.getChild(i);
                 if (expr instanceof NullLiteral) {
                     expr.setType(Type.ARRAY_INT); // Let it have item type.
                 }
@@ -288,6 +292,7 @@ public class ExpressionAnalyzer {
         // visit LambdaFunction
         visitor.visit(expression.getChild(0), scope);
         rewriteHighOrderFunction(expression, visitor, scope);
+        scope.clearLambdaInputs();
     }
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
@@ -416,9 +421,12 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitMapExpr(MapExpr node, Scope scope) {
             if (!node.getChildren().isEmpty()) {
-                Type keyType = node.getKeyCommonType();
-                Type valueType = node.getValueCommonType();
-                node.setType(new MapType(keyType, valueType));
+                Type originalType = node.getType();
+                if (originalType == Type.ANY_MAP) {
+                    Type keyType = node.getKeyCommonType();
+                    Type valueType = node.getValueCommonType();
+                    node.setType(new MapType(keyType, valueType));
+                }
             } else {
                 node.setType(new MapType(Type.NULL, Type.NULL));
             }
@@ -523,18 +531,17 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitCompoundPredicate(CompoundPredicate node, Scope scope) {
+            node.setType(Type.BOOLEAN);
             for (int i = 0; i < node.getChildren().size(); i++) {
-                Type type = node.getChild(i).getType();
-                if (!type.isBoolean() && !type.isNull()) {
-                    String msg = String.format("Operand '%s' part of predicate " +
-                                    "'%s' should return type 'BOOLEAN' but returns type '%s'",
-                            AstToStringBuilder.toString(node), AstToStringBuilder.toString(node.getChild(i)),
-                            type.toSql());
-                    throw new SemanticException(msg, node.getChild(i).getPos());
+                Expr child = node.getChild(i);
+                if (child.getType().isBoolean() || child.getType().isNull()) {
+                    // do nothing
+                } else if (!session.getSessionVariable().isEnableStrictType() && Type.canCastTo(child.getType(), Type.BOOLEAN)) {
+                    node.getChildren().set(i, new CastExpr(Type.BOOLEAN, child));
+                } else {
+                    throw new SemanticException(child.toSql() + " can not be converted to boolean type.");
                 }
             }
-
-            node.setType(Type.BOOLEAN);
             return null;
         }
 
@@ -958,6 +965,32 @@ public class ExpressionAnalyzer {
 
                     fn = newFn;
                 }
+            } else if (FunctionSet.CONCAT.equals(fnName) && node.getChildren().stream().anyMatch(child ->
+                    child.getType().isArrayType())) {
+                List<Type> arrayTypes = Arrays.stream(argumentTypes).map(argumentType -> {
+                    if (argumentType.isArrayType()) {
+                        return argumentType;
+                    } else {
+                        return new ArrayType(argumentType);
+                    }
+                }).collect(Collectors.toList());
+                // check if all array types are compatible
+                TypeManager.getCommonSuperType(arrayTypes);
+                for (int i = 0; i < argumentTypes.length; ++i) {
+                    if (!argumentTypes[i].isArrayType()) {
+                        node.setChild(i, new ArrayExpr(new ArrayType(argumentTypes[i]),
+                                Lists.newArrayList(node.getChild(i))));
+                    }
+                }
+
+                argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+                node.resetFnName(null, FunctionSet.ARRAY_CONCAT);
+                if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(FunctionSet.ARRAY_CONCAT, argumentTypes)) {
+                    fn = DecimalV3FunctionAnalyzer.getDecimalV3Function(session, node, argumentTypes);
+                } else {
+                    fn = Expr.getBuiltinFunction(FunctionSet.ARRAY_CONCAT, argumentTypes,
+                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                }
             } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(fnName, argumentTypes)) {
                 // Since the priority of decimal version is higher than double version (according functionId),
                 // and in `Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF` mode, `Expr.getBuiltinFunction` always
@@ -975,6 +1008,8 @@ public class ExpressionAnalyzer {
             } else if (FunctionSet.ARRAY_GENERATE.equals(fnName)) {
                 fn = getArrayGenerateFunction(node);
                 argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+            } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV2(fnName, argumentTypes)) {
+                fn = DecimalV3FunctionAnalyzer.getDecimalV2Function(node, argumentTypes);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
@@ -1117,7 +1152,6 @@ public class ExpressionAnalyzer {
                     }
                     break;
                 }
-
             }
         }
 
@@ -1351,7 +1385,7 @@ public class ExpressionAnalyzer {
                 node.setType(Type.BIGINT);
                 node.setIntValue(session.getConnectionId());
                 node.setStrValue("");
-            } else if (funcType.equalsIgnoreCase("CURRENT_CATALOG")) {
+            } else if (funcType.equalsIgnoreCase("CATALOG")) {
                 node.setType(Type.VARCHAR);
                 node.setStrValue(session.getCurrentCatalog());
             }

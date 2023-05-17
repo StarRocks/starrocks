@@ -26,6 +26,7 @@
 #include "runtime/current_thread.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/storage_engine.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks::lake {
 
@@ -110,6 +111,7 @@ inline bool AsyncDeltaWriterImpl::closed() {
 }
 
 inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<AsyncDeltaWriterImpl::Task>& iter) {
+    TEST_SYNC_POINT("AsyncDeltaWriterImpl::execute:1");
     auto async_writer = static_cast<AsyncDeltaWriterImpl*>(meta);
     auto delta_writer = async_writer->_writer.get();
     if (iter.is_queue_stopped()) {
@@ -197,20 +199,35 @@ inline void AsyncDeltaWriterImpl::finish(Callback cb) {
 }
 
 inline void AsyncDeltaWriterImpl::close() {
-    std::lock_guard l(_mtx);
+    std::unique_lock l(_mtx);
+    TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:1");
+    _closed = true;
     if (_queue_id.value != kInvalidQueueId) {
+        auto old_id = _queue_id;
+        _queue_id.value = kInvalidQueueId;
+
+        // Must unlock mutex first before joining the executino queue, otherwise deadlock may occur:
+        //           Current Thread                  Execution Queue Thread
+        //
+        //   AsyncDeltaWriterImpl::close()     |
+        //   \__  _mtx.lock (acquired)         |
+        //                                     |  AsyncDeltaWriter::execute()
+        //                                     |  \__ AsyncDeltaWriter::closed()
+        //                                     |      \__ _mtx.lock (blocked)
+        //                                     |
+        //   execution_queue_join() (blocked)  |
+        //
+        l.unlock();
+
         // After the execution_queue been `stop()`ed all incoming `write()` and `finish()` requests
         // will fail immediately.
-        int r = bthread::execution_queue_stop(_queue_id);
+        int r = bthread::execution_queue_stop(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to stop execution queue";
 
         // Wait for all running tasks completed.
-        r = bthread::execution_queue_join(_queue_id);
+        r = bthread::execution_queue_join(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to join execution queue";
-
-        _queue_id.value = kInvalidQueueId;
     }
-    _closed = true;
 }
 
 AsyncDeltaWriter::~AsyncDeltaWriter() {

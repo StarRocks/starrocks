@@ -87,6 +87,8 @@ public:
 
     void publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request);
 
+    void update_max_thread_by_type(int type, int new_val);
+
     ThreadPool* get_thread_pool(int type) const;
 
     DISALLOW_COPY_AND_MOVE(Impl);
@@ -538,6 +540,16 @@ void AgentServer::Impl::publish_cluster_state(TAgentResult& t_agent_result, cons
     status.to_thrift(&t_agent_result.status);
 }
 
+void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
+    switch (type) {
+    case TTaskType::CLONE:
+        _thread_pool_clone->update_max_threads(new_val);
+        break;
+    default:
+        break;
+    }
+}
+
 ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
     // TODO: more thread pools.
     switch (type) {
@@ -611,6 +623,10 @@ void AgentServer::release_snapshot(TAgentResult& agent_result, const std::string
 
 void AgentServer::publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request) {
     _impl->publish_cluster_state(agent_result, request);
+}
+
+void AgentServer::update_max_thread_by_type(int type, int new_val) {
+    _impl->update_max_thread_by_type(type, new_val);
 }
 
 ThreadPool* AgentServer::get_thread_pool(int type) const {

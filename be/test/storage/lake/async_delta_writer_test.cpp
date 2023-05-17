@@ -38,6 +38,7 @@
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/sync_point.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
 
@@ -449,6 +450,49 @@ TEST_F(AsyncDeltaWriterTest, test_open_after_close) {
     auto st = delta_writer->open();
     ASSERT_FALSE(st.ok());
     ASSERT_EQ("AsyncDeltaWriter has been closed", st.message());
+}
+
+TEST_F(AsyncDeltaWriterTest, test_concurrent_write_and_close) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    SyncPoint::GetInstance()->LoadDependency({{"AsyncDeltaWriterImpl::close:1", "AsyncDeltaWriterImpl::execute:1"}});
+
+    // Create and open DeltaWriter
+    auto tablet_id = _tablet_metadata->id();
+    auto delta_writer = AsyncDeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+                                                 _mem_tracker.get());
+    ASSERT_OK(delta_writer->open());
+
+    auto tid = std::this_thread::get_id();
+    // write()
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) {
+        ASSERT_ERROR(st);
+        ASSERT_NE(tid, std::this_thread::get_id());
+    });
+
+    // close()
+    delta_writer->close();
+
+    // TxnLog should not exist
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    ASSERT_TRUE(tablet.get_txn_log(_txn_id).status().is_not_found());
+
+    // Segment file should not exist
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
+    ASSERT_OK(fs->iterate_dir(join_path(kTestGroupPath, kMetadataDirectoryName), [&](std::string_view name) {
+        EXPECT_TRUE(is_tablet_metadata(name)) << name;
+        return true;
+    }));
+
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
 } // namespace starrocks::lake

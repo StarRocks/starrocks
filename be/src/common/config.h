@@ -121,11 +121,11 @@ CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
 CONF_Int32(alter_tablet_worker_count, "3");
 // The count of parallel clone task per storage path
-CONF_Int32(parallel_clone_task_per_path, "2");
-// The count of thread to clone.
+CONF_mInt32(parallel_clone_task_per_path, "8");
+// The count of thread to clone. Deprecated
 CONF_Int32(clone_worker_count, "3");
 // The count of thread to clone.
-CONF_Int32(storage_medium_migrate_count, "1");
+CONF_Int32(storage_medium_migrate_count, "3");
 // The count of thread to check consistency.
 CONF_Int32(check_consistency_worker_count, "1");
 // The count of thread to upload.
@@ -210,7 +210,6 @@ CONF_String(local_library_dir, "${UDF_RUNTIME_DIR}");
 CONF_mInt32(scanner_thread_pool_thread_num, "48");
 // Number of olap/external scanner thread pool size.
 CONF_Int32(scanner_thread_pool_queue_size, "102400");
-CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 CONF_Int32(udf_thread_pool_size, "1");
 // Port on which to run StarRocks test backend.
 CONF_Int32(port, "20001");
@@ -301,6 +300,7 @@ CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
+CONF_Int32(manual_compaction_threads, "4");
 
 // if compaction of a tablet failed, this tablet should not be chosen to
 // compaction until this interval passes.
@@ -329,6 +329,7 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mInt64(size_tiered_min_level_size, "131072");
 CONF_mInt64(size_tiered_level_multiple, "5");
+CONF_mInt64(size_tiered_level_multiple_dupkey, "10");
 CONF_mInt64(size_tiered_level_num, "7");
 
 CONF_Bool(enable_check_string_lengths, "true");
@@ -354,6 +355,7 @@ CONF_Int64(load_data_reserve_hours, "4");
 // log error log will be removed after this time
 CONF_mInt64(load_error_log_reserve_hours, "48");
 CONF_Int32(number_tablet_writer_threads, "16");
+CONF_mInt64(max_queueing_memtable_per_tablet, "2");
 
 // delta writer hang after this time, be will exit since storage is in error state
 CONF_Int32(be_exit_after_disk_write_hang_second, "60");
@@ -502,7 +504,7 @@ CONF_mInt32(max_consumer_num_per_group, "3");
 CONF_mInt32(max_pulsar_consumer_num_per_group, "10");
 
 // The size of thread pool for routine load task.
-// this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5).
+// this should be larger than FE config 'max_routine_load_task_num_per_be' (default 5).
 CONF_Int32(routine_load_thread_pool_size, "10");
 
 // kafka reqeust timeout
@@ -753,6 +755,13 @@ CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
 CONF_Int32(io_tasks_per_scan_operator, "4");
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
+CONF_Int32(connector_io_tasks_min_size, "2");
+CONF_Int32(connector_io_tasks_adjust_interval_ms, "50");
+CONF_Int32(connector_io_tasks_adjust_step, "1");
+CONF_Int32(connector_io_tasks_adjust_smooth, "4");
+CONF_Int32(connector_io_tasks_slow_io_latency_ms, "50");
+CONF_mDouble(scan_use_query_mem_ratio, "0.25");
+CONF_Double(connector_scan_use_query_mem_ratio, "0.3");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
@@ -810,12 +819,18 @@ CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
 #endif
 
 CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
-CONF_Int64(lake_gc_metadata_max_versions, "10");
-CONF_Int64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
-CONF_Int64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
+CONF_mBool(lake_print_delete_log, "true");
+CONF_mInt64(lake_gc_metadata_max_versions, "10");
+CONF_mInt64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
+CONF_mInt64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
 // This value should be much larger than the maximum timeout of loading/compaction/schema change jobs.
-CONF_Int64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
-CONF_Bool(lake_compaction_check_txn_log_first, "false");
+// The actual effective value is max(lake_gc_segment_expire_seconds, 86400)
+CONF_mInt64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
+CONF_mBool(lake_compaction_check_txn_log_first, "false");
+CONF_mInt64(experimental_lake_segment_gc_max_retries, "3");
+CONF_mBool(experimental_lake_enable_fast_gc, "false");
+// Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
+CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -880,16 +895,20 @@ CONF_Bool(block_cache_enable, "false");
 CONF_Int64(block_cache_disk_size, "0");
 CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
 CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
-CONF_Int64(block_cache_block_size, "1048576");  // 1MB
+CONF_Int64(block_cache_block_size, "262144");   // 256K
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
 CONF_Bool(block_cache_checksum_enable, "false");
 // Maximum number of concurrent inserts we allow globally for block cache.
 // 0 means unlimited.
-CONF_Int64(block_cache_max_concurrent_inserts, "1000000");
+CONF_Int64(block_cache_max_concurrent_inserts, "1500000");
 // Total memory limit for in-flight parcels.
 // Once this is reached, requests will be rejected until the parcel memory usage gets under the limit.
 CONF_Int64(block_cache_max_parcel_memory_mb, "256");
 CONF_Bool(block_cache_report_stats, "false");
+// This essentially turns the LRU into a two-segmented LRU. Setting this to 1 means every new insertion
+// will be inserted 1/2 from the end of the LRU, 2 means 1/4 from the end of the LRU, and so on.
+// It is only useful for the cachelib engine currently.
+CONF_Int64(block_cache_lru_insertion_point, "1");
 // cachelib, starcache
 CONF_String(block_cache_engine, "starcache");
 
@@ -930,12 +949,13 @@ CONF_Int64(binlog_file_max_size, "536870912");
 CONF_Int32(binlog_page_max_size, "1048576");
 
 CONF_mInt64(txn_info_history_size, "20000");
+CONF_mInt64(file_write_history_size, "10000");
 
 CONF_mInt32(update_cache_evict_internal_sec, "11");
 CONF_mBool(enable_auto_evict_update_cache, "true");
 
-CONF_Bool(enable_preload_column_mode_update_cache, "true");
-
 CONF_mInt64(load_tablet_timeout_seconds, "30");
+
+CONF_mBool(enable_pk_value_column_zonemap, "true");
 
 } // namespace starrocks::config

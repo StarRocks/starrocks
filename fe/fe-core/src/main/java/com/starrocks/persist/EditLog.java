@@ -99,6 +99,7 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -163,6 +164,12 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_DB: {
                     Database db = (Database) journal.getData();
+                    LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
+                    metastore.replayCreateDb(db);
+                    break;
+                }
+                case OperationType.OP_CREATE_DB_V2: {
+                    CreateDbInfo db = (CreateDbInfo) journal.getData();
                     LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
                     metastore.replayCreateDb(db);
                     break;
@@ -833,12 +840,12 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_ADD_ANALYZE_STATUS: {
-                    AnalyzeStatus analyzeStatus = (AnalyzeStatus) journal.getData();
+                    NativeAnalyzeStatus analyzeStatus = (NativeAnalyzeStatus) journal.getData();
                     globalStateMgr.getAnalyzeManager().replayAddAnalyzeStatus(analyzeStatus);
                     break;
                 }
                 case OperationType.OP_REMOVE_ANALYZE_STATUS: {
-                    AnalyzeStatus analyzeStatus = (AnalyzeStatus) journal.getData();
+                    NativeAnalyzeStatus analyzeStatus = (NativeAnalyzeStatus) journal.getData();
                     globalStateMgr.getAnalyzeManager().replayRemoveAnalyzeStatus(analyzeStatus);
                     break;
                 }
@@ -1088,6 +1095,10 @@ public class EditLog {
 
     public void logCreateDb(Database db) {
         logEdit(OperationType.OP_CREATE_DB, db);
+    }
+
+    public void logCreateDb(CreateDbInfo createDbInfo) {
+        logEdit(OperationType.OP_CREATE_DB_V2, createDbInfo);
     }
 
     public void logDropDb(DropDbInfo dropDbInfo) {
@@ -1576,11 +1587,15 @@ public class EditLog {
     }
 
     public void logAddAnalyzeStatus(AnalyzeStatus status) {
-        logEdit(OperationType.OP_ADD_ANALYZE_STATUS, status);
+        if (status.isNative()) {
+            logEdit(OperationType.OP_ADD_ANALYZE_STATUS, (NativeAnalyzeStatus) status);
+        }
     }
 
     public void logRemoveAnalyzeStatus(AnalyzeStatus status) {
-        logEdit(OperationType.OP_REMOVE_ANALYZE_STATUS, status);
+        if (status.isNative()) {
+            logEdit(OperationType.OP_REMOVE_ANALYZE_STATUS, (NativeAnalyzeStatus) status);
+        }
     }
 
     public void logAddBasicStatsMeta(BasicStatsMeta meta) {

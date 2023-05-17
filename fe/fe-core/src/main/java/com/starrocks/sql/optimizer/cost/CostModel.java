@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -129,7 +130,19 @@ public class CostModel {
         public CostEstimate visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
-
+            if (node.getTable().isMaterializedView()) {
+                ColumnRefSet usedColumns = statistics.getUsedColumns();
+                Projection projection = node.getProjection();
+                if (projection != null) {
+                    // we will add a projection on top of rewritten mv plan to keep the output columns the same as
+                    // original query.
+                    // excludes this projection keys when costing mv,
+                    // or the cost of mv may be larger than origal query,
+                    // which will lead to mismatch of mv
+                    usedColumns.except(projection.getColumnRefMap().keySet());
+                }
+                return CostEstimate.of(statistics.getOutputSize(usedColumns), 0, 0);
+            }
             return CostEstimate.of(statistics.getComputeSize(), 0, 0);
         }
 
@@ -368,7 +381,7 @@ public class CostModel {
 
             Preconditions.checkState(!(join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()),
                     "should be handled by nestloopjoin");
-            HashJoinCostModel joinCostModel = new HashJoinCostModel(context, inputProperties, eqOnPredicates);
+            HashJoinCostModel joinCostModel = new HashJoinCostModel(context, inputProperties, eqOnPredicates, statistics);
             return CostEstimate.of(joinCostModel.getCpuCost(), joinCostModel.getMemCost(), 0);
         }
 

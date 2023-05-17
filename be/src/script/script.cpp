@@ -109,6 +109,16 @@ std::string memtracker_debug_string(MemTracker& self) {
     return self.debug_string();
 }
 
+static std::vector<FileWriteStat> get_file_write_history() {
+    std::vector<FileWriteStat> stats;
+    FileSystem::get_file_write_history(&stats);
+    return stats;
+}
+
+static int64_t unix_seconds() {
+    return UnixSeconds();
+}
+
 void bind_exec_env(ForeignModule& m) {
     {
         auto& cls = m.klass<MemTracker>("MemTracker");
@@ -120,6 +130,13 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcExt<&memtracker_debug_string>("toString");
     }
     {
+        auto& cls = m.klass<FileWriteStat>("FileWriteStat");
+        REG_VAR(FileWriteStat, open_time);
+        REG_VAR(FileWriteStat, close_time);
+        REG_VAR(FileWriteStat, path);
+        REG_VAR(FileWriteStat, size);
+    }
+    {
         auto& cls = m.klass<ExecEnv>("ExecEnv");
         REG_STATIC_METHOD(ExecEnv, GetInstance);
         cls.funcStaticExt<&get_thread_id_list>("get_thread_id_list");
@@ -128,6 +145,8 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&get_stack_trace_for_all_threads>("get_stack_trace_for_all_threads");
         cls.funcStaticExt<&get_stack_trace_for_function>("get_stack_trace_for_function");
         cls.funcStaticExt<&grep_log_as_string>("grep_log_as_string");
+        cls.funcStaticExt<&get_file_write_history>("get_file_write_history");
+        cls.funcStaticExt<&unix_seconds>("unix_seconds");
         REG_METHOD(ExecEnv, process_mem_tracker);
         REG_METHOD(ExecEnv, query_pool_mem_tracker);
         REG_METHOD(ExecEnv, load_mem_tracker);
@@ -205,6 +224,30 @@ public:
         } else {
             return ret;
         }
+    }
+
+    static size_t submit_manual_compaction_task_for_table(int64_t table_id, int64_t rowset_size_threshold) {
+        auto infos = get_tablet_infos(table_id, -1);
+        for (auto& info : infos) {
+            submit_manual_compaction_task_for_tablet(info.tablet_id, rowset_size_threshold);
+        }
+        return infos.size();
+    }
+
+    static size_t submit_manual_compaction_task_for_partition(int64_t partition_id, int64_t rowset_size_threshold) {
+        auto infos = get_tablet_infos(-1, partition_id);
+        for (auto& info : infos) {
+            submit_manual_compaction_task_for_tablet(info.tablet_id, rowset_size_threshold);
+        }
+        return infos.size();
+    }
+
+    static void submit_manual_compaction_task_for_tablet(int64_t tablet_id, int64_t rowset_size_threshold) {
+        StorageEngine::instance()->submit_manual_compaction_task(tablet_id, rowset_size_threshold);
+    }
+
+    static std::string get_manual_compaction_status() {
+        return StorageEngine::instance()->get_manual_compaction_status();
     }
 
     static void bind(ForeignModule& m) {
@@ -352,6 +395,10 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, drop_tablet);
             REG_STATIC_METHOD(StorageEngineRef, get_data_dirs);
             REG_STATIC_METHOD(StorageEngineRef, do_compaction);
+            REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_table);
+            REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_partition);
+            REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_tablet);
+            REG_STATIC_METHOD(StorageEngineRef, get_manual_compaction_status);
         }
     }
 };

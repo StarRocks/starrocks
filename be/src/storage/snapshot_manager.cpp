@@ -599,9 +599,9 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
                 DelVector* delvec = &snapshot_meta.delete_vectors()[new_segment_id];
                 RETURN_IF_ERROR(TabletMetaManager::get_del_vector(meta_store, tablet->tablet_id(), old_segment_id,
                                                                   snapshot_version, delvec, &dummy /*latest_version*/));
-                DeltaColumnGroupList* dcg = &snapshot_meta.delta_column_groups()[new_segment_id];
+                DeltaColumnGroupList* dcgs = &snapshot_meta.delta_column_groups()[new_segment_id];
                 RETURN_IF_ERROR(TabletMetaManager::get_delta_column_group(meta_store, tablet->tablet_id(),
-                                                                          old_segment_id, snapshot_version, dcg));
+                                                                          old_segment_id, snapshot_version, dcgs));
             }
             rowset_meta_pb.set_rowset_seg_id(new_rsid);
             new_rsid += std::max<uint32_t>(rowset_meta_pb.num_segments(), 1);

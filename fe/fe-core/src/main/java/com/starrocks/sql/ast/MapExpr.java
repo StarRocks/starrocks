@@ -52,7 +52,7 @@ public class MapExpr extends Expr {
     }
 
     public Type getKeyCommonType() {
-        Preconditions.checkState(children.size() > 1);
+        Preconditions.checkState(children.size() > 1 && children.size() % 2 == 0);
         ArrayList<Type> keyExprsType = Lists.newArrayList();
         for (int i = 0; i < children.size(); i += 2) {
             keyExprsType.add(children.get(i).getType());
@@ -61,7 +61,7 @@ public class MapExpr extends Expr {
     }
 
     public Type getValueCommonType() {
-        Preconditions.checkState(children.size() > 1);
+        Preconditions.checkState(children.size() > 1 && children.size() % 2 == 0);
         ArrayList<Type> valueExprsType = Lists.newArrayList();
         for (int i = 1; i < children.size(); i += 2) {
             valueExprsType.add(children.get(i).getType());

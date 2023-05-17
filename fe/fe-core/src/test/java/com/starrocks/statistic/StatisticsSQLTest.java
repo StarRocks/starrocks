@@ -58,8 +58,7 @@ public class StatisticsSQLTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `escape0['abc']` (\n" +
@@ -75,8 +74,7 @@ public class StatisticsSQLTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("stat0");
@@ -94,6 +92,10 @@ public class StatisticsSQLTest extends PlanTestBase {
 
         String sql = job.buildSampleInsertSQL(db.getId(), t0StatsTableId, columnNames, 200);
         starRocksAssert.useDatabase("_statistics_");
+        String except = String.format("SELECT %s, '%s', %s, '%s', '%s'",
+                t0.getId(), "v3", db.getId(), "test.stat0", "test");
+        assertCContains(sql, except);
+
         String plan = getFragmentPlan(sql);
 
         Assert.assertEquals(3, StringUtils.countMatches(plan, "OlapScanNode"));
@@ -170,5 +172,24 @@ public class StatisticsSQLTest extends PlanTestBase {
             assertCContains(plan.getColNames().get(1).replace("\\", ""), column);
             assertCContains(plan.getColNames().get(3).replace("\\", ""), "escape0['abc']");
         }
+    }
+
+    @Test
+    public void testDropPartitionSQL() throws Exception {
+        starRocksAssert.useDatabase("_statistics_");
+        String sql = StatisticSQLBuilder.buildDropPartitionSQL(Lists.newArrayList(1L, 2L, 3L));
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "partition_id IN (1, 2, 3)");
+
+    }
+
+    @Test
+    public void testDropInvalidPartitionSQL() throws Exception {
+        starRocksAssert.useDatabase("_statistics_");
+        String sql = StatisticSQLBuilder.buildDropTableInvalidPartitionSQL(Lists.newArrayList(4L, 5L, 6L),
+                Lists.newArrayList(1L, 2L, 3L));
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "table_id IN (4, 5, 6)");
+        assertCContains(plan, "partition_id NOT IN (1, 2, 3)");
     }
 }

@@ -17,14 +17,13 @@ package com.starrocks.load;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.qe.ConnectContext;
@@ -40,7 +39,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -241,11 +239,11 @@ public class InsertOverwriteJobRunner {
         try {
             Table table = db.getTable(tableId);
             if (table == null) {
-                throw new DmlException("table:% does not exist in database:%s", tableId, db.getFullName());
+                throw new DmlException("table:%d does not exist in database:%s", tableId, db.getFullName());
             }
             Preconditions.checkState(table instanceof OlapTable);
             OlapTable targetTable = (OlapTable) table;
-            Map<Long, Set<Long>> sourceTabletIds = Maps.newHashMap();
+            Set<Tablet> sourceTablets = Sets.newHashSet();
             if (job.getTmpPartitionIds() != null) {
                 for (long pid : job.getTmpPartitionIds()) {
                     LOG.info("drop temp partition:{}", pid);
@@ -253,11 +251,8 @@ public class InsertOverwriteJobRunner {
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
                         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                            for (Tablet tablet : index.getTablets()) {
-                                if (!sourceTabletIds.containsKey(tablet.getId())) {
-                                    sourceTabletIds.put(tablet.getId(), tablet.getBackendIds());
-                                }
-                            }
+                            // hash set is able to deduplicate the elements
+                            sourceTablets.addAll(index.getTablets());
                         }
                         targetTable.dropTempPartition(partition.getName(), true);
                     } else {
@@ -268,10 +263,7 @@ public class InsertOverwriteJobRunner {
             if (!isReplay) {
                 // mark all source tablet ids force delete to drop it directly on BE,
                 // not to move it to trash
-                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-                for (long tabletId : sourceTabletIds.keySet()) {
-                    invertedIndex.markTabletForceDelete(tabletId, sourceTabletIds.get(tabletId));
-                }
+                sourceTablets.forEach(GlobalStateMgr.getCurrentInvertedIndex()::markTabletForceDelete);
 
                 InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
                         OVERWRITE_FAILED, job.getSourcePartitionIds(), job.getTmpPartitionIds());
@@ -294,15 +286,11 @@ public class InsertOverwriteJobRunner {
             List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
                     .map(partitionId -> targetTable.getPartition(partitionId).getName())
                     .collect(Collectors.toList());
-            Map<Long, Set<Long>> sourceTabletIds = Maps.newHashMap();
+            Set<Tablet> sourceTablets = Sets.newHashSet();
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
                 for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                    for (Tablet tablet : index.getTablets()) {
-                        if (!sourceTabletIds.containsKey(tablet.getId())) {
-                            sourceTabletIds.put(tablet.getId(), tablet.getBackendIds());
-                        }
-                    }
+                    sourceTablets.addAll(index.getTablets());
                 }
             });
 
@@ -314,10 +302,7 @@ public class InsertOverwriteJobRunner {
             if (!isReplay) {
                 // mark all source tablet ids force delete to drop it directly on BE,
                 // not to move it to trash
-                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-                for (long tabletId : sourceTabletIds.keySet()) {
-                    invertedIndex.markTabletForceDelete(tabletId, sourceTabletIds.get(tabletId));
-                }
+                sourceTablets.forEach(GlobalStateMgr.getCurrentInvertedIndex()::markTabletForceDelete);
 
                 InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
                         InsertOverwriteJobState.OVERWRITE_SUCCESS, job.getSourcePartitionIds(), job.getTmpPartitionIds());

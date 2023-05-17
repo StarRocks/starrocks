@@ -51,7 +51,7 @@ OlapScanNode::OlapScanNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
 }
 
 Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    RETURN_IF_ERROR(ScanNode::init(tnode, state));
     DCHECK(!tnode.olap_scan_node.__isset.sort_column) << "sorted result not supported any more";
 
     // init filtered_output_columns
@@ -643,6 +643,10 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
             scanner_params.skip_aggregation = _olap_scan_node.is_preaggregation;
             scanner_params.need_agg_finalize = true;
             scanner_params.unused_output_columns = &_unused_output_columns;
+            // one scan range has multi tablet_scanners, so only the first scanner need to update scan range
+            if (i == 0) {
+                scanner_params.update_num_scan_range = true;
+            }
             auto* scanner = _pool->add(new TabletScanner(this));
             RETURN_IF_ERROR(scanner->init(state, scanner_params));
             // Assume all scanners have the same schema.
@@ -685,8 +689,6 @@ StatusOr<TabletSharedPtr> OlapScanNode::get_tablet(const TInternalScanRange* sca
 }
 
 int OlapScanNode::estimated_max_concurrent_chunks() const {
-    int64_t query_limit = runtime_state()->query_mem_tracker_ptr()->limit();
-
     // We temporarily assume that the memory tried in the storage layer
     // is the same size as the chunk_size * _estimated_scan_row_bytes.
     size_t row_mem_usage = _estimated_scan_row_bytes + _estimated_output_row_bytes;
@@ -694,7 +696,7 @@ int OlapScanNode::estimated_max_concurrent_chunks() const {
     DCHECK_GT(chunk_mem_usage, 0);
 
     // limit scan memory usage not greater than 1/4 query limit
-    int concurrency = std::max<int>(query_limit * config::scan_use_query_mem_ratio / chunk_mem_usage, 1);
+    int concurrency = std::max<int>(_mem_limit / chunk_mem_usage, 1);
 
     return concurrency;
 }
@@ -798,9 +800,8 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
 
     size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
     size_t default_buffer_capacity = std::min<size_t>(max_buffer_capacity, estimated_max_concurrent_chunks());
-    int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
-            max_buffer_capacity, default_buffer_capacity, mem_limit, runtime_state()->chunk_size());
+            max_buffer_capacity, default_buffer_capacity, _mem_limit, runtime_state()->chunk_size());
 
     auto scan_ctx_factory = std::make_shared<pipeline::OlapScanContextFactory>(
             this, dop, shared_morsel_queue, _enable_shared_scan, std::move(buffer_limiter));

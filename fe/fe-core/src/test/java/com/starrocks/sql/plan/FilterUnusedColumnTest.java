@@ -36,8 +36,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`d_dow`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
         // for agg table
         starRocksAssert.withTable("CREATE TABLE `metrics_detail` ( \n" +
@@ -53,7 +52,6 @@ public class FilterUnusedColumnTest extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\"\n" +
                 ");");
         // for primary key table
@@ -67,8 +65,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`tags_id`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW tpcds_100g_date_dim_mv as \n" +
                 "SELECT d_dow, d_day_name, max(d_date) \n" +

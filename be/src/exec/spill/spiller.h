@@ -54,6 +54,11 @@ struct SpillProcessMetrics {
     RuntimeProfile::Counter* restore_rows = nullptr;
     RuntimeProfile::Counter* shuffle_timer = nullptr;
     RuntimeProfile::Counter* split_partition_timer = nullptr;
+
+    RuntimeProfile::Counter* flush_bytes = nullptr;
+    RuntimeProfile::Counter* restore_bytes = nullptr;
+    RuntimeProfile::Counter* serialize_timer = nullptr;
+    RuntimeProfile::Counter* deserialize_timer = nullptr;
 };
 
 // major spill interfaces
@@ -99,12 +104,12 @@ public:
     // prepared for as read
     template <class TaskExecutor, class MemGuard>
     Status flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
-
+    template <class MemGuard>
     Status set_flush_all_call_back(const FlushAllCallBack& callback, RuntimeState* state, IOTaskExecutor& executor,
-                                   const MemTrackerGuard& guard) {
+                                   const MemGuard& guard) {
         auto flush_call_back = [this, callback, state, &executor, guard]() {
             RETURN_IF_ERROR(callback());
-            if (spilled()) {
+            if (!_is_cancel && spilled()) {
                 RETURN_IF_ERROR(_acquire_input_stream(state));
                 RETURN_IF_ERROR(trigger_restore(state, executor, guard));
             }
@@ -136,7 +141,10 @@ public:
 
     void update_spilled_task_status(Status&& st);
 
-    Status task_status() { return _spilled_task_status; }
+    Status task_status() {
+        std::lock_guard l(_mutex);
+        return _spilled_task_status;
+    }
 
     void get_all_partitions(std::vector<const SpillPartitionInfo*>* parititons) {
         _writer->get_spill_partitions(parititons);
@@ -149,13 +157,9 @@ public:
 
     const std::shared_ptr<spill::Serde>& serde() { return _serde; }
     BlockManager* block_manager() { return _block_manager; }
+    const ChunkBuilder& chunk_builder() { return _chunk_builder; }
 
 private:
-    Status _get_spilled_task_status() {
-        std::lock_guard l(_mutex);
-        return _spilled_task_status;
-    }
-
     Status _acquire_input_stream(RuntimeState* state);
 
     Status _decrease_running_flush_tasks();
@@ -183,4 +187,5 @@ private:
 
     std::atomic_bool _is_cancel = false;
 };
+
 } // namespace starrocks::spill

@@ -73,7 +73,6 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -129,10 +128,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     @SerializedName(value = "origStmt")
     private OriginStatement origStmt;
 
-    // optional
-    @SerializedName(value = "storageFormat")
-    private TStorageFormat storageFormat = TStorageFormat.DEFAULT;
-
     // The rollup job will wait all transactions before this txn id finished, then send the rollup tasks.
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
@@ -176,10 +171,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     public String getRollupIndexName() {
         return rollupIndexName;
-    }
-
-    public void setStorageFormat(TStorageFormat storageFormat) {
-        this.storageFormat = storageFormat;
     }
 
     /**
@@ -252,9 +243,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                 tbl.enablePersistentIndex(),
                                 tabletType, tbl.getCompressionType(), index.getSortKeyIdxes());
                         createReplicaTask.setBaseTablet(tabletIdMap.get(rollupTabletId), baseSchemaHash);
-                        if (this.storageFormat != null) {
-                            createReplicaTask.setStorageFormat(this.storageFormat);
-                        }
                         batchTask.addTask(createReplicaTask);
                     } // end for rollupReplicas
                 } // end for rollupTablets
@@ -848,7 +836,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         watershedTxnId = in.readLong();
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_85) {
-            storageFormat = TStorageFormat.valueOf(Text.readString(in));
+            Text.readString(in); // placeholder
         }
     }
 

@@ -64,7 +64,7 @@ Describes the data file that you want to load. The `data_desc` descriptor can in
 -H "format: CSV | JSON"
 -H "column_separator: <column_separator>"
 -H "row_delimiter: <row_delimiter>"
--H "columns: <column1_name>[, <column2_name>，... ]"
+-H "columns: <column1_name>[, <column2_name>, ... ]"
 -H "partitions: <partition1_name>[, <partition2_name>, ...]"
 -H "jsonpaths: [ \"<json_path1>\"[, \"<json_path2>\", ...] ]"
 -H "strip_outer_array:  true | false"
@@ -136,7 +136,7 @@ The following table describes the optional parameters.
 | strict_mode      | No       | Specifies whether to enable the [strict mode](../../../loading/load_concept/strict_mode.md). Valid values: `true` and `false`. Default value: `false`.  The value `true` specifies to enable the strict mode, and the value `false` specifies to disable the strict mode. |
 | timezone         | No       | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime, alignment_timestamp, and from_unixtime. The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../administration/timezone.md). |
 | load_mem_limit   | No       | The maximum amount of memory that can be provisioned to the load job. Unit: bytes. By default, the maximum memory size for a load job is 2 GB. The value of this parameter cannot exceed the maximum amount of memory that can be provisioned to each BE. |
-| merge_condition  | No       | Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column. StarRocks supports conditional updates since v2.5. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md). <br/>**NOTE**<br/>The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key model support conditional updates. |
+| merge_condition  | No       | Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column. StarRocks supports conditional updates since v2.5. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md). <br/>**NOTE**<br/>The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key table support conditional updates. |
 
 ## Column mapping
 
@@ -302,7 +302,7 @@ If you want to load only the data records whose values in the first column of `e
 
 ```Bash
 curl --location-trusted -u root: -H "label:label4" \
-    -H "columns: col1, col2，col3]"\
+    -H "columns: col1, col2, col3]"\
     -H "where: col1 = 20180601" \
     -T example4.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table4/_stream_load

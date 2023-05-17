@@ -40,17 +40,12 @@ namespace starrocks {
 class ExprContext;
 class FileWriter;
 
-struct ParquetBuilderOptions {
-    TCompressionType::type compression_type = TCompressionType::SNAPPY;
-    bool use_dict = true;
-    int64_t row_group_max_size = 128 * 1024 * 1024;
-};
-
 class ParquetBuilder : public FileBuilder {
 public:
     ParquetBuilder(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
                    std::shared_ptr<::parquet::schema::GroupNode> schema,
-                   const std::vector<ExprContext*>& output_expr_ctxs, int64_t row_group_max_size);
+                   const std::vector<ExprContext*>& output_expr_ctxs, int64_t row_group_max_size,
+                   int64_t max_file_size);
 
     ~ParquetBuilder() override = default;
 
@@ -59,10 +54,6 @@ public:
     std::size_t file_size() override;
 
     Status finish() override;
-
-    static std::shared_ptr<::parquet::WriterProperties> get_properties(const ParquetBuilderOptions& options);
-    static std::shared_ptr<::parquet::schema::GroupNode> get_schema(const std::vector<std::string>& file_column_names,
-                                                                    const std::vector<ExprContext*>& output_expr_ctxs);
 
 private:
     std::unique_ptr<starrocks::parquet::SyncFileWriter> _writer;

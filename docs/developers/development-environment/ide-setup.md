@@ -72,7 +72,7 @@ export PYTHON=/usr/bin/python3
 
 `git clone https://github.com/StarRocks/starrocks.git`
 
-**Install required tools for compilation**：
+**Install required tools for compilation**:
 
 ```bash
 sudo apt update
@@ -103,7 +103,7 @@ The first time compile needs to compile thirdparty, it will require some time.
 
 ### FE
 
-FE development is simple because you can compile it in MacOS directly. Just enter `fe` folder and run the command  `mvn install -DskipTests` 。
+FE development is simple because you can compile it in MacOS directly. Just enter `fe` folder and run the command `mvn install -DskipTests`.
 
 Then you can use IDEA to open `fe` folder directly, everything is ok.
 
@@ -143,7 +143,7 @@ STARROCKS_GCC_HOME=/usr/
 STARROCKS_THIRDPARTY=/root/starrocks/thirdparty
 ```
 
-Notice: Be careful not to check `Include system environment variables`。
+Notice: Be careful not to check `Include system environment variables`.
 
 <img src="../../assets/ide-4.png" alt="ide-4" style="zoom:50%;" />
 
@@ -189,7 +189,7 @@ Then just run `./bin/start_be.sh` without any flag.
 
 Of course, you can use LLVM tools to development be.
 
-Ubuntu LLVM installtion refer to：https://apt.llvm.org/
+Ubuntu LLVM installtion refer to: https://apt.llvm.org/
 
 Then use the command:  `CC=clang-15 CXX=clang++-15 ./build.sh` to compile be. But the premise is that your thirdparty has been compiled with gcc.
 

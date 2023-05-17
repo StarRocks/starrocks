@@ -34,11 +34,11 @@ namespace starrocks::parquet {
 
 struct GroupReaderParam {
     struct Column {
-        // column index in parquet file
-        int col_idx_in_parquet;
+        // parquet field index in root node's children
+        int32_t field_idx_in_parquet;
 
         // column index in chunk
-        int col_idx_in_chunk;
+        int32_t col_idx_in_chunk;
 
         // column type in parquet file
         tparquet::Type::type col_type_in_parquet;
@@ -75,7 +75,8 @@ struct GroupReaderParam {
 
 class GroupReader {
 public:
-    GroupReader(GroupReaderParam& param, int row_group_number);
+    GroupReader(GroupReaderParam& param, int row_group_number, const std::set<std::int64_t>* need_skip_rowids,
+                int64_t row_group_first_row);
     ~GroupReader() = default;
 
     Status init();
@@ -132,13 +133,14 @@ private:
 
     Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
     Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
-    void _dict_filter(ChunkPtr* chunk, Filter* filter_ptr);
-    Status _dict_decode(ChunkPtr* chunk);
     void _collect_field_io_range(const ParquetField& field, std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                  int64_t* end_offset);
 
     // row group meta
     std::shared_ptr<tparquet::RowGroup> _row_group_metadata;
+    std::int64_t _row_group_first_row = 0;
+    const std::set<std::int64_t>* _need_skip_rowids;
+    std::int64_t _raw_rows_read = 0;
 
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;

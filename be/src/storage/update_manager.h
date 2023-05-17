@@ -98,6 +98,8 @@ public:
 
     MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
 
+    Status set_cached_delta_column_group(KVStore* meta, const TabletSegmentId& tsid, const DeltaColumnGroupPtr& dcg);
+
     void clear_cache();
 
     void clear_cached_del_vec(const std::vector<TabletSegmentId>& tsids);

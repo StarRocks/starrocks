@@ -369,7 +369,7 @@ Status DataDir::load() {
             }
         } else if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE &&
                    rowset_meta->tablet_uid() == tablet->tablet_uid()) {
-            Status publish_status = tablet->add_rowset(rowset, false);
+            Status publish_status = tablet->load_rowset(rowset);
             if (!publish_status.ok() && !publish_status.is_already_exist()) {
                 LOG(WARNING) << "Fail to add visible rowset=" << rowset->rowset_id()
                              << " to tablet=" << rowset_meta->tablet_id() << " txn id=" << rowset_meta->txn_id()
@@ -383,6 +383,24 @@ Status DataDir::load() {
                          << " current valid tablet uid=" << tablet->tablet_uid();
         }
     }
+
+    for (int64_t tablet_id : tablet_ids) {
+        TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, false);
+        if (tablet == nullptr) {
+            continue;
+        }
+        // ignore the failure, and this behaviour is the same as that when failed to load rowset above.
+        // For full data, FE will repair it by cloning data from other replicas. For binlog, there may
+        // be data loss, because there is no clone mechanism for binlog currently, and the application
+        // should deal with the case. For example, realtime MV can initialize with the newest full data
+        // to skip the lost binlog, and process the new binlog after that. The situation is similar with
+        // that the binlog is expired and deleted before the application processes it.
+        Status st = tablet->finish_load_rowsets();
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to finish loading rowsets, tablet id=" << tablet_id << ", status: " << st.to_string();
+        }
+    }
+
     return Status::OK();
 }
 
@@ -523,6 +541,12 @@ void DataDir::perform_path_scan() {
                         continue;
                     }
                     for (const auto& rowset_file : rowset_files) {
+                        StringPiece sp(rowset_file);
+                        if (sp.ends_with(".cols")) {
+                            // ".col" isn't gc here, because it links with delta column group,
+                            // So it will be removed when delta column group is removed from rocksdb
+                            continue;
+                        }
                         std::string rowset_file_path = tablet_schema_hash_path + "/" + rowset_file;
                         _all_check_paths.insert(rowset_file_path);
                     }

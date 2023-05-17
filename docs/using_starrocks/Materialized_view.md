@@ -168,7 +168,14 @@ GROUP BY order_id;
 
   - Strict consistency is not guaranteed between the materialized view and the base tables in the external catalog.
   - Currently, building asynchronous materialized views based on external resources is not supported.
-  - Currently, StarRocks cannot perceive if the data of the base tables in the external catalog has changed, so all partitions are refreshed by default every time the refreshing task is triggered. If you want to refresh only some of the partitions, you can manually refresh the materialized view using the [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md) statement and specify the partition you want to refresh.
+  - Currently, StarRocks cannot perceive the data changes on the base tables in Iceberg catalogs and Hudi catalogs, so all partitions are refreshed by default every time the refreshing task is triggered. If you want to refresh only some of the partitions, you can manually refresh the materialized view using the [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md) statement and specify the partition you want to refresh.
+  - From v2.5.5 onwards, StarRocks can periodically refresh the cached metadata of the frequently accessed Hive catalogs to perceive data changes. You can configure the Hive metadata cache refresh through the following FE parameters:
+
+    | Configuration item                                           | Default                              | Description                          |
+    | ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
+    | enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the Hive Metastore of the frequently accessed Hive catalogs to perceive data changes, and caches the information in the catalog metadata. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This item is an FE dynamic parameter. You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) command. |
+    | background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | The interval between two consecutive Hive metadata cache refreshes. Unit: millisecond. This item is an FE dynamic parameter. You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) command. |
+    | background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. This item is an FE dynamic parameter. You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) command. |
 
 ## Manually refresh an asynchronous materialized view
 
@@ -385,7 +392,7 @@ You can view the asynchronous materialized views in your database by using [SHOW
   SELECT * FROM information_schema.materialized_views;
   ```
 
-### Check the asynchronous materialized view definition
+### Check the definition of asynchronous materialized view
 
 You can check the query used to create an asynchronous materialized view via [SHOW CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20MATERIALIZED%20VIEW.md).
 
@@ -393,48 +400,48 @@ You can check the query used to create an asynchronous materialized view via [SH
 SHOW CREATE MATERIALIZED VIEW order_mv;
 ```
 
-### Check the asynchronous materialized view execution status
+### Check the execution status of asynchronous materialized view
 
-You can check the execution (building or refreshing) status of an asynchronous materialized view by querying the `tasks` and `task_runs` metadata tables in StarRocks' [Information Schema](../administration/information_schema.md). 
+You can check the execution (building or refreshing) status of an asynchronous materialized view by querying the `tasks` and `task_runs` metadata tables in StarRocks' [Information Schema](../administration/information_schema.md).
 
 The following example checks the execution status of the materialized view that was created most recently:
 
 1. Check the `TASK_NAME` of the most recent task in the table `tasks`.
 
-  ```Plain
-  mysql> select * from information_schema.tasks  order by CREATE_TIME desc limit 1\G;
-  *************************** 1. row ***************************
-    TASK_NAME: mv-59299
-  CREATE_TIME: 2022-12-12 17:33:51
-     SCHEDULE: MANUAL
-     DATABASE: ssb_1
-   DEFINITION: insert overwrite hive_mv_lineorder_flat_1 SELECT `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_linenumber`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_custkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_partkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderpriority`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_ordtotalprice`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_revenue`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`p_mfgr`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`s_nation`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`c_city`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`c_nation`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderdate`
-  FROM `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`
-  WHERE `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderdate` = '1997-01-01'
-  EXPIRE_TIME: NULL
-  1 row in set (0.02 sec)
-  ```
+    ```Plain
+    mysql> select * from information_schema.tasks  order by CREATE_TIME desc limit 1\G;
+    *************************** 1. row ***************************
+      TASK_NAME: mv-59299
+    CREATE_TIME: 2022-12-12 17:33:51
+      SCHEDULE: MANUAL
+      DATABASE: ssb_1
+    DEFINITION: insert overwrite hive_mv_lineorder_flat_1 SELECT `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_linenumber`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_custkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_partkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderpriority`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_ordtotalprice`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_revenue`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`p_mfgr`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`s_nation`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`c_city`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`c_nation`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderdate`
+    FROM `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`
+    WHERE `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderdate` = '1997-01-01'
+    EXPIRE_TIME: NULL
+    1 row in set (0.02 sec)
+    ```
 
 2. Check the execution status in the table `task_runs` using the `TASK_NAME` you have found.
 
-  ```Plain
-  mysql> select * from information_schema.task_runs where task_name='mv-59299' order by CREATE_TIME \G;
-  *************************** 1. row ***************************
-       QUERY_ID: d9cef11f-7a00-11ed-bd90-00163e14767f
-      TASK_NAME: mv-59299
-    CREATE_TIME: 2022-12-12 17:39:19
-    FINISH_TIME: 2022-12-12 17:39:22
-          STATE: SUCCESS
-       DATABASE: ssb_1
-     DEFINITION: insert overwrite hive_mv_lineorder_flat_1 SELECT `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_linenumber`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_custkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_partkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderpriority`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_ordtotalprice`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_revenue`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`p_mfgr`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`s_nation`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`c_city`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`c_nation`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderdate`
-  FROM `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`
-  WHERE `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderdate` = '1997-01-01'
-    EXPIRE_TIME: 2022-12-15 17:39:19
-     ERROR_CODE: 0
-  ERROR_MESSAGE: NULL
-       PROGRESS: 100%
-  2 rows in set (0.02 sec)
-  ```
+    ```Plain
+    mysql> select * from information_schema.task_runs where task_name='mv-59299' order by CREATE_TIME \G;
+    *************************** 1. row ***************************
+        QUERY_ID: d9cef11f-7a00-11ed-bd90-00163e14767f
+        TASK_NAME: mv-59299
+      CREATE_TIME: 2022-12-12 17:39:19
+      FINISH_TIME: 2022-12-12 17:39:22
+            STATE: SUCCESS
+        DATABASE: ssb_1
+      DEFINITION: insert overwrite hive_mv_lineorder_flat_1 SELECT `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_linenumber`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_custkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_partkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderpriority`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_ordtotalprice`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_revenue`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`p_mfgr`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`s_nation`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`c_city`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`c_nation`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderdate`
+    FROM `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`
+    WHERE `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderdate` = '1997-01-01'
+      EXPIRE_TIME: 2022-12-15 17:39:19
+      ERROR_CODE: 0
+    ERROR_MESSAGE: NULL
+        PROGRESS: 100%
+    2 rows in set (0.02 sec)
+    ```
 
 ### Drop an asynchronous materialized view
 

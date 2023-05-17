@@ -41,6 +41,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -53,8 +54,9 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -71,6 +73,7 @@ import java.util.Map;
  * If there is different type properties is added.Write a method such as buildDynamicProperty to build it.
  */
 public class TableProperty implements Writable, GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(TableProperty.class);
     public static final String DYNAMIC_PARTITION_PROPERTY_PREFIX = "dynamic_partition";
     public static final int INVALID = -1;
 
@@ -108,16 +111,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private boolean isInMemory = false;
 
     private boolean enablePersistentIndex = false;
-
-    /*
-     * the default storage format of this table.
-     * DEFAULT: depends on BE's config 'default_rowset_type'
-     * V1: alpha rowset
-     * V2: beta rowset
-     *
-     * This property should be set when creating the table, and can only be changed to V2 using Alter Table stmt.
-     */
-    private TStorageFormat storageFormat = TStorageFormat.DEFAULT;
 
     /*
      * the default storage volume of this table.
@@ -340,12 +333,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public TableProperty buildStorageFormat() {
-        storageFormat = TStorageFormat.valueOf(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT,
-                TStorageFormat.DEFAULT.name()));
-        return this;
-    }
-
     public TableProperty buildStorageVolume() {
         storageVolume = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
             RunMode.allowCreateLakeTable() ? "default" : "local");
@@ -378,8 +365,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildConstraint() {
-        uniqueConstraints = UniqueConstraint.parse(
+        try {
+            uniqueConstraints = UniqueConstraint.parse(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
+        } catch (AnalysisException e) {
+            LOG.warn("Failed to parse unique constraint, ignore this unique constraint", e);
+        }
 
         foreignKeyConstraints = ForeignKeyConstraint.parse(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
@@ -462,10 +453,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enableReplicatedStorage;
     }
 
-    public TStorageFormat getStorageFormat() {
-        return storageFormat;
-    }
-
     public String getStorageVolume() {
         return storageVolume;
     }
@@ -546,7 +533,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildDynamicProperty();
         buildReplicationNum();
         buildInMemory();
-        buildStorageFormat();
         buildStorageVolume();
         buildEnablePersistentIndex();
         buildCompressionType();

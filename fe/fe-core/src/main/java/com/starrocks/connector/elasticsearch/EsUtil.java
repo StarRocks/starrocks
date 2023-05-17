@@ -125,8 +125,8 @@ public class EsUtil {
         }
         for (String columnName : properties.keySet()) {
             JSONObject columnAttr = (JSONObject) properties.get(columnName);
-            //default set string.
-            Type type = Type.STRING;
+            // default set json.
+            Type type = Type.JSON;
             if (columnAttr.has("type")) {
                 type = convertType(columnAttr.get("type").toString());
             }

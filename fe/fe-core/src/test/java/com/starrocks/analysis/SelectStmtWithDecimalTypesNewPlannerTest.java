@@ -51,8 +51,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "DISTRIBUTED BY HASH(`key0`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
 
         ctx = UtFrameUtils.createDefaultCtx();
@@ -78,7 +77,6 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\"\n" +
                 ");");
     }

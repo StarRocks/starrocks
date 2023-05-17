@@ -6,7 +6,7 @@ DBeaver is a SQL client software application and a database administration tool,
 
 Make sure that you have installed DBeaver.
 
-You can download the DBeaver Community Edition at [https://dbeaver.io](https://dbeaver.io/) or the DBeaver PRO edition at [https://dbeaver.com](https://dbeaver.com/).
+You can download the DBeaver Community edition at [https://dbeaver.io](https://dbeaver.io/) or the DBeaver PRO edition at [https://dbeaver.com](https://dbeaver.com/).
 
 ## Integration
 
@@ -32,7 +32,7 @@ Follow these steps to connect to a database:
 
    - **Server Host**: the FE host IP address of your StarRocks cluster.
    - **Port**: the FE query port of your StarRocks cluster, for example, `9030`.
-   - **Database**: the target database in your StarRocks cluster. Both internal and external databases are supported.
+   - **Database**: the target database in your StarRocks cluster. Both internal and external databases are supported, but the functionality for external databases may be incomplete.
    - **Username**: the username that is used to log in to your StarRocks cluster, for example, `admin`.
    - **Password**: the password that is used to log in to your StarRocks cluster.
 

@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -129,7 +130,13 @@ public class HiveMetadata implements ConnectorMetadata {
                 }
             }
         }
-        return fileOps.getRemoteFiles(partitions.build());
+
+        boolean useRemoteFileCache = true;
+        if (table instanceof HiveTable) {
+            useRemoteFileCache = ((HiveTable) table).isUseMetadataCache();
+        }
+
+        return fileOps.getRemoteFiles(partitions.build(), useRemoteFileCache);
     }
 
     @Override

@@ -46,6 +46,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
@@ -57,6 +58,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -88,6 +90,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.ColumnRenameClause;
@@ -291,7 +294,7 @@ public class Alter {
                 processChangeRefreshScheme(refreshSchemeDesc, materializedView, dbName);
             } else if (modifyTablePropertiesClause != null) {
                 try {
-                    processModifyTableProperties(modifyTablePropertiesClause, materializedView);
+                    processModifyTableProperties(modifyTablePropertiesClause, db, materializedView);
                 } catch (AnalysisException ae) {
                     throw new DdlException(ae.getMessage());
                 }
@@ -306,6 +309,7 @@ public class Alter {
     }
 
     private void processModifyTableProperties(ModifyTablePropertiesClause modifyTablePropertiesClause,
+                                              Database db,
                                               MaterializedView materializedView) throws AnalysisException {
         Map<String, String> properties = modifyTablePropertiesClause.getProperties();
         Map<String, String> propClone = Maps.newHashMap();
@@ -313,22 +317,32 @@ public class Alter {
         int partitionTTL = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
             partitionTTL = PropertyAnalyzer.analyzePartitionTimeToLive(properties);
-            properties.remove(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER);
         }
         int partitionRefreshNumber = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
             partitionRefreshNumber = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
-            properties.remove(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER);
         }
         int autoRefreshPartitionsLimit = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
             autoRefreshPartitionsLimit = PropertyAnalyzer.analyzeAutoRefreshPartitionsLimit(properties, materializedView);
-            properties.remove(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT);
         }
         List<TableName> excludedTriggerTables = Lists.newArrayList();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
             excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
-            properties.remove(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES);
+        }
+        int maxMVRewriteStaleness = INVALID;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+            maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
+        }
+        List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+            uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db, materializedView);
+            properties.remove(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
+        }
+        List<ForeignKeyConstraint> foreignKeyConstraints = Lists.newArrayList();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+            foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, materializedView);
+            properties.remove(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
         }
 
         if (!properties.isEmpty()) {
@@ -373,6 +387,20 @@ public class Alter {
             curProp.put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES,
                     propClone.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES));
             materializedView.getTableProperty().setExcludedTriggerTables(excludedTriggerTables);
+            isChanged = true;
+        }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+            materializedView.setUniqueConstraints(uniqueConstraints);
+            isChanged = true;
+        }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+            materializedView.setForeignKeyConstraints(foreignKeyConstraints);
+            isChanged = true;
+        }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND,
+                    propClone.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND));
+            materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
             isChanged = true;
         }
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
@@ -812,7 +840,7 @@ public class Alter {
     }
 
     public void processAlterView(AlterViewStmt stmt, ConnectContext ctx) throws UserException {
-        TableName dbTableName = stmt.getTbl();
+        TableName dbTableName = stmt.getTableName();
         String dbName = dbTableName.getDb();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -832,32 +860,32 @@ public class Alter {
                 throw new DdlException("The specified table [" + tableName + "] is not a view");
             }
 
+
+            AlterViewClause alterViewClause = (AlterViewClause) stmt.getAlterClause();
+            String inlineViewDef = alterViewClause.getInlineViewDef();
+            List<Column> newFullSchema = alterViewClause.getColumns();
+            long sqlMode = ctx.getSessionVariable().getSqlMode();
+
             View view = (View) table;
-            modifyViewDef(db, view, stmt.getInlineViewDef(), ctx.getSessionVariable().getSqlMode(), stmt.getColumns());
+            String viewName = view.getName();
+
+            view.setInlineViewDefWithSqlMode(inlineViewDef, ctx.getSessionVariable().getSqlMode());
+            try {
+                view.init();
+            } catch (UserException e) {
+                throw new DdlException("failed to init view stmt", e);
+            }
+            view.setNewFullSchema(newFullSchema);
+
+            db.dropTable(viewName);
+            db.createTable(view);
+
+            AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema, sqlMode);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
+            LOG.info("modify view[{}] definition to {}", viewName, inlineViewDef);
         } finally {
             db.writeUnlock();
         }
-    }
-
-    private void modifyViewDef(Database db, View view, String inlineViewDef, long sqlMode, List<Column> newFullSchema)
-            throws DdlException {
-        String viewName = view.getName();
-
-        view.setInlineViewDefWithSqlMode(inlineViewDef, sqlMode);
-        try {
-            view.init();
-        } catch (UserException e) {
-            throw new DdlException("failed to init view stmt", e);
-        }
-        view.setNewFullSchema(newFullSchema);
-
-        db.dropTable(viewName);
-        db.createTable(view);
-
-        AlterViewInfo alterViewInfo =
-                new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema, sqlMode);
-        GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
-        LOG.info("modify view[{}] definition to {}", viewName, inlineViewDef);
     }
 
     public void replayModifyViewDef(AlterViewInfo alterViewInfo) throws DdlException {

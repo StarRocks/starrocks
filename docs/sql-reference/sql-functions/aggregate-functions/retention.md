@@ -104,7 +104,7 @@ The evaluation starts from the first condition.
 
     - User 4 meets no condition and [0,0] is returned.
 
-    Example 2：Calculate the percentage of users who have viewed commodity page on 2022-01-01 (action='pv') and placed an order on 2022-01-02（action='buy').
+    Example 2: Calculate the percentage of users who have viewed commodity page on 2022-01-01 (action='pv') and placed an order on 2022-01-02 (action='buy').
 
     ```Plain Text
     MySQL > select sum(r[1]),sum(r[2])/sum(r[1])

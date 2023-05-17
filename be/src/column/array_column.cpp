@@ -148,6 +148,7 @@ bool ArrayColumn::append_nulls(size_t count) {
     return false;
 }
 
+// append an empty array []
 void ArrayColumn::append_default() {
     _offsets->append(_offsets->get_data().back());
 }

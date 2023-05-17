@@ -713,6 +713,12 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
     }
 
+
+    /**
+     * toSql is an obsolete interface, because of historical reasons, the implementation of toSql is not rigorous enough.
+     * Newly developed code should use AstToSQLBuilder::toSQL instead
+     */
+    @Deprecated
     public String toSql() {
         return (printSqlInParens) ? "(" + toSqlImpl() + ")" : toSqlImpl();
     }
@@ -978,6 +984,9 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     /**
+     * Attention: if you just want check whether the expr is a constant literal, please consider
+     * use isLiteral()
+     *
      * Returns true if this expression should be treated as constant. I.e. if the frontend
      * and backend should assume that two evaluations of the expression within a query will
      * return the same value. Examples of constant expressions include:

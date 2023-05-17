@@ -123,7 +123,7 @@ private:
 template <LogicalType Type>
 class BinaryDictPageDecoder final : public PageDecoder {
 public:
-    BinaryDictPageDecoder(Slice data, const PageDecoderOptions& options);
+    BinaryDictPageDecoder(Slice data);
 
     Status init() override;
 
@@ -147,7 +147,6 @@ public:
 
 private:
     Slice _data;
-    PageDecoderOptions _options;
     std::unique_ptr<PageDecoder> _data_page_decoder;
     const BinaryPlainPageDecoder<Type>* _dict_decoder = nullptr;
     bool _parsed;

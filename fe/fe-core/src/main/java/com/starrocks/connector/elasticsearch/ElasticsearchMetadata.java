@@ -20,7 +20,6 @@ import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -38,13 +37,15 @@ public class ElasticsearchMetadata
 
     private final EsRestClient esRestClient;
     private final Map<String, String> properties;
+    private final String catalogName;
     public static final String DEFAULT_DB = "default_db";
     public static final long DEFAULT_DB_ID = 1L;
 
 
-    public ElasticsearchMetadata(EsRestClient esRestClient, Map<String, String> properties) {
+    public ElasticsearchMetadata(EsRestClient esRestClient, Map<String, String> properties, String catalogName) {
         this.esRestClient = esRestClient;
         this.properties = properties;
+        this.catalogName = catalogName;
     }
 
     @Override
@@ -67,26 +68,27 @@ public class ElasticsearchMetadata
         if (!DEFAULT_DB.equalsIgnoreCase(dbName)) {
             return null;
         }
-        return toEsTable(esRestClient, properties, tblName);
+        return toEsTable(esRestClient, properties, tblName, dbName, catalogName);
     }
 
     public static EsTable toEsTable(EsRestClient esRestClient,
                                     Map<String, String> properties,
-                                    String tableName) {
+                                    String tableName, String dbName, String catalogName) {
         try {
             List<Column> columns = EsUtil.convertColumnSchema(esRestClient, tableName);
             properties.put(EsTable.INDEX, tableName);
             EsTable esTable = new EsTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(),
-                    tableName, columns, properties, new SinglePartitionInfo());
+                    catalogName, dbName, tableName, columns, properties, new SinglePartitionInfo());
             esTable.setComment("created by external es catalog");
             esTable.syncTableMetaData(esRestClient);
             return esTable;
         } catch (NoSuchElementException e) {
-            LOG.error("Unknown index {}", tableName);
-            throw new StarRocksConnectorException("Unknown index " + tableName);
+            LOG.error(String.format("Unknown index {%s}", tableName), e);
+            return null;
         } catch (Exception e) {
             LOG.error("transform to EsTable Error", e);
-            throw new StarRocksConnectorException(e.getMessage());
+            return null;
         }
+
     }
 }

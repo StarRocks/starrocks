@@ -23,6 +23,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.starrocks.analysis.AnalyticExpr;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -31,6 +32,7 @@ import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
@@ -418,6 +420,10 @@ public class AnalyzerUtils {
         new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
     }
 
+    public static void collectSpecifyExternalTables(StatementBase statementBase, List<Table> tables, Predicate<Table> filter) {
+        new ExternalTableCollector(tables, filter).visit(statementBase);
+    }
+
     public static Map<TableName, SubqueryRelation> collectAllSubQueryRelation(QueryStatement queryStatement) {
         Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
         new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
@@ -485,7 +491,12 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
-            if (!node.getTable().isOlapTable() && tables.isEmpty()) {
+            if (!tables.isEmpty()) {
+                return null;
+            }
+            // if olap table has MV, we remove it
+            if (!node.getTable().isOlapTable() ||
+                    !node.getTable().getRelatedMaterializedViews().isEmpty()) {
                 tables.put(node.getName(), node.getTable());
             }
             return null;
@@ -507,6 +518,25 @@ public class AnalyzerUtils {
                 // Only copy the necessary olap table meta to avoid the lock when plan query
                 OlapTable copied = table.copyOnlyForQuery();
                 node.setTable(copied);
+            }
+            return null;
+        }
+    }
+
+    private static class ExternalTableCollector extends TableCollector {
+        List<Table> tables;
+        Predicate<Table> predicate;
+
+        public ExternalTableCollector(List<Table> tables, Predicate<Table> filter) {
+            this.tables = tables;
+            this.predicate = filter;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            Table table = node.getTable();
+            if (predicate.test(table)) {
+                tables.add(table);
             }
             return null;
         }
@@ -797,6 +827,27 @@ public class AnalyzerUtils {
         return null;
     }
 
+    public static SlotRef getSlotRefFromCast(Expr expr) {
+        if (expr instanceof CastExpr) {
+            CastExpr castExpr = (CastExpr) expr;
+            ArrayList<Expr> children = castExpr.getChildren();
+            for (Expr child : children) {
+                SlotRef slotRef = null;
+                if (child instanceof SlotRef) {
+                    slotRef = (SlotRef) child;
+                } else if (child instanceof CastExpr) {
+                    slotRef = getSlotRefFromCast(child);
+                } else if (child instanceof FunctionCallExpr) {
+                    slotRef = getSlotRefFromFunctionCall(child);
+                }
+                if (slotRef != null) {
+                    return slotRef;
+                }
+            }
+        }
+        return null;
+    }
+
     public static Type replaceNullType2Boolean(Type type) {
         if (type.isNull()) {
             return Type.BOOLEAN;
@@ -822,6 +873,19 @@ public class AnalyzerUtils {
             return new StructType(newFields);
         }
         return type;
+    }
+
+    public static void checkNondeterministicFunction(ParseNode node) {
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
+                if (expr.isNondeterministicBuiltinFnName()) {
+                    throw new SemanticException("Materialized view query statement select item " +
+                            expr.toSql() + " not supported nondeterministic function", expr.getPos());
+                }
+                return null;
+            }
+        }.visit(node);
     }
 
 }

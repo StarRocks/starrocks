@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
@@ -27,10 +26,8 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -50,7 +47,7 @@ public class ShowCreateViewStmtTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
-        FeConstants.default_scheduler_interval_millisecond = 100;
+        Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         UtFrameUtils.createMinStarRocksCluster();
@@ -91,8 +88,7 @@ public class ShowCreateViewStmtTest {
                         "DISTRIBUTED BY HASH(`c1`, `c2`) BUCKETS 2\n" +
                         "PROPERTIES(\n" +
                         "\"replication_num\" = \"1\",\n" +
-                        "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"default\"\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");");
     }
 
@@ -170,10 +166,10 @@ public class ShowCreateViewStmtTest {
                 "  |  output exprs:\n" +
                 "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
                 "  |  child exprs:\n" +
-                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
-                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
+                "  |      [32: c1, VARCHAR | [33: cast, VARCHAR | [34: cast, VARCHAR | [35: cast, VARCHAR\n" +
+                "  |      [37: c1, VARCHAR | [38: c2, VARCHAR | [42: cast, VARCHAR | [40: c4, VARCHAR\n" +
                 "  |  pass-through-operands: all";
-        Assert.assertTrue(plan.contains(snippet));
+        Assert.assertTrue(plan, plan.contains(snippet));
 
         String dropViewSql = "drop view if exists v2";
         DropTableStmt dropViewStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropViewSql, ctx);

@@ -24,7 +24,7 @@ TEST(TestDeltaColumnGroup, testLoad) {
     std::string pb_str = dcg.save();
     DeltaColumnGroup new_dcg;
     ASSERT_TRUE(new_dcg.load(100, pb_str.data(), pb_str.length()).ok());
-    ASSERT_TRUE(dcg.column_file() == new_dcg.column_file());
+    ASSERT_TRUE(dcg.column_file("111") == new_dcg.column_file("111"));
     std::vector<uint32_t> v1 = dcg.column_ids();
     std::vector<uint32_t> v2 = new_dcg.column_ids();
     ASSERT_TRUE(v1.size() == v2.size());

@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
@@ -32,6 +33,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
+import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.iceberg.BaseMetastoreCatalog;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.CatalogProperties;
@@ -42,6 +44,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
+import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -51,11 +54,11 @@ import org.apache.iceberg.hadoop.Configurable;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.relocated.com.google.common.base.MoreObjects;
+import org.apache.iceberg.util.LocationUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -71,6 +74,8 @@ import static org.apache.iceberg.Transactions.createTableTransaction;
 public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergCatalog, Configurable<Configuration> {
     public static final String LOCATION_PROPERTY = "location";
     private static final Logger LOG = LogManager.getLogger(IcebergHiveCatalog.class);
+    private static final String DEFAULT_METADATA_FOLDER_NAME = "metadata";
+    private static final String DEFAULT_DATA_FOLDER_NAME = "data";
 
     private String name;
     private Configuration conf;
@@ -139,6 +144,9 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
             this.conf.set(HiveConf.ConfVars.METASTOREWAREHOUSE.varname,
                     properties.get(CatalogProperties.WAREHOUSE_LOCATION));
         }
+
+        this.conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
+                String.valueOf(Config.hive_meta_store_timeout_s));
 
         String fileIOImpl = properties.get(CatalogProperties.FILE_IO_IMPL);
         this.fileIO =
@@ -240,8 +248,9 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
             String value = entry.getValue();
             if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
                 try {
+                    // TODO: check location that does not contains other objects
                     URI uri = new Path(value).toUri();
-                    FileSystem fileSystem = FileSystem.get(uri, new Configuration());
+                    FileSystem fileSystem = FileSystem.get(uri, conf);
                     fileSystem.exists(new Path(value));
                 } catch (Exception e) {
                     LOG.error("Invalid location URI: {}", value, e);
@@ -253,7 +262,8 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
             }
         }
 
-        org.apache.hadoop.hive.metastore.api.Database hiveDb = HiveMetastoreApiConverter.toMetastoreApiDatabase(database);
+        org.apache.hadoop.hive.metastore.api.Database hiveDb =
+                HiveMetastoreApiConverter.toMetastoreApiDatabase(database);
         createHiveDatabase(hiveDb);
     }
 
@@ -281,7 +291,8 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
         String database = namespace.level(0);
         try {
             List<String> tableNames = clients.run(client -> client.getAllTables(database));
-            return tableNames.stream().map(tblName -> TableIdentifier.of(namespace, tblName)).collect(Collectors.toList());
+            return tableNames.stream().map(tblName -> TableIdentifier.of(namespace, tblName))
+                    .collect(Collectors.toList());
         } catch (TException | InterruptedException e) {
             throw new RuntimeException(e);
         }
@@ -331,9 +342,8 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
 
             if (purge && lastMetadata != null) {
                 CatalogUtil.dropTableData(ops.io(), lastMetadata);
+                deleteTableFolder(lastMetadata);
             }
-
-            deleteTableDirectory(ops.current().location());
             LOG.info("Dropped table: {}", identifier);
             return true;
         } catch (NoSuchTableException | NoSuchObjectException e) {
@@ -347,16 +357,34 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
         }
     }
 
-    private void deleteTableDirectory(String tableLocation) {
-        Path path = new Path(tableLocation);
-        URI uri = path.toUri();
-        try {
-            FileSystem fileSystem = FileSystem.get(uri, new Configuration());
-            fileSystem.delete(path, true);
-        } catch (IOException e) {
-            LOG.error("Failed to delete directory {}", tableLocation, e);
-            throw new StarRocksConnectorException("Failed to delete directory %s. msg: %s", tableLocation, e.getMessage());
+    @Override
+    public void deleteUncommittedDataFiles(List<String> fileLocations) {
+        for (String location : fileLocations) {
+            fileIO.deleteFile(location);
         }
+    }
+
+    private void deleteTableFolder(TableMetadata metadata) {
+        String location = metadata.location();
+
+        // delete metadata folder
+        String metadataLocation = metadata.properties().get(TableProperties.WRITE_METADATA_LOCATION);
+        if (metadataLocation == null) {
+            metadataLocation = location + "/" + DEFAULT_METADATA_FOLDER_NAME;
+        }
+        metadataLocation = LocationUtil.stripTrailingSlash(metadataLocation);
+        fileIO.deleteFile(metadataLocation);
+
+        // delete data folder
+        String dataLocation = metadata.properties().get(TableProperties.WRITE_DATA_LOCATION);
+        if (dataLocation == null) {
+            dataLocation = location + "/" + DEFAULT_DATA_FOLDER_NAME;
+        }
+        metadataLocation = LocationUtil.stripTrailingSlash(metadataLocation);
+        fileIO.deleteFile(dataLocation);
+
+        // delete table root folder
+        fileIO.deleteFile(location);
     }
 
     @Override

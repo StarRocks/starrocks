@@ -118,7 +118,7 @@ public:
 
     Status serialize(std::string* meta_binary);
     Status deserialize(std::string_view data);
-    void init_from_pb(TabletMetaPB* ptablet_meta_pb);
+    void init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaPB* ptablet_schema_pb = nullptr);
 
     void to_meta_pb(TabletMetaPB* tablet_meta_pb);
     void to_json(std::string* json_string, json2pb::Pb2JsonOptions& options);
@@ -196,29 +196,14 @@ public:
 
     std::shared_ptr<BinlogConfig> get_binlog_config() { return _binlog_config; }
 
-    void set_binlog_config(const TBinlogConfig& binlog_config) {
-        if (_binlog_config == nullptr) {
-            _binlog_config = std::make_shared<BinlogConfig>();
-        } else if (_binlog_config->version > binlog_config.version) {
-            LOG(WARNING) << "skip to update binlog config of tablet=, " << _tablet_id << " current version is "
-                         << _binlog_config->version << ", update version is " << binlog_config.version;
-            return;
-        }
-        _binlog_config->update(binlog_config);
-        LOG(INFO) << "Set binlog config of tablet=" << _tablet_id << " to " << _binlog_config->to_string();
+    void set_binlog_config(const BinlogConfig& new_config) {
+        _binlog_config = std::make_shared<BinlogConfig>();
+        _binlog_config->update(new_config);
     }
 
-    void set_binlog_config(const BinlogConfig& binlog_config) {
-        if (_binlog_config == nullptr) {
-            _binlog_config = std::make_shared<BinlogConfig>();
-        } else if (_binlog_config->version > binlog_config.version) {
-            LOG(WARNING) << "skip to update binlog config of tablet=, " << _tablet_id << " current version is "
-                         << _binlog_config->version << ", update version is " << binlog_config.version;
-            return;
-        }
-        _binlog_config->update(binlog_config);
-        LOG(INFO) << "Set binlog config of tablet=" << _tablet_id << " to " << _binlog_config->to_string();
-    }
+    BinlogLsn get_binlog_min_lsn() { return _binlog_min_lsn; }
+
+    void set_binlog_min_lsn(BinlogLsn& binlog_lsn) { _binlog_min_lsn = binlog_lsn; }
 
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }
@@ -264,6 +249,17 @@ private:
     TabletUpdates* _updates = nullptr;
 
     std::shared_ptr<BinlogConfig> _binlog_config;
+
+    // The minimum lsn of binlog that is valid. It will be updated when deleting expired
+    // or overcapacity binlog in Tablet#delete_expired_inc_rowsets, and used to skip those
+    // useless binlog when recovery in Tablet#finish_load_rowsets. We can not only depend
+    // on _inc_rs_metas for recovery because _inc_rs_metas may contain rowsets that doest
+    // not have binlog in the following cases
+    // 1. _inc_rs_metas already contains some rowsets before enable binlog, so there is no
+    //    binlog for these data
+    // 2. config::inc_rowset_expired_sec is larger than the expired time of binlog, so
+    //    a rowset will not be removed from _inc_rs_metas if only the binlog is expired
+    BinlogLsn _binlog_min_lsn;
 
     std::shared_mutex _meta_lock;
 };

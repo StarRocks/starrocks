@@ -43,9 +43,11 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.ThriftServer;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.Counter;
@@ -58,6 +60,7 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
@@ -89,6 +92,7 @@ import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TRuntimeFilterDestination;
 import com.starrocks.thrift.TRuntimeFilterProberParams;
+import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTabletFailInfo;
@@ -170,6 +174,9 @@ public class Coordinator {
     private List<String> exportFiles;
     private final List<TTabletCommitInfo> commitInfos = Lists.newArrayList();
     private final List<TTabletFailInfo> failInfos = Lists.newArrayList();
+
+    // for external table sink
+    private final List<TSinkCommitInfo> sinkCommitInfos = Lists.newArrayList();
     // Input parameter
     private long jobId = -1; // job which this task belongs to
     private TUniqueId queryId;
@@ -177,6 +184,44 @@ public class Coordinator {
     private final boolean needReport;
 
     private final CoordinatorPreprocessor coordinatorPreprocessor;
+
+    private boolean thriftServerHighLoad;
+
+    // only used for sync stream load profile
+    // so only init relative data structure
+    public Coordinator(StreamLoadPlanner planner, TNetworkAddress address) {
+        TExecPlanFragmentParams params = planner.getExecPlanFragmentParams();
+        queryId = params.getParams().getFragment_instance_id();
+        LOG.info("Execution Profile " + DebugUtil.printId(queryId));
+        queryProfile = new RuntimeProfile("Execution Profile " + DebugUtil.printId(queryId));
+
+        fragmentProfiles = new ArrayList<>();
+        fragmentProfiles.add(new RuntimeProfile("Fragment 0"));
+        queryProfile.addChild(fragmentProfiles.get(0));
+        profileDoneSignal = new MarkedCountDownLatch<>(1);
+        profileDoneSignal.addMark(queryId, -1L /* value is meaningless */);
+
+        BackendExecState backendExecState = new BackendExecState(queryId, address);
+        backendExecStates.put(0, backendExecState);
+
+        attachInstanceProfileToFragmentProfile();
+
+        deltaUrls = Lists.newArrayList();
+        loadCounters = Maps.newHashMap();
+        this.connectContext = planner.getConnectContext();
+
+        // for complie
+        descTable = null;
+        this.isBlockQuery = true;
+        this.jobId = -1;
+        this.scanNodes = null;
+        this.queryOptions = null;
+        this.queryGlobals = null;
+        this.needReport = true;
+        this.coordinatorPreprocessor = null;
+        this.fragments = null;
+    }
+
 
     // Used for new planner
     public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
@@ -415,6 +460,10 @@ public class Coordinator {
         return failInfos;
     }
 
+    public List<TSinkCommitInfo> getSinkCommitInfos() {
+        return sinkCommitInfos;
+    }
+
     public boolean isUsingBackend(Long backendID) {
         return coordinatorPreprocessor.getUsedBackendIDs().contains(backendID);
     }
@@ -588,8 +637,6 @@ public class Coordinator {
             int backendId = 0;
             int profileFragmentId = 0;
 
-            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
-
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
             for (PlanFragment fragment : fragments) {
                 CoordinatorPreprocessor.FragmentExecParams params =
@@ -630,7 +677,8 @@ public class Coordinator {
 
                 // if pipeline is enable and current fragment contain olap table sink, in fe we will 
                 // calculate the number of all tablet sinks in advance and assign them to each fragment instance
-                boolean enablePipelineTableSinkDop = enablePipelineEngine && fragment.hasOlapTableSink();
+                boolean enablePipelineTableSinkDop = enablePipelineEngine &&
+                        (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
                 boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
                 int tabletSinkTotalDop = 0;
                 int accTabletSinkDop = 0;
@@ -867,8 +915,6 @@ public class Coordinator {
             int backendNum = 0;
             int profileFragmentId = 0;
 
-            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
-
             this.descTable.setIs_cached(false);
             TDescriptorTable emptyDescTable = new TDescriptorTable();
             emptyDescTable.setIs_cached(true);
@@ -910,9 +956,10 @@ public class Coordinator {
                                             Collectors.mapping(Function.identity(), Collectors.toList())));
                     // if pipeline is enable and current fragment contain olap table sink, in fe we will 
                     // calculate the number of all tablet sinks in advance and assign them to each fragment instance
-                    boolean enablePipelineTableSinkDop = enablePipelineEngine && fragment.hasOlapTableSink();
+                    boolean enablePipelineTableSinkDop = enablePipelineEngine &&
+                            (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
                     boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
-                    int tabletSinkTotalDop = 0;
+                    int tableSinkTotalDop = 0;
                     int accTabletSinkDop = 0;
                     if (enablePipelineTableSinkDop) {
                         for (Map.Entry<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> hostAndRequests :
@@ -920,17 +967,17 @@ public class Coordinator {
                             List<CoordinatorPreprocessor.FInstanceExecParam> requests = hostAndRequests.getValue();
                             for (CoordinatorPreprocessor.FInstanceExecParam request : requests) {
                                 if (!forceSetTableSinkDop) {
-                                    tabletSinkTotalDop += request.getPipelineDop();
+                                    tableSinkTotalDop += request.getPipelineDop();
                                 } else {
-                                    tabletSinkTotalDop += fragment.getPipelineDop();
+                                    tableSinkTotalDop += fragment.getPipelineDop();
                                 }
                             }
                         }
                     }
 
-                    if (tabletSinkTotalDop < 0) {
+                    if (tableSinkTotalDop < 0) {
                         throw new UserException(
-                                "tabletSinkTotalDop = " + tabletSinkTotalDop + " should be >= 0");
+                                "tableSinkTotalDop = " + tableSinkTotalDop + " should be >= 0");
                     }
 
                     for (Map.Entry<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> hostAndRequests :
@@ -966,7 +1013,7 @@ public class Coordinator {
                                 .collect(Collectors.toSet());
                         TExecBatchPlanFragmentsParams tRequest =
                                 params.toThriftInBatch(curInstanceIds, host, curDescTable, enablePipelineEngine,
-                                        accTabletSinkDop, tabletSinkTotalDop);
+                                        accTabletSinkDop, tableSinkTotalDop);
                         if (enablePipelineTableSinkDop) {
                             for (CoordinatorPreprocessor.FInstanceExecParam request : requests) {
                                 if (!forceSetTableSinkDop) {
@@ -1483,6 +1530,9 @@ public class Coordinator {
             if (params.isSetRejected_record_path()) {
                 rejectedRecordPaths.add(execState.address.hostname + ":" + params.getRejected_record_path());
             }
+            if (params.isSetSink_commit_infos()) {
+                sinkCommitInfos.addAll(params.sink_commit_infos);
+            }
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
         }
 
@@ -1548,14 +1598,14 @@ public class Coordinator {
      * the caller should check queryStatus for result.
      *
      * We divide the entire waiting process into multiple rounds,
-     * with a maximum of 30 seconds per round. And after each round of waiting,
+     * with a maximum of 5 seconds per round. And after each round of waiting,
      * check the status of the BE. If the BE status is abnormal, the wait is ended
      * and the result is returned. Otherwise, continue to the next round of waiting.
      * This method mainly avoids the problem that the Coordinator waits for a long time
      * after some BE can no long return the result due to some exception, such as BE is down.
      */
     public boolean join(int timeoutS) {
-        final long fixedMaxWaitTime = 30;
+        final long fixedMaxWaitTime = 5;
 
         long leftTimeoutS = timeoutS;
         while (leftTimeoutS > 0) {
@@ -1572,6 +1622,11 @@ public class Coordinator {
 
             if (!checkBackendState()) {
                 return true;
+            }
+
+            if (ThriftServer.getExecutor() != null
+                    && ThriftServer.getExecutor().getPoolSize() >= Config.thrift_server_max_worker_threads) {
+                thriftServerHighLoad = true;
             }
 
             leftTimeoutS -= waitTime;
@@ -1782,6 +1837,13 @@ public class Coordinator {
         return profileDoneSignal.getCount() == 0;
     }
 
+    public boolean isEnableLoadProfile() {
+        if (connectContext != null && connectContext.getSessionVariable().isEnableLoadProfile()) {
+            return true;
+        }
+        return false;
+    }
+
     // consistent with EXPLAIN's fragment index
     public List<QueryStatisticsItem.FragmentInstanceInfo> getFragmentInstanceInfos() {
         final List<QueryStatisticsItem.FragmentInstanceInfo> result =
@@ -1807,6 +1869,10 @@ public class Coordinator {
         }
     }
 
+    public boolean isThriftServerHighLoad() {
+        return this.thriftServerHighLoad;
+    }
+
     // record backend execute state
     // TODO(zhaochun): add profile information and others
     public class BackendExecState {
@@ -1821,6 +1887,14 @@ public class Coordinator {
         TNetworkAddress address;
         ComputeNode backend;
         long lastMissingHeartbeatTime = -1;
+
+
+        // fake backendExecState, only user for stream load profile
+        public BackendExecState(TUniqueId fragmentInstanceId, TNetworkAddress address) {
+            String name = "Instance " + DebugUtil.printId(fragmentInstanceId);
+            this.profile = new RuntimeProfile(name);
+            this.profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
+        }
 
         public BackendExecState(PlanFragmentId fragmentId, TNetworkAddress host, int profileFragmentId,
                                 TExecPlanFragmentParams rpcParams,

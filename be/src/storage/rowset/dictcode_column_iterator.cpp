@@ -26,12 +26,12 @@ Status GlobalDictCodeColumnIterator::decode_dict_codes(const Column& codes, Colu
     const auto& code_data = down_cast<const Int32Column*>(ColumnHelper::get_data_column(&codes))->get_data();
     const size_t size = code_data.size();
 
-    LowCardDictColumn::Container* container =
-            &down_cast<LowCardDictColumn*>(ColumnHelper::get_data_column(words))->get_data();
+    auto* low_card = down_cast<LowCardDictColumn*>(ColumnHelper::get_data_column(words));
+    low_card->resize_uninitialized(size);
+    LowCardDictColumn::Container* container = &down_cast<LowCardDictColumn*>(low_card)->get_data();
     bool output_nullable = words->is_nullable();
 
     auto& res_data = *container;
-    res_data.resize(size);
 #ifndef NDEBUG
     for (size_t i = 0; i < size; ++i) {
         DCHECK(code_data[i] <= DICT_DECODE_MAX_SIZE);

@@ -215,6 +215,8 @@ private:
 
     void _prepare_adapter_info();
 
+    bool _use_segment_zone_map_filter(const SegmentReadOptions& read_options);
+
     friend class SegmentIterator;
 
     std::shared_ptr<FileSystem> _fs;

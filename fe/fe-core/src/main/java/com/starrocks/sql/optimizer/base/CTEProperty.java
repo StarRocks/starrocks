@@ -31,7 +31,7 @@ public class CTEProperty implements PhysicalProperty {
 
     public static final CTEProperty EMPTY = new CTEProperty(ImmutableSet.of());
 
-    private CTEProperty(Set<Integer> cteIds) {
+    public CTEProperty(Set<Integer> cteIds) {
         this.cteIds = cteIds;
     }
 

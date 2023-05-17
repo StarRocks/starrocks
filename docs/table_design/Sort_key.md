@@ -6,15 +6,15 @@ Additionally, to reduce memory consumption, StarRocks supports creating a prefix
 
 ## Principles
 
-In the Duplicate Key model, sort key columns are defined by using the `DUPLICATE KEY` keyword.
+In the Duplicate Key table, sort key columns are defined by using the `DUPLICATE KEY` keyword.
 
-In the Aggregate Key model, sort key columns are defined by using the `AGGREGATE KEY` keyword.
+In the Aggregate table, sort key columns are defined by using the `AGGREGATE KEY` keyword.
 
-In the Unique Key model, sort key columns are defined by using the `UNIQUE KEY` keyword.
+In the Unique Key table, sort key columns are defined by using the `UNIQUE KEY` keyword.
 
-In versions earlier than v3.0, the primary key and sort key are decoupled in the Primary Key model. The sort key columns are defined by using the `ORDER BY` keyword. The primary key columns are defined by using the `PRIMARY KEY` keyword.
+In versions earlier than v3.0, the primary key and sort key are decoupled in the Primary Key table. The sort key columns are defined by using the `ORDER BY` keyword. The primary key columns are defined by using the `PRIMARY KEY` keyword.
 
-When you define sort key columns for a Duplicate Key, Aggregate Key, or Unique Key table, take note of the following points:
+When you define sort key columns for a Duplicate Key table, an Aggregate table, or a Unique Key table, take note of the following points:
 
 - Sort key columns must be continuously defined columns, of which the first defined column must be the beginning sort key column.
 
@@ -33,7 +33,7 @@ The following examples show allowed sort key columns and unallowed sort key colu
   - `city_code` and `user_id`
   - `site_id`, `city_code`, and `pv`
 
-The following sections provide examples of how to define sort key columns when you create tables that use various data models. These examples are suitable for StarRocks clusters that have at least three BEs.
+The following sections provide examples of how to define sort key columns when you create tables of different types. These examples are suitable for StarRocks clusters that have at least three BEs.
 
 ### Duplicate Key
 
@@ -73,7 +73,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 >**NOTICE**
 >
-> For an Aggregate Key table, columns for which `agg_type` is not specified are key columns, and those for which `agg_type` is specified are value columns. See [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md). In the preceding example, only `site_id` and `city_code` are specified as sort key columns, and therefore `agg_type` must be specified for `user_id` and `pv`.
+> For an Aggregate table, columns for which `agg_type` is not specified are key columns, and those for which `agg_type` is specified are value columns. See [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md). In the preceding example, only `site_id` and `city_code` are specified as sort key columns, and therefore `agg_type` must be specified for `user_id` and `pv`.
 
 ### Unique Key
 

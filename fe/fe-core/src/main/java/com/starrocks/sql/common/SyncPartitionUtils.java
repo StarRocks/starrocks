@@ -39,9 +39,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.connector.PartitionUtil;
-import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
 import org.apache.commons.lang3.StringUtils;
@@ -54,11 +52,16 @@ import java.time.LocalTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
+
+import static com.starrocks.sql.common.TimeUnitUtils.DAY;
+import static com.starrocks.sql.common.TimeUnitUtils.HOUR;
+import static com.starrocks.sql.common.TimeUnitUtils.MINUTE;
+import static com.starrocks.sql.common.TimeUnitUtils.MONTH;
+import static com.starrocks.sql.common.TimeUnitUtils.QUARTER;
+import static com.starrocks.sql.common.TimeUnitUtils.YEAR;
 
 /**
  * Process lower bound and upper bound for Expression Partition,
@@ -66,13 +69,6 @@ import java.util.stream.Collectors;
  */
 public class SyncPartitionUtils {
     private static final Logger LOG = LogManager.getLogger(SyncPartitionUtils.class);
-
-    public static final String MINUTE = "minute";
-    public static final String HOUR = "hour";
-    public static final String DAY = "day";
-    public static final String MONTH = "month";
-    public static final String QUARTER = "quarter";
-    public static final String YEAR = "year";
 
     private SyncPartitionUtils() throws IllegalAccessException {
         throw new IllegalAccessException("Utility class");
@@ -344,27 +340,9 @@ public class SyncPartitionUtils {
                                                              Map<String, Range<PartitionKey>> dstRangeMap) {
 
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
-
-        LinkedHashMap<String, Range<PartitionKey>> srcRangeLinkMap = srcRangeMap.entrySet().stream()
-                .sorted(Map.Entry.comparingByValue(RangeUtils.RANGE_COMPARATOR))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
-        LinkedHashMap<String, Range<PartitionKey>> dstRangeLinkMap = dstRangeMap.entrySet().stream()
-                .sorted(Map.Entry.comparingByValue(RangeUtils.RANGE_COMPARATOR))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
-
-        for (Map.Entry<String, Range<PartitionKey>> srcEntry : srcRangeLinkMap.entrySet()) {
-            boolean found = false;
-            for (Map.Entry<String, Range<PartitionKey>> dstEntry : dstRangeLinkMap.entrySet()) {
-                Range<PartitionKey> dstRange = dstEntry.getValue();
-                int lowerCmp = srcEntry.getValue().lowerEndpoint().compareTo(dstRange.lowerEndpoint());
-                int upperCmp = srcEntry.getValue().upperEndpoint().compareTo(dstRange.upperEndpoint());
-                // both range and name should be the same
-                if (lowerCmp == 0 && upperCmp == 0 && srcEntry.getKey().equals(dstEntry.getKey())) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
+        for (Map.Entry<String, Range<PartitionKey>> srcEntry : srcRangeMap.entrySet()) {
+            if (!dstRangeMap.containsKey(srcEntry.getKey()) ||
+                    !RangeUtils.isRangeEqual(srcEntry.getValue(), dstRangeMap.get(srcEntry.getKey()))) {
                 result.put(srcEntry.getKey(), srcEntry.getValue());
             }
         }
@@ -373,51 +351,41 @@ public class SyncPartitionUtils {
 
     public static Set<String> getPartitionNamesByRangeWithPartitionLimit(MaterializedView materializedView,
                                                                          String start, String end,
-                                                                         Constants.TaskType type)
+                                                                         int partitionTTLNumber,
+                                                                         boolean isAutoRefresh)
             throws AnalysisException {
         int autoRefreshPartitionsLimit = materializedView.getTableProperty().getAutoRefreshPartitionsLimit();
-        boolean noPartitionRange = StringUtils.isEmpty(start) && StringUtils.isEmpty(end);
-        boolean isAutoRefresh = (type == Constants.TaskType.PERIODICAL || type == Constants.TaskType.EVENT_TRIGGERED);
+        boolean hasPartitionRange = StringUtils.isNoneEmpty(start) || StringUtils.isNoneEmpty(end);
 
-        if (noPartitionRange && autoRefreshPartitionsLimit == TableProperty.INVALID) {
-            return materializedView.getPartitionNames();
-        }
-
-        // There is no need to check autoRefreshPartitionsLimit if it is not auto refresh
-        if (noPartitionRange && !isAutoRefresh) {
-            return materializedView.getPartitionNames();
-        }
-
-        if (noPartitionRange && isAutoRefresh) {
-            Map<String, Range<PartitionKey>> rangePartitionMap = materializedView.getRangePartitionMap();
-            List<Range<PartitionKey>> sortedRange = rangePartitionMap.values().stream()
-                    .sorted(RangeUtils.RANGE_COMPARATOR).collect(Collectors.toList());
-            int partitionNum = sortedRange.size();
-
-            if (autoRefreshPartitionsLimit >= partitionNum) {
-                return materializedView.getPartitionNames();
+        if (hasPartitionRange) {
+            Set<String> result = Sets.newHashSet();
+            Column partitionColumn =
+                    ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
+            Range<PartitionKey> rangeToInclude = createRange(start, end, partitionColumn);
+            Map<String, Range<PartitionKey>> rangeMap = materializedView.getValidPartitionMap(partitionTTLNumber);
+            for (Map.Entry<String, Range<PartitionKey>> entry : rangeMap.entrySet()) {
+                Range<PartitionKey> rangeToCheck = entry.getValue();
+                int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
+                int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
+                if (!(lowerCmp >= 0 || upperCmp <= 0)) {
+                    result.add(entry.getKey());
+                }
             }
-            LiteralExpr startExpr = sortedRange.get(partitionNum - autoRefreshPartitionsLimit).lowerEndpoint().
-                    getKeys().get(0);
-            LiteralExpr endExpr = sortedRange.get(partitionNum - 1).upperEndpoint().getKeys().get(0);
-            start = AnalyzerUtils.parseLiteralExprToDateString(startExpr, 0);
-            end = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 0);
+            return result;
         }
 
-        Set<String> result = Sets.newHashSet();
-        Column partitionColumn =
-                ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
-        Range<PartitionKey> rangeToInclude = createRange(start, end, partitionColumn);
-        Map<String, Range<PartitionKey>> rangeMap = materializedView.getRangePartitionMap();
-        for (Map.Entry<String, Range<PartitionKey>> entry : rangeMap.entrySet()) {
-            Range<PartitionKey> rangeToCheck = entry.getValue();
-            int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
-            int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
-            if (!(lowerCmp >= 0 || upperCmp <= 0)) {
-                result.add(entry.getKey());
-            }
+        int lastPartitionNum;
+        if (partitionTTLNumber > 0 && isAutoRefresh && autoRefreshPartitionsLimit > 0) {
+            lastPartitionNum = Math.min(partitionTTLNumber, autoRefreshPartitionsLimit);;
+        } else if (isAutoRefresh && autoRefreshPartitionsLimit > 0) {
+            lastPartitionNum = autoRefreshPartitionsLimit;
+        } else if (partitionTTLNumber > 0)  {
+            lastPartitionNum = partitionTTLNumber;
+        } else {
+            lastPartitionNum = TableProperty.INVALID;
         }
-        return result;
+
+        return materializedView.getValidPartitionMap(lastPartitionNum).keySet();
     }
 
     public static Range<PartitionKey> createRange(String lowerBound, String upperBound, Column partitionColumn)

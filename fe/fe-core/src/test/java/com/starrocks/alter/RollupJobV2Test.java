@@ -63,7 +63,6 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.task.AgentTaskQueue;
-import com.starrocks.thrift.TStorageFormat;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -264,7 +263,6 @@ public class RollupJobV2Test extends DDLTestBase {
                 KeysType.AGG_KEYS, keysCount,
                 new OriginStatement("create materialized view rollup as select bitmap_union(to_bitmap(c1)) from test",
                         0));
-        rollupJobV2.setStorageFormat(TStorageFormat.V2);
 
         // write rollup job
         rollupJobV2.write(out);
@@ -278,7 +276,6 @@ public class RollupJobV2Test extends DDLTestBase {
 
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         RollupJobV2 result = (RollupJobV2) AlterJobV2.read(in);
-        assertEquals(TStorageFormat.V2, Deencapsulation.getField(result, "storageFormat"));
         List<Column> resultColumns = Deencapsulation.getField(result, "rollupSchema");
         assertEquals(1, resultColumns.size());
         Column resultColumn1 = resultColumns.get(0);

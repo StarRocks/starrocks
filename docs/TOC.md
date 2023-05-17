@@ -8,14 +8,36 @@
   + [Architecture](./introduction/Architecture.md)
   + [Features](./introduction/Features.md)
 + Quick Start
-  + Deploy
-    + [Deploy StarRocks in Linux](./quick_start/Deploy.md)
-    + [Deploy StarRocks with Docker](./quick_start/deploy_with_docker.md)
+  + [Deploy StarRocks with Docker](./quick_start/deploy_with_docker.md)
   + [Create a table](./quick_start/Create_table.md)
   + [Load and query data](./quick_start/Import_and_query.md)
++ Deployment
+  + [Deployment overview](./deployment/deployment_overview.md)
+  + Prepare
+    + [Deployment prerequisites](./deployment/deployment_prerequisites.md)
+    + [Plan StarRocks cluster](./deployment/plan_cluster.md)
+    + [Check environment configurations](./deployment/environment_configurations.md)
+    + [Prepare deployment files](./deployment/prepare_deployment_files.md)
+  + Deploy
+    + Deploy classic StarRocks
+      + [Deploy StarRocks manually](./deployment/deploy_manually.md)
+      + Deploy on Kubernetes
+        + [Deploy StarRocks with Operator](./deployment/sr_operator.md)
+        + [Deploy StarRocks with Helm](./deployment/helm.md)
+      + [Deploy StarRocks on AWS](./deployment/starrocks_on_aws.md)
+    + [Deploy and use shared-data StarRocks](./deployment/deploy_shared_data.md)
+  + Manage
+    + [Post-deployment setup](./deployment/post_deployment_setup.md)
+    + [Upgrade StarRocks](./deployment/upgrade.md)
+    + [Downgrade StarRocks](./deployment/downgrade.md)
 + Table Design
   + [Understand StarRocks table design](./table_design/StarRocks_table_design.md)
-  + [Data models](./table_design/Data_model.md)
+  + Table types
+    + [Overview of table types](./table_design/table_types/table_types.md)
+    + [Duplicate Key table](./table_design/table_types/duplicate_key_table.md)
+    + [Aggregate table](./table_design/table_types/aggregate_table.md)
+    + [Unique Key table](./table_design/table_types/unique_key_table.md)
+    + [Primary Key table](./table_design/table_types/primary_key_table.md)
   + Data distribution
     + [Data distribution](./table_design/Data_distribution.md)
     + [Automatic partitioning](./table_design/automatic_partitioning.md)
@@ -50,7 +72,7 @@
     + [Delta Lake catalog](./data_source/catalog/deltalake_catalog.md)
     + [JDBC catalog](./data_source/catalog/jdbc_catalog.md)
     + [Query external data](./data_source/catalog/query_external_data.md)
-  + [External tables](./data_source/External_table.md)
+  + [External table](./data_source/External_table.md)
   + [File external table](./data_source/file_external_table.md)
   + [Local Cache](./data_source/Block_cache.md)
 + Query Acceleration
@@ -69,6 +91,8 @@
   + [Sorted streaming aggregate](./using_starrocks/sorted_aggregate.md)
 + Integration
   + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
+  + [Authenticate to Microsoft Azure Storage](./integrations/authenticate_to_azure_storage.md)
+  + [Authenticate to Google Cloud Storage](./integrations/authenticate_to_gcs.md)
   + BI tools
     + [Hex](./integrations/BI_integrations/Hex.md)
     + [Querybook](./integrations/BI_integrations/Querybook.md)
@@ -79,19 +103,12 @@
     + [DBeaver](./integrations/IDE_integrations/DBeaver.md)
   + [Other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
-  + Deployment
-    + [Deploy a shared-data StarRocks cluster](./administration/deploy_shared_data.md)
-    + [Deploy StarRocks with StarGo](./administration/stargo.md)
-    + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/sr_operator.md)
-    + [Deploy CN](./administration/deploy_cn.md)
-    + [Deploy FE cluster with high availability](./administration/Deployment.md)
   + Management
     + [Scale in and out](./administration/Scale_up_down.md)
     + [Backup and restore](./administration/Backup_and_restore.md)
     + [Configuration](./administration/Configuration.md)
     + [Monitor and alert](./administration/Monitor_and_Alert.md)
     + [Manage audit logs within StarRocks via Audit Loader](./administration/audit_loader.md)
-    + [Manage a cluster](./administration/Cluster_administration.md)
     + [Enable FQDN access](./administration/enable_fqdn.md)
     + [Configure a time zone](./administration/timezone.md)
     + [Information Schema](./administration/information_schema.md)
@@ -281,15 +298,17 @@
         + [CHAR](./sql-reference/sql-statements/data-types/CHAR.md)
         + [VARCHAR](./sql-reference/sql-statements/data-types/VARCHAR.md)
         + [STRING](./sql-reference/sql-statements/data-types/STRING.md)
+        + [BINARY](./sql-reference/sql-statements/data-types/BINARY.md)
       + Date
         + [DATE](./sql-reference/sql-statements/data-types/DATE.md)
         + [DATETIME](./sql-reference/sql-statements/data-types/DATETIME.md)
       + Others
         + [ARRAY](./sql-reference/sql-statements/data-types/Array.md)
-        + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
-        + [BINARY](./sql-reference/sql-statements/data-types/BINARY.md)
+        + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
+        + [MAP](./sql-reference/sql-statements/data-types/Map.md)
+
     + [Keywords](./sql-reference/sql-statements/keywords.md)
     + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
   + Function Reference
@@ -325,6 +344,8 @@
       + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
     + Array Functions
+      + [cardinality](./sql-reference/sql-functions/array-functions/cardinality.md)
+      + [element_at](./sql-reference/sql-functions/array-functions/element_at.md)
       + [array_agg](./sql-reference/sql-functions/array-functions/array_agg.md)
       + [array_append](./sql-reference/sql-functions/array-functions/array_append.md)
       + [array_avg](./sql-reference/sql-functions/array-functions/array_avg.md)
@@ -384,6 +405,41 @@
       + [intersect_count](./sql-reference/sql-functions/bitmap-functions/intersect_count.md)
       + [sub_bitmap](./sql-reference/sql-functions/bitmap-functions/sub_bitmap.md)
       + [to_bitmap](./sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
+    + JSON Functions
+      + [Overview of JSON functions and operators](./sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators.md)
+      + [JSON operators](./sql-reference/sql-functions/json-functions/json-operators.md)
+      + JSON constructor functions
+        + [json_array](./sql-reference/sql-functions/json-functions/json-constructor-functions/json_array.md)
+        + [json_object](./sql-reference/sql-functions/json-functions/json-constructor-functions/json_object.md)
+        + [parse_json](./sql-reference/sql-functions/json-functions/json-constructor-functions/parse_json.md)
+      + JSON query and processing functions
+        + [Arrow function](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/arrow-function.md)
+        + [cast](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/cast.md)
+        + [get_json_double](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_double.md)
+        + [get_json_int](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_int.md)
+        + [get_json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_string.md)
+        + [json_each](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
+        + [json_exists](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)
+        + [json_length](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_length.md)
+        + [json_keys](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_keys.md)
+        + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
+        + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
+    + Map Functions
+      + [cardinality](./sql-reference/sql-functions/map-functions/cardinality.md)
+      + [distinct_map_keys](./sql-reference/sql-functions/map-functions/distinct_map_keys.md)
+      + [element_at](./sql-reference/sql-functions/map-functions/element_at.md)
+      + [map_apply](./sql-reference/sql-functions/map-functions/map_apply.md)
+      + [map_concat](./sql-reference/sql-functions/map-functions/map_concat.md)
+      + [map_filter](./sql-reference/sql-functions/map-functions/map_filter.md)
+      + [map_from_arrays](./sql-reference/sql-functions/map-functions/map_from_arrays.md)
+      + [map_keys](./sql-reference/sql-functions/map-functions/map_keys.md)
+      + [map_size](./sql-reference/sql-functions/map-functions/map_size.md)
+      + [map_values](./sql-reference/sql-functions/map-functions/map_values.md)
+      + [transform_keys](./sql-reference/sql-functions/map-functions/transform_keys.md)
+      + [transform_values](./sql-reference/sql-functions/map-functions/transform_values.md)
+    + Binary Functions
+      + [to_binary](/sql-reference/sql-functions/binary-functions/to_binary.md)
+      + [from_binary](/sql-reference/sql-functions/binary-functions/from_binary.md)
     + Conditional Functions
       + [coalesce](./sql-reference/sql-functions/condition-functions/coalesce.md)
       + [if](./sql-reference/sql-functions/condition-functions/if.md)
@@ -461,6 +517,7 @@
       + [unix_timestamp](./sql-reference/sql-functions/date-time-functions/unix_timestamp.md)
       + [utc_timestamp](./sql-reference/sql-functions/date-time-functions/utc_timestamp.md)
       + [week](./sql-reference/sql-functions/date-time-functions/week.md)
+      + [week_iso](./sql-reference/sql-functions/date-time-functions/week_iso.md)
       + [weekofyear](./sql-reference/sql-functions/date-time-functions/weekofyear.md)
       + [weeks_add](./sql-reference/sql-functions/date-time-functions/weeks_add.md)
       + [weeks_diff](./sql-reference/sql-functions/date-time-functions/weeks_diff.md)
@@ -480,34 +537,6 @@
       + [st_polygon](./sql-reference/sql-functions/spatial-functions/st_polygon.md)
       + [st_x](./sql-reference/sql-functions/spatial-functions/st_x.md)
       + [st_y](./sql-reference/sql-functions/spatial-functions/st_y.md)
-    + JSON Functions
-      + [Overview of JSON functions and operators](./sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators.md)
-      + [JSON operators](./sql-reference/sql-functions/json-functions/json-operators.md)
-      + JSON constructor functions
-        + [json_array](./sql-reference/sql-functions/json-functions/json-constructor-functions/json_array.md)
-        + [json_object](./sql-reference/sql-functions/json-functions/json-constructor-functions/json_object.md)
-        + [parse_json](./sql-reference/sql-functions/json-functions/json-constructor-functions/parse_json.md)
-      + JSON query and processing functions
-        + [Arrow function](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/arrow-function.md)
-        + [cast](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/cast.md)
-        + [get_json_double](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_double.md)
-        + [get_json_int](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_int.md)
-        + [get_json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_string.md)
-        + [json_each](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
-        + [json_exists](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)
-        + [json_length](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_length.md)
-        + [json_keys](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_keys.md)
-        + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
-        + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
-    + Map Functions
-      + [map_apply](./sql-reference/sql-functions/map-functions/map_apply.md)
-      + [map_filter](./sql-reference/sql-functions/map-functions/map_filter.md)
-      + [map_from_arrays](./sql-reference/sql-functions/map-functions/map_from_arrays.md)
-      + [map_keys](./sql-reference/sql-functions/map-functions/map_keys.md)
-      + [map_size](./sql-reference/sql-functions/map-functions/map_size.md)
-      + [map_values](./sql-reference/sql-functions/map-functions/map_values.md)
-      + [transform_keys](./sql-reference/sql-functions/map-functions/transform_keys.md)
-      + [transform_values](./sql-reference/sql-functions/map-functions/transform_values.md)
     + Math Functions
       + [abs](./sql-reference/sql-functions/math-functions/abs.md)
       + [acos](./sql-reference/sql-functions/math-functions/acos.md)
@@ -588,6 +617,7 @@
       + [starts_with](./sql-reference/sql-functions/string-functions/starts_with.md)
       + [strleft](./sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](./sql-reference/sql-functions/string-functions/strright.md)
+      + [str_to_map](./sql-reference/sql-functions/string-functions/str_to_map.md)
       + [substring](./sql-reference/sql-functions/string-functions/substring.md)
       + [trim](./sql-reference/sql-functions/string-functions/trim.md)
       + [ucase](./sql-reference/sql-functions/string-functions/ucase.md)
@@ -607,9 +637,6 @@
       + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
     + Struct Functions
       + [row](/sql-reference/sql-functions/struct-functions/row.md)
-    + Binary Functions
-      + [to_binary](/sql-reference/sql-functions/binary-functions/to_binary.md)
-      + [from_binary](/sql-reference/sql-functions/binary-functions/from_binary.md)
     + Utility Functions
       + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
@@ -635,11 +662,12 @@
       + [Routine Load](./faq/loading/Routine_load_faq.md)
       + [Broker Load](./faq/loading/Broker_load_faq.md)
       + [Insert Into](./faq/loading/Insert_into_faq.md)
+      + [Synchronize data from MySQL in real time](/faq/loading/synchronize_mysql_into_sr.md)
       + [Flink connector](./faq/loading/Flink_connector_faq.md)
       + [DataX](./faq/loading/DataX_faq.md)
     + [Data Unloading](./faq/Exporting_faq.md)
   + [SQL](./faq/Sql_faq.md)
-  + [Query Dump](./faq/Dump_query.md)
+  + [query_dump](./faq/Dump_query.md)
   + [Other FAQs](./faq/Others.md)
 + Benchmark
   + [SSB Benchmark](./benchmarking/SSB_Benchmarking.md)

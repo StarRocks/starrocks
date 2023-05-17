@@ -16,7 +16,7 @@ PERCENTILE_APPROX_RAW(x, y);
 
 - `x`: It can be a column or a set of values. It must evaluate to PERCENTILE.
 
-- `y`: the percentile. The supported data type is DOUBLE. Value range: [0.0,1.0]。
+- `y`: the percentile. The supported data type is DOUBLE. Value range: [0.0,1.0].
 
 ## Return value
 

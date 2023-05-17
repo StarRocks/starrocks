@@ -45,10 +45,6 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    bool pending_finish() const override {
-        return _join_builder->spiller()->has_pending_data() || !_join_builder->spiller()->restore_finished();
-    }
-
     void mark_need_spill() override;
 
 private:
@@ -64,7 +60,6 @@ private:
     ChunkSharedSlice _hash_table_build_chunk_slice;
     std::function<StatusOr<ChunkPtr>()> _hash_table_slice_iterator;
     bool _is_first_time_spill = true;
-    size_t _push_numbers = 0;
 };
 
 class SpillableHashJoinBuildOperatorFactory final : public HashJoinBuildOperatorFactory {

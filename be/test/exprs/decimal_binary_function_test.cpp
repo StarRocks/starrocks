@@ -2974,6 +2974,7 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s14_div_decimal128p38s14_eq_
 template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op>
 void test_decimal_fast_mul_help(const DecimalTestCaseArray& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
+#if defined(__x86_64__) && defined(__GNUC__)
     test_vector_vector<LhsType, RhsType, ResultType, Op, false>(test_cases, lhs_precision, lhs_scale, rhs_precision,
                                                                 rhs_scale, result_precision, result_scale);
     test_vector_const<LhsType, RhsType, ResultType, Op, false>(test_cases, lhs_precision, lhs_scale, rhs_precision,
@@ -2990,6 +2991,7 @@ void test_decimal_fast_mul_help(const DecimalTestCaseArray& test_cases, int lhs_
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
     test_vector_vector<ResultType, ResultType, ResultType, MulOp, false>(
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
+#endif
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal_fast_mul_32x32) {
     DecimalTestCaseArray test_cases = {{"0.14", "3348947.24", "468852.6136"},

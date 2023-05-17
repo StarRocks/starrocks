@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -34,7 +33,7 @@ import java.util.Objects;
  *
  * */
 public class LogicalCTEProduceOperator extends LogicalOperator {
-    private final int cteId;
+    private int cteId;
 
     public LogicalCTEProduceOperator(int cteId) {
         super(OperatorType.LOGICAL_CTE_PRODUCE);
@@ -88,5 +87,23 @@ public class LogicalCTEProduceOperator extends LogicalOperator {
         return "LogicalCTEProduceOperator{" +
                 "cteId='" + cteId + '\'' +
                 '}';
+    }
+
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalCTEProduceOperator, LogicalValuesOperator.Builder> {
+        @Override
+        protected LogicalCTEProduceOperator newInstance() {
+            return new LogicalCTEProduceOperator(-1);
+        }
+
+        public void setCteId(int cteId) {
+            builder.cteId = cteId;
+        }
+
+        @Override
+        public LogicalValuesOperator.Builder withOperator(LogicalCTEProduceOperator operator) {
+            builder.cteId = operator.cteId;
+            return super.withOperator(operator);
+        }
     }
 }

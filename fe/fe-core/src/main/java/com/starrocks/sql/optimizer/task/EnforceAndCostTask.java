@@ -215,23 +215,24 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         }
     }
 
-    private boolean checkCTEPropertyValid(GroupExpression childBestExpr, PhysicalPropertySet requiredPropertySet) {
-        if (!OperatorType.PHYSICAL_CTE_CONSUME.equals(childBestExpr.getOp().getOpType()) &&
-                !OperatorType.PHYSICAL_NO_CTE.equals(childBestExpr.getOp().getOpType())) {
-            return true;
-        }
-
+    private boolean checkCTEPropertyValid(GroupExpression groupExpression, PhysicalPropertySet requiredPropertySet) {
+        OperatorType operatorType = groupExpression.getOp().getOpType();
         CTEProperty property = requiredPropertySet.getCteProperty();
-
-        if (OperatorType.PHYSICAL_NO_CTE.equals(childBestExpr.getOp().getOpType())) {
-            int cteId = ((PhysicalNoCTEOperator) childBestExpr.getOp()).getCteId();
-            return !property.getCteIds().contains(cteId);
-        } else if (OperatorType.PHYSICAL_CTE_CONSUME.equals(childBestExpr.getOp().getOpType())) {
-            int cteId = ((PhysicalCTEConsumeOperator) childBestExpr.getOp()).getCteId();
-            return property.getCteIds().contains(cteId);
+        CTEProperty usedCTEs;
+        switch (operatorType) {
+            case PHYSICAL_CTE_ANCHOR:
+            case PHYSICAL_CTE_PRODUCE:
+                usedCTEs = groupExpression.getGroup().getLogicalProperty().getUsedCTEs();
+                return property.getCteIds().containsAll(usedCTEs.getCteIds());
+            case PHYSICAL_CTE_CONSUME:
+                PhysicalCTEConsumeOperator consumeOperator = (PhysicalCTEConsumeOperator) groupExpression.getOp();
+                return property.getCteIds().contains(consumeOperator.getCteId());
+            case PHYSICAL_NO_CTE:
+                PhysicalNoCTEOperator noCTEOperator = (PhysicalNoCTEOperator) groupExpression.getOp();
+                return !property.getCteIds().contains(noCTEOperator.getCteId());
+            default:
+                return true;
         }
-
-        return true;
     }
 
     private void initRequiredProperties() {

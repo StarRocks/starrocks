@@ -91,7 +91,6 @@ static const std::string DEFAULT_COLUMN_FAMILY = "default"; // NOLINT
 static const std::string STARROCKS_COLUMN_FAMILY = "doris"; // NOLINT
 static const std::string META_COLUMN_FAMILY = "meta";       // NOLINT
 const std::string TABLET_ID_KEY = "tablet_id";              // NOLINT
-const std::string TABLET_SCHEMA_HASH_KEY = "schema_hash";   // NOLINT
 
 #define DECLARE_SINGLETON(classname) \
 public:                              \

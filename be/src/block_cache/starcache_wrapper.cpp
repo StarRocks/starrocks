@@ -45,16 +45,22 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     _load_starcache_conf();
     starcache::config::FLAGS_block_size = options.block_size;
     starcache::config::FLAGS_enable_disk_checksum = options.checksum;
+    starcache::config::FLAGS_max_concurrent_writes = options.max_concurrent_inserts;
 
     _cache = std::make_unique<starcache::StarCache>();
     return to_status(_cache->init(opt));
 }
 
-Status StarCacheWrapper::write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds) {
+Status StarCacheWrapper::write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds,
+                                     bool overwrite) {
     butil::IOBuf buf;
     // Don't free the buffer passed by users
     buf.append_user_data((void*)value, size, empty_deleter);
-    return to_status(_cache->set(key, buf));
+
+    starcache::WriteOptions options;
+    options.ttl_seconds = ttl_seconds;
+    options.overwrite = overwrite;
+    return to_status(_cache->set(key, buf, &options));
 }
 
 StatusOr<size_t> StarCacheWrapper::read_cache(const std::string& key, char* value, size_t off, size_t size) {

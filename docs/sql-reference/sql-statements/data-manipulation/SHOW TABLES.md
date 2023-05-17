@@ -4,7 +4,7 @@
 
 Displays all tables in the current database.
 
-Syntax：
+Syntax
 
 ```sql
 SHOW TABLES;

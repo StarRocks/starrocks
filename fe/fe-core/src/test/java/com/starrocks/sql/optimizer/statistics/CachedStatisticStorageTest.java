@@ -64,8 +64,7 @@ public class CachedStatisticStorageTest {
             + "DISTRIBUTED BY HASH(`table_id`, `column_name`, `db_id`) BUCKETS 2\n"
             + "PROPERTIES (\n"
             + "\"replication_num\" = \"1\",\n"
-            + "\"in_memory\" = \"false\",\n"
-            + "\"storage_format\" = \"V2\"\n"
+            + "\"in_memory\" = \"false\"\n"
             + ");";
 
     public static void createStatisticsTable() throws Exception {
@@ -101,8 +100,7 @@ public class CachedStatisticStorageTest {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
     }
 

@@ -22,7 +22,7 @@ ARG predownload_thirdparty=false
 ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20230317.tar
 ARG commit_id
 # check thirdparty/starlet-artifacts-version.sh, to get the right tag
-ARG starlet_tag=v0.2.7rc1
+ARG starlet_tag=v1.0.1
 # build for which linux distro: centos7|ubuntu
 ARG distro=ubuntu
 
@@ -30,7 +30,6 @@ FROM starrocks/toolchains-${distro}:20230324 as base
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
 WORKDIR /root
-
 
 FROM base as builder
 ARG prebuild_maven
@@ -56,12 +55,12 @@ FROM starrocks/starlet-artifacts-centos7:${starlet_tag} as starlet-centos7
 # determine which artifacts to use
 FROM starlet-${distro} as starlet
 
-
 FROM base as dev-env
 ARG commit_id
 LABEL org.opencontainers.image.source="https://github.com/StarRocks/starrocks"
 LABEL com.starrocks.commit=${commit_id:-"UNKNOWN"}
 ENV STARLET_INSTALL_DIR=$STARROCKS_THIRDPARTY/installed/starlet
+ENV PATH=$STARROCKS_GCC_HOME/bin:$PATH
 
 # Copy third-party dependencies
 COPY --from=builder $STARROCKS_THIRDPARTY $STARROCKS_THIRDPARTY

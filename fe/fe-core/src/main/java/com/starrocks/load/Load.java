@@ -55,10 +55,13 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.Status;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
@@ -70,9 +73,17 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TOpType;
 import org.apache.logging.log4j.LogManager;
@@ -170,6 +181,10 @@ public class Load {
                 continue;
             }
 
+            if (column.isMaterializedColumn()) {
+                continue;
+            }
+
             String originCol = Column.removeNamePrefix(column.getName());
             if (columnExprMap.containsKey(originCol)) {
                 Expr mappingExpr = columnExprMap.get(originCol);
@@ -204,6 +219,34 @@ public class Load {
                  */
                 // do nothing
             }
+        }
+        return shadowColumnDescs;
+    }
+
+    public static List<ImportColumnDesc> getMaterializedShadowColumnDesc(OlapTable tbl, String dbName) {
+        List<ImportColumnDesc> shadowColumnDescs = Lists.newArrayList();
+        for (Column column : tbl.getFullSchema()) {
+            if (!column.isMaterializedColumn()) {
+                continue;
+            }
+
+            TableName tableName = new TableName(dbName, tbl.getName());
+
+            ConnectContext connectContext = new ConnectContext();
+            connectContext.setDatabase(dbName);
+            connectContext.setQualifiedUser(AuthenticationManager.ROOT_USER);
+            connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+
+            // If fe restart and execute the streamload, this re-analyze is needed.
+            Expr expr = column.materializedColumnExpr();
+            ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(),
+                new Scope(RelationId.anonymous(), new RelationFields(
+                        tbl.getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                col.getType(), tableName, null))
+                            .collect(Collectors.toList()))), connectContext);
+    
+            ImportColumnDesc importColumnDesc = new ImportColumnDesc(column.getName(), expr);
+            shadowColumnDescs.add(importColumnDesc);
         }
         return shadowColumnDescs;
     }
@@ -270,6 +313,11 @@ public class Load {
         Set<String> mappingColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ImportColumnDesc importColumnDesc : columnExprs) {
             String columnName = importColumnDesc.getColumnName();
+
+            if (tbl.getColumns().size() != 0 && tbl.getColumn(columnName) != null
+                    && tbl.getColumn(columnName).isMaterializedColumn()) {
+                throw new DdlException("materialized column: " + columnName + " can not be specified");
+            }
 
             if (importColumnDesc.isColumn()) {
                 if (importColumnNames.contains(columnName)) {
@@ -372,12 +420,24 @@ public class Load {
                     continue;
                 }
                 Column.DefaultValueType defaultValueType = column.getDefaultValueType();
-                if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() && !column.isAutoIncrement()) {
+                if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() && !column.isAutoIncrement()
+                        && !column.isMaterializedColumn()) {
                     throw new DdlException("Column has no default value. column: " + columnName);
                 }
             }
         }
 
+        String dbName = "";
+        if (GlobalStateMgr.getCurrentState().getIdToDb() != null) {
+            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
+                Database db = entry.getValue();
+                if (db.getTable(tbl.getId()) != null) {
+                    dbName = db.getFullName();
+                }
+            }
+        }
+    
+        copiedColumnExprs.addAll(getMaterializedShadowColumnDesc((OlapTable) tbl, dbName));
         // get shadow column desc when table schema change
         copiedColumnExprs.addAll(getSchemaChangeShadowColumnDesc(tbl, columnExprMap));
 
@@ -421,6 +481,7 @@ public class Load {
             varcharColumns.addAll(columnsFromPath);
         }
         Set<String> exprArgsColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        Set<String> exprMaterializedColumnArgsColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ImportColumnDesc importColumnDesc : copiedColumnExprs) {
             if (importColumnDesc.isColumn()) {
                 continue;
@@ -431,6 +492,18 @@ public class Load {
                 String slotColumnName = slot.getColumnName();
                 exprArgsColumns.add(slotColumnName);
             }
+
+            if (tbl.getColumn(importColumnDesc.getColumnName()) != null &&
+                    tbl.getColumn(importColumnDesc.getColumnName()).isMaterializedColumn()) {
+                for (SlotRef slot : slots) {
+                    String slotColumnName = slot.getColumnName();
+                    exprMaterializedColumnArgsColumns.add(slotColumnName);
+                }
+            }
+        }
+
+        for (String colName : exprMaterializedColumnArgsColumns) {
+            exprArgsColumns.remove(colName);
         }
 
         // init slot desc add expr map, also transform hadoop functions
@@ -577,6 +650,28 @@ public class Load {
                     missAutoIncrementColumn.add(Boolean.TRUE);
                 }
                 ret.add(col);
+            } else if (col.isMaterializedColumn()) {
+                ret.add(col);
+            }
+        }
+        // partial update column must be specified if materialized column need it.
+        if (tbl instanceof OlapTable) {
+            OlapTable olaptable = ((OlapTable) tbl);
+            if (olaptable.hasMaterializedColumn()) {
+                for (Column col : olaptable.getBaseSchema()) {
+                    List<SlotRef> slots = col.getMaterializedColumnRef();
+                    if (slots != null) {
+                        for (SlotRef slot : slots) {
+                            Column originColumn = olaptable.getColumn(slot.getColumnName());
+
+                            if (!ret.contains(originColumn)) {
+                                throw new DdlException("column " + originColumn.getName() + " needs to be " +
+                                                       "used for expression evaluation for materialized " +
+                                                       "column " + col.getName());
+                            }
+                        }
+                    }
+                }
             }
         }
         return ret;

@@ -28,7 +28,7 @@ public class AlterReplicaTaskTest {
     @Test
     public void testAlterLocalTablet() {
         AlterReplicaTask task = AlterReplicaTask.alterLocalTablet(1, 2, 3, 4, 5, 6,
-                7, 8, 9, 10, 11, 12);
+                7, 8, 9, 10, 11, 12, null);
 
         Assert.assertEquals(1, task.getBackendId());
         Assert.assertEquals(2, task.getDbId());
