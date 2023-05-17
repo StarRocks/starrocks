@@ -531,7 +531,7 @@ jobs:
     name: ADMIT TEST
     needs: deploy
     if: always() && needs.deploy.result == 'success'
-    timeout-minutes: 60
+    timeout-minutes: 40
     env:
       PR_NUMBER: ${{ github.event.number }}
       CLUSTER_NAME: admit-default
