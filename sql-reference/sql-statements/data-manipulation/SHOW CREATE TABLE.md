@@ -74,7 +74,6 @@ COMMENT "my first starrocks table"
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10 
 PROPERTIES (
 "replication_num" = "3",
-"in_memory" = "false",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false"
 ); |

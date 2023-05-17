@@ -71,7 +71,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c1`) BUCKETS 2
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false",
 "compression" = "LZ4"

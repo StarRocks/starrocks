@@ -123,7 +123,6 @@ MODIFY PARTITION p1|(p1[, p2, ...]) SET ("key" = "value", ...);
     * storage_medium
     * storage_cooldown_time
     * replication_num
-    * in_memory
 
 2. 对于单分区表，partition_name 同表名。
 
@@ -455,7 +454,7 @@ SWAP WITH table_name;
 
     ```sql
     ALTER TABLE example_db.my_table
-    MODIFY PARTITION (p1, p2, p4) SET("in_memory"="true");
+    MODIFY PARTITION (p1, p2, p4) SET("replication_num"="1");
     ```
 
 6. 批量修改所有分区。
@@ -639,13 +638,6 @@ SWAP WITH table_name;
         "dynamic_partition.prefix" = "p",
         "dynamic_partition.buckets" = "32"
         );
-    ```
-
-15. 修改表的 in_memory 属性。
-
-    ```sql
-    ALTER TABLE example_db.my_table
-    SET ("in_memory" = "true");
     ```
 
 ### rename
