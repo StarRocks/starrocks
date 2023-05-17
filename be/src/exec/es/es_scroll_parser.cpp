@@ -276,8 +276,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
     return Status::OK();
 }
 
-void ScrollParser::set_params(const TupleDescriptor* descs,
-                              const std::map<std::string, std::string>* docvalue_context,
+void ScrollParser::set_params(const TupleDescriptor* descs, const std::map<std::string, std::string>* docvalue_context,
                               std::string& timezone) {
     _tuple_desc = descs;
     _doc_value_context = docvalue_context;
@@ -618,7 +617,8 @@ Status ScrollParser::_append_array_val_from_source(const rapidjson::Value& val, 
 
 // TODO: test here
 template <LogicalType type, typename T>
-Status ScrollParser::_append_date_val(const rapidjson::Value& col, Column* column, bool pure_doc_value, const std::string& timezone) {
+Status ScrollParser::_append_date_val(const rapidjson::Value& col, Column* column, bool pure_doc_value,
+                                      const std::string& timezone) {
     auto append_timestamp = [](auto& col, Column* column, const std::string& timezone) {
         TimestampValue value;
         value.from_unixtime(col.GetInt64() / 1000, timezone);
