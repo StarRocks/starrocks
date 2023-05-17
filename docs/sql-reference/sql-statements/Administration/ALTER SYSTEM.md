@@ -133,6 +133,19 @@ Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
 | broker_host     | Yes          | The host name or IP address of the Broker instance. Use the value of configuration item `priority_networks` if your instance has multiple IP addresses.|
 | broker_ipc_port | Yes          | The thrift server port on the Broker node. The Broker node uses it to receive requests from FE or BE. Default: `8000`. |
 
+<<<<<<< HEAD
+=======
+### Create image
+
+Create an image file. An image file is a snapshot of the FE metadata.
+
+```SQL
+ALTER SYSTEM CREATE IMAGE
+```
+
+Creating an image is an asynchronous operation on the Leader FE. You can check the start time and end time of the operation in the FE log file **fe.log**. A log like `triggering a new checkpoint manually...` indicates that the image creation has started, and a log like `finished save image...` indicates the image has been created.
+
+>>>>>>> ee1c084d4 ([Doc] fix spelling in docs (#23500))
 ## Usage notes
 
 - Adding and dropping FE, BE, CN, or Broker nodes are synchronous operations. You cannot cancel the node dropping operations.

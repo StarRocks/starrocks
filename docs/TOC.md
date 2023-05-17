@@ -575,6 +575,10 @@
       + [DataX](./faq/loading/DataX_faq.md)
     + [Data Unloading](./faq/Exporting_faq.md)
   + [SQL](./faq/Sql_faq.md)
+<<<<<<< HEAD
+=======
+  + [query_dump](./faq/Dump_query.md)
+>>>>>>> ee1c084d4 ([Doc] fix spelling in docs (#23500))
   + [Other FAQs](./faq/Others.md)
 + Benchmark
   + [SSB Benchmark](./benchmarking/SSB_Benchmarking.md)
