@@ -83,29 +83,6 @@ StarRocks 支持四种数据模型：主键模型 (PRIMARY KEY)，聚合模型 (
     DISTRIBUTED BY HASH(order_id) BUCKETS 4
     ```
 
-### 使用内存表
-
-StarRocks 支持把表数据全部缓存在内存中，用于加速查询。内存表适合数据量较小的分析业务。
-
-```sql
-CREATE TABLE memory_table
-(
-    visitorid   SMALLINT,
-    sessionid   BIGINT,
-    visittime   DATETIME,
-    city        CHAR(20),
-    province    CHAR(20),
-    ip          varchar(32),
-    brower      CHAR(20),
-    url         VARCHAR(1024)
-)
-DUPLICATE KEY(visitorid, sessionid)
-DISTRIBUTED BY HASH(sessionid, visitorid) BUCKETS 10
-PROPERTIES (
-           "in_memory"="true"
-);
-```
-
 ### 使用 Colocate Table
 
 StarRocks 支持将分布相同的相关表存储与共同的分桶列，从而相关表的 JOIN 操作可以直接在本地进行，进而加速查询。更多信息，参考 [Colocate Join](../using_starrocks/Colocate_join.md)。
