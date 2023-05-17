@@ -58,17 +58,7 @@ bool SpillableAggregateBlockingSourceOperator::is_finished() const {
     if (!_aggregator->spiller()->spilled()) {
         return AggregateBlockingSourceOperator::is_finished();
     }
-    if (_aggregator->spiller()->is_cancel()) {
-        return true;
-    }
     return _aggregator->is_spilled_eos() && !_has_last_chunk;
-}
-
-Status SpillableAggregateBlockingSourceOperator::set_finishing(RuntimeState* state) {
-    if (state->is_cancelled()) {
-        _aggregator->spiller()->cancel();
-    }
-    return Status::OK();
 }
 
 Status SpillableAggregateBlockingSourceOperator::set_finished(RuntimeState* state) {
@@ -81,6 +71,7 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::pull_chunk(RuntimeS
     if (!_aggregator->spiller()->spilled()) {
         return AggregateBlockingSourceOperator::pull_chunk(state);
     }
+
     ASSIGN_OR_RETURN(auto res, _pull_spilled_chunk(state));
 
     if (res != nullptr) {
