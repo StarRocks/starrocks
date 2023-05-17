@@ -389,17 +389,11 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         Slice haystack = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[0]);
         /// It is assumed that the StringSearcher is not very difficult to initialize.
         const char* res_pointer = nullptr;
-        if (state -> ignore_case) {
-            auto searcher = LibcASCIICaseInsensitiveStringSearcher(needle.data, needle.size);
-            res_pointer = searcher.search(haystack.data, haystack.size);
-        } else {
-            auto searcher = LibcASCIICaseSensitiveStringSearcher(needle.data, needle.size);
-            res_pointer = searcher.search(haystack.data, haystack.size);
-        }
 
-
+        auto searcher = LibcASCIICaseSensitiveStringSearcher(needle.data, needle.size, state -> ignore_case);
         /// searcher returns a pointer to the found substring or to the end of `haystack`.
-        // const char* res_pointer = searcher.search(haystack.data, haystack.size);
+        res_pointer = searcher.search(haystack.data, haystack.size);
+
         if (!res_pointer) {
             res->append(false);
         } else {
