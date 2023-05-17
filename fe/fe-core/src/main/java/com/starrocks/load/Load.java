@@ -989,6 +989,7 @@ public class Load {
         this.loadErrorHubParam = info;
     }
 
+    // TODO [meta-format-change] deprecated
     public void setLoadErrorHubInfo(Map<String, String> properties) throws DdlException {
         String type = properties.get("type");
         if (type.equalsIgnoreCase("MYSQL")) {
