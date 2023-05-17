@@ -362,8 +362,15 @@ Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_val
         }
 
         auto& column = chunk->get_column_by_slot_id(slot_info.id_);
+        // We should expand the union type.
+        avro_value_t& cur_value = element_value;
+        if (UNLIKELY(avro_value_get_type(&cur_value) == AVRO_UNION)) {
+            avro_value_t branch;
+            RETURN_IF_ERROR(_handle_union(cur_value, branch));
+            cur_value = branch;
+        }
         // construct column with value.
-        RETURN_IF_ERROR(_construct_column(element_value, column.get(), slot_info.type_, slot_info.key_));
+        RETURN_IF_ERROR(_construct_column(cur_value, column.get(), slot_info.type_, slot_info.key_));
     }
 
     for (int i = 0; i < _found_columns.size(); i++) {
