@@ -60,7 +60,7 @@ source $STARROCKS_HOME/bin/common.sh
 # JAVA_OPTS
 # LOG_DIR
 # PID_DIR
-export JAVA_OPTS="-Xmx1024m"
+export JAVA_OPTS="-Xmx8G"
 export LOG_DIR="$STARROCKS_HOME/log"
 export PID_DIR=`cd "$curdir"; pwd`
 
