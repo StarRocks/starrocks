@@ -81,7 +81,9 @@ public class LakeTablet extends Tablet {
     }
 
     public long getPrimaryComputeNodeId() throws UserException {
-        return getPrimaryComputeNodeId(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+        long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+        return getPrimaryComputeNodeId(workerGroupId);
     }
 
     public long getPrimaryComputeNodeId(long clusterId) throws UserException {
