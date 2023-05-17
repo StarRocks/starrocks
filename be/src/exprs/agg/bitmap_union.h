@@ -15,6 +15,7 @@
 #pragma once
 
 #include "column/object_column.h"
+#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
@@ -22,8 +23,54 @@
 
 namespace starrocks {
 
-class BitmapUnionAggregateFunction final
-        : public AggregateFunctionBatchHelper<BitmapValue, BitmapUnionAggregateFunction> {
+template <LogicalType LT>
+class BitmapUnionAggregateFunction
+        : public AggregateFunctionBatchHelper<BitmapValue, BitmapUnionAggregateFunction<LT>> {
+public:
+    using InputColumnType = RunTimeColumnType<LT>;
+    using InputCppType = RunTimeCppType<LT>;
+
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+        const auto& col = down_cast<const InputColumnType&>(*columns[0]);
+        InputCppType value = col.get_data()[row_num];
+        this->data(state).add(value);
+    }
+
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        const auto& col = down_cast<const InputColumnType&>(*column);
+        InputCppType value = col.get_data()[row_num];
+        this->data(state).add(value);
+    }
+
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        auto* col = down_cast<BitmapColumn*>(to);
+        auto& bitmap = down_cast<BitmapValue&>(this->data(state));
+        col->append(std::move(bitmap));
+    }
+
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
+        auto& src_column = down_cast<InputColumnType*>(src[0].get());
+        auto* dest_column = down_cast<BitmapColumn*>(dst->get());
+        for (size_t i = 0; i < chunk_size; i++) {
+            BitmapValue bitmap;
+            bitmap.add(src_column.get_data()[i]);
+            dest_column->append(std::move(bitmap));
+        }
+    }
+
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        auto* col = down_cast<BitmapColumn*>(to);
+        auto& bitmap = const_cast<BitmapValue&>(this->data(state));
+        col->append(std::move(bitmap));
+    }
+
+    std::string get_name() const override { return "bitmap_union"; }
+};
+
+template <>
+class BitmapUnionAggregateFunction<TYPE_OBJECT> final
+        : public AggregateFunctionBatchHelper<BitmapValue, BitmapUnionAggregateFunction<TYPE_OBJECT>> {
 public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         const auto* col = down_cast<const BitmapColumn*>(columns[0]);

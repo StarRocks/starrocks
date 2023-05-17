@@ -74,6 +74,7 @@ public:
         return std::make_shared<BitmapUnionIntAggregateFunction<LT>>();
     }
 
+    template <LogicalType LT>
     static AggregateFunctionPtr MakeBitmapUnionAggregateFunction();
 
     static AggregateFunctionPtr MakeBitmapIntersectAggregateFunction();
