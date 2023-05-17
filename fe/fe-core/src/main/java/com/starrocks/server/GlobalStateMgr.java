@@ -529,9 +529,9 @@ public class GlobalStateMgr {
         SystemInfoService systemInfoService = getOrCreateSystemInfo(clusterId);
         // use default warehouse
         Warehouse warehouse = warehouseMgr.getDefaultWarehouse();
-        com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
         // TODO: need to refactor after be split into cn + dn
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (warehouse != null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
             for (Long cnId : cluster.getComputeNodeIds()) {
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
                 nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getHost(), cn.getBrpcPort()));
