@@ -21,6 +21,8 @@
 
 namespace starrocks {
 
+using Roaring = roaring::Roaring;
+
 // A bitmap(uint32_t set) to store all the deleted rows' ids of a segment.
 // Each DelVector is associated with a version, which is EditVersion's majar version.
 // Serialization format:
