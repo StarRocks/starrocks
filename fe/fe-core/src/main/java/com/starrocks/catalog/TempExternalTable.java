@@ -203,9 +203,13 @@ public class TempExternalTable extends Table {
             PGetFileSchemaRequest request = getGetFileSchemaRequest(fileStatuses);
             Future<PGetFileSchemaResult> future = BackendServiceClient.getInstance().getFileSchema(address, request);
             result = future.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new DdlException("failed to get file schema: " + e.getMessage());
         } catch (Exception e) {
             throw new DdlException("failed to get file schema: " + e.getMessage());
         }
+
 
         List<Column> columns = new ArrayList<>();
         for (PSlotDescriptor slot : result.schema) {

@@ -23,8 +23,8 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "fmt/format.h"
-#include "runtime/descriptors.h"
 #include "parquet/schema.h"
+#include "runtime/descriptors.h"
 
 namespace starrocks {
 // ====================================================================================================================
@@ -138,7 +138,6 @@ Status ParquetReaderWrap::_init_parquet_reader() {
 
 Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs,
                                               const std::string& timezone) {
-
     RETURN_IF_ERROR(_init_parquet_reader());
     try {
         if (_current_line_of_group == 0) { // the first read
