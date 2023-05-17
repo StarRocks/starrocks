@@ -158,7 +158,7 @@ public class DeleteTest {
                 GlobalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
 
-                systemInfoService.getBackend(anyLong);
+                systemInfoService.getBackendOrComputeNode(anyLong);
                 result = backend;
             }
         };
