@@ -89,6 +89,8 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             case Types.TIMESTAMP:
                 primitiveType = PrimitiveType.DATETIME;
                 break;
+            case Types.LONGVARCHAR:
+                return ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
