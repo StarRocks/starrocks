@@ -20,14 +20,14 @@ All resources in a stack are defined by a template. Suppose you have created a t
 
 ## Deploy StarRocks cluster
 
-1. Sign in to [your AWS account](https://console.aws.amazon.com/console/home). If you don't have an account, sign up at [https://aws.amazon.com](https://aws.amazon.com/).
+1. Sign in to [your AWS account](https://console.aws.amazon.com/console/home). If you don't have an account, sign up at [AWS](https://aws.amazon.com/).
 
 2. Choose the AWS Region from the top toolbar.
 
-3. Choose a deployment option to launch this [Partner Solution](https://aws.amazon.com/cn/quickstart/architecture/starrocks-starrocks/). The AWS CloudFormation console opens with a prepopulated template which is used to deploy a StarRocks cluster with one FE and three BEs. Deployment takes about 30 minutes to complete.
+3. Choose a deployment option to launch this [Partner Solution](https://aws.amazon.com/quickstart/architecture/starrocks-starrocks/). The AWS CloudFormation console opens with a prepopulated template which is used to deploy a StarRocks cluster with one FE and three BEs. Deployment takes about 30 minutes to complete.
 
-   1. [Deploy StarRocks into a new VPC](https://fwd.aws/QKGpd?). This option builds a new AWS environment that consists of a VPC, subnets, NAT gateways, security groups, bastion hosts, and other infrastructure components. It then deploys StarRocks into this new VPC.
-   2. [Deploy StarRocks into an existing VPC](https://fwd.aws/vV4G6?). This option provisions StarRocks in your existing AWS infrastructure.
+   1. [Deploy StarRocks into a new VPC](https://signin.aws.amazon.com/signin?redirect_uri=https%3A%2F%2Fus-east-1.console.aws.amazon.com%2Fcloudformation%2Fhome%3Fregion%3Dus-east-1%26state%3DhashArgs%2523%252Fstacks%252Fnew%253FstackName%253Dstarrocks-starrocks%2526templateURL%253Dhttps%253A%252F%252Faws-quickstart.s3.us-east-1.amazonaws.com%252Fquickstart-starrocks-starrocks%252Ftemplates%252Fstarrocks-entrypoint-new-vpc.template.yaml%26isauthcode%3Dtrue&client_id=arn%3Aaws%3Aiam%3A%3A015428540659%3Auser%2Fcloudformation&forceMobileApp=0&code_challenge=yo-6I1O2W0f0VcoqYOVvSwMmhRkC7Vod1M9vWbiMWUM&code_challenge_method=SHA-256). This option builds a new AWS environment that consists of a VPC, subnets, NAT gateways, security groups, bastion hosts, and other infrastructure components. It then deploys StarRocks into this new VPC.
+   2. [Deploy StarRocks into an existing VPC](https://signin.aws.amazon.com/signin?redirect_uri=https%3A%2F%2Fus-east-1.console.aws.amazon.com%2Fcloudformation%2Fhome%3Fregion%3Dus-east-1%26state%3DhashArgs%2523%252Fstacks%252Fnew%253FstackName%253Dstarrocks-starrocks%2526templateURL%253Dhttps%253A%252F%252Faws-quickstart.s3.us-east-1.amazonaws.com%252Fquickstart-starrocks-starrocks%252Ftemplates%252Fstarrocks-entrypoint-existing-vpc.template.yaml%26isauthcode%3Dtrue&client_id=arn%3Aaws%3Aiam%3A%3A015428540659%3Auser%2Fcloudformation&forceMobileApp=0&code_challenge=dDa178BxB6UkFfrpADw5CIoZ4yDUNRTG7sNM1EO__eo&code_challenge_method=SHA-256). This option provisions StarRocks in your existing AWS infrastructure.
 
 4. Choose the correct AWS Region.
 
