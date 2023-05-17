@@ -22,7 +22,7 @@ The deployment of StarRocks generally follows the steps outlined here:
 
 4. [Prepare deployment files](../deployment/prepare_deployment_files.md).
 
-   - If you want to deploy StarRocks on x86-based CentOS 7.0, you can directly download and extract the software package provided on our official website.
+   - If you want to deploy StarRocks on x86-based CentOS 7.9, you can directly download and extract the software package provided on our official website.
    - If you want to deploy StarRocks with ARM architecture CPUs or on Ubuntu 22.04, you need to prepare the deployment files from the StarRocks Docker image.
    - If you want to deploy StarRocks on Kubernetes, you can skip this step.
 
