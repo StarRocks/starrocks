@@ -441,7 +441,7 @@ public class PseudoCluster {
             cluster.backends.put(backend.getHost(), backend);
             cluster.backendIdToHost.put(beId, backend.getHost());
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
-            GlobalStateMgr.getCurrentState().getStarOSAgent()
+            GlobalStateMgr.getCurrentStarOSAgent()
                     .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1), 0);
             LOG.info("add PseudoBackend {} {}", beId, host);
         }
@@ -466,7 +466,7 @@ public class PseudoCluster {
             this.backends.put(backend.getHost(), backend);
             this.backendIdToHost.put(beId, backend.getHost());
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
-            GlobalStateMgr.getCurrentState().getStarOSAgent()
+            GlobalStateMgr.getCurrentStarOSAgent()
                     .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1), 0);
             LOG.info("add PseudoBackend {} {}", beId, host);
             beIds.add(beId);

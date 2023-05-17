@@ -98,7 +98,7 @@ public class LakeTablet extends Tablet {
         try {
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
             long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
-            return GlobalStateMgr.getCurrentState().getStarOSAgent().getBackendIdsByShard(getShardId(), workerGroupId);
+            return GlobalStateMgr.getCurrentStarOSAgent().getBackendIdsByShard(getShardId(), workerGroupId);
         } catch (UserException e) {
             LOG.warn("Failed to get backends by shard. tablet id: {}", getId(), e);
             return Sets.newHashSet();
