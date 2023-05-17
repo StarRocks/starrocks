@@ -48,7 +48,8 @@ Broker Load 支持一次导入多个数据文件。在一个导入作业中，�
 DATA INFILE ("<file_path>"[, "<file_path>" ...])
 [NEGATIVE]
 INTO TABLE <table_name>
-[PARTITION (<partition_name>[, <partition_name> ...])]
+[PARTITION (<partition1_name>[, <partition2_name> ...])]
+[TEMPORARY PARTITION (<temporary_partition1_name>[, <temporary_partition2_name> ...])]
 [FORMAT AS "CSV | Parquet | ORC"]
 [COLUMNS TERMINATED BY "<column_separator>"]
 [ROWS TERMINATED BY "<row_separator>"]
@@ -98,6 +99,10 @@ INTO TABLE <table_name>
 - `PARTITION`
 
   指定要把数据导入哪些分区。如果不指定该参数，则默认导入到 StarRocks 表所在的所有分区中。
+
+- `TEMPORARY_PARTITION`
+
+  指定要把数据导入哪些[临时分区](../../../table_design/Temporary_partition.md)。
 
 - `FORMAT AS`
 
