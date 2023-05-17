@@ -169,7 +169,7 @@ GROUP BY order_id;
   - Strict consistency is not guaranteed between the materialized view and the base tables in the external catalog.
   - Currently, building asynchronous materialized views based on external resources is not supported.
   - Currently, StarRocks cannot perceive the data changes on the base tables in Iceberg catalogs and Hudi catalogs, so all partitions are refreshed by default every time the refreshing task is triggered. If you want to refresh only some of the partitions, you can manually refresh the materialized view using the [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md) statement and specify the partition you want to refresh.
-  - From v2.5.5 onwards, StarRocks can periodically refresh the cached metadata of the frequently accessed Hive catalogs to perceive data changes. You can configure the Hive metadata refresh through the following FE parameters:
+  - From v2.5.5 onwards, StarRocks can periodically refresh the cached metadata of the frequently accessed Hive catalogs to perceive data changes. You can configure the Hive cached metadata refresh through the following FE parameters:
 
     | Configuration item                                           | Default                              | Description                          |
     | ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
