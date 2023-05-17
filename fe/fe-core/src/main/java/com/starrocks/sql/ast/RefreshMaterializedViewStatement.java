@@ -21,9 +21,11 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class RefreshMaterializedViewStatement extends DdlStmt {
+
     private final TableName mvName;
     private final PartitionRangeDesc partitionRangeDesc;
     private final boolean forceRefresh;
+    private final boolean isSync;
 
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -32,17 +34,18 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
 
     public RefreshMaterializedViewStatement(TableName mvName,
                                             PartitionRangeDesc partitionRangeDesc,
-                                            boolean forceRefresh) {
-        this(mvName, partitionRangeDesc, forceRefresh, NodePosition.ZERO);
+                                            boolean forceRefresh, boolean isSync) {
+        this(mvName, partitionRangeDesc, forceRefresh, isSync, NodePosition.ZERO);
     }
 
     public RefreshMaterializedViewStatement(TableName mvName,
                                             PartitionRangeDesc partitionRangeDesc,
-                                            boolean forceRefresh, NodePosition pos) {
+                                            boolean forceRefresh, boolean isSync, NodePosition pos) {
         super(pos);
         this.mvName = mvName;
         this.partitionRangeDesc = partitionRangeDesc;
         this.forceRefresh = forceRefresh;
+        this.isSync = isSync;
     }
 
     public TableName getMvName() {
@@ -60,5 +63,9 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
 
     public boolean isForceRefresh() {
         return forceRefresh;
+    }
+
+    public boolean isSync() {
+        return isSync;
     }
 }
