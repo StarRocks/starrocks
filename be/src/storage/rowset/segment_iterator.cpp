@@ -258,7 +258,7 @@ private:
 
     Status _get_del_vec_st;
     DelVectorPtr _del_vec;
-    roaring_uint32_iterator_t _roaring_iter;
+    roaring::api::roaring_uint32_iterator_t _roaring_iter;
 
     std::unordered_map<ColumnId, std::unique_ptr<RandomAccessFile>> _column_files;
 
