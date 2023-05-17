@@ -107,7 +107,7 @@ public class RangeSimplifier {
                 return Utils.compoundAnd(rewrittenRangePredicates);
             }
         } catch (Exception e) {
-            LOG.warn("Simplify scalar operator {} failed:", Utils.compoundAnd(targets), e);
+            LOG.debug("Simplify scalar operator {} failed:", Utils.compoundAnd(targets), e);
             return null;
         }
     }
