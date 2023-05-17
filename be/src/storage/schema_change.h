@@ -128,6 +128,8 @@ public:
     // schema change v2, it will not set alter task in base tablet
     Status process_alter_tablet_v2(const TAlterTabletReqV2& request);
 
+    void set_alter_msg_header(std::string msg) { _alter_msg_header = msg; }
+
 private:
     struct SchemaChangeParams {
         TabletSharedPtr base_tablet;
@@ -154,6 +156,7 @@ private:
     static Status _convert_historical_rowsets(SchemaChangeParams& sc_params);
 
     DISALLOW_COPY(SchemaChangeHandler);
+    std::string _alter_msg_header;
 };
 
 } // namespace starrocks
