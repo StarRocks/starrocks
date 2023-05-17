@@ -289,6 +289,8 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaP
         auto& lsnPb = tablet_meta_pb.binlog_min_lsn();
         _binlog_min_lsn = BinlogLsn(lsnPb.version(), lsnPb.seq_id());
     }
+
+    _enable_shortcut_compaction = tablet_meta_pb.enable_shortcut_compaction();
 }
 
 void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
@@ -345,6 +347,8 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
         lsn->set_version(_binlog_min_lsn.version());
         lsn->set_seq_id(_binlog_min_lsn.seq_id());
     }
+
+    tablet_meta_pb->set_enable_shortcut_compaction(_enable_shortcut_compaction);
 }
 
 void TabletMeta::to_json(string* json_string, json2pb::Pb2JsonOptions& options) {

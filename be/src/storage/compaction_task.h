@@ -69,6 +69,7 @@ struct CompactionTaskInfo {
     size_t output_num_rows{0};
     CompactionType compaction_type{CompactionType::INVALID_COMPACTION};
     bool is_shortcut_compaction{false};
+    bool is_manual_compaction{false};
 
     // for vertical compaction
     size_t column_group_size{0};
@@ -119,6 +120,7 @@ struct CompactionTaskInfo {
         ss << ", total_merged_rows:" << total_merged_rows;
         ss << ", total_del_filtered_rows:" << total_del_filtered_rows;
         ss << ", is_shortcut_compaction:" << is_shortcut_compaction;
+        ss << ", is_manual_compaction:" << is_manual_compaction;
         ss << ", progress:" << get_progress();
         return ss.str();
     }
@@ -214,6 +216,10 @@ public:
 
     bool is_shortcut_compaction() const { return _task_info.is_shortcut_compaction; }
 
+    bool is_manual_compaction() const { return _task_info.is_manual_compaction; }
+
+    void set_is_manual_compaction(bool is_manual_compaction) { _task_info.is_manual_compaction = is_manual_compaction; }
+
 protected:
     virtual Status run_impl() = 0;
 
@@ -246,6 +252,10 @@ protected:
         std::stringstream input_stream_info;
         {
             std::unique_lock wrlock(_tablet->get_header_lock());
+            // after one success compaction, low cardinality dict will be generated.
+            // so we can enable shortcut compaction.
+            _tablet->tablet_meta()->set_enable_shortcut_compaction(true);
+
             for (int i = 0; i < 5 && i < _input_rowsets.size(); ++i) {
                 input_stream_info << _input_rowsets[i]->version() << ";";
             }
