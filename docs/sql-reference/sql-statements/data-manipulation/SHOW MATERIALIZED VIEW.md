@@ -33,7 +33,7 @@ Parameters in brackets [] is optional.
 | id                         | The ID of the materialized view.                             |
 | database_name              | The name of the database in which the materialized view resides. |
 | name                       | The name of the materialized view.                           |
-| refresh_type               | The refresh type of the materialized view, including ROLLUP, MANNUL, ASYNC, and INCREMENTAL. |
+| refresh_type               | The refresh type of the materialized view, including ROLLUP, MANUAL, ASYNC, and INCREMENTAL. |
 | is_active                  | Whether the materialized view state is active. Valid Value: `true` and `false`. |
 | partition_type             | The partition type of the materialized view, including RANGE and UNPARTITIONED.                |
 | task_id                    | ID of the materialized view refresh task.                  |
