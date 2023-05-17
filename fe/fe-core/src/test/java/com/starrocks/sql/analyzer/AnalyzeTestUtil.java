@@ -174,6 +174,20 @@ public class AnalyzeTestUtil {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `ttypes` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `vm` map<bigint(20), char(20)>  NULL,\n" +
+                "  `va` array<bigint(20)>  NULL,\n" +
+                "  `vs` struct<a bigint(20), b char(20)>  NULL,\n" +
+                "  `vj` json  NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
         starRocksAssert.withTable(
                 "create table tp(c1 int, c2 int, c3 int) DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
                         + "(PARTITION p1 VALUES [('-2147483648'), ('10')), PARTITION p2 VALUES [('10'), ('20')))"
