@@ -22,7 +22,7 @@ StarRocks 的部署通常遵循以下步骤：
 
 4. [准备部署文件](../deployment/prepare_deployment_files.md)。
 
-   - 如需在基于 x86 架构的 CentOS 7.0 平台上部署 StarRocks，您可以直接下载并解压官网提供的软件包。
+   - 如需在基于 x86 架构的 CentOS 7.9 平台上部署 StarRocks，您可以直接下载并解压官网提供的软件包。
    - 如需在 ARM 架构 CPU 或 Ubuntu 22.04 上部署 StarRocks，您需要通过 StarRocks 的 Docker 镜像准备部署文件。
    - 如需在 Kubernetes 上部署 StarRocks，您可以跳过该步骤。
 

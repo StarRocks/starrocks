@@ -2,9 +2,9 @@
 
 本文介绍如何准备 StarRocks 部署文件。
 
-目前 [镜舟官网](https://www.mirrorship.cn/zh-CN/download/community)提供的 StarRocks 软件包仅支持在 x86 架构 CPU 的 CentOS 7.0 平台上部署。如需在 ARM 架构 CPU 或 Ubuntu 22.04 操作系统上部署 StarRocks，您需要通过 StarRocks Docker 镜像获取部署文件。
+目前 [镜舟官网](https://www.mirrorship.cn/zh-CN/download/community)提供的 StarRocks 软件包仅支持在 x86 架构 CPU 的 CentOS 7.9 平台上部署。如需在 ARM 架构 CPU 或 Ubuntu 22.04 操作系统上部署 StarRocks，您需要通过 StarRocks Docker 镜像获取部署文件。
 
-## 为 x86 CentOS 7.0 平台准备部署文件
+## 为 x86 CentOS 7.9 平台准备部署文件
 
 StarRocks 二进制包的名称格式为 **StarRocks-version.tar.gz**，其中 **version** 是一个数字（例如 **2.5.2**），表示二进制包的版本信息。请确保您选择了正确版本的二进制包。
 
