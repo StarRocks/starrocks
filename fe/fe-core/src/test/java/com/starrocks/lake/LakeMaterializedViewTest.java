@@ -84,6 +84,13 @@ public class LakeMaterializedViewTest {
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB).useDatabase(DB);
 
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
+                return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+            }
+        };
+
         starRocksAssert.withTable("CREATE TABLE base_table\n" +
                 "(\n" +
                 "    k1 date,\n" +

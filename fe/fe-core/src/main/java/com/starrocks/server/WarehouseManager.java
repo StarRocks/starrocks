@@ -71,6 +71,10 @@ public class WarehouseManager implements Writable {
         }
     }
 
+    public Warehouse getDefaultWarehouse() {
+        return getWarehouse(DEFAULT_WAREHOUSE_NAME);
+    }
+
     public Warehouse getWarehouse(String warehouseName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return fullNameToWh.get(warehouseName);

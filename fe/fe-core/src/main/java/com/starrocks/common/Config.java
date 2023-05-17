@@ -2257,12 +2257,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long max_per_node_grep_log_limit = 500000;
 
-    /**
-     * only use compute node, test for multi-warehouse
-     */
-    @ConfField(mutable = true)
-    public static boolean only_use_compute_node = false;
-
     @ConfField
     public static boolean enable_execute_script_on_frontend = true;
 
