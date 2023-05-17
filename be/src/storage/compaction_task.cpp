@@ -197,7 +197,8 @@ Status CompactionTask::_shortcut_compact(Statistics* statistics) {
         }
     }
 
-    if (data_rowsets.size() == 1 && !data_rowsets.back()->rowset_meta()->is_segments_overlapping()) {
+    if (data_rowsets.size() == 1 && !data_rowsets.back()->rowset_meta()->is_segments_overlapping() &&
+        _tablet->enable_shortcut_compaction()) {
         TRACE("[Compaction] start shortcut comapction data");
         int64_t max_rows_per_segment = CompactionUtils::get_segment_max_rows(
                 config::max_segment_file_size, _task_info.input_rows_num, _task_info.input_rowsets_size);
