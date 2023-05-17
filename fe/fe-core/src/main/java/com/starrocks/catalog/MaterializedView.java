@@ -853,10 +853,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         // foreign keys constraints
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                     .append("\" = \"");
             sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(getForeignKeyConstraints()))
                     .append("\"");
+        }
+
+        // colocateTable
+        if (colocateGroup != null) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)
+                    .append("\" = \"");
+            sb.append(colocateGroup).append("\"");
         }
 
         appendUniqueProperties(sb);

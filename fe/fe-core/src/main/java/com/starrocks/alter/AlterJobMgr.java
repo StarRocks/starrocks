@@ -412,6 +412,10 @@ public class AlterJobMgr {
         }
 
         if (!properties.isEmpty()) {
+            if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+                throw new AnalysisException("Modify failed because unsupported properties: " +
+                        "colocate group is not supported for materialized view");
+            }
             // analyze properties
             List<SetListItem> setListItems = Lists.newArrayList();
             for (Map.Entry<String, String> entry : properties.entrySet()) {
