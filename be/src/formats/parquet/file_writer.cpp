@@ -450,9 +450,8 @@ Status AsyncFileWriter::_flush_row_group() {
         {
             auto lock = std::unique_lock(_m);
             _rg_writer_closing = false;
-            lock.unlock();
-            _cv.notify_one();
         }
+        _cv.notify_one();
         auto st = Status::ResourceBusy("submit flush row group task fails");
         LOG(WARNING) << st;
         return st;
