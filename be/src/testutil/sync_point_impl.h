@@ -36,7 +36,7 @@
 
 #pragma once
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(BE_TEST)
 namespace starrocks {
 
 struct SyncPoint::Data {
