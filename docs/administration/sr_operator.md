@@ -10,7 +10,7 @@ This topic introduces how to use the StarRocks Operator to automate the deployme
 
 ### Create Kubernetes cluster
 
-You can use the cloud-managed Kubernetes service, such as an [Amazon Elastic Kubernetes Service (EKS)](https://aws.amazon.com/cn/eks/?nc2=h_ql_prod_ct_eks) or [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine?hl=zh-cn) cluster, or a self-managed Kubernetes cluster.
+You can use the cloud-managed Kubernetes service, such as an [Amazon Elastic Kubernetes Service (EKS)](https://aws.amazon.com/eks/?nc1=h_ls) or [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine) cluster, or a self-managed Kubernetes cluster.
 
 **Create an Amazon EKS cluster**
 

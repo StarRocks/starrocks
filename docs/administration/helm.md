@@ -91,7 +91,11 @@
 
 **Access StarRocks cluster**
 
+<<<<<<< HEAD:docs/administration/helm.md
 You can access the StarRocks cluster from inside and outside the Kubernetes cluster. For detailed instructions, see [Access StarRocks Cluster](https://chat.openai.com/sr_operator#accessing-the-starrocks-cluster).
+=======
+  You can access the StarRocks cluster from inside and outside the Kubernetes cluster. For detailed instructions, see [Access StarRocks Cluster](./sr_operator.md#access-starrocks-cluster).
+>>>>>>> 2be54d003 (fix-broken-links-in-deployment-chapter (#23543)):docs/deployment/helm.md
 
 > **NOTICE**
 >
