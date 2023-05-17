@@ -187,7 +187,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false"
 );
@@ -299,7 +298,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`uid`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false"
 );
