@@ -4,7 +4,7 @@
 
 ## 概述
 
-StarRocks 提供 Ubuntu 22.04 和 CentOS 7 的开发环境镜像。通过该镜像，您可以在 Docker 容器中编译 StarRocks。
+StarRocks 提供 Ubuntu 22.04 和 CentOS 7.9 的开发环境镜像。通过该镜像，您可以在 Docker 容器中编译 StarRocks。
 
 ### StarRocks 版本和开发环境镜像
 
@@ -18,7 +18,7 @@ StarRocks 的不同版本对应 [StarRocks Docker Hub](https://hub.docker.com/u/
   | branch-3.0 | starrocks/dev-env-ubuntu:3.0-latest |
   | branch-2.5 | starrocks/dev-env-ubuntu:2.5-latest |
 
-- For CentOS 7.0:
+- For CentOS 7.9:
 
   | **分支名** | **镜像名**                           |
   | ---------- | ------------------------------------ |
@@ -36,7 +36,7 @@ StarRocks 的不同版本对应 [StarRocks Docker Hub](https://hub.docker.com/u/
 
 - **软件**
 
-  - 机器必须运行 Ubuntu 22.04 或 CentOS 7.0
+  - 机器必须运行 Ubuntu 22.04 或 CentOS 7.9
   - 机器必须安装 Docker
 
 ## 第一步：下载镜像
