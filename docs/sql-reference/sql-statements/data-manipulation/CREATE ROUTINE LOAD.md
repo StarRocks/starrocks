@@ -48,7 +48,7 @@ Optional. The properties of the data. Syntax:
 
 `COLUMNS TERMINATED BY`
 
-The column separator for CSV-formatted data. The default column separator is `\t` (Tab). For example,  you can use `COLUMNS TERMINATED BY ","` to specify the column separator as a comma.
+The column separator for CSV-formatted data. The default column separator is `\t` (Tab). For example, you can use `COLUMNS TERMINATED BY ","` to specify the column separator as a comma.
 
 > **Note**
 >

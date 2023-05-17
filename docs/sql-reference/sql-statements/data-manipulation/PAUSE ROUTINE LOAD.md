@@ -6,7 +6,7 @@ This statement pauses a Routine Load job but does not terminate this job. You ca
 
 > **Note**
 >
-> Only users with the LOAD_PRIV privilege on the table to which data is loaded have permissions to pause Routine Load jobs on this table. 
+> Only users with the LOAD_PRIV privilege on the table to which data is loaded have permissions to pause Routine Load jobs on this table.
 
 ## Syntax
 
