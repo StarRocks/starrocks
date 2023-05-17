@@ -58,12 +58,6 @@ public class LakeTabletsProcNodeTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-                globalStateMgr.getStarOSAgent();
-                minTimes = 0;
-                result = agent;
                 GlobalStateMgr.getCurrentStarOSAgent();
                 result = agent;
                 agent.getBackendIdsByShard(tablet1Id);
