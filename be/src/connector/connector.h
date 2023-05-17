@@ -87,6 +87,8 @@ public:
     // such as MySQL/JDBC, so `accept_empty_scan_ranges` is false, and most in most cases, these data source(MySQL/JDBC)
     // the method `insert_local_exchange_operator` is true also.
     virtual bool accept_empty_scan_ranges() const { return true; }
+
+    virtual const TupleDescriptor* tuple_descriptor(RuntimeState* state) const = 0;
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 
