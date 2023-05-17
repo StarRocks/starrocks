@@ -53,10 +53,6 @@ public class Cluster implements Writable {
         return workerGroupId;
     }
 
-    public long getWorkerGroupId() {
-        return workerGroupId;
-    }
-
     public int getRunningSqls() {
         return -1;
     }
