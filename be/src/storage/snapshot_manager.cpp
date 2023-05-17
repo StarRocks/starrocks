@@ -657,16 +657,19 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
             auto old_path = Rowset::segment_file_path(clone_dir, old_rowset_id, seg_id);
             auto new_path = Rowset::segment_file_path(clone_dir, new_rowset_id, seg_id);
             RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
+            FileSystem::Default()->delete_file(old_path);
         }
         for (int del_id = 0; del_id < rowset_meta_pb.num_delete_files(); del_id++) {
             auto old_path = Rowset::segment_del_file_path(clone_dir, old_rowset_id, del_id);
             auto new_path = Rowset::segment_del_file_path(clone_dir, new_rowset_id, del_id);
             RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
+            FileSystem::Default()->delete_file(old_path);
         }
         for (int upt_id = 0; upt_id < rowset_meta_pb.num_update_files(); upt_id++) {
             auto old_path = Rowset::segment_upt_file_path(clone_dir, old_rowset_id, upt_id);
             auto new_path = Rowset::segment_upt_file_path(clone_dir, new_rowset_id, upt_id);
             RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
+            FileSystem::Default()->delete_file(old_path);
         }
         rowset_meta_pb.set_rowset_id(new_rowset_id.to_string());
     }
