@@ -5422,6 +5422,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr(fnName, exprs, pos);
         }
 
+        if (functionName.equals(FunctionSet.LPAD) || functionName.equals(FunctionSet.RPAD)) {
+            if (context.expression().size() == 2) {
+                Expr e1 = (Expr) visit(context.expression(0));
+                Expr e2 = (Expr) visit(context.expression(1));
+                FunctionCallExpr functionCallExpr = new FunctionCallExpr(
+                        fnName, Lists.newArrayList(e1, e2, new StringLiteral(" ")), pos);
+                return functionCallExpr;
+            }
+        }
+
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
                 new FunctionParams(false, visit(context.expression(), Expr.class)), pos);
         if (context.over() != null) {

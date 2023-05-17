@@ -1,0 +1,44 @@
+-- name: test_string_functions
+-- function: lpad
+select lpad('test', 8, '');
+select lpad('test', 8, ' ');
+select lpad('test', 8, '中文，');
+select lpad('test', 8);
+select lpad('test', 2, '');
+select lpad('test', 2, ' ');
+select lpad('test', 2, '中文，');
+select lpad('test', 2);
+select lpad('test', 0, '');
+select lpad('test', 0, ' ');
+select lpad('test', 0, '中文，');
+select lpad('test', 0);
+
+-- function: rpad
+select rpad('test', 8, '');
+select rpad('test', 8, ' ');
+select rpad('test', 8, '中文，');
+select rpad('test', 8);
+select rpad('test', 2, '');
+select rpad('test', 2, ' ');
+select rpad('test', 2, '中文，');
+select rpad('test', 2);
+select rpad('test', 0, '');
+select rpad('test', 0, ' ');
+select rpad('test', 0, '中文，');
+select rpad('test', 0);
+
+create table t0(c0 varchar(16), c1 INT(16))
+        DUPLICATE KEY(c0)
+        DISTRIBUTED BY HASH(c0)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- insert 3 rows
+insert into t0 values ('test', 8), ('test', 2), ('test', 0);
+select lpad(c0, c1, ' ') from t0;
+select lpad(c0, c1, '中文，') from t0;
+select lpad(c0, c1, '') from t0;
+select lpad(c0, c1) from t0;
+select rpad(c0, c1, ' ') from t0;
+select rpad(c0, c1, '中文，') from t0;
+select rpad(c0, c1, '') from t0;
+select rpad(c0, c1) from t0;
