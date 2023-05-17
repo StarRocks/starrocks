@@ -275,7 +275,63 @@ public class AlterTableStatementAnalyzer {
             try {
                 columnDef.analyze(true);
             } catch (AnalysisException e) {
+<<<<<<< HEAD
                 throw new SemanticException("Analyze columnDef error: %s", e.getMessage());
+=======
+                throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), columnDef.getPos());
+            }
+
+            if (columnDef.getType().isTime()) {
+                throw new SemanticException("Unsupported data type: TIME");
+            }
+
+            if (columnDef.isMaterializedColumn()) {
+                if (!table.isOlapTable()) {
+                    throw new SemanticException("Materialized Column only support olap table");
+                }
+
+                clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
+
+                Expr expr = columnDef.materializedColumnExpr();
+                TableName tableName = new TableName(context.getDatabase(), table.getName());
+
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                        new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
+                                            tableName, null))
+                                .collect(Collectors.toList()))), context);
+    
+                // check if contain aggregation
+                List<FunctionCallExpr> funcs = Lists.newArrayList();
+                expr.collect(FunctionCallExpr.class, funcs);
+                for (FunctionCallExpr fn : funcs) {
+                    if (fn.isAggregateFunction()) {
+                        throw new SemanticException("Materialized Column don't support aggregation function");
+                    }
+                }
+                
+                // check if the expression refers to other materialized columns
+                List<SlotRef> slots = Lists.newArrayList();
+                expr.collect(SlotRef.class, slots);
+                if (slots.size() != 0) {
+                    for (SlotRef slot : slots) {
+                        Column refColumn = table.getColumn(slot.getColumnName());
+                        if (refColumn.isMaterializedColumn()) {
+                            throw new SemanticException("Expression can not refers to other materialized columns");
+                        }
+                        if (refColumn.isAutoIncrement()) {
+                            throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
+                        }
+                    }
+                }
+    
+                if (!columnDef.getType().matchesType(expr.getType())) {
+                    throw new SemanticException("Illege expression type for Materialized Column " +
+                                                "Column Type: " + columnDef.getType().toString() +
+                                                ", Expression Type: " + expr.getType().toString());
+                }
+                clause.setColumn(columnDef.toColumn());
+                return null;
+>>>>>>> e5b8a483d ([BugFix] check time type in DDL (#23473) (#23474))
             }
 
             ColumnPosition colPos = clause.getColPos();
@@ -344,7 +400,63 @@ public class AlterTableStatementAnalyzer {
             try {
                 columnDef.analyze(true);
             } catch (AnalysisException e) {
+<<<<<<< HEAD
                 throw new SemanticException("Analyze columnDef error: %s", e.getMessage());
+=======
+                throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), columnDef.getPos());
+            }
+
+            if (columnDef.getType().isTime()) {
+                throw new SemanticException("Unsupported data type: TIME");
+            }
+
+            if (columnDef.isMaterializedColumn()) {
+                if (!(table instanceof OlapTable)) {
+                    throw new SemanticException("Materialized Column only support olap table");
+                }
+    
+                clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
+    
+                Expr expr = columnDef.materializedColumnExpr();
+                TableName tableName = new TableName(context.getDatabase(), table.getName());
+    
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                        new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
+                                            tableName, null))
+                                .collect(Collectors.toList()))), context);
+    
+                // check if contain aggregation
+                List<FunctionCallExpr> funcs = Lists.newArrayList();
+                expr.collect(FunctionCallExpr.class, funcs);
+                for (FunctionCallExpr fn : funcs) {
+                    if (fn.isAggregateFunction()) {
+                        throw new SemanticException("Materialized Column don't support aggregation function");
+                    }
+                }
+                
+                // check if the expression refers to other materialized columns
+                List<SlotRef> slots = Lists.newArrayList();
+                expr.collect(SlotRef.class, slots);
+                if (slots.size() != 0) {
+                    for (SlotRef slot : slots) {
+                        Column refColumn = table.getColumn(slot.getColumnName());
+                        if (refColumn.isMaterializedColumn()) {
+                            throw new SemanticException("Expression can not refers to other materialized columns");
+                        }
+                        if (refColumn.isAutoIncrement()) {
+                            throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
+                        }
+                    }
+                }
+    
+                if (!columnDef.getType().matchesType(expr.getType())) {
+                    throw new SemanticException("Illege expression type for Materialized Column " +
+                                                "Column Type: " + columnDef.getType().toString() +
+                                                ", Expression Type: " + expr.getType().toString());
+                }
+                clause.setColumn(columnDef.toColumn());
+                return null;
+>>>>>>> e5b8a483d ([BugFix] check time type in DDL (#23473) (#23474))
             }
 
             ColumnPosition colPos = clause.getColPos();
