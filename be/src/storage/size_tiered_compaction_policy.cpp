@@ -21,7 +21,6 @@
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
-#include "util/trace.h"
 
 namespace starrocks {
 
@@ -85,15 +84,17 @@ double SizeTieredCompactionPolicy::_cal_compaction_score(int64_t segment_num, in
     double score = segment_num;
 
     // data bonus
+    double data_bonus = 0;
     if (keys_type == KeysType::DUP_KEYS) {
         // duplicate keys only has write amplification, so that we use more aggressive size-tiered strategy
-        score += ((double)(total_size - level_size) / level_size) * 2;
+        data_bonus = ((double)(total_size - level_size) / level_size) * 2;
     } else {
         // agg/unique key also has read amplification, segment num occupies a greater weight
-        score += (segment_num - 1) * 2 + ((double)(total_size - level_size) / level_size);
+        data_bonus = (segment_num - 1) * 2 + ((double)(total_size - level_size) / level_size);
     }
-    // Normalized score, max data bouns limit to triple size_tiered_level_multiple
-    score = std::min((double)config::size_tiered_level_multiple * 3 + segment_num, score);
+    // Normalized score, max data bonus limit to triple _level_multiple
+    data_bonus = std::min((double)_level_multiple * 3, data_bonus);
+    score += data_bonus;
 
     // level bonus: The lower the level means the smaller the data volume of the compaction, the higher the execution priority
     int64_t level_bonus = 0;
