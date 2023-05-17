@@ -40,7 +40,6 @@ BITMAP base64_to_bitmap(VARCHAR bitmap)
     DISTRIBUTED BY HASH(`tagname`) BUCKETS 1
     PROPERTIES (
     "replication_num" = "3",
-    "in_memory" = "false",
     "storage_format" = "DEFAULT"
     );
     ```
