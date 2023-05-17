@@ -40,7 +40,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -758,14 +757,11 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public long loadTransactionState(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
-            int size = dis.readInt();
-            long newChecksum = checksum ^ size;
-            readFields(dis);
-            LOG.info("finished replay transactionState from image");
-            return newChecksum;
-        }
-        return checksum;
+        int size = dis.readInt();
+        long newChecksum = checksum ^ size;
+        readFields(dis);
+        LOG.info("finished replay transactionState from image");
+        return newChecksum;
     }
 
     public List<Pair<Long, Long>> getTransactionIdByCoordinateBe(String coordinateHost, int limit) {

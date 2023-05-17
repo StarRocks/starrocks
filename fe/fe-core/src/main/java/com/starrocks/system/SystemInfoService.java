@@ -55,7 +55,6 @@ import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
@@ -1043,9 +1042,6 @@ public class SystemInfoService {
 
     public void replayAddBackend(Backend newBackend) {
         // update idToBackend
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            newBackend.setBackendState(BackendState.using);
-        }
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
         copiedBackends.put(newBackend.getId(), newBackend);
         idToBackendRef = ImmutableMap.copyOf(copiedBackends);

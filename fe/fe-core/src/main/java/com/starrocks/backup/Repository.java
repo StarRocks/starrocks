@@ -377,7 +377,7 @@ public class Repository implements Writable {
 
             // read file to backupMeta
             BackupMeta backupMeta =
-                    BackupMeta.fromFile(localMetaFile.getAbsolutePath(), metaVersion, starrocksMetaVersion);
+                    BackupMeta.fromFile(localMetaFile.getAbsolutePath(), starrocksMetaVersion);
             backupMetas.add(backupMeta);
         } catch (IOException e) {
             LOG.warn("failed to read backup meta from file", e);

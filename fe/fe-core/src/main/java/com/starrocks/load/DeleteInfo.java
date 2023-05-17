@@ -37,11 +37,9 @@ package com.starrocks.load;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ReplicaPersistInfo;
-import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -176,22 +174,18 @@ public class DeleteInfo implements Writable {
             replicaInfos.add(info);
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_11) {
-            tableName = Text.readString(in);
-            partitionName = Text.readString(in);
+        tableName = Text.readString(in);
+        partitionName = Text.readString(in);
 
-            size = in.readInt();
-            for (int i = 0; i < size; i++) {
-                String deleteCond = Text.readString(in);
-                deleteConditions.add(deleteCond);
-            }
-
-            createTimeMs = in.readLong();
+        size = in.readInt();
+        for (int i = 0; i < size; i++) {
+            String deleteCond = Text.readString(in);
+            deleteConditions.add(deleteCond);
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_19) {
-            boolean hasAsyncDeleteJob = in.readBoolean();
-            Preconditions.checkState(!hasAsyncDeleteJob, "async delete job is deprecated");
-        }
+        createTimeMs = in.readLong();
+
+        boolean hasAsyncDeleteJob = in.readBoolean();
+        Preconditions.checkState(!hasAsyncDeleteJob, "async delete job is deprecated");
     }
 }

@@ -48,7 +48,6 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -1156,11 +1155,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         dbId = in.readLong();
         label = Text.readString(in);
         state = JobState.valueOf(Text.readString(in));
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_54) {
-            timeoutSecond = in.readLong();
-        } else {
-            timeoutSecond = in.readInt();
-        }
+        timeoutSecond = in.readLong();
         loadMemLimit = in.readLong();
         maxFilterRatio = in.readDouble();
         // reuse deleteFlag as partialUpdate
@@ -1175,19 +1170,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
         progress = in.readInt();
         loadingStatus.readFields(in);
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_54) {
-            strictMode = in.readBoolean();
-            transactionId = in.readLong();
+        strictMode = in.readBoolean();
+        transactionId = in.readLong();
+        if (in.readBoolean()) {
+            authorizationInfo = new AuthorizationInfo();
+            authorizationInfo.readFields(in);
         }
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_56) {
-            if (in.readBoolean()) {
-                authorizationInfo = new AuthorizationInfo();
-                authorizationInfo.readFields(in);
-            }
-        }
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_61) {
-            timezone = Text.readString(in);
-        }
+        timezone = Text.readString(in);
     }
 
     public void replayUpdateStateInfo(LoadJobStateUpdateInfo info) {

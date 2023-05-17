@@ -50,11 +50,9 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.AlterClause;
@@ -327,10 +325,6 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         out.close();
 
         // read objects from file
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_86);
-        metaContext.setThreadLocalInfo();
-
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         SchemaChangeJobV2 result = (SchemaChangeJobV2) AlterJobV2.read(in);
         Assert.assertEquals(1, result.getJobId());

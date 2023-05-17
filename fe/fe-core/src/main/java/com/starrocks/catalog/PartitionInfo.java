@@ -36,14 +36,12 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -255,12 +253,7 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
 
             short replicationNum = in.readShort();
             idToReplicationNum.put(partitionId, replicationNum);
-            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_72) {
-                idToInMemory.put(partitionId, in.readBoolean());
-            } else {
-                // for compatibility, default is false
-                idToInMemory.put(partitionId, false);
-            }
+            idToInMemory.put(partitionId, in.readBoolean());
         }
     }
 

@@ -35,7 +35,6 @@
 package com.starrocks.system;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.ha.BDBHA;
@@ -196,11 +195,7 @@ public class Frontend implements Writable {
         role = FrontendNodeType.valueOf(Text.readString(in));
         host = Text.readString(in);
         editLogPort = in.readInt();
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_41) {
-            nodeName = Text.readString(in);
-        } else {
-            nodeName = GlobalStateMgr.genFeNodeName(host, editLogPort, true /* old style */);
-        }
+        nodeName = Text.readString(in);
     }
 
     public static Frontend read(DataInput in) throws IOException {
