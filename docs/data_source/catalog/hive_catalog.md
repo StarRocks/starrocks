@@ -835,7 +835,7 @@ You need to manually update metadata in the following situations:
 
   > **NOTE**
   >
-  > From v2.5.5 onwards, StarRocks provides the periodic Hive metadata refresh feature. After you enable this feature, StarRocks refreshes Hive metadata every 10 minutes by default. Therefore, manual updates are not needed in most cases. You need to perform a manual update only when you want to query new partitions immediately after the new partitions are created on your Hive cluster.
+  > From v2.5.5 onwards, StarRocks provides the periodic Hive metadata cache refresh feature. After you enable this feature, StarRocks refreshes your Hive metadata cache every 10 minutes by default. Therefore, manual updates are not needed in most cases. You need to perform a manual update only when you want to query new partitions immediately after the new partitions are created on your Hive cluster.
 
 Note that the REFRESH EXTERNAL TABLE refreshes only the tables and partitions cached in your FEs.
 
