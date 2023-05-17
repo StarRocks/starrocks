@@ -76,7 +76,7 @@ public:
 
 private:
     void _read_next_batch() {
-        uint32_t n = roaring_read_uint32_iterator(&_iter, _buf, kBatchSize);
+        uint32_t n = roaring::api::roaring_read_uint32_iterator(&_iter, _buf, kBatchSize);
         _buf_pos = 0;
         _buf_size = n;
         _eof = n == 0;
@@ -84,7 +84,7 @@ private:
 
     static const uint32_t kBatchSize = 256;
 
-    roaring_uint32_iterator_t _iter{};
+    roaring::api::roaring_uint32_iterator_t _iter{};
     uint32_t _last_val{0};
     uint32_t _buf_pos{0};
     uint32_t _buf_size{0};

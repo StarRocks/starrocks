@@ -180,7 +180,7 @@ TEST(BitmapValueTest, bitmap_serde) {
         BitmapValue bitmap32(std::vector<uint64_t>{0, UINT32_MAX});
         std::string buffer = convert_bitmap_to_string(bitmap32);
 
-        Roaring roaring;
+        roaring::Roaring roaring;
         roaring.add(0);
         roaring.add(UINT32_MAX);
         std::string expect_buffer(1, type_bitmap32);
@@ -209,7 +209,7 @@ TEST(BitmapValueTest, bitmap_serde) {
         BitmapValue bitmap64(std::vector<uint64_t>{0, static_cast<uint64_t>(UINT32_MAX) + 1});
         std::string buffer = convert_bitmap_to_string(bitmap64);
 
-        Roaring roaring;
+        roaring::Roaring roaring;
         roaring.add(0);
         std::string expect_buffer(1, type_bitmap64);
         put_varint64(&expect_buffer, 2); // map size
