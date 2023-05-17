@@ -358,6 +358,15 @@ fi
 cd -
 echo "Finished patching $LIBRDKAFKA_SOURCE"
 
+# patch roaring-bitmap
+cd $TP_SOURCE_DIR/$CROARINGBITMAP_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $CROARINGBITMAP_SOURCE = "CRoaring-0.2.60" ]; then
+    patch -p1 < $TP_PATCH_DIR/roaring-bitmap-patch-v0.2.60.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $CROARINGBITMAP_SOURCE"
+
 # patch mariadb-connector-c-3.2.5
 cd $TP_SOURCE_DIR/$MARIADB_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; then
