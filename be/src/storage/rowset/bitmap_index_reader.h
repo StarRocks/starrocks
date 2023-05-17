@@ -52,8 +52,6 @@ class BitmapIndexIterator;
 class IndexedColumnReader;
 class IndexedColumnIterator;
 
-using Roaring = roaring::Roaring;
-
 class BitmapIndexReader {
 public:
     BitmapIndexReader();

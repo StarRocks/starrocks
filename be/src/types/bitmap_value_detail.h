@@ -91,13 +91,6 @@ struct BitmapTypeCode {
 
 namespace detail {
 
-// https://github.com/RoaringBitmap/CRoaring/blob/5d6dd2342d9e3ffaf481aa5ebe344e19984faa4a/src/roaring.c#L21
-// The tow macro is not in .h file, so copy to here.
-#define SERIALIZATION_ARRAY_UINT32 1
-#define SERIALIZATION_CONTAINER 2
-
-using Roaring = roaring::Roaring;
-
 class Roaring64MapSetBitForwardIterator;
 
 // Forked from https://github.com/RoaringBitmap/CRoaring/blob/v0.2.60/cpp/roaring64map.hh

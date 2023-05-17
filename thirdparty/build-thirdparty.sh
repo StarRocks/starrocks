@@ -707,8 +707,6 @@ build_bitshuffle() {
 }
 
 # croaring bitmap
-# If open AVX512 default, current version will be compiled failed on some machine, so close AVX512 default,
-# When this problem is solved, a switch will be added to control.
 build_croaringbitmap() {
     FORCE_AVX=ON
     # avx2 is not supported by aarch64.
@@ -729,8 +727,6 @@ build_croaringbitmap() {
     -DENABLE_ROARING_TESTS=OFF \
     -DROARING_DISABLE_NATIVE=ON \
     -DFORCE_AVX=$FORCE_AVX \
-    -DROARING_DISABLE_AVX512=ON \
-    -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" ..
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
