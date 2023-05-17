@@ -64,7 +64,7 @@ netstat -tunlp | grep 9050
 netstat -tunlp | grep 8060
 ```
 
-If any of the above ports are occupied, you must find alternatives and specify them later when you deploy CN nodes. For detailed instructions, see [Deploy StarRocks - Start the CN service](../deployment/).
+If any of the above ports are occupied, you must find alternatives and specify them later when you deploy CN nodes. For detailed instructions, see [Deploy StarRocks - Start the CN service](../deployment/deploy_manually.md#step-4-optional-start-the-cn-service).
 
 ## Hostnames
 
