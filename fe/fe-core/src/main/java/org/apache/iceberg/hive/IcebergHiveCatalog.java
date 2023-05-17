@@ -44,6 +44,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
+import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -53,11 +54,11 @@ import org.apache.iceberg.hadoop.Configurable;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.relocated.com.google.common.base.MoreObjects;
+import org.apache.iceberg.util.LocationUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -73,6 +74,8 @@ import static org.apache.iceberg.Transactions.createTableTransaction;
 public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergCatalog, Configurable<Configuration> {
     public static final String LOCATION_PROPERTY = "location";
     private static final Logger LOG = LogManager.getLogger(IcebergHiveCatalog.class);
+    private static final String DEFAULT_METADATA_FOLDER_NAME = "metadata";
+    private static final String DEFAULT_DATA_FOLDER_NAME = "data";
 
     private String name;
     private Configuration conf;
@@ -245,6 +248,7 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
             String value = entry.getValue();
             if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
                 try {
+                    // TODO: check location that does not contains other objects
                     URI uri = new Path(value).toUri();
                     FileSystem fileSystem = FileSystem.get(uri, conf);
                     fileSystem.exists(new Path(value));
@@ -258,7 +262,8 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
             }
         }
 
-        org.apache.hadoop.hive.metastore.api.Database hiveDb = HiveMetastoreApiConverter.toMetastoreApiDatabase(database);
+        org.apache.hadoop.hive.metastore.api.Database hiveDb =
+                HiveMetastoreApiConverter.toMetastoreApiDatabase(database);
         createHiveDatabase(hiveDb);
     }
 
@@ -286,7 +291,8 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
         String database = namespace.level(0);
         try {
             List<String> tableNames = clients.run(client -> client.getAllTables(database));
-            return tableNames.stream().map(tblName -> TableIdentifier.of(namespace, tblName)).collect(Collectors.toList());
+            return tableNames.stream().map(tblName -> TableIdentifier.of(namespace, tblName))
+                    .collect(Collectors.toList());
         } catch (TException | InterruptedException e) {
             throw new RuntimeException(e);
         }
@@ -336,9 +342,8 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
 
             if (purge && lastMetadata != null) {
                 CatalogUtil.dropTableData(ops.io(), lastMetadata);
+                deleteTableFolder(lastMetadata);
             }
-
-            deletePath(ops.current().location());
             LOG.info("Dropped table: {}", identifier);
             return true;
         } catch (NoSuchTableException | NoSuchObjectException e) {
@@ -354,20 +359,32 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
 
     @Override
     public void deleteUncommittedDataFiles(List<String> fileLocations) {
-        fileLocations.forEach(this::deletePath);
+        for (String location : fileLocations) {
+            fileIO.deleteFile(location);
+        }
     }
 
-    // TODO(stephen): use CachingFileIO to access file system After adaptation
-    private void deletePath(String location) {
-        Path path = new Path(location);
-        URI uri = path.toUri();
-        try {
-            FileSystem fileSystem = FileSystem.get(uri, conf);
-            fileSystem.delete(path, true);
-        } catch (IOException e) {
-            LOG.error("Failed to delete location {}", location, e);
-            throw new StarRocksConnectorException("Failed to delete location %s. msg: %s", location, e.getMessage());
+    private void deleteTableFolder(TableMetadata metadata) {
+        String location = metadata.location();
+
+        // delete metadata folder
+        String metadataLocation = metadata.properties().get(TableProperties.WRITE_METADATA_LOCATION);
+        if (metadataLocation == null) {
+            metadataLocation = location + "/" + DEFAULT_METADATA_FOLDER_NAME;
         }
+        metadataLocation = LocationUtil.stripTrailingSlash(metadataLocation);
+        fileIO.deleteFile(metadataLocation);
+
+        // delete data folder
+        String dataLocation = metadata.properties().get(TableProperties.WRITE_DATA_LOCATION);
+        if (dataLocation == null) {
+            dataLocation = location + "/" + DEFAULT_DATA_FOLDER_NAME;
+        }
+        metadataLocation = LocationUtil.stripTrailingSlash(metadataLocation);
+        fileIO.deleteFile(dataLocation);
+
+        // delete table root folder
+        fileIO.deleteFile(location);
     }
 
     @Override
