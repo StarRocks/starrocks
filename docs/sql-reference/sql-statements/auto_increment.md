@@ -256,7 +256,7 @@ If the `AUTO_INCREMENT` column is not a primary key or a part of the primary key
 - If the row already exists in the table, StarRocks does not update the auto-incremented ID.
 - If the row is newly loaded into the table, StarRocks generates a new auto-incremented ID.
 
-This feature can be used to build a dictionary table for fastly computing distinct STRING values.
+This feature can be used to build a dictionary table for quickly computing distinct STRING values.
 
 1. In the database `example_db`, create a table `test_tbl5` and specify the column `job1` as the `AUTO_INCREMENT` column and insert a data row into the table `test_tbl5`.
 
