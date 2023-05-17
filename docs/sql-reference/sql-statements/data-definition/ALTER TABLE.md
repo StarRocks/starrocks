@@ -121,7 +121,6 @@ Note:
    - storage_medium
    - storage_cooldown_time
    - replication_num
-   - in_memory
 
 2. For single-partition tables, partition name is the same as the table name.
 
@@ -434,11 +433,11 @@ SWAP WITH table_name;
     MODIFY PARTITION p1 SET("replication_num"="1");
     ```
 
-5. Batch alter the `in_memory` property of specified partitions.
+5. Batch alter the number of replicas for specified partitions.
 
     ```sql
     ALTER TABLE example_db.my_table
-    MODIFY PARTITION (p1, p2, p4) SET("in_memory"="true");
+    MODIFY PARTITION (p1, p2, p4) SET("replication_num"="1");
     ```
 
 6. Batch alter the storage medium of all partitions.
@@ -623,13 +622,6 @@ SWAP WITH table_name;
          "dynamic_partition.buckets" = "32"
          );
      ```
-
-15. Alter the `in_memory` property of the table.
-
-    ```sql
-    ALTER TABLE example_db.my_table
-    SET ("in_memory" = "true");
-    ```
 
 ### Rename
 
