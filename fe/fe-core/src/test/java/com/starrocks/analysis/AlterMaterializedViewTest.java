@@ -138,8 +138,6 @@ public class AlterMaterializedViewTest {
             Assert.assertThrows(DdlException.class, () -> currentState.alterMaterializedView(stmt));
         }
     }
-<<<<<<< HEAD
-=======
 
     // TODO: consider to support alterjob for mv
     @Test
@@ -166,5 +164,4 @@ public class AlterMaterializedViewTest {
             Assert.assertThrows(DdlException.class, () -> currentState.alterMaterializedView(stmt));
         }
     }
->>>>>>> e86294b71 ([Enhancement] support colocate group when create mv (#22512))
 }
