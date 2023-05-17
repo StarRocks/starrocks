@@ -185,7 +185,7 @@ jobs:
         run: |
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               cd elastic-service
-              python3 lib/ecs_lib.py delete_instances conf/starrocks_deploy.conf
+              sh elastic-cluster.sh --delete
           fi
 
   be-ut:
