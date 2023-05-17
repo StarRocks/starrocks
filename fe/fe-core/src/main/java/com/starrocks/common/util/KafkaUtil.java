@@ -195,7 +195,7 @@ public class KafkaUtil {
                     if (code != TStatusCode.OK) {
                         LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
                         // When getting kafka info timed out, we tried again three times.
-                        if (++retryTimes > 3 || retryTimes * Config.routine_load_kafka_timeout_second >
+                        if (++retryTimes > 3 || (retryTimes + 1) * Config.routine_load_kafka_timeout_second >
                                                                         Config.routine_load_task_timeout_second) {
                             throw new UserException(
                                     "failed to send proxy request to " + address + " err " + result.status.errorMsgs);
