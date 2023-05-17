@@ -26,13 +26,6 @@ Different branches of StarRocks correspond to different development environment 
   | branch-3.0      | starrocks/dev-env-centos7:3.0-latest |
   | branch-2.5      | starrocks/dev-env-centos7:2.5-latest |
 
-### Third-party tools
-
-The following third-party tools have been integrated into the images:
-
-- LLVM
-- Clang
-
 ## Prerequisites
 
 Before compiling StarRocks, make sure the following requirements are satisfied:
