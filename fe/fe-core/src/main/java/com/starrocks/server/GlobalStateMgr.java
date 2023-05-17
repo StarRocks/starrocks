@@ -531,13 +531,9 @@ public class GlobalStateMgr {
         Warehouse warehouse = warehouseMgr.getDefaultWarehouse();
         com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
         // TODO: need to refactor after be split into cn + dn
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA &&
-                !cluster.getComputeNodeIds().isEmpty()) {
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             for (Long cnId : cluster.getComputeNodeIds()) {
-                ComputeNode cn = systemInfoService.getBackend(cnId);
-                if (cn == null) {
-                    cn = systemInfoService.getComputeNode(cnId);
-                }
+                ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
                 nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getHost(), cn.getBrpcPort()));
             }
         } else {

@@ -30,7 +30,6 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -114,14 +113,10 @@ public class Utils {
         List<ComputeNode> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             // TODO: need to refactor after be split into cn + dn
-            ComputeNode backend = systemInfoService.getBackend(entry.getKey());
+            ComputeNode backend = systemInfoService.getBackendOrComputeNode(entry.getKey());
             if (backend == null) {
-                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                    backend = systemInfoService.getComputeNode(entry.getKey());
-                }
-                if (backend == null) {
-                    throw new NoAliveBackendException("Backend been dropped while building publish version request");
-                }
+                throw new NoAliveBackendException("Backend or computeNode been " +
+                        "dropped while building publish version request");
             }
             PublishVersionRequest request = new PublishVersionRequest();
             request.baseVersion = baseVersion;

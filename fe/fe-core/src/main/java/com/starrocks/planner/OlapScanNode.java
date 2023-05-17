@@ -488,15 +488,11 @@ public class OlapScanNode extends ScanNode {
             boolean collectedStat = false;
             for (Replica replica : replicas) {
                 // TODO: need to refactor after be split into cn + dn
-                ComputeNode backend =  GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                ComputeNode backend =  GlobalStateMgr.getCurrentSystemInfo().
+                        getBackendOrComputeNode(replica.getBackendId());
                 if (backend == null) {
-                    if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                        backend = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(replica.getBackendId());
-                    }
-                    if (backend == null) {
-                        LOG.debug("replica {} not exists", replica.getBackendId());
-                        continue;
-                    }
+                    LOG.debug("replica {} not exists", replica.getBackendId());
+                    continue;
                 }
                 String ip = backend.getHost();
                 int port = backend.getBePort();

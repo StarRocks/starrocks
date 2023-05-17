@@ -140,6 +140,17 @@ public class SimpleScheduler {
     }
 
     @Nullable
+    public static TNetworkAddress getBackendOrComputeNodeHost(ImmutableMap<Long, ComputeNode> computeNodes,
+                                                              ImmutableMap<Long, Backend> backendMap,
+                                                              Reference<Long> nodeIdRef) {
+        TNetworkAddress addr = getBackendHost(backendMap, nodeIdRef);
+        if (addr == null) {
+            return getComputeNodeHost(computeNodes, nodeIdRef);
+        }
+        return addr;
+    }
+
+    @Nullable
     public static Backend getBackend(ImmutableMap<Long, Backend> nodeMap) {
         if (nodeMap == null || nodeMap.isEmpty()) {
             return null;

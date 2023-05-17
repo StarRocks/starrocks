@@ -517,14 +517,10 @@ public class CoordinatorPreprocessor {
             if (fragment.getDataPartition() == DataPartition.UNPARTITIONED) {
                 Reference<Long> backendIdRef = new Reference<>();
                 TNetworkAddress execHostport;
+                // TODO: need to refactor after be split into cn + dn
                 if (usedComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                    execHostport = SimpleScheduler.getComputeNodeHost(this.idToComputeNode, backendIdRef);
-                    // TODO: need to refactor after be split into cn + dn
-                    if (execHostport == null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                        execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
-                    }
-                    // for debug
-                    LOG.info("this.idToComputeNode is {}", idToComputeNode);
+                    execHostport = SimpleScheduler.getBackendOrComputeNodeHost(this.idToComputeNode,
+                            this.idToBackend, backendIdRef);
                 } else {
                     execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
                 }

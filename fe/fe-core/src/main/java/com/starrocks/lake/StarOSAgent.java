@@ -471,9 +471,13 @@ public class StarOSAgent {
                         if (workerInfo.getWorkerPropertiesMap().containsKey("be_port")) {
                             int bePort = Integer.parseInt(workerInfo.getWorkerPropertiesMap().get("be_port"));
                             ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo()
-                                    .getComputeNodeWithBePort(pair[0], bePort);
+                                    .getBackendWithBePort(pair[0], bePort);
                             if (cn == null) {
-                                LOG.warn("can't find backendId with bePort:{} for {}.", bePort, workerAddr);
+                                cn = GlobalStateMgr.getCurrentSystemInfo()
+                                        .getComputeNodeWithBePort(pair[0], bePort);
+                                if (cn == null) {
+                                    LOG.warn("can't find backendId with bePort:{} for {}.", bePort, workerAddr);
+                                }
                             } else {
                                 backendId = cn.getId();
                             }

@@ -45,7 +45,6 @@ import com.starrocks.qe.QueryStateException;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -104,14 +103,9 @@ public class LakeDeleteJob extends DeleteJob {
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
             for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
                 // TODO: need to refactor after be split into cn + dn
-                ComputeNode backend = systemInfoService.getBackend(entry.getKey());
+                ComputeNode backend = systemInfoService.getBackendOrComputeNode(entry.getKey());
                 if (backend == null) {
-                    if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                        backend = systemInfoService.getComputeNode(entry.getKey());
-                    }
-                    if (backend == null) {
-                        throw new DdlException("Backend " + entry.getKey() + " has been dropped");
-                    }
+                    throw new DdlException("Backend or computeNode" + entry.getKey() + " has been dropped");
                 }
                 DeleteDataRequest request = new DeleteDataRequest();
                 request.tabletIds = entry.getValue();
