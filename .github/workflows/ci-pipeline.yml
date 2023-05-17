@@ -185,7 +185,7 @@ jobs:
         run: |
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               cd elastic-service
-              sh elastic-cluster.sh --delete
+              ./bin/elastic-cluster.sh --delete
           fi
 
   be-ut:
@@ -659,7 +659,7 @@ jobs:
       - name: Clean ECS
         run: |
           cd elastic-service
-          sh elastic-cluster.sh --delete
+          ./bin/elastic-cluster.sh --delete
 
       - name: Clean TMP
         run: |
