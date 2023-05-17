@@ -477,6 +477,8 @@ public class StarOSAgent {
                                         .getComputeNodeWithBePort(pair[0], bePort);
                                 if (cn == null) {
                                     LOG.warn("can't find backendId with bePort:{} for {}.", bePort, workerAddr);
+                                } else {
+                                    backendId = cn.getId();
                                 }
                             } else {
                                 backendId = cn.getId();
