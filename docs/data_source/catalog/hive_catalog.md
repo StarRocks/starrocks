@@ -439,6 +439,7 @@ However, if the frequency of data updates in Hive is high, you can tune these pa
 | remote_file_cache_refresh_interval_sec | No       | The time interval at which StarRocks asynchronously updates the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `60`. |
 | metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Hive tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
 | remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
+| enable_cache_list_names                | No       | Specifies whether StarRocks caches Hive partition names. Valid values: `true` and `false`. Default value: `false`. The value `true` enables the cache, and the value `false` disables the cache. |
 
 For more information, see the "[Understand automatic asynchronous update](../catalog/hive_catalog.md#appendix-understand-automatic-asynchronous-update)" section of this topic.
 
@@ -805,15 +806,28 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hive_table
 ```
 
-## Synchronize metadata updates
+## Manually or automatically update metadata
 
 ### Manual update
 
-By default, StarRocks caches the metadata of Hive and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Hive table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
+By default, StarRocks caches the metadata of Hive and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Hive table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to manually update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name>
 ```
+
+You need to manually update metadata in the following situations:
+
+- A data file in an existing partition is changed, for example, by running the `INSERT OVERWRITE ... PARTITION ...` command.
+- Schema changes are made on a Hive table.
+- An existing Hive table is deleted by using the DROP statement, and a new Hive table with the same name as the deleted Hive table is created.
+- You have specified `"enable_cache_list_names" = "true"` in `PROPERTIES` at the creation of your Hive catalog, and you want to query new partitions that you just created on your Hive cluster.
+
+  > **NOTE**
+  >
+  > From v2.5.5 onwards, StarRocks provides the periodic Hive metadata cache refresh feature. For more information, see the below "Periodically refresh Hive metadata cache" section of this topic. After you enable this feature, StarRocks refreshes your Hive metadata cache every 10 minutes by default. Therefore, manual updates are not needed in most cases. You need to perform a manual update only when you want to query new partitions immediately after the new partitions are created on your Hive cluster.
+
+Note that the REFRESH EXTERNAL TABLE refreshes only the tables and partitions cached in your FEs.
 
 ### Automatic incremental update
 
@@ -887,7 +901,19 @@ You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file o
 | enable_hms_parallel_process_evens | Specifies whether StarRocks processes events in parallel as it reads the events. Valid values: `true` and `false`. Default value: `true`. The value `true` enables parallelism, and the value `false` disables parallelism. |
 | hms_process_events_parallel_num   | The maximum number of events that StarRocks can process in parallel. Default value: `4`. |
 
-## Appendix: Understand automatic asynchronous update
+## Periodically refresh metadata cache
+
+From v2.5.5 onwards, StarRocks can periodically refresh the cached metadata of the frequently accessed Hive catalogs to perceive data changes. You can configure the Hive metadata cache refresh through the following [FE parameters](../../administration/Configuration.md#fe-configuration-items):
+
+| Configuration item                                           | Default                              | Description                          |
+| ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
+| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This item is an [FE dynamic parameter](../../administration/Configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) command. |
+| background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | The interval between two consecutive Hive metadata cache refreshes. Unit: millisecond. This item is an [FE dynamic parameter](../../administration/Configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) command. |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. This item is an [FE dynamic parameter](../../administration/Configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) command. |
+
+Using the periodic Hive metadata cache refresh feature and the metadata automatic asynchronous update policy together significantly accelerates data access, reduces the read load from external data sources, and improves query performance.
+
+## Appendix: Understand metadata automatic asynchronous update
 
 Automatic asynchronous update is the default policy that StarRocks uses to update the metadata in Hive catalogs.
 

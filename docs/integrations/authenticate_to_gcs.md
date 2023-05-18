@@ -113,7 +113,7 @@ The following table describes the parameters you need to configure in `StorageCr
 
 | **Parameter**                          | **Default value** | **Value** **example**                                       | **Description**                                              |
 | -------------------------------------- | ----------------- | ----------------------------------------------------------- | ------------------------------------------------------------ |
-| gcp.gcs.service_account_email          | ""                | "user@hello.iam.gserviceaccount.com"                        | The email address in the JSON file generated at the creation of the service account. |
+| gcp.gcs.service_account_email          | ""                | "`user@hello.iam.gserviceaccount.com`"                        | The email address in the JSON file generated at the creation of the service account. |
 | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                  | The private key ID in the JSON file generated at the creation of the service account. |
 | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n" | The private key in the JSON file generated at the creation of the service account. |
 
@@ -150,7 +150,7 @@ The following table describes the parameters you need to configure in `StorageCr
 
 | **Parameter**                          | **Default value** | **Value** **example**                                       | **Description**                                              |
 | -------------------------------------- | ----------------- | ----------------------------------------------------------- | ------------------------------------------------------------ |
-| gcp.gcs.service_account_email          | ""                | "user@hello.iam.gserviceaccount.com"                        | The email address in the JSON file generated at the creation of the meta service account. |
+| gcp.gcs.service_account_email          | ""                | "`user@hello.iam.gserviceaccount.com`"                        | The email address in the JSON file generated at the creation of the meta service account. |
 | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                  | The private key ID in the JSON file generated at the creation of the meta service account. |
 | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n" | The private key in the JSON file generated at the creation of the meta service account. |
 | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                     | The data service account that you want to impersonate.       |
