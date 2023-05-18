@@ -51,7 +51,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |meta_delay_toleration_second | 300  | FE 所在 StarRocks 集群中，非 Leader FE 能够容忍的元数据落后的最大时间。单位：秒。<br>如果非 Leader FE 上的元数据与 Leader FE 上的元数据之间的延迟时间超过该参数取值，则该非 Leader FE 将停止服务。 |
 |drop_backend_after_decommission|TRUE|BE 被下线后，是否删除该 BE。true 代表 BE 被下线后会立即删除该 BE。False 代表下线完成后不删除 BE。|
 |enable_collect_query_detail_info|FALSE|是否收集查询的 profile 信息。设置为 true 时，系统会收集查询的 profile。设置为 false 时，系统不会收集查询的 profile。|
-|enable_background_refresh_connector_metadata| v3.0 为 TRUE<br />v2.5 为 FALSE |是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 通过轮询经常访问的 Hive 外部数据目录的 Hive Metastore 感知数据更新，并将信息缓存至对应外部数据目录的元数据中。`true` 代表开启，`false` 代表关闭。自 v2.5.5 起支持。 |
+|enable_background_refresh_connector_metadata| v3.0 为 TRUE<br />v2.5 为 FALSE |是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（Hive Metastore 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。自 v2.5.5 起支持。 |
 |background_refresh_metadata_interval_millis| 600000 |接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。自 v2.5.5 起支持。|
 |background_refresh_metadata_time_secs_since_last_access_secs|86400|Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。自 v2.5.5 起支持。|
 
