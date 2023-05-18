@@ -119,6 +119,7 @@ protected:
 
     void SetUp() override {
         config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
+        config::enable_size_tiered_compaction_strategy = false;
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
