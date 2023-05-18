@@ -183,34 +183,6 @@ public class MaterializedViewAnalyzer {
             SECOND
         }
 
-
-        static class SelectRelationCollector extends AstVisitor<Void, Void> {
-            private final List<SelectRelation> selectRelations = new ArrayList<>();
-
-            public static List<SelectRelation> collectBaseRelations(QueryRelation queryRelation) {
-                SelectRelationCollector collector = new SelectRelationCollector();
-                queryRelation.accept(collector, null);
-                return collector.selectRelations;
-            }
-
-            @Override
-            public Void visitRelation(Relation node, Void context) {
-                return null;
-            }
-
-            @Override
-            public Void visitSelect(SelectRelation node, Void context) {
-                selectRelations.add(node);
-                return null;
-            }
-
-            @Override
-            public Void visitSetOp(SetOperationRelation node, Void context) {
-                for (QueryRelation sub : node.getRelations()) {
-                    selectRelations.addAll(collectBaseRelations(sub));
-                }
-                return null;
-
         private boolean isSupportBasedOnTable(Table table) {
             return SUPPORTED_TABLE_TYPE.contains(table.getType()) || table instanceof OlapTable;
         }
