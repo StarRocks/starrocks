@@ -790,11 +790,11 @@ DROP Catalog hudi_catalog_glue;
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hudi_table
 ```
 
-## 更新缓存元数据
+## 手动或自动更新元数据
 
 ### 手动更新
 
-默认情况下，StarRocks 会缓存 Hudi 的元数据、并以异步模式自动更新缓存的元数据，从而提高查询性能。此外，在对 Hudi 表做了表结构变更、或其他表更新后，您也可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) 更新该表的元数据，从而确保 StarRocks 第一时间生成合理的查询计划：
+默认情况下，StarRocks 会缓存 Hudi 的元数据、并以异步模式自动更新缓存的元数据，从而提高查询性能。此外，在对 Hudi 表做了表结构变更或其他表更新后，您也可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) 手动更新该表的元数据，从而确保 StarRocks 第一时间生成合理的查询计划：
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name>
@@ -872,7 +872,7 @@ HMS 2.x 和 3.x 版本均支持配置事件侦听器。这里以配套 HMS 3.1.2
 | enable_hms_parallel_process_evens | 指定 StarRocks 在读取事件时是否并行处理读取的事件。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 则开启并行机制，取值为 `false` 则关闭并行机制。 |
 | hms_process_events_parallel_num   | StarRocks 每次处理事件的最大并发数。默认值：`4`。            |
 
-## 附录：理解自动异步更新策略
+## 附录：理解元数据自动异步更新策略
 
 自动异步更新策略是 StarRocks 用于更新 Hudi Catalog 中元数据的默认策略。
 
