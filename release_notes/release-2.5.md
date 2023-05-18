@@ -149,7 +149,7 @@
 
 - [Hudi catalog](../data_source/catalog/hudi_catalog.md) 和 [Hudi 外部表](../data_source/External_table.md#apache-hudi-外表)支持查询 Merge On Read 表。[#6780](https://github.com/StarRocks/starrocks/pull/6780)
 - [Hive catalog](../data_source/catalog/hive_catalog.md)、Hudi catalog 和 [Iceberg catalog](../data_source/catalog/iceberg_catalog.md) 支持查询 STRUCT 和 MAP 类型数据。[#10677](https://github.com/StarRocks/starrocks/issues/10677)
-- 提供 [Local Cache](../data_source/Block_cache.md) 特性，在查询 HDFS 或对象存储上的热数据时，大幅优化数据访问效率。[#11597](https://github.com/StarRocks/starrocks/pull/11579)
+- 提供 [Data Cache](../data_source/data_cache.md) 特性，在查询外部 HDFS 或对象存储上的热数据时，大幅优化数据查询效率。[#11597](https://github.com/StarRocks/starrocks/pull/11579)
 - 支持 [Delta Lake catalog](../data_source/catalog/deltalake_catalog.md)，无需导入数据或创建外部表即可查询 Delta Lake 数据。[#11972](https://github.com/StarRocks/starrocks/issues/11972)
 - Hive catalog、Hudi catalog 和 Iceberg catalog 兼容 AWS Glue。[#12249](https://github.com/StarRocks/starrocks/issues/12249)
 - 支持通过[文件外部表](../data_source/file_external_table.md)查询 HDFS 或对象存储上的 Parquet 和 ORC 文件。[#13064](https://github.com/StarRocks/starrocks/pull/13064)

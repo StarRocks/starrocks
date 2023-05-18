@@ -6,7 +6,7 @@ StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源�
 >
 > 从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 和 JDBC 数据源的场景，推荐使用 Catalog。参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md) 和 [JDBC catalog](../data_source/catalog/jdbc_catalog.md)。
 
-从 2.5 版本开始，查询外部数据源时支持 Local Cache，提升对热数据的查询性能。参见[Local Cache](Block_cache.md)。
+从 2.5 版本开始，查询外部数据源时支持 Data Cache，提升对热数据的查询性能。参见[Data Cache](data_cache.md)。
 
 ## MySQL 外部表
 
