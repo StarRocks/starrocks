@@ -799,11 +799,11 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hudi_table
 ```
 
-## Synchronize metadata updates
+## Manually or automatically update metadata
 
 ### Manual update
 
-By default, StarRocks caches the metadata of Hudi and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Hudi table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
+By default, StarRocks caches the metadata of Hudi and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Hudi table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to manually update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name>
@@ -881,7 +881,7 @@ You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file o
 | enable_hms_parallel_process_evens | Specifies whether StarRocks processes events in parallel as it reads the events. Valid values: `true` and `false`. Default value: `true`. The value `true` enables parallelism, and the value `false` disables parallelism. |
 | hms_process_events_parallel_num   | The maximum number of events that StarRocks can process in parallel. Default value: `4`. |
 
-## Appendix: Understand automatic asynchronous update
+## Appendix: Understand metadata automatic asynchronous update
 
 Automatic asynchronous update is the default policy that StarRocks uses to update the metadata in Hudi catalogs.
 
