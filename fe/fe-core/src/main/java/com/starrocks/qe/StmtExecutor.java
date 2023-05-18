@@ -906,8 +906,6 @@ public class StmtExecutor {
         } catch (RejectedExecutionException e) {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
-            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
-            analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
             if (analyzeStmt.isExternal()) {
                 GlobalStateMgr.getCurrentAnalyzeMgr().addOrUpdateAnalyzeStatus(analyzeStatus);
             } else {
