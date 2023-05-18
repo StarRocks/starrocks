@@ -230,7 +230,7 @@ SELECT /*+ SET_VAR
 
 * enable_scan_block_cache（2.5 及以后）
 
-  是否开启 Local Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Local Cache](../data_source/Block_cache.md)。该特性从 2.5 版本开始支持。
+  是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache.md)。该特性从 2.5 版本开始支持。
 
 * enable_populate_block_cache（2.5 及以后）
 
