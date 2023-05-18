@@ -493,6 +493,52 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return Pair.create(status, prio);
     }
 
+    private boolean isReplicaBackendDead(Backend backend) {
+        return backend != null && !backend.isAlive();
+    }
+
+    private boolean isReplicaBackendDropped(Backend backend) {
+        return backend == null;
+    }
+
+    private boolean isReplicaStateAbnormal(Replica replica, Backend backend, Set<String> replicaHostSet) {
+        return replica.getState() == ReplicaState.CLONE
+                || replica.getState() == ReplicaState.DECOMMISSION
+                || replica.isBad()
+                || !replicaHostSet.add(backend.getHost());
+    }
+
+    /**
+     * For certain deployment, like k8s pods + pvc, the replica is not lost even the
+     * corresponding backend is detected as dead, because the replica data is persisted
+     * on a pvc which is backed by a remote storage service, such as AWS EBS. And later,
+     * k8s control place will schedule a new pod and attach the pvc to it which will
+     * restore the replica to a {@link ReplicaState#NORMAL} state immediately. But normally
+     * the {@link com.starrocks.clone.TabletScheduler} of Starrocks will start to schedule
+     * {@link TabletStatus#REPLICA_MISSING} tasks and create new replicas in a short time.
+     * After new pod scheduling is completed, {@link com.starrocks.clone.TabletScheduler} has
+     * to delete the redundant healthy replica which cause resource waste and may also affect
+     * the loading process.
+     *
+     * <p> This method checks the necessity of a {@link TabletStatus#REPLICA_MISSING} task without
+     * considering the corresponding backends of tablet replicas are alive or not.
+     *
+     * @param systemInfoService {@link SystemInfoService}
+     * @return {@code true} means that we still need to schedule a {@link TabletStatus#REPLICA_MISSING} task
+     * even though we have ignored the aliveness of corresponding backend
+     */
+    public boolean checkReplicaMissingIgnoreDeadBackend(SystemInfoService systemInfoService) {
+        Set<String> hosts = Sets.newHashSet();
+        for (Replica replica : replicas) {
+            Backend backend = systemInfoService.getBackend(replica.getBackendId());
+            if (isReplicaBackendDropped(backend) || isReplicaStateAbnormal(replica, backend, hosts)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * A replica is healthy only if
      * 1. the backend is available
@@ -510,15 +556,14 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         int alive = 0;
         int aliveAndVersionComplete = 0;
         int stable = 0;
-        int availableInCluster = 0;
 
         Replica needFurtherRepairReplica = null;
         Set<String> hosts = Sets.newHashSet();
         for (Replica replica : replicas) {
             Backend backend = systemInfoService.getBackend(replica.getBackendId());
-            if (backend == null || !backend.isAlive() || replica.getState() == ReplicaState.CLONE
-                    || replica.getState() == ReplicaState.DECOMMISSION
-                    || replica.isBad() || !hosts.add(backend.getHost())) {
+            if (isReplicaBackendDropped(backend)
+                    || isReplicaBackendDead(backend)
+                    || isReplicaStateAbnormal(replica, backend, hosts)) {
                 // this replica is not alive,
                 // or if this replica is on same host with another replica, we also treat it as 'dead',
                 // so that Tablet Scheduler will create a new replica on different host.
@@ -542,8 +587,6 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 continue;
             }
             stable++;
-
-            availableInCluster++;
         }
 
         // 1. alive replicas are not enough
