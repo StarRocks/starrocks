@@ -72,6 +72,8 @@ import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
@@ -79,6 +81,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -885,6 +888,46 @@ public class AnalyzerUtils {
                 return null;
             }
         }.visit(node);
+    }
+
+    public static Expr resolveSlotRef(SlotRef slotRef, QueryStatement queryStatement) {
+        AstVisitor<Expr, Void> slotRefResolver = new AstVisitor<Expr, Void>() {
+            @Override
+            public Expr visitSelect(SelectRelation node, Void context) {
+                for (SelectListItem selectListItem : node.getSelectList().getItems()) {
+                    if (selectListItem.getAlias() == null) {
+                        if (selectListItem.getExpr() instanceof SlotRef) {
+                            SlotRef slot = (SlotRef) selectListItem.getExpr();
+                            if (slot.getColumnName().equalsIgnoreCase(slotRef.getColumnName())) {
+                                return slot;
+                            }
+                        }
+                    } else {
+                        if (selectListItem.getAlias().equalsIgnoreCase(slotRef.getColumnName())) {
+                            return selectListItem.getExpr();
+                        }
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public Expr visitSetOp(SetOperationRelation node, Void context) {
+                for (Relation relation : node.getRelations()) {
+                    Expr resolved = relation.accept(this, null);
+                    if (resolved != null) {
+                        return resolved;
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public SlotRef visitValues(ValuesRelation node, Void context) {
+                return null;
+            }
+        };
+        return queryStatement.getQueryRelation().accept(slotRefResolver, null);
     }
 
 }

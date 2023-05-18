@@ -104,6 +104,20 @@ public class MvRewriteOptimizationTest {
                         "properties (\n" +
                         "\"replication_num\" = \"1\"\n" +
                         ");")
+                .withTable("create table emps_par (\n" +
+                        "    empid int not null,\n" +
+                        "    deptno int not null,\n" +
+                        "    name varchar(25) not null,\n" +
+                        "    salary double\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(`deptno`)\n" +
+                        "(PARTITION p1 VALUES [(\"-2147483648\"), (\"2\")),\n" +
+                        "PARTITION p2 VALUES [(\"2\"), (\"3\")),\n" +
+                        "PARTITION p3 VALUES [(\"3\"), (\"4\")))\n" +
+                        "distributed by hash(`empid`) buckets 10\n" +
+                        "properties (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");")
                 .withTable("create table depts (\n" +
                         "    deptno int not null,\n" +
                         "    name varchar(25) not null\n" +
@@ -685,6 +699,35 @@ public class MvRewriteOptimizationTest {
 
             starRocksAssert.dropView("view1");
             dropMv("test", "join_mv_1");
+        }
+
+        {
+            starRocksAssert.withView("create view view1 as " +
+                    " SELECT emps_par.deptno as deptno1, depts.deptno as deptno2, emps_par.empid, emps_par.name" +
+                    " from emps_par join depts" +
+                    " on emps_par.deptno = depts.deptno");
+
+            createAndRefreshMv("test", "join_mv_2", "create materialized view join_mv_2" +
+                    " distributed by hash(deptno2)" +
+                    " partition by deptno1" +
+                    " as " +
+                    " SELECT deptno1, deptno2, empid, name from view1 union SELECT deptno1, deptno2, empid, name from view1");
+
+            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+                    " distributed by hash(deptno2)" +
+                    " partition by deptno1" +
+                    " as " +
+                    " SELECT deptno1, deptno2, empid, name from view1");
+
+            {
+                String query = "SELECT deptno1, deptno2, empid, name from view1";
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "join_mv_1");
+            }
+
+            starRocksAssert.dropView("view1");
+            dropMv("test", "join_mv_1");
+            dropMv("test", "join_mv_2");
         }
     }
 
