@@ -38,7 +38,7 @@ See the "Background information" section in [Load data from HDFS or cloud storag
 
 ### Routine load
 
-If you choose Routine Load, make sure that topics are created in your Apache Kafka® cluster. Assume that you have created two topics: `topic1` and `topic2`.
+If you choose [Routine Load](./RoutineLoad.md), make sure that topics are created in your Apache Kafka® cluster. Assume that you have created two topics: `topic1` and `topic2`.
 
 ## Data examples
 
