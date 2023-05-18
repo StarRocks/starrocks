@@ -246,7 +246,7 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
 }
 
 void sigterm_handler(int signo, siginfo_t* info, void* context) {
-    LOG(INFO) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << ", is going to exit";
+    LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << ", is going to exit";
     k_starrocks_exit.store(true);
 }
 
