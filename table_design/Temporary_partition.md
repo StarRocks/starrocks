@@ -49,7 +49,7 @@ ADD TEMPORARY PARTITIONS START ("value1") END ("value2") EVERY {(INTERVAL <num> 
 
 ### **参数说明**
 
-`partition_desc`：为临时分区指定分桶数和部分属性，包括副本数、是否是内存表、存储介质等信息。
+`partition_desc`：为临时分区指定分桶数和部分属性，包括副本数、存储介质等信息。
 
 ### 示例
 
