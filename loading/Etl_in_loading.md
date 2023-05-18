@@ -38,7 +38,7 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 
 ### Routine Load
 
-如果使用 Routine Load 导入数据，必须确保您的 Apache Kafka® 集群已创建 Topic。本文假设您已部署两个 Topic，分别为 `topic1` 和 `topic2`。
+如果使用 [Routine Load](./RoutineLoad.md) 导入数据，必须确保您的 Apache Kafka® 集群已创建 Topic。本文假设您已部署两个 Topic，分别为 `topic1` 和 `topic2`。
 
 ## 数据样例
 
