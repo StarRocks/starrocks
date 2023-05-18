@@ -33,8 +33,6 @@
 // under the License.
 
 #include "service/internal_service.h"
-#include "gen_cpp/InternalService_types.h"
-#include "gen_cpp/PlanNodes_types.h"
 
 #include <fmt/format.h>
 
@@ -59,7 +57,9 @@
 #include "exec/pipeline/stream_epoch_manager.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"
+#include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/MVMaintenance_types.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/command_executor.h"
@@ -739,8 +739,9 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(
 }
 
 template <typename T>
-void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcController* controller, const PGetFileSchemaRequest* request,
-                                   PGetFileSchemaResult* response, google::protobuf::Closure* done) {
+void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcController* controller,
+                                                  const PGetFileSchemaRequest* request, PGetFileSchemaResult* response,
+                                                  google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     TGetFileSchemaRequest t_request;
 
@@ -758,7 +759,7 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
             return;
         }
     }
-    const auto &scan_range = t_request.scan_range.broker_scan_range;
+    const auto& scan_range = t_request.scan_range.broker_scan_range;
     if (scan_range.ranges.empty()) {
         st = Status::InvalidArgument("No file to scan. Please check the specified path.");
         return;

@@ -78,6 +78,7 @@ private:
     Status handle_timestamp(const std::shared_ptr<arrow::TimestampArray>& ts_array, uint8_t* buf, int32_t* wbtyes);
     Status next_selected_row_group();
     Status _init_parquet_reader();
+    Status _init_parquet_reader();
 
     const int32_t _num_of_columns_from_file;
     int64_t _num_rows = 0;
