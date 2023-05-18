@@ -33,7 +33,7 @@ RUN yum install -y java-1.8.0-openjdk-devel tzdata openssl curl vim ca-certifica
     rpm -ivh https://repo.mysql.com/mysql57-community-release-el7.rpm && \
     yum -y install mysql-community-client --nogpgcheck && \
     yum remove -y mysql57-community-release-el7
-ENV JAVA_HOME=/lib/jvm/default-java
+ENV JAVA_HOME=/usr/lib/jvm/java-openjdk
 
 WORKDIR $DEPLOYDIR
 
