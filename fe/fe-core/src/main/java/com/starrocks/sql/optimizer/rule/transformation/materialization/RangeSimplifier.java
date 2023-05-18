@@ -25,12 +25,16 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 public class RangeSimplifier {
+    protected static final Logger LOG = LogManager.getLogger(RangeSimplifier.class);
+
     private final List<ScalarOperator> srcPredicates;
 
     public RangeSimplifier(List<ScalarOperator> srcPredicates) {
@@ -103,6 +107,7 @@ public class RangeSimplifier {
                 return Utils.compoundAnd(rewrittenRangePredicates);
             }
         } catch (Exception e) {
+            LOG.debug("Simplify scalar operator {} failed:", Utils.compoundAnd(targets), e);
             return null;
         }
     }
@@ -114,7 +119,7 @@ public class RangeSimplifier {
             Preconditions.checkState(rangePredicate.getChild(0) instanceof ColumnRefOperator);
             Preconditions.checkState(rangePredicate.getChild(1) instanceof ConstantOperator);
             BinaryPredicateOperator srcBinary = (BinaryPredicateOperator) rangePredicate;
-            Preconditions.checkState(srcBinary.getBinaryType().isRange() || srcBinary.getBinaryType().isEqual());
+            Preconditions.checkState(srcBinary.getBinaryType().isEqualOrRange());
             ColumnRefOperator srcColumn = (ColumnRefOperator) srcBinary.getChild(0);
             ConstantOperator srcConstant = (ConstantOperator) srcBinary.getChild(1);
             if (!columnIdToRange.containsKey(srcColumn.getId())) {
@@ -134,7 +139,7 @@ public class RangeSimplifier {
     private List<ScalarOperator> filterScalarOperators(
             List<ScalarOperator> columnScalars, Range<ConstantOperator> validRange) {
         List<ScalarOperator> results = Lists.newArrayList();
-        ;
+
         for (ScalarOperator candidate : columnScalars) {
             if (isRedundantPredicate(candidate, validRange)) {
                 continue;
