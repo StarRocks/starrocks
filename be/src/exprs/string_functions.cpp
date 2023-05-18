@@ -45,7 +45,7 @@
 
 namespace starrocks {
 // A regex to match any regex pattern is equivalent to a substring search.
-static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]*)(?:\.\*)*)", re2::RE2::Quiet);
+static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+)(?:\.\*)*)", re2::RE2::Quiet);
 
 #define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                          \
     if (UNLIKELY(col->capacity_limit_reached())) {                                   \
@@ -2574,7 +2574,7 @@ Status StringFunctions::hs_compile_and_alloc_scratch(const std::string& pattern,
     if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SOM_LEFTMOST,
                    HS_MODE_BLOCK, nullptr, &state->database, &state->compile_err) != HS_SUCCESS) {
         std::stringstream error;
-        error << "Invalid regex expression: " << slice.data << ": " << state->compile_err->message;
+        error << "Invalid regex expression: " << slice << ": " << state->compile_err->message;
         context->set_error(error.str().c_str());
         hs_free_compile_error(state->compile_err);
         return Status::InvalidArgument(error.str());
@@ -2874,20 +2874,21 @@ static ColumnPtr regexp_replace_use_hyperscan(StringFunctionsState* state, const
                 [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
                    void* ctx) -> int {
                     auto* value = (MatchInfoChain*)ctx;
-                    if (from >= value->last_to) {
-                        MatchInfo info;
-                        info.from = from;
-                        info.to = to;
-                        value->info_chain.emplace_back(info);
-                        value->last_to = to;
+                    if (value->info_chain.empty()) {
+                        value->info_chain.emplace_back(MatchInfo{.from = from, .to = to});
+                    } else if (value->info_chain.back().from == from) {
+                        value->info_chain.back().to = to;
+                    } else {
+                        value->info_chain.emplace_back(MatchInfo{.from = from, .to = to});
                     }
+                    value->last_to = to;
                     return 0;
                 },
                 &match_info_chain);
         DCHECK(status == HS_SUCCESS || status == HS_SCAN_TERMINATED) << " status: " << status;
 
         std::string result_str;
-        result_str.reserve(value_size + match_info_chain.info_chain.size() * (rpl_value.size - state->size_of_pattern));
+        result_str.reserve(value_size);
 
         const char* start = str_viewer.value(row).data;
         size_t last_to = 0;
@@ -2991,23 +2992,29 @@ static void replace_all(std::string& str, const std::string& ptn, const std::str
 }
 
 StatusOr<ColumnPtr> StringFunctions::replace(FunctionContext* context, const Columns& columns) {
+    const ColumnPtr& arg0 = columns[0];
+    if (arg0->only_null()) {
+        return arg0;
+    }
+
     const auto state =
             reinterpret_cast<const ReplaceState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (state->const_pattern && state->pattern.empty()) {
-        return columns[0];
+        return arg0;
     }
 
-    const auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
-    const auto size = str_viewer.size();
+    // NOTE: ColumnView's size is not equal to input column's size, use input column instead.
+    const auto num_rows = arg0->size();
+    const auto str_viewer = ColumnViewer<TYPE_VARCHAR>(arg0);
     if (state->only_null) {
-        return NullableColumn::create(str_viewer.column(), NullColumn::create(size, 1));
+        return ColumnHelper::create_const_null_column(num_rows);
     }
 
     const auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     const auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
-    ColumnBuilder<TYPE_VARCHAR> result(size);
-    for (int row = 0; row < size; ++row) {
+    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    for (int row = 0; row < num_rows; ++row) {
         if (str_viewer.is_null(row) || (!state->const_pattern && ptn_viewer.is_null(row)) ||
             (!state->const_repl && rpl_viewer.is_null(row))) {
             result.append_null();

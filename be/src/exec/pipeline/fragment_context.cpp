@@ -138,6 +138,10 @@ void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadConte
 }
 
 void FragmentContext::cancel(const Status& status) {
+    if (_runtime_state != nullptr && _runtime_state->query_ctx() != nullptr) {
+        _runtime_state->query_ctx()->release_workgroup_token_once();
+    }
+
     _runtime_state->set_is_cancelled(true);
     set_final_status(status);
 

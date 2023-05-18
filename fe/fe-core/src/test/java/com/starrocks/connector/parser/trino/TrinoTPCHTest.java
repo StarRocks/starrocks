@@ -55,13 +55,28 @@ public class TrinoTPCHTest extends TrinoTestBase {
     }
 
     @Test
+    public void testTPCH4_2() {
+        runFileUnitTest("tpch/q4-2");
+    }
+
+    @Test
     public void testTPCH5() {
         runFileUnitTest("tpch/q5");
     }
 
     @Test
+    public void testTPCH5_2() {
+        runFileUnitTest("tpch/q5-2");
+    }
+
+    @Test
     public void testTPCH6() {
         runFileUnitTest("tpch/q6");
+    }
+
+    @Test
+    public void testTPCH6_2() {
+        runFileUnitTest("tpch/q6-2");
     }
 
     @Test
@@ -95,6 +110,11 @@ public class TrinoTPCHTest extends TrinoTestBase {
     }
 
     @Test
+    public void testTPCH12_2() {
+        runFileUnitTest("tpch/q12-2");
+    }
+
+    @Test
     public void testTPCH13() {
         runFileUnitTest("tpch/q13");
     }
@@ -102,6 +122,11 @@ public class TrinoTPCHTest extends TrinoTestBase {
     @Test
     public void testTPCH14() {
         runFileUnitTest("tpch/q14");
+    }
+
+    @Test
+    public void testTPCH14_2() {
+        runFileUnitTest("tpch/q14-2");
     }
 
     @Test
@@ -134,6 +159,11 @@ public class TrinoTPCHTest extends TrinoTestBase {
     @Test
     public void testTPCH20() {
         runFileUnitTest("tpch/q20");
+    }
+
+    @Test
+    public void testTPCH20_2() {
+        runFileUnitTest("tpch/q20-2");
     }
 
     @Test

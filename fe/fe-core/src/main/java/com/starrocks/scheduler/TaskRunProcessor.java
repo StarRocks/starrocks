@@ -17,4 +17,6 @@ package com.starrocks.scheduler;
 
 public interface TaskRunProcessor {
     void processTaskRun(TaskRunContext context) throws Exception;
+
+    void postTaskRun(TaskRunContext context) throws Exception;
 }

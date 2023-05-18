@@ -15,11 +15,22 @@
 #include "exec/schema_scanner.h"
 
 #include "column/type_traits.h"
+#include "exec/schema_scanner/schema_be_bvars_scanner.h"
+#include "exec/schema_scanner/schema_be_cloud_native_compactions_scanner.h"
+#include "exec/schema_scanner/schema_be_compactions_scanner.h"
+#include "exec/schema_scanner/schema_be_configs_scanner.h"
+#include "exec/schema_scanner/schema_be_logs_scanner.h"
+#include "exec/schema_scanner/schema_be_metrics_scanner.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
+#include "exec/schema_scanner/schema_be_threads_scanner.h"
+#include "exec/schema_scanner/schema_be_txns_scanner.h"
 #include "exec/schema_scanner/schema_charsets_scanner.h"
 #include "exec/schema_scanner/schema_collations_scanner.h"
 #include "exec/schema_scanner/schema_columns_scanner.h"
 #include "exec/schema_scanner/schema_dummy_scanner.h"
+#include "exec/schema_scanner/schema_fe_tablet_schedules_scanner.h"
+#include "exec/schema_scanner/schema_load_tracking_logs_scanner.h"
+#include "exec/schema_scanner/schema_loads_scanner.h"
 #include "exec/schema_scanner/schema_materialized_views_scanner.h"
 #include "exec/schema_scanner/schema_schema_privileges_scanner.h"
 #include "exec/schema_scanner/schema_schemata_scanner.h"
@@ -31,6 +42,8 @@
 #include "exec/schema_scanner/schema_user_privileges_scanner.h"
 #include "exec/schema_scanner/schema_variables_scanner.h"
 #include "exec/schema_scanner/schema_views_scanner.h"
+#include "exec/schema_scanner/starrocks_grants_to_scanner.h"
+#include "exec/schema_scanner/starrocks_role_edges_scanner.h"
 
 namespace starrocks {
 
@@ -111,12 +124,40 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaTaskRunsScanner>();
     case TSchemaTableType::SCH_MATERIALIZED_VIEWS:
         return std::make_unique<SchemaMaterializedViewsScanner>();
+    case TSchemaTableType::SCH_LOADS:
+        return std::make_unique<SchemaLoadsScanner>();
+    case TSchemaTableType::SCH_LOAD_TRACKING_LOGS:
+        return std::make_unique<SchemaLoadTrackingLogsScanner>();
     case TSchemaTableType::SCH_TABLES_CONFIG:
         return std::make_unique<SchemaTablesConfigScanner>();
     case TSchemaTableType::SCH_VERBOSE_SESSION_VARIABLES:
         return std::make_unique<SchemaVariablesScanner>(TVarType::VERBOSE);
     case TSchemaTableType::SCH_BE_TABLETS:
         return std::make_unique<SchemaBeTabletsScanner>();
+    case TSchemaTableType::SCH_BE_METRICS:
+        return std::make_unique<SchemaBeMetricsScanner>();
+    case TSchemaTableType::SCH_BE_TXNS:
+        return std::make_unique<SchemaBeTxnsScanner>();
+    case TSchemaTableType::SCH_BE_CONFIGS:
+        return std::make_unique<SchemaBeConfigsScanner>();
+    case TSchemaTableType::SCH_BE_THREADS:
+        return std::make_unique<SchemaBeThreadsScanner>();
+    case TSchemaTableType::SCH_BE_LOGS:
+        return std::make_unique<SchemaBeLogsScanner>();
+    case TSchemaTableType::SCH_FE_TABLET_SCHEDULES:
+        return std::make_unique<SchemaFeTabletSchedulesScanner>();
+    case TSchemaTableType::SCH_BE_COMPACTIONS:
+        return std::make_unique<SchemaBeCompactionsScanner>();
+    case TSchemaTableType::SCH_BE_BVARS:
+        return std::make_unique<SchemaBeBvarsScanner>();
+    case TSchemaTableType::SCH_BE_CLOUD_NATIVE_COMPACTIONS:
+        return std::make_unique<SchemaBeCloudNativeCompactionsScanner>();
+    case TSchemaTableType::STARROCKS_ROLE_EDGES:
+        return std::make_unique<StarrocksRoleEdgesScanner>();
+    case TSchemaTableType::STARROCKS_GRANT_TO_ROLES:
+        return std::make_unique<StarrocksGrantsToScanner>(TGrantsToType::ROLE);
+    case TSchemaTableType::STARROCKS_GRANT_TO_USERS:
+        return std::make_unique<StarrocksGrantsToScanner>(TGrantsToType::USER);
     default:
         return std::make_unique<SchemaDummyScanner>();
     }

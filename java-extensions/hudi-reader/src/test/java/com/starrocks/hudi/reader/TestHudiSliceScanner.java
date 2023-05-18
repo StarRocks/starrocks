@@ -295,7 +295,7 @@ insert into test_hudi_mor5 values('AA1', 20, 1, "1", cast(date_format("2021-01-0
         params.put("hive_column_names",
                 "_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key,_hoodie_partition_path,_hoodie_file_name,uuid,ts,a,b,c");
         params.put("hive_column_types",
-                "string#string#string#string#string#string#int#int#string#TimestampMicros");
+                "string#string#string#string#string#string#int#int#string#timestamp-micros");
         params.put("instant_time", "20230208203804485");
         params.put("data_file_length", "435028");
         params.put("input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat");

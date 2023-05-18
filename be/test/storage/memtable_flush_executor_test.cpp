@@ -112,6 +112,7 @@ static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
         auto fd = new Field(cid, name, type, nullable);
         fd->set_is_key(i < nkey);
         fd->set_aggregate_method(i < nkey ? STORAGE_AGGREGATE_NONE : STORAGE_AGGREGATE_REPLACE);
+        fd->set_uid(cid);
         fields.emplace_back(fd);
     }
     ret = std::make_unique<Schema>(std::move(fields));

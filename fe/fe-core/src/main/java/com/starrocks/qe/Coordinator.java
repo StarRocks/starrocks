@@ -43,20 +43,25 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.ThriftServer;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.load.loadv2.BulkLoadJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.StreamLoadPlanner;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
@@ -87,11 +92,13 @@ import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TRuntimeFilterDestination;
 import com.starrocks.thrift.TRuntimeFilterProberParams;
+import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -162,10 +169,14 @@ public class Coordinator {
     private List<String> deltaUrls;
     private Map<String, String> loadCounters;
     private String trackingUrl;
+    private Set<String> rejectedRecordPaths = new HashSet<>();
     // for export
     private List<String> exportFiles;
     private final List<TTabletCommitInfo> commitInfos = Lists.newArrayList();
     private final List<TTabletFailInfo> failInfos = Lists.newArrayList();
+
+    // for external table sink
+    private final List<TSinkCommitInfo> sinkCommitInfos = Lists.newArrayList();
     // Input parameter
     private long jobId = -1; // job which this task belongs to
     private TUniqueId queryId;
@@ -173,6 +184,44 @@ public class Coordinator {
     private final boolean needReport;
 
     private final CoordinatorPreprocessor coordinatorPreprocessor;
+
+    private boolean thriftServerHighLoad;
+
+    // only used for sync stream load profile
+    // so only init relative data structure
+    public Coordinator(StreamLoadPlanner planner, TNetworkAddress address) {
+        TExecPlanFragmentParams params = planner.getExecPlanFragmentParams();
+        queryId = params.getParams().getFragment_instance_id();
+        LOG.info("Execution Profile " + DebugUtil.printId(queryId));
+        queryProfile = new RuntimeProfile("Execution Profile " + DebugUtil.printId(queryId));
+
+        fragmentProfiles = new ArrayList<>();
+        fragmentProfiles.add(new RuntimeProfile("Fragment 0"));
+        queryProfile.addChild(fragmentProfiles.get(0));
+        profileDoneSignal = new MarkedCountDownLatch<>(1);
+        profileDoneSignal.addMark(queryId, -1L /* value is meaningless */);
+
+        BackendExecState backendExecState = new BackendExecState(queryId, address);
+        backendExecStates.put(0, backendExecState);
+
+        attachInstanceProfileToFragmentProfile();
+
+        deltaUrls = Lists.newArrayList();
+        loadCounters = Maps.newHashMap();
+        this.connectContext = planner.getConnectContext();
+
+        // for complie
+        descTable = null;
+        this.isBlockQuery = true;
+        this.jobId = -1;
+        this.scanNodes = null;
+        this.queryOptions = null;
+        this.queryGlobals = null;
+        this.needReport = true;
+        this.coordinatorPreprocessor = null;
+        this.fragments = null;
+    }
+
 
     // Used for new planner
     public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
@@ -208,6 +257,7 @@ public class Coordinator {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setQualifiedUser(AuthenticationManager.ROOT_USER);
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setPipelineDop(0);
         this.connectContext = connectContext;
@@ -222,6 +272,10 @@ public class Coordinator {
             if (loadCompressionType != null) {
                 this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
             }
+        }
+        if (sessionVariables.containsKey(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)) {
+            this.queryOptions.setLog_rejected_record_num(
+                    Long.parseLong(sessionVariables.get(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)));
         }
         this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
         this.needReport = true;
@@ -251,6 +305,10 @@ public class Coordinator {
                 this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
             }
         }
+        if (sessionVariables.containsKey(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)) {
+            this.queryOptions.setLog_rejected_record_num(
+                    Long.parseLong(sessionVariables.get(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)));
+        }
         this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
         this.needReport = true;
 
@@ -272,7 +330,13 @@ public class Coordinator {
         this.queryOptions = context.getSessionVariable().toThrift();
         this.queryOptions.setQuery_type(TQueryType.LOAD);
         this.queryOptions.setQuery_timeout((int) loadPlanner.getTimeout());
-        this.queryOptions.setMem_limit(loadPlanner.getExecMemLimit());
+
+        // Don't set it explicit when zero. otherwise backend will take limit as zero.
+        long execMemLimit = loadPlanner.getExecMemLimit();
+        if (execMemLimit > 0) {
+            this.queryOptions.setMem_limit(execMemLimit);
+            this.queryOptions.setQuery_mem_limit(execMemLimit);
+        }
         this.queryOptions.setLoad_mem_limit(loadPlanner.getLoadMemLimit());
         Map<String, String> sessionVariables = loadPlanner.getSessionVariables();
         if (sessionVariables != null) {
@@ -283,6 +347,10 @@ public class Coordinator {
                 if (loadCompressionType != null) {
                     this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
                 }
+            }
+            if (sessionVariables.containsKey(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)) {
+                this.queryOptions.setLog_rejected_record_num(
+                        Long.parseLong(sessionVariables.get(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)));
             }
         }
 
@@ -345,6 +413,10 @@ public class Coordinator {
         return trackingUrl;
     }
 
+    public List<String> getRejectedRecordPaths() {
+        return rejectedRecordPaths.stream().collect(Collectors.toList());
+    }   
+
     public long getStartTime() {
         return this.queryGlobals.getTimestamp_ms();
     }
@@ -386,6 +458,10 @@ public class Coordinator {
 
     public List<TTabletFailInfo> getFailInfos() {
         return failInfos;
+    }
+
+    public List<TSinkCommitInfo> getSinkCommitInfos() {
+        return sinkCommitInfos;
     }
 
     public boolean isUsingBackend(Long backendID) {
@@ -536,6 +612,23 @@ public class Coordinator {
         }
     }
 
+    private void handleErrorBackendExecState(BackendExecState errorBackendExecState, TStatusCode errorCode,
+                                             String errMessage)
+            throws UserException, RpcException {
+        if (errorBackendExecState != null) {
+            cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
+            switch (Objects.requireNonNull(errorCode)) {
+                case TIMEOUT:
+                    throw new UserException("query timeout. backend id: " + errorBackendExecState.backend.getId());
+                case THRIFT_RPC_ERROR:
+                    SimpleScheduler.addToBlacklist(errorBackendExecState.backend.getId());
+                    throw new RpcException(errorBackendExecState.backend.getHost(), "rpc failed");
+                default:
+                    throw new UserException(errMessage + " backend:" + errorBackendExecState.address.hostname);
+            }
+        }
+    }
+
     private void deliverExecFragmentRequests(boolean enablePipelineEngine) throws Exception {
         long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
         lock();
@@ -543,8 +636,6 @@ public class Coordinator {
             // execute all instances from up to bottom
             int backendId = 0;
             int profileFragmentId = 0;
-
-            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
 
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
             for (PlanFragment fragment : fragments) {
@@ -586,7 +677,8 @@ public class Coordinator {
 
                 // if pipeline is enable and current fragment contain olap table sink, in fe we will 
                 // calculate the number of all tablet sinks in advance and assign them to each fragment instance
-                boolean enablePipelineTableSinkDop = enablePipelineEngine && fragment.hasOlapTableSink();
+                boolean enablePipelineTableSinkDop = enablePipelineEngine &&
+                        (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
                 boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
                 int tabletSinkTotalDop = 0;
                 int accTabletSinkDop = 0;
@@ -659,6 +751,10 @@ public class Coordinator {
                         }
                         futures.add(Pair.create(execState, execState.execRemoteFragmentAsync()));
                     }
+
+                    BackendExecState errorBackendExecState = null;
+                    TStatusCode errorCode = null;
+                    String errMessage = null;
                     for (Pair<BackendExecState, Future<PExecPlanFragmentResult>> pair : futures) {
                         TStatusCode code;
                         String errMsg = null;
@@ -688,18 +784,22 @@ public class Coordinator {
                             LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
                                     errMsg, code, fragment.getFragmentId(),
                                     pair.first.address.hostname, pair.first.address.port);
-                            cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
-                            switch (Objects.requireNonNull(code)) {
-                                case TIMEOUT:
-                                    throw new UserException("query timeout. backend id: " + pair.first.backend.getId());
-                                case THRIFT_RPC_ERROR:
-                                    SimpleScheduler.addToBlacklist(pair.first.backend.getId());
-                                    throw new RpcException(pair.first.backend.getHost(), "rpc failed");
-                                default:
-                                    throw new UserException(errMsg + " backend:" + pair.first.address.hostname);
+                            if (errorBackendExecState == null) {
+                                errorBackendExecState = pair.first;
+                                errorCode = code;
+                                errMessage = errMsg;
+                            }
+                            if (Objects.requireNonNull(code) == TStatusCode.TIMEOUT) {
+                                break;
                             }
                         }
                     }
+
+                    // Handle error results and cancel fragment instances, excluding TIMEOUT errors,
+                    // until all the delivered fragment instances are completed.
+                    // Otherwise, the cancellation RPC may arrive at BE before the delivery fragment instance RPC,
+                    // causing the instances to become stale and only able to be released after a timeout.
+                    handleErrorBackendExecState(errorBackendExecState, errorCode, errMessage);
                 }
                 profileFragmentId += 1;
             }
@@ -815,8 +915,6 @@ public class Coordinator {
             int backendNum = 0;
             int profileFragmentId = 0;
 
-            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
-
             this.descTable.setIs_cached(false);
             TDescriptorTable emptyDescTable = new TDescriptorTable();
             emptyDescTable.setIs_cached(true);
@@ -858,9 +956,10 @@ public class Coordinator {
                                             Collectors.mapping(Function.identity(), Collectors.toList())));
                     // if pipeline is enable and current fragment contain olap table sink, in fe we will 
                     // calculate the number of all tablet sinks in advance and assign them to each fragment instance
-                    boolean enablePipelineTableSinkDop = enablePipelineEngine && fragment.hasOlapTableSink();
+                    boolean enablePipelineTableSinkDop = enablePipelineEngine &&
+                            (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
                     boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
-                    int tabletSinkTotalDop = 0;
+                    int tableSinkTotalDop = 0;
                     int accTabletSinkDop = 0;
                     if (enablePipelineTableSinkDop) {
                         for (Map.Entry<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> hostAndRequests :
@@ -868,17 +967,17 @@ public class Coordinator {
                             List<CoordinatorPreprocessor.FInstanceExecParam> requests = hostAndRequests.getValue();
                             for (CoordinatorPreprocessor.FInstanceExecParam request : requests) {
                                 if (!forceSetTableSinkDop) {
-                                    tabletSinkTotalDop += request.getPipelineDop();
+                                    tableSinkTotalDop += request.getPipelineDop();
                                 } else {
-                                    tabletSinkTotalDop += fragment.getPipelineDop();
+                                    tableSinkTotalDop += fragment.getPipelineDop();
                                 }
                             }
                         }
                     }
 
-                    if (tabletSinkTotalDop < 0) {
+                    if (tableSinkTotalDop < 0) {
                         throw new UserException(
-                                "tabletSinkTotalDop = " + tabletSinkTotalDop + " should be >= 0");
+                                "tableSinkTotalDop = " + tableSinkTotalDop + " should be >= 0");
                     }
 
                     for (Map.Entry<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> hostAndRequests :
@@ -914,7 +1013,7 @@ public class Coordinator {
                                 .collect(Collectors.toSet());
                         TExecBatchPlanFragmentsParams tRequest =
                                 params.toThriftInBatch(curInstanceIds, host, curDescTable, enablePipelineEngine,
-                                        accTabletSinkDop, tabletSinkTotalDop);
+                                        accTabletSinkDop, tableSinkTotalDop);
                         if (enablePipelineTableSinkDop) {
                             for (CoordinatorPreprocessor.FInstanceExecParam request : requests) {
                                 if (!forceSetTableSinkDop) {
@@ -972,6 +1071,9 @@ public class Coordinator {
                                 firstExecState.execRemoteBatchFragmentsAsync(inflightRequest.second)));
                     }
 
+                    BackendExecState errorBackendExecState = null;
+                    TStatusCode errorCode = null;
+                    String errMessage = null;
                     for (Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>> pair : futures) {
                         TStatusCode code;
                         String errMsg = null;
@@ -1001,18 +1103,23 @@ public class Coordinator {
                             LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
                                     errMsg, code, pair.first.fragmentId,
                                     pair.first.address.hostname, pair.first.address.port);
-                            cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
-                            switch (Objects.requireNonNull(code)) {
-                                case TIMEOUT:
-                                    throw new UserException("query timeout. backend id: " + pair.first.backend.getId());
-                                case THRIFT_RPC_ERROR:
-                                    SimpleScheduler.addToBlacklist(pair.first.backend.getId());
-                                    throw new RpcException(pair.first.backend.getHost(), "rpc failed");
-                                default:
-                                    throw new UserException(errMsg + " backend:" + pair.first.address.hostname);
+                            profileDoneSignal.markedCountDown(pair.first.fragmentInstanceId(), -1L);
+                            if (errorBackendExecState == null) {
+                                errorBackendExecState = pair.first;
+                                errorCode = code;
+                                errMessage = errMsg;
+                            }
+                            if (Objects.requireNonNull(code) == TStatusCode.TIMEOUT) {
+                                break;
                             }
                         }
                     }
+
+                    // Handle error results and cancel fragment instances, excluding TIMEOUT errors,
+                    // until all the delivered fragment instances are completed.
+                    // Otherwise, the cancellation RPC may arrive at BE before the delivery fragment instance RPC,
+                    // causing the instances to become stale and only able to be released after a timeout.
+                    handleErrorBackendExecState(errorBackendExecState, errorCode, errMessage);
                 }
             }
 
@@ -1339,7 +1446,9 @@ public class Coordinator {
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
-        connectContext.getState().setError(cancelReason.toString());
+        if (StringUtils.isEmpty(connectContext.getState().getErrorMessage())) {
+            connectContext.getState().setError(cancelReason.toString());
+        }
         if (null != receiver) {
             receiver.cancel();
         }
@@ -1395,9 +1504,8 @@ public class Coordinator {
             if (ctx != null) {
                 ctx.setErrorCodeOnce(status.getErrorCodeString());
             }
-            LOG.warn("one instance report fail {}, params={} query_id={} instance_id={}",
-                    status, params, DebugUtil.printId(queryId),
-                    DebugUtil.printId(params.getFragment_instance_id()));
+            LOG.warn("exec state report failed status={}, query_id={}, instance_id={}",
+                    status, DebugUtil.printId(queryId), DebugUtil.printId(params.getFragment_instance_id()));
             updateStatus(status, params.getFragment_instance_id());
         }
         if (execState.done) {
@@ -1419,6 +1527,12 @@ public class Coordinator {
             if (params.isSetFailInfos()) {
                 updateFailInfos(params.getFailInfos());
             }
+            if (params.isSetRejected_record_path()) {
+                rejectedRecordPaths.add(execState.address.hostname + ":" + params.getRejected_record_path());
+            }
+            if (params.isSetSink_commit_infos()) {
+                sinkCommitInfos.addAll(params.sink_commit_infos);
+            }
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
         }
 
@@ -1430,16 +1544,14 @@ public class Coordinator {
                 if (params.isSetSink_load_bytes() && params.isSetSource_load_rows()
                         && params.isSetSource_load_bytes()) {
                     GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
-                            jobId, params.backend_id, params.query_id, params.fragment_instance_id, params.loaded_rows,
-                            params.sink_load_bytes, params.source_load_rows, params.source_load_bytes, params.done);
+                            jobId, params);
                 }
             }
         } else {
             if (params.isSetSink_load_bytes() && params.isSetSource_load_rows()
                     && params.isSetSource_load_bytes()) {
                 GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
-                        jobId, params.backend_id, params.query_id, params.fragment_instance_id, params.loaded_rows,
-                        params.sink_load_bytes, params.source_load_rows, params.source_load_bytes, params.done);
+                        jobId, params);
             }
         }
     }
@@ -1486,14 +1598,14 @@ public class Coordinator {
      * the caller should check queryStatus for result.
      *
      * We divide the entire waiting process into multiple rounds,
-     * with a maximum of 30 seconds per round. And after each round of waiting,
+     * with a maximum of 5 seconds per round. And after each round of waiting,
      * check the status of the BE. If the BE status is abnormal, the wait is ended
      * and the result is returned. Otherwise, continue to the next round of waiting.
      * This method mainly avoids the problem that the Coordinator waits for a long time
      * after some BE can no long return the result due to some exception, such as BE is down.
      */
     public boolean join(int timeoutS) {
-        final long fixedMaxWaitTime = 30;
+        final long fixedMaxWaitTime = 5;
 
         long leftTimeoutS = timeoutS;
         while (leftTimeoutS > 0) {
@@ -1510,6 +1622,11 @@ public class Coordinator {
 
             if (!checkBackendState()) {
                 return true;
+            }
+
+            if (ThriftServer.getExecutor() != null
+                    && ThriftServer.getExecutor().getPoolSize() >= Config.thrift_server_max_worker_threads) {
+                thriftServerHighLoad = true;
             }
 
             leftTimeoutS -= waitTime;
@@ -1720,6 +1837,13 @@ public class Coordinator {
         return profileDoneSignal.getCount() == 0;
     }
 
+    public boolean isEnableLoadProfile() {
+        if (connectContext != null && connectContext.getSessionVariable().isEnableLoadProfile()) {
+            return true;
+        }
+        return false;
+    }
+
     // consistent with EXPLAIN's fragment index
     public List<QueryStatisticsItem.FragmentInstanceInfo> getFragmentInstanceInfos() {
         final List<QueryStatisticsItem.FragmentInstanceInfo> result =
@@ -1745,6 +1869,10 @@ public class Coordinator {
         }
     }
 
+    public boolean isThriftServerHighLoad() {
+        return this.thriftServerHighLoad;
+    }
+
     // record backend execute state
     // TODO(zhaochun): add profile information and others
     public class BackendExecState {
@@ -1759,6 +1887,14 @@ public class Coordinator {
         TNetworkAddress address;
         ComputeNode backend;
         long lastMissingHeartbeatTime = -1;
+
+
+        // fake backendExecState, only user for stream load profile
+        public BackendExecState(TUniqueId fragmentInstanceId, TNetworkAddress address) {
+            String name = "Instance " + DebugUtil.printId(fragmentInstanceId);
+            this.profile = new RuntimeProfile(name);
+            this.profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
+        }
 
         public BackendExecState(PlanFragmentId fragmentId, TNetworkAddress host, int profileFragmentId,
                                 TExecPlanFragmentParams rpcParams,

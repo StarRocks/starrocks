@@ -548,6 +548,19 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
         LOG(FATAL) << "only support overwrite now";
     }
 
+    // We just replace the table_schema in tabletMeta using the schema
+    // in snapshot_meta.
+    TabletMetaSharedPtr new_tablet_meta = std::make_shared<TabletMeta>();
+    std::shared_lock rdlock(tablet->get_header_lock());
+    tablet->generate_tablet_meta_copy_unlocked(new_tablet_meta);
+    rdlock.unlock();
+
+    TabletMetaPB metapb;
+    new_tablet_meta->to_meta_pb(&metapb);
+    new_tablet_meta->init_from_pb(&metapb, &snapshot_meta.tablet_meta().schema());
+    tablet->set_tablet_meta(new_tablet_meta);
+    tablet->save_meta();
+
     RETURN_IF_ERROR(tablet->updates()->load_snapshot(snapshot_meta, true));
     tablet->updates()->remove_expired_versions(time(nullptr));
     LOG(INFO) << "Loaded snapshot of tablet " << tablet->tablet_id() << ", removing directory " << snapshot_path;
@@ -801,37 +814,40 @@ Status SnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnection& 
 Status SnapshotLoader::_get_existing_files_from_remote_without_broker(const std::unique_ptr<FileSystem>& fs,
                                                                       const std::string& remote_path,
                                                                       std::map<std::string, FileStat>* files) {
-    std::vector<FileStatus> file_status;
-    Status status = fs->list_path(remote_path, &file_status);
-    if (!status.ok() && !status.is_not_found()) {
-        std::stringstream ss;
-        ss << "failed to list files in remote path: " << remote_path << ", msg: " << status.message();
-        LOG(WARNING) << ss.str();
-        return status;
-    }
-    LOG(INFO) << "finished to list files from remote path. file num: " << file_status.size();
-
-    // split file name and checksum
-    for (const auto& file : file_status) {
-        if (file.is_dir) {
-            // this is not a file
-            continue;
+    int64_t file_num = 0;
+    Status st;
+    st.update(fs->iterate_dir2(remote_path, [&](DirEntry entry) {
+        if (UNLIKELY(!entry.is_dir.has_value())) {
+            st.update(Status::InternalError("Unable to recognize the file type"));
+            return false;
         }
-
-        const std::string& file_name = file.name;
-        size_t pos = file_name.find_last_of('.');
-        if (pos == std::string::npos || pos == file_name.size() - 1) {
+        file_num++;
+        if (entry.is_dir.value()) {
+            return true;
+        }
+        if (UNLIKELY(!entry.size.has_value())) {
+            st.update(Status::InternalError("Unable to get file size"));
+            return false;
+        }
+        size_t pos = entry.name.find_last_of('.');
+        if (pos == std::string::npos || pos == entry.name.size() - 1) {
             // Not found checksum separator, ignore this file
-            continue;
+            return true;
         }
-        std::string name = std::string(file_name, 0, pos);
-        std::string md5 = std::string(file_name, pos + 1);
-        FileStat stat = {name, md5, file.size};
-        files->emplace(name, stat);
-        VLOG(2) << "split remote file: " << name << ", checksum: " << md5;
+        std::string name_part(entry.name.data(), entry.name.data() + pos);
+        std::string md5_part(entry.name.data() + pos + 1, entry.name.data() + entry.name.size());
+        FileStat stat = {.name = name_part, .md5 = md5_part, .size = entry.size.value()};
+        files->emplace(name_part, stat);
+        VLOG(2) << "split remote file: " << name_part << ", checksum: " << md5_part;
+        return true;
+    }));
+
+    if (!st.ok() && !st.is_not_found()) {
+        LOG(WARNING) << "failed to list files in remote path: " << remote_path << ", msg: " << st;
+        return st;
     }
 
-    LOG(INFO) << "finished to split files. valid file num: " << files->size();
+    LOG(INFO) << "finished to split files. total file num: " << file_num << " valid file num: " << files->size();
 
     return Status::OK();
 }

@@ -56,13 +56,25 @@ public class MapType extends Type {
     }
 
     @Override
-    public void setSelectedField(int pos, boolean needSetChildren) {
-        if (pos == -1) {
-            Arrays.fill(selectedFields, true);
-        } else {
-            selectedFields[pos] = true;
+    public void setSelectedField(ComplexTypeAccessPath accessPath, boolean needSetChildren) {
+        ComplexTypeAccessPathType accessPathType = accessPath.getAccessPathType();
+        switch (accessPathType) {
+            case ALL_SUBFIELDS:
+                Arrays.fill(selectedFields, true);
+                break;
+            case MAP_KEY:
+                selectedFields[0] = true;
+                break;
+            case MAP_VALUE:
+                selectedFields[1] = true;
+                break;
+            default:
+                Preconditions.checkArgument(false, "Unreachable!");
         }
-        if (needSetChildren && (pos == 1 || pos == -1) && valueType.isComplexType()) {
+
+        if (needSetChildren &&
+                (accessPathType == ComplexTypeAccessPathType.ALL_SUBFIELDS ||
+                        accessPathType == ComplexTypeAccessPathType.MAP_VALUE) && valueType.isComplexType()) {
             valueType.selectAllFields();
         }
     }
@@ -75,7 +87,7 @@ public class MapType extends Type {
         if (!selectedFields[1]) {
             valueType = ScalarType.UNKNOWN_TYPE;
         }
-        Preconditions.checkArgument(!keyType.isNull() || !valueType.isNull());
+        Preconditions.checkArgument(!keyType.isUnknown() || !valueType.isUnknown());
     }
 
     @Override
@@ -155,6 +167,20 @@ public class MapType extends Type {
         node.setType(TTypeNodeType.MAP);
         keyType.toThrift(container);
         valueType.toThrift(container);
+    }
+
+    @Override
+    public boolean isFullyCompatible(Type other) {
+        if (!other.isMapType()) {
+            return false;
+        }
+
+        if (equals(other)) {
+            return true;
+        }
+
+        MapType t = (MapType) other;
+        return keyType.isFullyCompatible(t.getKeyType()) && valueType.isFullyCompatible(t.getValueType());
     }
 
     @Override

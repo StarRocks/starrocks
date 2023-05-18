@@ -210,7 +210,11 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
         if ((obj instanceof StringLiteral && !(this instanceof StringLiteral))
                 || (this instanceof StringLiteral && !(obj instanceof StringLiteral))
                 || (obj instanceof DecimalLiteral && !(this instanceof DecimalLiteral))
-                || (this instanceof DecimalLiteral && !(obj instanceof DecimalLiteral))) {
+                || (this instanceof DecimalLiteral && !(obj instanceof DecimalLiteral))
+                || (obj instanceof BoolLiteral && !(this instanceof BoolLiteral))
+                || (this instanceof BoolLiteral && !(obj instanceof BoolLiteral))
+                || (obj instanceof FloatLiteral && !(this instanceof FloatLiteral))
+                || (this instanceof FloatLiteral && !(obj instanceof FloatLiteral))) {
             return false;
         }
         return this.compareLiteral(((LiteralExpr) obj)) == 0;

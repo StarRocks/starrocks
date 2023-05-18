@@ -115,6 +115,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.stream.Collectors;
 
 public class ReportHandler extends Daemon {
     public enum ReportType {
@@ -133,7 +134,7 @@ public class ReportHandler extends Daemon {
 
     private static final Logger LOG = LogManager.getLogger(ReportHandler.class);
 
-    private BlockingQueue<ReportTask> reportQueue = Queues.newLinkedBlockingQueue();
+    private BlockingQueue<Pair<Long, ReportType>> reportQueue = Queues.newLinkedBlockingQueue();
 
     private Map<ReportType, Map<Long, ReportTask>> pendingTaskMap = Maps.newHashMap();
 
@@ -223,7 +224,7 @@ public class ReportHandler extends Daemon {
                         "invalid report request, multi fields " + reportType + " " + ReportType.TABLET_REPORT);
                 return result;
             }
-            // the 'tablets' member will be deprecated in future.
+            // the 'tablets' member will be deprecated in the future.
             tablets = buildTabletMap(request.getTablet_list());
             reportVersion = request.getReport_version();
             reportType = ReportType.TABLET_REPORT;
@@ -293,7 +294,7 @@ public class ReportHandler extends Daemon {
             }
             ReportTask oldTask = pendingTaskMap.get(reportTask.type).get(reportTask.beId);
             if (oldTask == null) {
-                reportQueue.put(reportTask);
+                reportQueue.put(Pair.create(reportTask.beId, reportTask.type));
             } else {
                 LOG.info("update be {} report task, type: {}", oldTask.beId, oldTask.type);
             }
@@ -379,8 +380,9 @@ public class ReportHandler extends Daemon {
         // storage medium -> tablet id
         ListMultimap<TStorageMedium, Long> tabletMigrationMap = ArrayListMultimap.create();
 
-        // dbid -> txn id -> [partition info]
-        Map<Long, ListMultimap<Long, TPartitionVersionInfo>> transactionsToPublish = Maps.newHashMap();
+        // dbid -> txn id -> partition id -> [partition info]
+        Map<Long, Map<Long, Map<Long, TPartitionVersionInfo>>> transactionsToPublish = Maps.newHashMap();
+
         Map<Long, Long> transactionsToCommitTime = Maps.newHashMap();
         ListMultimap<Long, Long> transactionsToClear = ArrayListMultimap.create();
 
@@ -771,7 +773,7 @@ public class ReportHandler extends Daemon {
                         // so we do not delete it.
                         List<Replica> replicas = tablet.getImmutableReplicas();
                         if (replicas.size() <= 1) {
-                            LOG.error("backend [{}] invalid situation. tablet[{}] has few replica[{}], "
+                            LOG.debug("backend [{}] invalid situation. tablet[{}] has few replica[{}], "
                                             + "replica num setting is [{}]",
                                     backendId, tabletId, replicas.size(), replicationNum);
                             // there is a replica in FE, but not in BE and there is only one replica in this tablet
@@ -894,9 +896,9 @@ public class ReportHandler extends Daemon {
                 // continue to report them to FE forever and add some processing overhead(the tablet report
                 // process is protected with DB S lock).
                 addDropReplicaTask(batchTask, backendId, tabletId,
-                        -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletForceDelete(tabletId));
+                        -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletForceDelete(tabletId, backendId));
                 if (!FeConstants.runningUnitTest) {
-                    invertedIndex.eraseTabletForceDelete(tabletId);
+                    invertedIndex.eraseTabletForceDelete(tabletId, backendId);
                 }
                 ++deleteFromBackendCounter;
                 --maxTaskSendPerBe;
@@ -1009,17 +1011,18 @@ public class ReportHandler extends Daemon {
     }
 
     private static void handleRepublishVersionInfo(
-            Map<Long, ListMultimap<Long, TPartitionVersionInfo>> transactionsToPublish,
+            Map<Long, Map<Long, Map<Long, TPartitionVersionInfo>>> transactionsToPublish,
             Map<Long, Long> transactionsToCommitTime,
             long backendId) {
         AgentBatchTask batchTask = new AgentBatchTask();
         long createPublishVersionTaskTime = System.currentTimeMillis();
         for (Long dbId : transactionsToPublish.keySet()) {
-            ListMultimap<Long, TPartitionVersionInfo> map = transactionsToPublish.get(dbId);
+            Map<Long, Map<Long, TPartitionVersionInfo>> map = transactionsToPublish.get(dbId);
             for (long txnId : map.keySet()) {
                 long commitTime = transactionsToCommitTime.get(txnId);
                 PublishVersionTask task =
-                        new PublishVersionTask(backendId, txnId, dbId, commitTime, map.get(txnId), null, null,
+                        new PublishVersionTask(backendId, txnId, dbId, commitTime,
+                                map.get(txnId).values().stream().collect(Collectors.toList()), null, null,
                                 createPublishVersionTaskTime, null);
                 batchTask.addTask(task);
                 // add to AgentTaskQueue for handling finish report.
@@ -1035,7 +1038,7 @@ public class ReportHandler extends Daemon {
             return;
         }
 
-        // print a warn log here to indicate the exceptions on the backend
+        // print a warning log here to indicate the exceptions on the backend
         LOG.warn("find {} tablets on backend {} which is bad or misses versions that need clone or force recovery",
                 tabletRecoveryMap.size(), backendId);
 
@@ -1458,15 +1461,14 @@ public class ReportHandler extends Daemon {
     @Override
     protected void runOneCycle() {
         while (true) {
-            ReportTask task = null;
             try {
-                task = reportQueue.take();
+                Pair<Long, ReportType> pair = reportQueue.take();
+                ReportTask task = null;
                 synchronized (pendingTaskMap) {
                     // using the lastest task
-                    long beId = task.beId;
-                    task = pendingTaskMap.get(task.type).get(beId);
+                    task = pendingTaskMap.get(pair.second).get(pair.first);
                     if (task == null) {
-                        throw new Exception("pendingTaskMap not exists " + beId);
+                        throw new Exception("pendingTaskMap not exists " + pair.first);
                     }
                     pendingTaskMap.get(task.type).remove(task.beId, task);
                 }

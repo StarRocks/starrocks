@@ -18,7 +18,6 @@ package com.starrocks.alter;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.common.UserException;
-import com.starrocks.thrift.TStorageFormat;
 
 import java.util.HashMap;
 import java.util.List;
@@ -37,7 +36,6 @@ public abstract class AlterJobV2Builder {
     protected double bloomFilterFpp;
     protected boolean hasIndexChanged = false;
     protected List<Index> indexes;
-    protected TStorageFormat newStorageFormat;
     protected Map<Long, List<Column>> newIndexSchema = new HashMap<>();
     protected Map<Long, Short> newIndexShortKeyCount = new HashMap<>();
     protected List<Integer> sortKeyIdxes;
@@ -79,11 +77,6 @@ public abstract class AlterJobV2Builder {
     public AlterJobV2Builder withAlterIndexInfo(boolean hasIndexChanged, @NotNull List<Index> indexes) {
         this.hasIndexChanged = hasIndexChanged;
         this.indexes = indexes;
-        return this;
-    }
-
-    public AlterJobV2Builder withNewStorageFormat(TStorageFormat storageFormat) {
-        this.newStorageFormat = storageFormat;
         return this;
     }
 

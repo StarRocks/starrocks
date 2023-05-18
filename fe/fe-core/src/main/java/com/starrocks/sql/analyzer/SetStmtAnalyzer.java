@@ -185,6 +185,10 @@ public class SetStmtAnalyzer {
             }
         }
 
+        if (variable.equalsIgnoreCase(SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L, null);
+        }
+
         var.setResolvedExpression(resolvedExpression);
     }
 
@@ -193,10 +197,10 @@ public class SetStmtAnalyzer {
         try {
             long num = Long.parseLong(value);
             if (min != null && num < min) {
-                throw new SemanticException(String.format("%s must be equal or greater than %d.", field, min));
+                throw new SemanticException(String.format("%s must be equal or greater than %d", field, min));
             }
             if (max != null && num > max) {
-                throw new SemanticException(String.format("%s must be equal or smaller than %d.", field, max));
+                throw new SemanticException(String.format("%s must be equal or smaller than %d", field, max));
             }
         } catch (NumberFormatException ex) {
             throw new SemanticException(field + " is not a number");
@@ -207,7 +211,7 @@ public class SetStmtAnalyzer {
         try {
             TTabletInternalParallelMode.valueOf(val.toUpperCase());
         } catch (Exception ignored) {
-            throw new SemanticException("Invalid tablet_internal_parallel_mode, now we support {auto, force_split}.");
+            throw new SemanticException("Invalid tablet_internal_parallel_mode, now we support {auto, force_split}");
         }
     }
 
@@ -227,8 +231,8 @@ public class SetStmtAnalyzer {
                 SelectList selectList = new SelectList(Lists.newArrayList(
                         new SelectListItem(var.getUnevaluatedExpression(), null)), false);
 
-                ArrayList<Expr> row = Lists.newArrayList(NullLiteral.create(Type.NULL));
-                List<ArrayList<Expr>> rows = new ArrayList<>();
+                List<Expr> row = Lists.newArrayList(NullLiteral.create(Type.NULL));
+                List<List<Expr>> rows = new ArrayList<>();
                 rows.add(row);
                 ValuesRelation valuesRelation = new ValuesRelation(rows, Lists.newArrayList(""));
                 valuesRelation.setNullValues(true);

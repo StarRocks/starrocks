@@ -40,7 +40,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -76,10 +75,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
-import static java.lang.Math.min;
 
 /**
  * Transaction Manager
@@ -137,6 +134,11 @@ public class GlobalTransactionMgr implements Writable {
             throws AnalysisException, BeginTransactionException {
         if (Config.disable_load_job) {
             throw new AnalysisException("disable_load_job is set to true, all load jobs are prevented");
+        }
+
+        if (GlobalStateMgr.getCurrentState().isSafeMode()) {
+            throw new AnalysisException(String.format("The cluster is under safe" +
+                    " mode state, all load jobs are rejected."));
         }
 
         switch (sourceType) {
@@ -286,6 +288,11 @@ public class GlobalTransactionMgr implements Writable {
 
         if (Config.disable_load_job) {
             throw new AnalysisException("disable_load_job is set to true, all load jobs are prevented");
+        }
+
+        if (GlobalStateMgr.getCurrentState().isSafeMode()) {
+            throw new AnalysisException(String.format("The cluster is under safe mode state," +
+                    " all load jobs are rejected."));
         }
 
         switch (sourceType) {
@@ -463,6 +470,12 @@ public class GlobalTransactionMgr implements Writable {
         return waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS);
     }
 
+    public void abortAllRunningTransactions() throws UserException {
+        for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
+            entry.getValue().abortAllRunningTransaction();
+        }
+    }
+
     public void abortTransaction(long dbId, long transactionId, String reason) throws UserException {
         abortTransaction(dbId, transactionId, reason, Lists.newArrayList());
     }
@@ -594,16 +607,17 @@ public class GlobalTransactionMgr implements Writable {
     /**
      * Get the min txn id of running transactions.
      *
-     * @return the min txn id of running transactions, null if no running transaction.
+     * @return the min txn id of running transactions. If there are no running transactions, return the next transaction id
+     * that will be assigned.
+     *
      */
-    @Nullable
-    public Long getMinActiveTxnId() {
-        long result = Long.MAX_VALUE;
+    public long getMinActiveTxnId() {
+        long minId = idGenerator.peekNextTransactionId();
         for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
             DatabaseTransactionMgr dbTransactionMgr = entry.getValue();
-            result = min(result, dbTransactionMgr.getMinActiveTxnId());
+            minId = Math.min(minId, dbTransactionMgr.getMinActiveTxnId().orElse(Long.MAX_VALUE));
         }
-        return result == Long.MAX_VALUE ? idGenerator.peekNextTransactionId() : result;
+        return minId;
     }
 
     public TransactionState getTransactionState(long dbId, long transactionId) {
@@ -743,14 +757,11 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public long loadTransactionState(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
-            int size = dis.readInt();
-            long newChecksum = checksum ^ size;
-            readFields(dis);
-            LOG.info("finished replay transactionState from image");
-            return newChecksum;
-        }
-        return checksum;
+        int size = dis.readInt();
+        long newChecksum = checksum ^ size;
+        readFields(dis);
+        LOG.info("finished replay transactionState from image");
+        return newChecksum;
     }
 
     public List<Pair<Long, Long>> getTransactionIdByCoordinateBe(String coordinateHost, int limit) {

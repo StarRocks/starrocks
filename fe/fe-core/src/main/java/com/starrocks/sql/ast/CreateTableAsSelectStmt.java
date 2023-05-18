@@ -51,9 +51,9 @@ public class CreateTableAsSelectStmt extends StatementBase {
         this.insertStmt = new InsertStmt(createTableStmt.getDbTbl(), queryStatement);
     }
 
-    public void createTable(ConnectContext session) throws AnalysisException {
+    public boolean createTable(ConnectContext session) throws AnalysisException {
         try {
-            session.getGlobalStateMgr().createTable(createTableStmt);
+            return session.getGlobalStateMgr().getMetadataMgr().createTable(createTableStmt);
         } catch (DdlException e) {
             throw new AnalysisException(e.getMessage());
         }
@@ -61,8 +61,8 @@ public class CreateTableAsSelectStmt extends StatementBase {
 
     public void dropTable(ConnectContext session) throws AnalysisException {
         try {
-            session.getGlobalStateMgr().dropTable(new DropTableStmt(true, createTableStmt.getDbTbl(), true));
-        } catch (DdlException e) {
+            session.getGlobalStateMgr().getMetadataMgr().dropTable(new DropTableStmt(true, createTableStmt.getDbTbl(), true));
+        } catch (Exception e) {
             throw new AnalysisException(e.getMessage());
         }
     }
@@ -86,6 +86,11 @@ public class CreateTableAsSelectStmt extends StatementBase {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
+    }
+
+    @Override
+    public String toSql() {
+        return createTableStmt.toSql() + " AS " + queryStatement.toSql();
     }
 
     @Override

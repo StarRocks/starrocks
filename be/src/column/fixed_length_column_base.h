@@ -45,6 +45,11 @@ template <>
 inline constexpr bool IsTimestamp<TimestampValue> = true;
 
 template <typename T>
+constexpr bool IsTemporal() {
+    return std::is_same_v<T, DateValue> || std::is_same_v<T, TimestampValue> || std::is_same_v<T, DateTimeValue>;
+}
+
+template <typename T>
 class FixedLengthColumnBase : public ColumnFactory<Column, FixedLengthColumnBase<T>> {
     friend class ColumnFactory<Column, FixedLengthColumnBase>;
 
@@ -109,7 +114,7 @@ public:
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
-    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
 
     bool append_nulls(size_t count __attribute__((unused))) override { return false; }
 
@@ -128,9 +133,12 @@ public:
     }
 
     size_t append_numbers(const void* buff, size_t length) override {
+        DCHECK(length % sizeof(ValueType) == 0);
         const size_t count = length / sizeof(ValueType);
-        const T* const ptr = reinterpret_cast<const T*>(buff);
-        _data.insert(_data.end(), ptr, ptr + count);
+        size_t dst_offset = _data.size();
+        raw::stl_vector_resize_uninitialized(&_data, _data.size() + count);
+        T* dst = _data.data() + dst_offset;
+        memcpy(dst, buff, length);
         return count;
     }
 

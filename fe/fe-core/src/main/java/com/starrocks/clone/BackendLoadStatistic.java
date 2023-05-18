@@ -89,17 +89,24 @@ public class BackendLoadStatistic {
     }
 
     public static class BeStatComparatorForUsedPercent implements Comparator<BackendLoadStatistic> {
-        private TStorageMedium medium;
+        private final TStorageMedium medium;
+        private final boolean isAscending;
 
         public BeStatComparatorForUsedPercent(TStorageMedium medium) {
             this.medium = medium;
+            this.isAscending = true;
+        }
+
+        public BeStatComparatorForUsedPercent(TStorageMedium medium, boolean isAscending) {
+            this.medium = medium;
+            this.isAscending = isAscending;
         }
 
         @Override
         public int compare(BackendLoadStatistic o1, BackendLoadStatistic o2) {
             double percent1 = o1.getUsedPercent(medium);
             double percent2 = o2.getUsedPercent(medium);
-            return Double.compare(percent1, percent2);
+            return isAscending ? Double.compare(percent1, percent2) : -Double.compare(percent1, percent2);
         }
     }
 
@@ -385,7 +392,7 @@ public class BackendLoadStatistic {
                 continue;
             }
 
-            BalanceStatus bStatus = pathStatistic.isFit(tabletSize, isSupplement);
+            BalanceStatus bStatus = pathStatistic.isFit(tabletSize);
             if (!bStatus.ok()) {
                 status.addErrMsgs(bStatus.getErrMsgs());
                 continue;
@@ -398,7 +405,7 @@ public class BackendLoadStatistic {
         // if this is a supplement task, ignore the storage medium
         if (isSupplement || !Config.enable_strict_storage_medium_check) {
             for (RootPathLoadStatistic filteredPathStatistic : mediumNotMatchedPath) {
-                BalanceStatus bStatus = filteredPathStatistic.isFit(tabletSize, isSupplement);
+                BalanceStatus bStatus = filteredPathStatistic.isFit(tabletSize);
                 if (!bStatus.ok()) {
                     status.addErrMsgs(bStatus.getErrMsgs());
                     continue;

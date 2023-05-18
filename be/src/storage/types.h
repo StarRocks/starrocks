@@ -99,10 +99,6 @@ struct TypeComparator {
     static int cmp(const void* lhs, const void* rhs);
 };
 
-bool is_scalar_field_type(LogicalType field_type);
-
-bool is_complex_metric_type(LogicalType field_type);
-
 const TypeInfo* get_scalar_type_info(LogicalType t);
 
 TypeInfoPtr get_type_info(LogicalType field_type);

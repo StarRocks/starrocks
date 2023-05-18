@@ -25,7 +25,7 @@ public class SyncRefreshSchemeDesc extends RefreshSchemeDesc {
     }
 
     public SyncRefreshSchemeDesc(NodePosition pos) {
-        super(MaterializedView.RefreshType.SYNC, pos);
+        super(MaterializedView.RefreshType.SYNC, pos, MaterializedView.RefreshMoment.IMMEDIATE);
     }
 
 }

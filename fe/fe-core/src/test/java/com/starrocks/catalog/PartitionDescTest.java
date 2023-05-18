@@ -16,10 +16,10 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.PartitionDesc;
 import org.apache.commons.lang.NotImplementedException;
 import org.junit.Before;
@@ -67,7 +67,7 @@ public class PartitionDescTest {
         List<Column> columns = Lists.newArrayList(id);
         Map<String, Long> partitionNameToId = new HashMap<>();
         partitionNameToId.put("p1", 1003L);
-        this.partitionDesc.toPartitionInfo(columns, partitionNameToId, false, false);
+        this.partitionDesc.toPartitionInfo(columns, partitionNameToId, false);
         throw new NotImplementedException();
     }
 

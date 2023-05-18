@@ -67,7 +67,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DataQualityException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -87,6 +86,7 @@ import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
@@ -103,6 +103,7 @@ import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPriority;
 import com.starrocks.thrift.TPushType;
+import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.BeginTransactionException;
@@ -153,6 +154,8 @@ public class SparkLoadJob extends BulkLoadJob {
     private ResourceDesc resourceDesc;
     // for straggler wait long time to commit transaction
     private long quorumFinishTimestamp = -1;
+    // spark load wait yarn response timeout
+    protected long sparkLoadSubmitTimeoutSecond = Config.spark_load_submit_timeout_second;
     // below for push task
     private final Map<Long, Set<Long>> tableToLoadPartitions = Maps.newHashMap();
     private final Map<Long, PushBrokerReaderParams> indexToPushBrokerReaderParams = Maps.newHashMap();
@@ -179,6 +182,14 @@ public class SparkLoadJob extends BulkLoadJob {
     @Override
     protected void setJobProperties(Map<String, String> properties) throws DdlException {
         super.setJobProperties(properties);
+
+        if (properties.containsKey(LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT)) {
+            try {
+                sparkLoadSubmitTimeoutSecond = Long.parseLong(properties.get(LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT));
+            } catch (NumberFormatException e) {
+                throw new DdlException("spark_load_submit_timeout is not LONG", e);
+            }
+        }
 
         // set spark resource and broker desc
         setResourceInfo();
@@ -344,8 +355,11 @@ public class SparkLoadJob extends BulkLoadJob {
             long dummyBackendId = -1L;
             loadingStatus.getLoadStatistic()
                     .initLoad(dummyId, Sets.newHashSet(dummyId), Lists.newArrayList(dummyBackendId));
+            TReportExecStatusParams params = new TReportExecStatusParams();
+            params.setDone(true);
+            params.setSource_load_rows(dppResult.scannedRows);
             loadingStatus.getLoadStatistic()
-                    .updateLoadProgress(dummyBackendId, dummyId, dummyId, dppResult.scannedRows, true);
+                    .updateLoadProgress(params);
 
             Map<String, String> counters = loadingStatus.getCounters();
             counters.put(DPP_NORMAL_ALL, String.valueOf(dppResult.normalRows));
@@ -521,7 +535,7 @@ public class SparkLoadJob extends BulkLoadJob {
 
                                 } else {
                                     // lake tablet
-                                    long backendId = ((LakeTablet) tablet).getPrimaryBackendId();
+                                    long backendId = ((LakeTablet) tablet).getPrimaryComputeNodeId();
                                     Backend backend = GlobalStateMgr.getCurrentSystemInfo().
                                             getBackend(backendId);
                                     if (backend == null) {
@@ -857,9 +871,7 @@ public class SparkLoadJob extends BulkLoadJob {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         sparkResource = (SparkResource) Resource.read(in);
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_91) {
-            sparkLoadAppHandle = SparkLoadAppHandle.read(in);
-        }
+        sparkLoadAppHandle = SparkLoadAppHandle.read(in);
         etlStartTimestamp = in.readLong();
         appId = Text.readString(in);
         etlOutputPath = Text.readString(in);

@@ -16,10 +16,10 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
@@ -122,8 +122,7 @@ public class ListPartitionDescTest {
         Map<String, Long> partitionNameToId = new HashMap<>();
         partitionNameToId.put("p1", 10001L);
         partitionNameToId.put("p2", 10002L);
-        return (ListPartitionInfo) listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId,
-                false, false);
+        return (ListPartitionInfo) listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false);
     }
 
     public ListPartitionInfo findMultiListPartitionInfo() throws AnalysisException, DdlException {
@@ -134,8 +133,7 @@ public class ListPartitionDescTest {
         Map<String, Long> partitionNameToId = new HashMap<>();
         partitionNameToId.put("p1", 10001L);
         partitionNameToId.put("p2", 10002L);
-        return (ListPartitionInfo) listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId,
-                false, false);
+        return (ListPartitionInfo) listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false);
     }
 
     @Test(expected = AnalysisException.class)

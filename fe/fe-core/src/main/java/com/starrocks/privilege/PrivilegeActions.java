@@ -14,9 +14,14 @@
 
 package com.starrocks.privilege;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
@@ -24,369 +29,114 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class PrivilegeActions {
     private static final Logger LOG = LogManager.getLogger(PrivilegeActions.class);
 
-    public static boolean checkTableAction(ConnectContext connectContext, String db, String table, PrivilegeType action) {
-        return checkTableAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(), db, table, action);
-    }
-
-    public static boolean checkTableAction(
-            UserIdentity userIdentity, Set<Long> roleIds, String db, String table, PrivilegeType privilegeType) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
+    private static boolean checkObjectTypeAction(UserIdentity userIdentity, Set<Long> roleIds,
+                                                 PrivilegeType privilegeType,
+                                                 ObjectType objectType, List<String> objectTokens) {
+        AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(userIdentity, roleIds);
-            return manager.checkAction(collection, ObjectType.TABLE, privilegeType, Arrays.asList(db, table));
+            return manager.checkAction(collection, objectType, privilegeType, objectTokens);
         } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking action[{}] on table {}.{}, message: {}",
-                    privilegeType, db, table, e.getMessage());
+            LOG.info("Object not found when checking action[{}] on {} {}, message: {}",
+                    privilegeType, objectType.name().replace("_", " "),
+                    getFullyQualifiedNameFromListAllowNull(objectTokens), e.getMessage());
             return true;
         } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking action[{}] on table {}.{}", privilegeType, db, table, e);
+            LOG.warn("caught exception when checking action[{}] on {} {}",
+                    privilegeType, objectType.name().replace("_", " "),
+                    getFullyQualifiedNameFromListAllowNull(objectTokens), e);
             return false;
         }
     }
 
-    public static boolean checkDbAction(ConnectContext context, String db, PrivilegeType action) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
-        try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds());
-            return manager.checkAction(collection, ObjectType.DATABASE, action, Collections.singletonList(db));
-        } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking action[{}] on database {}, message: {}",
-                    action, db, e.getMessage());
-            return true;
-        } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking action[{}] on db {}", action, db, e);
-            return false;
-        }
+    public static boolean checkTableAction(ConnectContext connectContext, String db, String table,
+                                           PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.TABLE, Arrays.asList(db, table));
     }
 
-    public static boolean checkSystemAction(ConnectContext connectContext, PrivilegeType action) {
-        return checkSystemAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(), action);
+    public static boolean checkTableAction(ConnectContext connectContext, String catalogName, String db, String table,
+                                           PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.TABLE, Arrays.asList(catalogName, db, table));
     }
 
-    public static boolean checkSystemAction(
-            UserIdentity userIdentity, Set<Long> roleIds, PrivilegeType action) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
-        try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(userIdentity, roleIds);
-            return manager.checkAction(collection, ObjectType.SYSTEM, action, null);
-        } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking action[{}] on system", action, e);
-            return false;
-        }
+    public static boolean checkTableAction(UserIdentity userIdentity, Set<Long> roleIds, String db, String table,
+                                           PrivilegeType privilegeType) {
+        return checkObjectTypeAction(userIdentity, roleIds, privilegeType, ObjectType.TABLE, Arrays.asList(db, table));
     }
 
-    public static boolean checkResourceAction(ConnectContext context, String name,
-                                              PrivilegeType action) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
-        try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds());
-            return manager.checkAction(collection, ObjectType.RESOURCE, action, Collections.singletonList(name));
-        } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking action[{}] on resource {}, message: {}",
-                    action, name, e.getMessage());
-            return true;
-        } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking action[{}] on resource {}", action, name, e);
-            return false;
-        }
+    public static boolean checkDbAction(ConnectContext connectContext, String db, PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.DATABASE, Collections.singletonList(db));
     }
 
-    public static boolean checkAnyActionOnResource(ConnectContext context, String name) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
-        try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds());
-            // 1. check for any action on resource
-            PEntryObject resourceObject = manager.provider.generateObject(
-                    ObjectType.RESOURCE, Collections.singletonList(name), GlobalStateMgr.getCurrentState());
-            return manager.provider.searchAnyActionOnObject(ObjectType.RESOURCE, resourceObject, collection);
-        } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking any action on resource {}, message: {}",
-                    name, e.getMessage());
-            return true;
-        } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking any action on resource {}", name, e);
-            return false;
-        }
+    public static boolean checkDbAction(ConnectContext connectContext,
+                                        String catalogName, String db, PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.DATABASE, Arrays.asList(catalogName, db));
     }
 
-    public static boolean checkResourceGroupAction(ConnectContext context, String name,
-                                                   PrivilegeType action) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
-        try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds());
-            return manager.checkAction(collection, ObjectType.RESOURCE_GROUP, action, Collections.singletonList(name));
-        } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking action[{}] on resource group {}, message: {}",
-                    action, name, e.getMessage());
-            return true;
-        } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking action[{}] on resource group {}", action, name, e);
-            return false;
-        }
+    public static boolean checkSystemAction(ConnectContext connectContext, PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.SYSTEM, null);
     }
 
-    public static boolean checkGlobalFunctionAction(ConnectContext context, String name,
-                                                    PrivilegeType action) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
-        try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds());
-            return manager.checkAction(collection, ObjectType.GLOBAL_FUNCTION, action, Collections.singletonList(name));
-        } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking action[{}] on global function {}, message: {}",
-                    action, name, e.getMessage());
-            return true;
-        } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking action[{}] on global function {}", action, name, e);
-            return false;
-        }
+    public static boolean checkSystemAction(UserIdentity userIdentity, Set<Long> roleIds, PrivilegeType privilegeType) {
+        return checkObjectTypeAction(userIdentity, roleIds, privilegeType, ObjectType.SYSTEM, null);
     }
 
-    public static boolean checkCatalogAction(ConnectContext context, String name,
-                                             PrivilegeType action) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
-        try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds());
-            return manager.checkAction(collection, ObjectType.CATALOG, action, Collections.singletonList(name));
-        } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking action[{}] on catalog {}, message: {}",
-                    action, name, e.getMessage());
-            return true;
-        } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking action[{}] on catalog {}", action, name, e);
-            return false;
-        }
+    public static boolean checkResourceAction(ConnectContext connectContext, String name, PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.RESOURCE, Collections.singletonList(name));
     }
 
-    public static boolean checkAnyActionOnCatalog(ConnectContext context, String catalogName) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
-        try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds());
-            // 1. check for any action on catalog
-            PEntryObject catalogObject = manager.provider.generateObject(
-                    ObjectType.CATALOG, Collections.singletonList(catalogName), GlobalStateMgr.getCurrentState());
-            return manager.provider.searchAnyActionOnObject(ObjectType.CATALOG, catalogObject, collection);
-        } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking any action on catalog {}, message: {}",
-                    catalogName, e.getMessage());
-            return true;
-        } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking any action on catalog {}", catalogName, e);
-            return false;
-        }
+    public static boolean checkViewAction(ConnectContext connectContext, String db, String view,
+                                          PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.VIEW, Arrays.asList(db, view));
     }
 
-    public static boolean checkViewAction(
-            ConnectContext context, String db, String view, PrivilegeType action) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
-        try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds());
-            return manager.checkAction(collection, ObjectType.VIEW, action, Arrays.asList(db, view));
-        } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking action[{}] on view {}.{}, message: {}",
-                    action, db, view, e.getMessage());
-            return true;
-        } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking action[{}] on view {}.{}", action, db, view, e);
-            return false;
-        }
+    public static boolean checkCatalogAction(ConnectContext connectContext, String name, PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.CATALOG, Collections.singletonList(name));
     }
 
-    public static boolean checkMaterializedViewAction(
-            ConnectContext context, String db, String materializedView,
-            PrivilegeType action) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
-        try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds());
-            return manager.checkAction(collection, ObjectType.MATERIALIZED_VIEW, action, Arrays.asList(db, materializedView));
-        } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking action[{}] on materialized view {}.{}, message: {}",
-                    action, db, materializedView, e.getMessage());
-            return true;
-        } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking action[{}] on materialized view {}.{}",
-                    action, db, materializedView, e);
-            return false;
-        }
+    public static boolean checkMaterializedViewAction(ConnectContext connectContext, String db, String materializedView,
+                                                      PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.MATERIALIZED_VIEW, Arrays.asList(db, materializedView));
     }
 
-    public static boolean checkFunctionAction(
-            ConnectContext context, String db, String functionSig,
-            PrivilegeType action) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
-        try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds());
-            return manager.checkAction(collection, ObjectType.FUNCTION, action, Arrays.asList(db, functionSig));
-        } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking action[{}] on function {}.{}, message: {}",
-                    action, db, functionSig, e.getMessage());
-            return true;
-        } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking action[{}] on function {}.{}",
-                    action, db, functionSig, e);
-            return false;
-        }
-    }
-
-    public static boolean checkAnyActionOnMaterializedView(ConnectContext context, String db, String materializedView) {
-        return checkAnyActionOnMaterializedView(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                db, materializedView);
-    }
-
-    public static boolean checkAnyActionOnMaterializedView(
-            UserIdentity currentUser, Set<Long> roleIds, String db, String materializedView) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
-        try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(currentUser, roleIds);
-            PEntryObject materializedViewObject = manager.provider.generateObject(
-                    ObjectType.MATERIALIZED_VIEW, Arrays.asList(db, materializedView),
-                    GlobalStateMgr.getCurrentState());
-            return manager.provider.searchAnyActionOnObject(ObjectType.MATERIALIZED_VIEW, materializedViewObject, collection);
-        } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking any action on materialized view {}.{}, message: {}",
-                    db, materializedView, e.getMessage());
-            return true;
-        } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking any action on materialized view {}.{}",
-                    db, materializedView, e);
-            return false;
-        }
-    }
-
-    public static boolean checkAnyActionOnView(ConnectContext context, String db, String view) {
-        return checkAnyActionOnView(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), db, view);
-    }
-
-    public static boolean checkAnyActionOnView(UserIdentity currentUser, Set<Long> roleIds, String db, String view) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
-        try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(currentUser, roleIds);
-            PEntryObject viewObject = manager.provider.generateObject(
-                    ObjectType.VIEW, Arrays.asList(db, view), GlobalStateMgr.getCurrentState());
-            return manager.provider.searchAnyActionOnObject(ObjectType.VIEW, viewObject, collection);
-        } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking any action on view {}.{}, message: {}",
-                    db, view, e.getMessage());
-            return true;
-        } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking any action on view {}.{}", db, view, e);
-            return false;
-        }
-    }
-
-    /**
-     * show databases; use database
-     */
-    public static boolean checkAnyActionOnDb(ConnectContext context, String db) {
-        return checkAnyActionOnDb(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), db);
-    }
-
-    public static boolean checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds, String db) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
-        try {
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(currentUser, roleIds);
-            // 1. check for any action on db
-            PEntryObject dbObject = manager.provider.generateObject(
-                    ObjectType.DATABASE, Collections.singletonList(db), GlobalStateMgr.getCurrentState());
-            return manager.provider.searchAnyActionOnObject(ObjectType.DATABASE, dbObject, collection);
-        } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking any action on database {}, message: {}",
-                    db, e.getMessage());
-            return true;
-        } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking any action on db {}", db, e);
-            return false;
-        }
-    }
-
-    /**
-     * Check whether current user has any privilege action on the db or objects(table/view/mv) in the db.
-     * Currently, it's used by `show databases` or `use database`.
-     */
-
-    public static boolean checkAnyActionOnOrInDb(ConnectContext context, String db) {
-        return checkAnyActionOnOrInDb(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), db);
-    }
-
-    public static boolean checkAnyActionOnOrInDb(UserIdentity currentUser, Set<Long> roleIds, String db) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
-        try {
-            // 1. check for any action on db
-            if (checkAnyActionOnDb(currentUser, roleIds, db)) {
-                return true;
-            }
-            // 2. check for any action on any table in this db
-            PrivilegeCollection collection = manager.mergePrivilegeCollection(currentUser, roleIds);
-            PEntryObject allTableInDbObject = manager.provider.generateObject(
-                    ObjectType.TABLE,
-                    Lists.newArrayList(db, "*"),
-                    GlobalStateMgr.getCurrentState());
-            if (manager.provider.searchAnyActionOnObject(ObjectType.TABLE, allTableInDbObject, collection)) {
-                return true;
-            }
-            // 3. check for any action on any view in this db
-            PEntryObject allViewInDbObject = manager.provider.generateObject(
-                    ObjectType.VIEW,
-                    Lists.newArrayList(db, "*"),
-                    GlobalStateMgr.getCurrentState());
-            if (manager.provider.searchAnyActionOnObject(ObjectType.VIEW, allViewInDbObject, collection)) {
-                return true;
-            }
-            // 4. check for any action on any mv in this db
-            PEntryObject allMvInDbObject = manager.provider.generateObject(
-                    ObjectType.MATERIALIZED_VIEW,
-                    Lists.newArrayList(db, "*"),
-                    GlobalStateMgr.getCurrentState());
-            if (manager.provider.searchAnyActionOnObject(ObjectType.MATERIALIZED_VIEW, allMvInDbObject, collection)) {
-                return true;
-            }
-
-            // 5. check for any action on any function in this db
-            PEntryObject allFunctionsInDbObject = manager.provider.generateObject(
-                    ObjectType.FUNCTION,
-                    Lists.newArrayList(db, "*"),
-                    GlobalStateMgr.getCurrentState());
-            return manager.provider.searchAnyActionOnObject(ObjectType.FUNCTION, allFunctionsInDbObject, collection);
-        } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking any action on or in database {}, message: {}",
-                    db, e.getMessage());
-            return true;
-        } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking any action on or in db {}", db, e);
-            return false;
-        }
+    public static boolean checkResourceGroupAction(ConnectContext connectContext, String name,
+                                                   PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.RESOURCE_GROUP, Collections.singletonList(name));
     }
 
     /**
      * Check whether current user has specified privilege action on any object(table/view/mv) in the db.
      */
     public static boolean checkActionInDb(ConnectContext context, String db, PrivilegeType privilegeType) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
+        AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
                     context.getCurrentRoleIds());
             // 1. check for specified action on any table in this db
-
             if (manager.provider.isAvailablePrivType(ObjectType.TABLE, privilegeType)) {
                 PEntryObject allTableInDbObject = manager.provider.generateObject(
                         ObjectType.TABLE,
                         Lists.newArrayList(db, "*"),
                         GlobalStateMgr.getCurrentState());
-                if (manager.provider.searchActionOnObject(ObjectType.TABLE, allTableInDbObject, collection, privilegeType)) {
+                if (manager.provider.searchActionOnObject(ObjectType.TABLE, allTableInDbObject, collection,
+                        privilegeType)) {
                     return true;
                 }
             }
@@ -397,7 +147,8 @@ public class PrivilegeActions {
                         ObjectType.VIEW,
                         Lists.newArrayList(db, "*"),
                         GlobalStateMgr.getCurrentState());
-                if (manager.provider.searchActionOnObject(ObjectType.VIEW, allViewInDbObject, collection, privilegeType)) {
+                if (manager.provider.searchActionOnObject(ObjectType.VIEW, allViewInDbObject, collection,
+                        privilegeType)) {
                     return true;
                 }
             }
@@ -422,38 +173,238 @@ public class PrivilegeActions {
         }
     }
 
-    public static boolean checkAnyActionOnTable(ConnectContext context, String db, String table) {
-        return checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), db, table);
+    private static String getFullyQualifiedNameFromListAllowNull(List<String> objectTokens) {
+        return objectTokens.stream()
+                .map(e -> e == null ? "null" : e)
+                .collect(Collectors.joining("."));
     }
 
-    public static boolean checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, String db, String table) {
-        PrivilegeManager manager = GlobalStateMgr.getCurrentState().getPrivilegeManager();
+    private static boolean checkAnyActionOnObject(UserIdentity currentUser, Set<Long> roleIds, ObjectType objectType,
+                                                  List<String> objectTokens) {
+        AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(currentUser, roleIds);
-            PEntryObject tableObject = manager.provider.generateObject(
-                    ObjectType.TABLE, Arrays.asList(db, table), GlobalStateMgr.getCurrentState());
-            return manager.provider.searchAnyActionOnObject(ObjectType.TABLE, tableObject, collection);
+            PEntryObject pEntryObject = manager.provider.generateObject(
+                    objectType, objectTokens, GlobalStateMgr.getCurrentState());
+            return manager.provider.searchAnyActionOnObject(objectType, pEntryObject, collection);
         } catch (PrivObjNotFoundException e) {
-            LOG.info("Object not found when checking any action on table {}.{}, message: {}",
-                    db, table, e.getMessage());
+            LOG.info("Object not found when checking any action on {} {}, message: {}",
+                    objectType.name(), getFullyQualifiedNameFromListAllowNull(objectTokens), e.getMessage());
             return true;
         } catch (PrivilegeException e) {
-            LOG.warn("caught exception when checking any action on table {}.{}", db, table, e);
+            LOG.warn("caught exception when checking any action on {} {}",
+                    objectType.name(), getFullyQualifiedNameFromListAllowNull(objectTokens), e);
             return false;
         }
     }
 
-    public static boolean checkAnyActionOnTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName, Table tbl) {
+    public static boolean checkAnyActionOnTable(ConnectContext context, String db, String table) {
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.TABLE,
+                Lists.newArrayList(db, table));
+    }
+
+    public static boolean checkAnyActionOnTable(ConnectContext context, String catalogName, String db, String table) {
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.TABLE,
+                Lists.newArrayList(catalogName, db, table));
+    }
+
+    public static boolean checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, String db, String table) {
+        return checkAnyActionOnObject(currentUser, roleIds, ObjectType.TABLE, Lists.newArrayList(db, table));
+    }
+
+    public static boolean checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds,
+                                                String catalogName, String db, String table) {
+        return checkAnyActionOnObject(currentUser, roleIds, ObjectType.TABLE,
+                Lists.newArrayList(catalogName, db, table));
+    }
+
+    /**
+     * show databases; use database
+     */
+    public static boolean checkAnyActionOnDb(ConnectContext context, String catalogName, String db) {
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                ObjectType.DATABASE, Arrays.asList(catalogName, db));
+    }
+
+    public static boolean checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds,
+                                             String catalogName, String db) {
+        return checkAnyActionOnObject(currentUser, roleIds, ObjectType.DATABASE, Arrays.asList(catalogName, db));
+    }
+
+    public static boolean checkAnyActionOnResource(ConnectContext context, String name) {
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                ObjectType.RESOURCE, Collections.singletonList(name));
+    }
+
+    public static boolean checkAnyActionOnView(ConnectContext context, String db, String view) {
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.VIEW,
+                Lists.newArrayList(db, view));
+    }
+
+    public static boolean checkAnyActionOnView(UserIdentity currentUser, Set<Long> roleIds, String db, String view) {
+        return checkAnyActionOnObject(currentUser, roleIds, ObjectType.VIEW, Arrays.asList(db, view));
+    }
+
+    public static boolean checkAnyActionOnCatalog(ConnectContext context, String catalogName) {
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.CATALOG,
+                Collections.singletonList(catalogName));
+    }
+
+    public static boolean checkAnyActionOnCatalog(UserIdentity userIdentity, Set<Long> roleIds, String catalogName) {
+        return checkAnyActionOnObject(userIdentity, roleIds, ObjectType.CATALOG, Collections.singletonList(catalogName));
+    }
+
+    public static boolean checkAnyActionOnOrInCatalog(ConnectContext connectContext, String catalogName) {
+        return checkAnyActionOnOrInCatalog(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                catalogName);
+    }
+
+    public static boolean checkAnyActionOnOrInCatalog(UserIdentity userIdentity, Set<Long> roleIds,
+                                                      String catalogName) {
+        // check for any action on catalog or on db or on table/view/mv/function
+        return checkAnyActionOnCatalog(userIdentity, roleIds, catalogName)
+                || checkAnyActionOnDb(userIdentity, roleIds, catalogName, "*")
+                || checkAnyActionOnTable(userIdentity, roleIds, catalogName, "*", "*")
+                || (CatalogMgr.isInternalCatalog(catalogName) &&
+                (checkAnyActionOnView(userIdentity, roleIds, "*", "*")
+                        || checkAnyActionOnMaterializedView(userIdentity, roleIds, "*", "*")
+                        || checkAnyActionOnFunction(userIdentity, roleIds,
+                        PrivilegeBuiltinConstants.ALL_DATABASE_ID,
+                        PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID)));
+    }
+
+    public static boolean checkAnyActionOnMaterializedView(ConnectContext context, String db, String materializedView) {
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                ObjectType.MATERIALIZED_VIEW, Arrays.asList(db, materializedView));
+    }
+
+    public static boolean checkAnyActionOnMaterializedView(UserIdentity currentUser, Set<Long> roleIds, String db,
+                                                           String materializedView) {
+        return checkAnyActionOnObject(currentUser, roleIds, ObjectType.MATERIALIZED_VIEW,
+                Arrays.asList(db, materializedView));
+    }
+
+    public static boolean checkAnyActionOnTableLikeObject(UserIdentity currentUser, Set<Long> roleIds,
+                                                          String dbName, Table tbl) {
         Table.TableType type = tbl.getType();
         switch (type) {
             case OLAP:
+            case CLOUD_NATIVE:
                 return checkAnyActionOnTable(currentUser, roleIds, dbName, tbl.getName());
             case MATERIALIZED_VIEW:
+            case CLOUD_NATIVE_MATERIALIZED_VIEW:
                 return checkAnyActionOnMaterializedView(currentUser, roleIds, dbName, tbl.getName());
             case VIEW:
                 return checkAnyActionOnView(currentUser, roleIds, dbName, tbl.getName());
             default:
                 return false;
         }
+    }
+
+    /**
+     * Check whether current user has any privilege action on the db or objects(table/view/mv) in the db.
+     * Currently, it's used by `show databases` or `use database`.
+     */
+    public static boolean checkAnyActionOnOrInDb(ConnectContext connectContext, String db) {
+        return checkAnyActionOnOrInDb(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(), db);
+    }
+
+    public static boolean checkAnyActionOnOrInDb(ConnectContext connectContext, String catalogName, String db) {
+        return checkAnyActionOnOrInDb(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                catalogName, db);
+    }
+
+    public static boolean checkAnyActionOnOrInDb(UserIdentity userIdentity, Set<Long> roleIds, String db) {
+        return checkAnyActionOnOrInDb(userIdentity, roleIds, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db);
+    }
+
+    public static boolean checkAnyActionOnOrInDb(UserIdentity userIdentity, Set<Long> roleIds,
+                                                 String catalogName, String db) {
+        Preconditions.checkNotNull(db, "db should not null");
+        if (checkAnyActionOnDb(userIdentity, roleIds, catalogName, db)
+                || checkAnyActionOnTable(userIdentity, roleIds, catalogName, db, "*")) {
+            return true;
+        }
+
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            Database database = GlobalStateMgr.getCurrentState().getDb(db);
+            if (database == null) {
+                return true;
+            }
+
+            return checkAnyActionOnView(userIdentity, roleIds, db, "*")
+                    || checkAnyActionOnMaterializedView(userIdentity, roleIds, db, "*")
+                    || checkAnyActionOnFunction(userIdentity, roleIds, database.getId(),
+                    PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID);
+        }
+        return false;
+    }
+
+    /**
+     * Check whether current user has any privilege action on Function
+     */
+
+    private static boolean checkFunctionAction(ConnectContext connectContext, ObjectType objectType,
+                                               long databaseId, Function function, PrivilegeType privilegeType) {
+        AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+        try {
+            PrivilegeCollection collection = manager.mergePrivilegeCollection(connectContext.getCurrentUserIdentity(),
+                    connectContext.getCurrentRoleIds());
+            PEntryObject object = manager.provider.generateFunctionObject(objectType, databaseId, function.getFunctionId(),
+                    GlobalStateMgr.getCurrentState());
+            return manager.provider.check(objectType, privilegeType, object, collection);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking action[{}] on {} {}, message: {}",
+                    privilegeType, objectType.name().replace("_", " "),
+                    function.getSignature(), e.getMessage());
+            return true;
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when checking action[{}] on {} {}",
+                    privilegeType, objectType.name().replace("_", " "),
+                    function.getSignature(), e);
+            return false;
+        }
+    }
+
+    public static boolean checkFunctionAction(ConnectContext connectContext, Database database, Function function,
+                                              PrivilegeType privilegeType) {
+        return checkFunctionAction(connectContext, ObjectType.FUNCTION, database.getId(), function, privilegeType);
+    }
+
+    public static boolean checkGlobalFunctionAction(ConnectContext connectContext, Function function,
+                                                    PrivilegeType privilegeType) {
+        return checkFunctionAction(connectContext, ObjectType.GLOBAL_FUNCTION,
+                PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID, function, privilegeType);
+    }
+
+    private static boolean checkAnyActionOnFunctionObject(UserIdentity currentUser, Set<Long> roleIds,
+                                                          ObjectType objectType,
+                                                          long databaseId, long functionId) {
+        AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+        try {
+            PrivilegeCollection collection = manager.mergePrivilegeCollection(currentUser, roleIds);
+            PEntryObject pEntryObject = manager.provider.generateFunctionObject(
+                    objectType, databaseId, functionId, GlobalStateMgr.getCurrentState());
+            return manager.provider.searchAnyActionOnObject(objectType, pEntryObject, collection);
+        } catch (PrivObjNotFoundException e) {
+            LOG.info("Object not found when checking any action on {} {}, message: {}",
+                    objectType.name(), functionId, e.getMessage());
+            return true;
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when checking any action on {} {}",
+                    objectType.name(), functionId, e);
+            return false;
+        }
+    }
+
+    public static boolean checkAnyActionOnFunction(UserIdentity currentUser, Set<Long> roleIds,
+                                                   long databaseId, long functionSig) {
+        return checkAnyActionOnFunctionObject(currentUser, roleIds, ObjectType.FUNCTION, databaseId, functionSig);
+    }
+
+    public static boolean checkAnyActionOnGlobalFunction(ConnectContext context, Long functionId) {
+        return checkAnyActionOnFunctionObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                ObjectType.GLOBAL_FUNCTION,
+                PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID, functionId);
     }
 }

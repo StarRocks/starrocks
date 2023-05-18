@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
@@ -43,13 +42,8 @@ public class ShowStatusStmt extends ShowStmt {
     private String pattern;
     private Expr where;
 
-    @VisibleForTesting
     public ShowStatusStmt() {
         this(SESSION, null, null, NodePosition.ZERO);
-    }
-
-    public ShowStatusStmt(SetType type, String pattern, Expr where) {
-        this(type, pattern, where, NodePosition.ZERO);
     }
 
     public ShowStatusStmt(SetType type, String pattern, Expr where, NodePosition pos) {

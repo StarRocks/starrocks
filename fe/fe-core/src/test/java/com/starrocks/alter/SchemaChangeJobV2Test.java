@@ -50,17 +50,14 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
@@ -317,7 +314,6 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
 
         SchemaChangeJobV2 schemaChangeJobV2 = new SchemaChangeJobV2(1, 1, 1, "test", 600000);
-        schemaChangeJobV2.setStorageFormat(TStorageFormat.V2);
         Deencapsulation.setField(schemaChangeJobV2, "jobState", AlterJobV2.JobState.FINISHED);
         Map<Long, SchemaVersionAndHash> indexSchemaVersionAndHashMap = Maps.newHashMap();
         indexSchemaVersionAndHashMap.put(Long.valueOf(1000), new SchemaVersionAndHash(10, 20));
@@ -329,15 +325,10 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         out.close();
 
         // read objects from file
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_86);
-        metaContext.setThreadLocalInfo();
-
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         SchemaChangeJobV2 result = (SchemaChangeJobV2) AlterJobV2.read(in);
         Assert.assertEquals(1, result.getJobId());
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, result.getJobState());
-        Assert.assertEquals(TStorageFormat.V2, Deencapsulation.getField(result, "storageFormat"));
 
         Assert.assertNotNull(Deencapsulation.getField(result, "partitionIndexMap"));
         Assert.assertNotNull(Deencapsulation.getField(result, "partitionIndexTabletMap"));

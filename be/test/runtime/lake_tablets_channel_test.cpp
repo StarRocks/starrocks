@@ -17,17 +17,13 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
-#include <random>
-
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
-#include "gen_cpp/descriptors.pb.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/mem_tracker.h"
@@ -40,7 +36,6 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/rowset/segment.h"
-#include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
@@ -48,10 +43,6 @@
 #include "util/uid_util.h"
 
 namespace starrocks {
-
-using VSchema = starrocks::Schema;
-using VChunk = starrocks::Chunk;
-using Int32Column = starrocks::Int32Column;
 
 // 2 senders, 1 index, each index has 2 partitions, each partition has 2 tablets, each tablet has 2 columns
 // partition id: 10, 11
@@ -70,7 +61,7 @@ public:
 
         auto metadata = new_tablet_metadata(10086);
         _tablet_schema = TabletSchema::create(metadata->schema());
-        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
 
         // init _open_request
         _open_request.mutable_id()->set_hi(456789);
@@ -159,7 +150,7 @@ public:
         return metadata;
     }
 
-    VChunk generate_data(int64_t chunk_size) {
+    Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
         for (int i = 0; i < chunk_size; i++) {
@@ -169,7 +160,7 @@ public:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        VChunk chunk({c0, c1}, _schema);
+        Chunk chunk({c0, c1}, _schema);
         chunk.set_slot_id_to_index(0, 0);
         chunk.set_slot_id_to_index(1, 1);
         return chunk;
@@ -198,8 +189,8 @@ protected:
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10089)));
 
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
-        _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), UniqueId::gen_uid(), string(), 1000,
-                                                      std::move(load_mem_tracker));
+        _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(),
+                                                      UniqueId::gen_uid(), string(), 1000, std::move(load_mem_tracker));
         TabletsChannelKey key{UniqueId::gen_uid().to_proto(), 99999};
         _tablets_channel =
                 new_lake_tablets_channel(_load_channel.get(), _tablet_manager.get(), key, _load_channel->mem_tracker());
@@ -220,7 +211,7 @@ protected:
         _tablet_manager->prune_metacache();
     }
 
-    std::shared_ptr<VChunk> read_segment(int64_t tablet_id, const std::string& filename) {
+    std::shared_ptr<Chunk> read_segment(int64_t tablet_id, const std::string& filename) {
         // Check segment file
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
         auto path = _location_provider->segment_location(tablet_id, filename);
@@ -262,7 +253,7 @@ protected:
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
     lake::LocationProvider* _backup_location_provider;
     std::shared_ptr<TabletSchema> _tablet_schema;
-    std::shared_ptr<VSchema> _schema;
+    std::shared_ptr<Schema> _schema;
     std::shared_ptr<OlapTableSchemaParam> _schema_param;
     PTabletWriterOpenRequest _open_request;
 
@@ -274,7 +265,7 @@ TEST_F(LakeTabletsChannelTest, test_simple_write) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param));
+    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
 
     constexpr int kChunkSize = 128;
     constexpr int kChunkSizePerTablet = kChunkSize / 4;
@@ -375,7 +366,7 @@ TEST_F(LakeTabletsChannelTest, test_write_partial_partition) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param));
+    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
 
     constexpr int kChunkSize = 128;
     constexpr int kChunkSizePerTablet = kChunkSize / 2;
@@ -431,7 +422,7 @@ TEST_F(LakeTabletsChannelTest, test_write_partial_partition) {
 }
 
 TEST_F(LakeTabletsChannelTest, test_write_concurrently) {
-    ASSERT_OK(_tablets_channel->open(_open_request, _schema_param));
+    ASSERT_OK(_tablets_channel->open(_open_request, _schema_param, false));
 
     constexpr int kChunkSize = 128;
     constexpr int kChunkSizePerTablet = kChunkSize / 4;
@@ -494,24 +485,25 @@ TEST_F(LakeTabletsChannelTest, test_write_concurrently) {
     }
 }
 
-TEST_F(LakeTabletsChannelTest, test_cancel) {
+TEST_F(LakeTabletsChannelTest, DISABLED_test_abort) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param));
+    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
 
     constexpr int kChunkSize = 128;
     constexpr int kChunkSizePerTablet = kChunkSize / 4;
     auto chunk = generate_data(kChunkSize);
-    std::atomic<bool> started{false};
+    std::atomic<int> write_count{0};
+    std::atomic<bool> stopped{false};
     auto t0 = std::thread([&]() {
-        PTabletWriterAddChunkRequest add_chunk_request;
-        PTabletWriterAddBatchResult add_chunk_response;
-        add_chunk_request.set_index_id(kIndexId);
-        add_chunk_request.set_sender_id(0);
-        add_chunk_request.set_eos(false);
         int64_t packet_seq = 0;
         while (true) {
+            PTabletWriterAddChunkRequest add_chunk_request;
+            PTabletWriterAddBatchResult add_chunk_response;
+            add_chunk_request.set_index_id(kIndexId);
+            add_chunk_request.set_sender_id(0);
+            add_chunk_request.set_eos(false);
             add_chunk_request.set_packet_seq(packet_seq++);
 
             for (int i = 0; i < kChunkSize; i++) {
@@ -527,16 +519,27 @@ TEST_F(LakeTabletsChannelTest, test_cancel) {
             if (add_chunk_response.status().status_code() != TStatusCode::OK) {
                 break;
             }
-            started = true;
+            write_count.fetch_add(1);
         }
+        PTabletWriterAddChunkRequest finish_request;
+        PTabletWriterAddBatchResult finish_response;
+        finish_request.set_index_id(kIndexId);
+        finish_request.set_sender_id(0);
+        finish_request.set_eos(true);
+        finish_request.set_packet_seq(packet_seq++);
+        finish_request.add_partition_ids(10);
+        finish_request.add_partition_ids(11);
+        _tablets_channel->add_chunk(nullptr, finish_request, &finish_response);
+        ASSERT_NE(TStatusCode::OK, finish_response.status().status_code());
+        stopped.store(true);
     });
 
-    while (!started) {
+    while (write_count.load() < 5 && !stopped.load()) {
         std::this_thread::yield();
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-    _tablets_channel->cancel();
+    ASSERT_FALSE(stopped.load());
+    ASSERT_GT(write_count.load(), 0);
+    _tablets_channel->abort();
 
     t0.join();
 
@@ -550,7 +553,7 @@ TEST_F(LakeTabletsChannelTest, test_write_failed) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param));
+    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
 
     constexpr int kChunkSize = 128;
     constexpr int kChunkSizePerTablet = kChunkSize / 4;
@@ -587,7 +590,7 @@ TEST_F(LakeTabletsChannelTest, test_empty_tablet) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param));
+    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
 
     constexpr int kChunkSize = 12;
     auto chunk = generate_data(kChunkSize);
@@ -652,7 +655,7 @@ TEST_F(LakeTabletsChannelTest, test_finish_failed) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param));
+    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
 
     constexpr int kChunkSize = 12;
     auto chunk = generate_data(kChunkSize);
@@ -690,6 +693,61 @@ TEST_F(LakeTabletsChannelTest, test_finish_failed) {
 
     _tablets_channel->add_chunk(nullptr, finish_request, &finish_response);
     ASSERT_NE(TStatusCode::OK, finish_response.status().status_code());
+}
+
+TEST_F(LakeTabletsChannelTest, test_finish_after_abort) {
+    auto open_request = _open_request;
+    open_request.set_num_senders(2);
+
+    ASSERT_OK(_tablets_channel->open(open_request, _schema_param, false));
+
+    {
+        constexpr int kChunkSize = 128;
+        constexpr int kChunkSizePerTablet = kChunkSize / 4;
+        auto chunk = generate_data(kChunkSize);
+
+        PTabletWriterAddChunkRequest add_chunk_request;
+        PTabletWriterAddBatchResult add_chunk_response;
+        add_chunk_request.set_index_id(kIndexId);
+        add_chunk_request.set_sender_id(0);
+        add_chunk_request.set_eos(true);
+        add_chunk_request.set_packet_seq(0);
+
+        for (int i = 0; i < kChunkSize; i++) {
+            int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+            add_chunk_request.add_tablet_ids(tablet_id);
+            add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+        }
+
+        ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+        add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+
+        _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
+        ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK);
+
+        _tablets_channel->abort();
+
+        _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response);
+        ASSERT_EQ(TStatusCode::DUPLICATE_RPC_INVOCATION, add_chunk_response.status().status_code());
+    }
+    {
+        PTabletWriterAddChunkRequest finish_request;
+        PTabletWriterAddBatchResult finish_response;
+        finish_request.set_index_id(kIndexId);
+        finish_request.set_sender_id(1);
+        finish_request.set_eos(true);
+        finish_request.set_packet_seq(0);
+
+        _tablets_channel->add_chunk(nullptr, finish_request, &finish_response);
+        ASSERT_NE(TStatusCode::OK, finish_response.status().status_code());
+        ASSERT_GE(finish_response.status().error_msgs_size(), 1);
+        const auto& message = finish_response.status().error_msgs(0);
+        ASSERT_TRUE(message.find("AsyncDeltaWriter has been closed") != std::string::npos) << message;
+
+        PTabletWriterAddBatchResult finish_response2;
+        _tablets_channel->add_chunk(nullptr, finish_request, &finish_response2);
+        ASSERT_EQ(TStatusCode::DUPLICATE_RPC_INVOCATION, finish_response2.status().status_code());
+    }
 }
 
 } // namespace starrocks

@@ -43,7 +43,6 @@ public class ResourceDesc implements ParseNode {
 
     protected NodePosition pos;
 
-
     public ResourceDesc(String name, Map<String, String> properties) {
         this(name, properties, NodePosition.ZERO);
     }
@@ -57,7 +56,6 @@ public class ResourceDesc implements ParseNode {
         }
         this.etlJobType = EtlJobType.UNKNOWN;
     }
-
 
     public String getName() {
         return name;
@@ -84,7 +82,7 @@ public class ResourceDesc implements ParseNode {
 
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("WITH RESOURCE '").append(name).append("'");
+        sb.append(" WITH RESOURCE '").append(name).append("'");
         if (properties != null && !properties.isEmpty()) {
             PrintableMap<String, String> printableMap = new PrintableMap<>(properties, " = ", true, false, true);
             sb.append(" (").append(printableMap.toString()).append(")");

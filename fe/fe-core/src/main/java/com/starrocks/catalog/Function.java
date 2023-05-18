@@ -144,6 +144,7 @@ public class Function implements Writable {
 
     public Function(long id, FunctionName name, Type[] argTypes, Type retType, boolean hasVarArgs) {
         this.id = id;
+        this.functionId = id;
         this.name = name;
         this.hasVarArgs = hasVarArgs;
         if (argTypes == null) {
@@ -156,13 +157,14 @@ public class Function implements Writable {
     }
 
     public Function(long id, FunctionName name, List<Type> argTypes, Type retType, boolean hasVarArgs) {
+        this.id = id;
         this.functionId = id;
         this.name = name;
         this.hasVarArgs = hasVarArgs;
         if (argTypes == null) {
             this.argTypes = new Type[0];
         } else {
-            this.argTypes = argTypes.toArray(new Type[argTypes.size()]);
+            this.argTypes = argTypes.toArray(new Type[0]);
         }
         this.retType = retType;
         this.isPolymorphic = Arrays.stream(this.argTypes).anyMatch(Type::isPseudoType);
@@ -174,6 +176,7 @@ public class Function implements Writable {
         name = other.name;
         retType = other.retType;
         argTypes = other.argTypes;
+        hasVarArgs = other.hasVarArgs;
         userVisible = other.userVisible;
         location = other.location;
         binaryType = other.binaryType;
@@ -279,6 +282,10 @@ public class Function implements Writable {
 
     public String getChecksum() {
         return checksum;
+    }
+
+    public void setRetType(Type retType) {
+        this.retType = retType;
     }
 
     // TODO(cmy): Currently we judge whether it is UDF by wheter the 'location' is set.

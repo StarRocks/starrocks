@@ -120,6 +120,9 @@ public class ScalarRangePredicateExtractor {
             if (!checkStatisticsEstimateValid(extractExpr)) {
                 extractExpr.setNotEvalEstimate(true);
             }
+            // TODO: merge `setFromPredicateRangeDerive` into `setRedundant`
+            result.forEach(f -> f.setRedundant(true));
+            extractExpr.setRedundant(true);
             return Utils.compoundAnd(predicate, extractExpr);
         }
 
@@ -443,7 +446,7 @@ public class ScalarRangePredicateExtractor {
     private static boolean isOnlyAndCompound(ScalarOperator predicate) {
         if (predicate instanceof CompoundPredicateOperator) {
             CompoundPredicateOperator compoundPredicateOperator = (CompoundPredicateOperator) predicate;
-            if (compoundPredicateOperator.isOr() || compoundPredicateOperator.isNot()) {
+            if (!compoundPredicateOperator.isAnd()) {
                 return false;
             }
 
@@ -457,7 +460,7 @@ public class ScalarRangePredicateExtractor {
     private static boolean isOnlyOrCompound(ScalarOperator predicate) {
         if (predicate instanceof CompoundPredicateOperator) {
             CompoundPredicateOperator compoundPredicateOperator = (CompoundPredicateOperator) predicate;
-            if (compoundPredicateOperator.isAnd() || compoundPredicateOperator.isNot()) {
+            if (!compoundPredicateOperator.isOr()) {
                 return false;
             }
 

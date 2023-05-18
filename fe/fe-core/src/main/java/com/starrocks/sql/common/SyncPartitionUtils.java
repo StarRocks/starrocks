@@ -14,9 +14,8 @@
 
 package com.starrocks.sql.common;
 
-
-import com.clearspring.analytics.util.Lists;
-import com.clearspring.analytics.util.Preconditions;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
@@ -26,6 +25,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -33,14 +33,18 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.LocalDateTime;
@@ -48,24 +52,23 @@ import java.time.LocalTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
+
+import static com.starrocks.sql.common.TimeUnitUtils.DAY;
+import static com.starrocks.sql.common.TimeUnitUtils.HOUR;
+import static com.starrocks.sql.common.TimeUnitUtils.MINUTE;
+import static com.starrocks.sql.common.TimeUnitUtils.MONTH;
+import static com.starrocks.sql.common.TimeUnitUtils.QUARTER;
+import static com.starrocks.sql.common.TimeUnitUtils.YEAR;
 
 /**
  * Process lower bound and upper bound for Expression Partition,
  * only support SlotRef and FunctionCallExpr
  */
 public class SyncPartitionUtils {
-
-    public static final String MINUTE = "minute";
-    public static final String HOUR = "hour";
-    public static final String DAY = "day";
-    public static final String MONTH = "month";
-    public static final String QUARTER = "quarter";
-    public static final String YEAR = "year";
+    private static final Logger LOG = LogManager.getLogger(SyncPartitionUtils.class);
 
     private SyncPartitionUtils() throws IllegalAccessException {
         throw new IllegalAccessException("Utility class");
@@ -337,52 +340,52 @@ public class SyncPartitionUtils {
                                                              Map<String, Range<PartitionKey>> dstRangeMap) {
 
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
-
-        LinkedHashMap<String, Range<PartitionKey>> srcRangeLinkMap = srcRangeMap.entrySet().stream()
-                .sorted(Map.Entry.comparingByValue(RangeUtils.RANGE_COMPARATOR))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
-        LinkedHashMap<String, Range<PartitionKey>> dstRangeLinkMap = dstRangeMap.entrySet().stream()
-                .sorted(Map.Entry.comparingByValue(RangeUtils.RANGE_COMPARATOR))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
-
-        for (Map.Entry<String, Range<PartitionKey>> srcEntry : srcRangeLinkMap.entrySet()) {
-            boolean found = false;
-            for (Map.Entry<String, Range<PartitionKey>> dstEntry : dstRangeLinkMap.entrySet()) {
-                Range<PartitionKey> dstRange = dstEntry.getValue();
-                int lowerCmp = srcEntry.getValue().lowerEndpoint().compareTo(dstRange.lowerEndpoint());
-                int upperCmp = srcEntry.getValue().upperEndpoint().compareTo(dstRange.upperEndpoint());
-                // both range and name should be the same
-                if (lowerCmp == 0 && upperCmp == 0 && srcEntry.getKey().equals(dstEntry.getKey())) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
+        for (Map.Entry<String, Range<PartitionKey>> srcEntry : srcRangeMap.entrySet()) {
+            if (!dstRangeMap.containsKey(srcEntry.getKey()) ||
+                    !RangeUtils.isRangeEqual(srcEntry.getValue(), dstRangeMap.get(srcEntry.getKey()))) {
                 result.put(srcEntry.getKey(), srcEntry.getValue());
             }
         }
         return result;
     }
 
-    public static Set<String> getPartitionNamesByRange(MaterializedView materializedView, String start, String end)
+    public static Set<String> getPartitionNamesByRangeWithPartitionLimit(MaterializedView materializedView,
+                                                                         String start, String end,
+                                                                         int partitionTTLNumber,
+                                                                         boolean isAutoRefresh)
             throws AnalysisException {
-        if (StringUtils.isEmpty(start) && StringUtils.isEmpty(end)) {
-            return materializedView.getPartitionNames();
-        }
-        Set<String> result = Sets.newHashSet();
-        Column partitionColumn =
-                ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
-        Range<PartitionKey> rangeToInclude = createRange(start, end, partitionColumn);
-        Map<String, Range<PartitionKey>> rangeMap = materializedView.getRangePartitionMap();
-        for (Map.Entry<String, Range<PartitionKey>> entry : rangeMap.entrySet()) {
-            Range<PartitionKey> rangeToCheck = entry.getValue();
-            int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
-            int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
-            if (!(lowerCmp >= 0 || upperCmp <= 0)) {
-                result.add(entry.getKey());
+        int autoRefreshPartitionsLimit = materializedView.getTableProperty().getAutoRefreshPartitionsLimit();
+        boolean hasPartitionRange = StringUtils.isNoneEmpty(start) || StringUtils.isNoneEmpty(end);
+
+        if (hasPartitionRange) {
+            Set<String> result = Sets.newHashSet();
+            Column partitionColumn =
+                    ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
+            Range<PartitionKey> rangeToInclude = createRange(start, end, partitionColumn);
+            Map<String, Range<PartitionKey>> rangeMap = materializedView.getValidPartitionMap(partitionTTLNumber);
+            for (Map.Entry<String, Range<PartitionKey>> entry : rangeMap.entrySet()) {
+                Range<PartitionKey> rangeToCheck = entry.getValue();
+                int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
+                int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
+                if (!(lowerCmp >= 0 || upperCmp <= 0)) {
+                    result.add(entry.getKey());
+                }
             }
+            return result;
         }
-        return result;
+
+        int lastPartitionNum;
+        if (partitionTTLNumber > 0 && isAutoRefresh && autoRefreshPartitionsLimit > 0) {
+            lastPartitionNum = Math.min(partitionTTLNumber, autoRefreshPartitionsLimit);;
+        } else if (isAutoRefresh && autoRefreshPartitionsLimit > 0) {
+            lastPartitionNum = autoRefreshPartitionsLimit;
+        } else if (partitionTTLNumber > 0)  {
+            lastPartitionNum = partitionTTLNumber;
+        } else {
+            lastPartitionNum = TableProperty.INVALID;
+        }
+
+        return materializedView.getValidPartitionMap(lastPartitionNum).keySet();
     }
 
     public static Range<PartitionKey> createRange(String lowerBound, String upperBound, Column partitionColumn)
@@ -401,23 +404,16 @@ public class SyncPartitionUtils {
         return Range.closedOpen(lowerBoundPartitionKey, upperBoundPartitionKey);
     }
 
-    public static void dropBaseVersionMeta(MaterializedView mv, String basePartitionName) {
-        MaterializedView.AsyncRefreshContext refreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
+    private static void dropBaseVersionMetaForOlapTable(MaterializedView mv, String basePartitionName,
+                                                        MaterializedView.AsyncRefreshContext refreshContext,
+                                                        TableName tableName) {
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
                 refreshContext.getBaseTableVisibleVersionMap();
         if (versionMap == null) {
             return;
         }
         Expr expr = mv.getPartitionRefTableExprs().get(0);
-        SlotRef slotRef;
-        if (expr instanceof SlotRef) {
-            slotRef = (SlotRef) expr;
-        } else {
-            List<SlotRef> slotRefs = Lists.newArrayList();
-            expr.collect(SlotRef.class, slotRefs);
-            slotRef = slotRefs.get(0);
-        }
-        TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+
         Database baseDb = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
         if (baseDb == null) {
             return;
@@ -436,5 +432,64 @@ public class SyncPartitionUtils {
             // This is a bad case for refreshing, and this problem will be optimized later.
             versionMap.remove(tableId);
         }
+    }
+
+    private static void dropBaseVersionMetaForExternalTable(MaterializedView mv, String basePartitionName,
+                                                            MaterializedView.AsyncRefreshContext refreshContext,
+                                                            TableName tableName) {
+        Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
+                refreshContext.getBaseTableInfoVisibleVersionMap();
+        if (versionMap == null) {
+            return;
+        }
+        Expr expr = mv.getPartitionRefTableExprs().get(0);
+        Table baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
+                tableName.getDb(), tableName.getTbl());
+
+        if (baseTable == null) {
+            return;
+        }
+        if (expr instanceof SlotRef) {
+            Column partitionColumn = baseTable.getColumn(((SlotRef) expr).getColumnName());
+            BaseTableInfo baseTableInfo = new BaseTableInfo(tableName.getCatalog(), tableName.getDb(),
+                    baseTable.getTableIdentifier());
+            Map<String, MaterializedView.BasePartitionInfo> baseTableVersionMap = versionMap.get(baseTableInfo);
+            if (baseTableVersionMap != null) {
+                baseTableVersionMap.keySet().removeIf(partitionName -> {
+                    try {
+                        Set<String> partitionNames = PartitionUtil.getMVPartitionName(baseTable, partitionColumn,
+                                Lists.newArrayList(partitionName));
+                        return partitionNames != null && partitionNames.size() == 1 &&
+                                Lists.newArrayList(partitionNames).get(0).equals(basePartitionName);
+                    } catch (AnalysisException e) {
+                        LOG.warn("failed to get mv partition name", e);
+                        return false;
+                    }
+                });
+            }
+        } else {
+            // This is a bad case for refreshing, and this problem will be optimized later.
+            versionMap.remove(new BaseTableInfo(tableName.getCatalog(), tableName.getDb(),
+                    baseTable.getTableIdentifier()));
+        }
+    }
+
+
+    public static void dropBaseVersionMeta(MaterializedView mv, String basePartitionName) {
+        MaterializedView.AsyncRefreshContext refreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
+
+        Expr expr = mv.getPartitionRefTableExprs().get(0);
+        SlotRef slotRef;
+        if (expr instanceof SlotRef) {
+            slotRef = (SlotRef) expr;
+        } else {
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            expr.collect(SlotRef.class, slotRefs);
+            slotRef = slotRefs.get(0);
+        }
+        TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+        // base version meta for olap table and external table are different, we need to drop them separately
+        dropBaseVersionMetaForOlapTable(mv, basePartitionName, refreshContext, tableName);
+        dropBaseVersionMetaForExternalTable(mv, basePartitionName, refreshContext, tableName);
     }
 }

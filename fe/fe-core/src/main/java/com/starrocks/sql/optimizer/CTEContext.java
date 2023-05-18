@@ -58,6 +58,8 @@ public class CTEContext {
 
     private int maxCTELimit = 10;
 
+    private int cteIdSequence = 0;
+
     public CTEContext() {
         forceCTEList = Lists.newArrayList();
     }
@@ -69,6 +71,7 @@ public class CTEContext {
         consumeLimits = Maps.newHashMap();
 
         produceStatistics = Maps.newHashMap();
+        cteIdSequence = 0;
     }
 
     public void setEnableCTE(boolean enableCTE) {
@@ -81,6 +84,7 @@ public class CTEContext {
 
     public void addCTEProduce(int cteId) {
         this.produces.add(cteId);
+        cteIdSequence = Math.max(cteId, cteIdSequence);
     }
 
     public void setMaxCTELimit(int maxCTELimit) {
@@ -233,5 +237,9 @@ public class CTEContext {
         }
 
         return false;
+    }
+
+    public int getNextCteId() {
+        return ++cteIdSequence;
     }
 }

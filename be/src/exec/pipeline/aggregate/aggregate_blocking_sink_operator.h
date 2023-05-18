@@ -18,17 +18,18 @@
 
 #include "exec/aggregator.h"
 #include "exec/pipeline/operator.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 class AggregateBlockingSinkOperator : public Operator {
 public:
-    AggregateBlockingSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                                  AggregatorPtr aggregator)
-            : Operator(factory, id, "aggregate_blocking_sink", plan_node_id, driver_sequence),
-              _aggregator(std::move(aggregator)) {
+    AggregateBlockingSinkOperator(AggregatorPtr aggregator, OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                                  int32_t driver_sequence, const char* name = "aggregate_blocking_sink")
+            : Operator(factory, id, name, plan_node_id, driver_sequence), _aggregator(std::move(aggregator)) {
         _aggregator->set_aggr_phase(AggrPhase2);
         _aggregator->ref();
     }
+
     ~AggregateBlockingSinkOperator() override = default;
 
     bool has_output() const override { return false; }
@@ -43,31 +44,35 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
-private:
+protected:
     // It is used to perform aggregation algorithms shared by
     // AggregateBlockingSourceOperator. It is
     // - prepared at SinkOperator::prepare(),
     // - reffed at constructor() of both sink and source operator,
     // - unreffed at close() of both sink and source operator.
     AggregatorPtr _aggregator = nullptr;
+
+private:
     // Whether prev operator has no output
     bool _is_finished = false;
+    // whether enable aggregate group by limit optimize
+    bool _agg_group_by_with_limit = false;
 };
 
 class AggregateBlockingSinkOperatorFactory final : public OperatorFactory {
 public:
-    AggregateBlockingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorFactoryPtr aggregator_factory)
+    AggregateBlockingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorFactoryPtr aggregator_factory,
+                                         const SpillProcessChannelFactoryPtr& _)
             : OperatorFactory(id, "aggregate_blocking_sink", plan_node_id),
               _aggregator_factory(std::move(aggregator_factory)) {}
 
     ~AggregateBlockingSinkOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<AggregateBlockingSinkOperator>(this, _id, _plan_node_id, driver_sequence,
-                                                               _aggregator_factory->get_or_create(driver_sequence));
-    }
+    Status prepare(RuntimeState* state) override;
+
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
-    AggregatorFactoryPtr _aggregator_factory = nullptr;
+    AggregatorFactoryPtr _aggregator_factory;
 };
 } // namespace starrocks::pipeline

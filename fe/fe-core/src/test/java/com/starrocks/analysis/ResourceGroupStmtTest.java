@@ -3,8 +3,8 @@ package com.starrocks.analysis;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -143,7 +143,7 @@ public class ResourceGroupStmtTest {
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        FeConstants.default_scheduler_interval_millisecond = 1;
+        Config.alter_scheduler_interval_millisecond = 1;
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withRole("rg1_role1");
         starRocksAssert.withUser("rg1_user1");
@@ -328,7 +328,8 @@ public class ResourceGroupStmtTest {
             starRocksAssert.executeResourceGroupDdlSql(sql1);
             Assert.fail("should throw error");
         } catch (Exception e) {
-            Assert.assertEquals("Unsupported query_type: 'mv'", e.getMessage());
+            Assert.assertEquals("Getting analyzing error. Detail message: Unsupported query_type: 'mv'.",
+                    e.getMessage());
         }
 
     }
@@ -463,6 +464,11 @@ public class ResourceGroupStmtTest {
         String remoteIp = "192.168.2.4";
         starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
+        starRocksAssert.getCtx().setCurrentRoleIds(
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager().getRoleIdsByUser(
+                        new UserIdentity(qualifiedUser, "%")
+                )
+        );
         starRocksAssert.getCtx().setRemoteIP(remoteIp);
         TWorkGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                 starRocksAssert.getCtx(),

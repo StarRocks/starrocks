@@ -48,6 +48,8 @@ public class TaskRunStatusChange implements Writable {
     @SerializedName("errorMessage")
     private String errorMessage;
 
+    @SerializedName("extraMessage")
+    private String extraMessage;
 
     public TaskRunStatusChange(long taskId, TaskRunStatus status,
                                Constants.TaskRunState fromStatus,
@@ -61,6 +63,7 @@ public class TaskRunStatusChange implements Writable {
             errorCode = status.getErrorCode();
             errorMessage = status.getErrorMessage();
         }
+        this.extraMessage = status.getExtraMessage();
     }
 
     public long getTaskId() {
@@ -119,6 +122,14 @@ public class TaskRunStatusChange implements Writable {
         this.finishTime = finishTime;
     }
 
+    public String getExtraMessage() {
+        return extraMessage;
+    }
+
+    public void setExtraMessage(String extraMessage) {
+        this.extraMessage = extraMessage;
+    }
+
     public static TaskRunStatusChange read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, TaskRunStatusChange.class);
@@ -130,4 +141,17 @@ public class TaskRunStatusChange implements Writable {
         Text.writeString(out, json);
     }
 
+    @Override
+    public String toString() {
+        return "TaskRunStatus{" +
+                "queryId='" + queryId + '\'' +
+                ", taskId='" + taskId + '\'' +
+                ", finishTime=" + finishTime +
+                ", fromStatus=" + fromStatus +
+                ", toStatus=" + toStatus +
+                ", errorCode=" + errorCode +
+                ", errorMessage='" + errorMessage + '\'' +
+                ", extraMessage=" + getExtraMessage() +
+                '}';
+    }
 }

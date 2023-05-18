@@ -47,16 +47,13 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.LeaderDaemon;
-import com.starrocks.lake.backup.LakeBackupJob;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AbstractBackupStmt;
 import com.starrocks.sql.ast.BackupStmt;
@@ -90,7 +87,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class BackupHandler extends LeaderDaemon implements Writable {
+public class BackupHandler extends FrontendDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(BackupHandler.class);
 
     public static final int SIGNATURE_VERSION = 1;
@@ -299,7 +296,6 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         // Also calculate the signature for incremental backup check.
         List<TableRef> tblRefs = stmt.getTableRefs();
         BackupMeta curBackupMeta = null;
-        TableType t = TableType.OLAP;
         db.readLock();
         try {
             List<Table> backupTbls = Lists.newArrayList();
@@ -385,14 +381,8 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         }
 
         // Create a backup job
-        BackupJob backupJob = null;
-        if (t == TableType.OLAP) {
-            backupJob = new BackupJob(stmt.getLabel(), db.getId(), db.getOriginName(), tblRefs, stmt.getTimeoutMs(),
-                    globalStateMgr, repository.getId());
-        } else if (t == TableType.LAKE) {
-            backupJob = new LakeBackupJob(stmt.getLabel(), db.getId(), db.getOriginName(), tblRefs, stmt.getTimeoutMs(),
-                    globalStateMgr, repository.getId());
-        }
+        BackupJob backupJob = new BackupJob(stmt.getLabel(), db.getId(), db.getOriginName(), tblRefs,
+                stmt.getTimeoutMs(), globalStateMgr, repository.getId());
         // write log
         globalStateMgr.getEditLog().logBackupJob(backupJob);
 
@@ -423,15 +413,13 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         }
 
         BackupMeta backupMeta = downloadAndDeserializeMetaInfo(jobInfo, repository, stmt);
-        if (backupMeta != null) {
-            backupMeta.makeDummyMap();
-        }
+
         // Create a restore job
         RestoreJob restoreJob = null;
         if (backupMeta != null) {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                 Table remoteTbl = backupMeta.getTable(tblInfo.name);
-                if (remoteTbl.isLakeTable()) {
+                if (remoteTbl.isCloudNativeTable()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, remoteTbl.getName());
                 }
             }
@@ -677,9 +665,7 @@ public class BackupHandler extends LeaderDaemon implements Writable {
     }
 
     public long loadBackupHandler(DataInputStream dis, long checksum, GlobalStateMgr globalStateMgr) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_42) {
-            readFields(dis);
-        }
+        readFields(dis);
         setGlobalStateMgr(globalStateMgr);
         LOG.info("finished replay backupHandler from image");
         return checksum;

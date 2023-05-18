@@ -15,14 +15,18 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -47,6 +51,15 @@ public class PhysicalCTEConsumeOperator extends PhysicalOperator {
 
     public Map<ColumnRefOperator, ColumnRefOperator> getCteOutputColumnRefMap() {
         return cteOutputColumnRefMap;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        List<ColumnOutputInfo> entryList = Lists.newArrayList();
+        for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : cteOutputColumnRefMap.entrySet()) {
+            entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
+        }
+        return new RowOutputInfo(entryList);
     }
 
     @Override

@@ -27,7 +27,6 @@ import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -53,7 +52,7 @@ public class DeletePlanner {
         QueryRelation query = deleteStatement.getQueryStatement().getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
+        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transform(query);
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
@@ -81,10 +80,6 @@ public class DeletePlanner {
             TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 
             OlapTable table = (OlapTable) deleteStatement.getTable();
-            if (table.isAbortDelete()) {
-                throw new SemanticException(
-                    "Delete statement is forbidden when auto increment column is not the Key for Primary Key table.");
-            }
             for (Column column : table.getBaseSchema()) {
                 if (column.isKey()) {
                     SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
@@ -108,12 +103,12 @@ public class DeletePlanner {
                 partitionIds.add(partition.getId());
             }
             DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, table.writeQuorum(),
-                    table.enableReplicatedStorage(), false);
+                    table.enableReplicatedStorage(), false, false);
             execPlan.getFragments().get(0).setSink(dataSink);
             if (canUsePipeline) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
                 if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
-                    sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getDegreeOfParallelism());
+                    sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
                 } else {
                     sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
                 }

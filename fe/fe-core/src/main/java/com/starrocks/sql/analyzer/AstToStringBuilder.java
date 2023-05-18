@@ -14,10 +14,8 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -55,6 +53,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -77,6 +76,8 @@ import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MapExpr;
+import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -95,6 +96,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
@@ -169,7 +171,11 @@ public class AstToStringBuilder {
                 sb.append("REVOKE ");
             }
             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                List<String> privList = stmt.getPrivilegeTypes().stream().map(Enum::name).collect(toList());
+                List<String> privList = new ArrayList<>();
+                for (PrivilegeType privilegeType : stmt.getPrivilegeTypes()) {
+                    privList.add(privilegeType.name().replace("_", " "));
+                }
+
                 sb.append(Joiner.on(", ").join(privList));
                 sb.append(" ON ");
 
@@ -280,10 +286,16 @@ public class AstToStringBuilder {
                             + " as " + userVariable.getEvaluatedExpression().getType().toSql() + ")";
                     setVarList.add(setVarSql);
                 } else if (setVar instanceof SetPassVar) {
-                    String tmp = "PASSWORD FOR " +
-                            ((SetPassVar) setVar).getUserIdent().toString() +
-                            " = PASSWORD('***')";
-                    setVarList.add(tmp);
+                    SetPassVar setPassVar = (SetPassVar) setVar;
+                    UserIdentity userIdentity = setPassVar.getUserIdent();
+                    String setPassSql = "";
+                    if (userIdentity == null) {
+                        setPassSql += "PASSWORD";
+                    } else {
+                        setPassSql += "PASSWORD FOR " + userIdentity;
+                    }
+                    setPassSql += " = PASSWORD('***')";
+                    setVarList.add(setPassSql);
                 }
             }
 
@@ -356,26 +368,22 @@ public class AstToStringBuilder {
             return sb.toString();
         }
 
-
         @Override
         public String visitLoadStatement(LoadStmt stmt, Void context) {
             StringBuilder sb = new StringBuilder();
 
             sb.append("LOAD LABEL ").append(stmt.getLabel().toString());
-            sb.append("(");
-            Joiner.on(",").appendTo(sb, Lists.transform(stmt.getDataDescriptions(), new Function<DataDescription, Object>() {
-                @Override
-                public Object apply(DataDescription dataDescription) {
-                    return dataDescription.toString();
-                }
-            })).append(")");
+            sb.append(" (");
+            sb.append(Joiner.on(",").join(
+                    stmt.getDataDescriptions().stream().map(DataDescription::toString).collect(toList())));
+            sb.append(")");
 
             if (stmt.getBrokerDesc() != null) {
                 sb.append(stmt.getBrokerDesc());
             }
 
             if (stmt.getCluster() != null) {
-                sb.append("BY '");
+                sb.append(" BY '");
                 sb.append(stmt.getCluster());
                 sb.append("'");
             }
@@ -384,8 +392,8 @@ public class AstToStringBuilder {
             }
 
             if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
-                sb.append("PROPERTIES (");
-                sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
+                sb.append(" PROPERTIES (");
+                sb.append(new PrintableMap<>(stmt.getProperties(), "=", true, false));
                 sb.append(")");
             }
             return sb.toString();
@@ -695,6 +703,30 @@ public class AstToStringBuilder {
             return sqlBuilder.toString();
         }
 
+        @Override
+        public String visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void scope) {
+            StringBuilder sqlBuilder = new StringBuilder();
+            sqlBuilder.append("TABLE(");
+
+            TableFunctionRelation tableFunction = (TableFunctionRelation) node.getRight();
+            sqlBuilder.append(tableFunction.getFunctionName());
+            sqlBuilder.append("(");
+            sqlBuilder.append(tableFunction.getChildExpressions().stream().map(this::visit).collect(Collectors.joining(",")));
+            sqlBuilder.append(")");
+            sqlBuilder.append(")"); // TABLE(
+
+            if (tableFunction.getAlias() != null) {
+                sqlBuilder.append(" ").append(tableFunction.getAlias().getTbl());
+                if (tableFunction.getColumnOutputNames() != null) {
+                    sqlBuilder.append("(");
+                    sqlBuilder.append(Joiner.on(",").join(tableFunction.getColumnOutputNames()));
+                    sqlBuilder.append(")");
+                }
+            }
+
+            return sqlBuilder.toString();
+        }
+
         // ---------------------------------- Expression --------------------------------
 
         @Override
@@ -740,15 +772,23 @@ public class AstToStringBuilder {
         }
 
         public String visitArrayExpr(ArrayExpr node, Void context) {
-            boolean explicitType = node.isExplicitType();
-
             StringBuilder sb = new StringBuilder();
-            if (explicitType) {
-                sb.append(node.getType().toString());
-            }
             sb.append('[');
             sb.append(visitAstList(node.getChildren()));
             sb.append(']');
+            return sb.toString();
+        }
+
+        public String visitMapExpr(MapExpr node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append('{');
+            for (int i = 0; i < node.getChildren().size(); i = i + 2) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                sb.append(visit(node.getChild(i)) + ":" + visit(node.getChild(i + 1)));
+            }
+            sb.append('}');
             return sb.toString();
         }
 
@@ -864,6 +904,13 @@ public class AstToStringBuilder {
                 sb.append(" ").append(ident.getValue());
                 StringLiteral boundary = (StringLiteral) node.getChild(3);
                 sb.append(", ").append(boundary.getValue());
+                sb.append(")");
+            } else if (functionName.equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
+                sb.append(visit(node.getChild(0)));
+                List<OrderByElement> sortClause = fnParams.getOrderByElements();
+                if (sortClause != null) {
+                    sb.append(" ORDER BY ").append(visitAstList(sortClause));
+                }
                 sb.append(")");
             } else {
                 List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());

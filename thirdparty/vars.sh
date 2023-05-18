@@ -24,10 +24,13 @@
 # --job param for *make*
 # support macos
 if [[ $(uname) == "Darwin" ]]; then
-    PARALLEL=$[$(sysctl -n hw.physicalcpu)/4+1]
+    default_parallel=$[$(sysctl -n hw.physicalcpu)/4+1]
 else
-    PARALLEL=$[$(nproc)/4+1]
+    default_parallel=$[$(nproc)/4+1]
 fi
+
+# use the value if $PARALEL is already set, otherwise use $default_parallel
+PARALLEL=${PARALLEL:-$default_parallel}
 
 ###################################################
 # DO NOT change variables bellow unless you known
@@ -194,6 +197,12 @@ ROCKSDB_NAME=rocksdb-6.22.1.zip
 ROCKSDB_SOURCE=rocksdb-6.22.1
 ROCKSDB_MD5SUM="02727e52cdb94fa6a9dbbd68d157e619"
 
+# libsasl
+SASL_DOWNLOAD="https://github.com/cyrusimap/cyrus-sasl/archive/refs/tags/cyrus-sasl-2.1.28.tar.gz"
+SASL_NAME=cyrus-sasl-2.1.28.tar.gz
+SASL_SOURCE=cyrus-sasl-2.1.28
+SASL_MD5SUM="7dcf3919b3085a1d09576438171bda91"
+
 # librdkafka
 LIBRDKAFKA_DOWNLOAD="https://github.com/confluentinc/librdkafka/archive/refs/tags/v2.0.2.tar.gz"
 LIBRDKAFKA_NAME=librdkafka-2.0.2.tar.gz
@@ -243,10 +252,10 @@ BITSHUFFLE_SOURCE=bitshuffle-0.5.1
 BITSHUFFLE_MD5SUM="b3bf6a9838927f7eb62214981c138e2f"
 
 # CROARINGBITMAP
-CROARINGBITMAP_DOWNLOAD="https://github.com/RoaringBitmap/CRoaring/archive/v0.2.60.tar.gz"
-CROARINGBITMAP_NAME=CRoaring-0.2.60.tar.gz
-CROARINGBITMAP_SOURCE=CRoaring-0.2.60
-CROARINGBITMAP_MD5SUM="29602918e6890ffdeed84cb171857046"
+CROARINGBITMAP_DOWNLOAD="https://github.com/RoaringBitmap/CRoaring/archive/refs/tags/v1.1.3.tar.gz"
+CROARINGBITMAP_NAME=CRoaring-1.1.3.tar.gz
+CROARINGBITMAP_SOURCE=CRoaring-1.1.3
+CROARINGBITMAP_MD5SUM="605924d21c14c760e66466799215868f"
 
 # jemalloc
 JEMALLOC_DOWNLOAD="https://github.com/jemalloc/jemalloc/releases/download/5.2.1/jemalloc-5.2.1.tar.bz2"
@@ -296,6 +305,12 @@ JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.2.tar.gz"
 JINDOSDK_NAME="jindosdk-4.6.2.tar.gz"
 JINDOSDK_SOURCE="jindosdk-4.6.2"
 JINDOSDK_MD5SUM="7288ffb8f2fbdde6b907d15041a0f79c"
+
+# Google Cloud Storage, gcs-connector
+GCS_CONNECTOR_DOWNLOAD="https://cdn-thirdparty.starrocks.com/gcs-connector-hadoop3-2.2.11-shaded.zip"
+GCS_CONNECTOR_NAME="gcs-connector-hadoop3-2.2.11-shaded.zip"
+GCS_CONNECTOR_SOURCE="gcs-connector-hadoop3-2.2.11-shaded"
+GCS_CONNECTOR_MD5SUM="51fd0eb5cb913a84e4ad8a5ed2069e21"
 
 # aws-sdk-cpp
 AWS_SDK_CPP_DOWNLOAD="https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.9.179.tar.gz"
@@ -363,8 +378,20 @@ SERDES_NAME="libserdes-7.3.1.tar.gz"
 SERDES_SOURCE="libserdes-7.3.1"
 SERDES_MD5SUM="61012487a8845f37540710ac4ac2f7ab"
 
+# lzo
+LZO2_DOWNLOAD="http://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz"
+LZO2_NAME=lzo-2.10.tar.gz
+LZO2_SOURCE=lzo-2.10
+LZO2_MD5SUM="39d3f3f9c55c87b1e5d6888e1420f4b5"
+
+# datasketches-cpp
+DATASKETCHES_DOWNLOAD="https://github.com/apache/datasketches-cpp/archive/refs/tags/4.0.0.tar.gz"
+DATASKETCHES_NAME="datasketches-cpp-4.0.0.tar.gz"
+DATASKETCHES_SOURCE="datasketches-cpp-4.0.0"
+DATASKETCHES_MD5SUM="724cd1df9735de2b8939d298f0d95ea2"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
-            RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
+            RE2 BOOST LEVELDB BRPC ROCKSDB SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
-            BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS JANSSON AVRO SERDES"
+            BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES"

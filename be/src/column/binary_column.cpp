@@ -90,7 +90,8 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
 }
 
 template <typename T>
-void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
+void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size,
+                                                      bool deep_copy) {
     auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
     auto& src_offsets = src_column.get_offset();
     auto& src_bytes = src_column.get_bytes();
@@ -171,11 +172,17 @@ void append_fixed_length(const Buffer<Slice>& strs, Bytes* bytes, typename Binar
 
     size_t offset = bytes->size();
     bytes->resize(size + copy_length);
-    for (const auto& s : strs) {
-        strings::memcpy_inlined(&(*bytes)[offset], s.data, copy_length);
-        offset += s.size;
-        offsets->emplace_back(offset);
+
+    size_t rows = strs.size();
+    size_t length = offsets->size();
+    raw::stl_vector_resize_uninitialized(offsets, offsets->size() + rows);
+
+    for (size_t i = 0; i < rows; ++i) {
+        memcpy(&(*bytes)[offset], strs[i].get_data(), copy_length);
+        offset += strs[i].get_size();
+        (*offsets)[length++] = offset;
     }
+
     bytes->resize(offset);
 }
 

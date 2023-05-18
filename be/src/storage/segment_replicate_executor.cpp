@@ -220,9 +220,6 @@ Status ReplicateToken::submit(std::unique_ptr<SegmentPB> segment, bool eos) {
 }
 
 void ReplicateToken::cancel(const Status& st) {
-    for (auto& channel : _replicate_channels) {
-        channel->cancel();
-    }
     set_status(st);
 }
 
@@ -276,6 +273,23 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
             auto buf = new uint8[segment->delete_data_size()];
             data.append_user_data(buf, segment->delete_data_size(), [](void* buf) { delete[](uint8*) buf; });
             auto st = rfile->read_fully(buf, segment->delete_data_size());
+            if (!st.ok()) {
+                LOG(WARNING) << "Failed to read delete file " << segment->DebugString() << " by " << debug_string()
+                             << " err " << st;
+                return set_status(st);
+            }
+        }
+        if (segment->has_update_path()) {
+            auto res = _fs->new_random_access_file(segment->update_path());
+            if (!res.ok()) {
+                LOG(WARNING) << "Failed to open update file " << segment->DebugString() << " by " << debug_string()
+                             << " err " << res.status();
+                return set_status(res.status());
+            }
+            auto rfile = std::move(res.value());
+            auto buf = new uint8[segment->update_data_size()];
+            data.append_user_data(buf, segment->update_data_size(), [](void* buf) { delete[](uint8*) buf; });
+            auto st = rfile->read_fully(buf, segment->update_data_size());
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to read delete file " << segment->DebugString() << " by " << debug_string()
                              << " err " << st;

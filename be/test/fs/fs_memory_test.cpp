@@ -455,4 +455,31 @@ TEST_F(MemoryFileSystemTest, test_random_access_file) {
     EXPECT_ERROR(f->read_at_fully(22, slice.data, slice.size));
 }
 
+TEST_F(MemoryFileSystemTest, test_iterate_dir2) {
+    ASSERT_OK(_fs->create_dir("/home"));
+    ASSERT_OK(_fs->create_dir("/home/code"));
+    ASSIGN_OR_ABORT(auto f, _fs->new_writable_file("/home/gcc"));
+    ASSERT_OK(f->append("test"));
+    ASSERT_OK(f->close());
+
+    ASSERT_OK(_fs->iterate_dir2("/home", [](DirEntry entry) -> bool {
+        auto name = entry.name;
+        if (name == "code") {
+            CHECK(entry.is_dir.has_value());
+            CHECK(entry.is_dir.value());
+            CHECK(!entry.mtime.has_value());
+            CHECK(!entry.size.has_value());
+        } else if (name == "gcc") {
+            CHECK(entry.is_dir.has_value());
+            CHECK(!entry.is_dir.value());
+            CHECK(!entry.mtime.has_value());
+            CHECK(entry.size.has_value());
+            CHECK_EQ(4, entry.size.value());
+        } else {
+            CHECK(false) << "Unexpected file " << name;
+        }
+        return true;
+    }));
+}
+
 } // namespace starrocks

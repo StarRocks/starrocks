@@ -22,13 +22,11 @@ import com.starrocks.journal.bdbje.BDBToolOptions;
 public class CommandLineOptions {
 
     private boolean isVersion;
-    private String helperNode;
     private boolean runBdbTools;
     private BDBToolOptions bdbToolOpts = null;
 
-    public CommandLineOptions(boolean isVersion, String helperNode, BDBToolOptions bdbToolOptions) {
+    public CommandLineOptions(boolean isVersion, BDBToolOptions bdbToolOptions) {
         this.isVersion = isVersion;
-        this.helperNode = helperNode;
         this.bdbToolOpts = bdbToolOptions;
         if (this.bdbToolOpts != null) {
             runBdbTools = true;
@@ -39,10 +37,6 @@ public class CommandLineOptions {
 
     public boolean isVersion() {
         return isVersion;
-    }
-
-    public String getHelperNode() {
-        return helperNode;
     }
 
     public boolean runBdbTools() {
@@ -57,7 +51,6 @@ public class CommandLineOptions {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("print version: " + isVersion).append("\n");
-        sb.append("helper node: " + helperNode).append("\n");
         sb.append("bdb tool options: \n(\n" + bdbToolOpts).append("\n)\n");
         return sb.toString();
     }

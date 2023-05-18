@@ -81,9 +81,7 @@ public:
 
         // construct dict page
         OwnedSlice dict_slice = page_builder.get_dictionary_page()->build();
-        PageDecoderOptions dict_decoder_options;
-        auto dict_page_decoder =
-                std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(dict_slice.slice(), dict_decoder_options);
+        auto dict_page_decoder = std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(dict_slice.slice());
         status = dict_page_decoder->init();
         ASSERT_TRUE(status.ok());
         // because every slice is unique
@@ -100,8 +98,7 @@ public:
         Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::DICT_ENCODING, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
 
-        PageDecoderOptions decoder_options;
-        BinaryDictPageDecoder<TYPE_VARCHAR> page_decoder(encoded_data, decoder_options);
+        BinaryDictPageDecoder<TYPE_VARCHAR> page_decoder(encoded_data);
         page_decoder.set_dict_decoder(dict_page_decoder.get());
 
         status = page_decoder.init();
@@ -198,9 +195,7 @@ public:
         for (int i = 0; i < 100; ++i) {
             int slice_index = random() % results.size();
             //int slice_index = 1;
-            PageDecoderOptions dict_decoder_options;
-            auto dict_page_decoder =
-                    std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(dict_slice.slice(), dict_decoder_options);
+            auto dict_page_decoder = std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(dict_slice.slice());
             status = dict_page_decoder->init();
             ASSERT_TRUE(status.ok());
 
@@ -215,8 +210,7 @@ public:
             Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::DICT_ENCODING, &page, &encoded_data);
             ASSERT_TRUE(st.ok());
 
-            PageDecoderOptions decoder_options;
-            BinaryDictPageDecoder<TYPE_VARCHAR> page_decoder(encoded_data, decoder_options);
+            BinaryDictPageDecoder<TYPE_VARCHAR> page_decoder(encoded_data);
             status = page_decoder.init();
             page_decoder.set_dict_decoder(dict_page_decoder.get());
             ASSERT_TRUE(status.ok());

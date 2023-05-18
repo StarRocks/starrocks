@@ -46,6 +46,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     private static final List<ClearTransactionTask> CLEAR_TRANSACTION_TASKS = Lists.newArrayList();
 
     private final DatabaseTransactionMgr dbTxnMgr;
+    // olap table or olap materialized view
     private final OlapTable table;
 
     private Set<Long> totalInvolvedBackends;

@@ -18,6 +18,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -34,6 +35,11 @@ public class MultiInPredicate extends Predicate {
     private int numberOfColumns;
 
     public MultiInPredicate(List<Expr> outerExprs, Expr subquery, boolean isNotIn) {
+        this(outerExprs, subquery, isNotIn, NodePosition.ZERO);
+    }
+
+    public MultiInPredicate(List<Expr> outerExprs, Expr subquery, boolean isNotIn, NodePosition pos) {
+        super(pos);
         Preconditions.checkNotNull(subquery);
         children.addAll(outerExprs);
         children.add(subquery);
@@ -41,7 +47,6 @@ public class MultiInPredicate extends Predicate {
         this.subquery = subquery;
         this.isNotIn = isNotIn;
         this.numberOfColumns = outerExprs.size();
-
     }
 
     protected MultiInPredicate(MultiInPredicate other) {

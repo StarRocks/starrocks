@@ -20,10 +20,8 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
 public class LogicalExceptOperator extends LogicalSetOperator {
-    private LogicalExceptOperator(Builder builder) {
-        super(OperatorType.LOGICAL_EXCEPT, builder.outputColumnRefOp, builder.childOutputColumns,
-                builder.getLimit(),
-                builder.getProjection());
+    private LogicalExceptOperator() {
+        super(OperatorType.LOGICAL_EXCEPT);
     }
 
     @Override
@@ -39,14 +37,8 @@ public class LogicalExceptOperator extends LogicalSetOperator {
     public static class Builder
             extends LogicalSetOperator.Builder<LogicalExceptOperator, LogicalExceptOperator.Builder> {
         @Override
-        public LogicalExceptOperator build() {
-            return new LogicalExceptOperator(this);
-        }
-
-        @Override
-        public Builder withOperator(LogicalExceptOperator operator) {
-            super.withOperator(operator);
-            return this;
+        protected LogicalExceptOperator newInstance() {
+            return new LogicalExceptOperator();
         }
     }
 }

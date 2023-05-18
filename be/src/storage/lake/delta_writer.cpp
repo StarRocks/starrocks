@@ -185,7 +185,7 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
         ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
         RETURN_IF_ERROR(handle_partial_update());
-        ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer());
+        ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer(kHorizontal));
         if (_partial_update_tablet_schema != nullptr) {
             _tablet_writer->set_tablet_schema(_partial_update_tablet_schema);
         }
@@ -201,9 +201,9 @@ inline Status DeltaWriterImpl::reset_memtable() {
         _vectorized_schema = MemTable::convert_schema(_tablet_schema.get(), _slots);
         _schema_initialized = true;
     }
-    if (_slots != nullptr) {
+    if (_slots != nullptr || !_merge_condition.empty()) {
         _mem_table = std::make_unique<MemTable>(_tablet_id, &_vectorized_schema, _slots, _mem_table_sink.get(),
-                                                _mem_tracker);
+                                                _merge_condition, _mem_tracker);
     } else {
         _mem_table = std::make_unique<MemTable>(_tablet_id, &_vectorized_schema, _mem_table_sink.get(),
                                                 _max_buffer_size, _mem_tracker);
@@ -344,6 +344,10 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
         if (_merge_condition != "") {
             op_write->mutable_txn_meta()->set_merge_condition(_merge_condition);
         }
+    }
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+        // preload update state here to minimaze the cost when publishing.
+        tablet.update_mgr()->preload_update_state(*txn_log, &tablet);
     }
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
     return Status::OK();

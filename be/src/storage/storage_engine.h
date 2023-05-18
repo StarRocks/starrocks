@@ -116,6 +116,7 @@ public:
 
     Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
 
+    std::vector<string> get_store_paths();
     // get root path for creating tablet. The returned vector of root path should be random,
     // for avoiding that all the tablet would be deployed one disk.
     std::vector<DataDir*> get_stores_for_create_tablet(TStorageMedium::type storage_medium);
@@ -217,6 +218,9 @@ public:
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>>
     get_executed_repair_compaction_tasks();
 
+    void submit_manual_compaction_task(int64_t tablet_id, int64_t rowset_size_threshold);
+    std::string get_manual_compaction_status();
+
     void do_manual_compact(bool force_compact);
 
     void increase_update_compaction_thread(const int num_threads_per_disk);
@@ -235,7 +239,7 @@ protected:
 private:
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.
-    Status _open();
+    Status _open(const EngineOptions& options);
 
     Status _init_store_map();
 
@@ -243,7 +247,7 @@ private:
 
     // Some check methods
     Status _check_file_descriptor_number();
-    Status _check_all_root_path_cluster_id();
+    Status _check_all_root_path_cluster_id(bool need_write_cluster_id);
     Status _judge_and_update_effective_cluster_id(int32_t cluster_id);
 
     bool _delete_tablets_on_unused_root_path();
@@ -260,6 +264,8 @@ private:
     // All these xxx_callback() functions are for Background threads
     // update cache expire thread
     void* _update_cache_expire_thread_callback(void* arg);
+    // update cache evict thread
+    void* _update_cache_evict_thread_callback(void* arg);
 
     // unused rowset monitor thread
     void* _unused_rowset_monitor_thread_callback(void* arg);
@@ -272,6 +278,10 @@ private:
     void* _update_compaction_thread_callback(void* arg, DataDir* data_dir);
     // repair compaction function
     void* _repair_compaction_thread_callback(void* arg);
+    // manual compaction function
+    void* _manual_compaction_thread_callback(void* arg);
+
+    bool _check_and_run_manual_compaction_task();
 
     // garbage sweep thread process function. clear snapshot and trash folder
     void* _garbage_sweeper_thread_callback(void* arg);
@@ -301,29 +311,6 @@ private:
     size_t _compaction_check_one_round();
 
 private:
-    struct CompactionCandidate {
-        CompactionCandidate(uint32_t nicumulative_compaction_, int64_t tablet_id_, uint32_t index_)
-                : nice(nicumulative_compaction_), tablet_id(tablet_id_), disk_index(index_) {}
-        uint32_t nice;
-        int64_t tablet_id;
-        uint32_t disk_index = -1;
-    };
-
-    // In descending order
-    struct CompactionCandidateComparator {
-        bool operator()(const CompactionCandidate& a, const CompactionCandidate& b) { return a.nice > b.nice; }
-    };
-
-    struct CompactionDiskStat {
-        CompactionDiskStat(std::string path, uint32_t index, bool used)
-                : storage_path(std::move(path)), disk_index(index), is_used(used) {}
-        const std::string storage_path;
-        const uint32_t disk_index;
-        uint32_t task_running{0};
-        uint32_t task_remaining{0};
-        bool is_used;
-    };
-
     EngineOptions _options;
     std::mutex _store_lock;
     std::map<std::string, DataDir*> _store_map;
@@ -338,6 +325,7 @@ private:
     std::atomic<bool> _bg_worker_stopped{false};
     // thread to expire update cache;
     std::thread _update_cache_expire_thread;
+    std::thread _update_cache_evict_thread;
     std::thread _unused_rowset_monitor_thread;
     // thread to monitor snapshot expiry
     std::thread _garbage_sweeper_thread;
@@ -354,6 +342,7 @@ private:
     std::mutex _repair_compaction_tasks_lock;
     std::vector<std::pair<int64_t, std::vector<uint32_t>>> _repair_compaction_tasks;
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>> _executed_repair_compaction_tasks;
+    std::vector<std::thread> _manual_compaction_threads;
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;
     std::thread _adjust_cache_thread;
@@ -403,18 +392,6 @@ private:
 
     StorageEngine(const StorageEngine&) = delete;
     const StorageEngine& operator=(const StorageEngine&) = delete;
-};
-
-// DummyStorageEngine is used for ComputeNode, it only stores cluster id.
-class DummyStorageEngine : public StorageEngine {
-    std::string _conf_path;
-    std::unique_ptr<ClusterIdMgr> cluster_id_mgr;
-
-public:
-    DummyStorageEngine(const EngineOptions& options);
-    static Status open(const EngineOptions& options, StorageEngine** engine_ptr);
-    Status set_cluster_id(int32_t cluster_id) override;
-    Status start_bg_threads() override { return Status::OK(); };
 };
 
 /// Load min_garbage_sweep_interval and max_garbage_sweep_interval from config,

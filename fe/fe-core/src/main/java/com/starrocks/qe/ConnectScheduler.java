@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.nio.NConnectContext;
 import com.starrocks.mysql.privilege.PrivPredicate;
@@ -63,7 +64,7 @@ public class ConnectScheduler {
     private final AtomicInteger nextConnectionId;
 
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
-    private final Map<String, AtomicInteger> connByUser = Maps.newConcurrentMap();
+    private final Map<String, AtomicInteger> connCountByUser = Maps.newConcurrentMap();
     private final ExecutorService executor = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.max_connection_scheduler_threads_num, "connect-scheduler-pool", true);
 
@@ -130,21 +131,21 @@ public class ConnectScheduler {
             return false;
         }
         // Check user
-        if (connByUser.get(ctx.getQualifiedUser()) == null) {
-            connByUser.put(ctx.getQualifiedUser(), new AtomicInteger(0));
+        if (connCountByUser.get(ctx.getQualifiedUser()) == null) {
+            connCountByUser.put(ctx.getQualifiedUser(), new AtomicInteger(0));
         }
-        int conns = connByUser.get(ctx.getQualifiedUser()).get();
-        long currentConns;
+        int currentConns = connCountByUser.get(ctx.getQualifiedUser()).get();
+        long currentMaxConns;
         if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
-            currentConns = ctx.getGlobalStateMgr().getAuthenticationManager().getMaxConn(ctx.getQualifiedUser());
+            currentMaxConns = ctx.getGlobalStateMgr().getAuthenticationManager().getMaxConn(ctx.getQualifiedUser());
         } else {
-            currentConns = ctx.getGlobalStateMgr().getAuth().getMaxConn(ctx.getQualifiedUser());
+            currentMaxConns = ctx.getGlobalStateMgr().getAuth().getMaxConn(ctx.getQualifiedUser());
         }
-        if (conns >= currentConns) {
+        if (currentConns >= currentMaxConns) {
             return false;
         }
         numberConnection.incrementAndGet();
-        connByUser.get(ctx.getQualifiedUser()).incrementAndGet();
+        connCountByUser.get(ctx.getQualifiedUser()).incrementAndGet();
         connectionMap.put((long) ctx.getConnectionId(), ctx);
         return true;
     }
@@ -152,7 +153,7 @@ public class ConnectScheduler {
     public void unregisterConnection(ConnectContext ctx) {
         if (connectionMap.remove((long) ctx.getConnectionId()) != null) {
             numberConnection.decrementAndGet();
-            AtomicInteger conns = connByUser.get(ctx.getQualifiedUser());
+            AtomicInteger conns = connCountByUser.get(ctx.getQualifiedUser());
             if (conns != null) {
                 conns.decrementAndGet();
             }
@@ -213,16 +214,23 @@ public class ConnectScheduler {
                 context.setThreadLocalInfo();
                 context.setConnectScheduler(ConnectScheduler.this);
                 // authenticate check failed.
-                if (!MysqlProto.negotiate(context)) {
-                    return;
-                }
+                MysqlProto.NegotiateResult result = null;
+                try {
+                    result = MysqlProto.negotiate(context);
+                    if (!result.isSuccess()) {
+                        return;
+                    }
 
-                if (registerConnection(context)) {
-                    MysqlProto.sendResponsePacket(context);
-                } else {
-                    context.getState().setError("Reach limit of connections");
-                    MysqlProto.sendResponsePacket(context);
-                    return;
+                    if (registerConnection(context)) {
+                        MysqlProto.sendResponsePacket(context);
+                    } else {
+                        context.getState().setError("Reach limit of connections");
+                        MysqlProto.sendResponsePacket(context);
+                        return;
+                    }
+                } finally {
+                    LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context,
+                            result == null ? null : result.getAuthPacket());
                 }
 
                 context.setStartTime();

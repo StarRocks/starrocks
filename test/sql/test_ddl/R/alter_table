@@ -1,0 +1,29 @@
+-- name: test_ddl_alter_table
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (id1 int) DUPLICATE KEY(id1) COMMENT "c1" DISTRIBUTED BY HASH(id1) BUCKETS 1 properties('replication_num' = '1');
+-- result:
+-- !result
+ALTER TABLE t1 COMMENT="c2";
+-- result:
+-- !result
+SHOW CREATE TABLE t1;
+-- result:
+t1	CREATE TABLE `t1` (
+  `id1` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`id1`)
+COMMENT "c2"
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result

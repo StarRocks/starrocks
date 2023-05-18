@@ -24,13 +24,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
@@ -86,7 +85,8 @@ public class BackupRestoreAnalyzer {
             for (TableRef tableRef : tableRefs) {
                 analyzeTableRef(tableRef, dbName, database, tblPartsMap, context.getCurrentCatalog());
                 if (tableRef.hasExplicitAlias()) {
-                    throw new SemanticException("Can not set alias for table in Backup Stmt: " + tableRef);
+                    throw new SemanticException("Can not set alias for table in Backup Stmt: " + tableRef,
+                            tableRef.getPos());
                 }
             }
 
@@ -140,8 +140,10 @@ public class BackupRestoreAnalyzer {
 
         @Override
         public Void visitShowBackupStatement(ShowBackupStmt showBackupStmt, ConnectContext context) {
-            String dbName = getDbName(showBackupStmt.getDbName(), context);
-            showBackupStmt.setDbName(dbName);
+            String dbName = showBackupStmt.getDbName();
+            if (dbName != null) {
+                getDatabase(dbName, context);
+            }
             return null;
         }
 
@@ -156,7 +158,7 @@ public class BackupRestoreAnalyzer {
                 if (!tblPartsMap.containsKey(tableName.getTbl())) {
                     tblPartsMap.put(tableName.getTbl(), tableRef);
                 } else {
-                    throw new SemanticException("Duplicated table: " + tableName.getTbl());
+                    throw new SemanticException("Duplicated table: " + tableName.getTbl(), tableRef.getPos());
                 }
 
                 aliasSet.add(tableRef.getName().getTbl());
@@ -164,7 +166,7 @@ public class BackupRestoreAnalyzer {
 
             for (TableRef tblRef : tableRefs) {
                 if (tblRef.hasExplicitAlias() && !aliasSet.add(tblRef.getExplicitAlias())) {
-                    throw new SemanticException("Duplicated alias name: " + tblRef.getExplicitAlias());
+                    throw new SemanticException("Duplicated alias name: " + tblRef.getExplicitAlias(), tblRef.getPos());
                 }
             }
 
@@ -174,7 +176,7 @@ public class BackupRestoreAnalyzer {
             Map<String, String> copiedProperties = Maps.newHashMap(properties);
             long timeoutMs = Config.backup_job_default_timeout_ms;
             boolean allowLoad = false;
-            int replicationNum = FeConstants.default_replication_num;
+            int replicationNum = RunMode.defaultReplicationNum();
             String backupTimestamp = null;
             int metaVersion = -1;
             int starrocksMetaVersion = -1;
@@ -242,8 +244,10 @@ public class BackupRestoreAnalyzer {
 
         @Override
         public Void visitShowRestoreStatement(ShowRestoreStmt showRestoreStmt, ConnectContext context) {
-            String dbName = getDbName(showRestoreStmt.getDbName(), context);
-            showRestoreStmt.setDbName(dbName);
+            String dbName = showRestoreStmt.getDbName();
+            if (dbName != null) {
+                getDatabase(dbName, context);
+            }
             return null;
         }
     }
@@ -252,11 +256,7 @@ public class BackupRestoreAnalyzer {
         if (Strings.isNullOrEmpty(dbName)) {
             dbName = context.getDatabase();
         } else {
-            try {
-                FeNameFormat.checkDbName(dbName);
-            } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
-            }
+            FeNameFormat.checkDbName(dbName);
         }
         return dbName;
     }
@@ -307,7 +307,7 @@ public class BackupRestoreAnalyzer {
         }
 
         if (partitionNames != null) {
-            if (!tbl.isOlapOrLakeTable()) {
+            if (!tbl.isOlapOrCloudNativeTable()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName.getTbl());
             }
 
@@ -316,7 +316,8 @@ public class BackupRestoreAnalyzer {
                 Partition partition = olapTbl.getPartition(partName);
                 if (partition == null) {
                     throw new SemanticException(
-                            "partition[" + partName + "] does not exist  in table" + tableName.getTbl());
+                            "partition[" + partName + "] does not exist  in table" + tableName.getTbl(),
+                            tableRef.getPartitionNames().getPos());
                 }
             }
         }
@@ -324,7 +325,7 @@ public class BackupRestoreAnalyzer {
         if (!tblPartsMap.containsKey(tableName.getTbl())) {
             tblPartsMap.put(tableName.getTbl(), tableRef);
         } else {
-            throw new SemanticException("Duplicated table: " + tableName.getTbl());
+            throw new SemanticException("Duplicated table: " + tableName.getTbl(), tableName.getPos());
         }
     }
 

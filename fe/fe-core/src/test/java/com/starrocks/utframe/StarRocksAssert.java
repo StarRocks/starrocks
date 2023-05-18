@@ -66,8 +66,8 @@ import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
-import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DdlStmt;
+import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -76,6 +76,7 @@ import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.BackendCoreStat;
 import org.apache.commons.lang.StringUtils;
 import org.junit.Assert;
@@ -128,7 +129,7 @@ public class StarRocksAssert {
     public StarRocksAssert withRole(String roleName) throws Exception {
         CreateRoleStmt createRoleStmt =
                 (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser("create role " + roleName + ";", ctx);
-        GlobalStateMgr.getCurrentState().getPrivilegeManager().createRole(createRoleStmt);
+        GlobalStateMgr.getCurrentState().getAuthorizationManager().createRole(createRoleStmt);
         return this;
     }
 
@@ -213,10 +214,16 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        createTableStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        return this;
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        if (statementBase instanceof  CreateTableStmt) {
+            CreateTableStmt createTableStmt = (CreateTableStmt) statementBase;
+            createTableStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+            return this.withTable(sql);
+        } else if (statementBase instanceof CreateMaterializedViewStatement) {
+            return this.withMaterializedView(sql, true);
+        } else {
+            throw new AnalysisException("Sql is not supported in withSingleReplicaTable:" + sql);
+        }
     }
 
     public StarRocksAssert withView(String sql) throws Exception {
@@ -229,6 +236,13 @@ public class StarRocksAssert {
         DropTableStmt dropViewStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop view " + viewName + ";", ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
+        return this;
+    }
+
+    public StarRocksAssert dropCatalog(String catalogName) throws Exception {
+        DropCatalogStmt dropCatalogStmt =
+                (DropCatalogStmt) UtFrameUtils.parseStmtWithNewParser("drop catalog " + catalogName + ";", ctx);
+        GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
         return this;
     }
 
@@ -255,14 +269,24 @@ public class StarRocksAssert {
 
     // Add materialized view to the schema
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
+        return withMaterializedView(sql, false);
+    }
+
+    public StarRocksAssert withMaterializedView(String sql, boolean isOnlySingleReplica) throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         if (stmt instanceof CreateMaterializedViewStmt) {
             CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
+            if (isOnlySingleReplica) {
+                createMaterializedViewStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+            }
             GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
         } else {
             Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            if (isOnlySingleReplica) {
+                createMaterializedViewStatement.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+            }
             GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
         }
         checkAlterJob();
@@ -281,13 +305,6 @@ public class StarRocksAssert {
     public StarRocksAssert withCatalog(String sql) throws Exception {
         CreateCatalogStmt createCatalogStmt = (CreateCatalogStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(createCatalogStmt);
-        return this;
-    }
-
-    // With warehouse
-    public StarRocksAssert withWarehouse(String sql) throws Exception {
-        CreateWarehouseStmt createWarehouseStmt = (CreateWarehouseStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getWarehouseMgr().createWarehouse(createWarehouseStmt);
         return this;
     }
 
@@ -368,7 +385,8 @@ public class StarRocksAssert {
             try {
                 explainQuery();
             } catch (AnalysisException | StarRocksPlannerException analysisException) {
-                Assert.assertTrue(Stream.of(keywords).allMatch(analysisException.getMessage()::contains));
+                Assert.assertTrue(analysisException.getMessage(),
+                        Stream.of(keywords).allMatch(analysisException.getMessage()::contains));
                 return;
             } catch (Exception ex) {
                 Assert.fail();
@@ -379,7 +397,7 @@ public class StarRocksAssert {
 
     public ShowResultSet showTablet(String db, String table) throws DdlException, AnalysisException {
         TableName tableName = new TableName(db, table);
-        ShowTabletStmt showTabletStmt = new ShowTabletStmt(tableName, -1);
+        ShowTabletStmt showTabletStmt = new ShowTabletStmt(tableName, -1, NodePosition.ZERO);
         ShowExecutor showExecutor = new ShowExecutor(getCtx(), showTabletStmt);
         return showExecutor.execute();
     }

@@ -38,6 +38,7 @@ DIAGNOSTIC_POP
 #include "io/output_stream.h"
 #include "io/seekable_input_stream.h"
 #include "service/staros_worker.h"
+#include "storage/olap_common.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {
@@ -60,6 +61,7 @@ using FileSystemPtr = std::unique_ptr<staros::starlet::fslib::FileSystem>;
 using ReadOnlyFilePtr = std::unique_ptr<staros::starlet::fslib::ReadOnlyFile>;
 using WritableFilePtr = std::unique_ptr<staros::starlet::fslib::WritableFile>;
 using Anchor = staros::starlet::fslib::Stream::Anchor;
+using EntryStat = staros::starlet::fslib::EntryStat;
 
 bool is_starlet_uri(std::string_view uri) {
     return HasPrefixString(uri, "staros://");
@@ -152,6 +154,24 @@ public:
         }
     }
 
+    StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override {
+        auto stream_st = _file_ptr->stream();
+        if (!stream_st.ok()) {
+            return to_status(stream_st.status());
+        }
+
+        const auto& read_stats = (*stream_st)->get_read_stats();
+        auto stats = std::make_unique<io::NumericStatistics>();
+        stats->reserve(6);
+        stats->append(kBytesReadLocalDisk, read_stats.bytes_read_local_disk);
+        stats->append(kBytesReadRemote, read_stats.bytes_read_remote);
+        stats->append(kIOCountLocalDisk, read_stats.io_count_local_disk);
+        stats->append(kIOCountRemote, read_stats.io_count_remote);
+        stats->append(kIONsLocalDisk, read_stats.io_ns_local_disk);
+        stats->append(kIONsRemote, read_stats.io_ns_remote);
+        return std::move(stats);
+    }
+
 private:
     ReadOnlyFilePtr _file_ptr;
 };
@@ -238,8 +258,10 @@ public:
         if (!file_st.ok()) {
             return to_status(file_st.status());
         }
+
+        bool is_cache_hit = (*file_st)->is_cache_hit();
         auto istream = std::make_shared<StarletInputStream>(std::move(*file_st));
-        return std::make_unique<RandomAccessFile>(std::move(istream), path);
+        return std::make_unique<RandomAccessFile>(std::move(istream), path, is_cache_hit);
     }
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
@@ -298,7 +320,23 @@ public:
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        auto st = (*fs_st)->list_dir(pair.first, false, cb);
+        auto st = (*fs_st)->list_dir(pair.first, false, [&](EntryStat stat) { return cb(stat.name); });
+        return to_status(st);
+    }
+
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(dir));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+        auto st = (*fs_st)->list_dir(pair.first, false, [&](EntryStat e) {
+            DirEntry entry{.name = e.name,
+                           .mtime = std::move(e.mtime),
+                           .size = std::move(e.size),
+                           .is_dir = std::move(e.is_dir)};
+            return cb(entry);
+        });
         return to_status(st);
     }
 
@@ -338,7 +376,7 @@ public:
         }
         // TODO: leave this check to starlet.
         bool dir_empty = true;
-        auto cb = [&dir_empty](std::string_view file) {
+        auto cb = [&dir_empty](EntryStat stat) {
             dir_empty = false;
             // break the iteration
             return false;
@@ -401,7 +439,17 @@ public:
     }
 
     Status path_exists(const std::string& path) override {
-        return Status::NotSupported("StarletFileSystem::path_exists");
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+
+        auto exists_or = (*fs_st)->exists(pair.first);
+        if (!exists_or.ok()) {
+            return to_status(exists_or.status());
+        }
+        return *exists_or ? Status::OK() : Status::NotFound(path);
     }
 
     Status get_children(const std::string& dir, std::vector<std::string>* file) override {

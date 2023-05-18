@@ -40,7 +40,6 @@
 
 namespace starrocks {
 
-const int64_t MAX_ERROR_LINES_IN_FILE = 50;
 const int64_t MAX_ERROR_LOG_LENGTH = 64;
 
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
@@ -66,7 +65,7 @@ Status JsonScanner::open() {
     const TBrokerRangeDesc& range = _scan_range.ranges[0];
 
     if (range.__isset.jsonpaths) {
-        RETURN_IF_ERROR(_parse_json_paths(range.jsonpaths, &_json_paths));
+        RETURN_IF_ERROR(parse_json_paths(range.jsonpaths, &_json_paths));
     }
     if (range.__isset.json_root) {
         JsonFunctions::parse_json_paths(range.json_root, &_root_paths);
@@ -240,8 +239,7 @@ Status JsonScanner::_construct_cast_exprs() {
     return Status::OK();
 }
 
-Status JsonScanner::_parse_json_paths(const std::string& jsonpath,
-                                      std::vector<std::vector<SimpleJsonPath>>* path_vecs) {
+Status JsonScanner::parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs) {
     try {
         simdjson::dom::parser parser;
         simdjson::dom::element elem = parser.parse(jsonpath.c_str(), jsonpath.length());
@@ -493,6 +491,12 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
                 _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
                 LOG(WARNING) << "failed to construct row: " << st;
             }
+            if (_state->enable_log_rejected_record()) {
+                std::string_view sv;
+                (void)!row.raw_json().get(sv);
+                _state->append_rejected_record_to_file(std::string(sv.data(), sv.size()), st.to_string(),
+                                                       _file->filename());
+            }
             // Before continuing to process other rows, we need to first clean the fail parsed row.
             chunk->set_num_rows(chunk_row_num);
         }
@@ -700,6 +704,8 @@ Status JsonReader::_read_and_parse_json() {
     {
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
         ASSIGN_OR_RETURN(_parser_buf, stream_file->pipe()->read());
+
+        _state->update_num_bytes_scan_from_source(_parser_buf->remaining());
 
         if (_parser_buf->capacity < _parser_buf->remaining() + simdjson::SIMDJSON_PADDING) {
             // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.

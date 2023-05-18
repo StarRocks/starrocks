@@ -22,6 +22,7 @@ import com.starrocks.thrift.TCreateTabletReq;
 
 public class BeLakeTabletManager {
     PseudoBackend backend;
+    // TODO: update the data structure according to the later needs
     Table<Long, Long, TabletMetadataPB> tablets = HashBasedTable.create();
 
     BeLakeTabletManager(PseudoBackend backend) {
@@ -29,9 +30,6 @@ public class BeLakeTabletManager {
     }
 
     void createTablet(TCreateTabletReq req) {
-        if (req.isSetBase_tablet_id()) {
-            throw new RuntimeException("Does not support base tablet in UT now");
-        }
         TabletMetadataPB metadataPB = new TabletMetadataPB();
         metadataPB.id = req.tablet_id;
         metadataPB.version = req.version;

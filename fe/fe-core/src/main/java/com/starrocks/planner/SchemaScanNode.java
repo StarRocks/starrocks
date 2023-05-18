@@ -38,6 +38,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -45,6 +46,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSchemaScanNode;
@@ -62,12 +64,23 @@ public class SchemaScanNode extends ScanNode {
     private String schemaWild;
     private String frontendIP;
     private int frontendPort;
+    private Long jobId;
+    private String label;
 
     // only used for BE related schema scans
     private Long beId = null;
     private Long tableId = null;
     private Long partitionId = null;
     private Long tabletId = null;
+    private Long txnId = null;
+    private String type = null;
+    private String state = null;
+    private Long logStartTs = null;
+    private Long logEndTs = null;
+    private String logLevel = null;
+    private String logPattern = null;
+    private Long logLimit = null;
+
     private List<TScanRangeLocations> beScanRanges = null;
 
     public void setSchemaDb(String schemaDb) {
@@ -98,6 +111,26 @@ public class SchemaScanNode extends ScanNode {
 
     public void setFrontendPort(int frontendPort) {
         this.frontendPort = frontendPort;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
+    public void setJobId(long jobId) {
+        this.jobId = jobId;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public Long getJobId() {
+        return jobId;
+    }
+
+    public String getTableName() {
+        return tableName;
     }
 
     /**
@@ -160,6 +193,43 @@ public class SchemaScanNode extends ScanNode {
         if (tabletId != null) {
             msg.schema_scan_node.setTablet_id(tabletId);
         }
+
+        if (jobId != null) {
+            msg.schema_scan_node.setJob_id(jobId);
+        }
+
+        if (label != null) {
+            msg.schema_scan_node.setLabel(label);
+        }
+        if (txnId != null) {
+            msg.schema_scan_node.setTxn_id(txnId);
+        }
+        if (type != null) {
+            msg.schema_scan_node.setType(type);
+        }
+        if (state != null) {
+            msg.schema_scan_node.setState(state);
+        }
+        if (logStartTs != null) {
+            msg.schema_scan_node.setLog_start_ts(logStartTs);
+        }
+        if (logEndTs != null) {
+            msg.schema_scan_node.setLog_end_ts(logEndTs);
+        }
+        if (logLevel != null) {
+            msg.schema_scan_node.setLog_level(logLevel);
+        }
+        if (logPattern != null) {
+            msg.schema_scan_node.setLog_pattern(logPattern);
+        }
+        if (logLimit != null) {
+            msg.schema_scan_node.setLog_limit(logLimit);
+        }
+        // setting limit for the scanner may cause query to return less rows than expected
+        // but this is for the purpose of protect FE resource usage, so it's acceptable
+        if (getLimit() > 0) {
+            msg.schema_scan_node.setLimit(getLimit());
+        }
     }
 
     public void setBeId(long beId) {
@@ -178,24 +248,58 @@ public class SchemaScanNode extends ScanNode {
         this.tabletId = tabletId;
     }
 
+    public void setTxnId(long txnId) {
+        this.txnId = txnId;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public void setState(String state) {
+        this.state = state;
+    }
+
+    public void setLogStartTs(long logStartTs) {
+        this.logStartTs = logStartTs;
+    }
+
+    public void setLogEndTs(long logEndTs) {
+        this.logEndTs = logEndTs;
+    }
+
+    public void setLogLevel(String logLevel) {
+        this.logLevel = logLevel;
+    }
+
+    public void setLogPattern(String logPattern) {
+        this.logPattern = logPattern;
+    }
+
+    public void setLogLimit(long logLimit) {
+        this.logLimit = logLimit;
+    }
+
     public boolean isBeSchemaTable() {
-        return tableName.startsWith("be_");
+        return SystemTable.isBeSchemaTable(tableName);
     }
 
     public void computeBeScanRanges() {
         for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
             // if user specifies BE id, we try to scan all BEs(including bad BE)
             // if user doesn't specify BE id, we only scan live BEs
-            if ((be.isAlive() && beId == null) || be.getId() == beId) {
+            if ((be.isAlive() && beId == null) || (beId != null && beId.equals(be.getId()))) {
                 if (beScanRanges == null) {
                     beScanRanges = Lists.newArrayList();
                 }
-                TScanRangeLocations locations = new TScanRangeLocations();
+                TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
                 TScanRangeLocation location = new TScanRangeLocation();
                 location.setBackend_id(be.getId());
                 location.setServer(new TNetworkAddress(be.getHost(), be.getBePort()));
-                locations.addToLocations(location);
-                beScanRanges.add(locations);
+                scanRangeLocations.addToLocations(location);
+                TScanRange scanRange = new TScanRange();
+                scanRangeLocations.setScan_range(scanRange);
+                beScanRanges.add(scanRangeLocations);
             }
         }
     }

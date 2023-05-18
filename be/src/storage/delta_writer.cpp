@@ -134,8 +134,10 @@ Status DeltaWriter::_init() {
         if (config::enable_event_based_compaction_framework) {
             StorageEngine::instance()->compaction_manager()->update_tablet_async(_tablet);
         }
-        auto msg = fmt::format("Too many versions. tablet_id: {}, version_count: {}, limit: {}, replica_state: {}",
-                               _opt.tablet_id, _tablet->version_count(), config::tablet_max_versions, _replica_state);
+        auto msg = fmt::format(
+                "Too many versions, please reduce your insert/load request rate. tablet_id: {}, version_count: {}, "
+                "limit: {}, replica_state: {}",
+                _opt.tablet_id, _tablet->version_count(), config::tablet_max_versions, _replica_state);
         LOG(ERROR) << msg;
         Status st = Status::ServiceUnavailable(msg);
         _set_state(kUninitialized, st);
@@ -215,10 +217,10 @@ Status DeltaWriter::_init() {
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         if (!std::includes(writer_context.referenced_column_ids.begin(), writer_context.referenced_column_ids.end(),
                            sort_key_idxes.begin(), sort_key_idxes.end())) {
-            LOG(WARNING) << "table with sort key do not support partial update";
-            return Status::NotSupported("table with sort key do not support partial update");
+            _partial_schema_with_sort_key = true;
         }
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
+        writer_context.partial_update_mode = _opt.partial_update_mode;
     } else {
         writer_context.tablet_schema = &_tablet->tablet_schema();
         if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
@@ -254,7 +256,6 @@ Status DeltaWriter::_init() {
     writer_context.segments_overlap = OVERLAPPING;
     writer_context.global_dicts = _opt.global_dicts;
     writer_context.miss_auto_increment_column = _opt.miss_auto_increment_column;
-    writer_context.abort_delete = _opt.abort_delete;
     Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
     if (!st.ok()) {
         auto msg = strings::Substitute("Fail to create rowset writer. tablet_id: $0, error: $1", _opt.tablet_id,
@@ -296,8 +297,25 @@ void DeltaWriter::_set_state(State state, const Status& st) {
     }
 }
 
+Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
+    if (_tablet->updates() != nullptr && _partial_schema_with_sort_key && _opt.slots != nullptr &&
+        _opt.slots->back()->col_name() == "__op") {
+        size_t op_column_id = chunk.num_columns() - 1;
+        auto op_column = chunk.get_column_by_index(op_column_id);
+        auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+        for (size_t i = 0; i < chunk.num_rows(); i++) {
+            if (ops[i] == TOpType::UPSERT) {
+                LOG(WARNING) << "table with sort key do not support partial update";
+                return Status::NotSupported("table with sort key do not support partial update");
+            }
+        }
+    }
+    return Status::OK();
+}
+
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    RETURN_IF_ERROR(_check_partial_update_with_sort_key(chunk));
     // Delay the creation memtables until we write data.
     // Because for the tablet which doesn't have any written data, we will not use their memtables.
     if (_mem_table == nullptr) {
@@ -438,7 +456,7 @@ void DeltaWriter::_reset_mem_table() {
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
     _mem_table->set_write_buffer_row(_memtable_buffer_row);
-    _mem_table->set_abort_delete(_opt.abort_delete);
+    _mem_table->set_partial_schema_with_sort_key(_partial_schema_with_sort_key);
 }
 
 Status DeltaWriter::commit() {
@@ -549,7 +567,7 @@ void DeltaWriter::abort(bool with_log) {
     }
 
     VLOG(1) << "Aborted delta writer. tablet_id: " << _tablet->tablet_id() << " txn_id: " << _opt.txn_id
-            << " load_id: " << print_id(_opt.load_id);
+            << " load_id: " << print_id(_opt.load_id) << " partition_id: " << partition_id();
 }
 
 int64_t DeltaWriter::partition_id() const {

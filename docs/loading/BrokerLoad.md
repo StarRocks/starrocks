@@ -1,26 +1,27 @@
 # Load data from HDFS or cloud storage
 
-StarRocks provides the loading method MySQL-based Broker Load to help you load dozens to hundreds of gigabytes of data from HDFS or cloud storage into StarRocks.
+StarRocks provides the loading method MySQL-based Broker Load to help you load a large amount of data from HDFS or cloud storage into StarRocks.
 
 Broker Load runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job. You need to use the [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) statement or the `curl` command to check the result of the job.
 
-Broker Load supports loading one or more data files at a time and ensures the transactional atomicity of each load job that is run to load multiple data files. Atomicity means that the loading of multiple data files in one load job must all succeed or fail. It never happens that the loading of some data files succeeds while the loading of the other files fails.
+Broker Load supports single-table loads and multi-table loads. You can load one or multiple data files into one or multiple destination tables by running one Broker Load job. Broker Load ensures the transactional atomicity of each load job that is run to load multiple data files. Atomicity means that the loading of multiple data files in one load job must all succeed or fail. It never happens that the loading of some data files succeeds while the loading of the other files fails.
 
-Broker Load also supports data transformation at data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md).
+Broker Load supports data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
 
 ## Background information
 
-In StarRocks v2.4 and earlier, Broker Load depends on brokers to set up connections between your StarRocks cluster and your storage system. When you create a Broker Load job, you need to input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. A broker is an independent, stateless service that is integrated with a file-system interface. With brokers, StarRocks can access and read data files that are stored in your storage system, and can use its own computing resources to pre-process and load the data of these data files.
+In v2.4 and earlier, StarRocks depends on brokers to set up connections between your StarRocks cluster and your external storage system when it runs a Broker Load job. Therefore, you need to input `WITH BROKER "<broker_name>"` to specify the broker you want to use in the load statement. This is called "broker-based loading." A broker is an independent, stateless service that is integrated with a file-system interface. With brokers, StarRocks can access and read data files that are stored in your external storage system, and can use its own computing resources to pre-process and load the data of these data files.
 
-From StarRocks v2.5 onwards, Broker Load no longer needs to depend on brokers to set up connections between your StarRocks cluster and your storage system. When you create a Broker Load job, you no longer need to specify a broker group, but you still need to retain the `WITH BROKER` keyword.
+From v2.5 onwards, StarRocks no longer depends on brokers to set up connections between your StarRocks cluster and your external storage system when it runs a Broker Load job. Therefore, you no longer need to specify a broker in the load statement, but you still need to retain the `WITH BROKER` keyword. This is called "broker-free loading."
+
+When your data is stored in HDFS, however, broker-free loading may not work and you can resort to broker-based loading:
+
+- If you load data from multiple HDFS clusters, you need to deploy and configure an independent broker for each of these HDFS clusters.
+- If you load data from a single HDFS cluster and you have configured multiple Kerberos users, you need to deploy one independent broker.
 
 > **NOTE**
 >
-> Loading without the broker process may not work in certain circumstances, such as when you have multiple HDFS clusters or multiple Kerberos users. In this situation, you can still load data by using the broker process.
-
-If you need to load data by using brokers, make sure that brokers are deployed in your StarRocks cluster.
-
-You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../administration/deploy_broker.md).
+> You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you can deploy brokers by following the instructions provided in [Deploy a broker](../deployment/deploy_broker.md).
 
 ## Supported data file formats
 
@@ -45,23 +46,27 @@ Broker Load supports the following storage systems:
 
 - HDFS
 
-- Amazon S3
+- AWS S3
 
 - Google GCS
 
+- Other S3-compatible storage system such as MinIO
+
+- Microsoft Azure Storage
+
 ## How it works
 
-After you submit a load job to an FE, the FE generates a query plan, splits the query plan into portions based on the number of BEs and the size of the data file you want to load, and then assigns each portion of the query plan to a specific BE. During the load, each BE pulls the data of the data file by using the broker, pre-processes the data, and then loads the data into your StarRocks cluster. After all BEs finish their portions of the query plan, the FE determines whether the load job is successful.
+After you submit a load job to an FE, the FE generates a query plan, splits the query plan into portions based on the number of available BEs and the size of the data file you want to load, and then assigns each portion of the query plan to an available BE. During the load, each involved BE pulls the data of the data file from your HDFS or cloud storage system, pre-processes the data, and then loads the data into your StarRocks cluster. After all BEs finish their portions of the query plan, the FE determines whether the load job is successful.
 
 The following figure shows the workflow of a Broker Load job.
 
-![Workflow of Broker Load](../assets/4.3-1-en.png)
+![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
 
 ## Basic operations
 
-### Create a load job
+### Create a multi-table load job
 
-This topic uses CSV as an example to describe how to load data. For information about how to load data in other file formats and about the syntax and parameter descriptions for Broker Load, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+This topic uses CSV as an example to describe how to load multiple data files into multiple tables. For information about how to load data in other file formats and about the syntax and parameter descriptions for Broker Load, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../sql-reference/sql-statements/keywords.md).
 
@@ -69,7 +74,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 1. In your StarRocks database `test_db`, create StarRocks tables.
 
-   a. Create a table named `table1` that uses the Primary Key model. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+   a. Create a table named `table1` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table1`
@@ -83,7 +88,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
    DISTRIBUTED BY HASH(`id`) BUCKETS 10;
    ```
 
-   b. Create a table named `table2` that uses the Primary Key model. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
+   b. Create a table named `table2` that uses the Primary Key table. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table2`
@@ -113,7 +118,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
    200,'Beijing'
    ```
 
-3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `input` folder of your Amazon S3 bucket `bucket_s3`, and to the `input` folder of your Google GCS bucket `bucket_gcs`.
+3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `input` folder of your AWS S3 bucket `bucket_s3`, and to the `input` folder of your Google GCS bucket `bucket_gcs`.
 
 #### Load data from HDFS
 
@@ -134,8 +139,7 @@ LOAD LABEL test_db.label1
 )
 WITH BROKER
 (
-    "username" = "hdfs_username",
-    "password" = "hdfs_password"
+    StorageCredentialParams
 )
 PROPERTIES
 (
@@ -143,9 +147,11 @@ PROPERTIES
 );
 ```
 
-#### Load data from Amazon S3
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
-Execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your Amazon S3 bucket `bucket_s3` into `table1` and `table2`, respectively:
+#### Load data from AWS S3
+
+Execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your AWS S3 bucket `bucket_s3` into `table1` and `table2`, respectively:
 
 ```SQL
 LOAD LABEL test_db.label2
@@ -162,16 +168,15 @@ LOAD LABEL test_db.label2
 )
 WITH BROKER
 (
-    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
-    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
-    "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
+    StorageCredentialParams
 );
 ```
 
 > **NOTE**
 >
-> - Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
-> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `aws.s3.access_key` and `aws.s3.secret_key` unspecified.
+> Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as the file path with `s3a://`.
+
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 #### Load data from Google GCS
 
@@ -180,31 +185,93 @@ Execute the following statement to load `file1.csv` and `file2.csv` from the `in
 ```SQL
 LOAD LABEL test_db.label3
 (
-    DATA INFILE("s3a://bucket_gcs/input/file1.csv")
+    DATA INFILE("gs://bucket_gcs/input/file1.csv")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
     ,
-    DATA INFILE("s3a://bucket_gcs/input/file2.csv")
+    DATA INFILE("gs://bucket_gcs/input/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
     (id, city)
 )
 WITH BROKER
 (
-    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
-    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.s3a.endpoint" = "storage.googleapis.com"
+    StorageCredentialParams
 );
 ```
 
 > **NOTE**
 >
-> Broker Load supports accessing Google GCS only according to the S3A protocol. Therefore, when you load data from Google GCS, you must replace the prefix in the GCS URI you pass as a file path into `DATA INFILE` with `s3a://`.
+> Broker Load supports accessing Google GCS only according to the gs protocol. Therefore, when you load data from Google GCS, you must include `gs://` as the prefix in the GCS URI that you pass as the file path.
+
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+
+#### Load data from other S3-compatible storage system
+
+Use MinIO as an example. You can execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your MinIO bucket `bucket_minio` into `table1` and `table2`, respectively:
+
+```SQL
+LOAD LABEL test_db.label7
+(
+    DATA INFILE("obs://bucket_minio/input/file1.csv")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    (id, name, score)
+    ,
+    DATA INFILE("obs://bucket_minio/input/file2.csv")
+    INTO TABLE table2
+    COLUMNS TERMINATED BY ","
+    (id, city)
+)
+WITH BROKER
+(
+    StorageCredentialParams
+);
+```
+
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+
+#### Load data from Microsoft Azure Storage
+
+Execute the following statement to load `file1.csv` and `file2.csv` from the specified paths of your Azure Storage:
+
+```SQL
+LOAD LABEL test_db.label8
+(
+    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/file1.csv")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    (id, name, score)
+    ,
+    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/file2.csv")
+    INTO TABLE table2
+    COLUMNS TERMINATED BY ","
+    (id, city)
+)
+WITH BROKER
+(
+    StorageCredentialParams
+);
+```
+
+> **NOTICE**
+  >
+  > When you load data from Azure Storage, you need to determine which prefix to use based on the access protocol and specific storage service that you use. The preceding example uses Blob Storage as an example.
+  >
+  > - When you load data from Blob Storage, you must include `wasb://` or `wasbs://` as a prefix in the file path based on the protocol that is used to access your storage account:
+  >   - If your Blob Storage allows access only through HTTP, use `wasb://` as the prefix, for example, `wasb://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`.
+  >   - If your Blob Storage allows access only through HTTPS, use `wasbs://` as the prefix, for example, `wasbs://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`
+  > - When you load data from Data Lake Storage Gen1, you must include `adl://` as a prefix in the file path, for example, `adl://<data_lake_storage_gen1_name>.azuredatalakestore.net/<path>/<file_name>`.
+  > - When you load data from Data Lake Storage Gen2, you must include `abfs://` or `abfss://` as a prefix in the file path based on the protocol that is used to access your storage account:
+  >   - If your Data Lake Storage Gen2 allows access only via HTTP, use `abfs://` as the prefix, for example, `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
+  >   - If your Data Lake Storage Gen2 allows access only via HTTPS, use `abfss://` as the prefix, for example, `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
+
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 #### Query data
 
-After the load of data from your HDFS cluster, Amazon S3 bucket, or Google GCS bucket is complete, you can use the SELECT statement to query the data of the StarRocks tables to verify that the load is successful.
+After the load of data from your HDFS cluster, AWS S3 bucket, or Google GCS bucket is complete, you can use the SELECT statement to query the data of the StarRocks tables to verify that the load is successful.
 
 1. Execute the following statement to query the data of `table1`:
 
@@ -233,9 +300,9 @@ After the load of data from your HDFS cluster, Amazon S3 bucket, or Google GCS b
    4 rows in set (0.01 sec)
    ```
 
-#### Usage notes
+### Create a single-table load job
 
-The preceding load examples show how to load multiple data files into multiple destination tables. You can also load a single data file or all data files from a specified path into a single destination table. Suppose your Amazon S3 bucket `bucket_s3` contains a folder named `input`. The `input` folder contains multiple data files, one of which is named `file1.csv`. These data files consist of the same number of columns as `table1` and the columns from each of these data files can be mapped one on one in sequence to the columns from `table1`.
+You can also load a single data file or all data files from a specified path into a single destination table. Suppose your AWS S3 bucket `bucket_s3` contains a folder named `input`. The `input` folder contains multiple data files, one of which is named `file1.csv`. These data files consist of the same number of columns as `table1` and the columns from each of these data files can be mapped one on one in sequence to the columns from `table1`.
 
 To load `file1.csv` into `table1`, execute the following statement:
 
@@ -249,10 +316,8 @@ LOAD LABEL test_db.label_7
 )
 WITH BROKER 
 (
-    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
-    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
-    "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
-)；
+    StorageCredentialParams
+);
 ```
 
 To load all data files from the `input` folder into `table1`, execute the following statement:
@@ -267,10 +332,8 @@ LOAD LABEL test_db.label_8
 )
 WITH BROKER 
 (
-    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
-    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
-    "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
-)；
+    StorageCredentialParams
+);
 ```
 
 ### View a load job

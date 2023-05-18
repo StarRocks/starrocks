@@ -57,8 +57,7 @@ public class TruncateTableStmtTest {
                         "DISTRIBUTED BY HASH(date_time) BUCKETS 10\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
-                        "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");");
     }
     @Test

@@ -236,7 +236,7 @@ public:
     ~ChunksSorterHeapSort() override = default;
 
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
-    Status done(RuntimeState* state) override;
+    Status do_done(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
     std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) override;
     int64_t mem_usage() const override {

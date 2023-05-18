@@ -17,6 +17,7 @@
 #include <variant>
 
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
 namespace starrocks::pipeline {
@@ -49,7 +50,14 @@ StatusOr<ChunkPtr> AggregateStreamingSinkOperator::pull_chunk(RuntimeState* stat
     return Status::InternalError("Not support");
 }
 
+void AggregateStreamingSinkOperator::mark_need_spill() {
+    _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::FORCE_STREAMING;
+}
+
 Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    DeferOp update_revocable_bytes{[this]() {
+        set_revocable_mem_bytes(_aggregator->hash_map_variant().allocated_memory_usage(_aggregator->mem_pool()));
+    }};
     size_t chunk_size = chunk->num_rows();
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());

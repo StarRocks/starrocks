@@ -53,7 +53,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
@@ -65,12 +64,16 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.load.streamload.StreamLoadInfo;
+import com.starrocks.load.streamload.StreamLoadManager;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
@@ -119,6 +122,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     public static final long DEFAULT_TASK_SCHED_INTERVAL_SECOND = 10;
     public static final boolean DEFAULT_STRICT_MODE = false; // default is false
+
 
     protected static final String STAR_STRING = "*";
 
@@ -172,6 +176,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected int desireTaskConcurrentNum; // optional
     protected JobState state = JobState.NEED_SCHEDULE;
     protected LoadDataSourceType dataSourceType;
+    protected double maxFilterRatio = 1;
     // max number of error data in max batch rows * 10
     // maxErrorNum / (maxBatchRows * 10) = max error rate of routine load job
     // if current error rate is more than max error rate, the job will be paused
@@ -205,6 +210,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     private static final String PROPS_STRIP_OUTER_ARRAY = "strip_outer_array";
     private static final String PROPS_JSONPATHS = "jsonpaths";
     private static final String PROPS_JSONROOT = "json_root";
+
+    private String confluentSchemaRegistryUrl;
 
     // for csv
     protected boolean trimspace = false;
@@ -298,13 +305,16 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (stmt.getMaxErrorNum() != -1) {
             this.maxErrorNum = stmt.getMaxErrorNum();
         }
+        this.maxFilterRatio = stmt.getMaxFilterRatio();
         if (stmt.getMaxBatchIntervalS() != -1) {
             this.taskSchedIntervalS = stmt.getMaxBatchIntervalS();
         }
         if (stmt.getMaxBatchRows() != -1) {
             this.maxBatchRows = stmt.getMaxBatchRows();
         }
+        jobProperties.put(LoadStmt.LOG_REJECTED_RECORD_NUM, String.valueOf(stmt.getLogRejectedRecordNum()));
         jobProperties.put(LoadStmt.PARTIAL_UPDATE, String.valueOf(stmt.isPartialUpdate()));
+        jobProperties.put(LoadStmt.PARTIAL_UPDATE_MODE, String.valueOf(stmt.getPartialUpdateMode()));
         jobProperties.put(LoadStmt.TIMEZONE, stmt.getTimezone());
         jobProperties.put(LoadStmt.STRICT_MODE, String.valueOf(stmt.isStrictMode()));
         if (stmt.getMergeConditionStr() != null) {
@@ -337,6 +347,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             }
         } else if (stmt.getFormat().equals("avro")) {
             jobProperties.put(PROPS_FORMAT, "avro");
+            if (!Strings.isNullOrEmpty(stmt.getJsonPaths())) {
+                jobProperties.put(PROPS_JSONPATHS, stmt.getJsonPaths());
+            } else {
+                jobProperties.put(PROPS_JSONPATHS, "");
+            }
+            this.confluentSchemaRegistryUrl = stmt.getConfluentSchemaRegistryUrl();
         } else {
             throw new UserException("Invalid format type.");
         }
@@ -365,6 +381,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (routineLoadDesc.getPartitionNames() != null) {
             partitions = routineLoadDesc.getPartitionNames();
         }
+    }
+
+    public String getConfluentSchemaRegistryUrl() {
+        return confluentSchemaRegistryUrl;
+    }
+
+    public void setConfluentSchemaRegistryUrl(String confluentSchemaRegistryUrl) {
+        this.confluentSchemaRegistryUrl = confluentSchemaRegistryUrl;
     }
 
     @Override
@@ -522,12 +546,29 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         return Boolean.valueOf(value);
     }
 
+    public String getPartialUpdateMode() {
+        return jobProperties.get(LoadStmt.PARTIAL_UPDATE_MODE);
+    }
+
     public RoutineLoadProgress getProgress() {
         return progress;
     }
 
+    public double getMaxFilterRatio() {
+        return maxFilterRatio;
+    }
+
     public long getMaxBatchRows() {
         return maxBatchRows;
+    }
+
+    public long getLogRejectedRecordNum() {
+        String v = jobProperties.get(LoadStmt.LOG_REJECTED_RECORD_NUM);
+        if (v == null) {
+            return 0;
+        } else {
+            return Long.valueOf(v);
+        }
     }
 
     public long getTaskSchedIntervalS() {
@@ -725,7 +766,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     public void prepare() throws UserException {
     }
 
-    public TExecPlanFragmentParams plan(TUniqueId loadId, long txnId) throws UserException {
+    public TExecPlanFragmentParams plan(TUniqueId loadId, long txnId, String label) throws UserException {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("db " + dbId + " does not exist");
@@ -736,10 +777,36 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             if (table == null) {
                 throw new MetaNotFoundException("table " + this.tableId + " does not exist");
             }
+            StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(this);
+            info.setTxnId(txnId);
             StreamLoadPlanner planner =
-                    new StreamLoadPlanner(db, (OlapTable) table, StreamLoadInfo.fromRoutineLoadJob(this));
+                    new StreamLoadPlanner(db, (OlapTable) table, info);
             TExecPlanFragmentParams planParams = planner.plan(loadId);
             planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
+            if (planParams.query_options.enable_profile) {
+                planParams.query_options.setEnable_profile(true);
+                StreamLoadManager streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadManager();
+
+                StreamLoadTask streamLoadTask = streamLoadManager.createLoadTask(db, table.getName(), label,
+                        Config.routine_load_task_timeout_second);
+                streamLoadTask.setTxnId(txnId);
+                streamLoadTask.setLabel(label);
+                streamLoadTask.setTUniqueId(loadId);
+                streamLoadManager.addLoadTask(streamLoadTask);
+
+                Coordinator coord = new Coordinator(planner, planParams.getCoord());
+                streamLoadTask.setCoordinator(coord);
+
+                QeProcessorImpl.INSTANCE.registerQuery(loadId, coord);
+
+                LOG.info(new LogBuilder("routine load task create stream load task success").
+                        add("transactionId", txnId).
+                        add("label", label).
+                        add("streamLoadTaskId", streamLoadTask.getId()));
+
+            } else {
+                planParams.query_options.setEnable_profile(false);
+            }
             // add table indexes to transaction state
             TransactionState txnState =
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
@@ -747,6 +814,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 throw new MetaNotFoundException("txn does not exist: " + txnId);
             }
             txnState.addTableIndexes(planner.getDestTable());
+
+            planParams.setImport_label(txnState.getLabel());
+            planParams.setDb_name(db.getFullName());
+            planParams.setLoad_job_id(txnId);
 
             return planParams;
         } finally {
@@ -834,6 +905,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                     RoutineLoadTaskInfo routineLoadTaskInfo = routineLoadTaskInfoOptional.get();
                     taskBeId = routineLoadTaskInfo.getBeId();
                     executeTaskOnTxnStatusChanged(routineLoadTaskInfo, txnState, TransactionStatus.COMMITTED, null);
+                    routineLoadTaskInfo.afterCommitted(txnState, txnOperated);
                 }
                 ++committedTaskNum;
                 LOG.debug("routine load task committed. task id: {}, job id: {}", txnState.getLabel(), id);
@@ -962,6 +1034,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                             .add("msg", "txn abort with reason " + txnStatusChangeReasonString)
                             .build());
                 }
+                routineLoadTaskInfo.afterAborted(txnState, txnOperated, txnStatusChangeReasonString);
                 ++abortedTaskNum;
                 TransactionState.TxnStatusChangeReason txnStatusChangeReason = null;
                 if (txnStatusChangeReasonString != null) {
@@ -1047,6 +1120,17 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
         routineLoadTaskInfo.setTxnStatus(txnStatus);
 
+        if (TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr) == 
+                                            TransactionState.TxnStatusChangeReason.FILTERED_ROWS) {
+            updateState(JobState.PAUSED,
+                        new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR, txnStatusChangeReasonStr),
+                        false /* not replay */);
+            LOG.warn(
+                    "routine load task [job name {}, task id {}] aborted because of {}, change state to PAUSED",
+                     name, routineLoadTaskInfo.getId().toString(), txnStatusChangeReasonStr);
+            return;
+        }
+
         if (state == JobState.RUNNING) {
             if (txnStatus == TransactionStatus.ABORTED) {
                 RoutineLoadTaskInfo newRoutineLoadTaskInfo = unprotectRenewTask(
@@ -1079,7 +1163,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                     tblName, tblName));
         }
 
-        if (!table.isOlapOrLakeTable()) {
+        if (!table.isOlapOrCloudNativeTable()) {
             throw new AnalysisException("Only olap/lake table support routine load");
         }
 
@@ -1384,6 +1468,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             jobProperties.put("rowDelimiter", rowDelimiter == null ? "\t" : rowDelimiter.toString());
         }
         jobProperties.put("maxErrorNum", String.valueOf(maxErrorNum));
+        jobProperties.put("maxFilterRatio", String.valueOf(maxFilterRatio));
         jobProperties.put("maxBatchIntervalS", String.valueOf(taskSchedIntervalS));
         jobProperties.put("maxBatchRows", String.valueOf(maxBatchRows));
         jobProperties.put("currentTaskConcurrentNum", String.valueOf(currentTaskConcurrentNum));
@@ -1524,35 +1609,20 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         committedTaskNum = in.readLong();
         abortedTaskNum = in.readLong();
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_76) {
-            String stmt = Text.readString(in);
-            origStmt = new OriginStatement(stmt, 0);
-        } else {
-            origStmt = OriginStatement.read(in);
+        origStmt = OriginStatement.read(in);
+
+        int size = in.readInt();
+        for (int i = 0; i < size; i++) {
+            String key = Text.readString(in);
+            String value = Text.readString(in);
+            jobProperties.put(key, value);
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_59) {
-            int size = in.readInt();
-            for (int i = 0; i < size; i++) {
-                String key = Text.readString(in);
-                String value = Text.readString(in);
-                jobProperties.put(key, value);
-            }
-        } else {
-            // The behaviors of old broker load could not be changed
-            jobProperties.put(LoadStmt.STRICT_MODE, Boolean.toString(false));
-        }
-
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_66) {
-            int size = in.readInt();
-            for (int i = 0; i < size; i++) {
-                String key = Text.readString(in);
-                String value = Text.readString(in);
-                sessionVariables.put(key, value);
-            }
-        } else {
-            // old version of load does not have sqlmode, set it to default
-            sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
+        size = in.readInt();
+        for (int i = 0; i < size; i++) {
+            String key = Text.readString(in);
+            String value = Text.readString(in);
+            sessionVariables.put(key, value);
         }
 
         setRoutineLoadDesc(CreateRoutineLoadStmt.getLoadDesc(origStmt, sessionVariables));
@@ -1641,6 +1711,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY)) {
             this.maxErrorNum = Long.parseLong(
                     copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY));
+        }
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
+            this.maxFilterRatio = Double.parseDouble(
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY));
         }
         if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY)) {
             this.taskSchedIntervalS = Long.parseLong(

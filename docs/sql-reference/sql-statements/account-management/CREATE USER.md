@@ -2,94 +2,84 @@
 
 ## Description
 
+Creates a StarRocks user. In StarRocks, a "user_identity" uniquely identifies a user.
+
 ### Syntax
 
 ```SQL
-CREATE USER
-user_identity [auth_option]
-[DEFAULT ROLE 'role_name']
-
-user_identity:
-    'user_name'@'host'
-
-auth_option: {
-    IDENTIFIED BY 'auth_string'
-    IDENTIFIED WITH auth_plugin
-    IDENTIFIED WITH auth_plugin BY 'auth_string'
-    IDENTIFIED WITH auth_plugin AS 'auth_string'
-}
+CREATE USER <user_identity> [auth_option] [DEFAULT ROLE <role_name>[, <role_name>, ...]]
 ```
 
-1. The command "CREATE USER" is used to create a StarRocks user. In StarRocks, a “user_identity” uniquely identifies a user.  
-2. "user_identity” consists of two parts, “user_name” and “host”. Here, “user_name” is the username and "host" identifies the host address where the client connects. The "host" part can use % for fuzzy matching. If no host is specified, the default is '%', meaning that the user can connect to StarRocks from any host.
-3. "auth_option" specifies user authentication method. It currently supports "mysql_native_password" and "authentication_ldap_simple".
+## Parameters
 
-If a role is specified, it will automatically grant all permissions the role owns to this newly created user with the precondition that the role already exists. If a role is not specified, the user defaults to having no permission.  
+- `user_identity` consists of two parts, "user_name" and "host", in the format of `username@'userhost'`.  For the "host" part, you can use `%` for fuzzy match. If "host" is not specified, "%" is used by default, meaning that the user can connect to StarRocks from any host.
+
+- `auth_option` specifies the authentication method. Currently, three authentication methods are supported: StarRocks native password, mysql_native_password, and "authentication_ldap_simple". StarRocks native password is the same as mysql_native_password in logic but slightly differs in syntax. One user identity can use only one authentication method.
+
+    ```SQL
+    auth_option: {
+        IDENTIFIED BY 'auth_string'
+        IDENTIFIED WITH mysql_native_password BY 'auth_string'
+        IDENTIFIED WITH mysql_native_password AS 'auth_string'
+        IDENTIFIED WITH authentication_ldap_simple AS 'auth_string'
+        
+    }
+    ```
+
+    | **Authentication method**    | **Password for user creation** | **Password for login** |
+    | ---------------------------- | ------------------------------ | ---------------------- |
+    | Native password              | Plaintext or ciphertext        | Plaintext              |
+    | `mysql_native_password BY`   | Plaintext                      | Plaintext              |
+    | `mysql_native_password WITH` | Ciphertext                     | Plaintext              |
+    | `authentication_ldap_simple` | Plaintext                      | Plaintext              |
+
+> Note: StarRocks encrypts users' passwords before storing them.
+
+- `DEFAULT ROLE <role_name>[, <role_name>, ...]`: If this parameter is specified, the roles are automatically assigned to the user and activated by default when the user logs in. If not specified, this user does not have any privileges. Make sure that all the roles that are specified already exist.
 
 ## Examples
 
-1. Create a passwordless user (without specifying host, it is equivalent to jack@'%')
+Example 1: Create a user using a plaintext password with no host specified, which is equivalent to `jack@'%'`.
 
-    ```SQL
-    CREATE USER 'jack';
-    ```
+```SQL
+CREATE USER 'jack' IDENTIFIED BY '123456';
+```
 
-2. Create a password user that allows login from '172.10.1.10'.
+Example 2: Create a user using a plaintext password and allow the user to log in from  `'172.10.1.10'`.
 
-    ```sql
-    CREATE USER jack@'172.10.1.10' IDENTIFIED BY '123456';
-    ```
+```SQL
+CREATE USER jack@'172.10.1.10' IDENTIFIED WITH mysql_native_password BY '123456';
+```
 
-    or
+Example 3: Create a user with a cyphertext password and allow the user to log in from  `'172.10.1.10'`.
 
-    ```SQL
-    CREATE USER jack@'172.10.1.10' IDENTIFIED WITH mysql_native_password BY '123456';
-    ```
+```SQL
+CREATE USER jack@'172.10.1.10' IDENTIFIED BY PASSWORD '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
+CREATE USER jack@'172.10.1.10' IDENTIFIED WITH mysql_native_password AS '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
+```
 
-3. To avoid passing in plaintext, use case 2 can also be created in the following way
+> Note: You can get the encrypted password using the password() function.
 
-    ```SQL
-    CREATE USER jack@'172.10.1.10' IDENTIFIED BY PASSWORD '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
-    ```
+Example 4: Create a user who is allowed to log in from a domain name 'example_domain'.
 
-    or
+```SQL
+CREATE USER 'jack'@['example_domain'] IDENTIFIED BY '123456';
+```
 
-    ```SQL
-    CREATE USER jack@'172.10.1.10' IDENTIFIED WITH mysql_native_password AS '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
-    ```
+Example 5: Create a user that uses LDAP authentication.
 
-    The encrypted content could be obtained though PASSWORD(), for example:
+```SQL
+CREATE USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple;
+```
 
-    ```sql
-    SELECT PASSWORD('123456');
-    ```
+Example 6: Create a user that uses LDAP authentication and specify the distinguished name (DN) of the user in LDAP.
 
-4. Create a user authenticated by ldap
+```SQL
+CREATE USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com';
+```
 
-    ```sql
-    CREATE USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple
-    ```
+Example 7: Create a user who is allowed to log in from the '192.168' subnet and set `db_admin` and `user_admin` as the default roles for the user.
 
-5. Create a user authenticated by ldap, and specify user's DN (Distinguished Name) in ldap
-
-    ```sql
-    CREATE USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com'
-    ```
-
-6. Create a user who is allowed to log in from '192.168' subnet and meanwhile specify its role as example_role
-
-    ```sql
-    CREATE USER 'jack'@'192.168.%' DEFAULT ROLE 'example_role';
-    ```
-
-7. Create a user who is allowed to log in from the domain named 'example_domain'
-
-    ```sql
-    CREATE USER 'jack'@['example_domain'] IDENTIFIED BY '123456';
-    ```
-
-8. Create a user and specify a role
-
-    ```sql
-    CREATE USER 'jack'@'%' IDENTIFIED BY '12345' DEFAULT ROLE 'my_role';
-    ```
+```SQL
+CREATE USER 'jack'@'192.168.%' DEFAULT ROLE db_admin, user_admin;
+```

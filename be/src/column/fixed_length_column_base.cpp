@@ -54,7 +54,8 @@ void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
+void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size,
+                                                           bool deep_copy) {
     const T* src_data = reinterpret_cast<const T*>(src.raw_data());
     size_t orig_size = _data.size();
     _data.resize(orig_size + size);
@@ -319,7 +320,7 @@ std::string FixedLengthColumnBase<T>::debug_string() const {
     std::stringstream ss;
     ss << "[";
     size_t size = this->size();
-    for (size_t i = 0; i < size - 1; ++i) {
+    for (size_t i = 0; i + 1 < size; ++i) {
         ss << debug_item(i) << ", ";
     }
     if (size > 0) {

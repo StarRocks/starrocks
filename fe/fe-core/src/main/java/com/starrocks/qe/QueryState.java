@@ -110,7 +110,7 @@ public class QueryState {
 
     public void setError(String errorMsg) {
         this.stateType = MysqlStateType.ERR;
-        this.errorMessage = errorMsg;
+        this.setMsg(errorMsg);
     }
 
     public boolean isError() {
@@ -126,7 +126,7 @@ public class QueryState {
     }
 
     public void setMsg(String msg) {
-        this.errorMessage = msg;
+        this.errorMessage = msg == null ? "" : msg;
     }
 
     public void setErrType(ErrType errType) {

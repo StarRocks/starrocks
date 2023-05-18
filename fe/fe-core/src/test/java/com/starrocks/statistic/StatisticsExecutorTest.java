@@ -56,8 +56,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0_stats");
@@ -80,9 +79,9 @@ public class StatisticsExecutorTest extends PlanTestBase {
         OlapTable table = (OlapTable) database.getTable("t0_stats");
         List<Long> partitionIdList = table.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
-        FullStatisticsCollectJob collectJob = new FullStatisticsCollectJob(database, table, partitionIdList,
+        SampleStatisticsCollectJob collectJob = new SampleStatisticsCollectJob(database, table,
                 Lists.newArrayList("v1", "v2", "v3", "v4", "v5"),
-                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.AnalyzeType.SAMPLE,
                 StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap());
 

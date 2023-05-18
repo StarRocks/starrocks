@@ -64,7 +64,7 @@ public class AlterJobV2Test {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        FeConstants.default_scheduler_interval_millisecond = 1000;
+        Config.alter_scheduler_interval_millisecond = 1000;
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
@@ -216,8 +216,6 @@ public class AlterJobV2Test {
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
                     .getDb("test").getTable("mv3");
             Assert.assertTrue(!mv.isActive());
-        } catch (Exception e) {
-            Assert.fail();
         } finally {
             starRocksAssert.dropTable("modify_column_test3");
         }

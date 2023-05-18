@@ -61,8 +61,8 @@ public class ShowTabletStmt extends ShowStmt {
 
     private boolean isShowSingleTablet;
 
-    public ShowTabletStmt(TableName dbTableName, long tabletId) {
-        this(dbTableName, tabletId, null, null, null, null);
+    public ShowTabletStmt(TableName dbTableName, long tabletId, NodePosition pos) {
+        this(dbTableName, tabletId, null, null, null, null, pos);
     }
 
     public ShowTabletStmt(TableName dbTableName, long tabletId, PartitionNames partitionNames,
@@ -212,11 +212,11 @@ public class ShowTabletStmt extends ShowStmt {
         db.readLock();
         try {
             Table table = db.getTable(tableName);
-            if (table == null || !table.isNativeTable()) {
+            if (table == null || !table.isNativeTableOrMaterializedView()) {
                 return ImmutableList.of();
             }
 
-            if (table.isLakeTable()) {
+            if (table.isCloudNativeTableOrMaterializedView()) {
                 return LakeTabletsProcNode.TITLE_NAMES;
             } else {
                 return LocalTabletsProcDir.TITLE_NAMES;

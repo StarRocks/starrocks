@@ -22,6 +22,7 @@ import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.MetaException;
@@ -41,7 +42,7 @@ import java.util.concurrent.TimeUnit;
 
 public class HiveMetaClientTest {
     @Test
-    public void testClientPool(@Mocked HiveMetaStoreThriftClient metaStoreClient) throws Exception {
+    public void testClientPool(@Mocked HiveMetaStoreClient metaStoreClient) throws Exception {
         new Expectations() {
             {
                 metaStoreClient.getTable(anyString, anyString);
@@ -94,7 +95,7 @@ public class HiveMetaClientTest {
     @Test
     public void testGetHiveClient() {
         HiveConf hiveConf = new HiveConf();
-        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:9030");
+        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90303");
         HiveMetaClient client = new HiveMetaClient(hiveConf);
         try {
             client.getAllDatabaseNames();
@@ -104,7 +105,7 @@ public class HiveMetaClientTest {
     }
 
     @Test
-    public void testRecyclableClient(@Mocked HiveMetaStoreThriftClient metaStoreClient) throws TException {
+    public void testRecyclableClient(@Mocked HiveMetaStoreClient metaStoreClient) throws TException {
         new Expectations() {
             {
                 metaStoreClient.getTable(anyString, anyString);
@@ -123,7 +124,7 @@ public class HiveMetaClientTest {
         };
 
         HiveConf hiveConf = new HiveConf();
-        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:9030");
+        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
         HiveMetaClient client = new HiveMetaClient(hiveConf);
         try {
             client.getTable("db", "tbl");

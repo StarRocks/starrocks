@@ -1,6 +1,6 @@
-# Starrocks be ubuntu image
+# Starrocks be/cn ubuntu image
 
-## 1 Build Starrocks be ubuntu image for k8s deployment
+## 1 Build Starrocks be/cn ubuntu image for k8s deployment
 ```
 DOCKER_BUILDKIT=1 docker build -f be-ubuntu.Dockerfile -t ghcr.io/OWNER/starrocks/be-ubuntu:<tag> ../../..
 ```
@@ -23,3 +23,8 @@ E.g.:
 ```shell
 docker push ghcr.io/starrocks/starrocks/be-ubuntu:main
 ```
+
+## 3 CN image
+Image built from previous steps can be used as compute node image, the only difference is the entrypoint script.
+* `be_entrypoint.sh` : be start script
+* `cn_entrypoint.sh` : cn start script

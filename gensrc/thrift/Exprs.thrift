@@ -81,6 +81,7 @@ enum TExprNodeType {
   RUNTIME_FILTER_MIN_MAX_EXPR,
   MAP_ELEMENT_EXPR,
   BINARY_LITERAL,
+  MAP_EXPR,
 }
 
 //enum TAggregationOp {

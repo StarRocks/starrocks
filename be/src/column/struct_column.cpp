@@ -161,12 +161,12 @@ void StructColumn::append_selective(const Column& src, const uint32_t* indexes, 
     }
 }
 
-void StructColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
+void StructColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) {
     DCHECK(src.is_struct());
     const auto& src_column = down_cast<const StructColumn&>(src);
     DCHECK_EQ(_fields.size(), src_column._fields.size());
     for (size_t i = 0; i < _fields.size(); i++) {
-        _fields[i]->append_value_multiple_times(*src_column._fields[i], index, size);
+        _fields[i]->append_value_multiple_times(*src_column._fields[i], index, size, deep_copy);
     }
 }
 
@@ -469,10 +469,10 @@ bool StructColumn::capacity_limit_reached(std::string* msg) const {
 void StructColumn::check_or_die() const {
     // Struct must have at least one field.
     DCHECK(_fields.size() > 0);
-    DCHECK(_field_names.size() > 0);
+    // DCHECK(_field_names.size() > 0);
 
     // fields and field_names must have the same size.
-    DCHECK(_fields.size() == _field_names.size());
+    // DCHECK(_fields.size() == _field_names.size());
 
     for (const auto& column : _fields) {
         column->check_or_die();

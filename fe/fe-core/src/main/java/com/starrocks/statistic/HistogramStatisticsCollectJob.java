@@ -34,12 +34,12 @@ import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_
 public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private static final String COLLECT_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT $tableId, '$columnName', $dbId, '$dbName.$tableName'," +
-                    " histogram($columnName, cast($bucketNum as int), cast($sampleRatio as double)), " +
+                    " histogram(`$columnName`, cast($bucketNum as int), cast($sampleRatio as double)), " +
                     " $mcv," +
                     " NOW()" +
-                    " FROM (SELECT $columnName FROM $dbName.$tableName where rand() <= $sampleRatio" +
-                    " and $columnName is not null $MCVExclude" +
-                    " ORDER BY $columnName LIMIT $totalRows) t";
+                    " FROM (SELECT `$columnName` FROM `$dbName`.`$tableName` where rand() <= $sampleRatio" +
+                    " and `$columnName` is not null $MCVExclude" +
+                    " ORDER BY `$columnName` LIMIT $totalRows) t";
 
     private static final String COLLECT_MCV_STATISTIC_TEMPLATE =
             "select cast(version as INT), cast(db_id as BIGINT), cast(table_id as BIGINT), " +
@@ -49,7 +49,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     "$tableId as table_id, " +
                     "`$columnName` as column_key, " +
                     "count(`$columnName`) as column_value " +
-                    "from $dbName.$tableName where `$columnName` is not null " +
+                    "from `$dbName`.`$tableName` where `$columnName` is not null " +
                     "group by `$columnName` " +
                     "order by count(`$columnName`) desc limit $topN ) t";
 
@@ -132,10 +132,10 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
         if (!mostCommonValues.isEmpty()) {
             if (column.getType().getPrimitiveType().isDateType() || column.getType().getPrimitiveType().isCharFamily()) {
-                context.put("MCVExclude", " and " + columnName + " not in (\"" +
+                context.put("MCVExclude", " and " + StatisticUtils.quoting(columnName) + " not in (\"" +
                         Joiner.on("\",\"").join(mostCommonValues.keySet()) + "\")");
             } else {
-                context.put("MCVExclude", " and " + columnName + " not in (" +
+                context.put("MCVExclude", " and " + StatisticUtils.quoting(columnName) + " not in (" +
                         Joiner.on(",").join(mostCommonValues.keySet()) + ")");
             }
         } else {

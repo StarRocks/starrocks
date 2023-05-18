@@ -19,6 +19,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
@@ -27,13 +28,15 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class ArrayExpr extends Expr {
-    private boolean explicitType = false;
 
     public ArrayExpr(Type type, List<Expr> items) {
-        super();
+        this(type, items, NodePosition.ZERO);
+    }
+
+    public ArrayExpr(Type type, List<Expr> items, NodePosition pos) {
+        super(pos);
         this.type = type;
         this.children = Expr.cloneList(items);
-        this.explicitType = this.type != null;
     }
 
     public ArrayExpr(ArrayExpr other) {
@@ -44,20 +47,11 @@ public class ArrayExpr extends Expr {
     protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
 
-    public boolean isExplicitType() {
-        return explicitType;
-    }
-
     @Override
     protected String toSqlImpl() {
-        StringBuilder sb = new StringBuilder();
-        if (this.explicitType) {
-            sb.append(this.type.toSql());
-        }
-        sb.append('[');
-        sb.append(children.stream().map(Expr::toSql).collect(Collectors.joining(",")));
-        sb.append(']');
-        return sb.toString();
+        return '[' +
+                children.stream().map(Expr::toSql).collect(Collectors.joining(",")) +
+                ']';
     }
 
     @Override

@@ -19,10 +19,10 @@
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
+#include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
-#include "util/buffered_stream.h"
 #include "util/runtime_profile.h"
 namespace starrocks {
 class RandomAccessFile;
@@ -34,17 +34,19 @@ namespace starrocks::parquet {
 
 struct GroupReaderParam {
     struct Column {
-        // column index in parquet file
-        int col_idx_in_parquet;
+        // parquet field index in root node's children
+        int32_t field_idx_in_parquet;
 
         // column index in chunk
-        int col_idx_in_chunk;
+        int32_t col_idx_in_chunk;
 
         // column type in parquet file
         tparquet::Type::type col_type_in_parquet;
 
         // column type in chunk
         TypeDescriptor col_type_in_chunk;
+
+        const TIcebergSchemaField* t_iceberg_schema_field = nullptr;
 
         SlotId slot_id;
     };
@@ -60,7 +62,7 @@ struct GroupReaderParam {
 
     HdfsScanStats* stats = nullptr;
 
-    SharedBufferedInputStream* shared_buffered_stream = nullptr;
+    io::SharedBufferedInputStream* sb_stream = nullptr;
 
     int chunk_size = 0;
 
@@ -73,13 +75,14 @@ struct GroupReaderParam {
 
 class GroupReader {
 public:
-    GroupReader(GroupReaderParam& param, int row_group_number);
+    GroupReader(GroupReaderParam& param, int row_group_number, const std::set<std::int64_t>* need_skip_rowids,
+                int64_t row_group_first_row);
     ~GroupReader() = default;
 
     Status init();
     Status get_next(ChunkPtr* chunk, size_t* row_count);
     void close();
-    void collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
+    void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
     void set_end_offset(int64_t value) { _end_offset = value; }
 
 private:
@@ -130,13 +133,14 @@ private:
 
     Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
     Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
-    void _dict_filter(ChunkPtr* chunk, Filter* filter_ptr);
-    Status _dict_decode(ChunkPtr* chunk);
-    void _collect_field_io_range(const ParquetField& field, std::vector<SharedBufferedInputStream::IORange>* ranges,
+    void _collect_field_io_range(const ParquetField& field, std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                  int64_t* end_offset);
 
     // row group meta
     std::shared_ptr<tparquet::RowGroup> _row_group_metadata;
+    std::int64_t _row_group_first_row = 0;
+    const std::set<std::int64_t>* _need_skip_rowids;
+    std::int64_t _raw_rows_read = 0;
 
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;

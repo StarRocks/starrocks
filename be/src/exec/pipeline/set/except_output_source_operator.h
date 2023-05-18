@@ -32,13 +32,9 @@ public:
         _except_ctx->ref();
     }
 
-    bool has_output() const override {
-        return _except_ctx->is_dependency_finished(_dependency_index) && !_except_ctx->is_output_finished();
-    }
+    bool has_output() const override { return _except_ctx->is_probe_finished() && !_except_ctx->is_output_finished(); }
 
-    bool is_finished() const override {
-        return _except_ctx->is_dependency_finished(_dependency_index) && _except_ctx->is_output_finished();
-    }
+    bool is_finished() const override { return _except_ctx->is_probe_finished() && _except_ctx->is_output_finished(); }
 
     Status set_finished(RuntimeState* state) override { return _except_ctx->set_finished(); }
 
@@ -61,9 +57,9 @@ public:
               _dependency_index(dependency_index) {}
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<ExceptOutputSourceOperator>(
-                this, _id, _plan_node_id, driver_sequence,
-                _except_partition_ctx_factory->get_or_create(driver_sequence), _dependency_index);
+        return std::make_shared<ExceptOutputSourceOperator>(this, _id, _plan_node_id, driver_sequence,
+                                                            _except_partition_ctx_factory->get(driver_sequence),
+                                                            _dependency_index);
     }
 
     void close(RuntimeState* state) override;

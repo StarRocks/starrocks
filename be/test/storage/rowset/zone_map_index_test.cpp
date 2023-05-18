@@ -89,8 +89,14 @@ protected:
             ASSERT_OK(wfile->close());
         }
 
+        IndexReadOptions opts;
+        opts.fs = _fs.get();
+        opts.file_name = filename;
+        opts.use_page_cache = true;
+        opts.kept_in_memory = false;
+        opts.skip_fill_local_cache = false;
         ZoneMapIndexReader column_zone_map;
-        ASSIGN_OR_ABORT(auto r, column_zone_map.load(_fs.get(), filename, index_meta.zone_map_index(), true, false));
+        ASSIGN_OR_ABORT(auto r, column_zone_map.load(opts, index_meta.zone_map_index()));
         ASSERT_TRUE(r);
         ASSERT_EQ(3, column_zone_map.num_pages());
         const std::vector<ZoneMapPB>& zone_maps = column_zone_map.page_zone_maps();
@@ -143,8 +149,14 @@ TEST_F(ColumnZoneMapTest, NormalTestIntPage) {
         ASSERT_OK(file->close());
     }
 
+    IndexReadOptions opts;
+    opts.fs = _fs.get();
+    opts.file_name = filename;
+    opts.use_page_cache = true;
+    opts.kept_in_memory = false;
+    opts.skip_fill_local_cache = false;
     ZoneMapIndexReader column_zone_map;
-    ASSIGN_OR_ABORT(auto r, column_zone_map.load(_fs.get(), filename, index_meta.zone_map_index(), true, false));
+    ASSIGN_OR_ABORT(auto r, column_zone_map.load(opts, index_meta.zone_map_index()));
     ASSERT_TRUE(r);
     ASSERT_EQ(3, column_zone_map.num_pages());
     const std::vector<ZoneMapPB>& zone_maps = column_zone_map.page_zone_maps();

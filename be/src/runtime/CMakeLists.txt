@@ -73,7 +73,6 @@ set(RUNTIME_FILES
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     time_types.cpp
-    hdfs/hdfs_fs_cache.cpp
     runtime_filter_worker.cpp
     global_dict/decoder.cpp
     global_dict/parser.cpp
@@ -84,6 +83,9 @@ set(RUNTIME_FILES
     lake_tablets_channel.cpp
     lake_snapshot_loader.cpp
     profile_report_worker.cpp
+    schema_table_sink.cpp
+    command_executor.cpp
+    iceberg_table_sink.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

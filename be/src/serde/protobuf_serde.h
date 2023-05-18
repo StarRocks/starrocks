@@ -23,59 +23,13 @@
 #include "column/chunk_extra_data.h"
 #include "common/statusor.h"
 #include "gen_cpp/data.pb.h" // ChunkPB
+#include "serde/encode_context.h"
 
 namespace starrocks {
 class RowDescriptor;
 }
 
 namespace starrocks::serde {
-constexpr double EncodeRatioLimit = 0.9;
-constexpr uint32_t EncodeSamplingNum = 5;
-
-// EncodeContext adaptively adjusts encode_level according to the compression ratio. In detail,
-// for every _frequency chunks, if the compression ratio for the first EncodeSamplingNum chunks is less than
-// EncodeRatioLimit, then encode the rest chunks, otherwise not.
-
-class EncodeContext {
-public:
-    static std::shared_ptr<EncodeContext> get_encode_context_shared_ptr(const int col_num, const int encode_level) {
-        return encode_level == 0 ? nullptr : std::make_shared<EncodeContext>(col_num, encode_level);
-    }
-    EncodeContext(const int col_num, const int encode_level);
-    // update encode_level for each column
-    void update(const int col_id, uint64_t mem_bytes, uint64_t encode_byte);
-
-    int get_encode_level(const int col_id) {
-        DCHECK(_session_encode_level != 0);
-        return _column_encode_level[col_id];
-    }
-
-    int get_session_encode_level() {
-        DCHECK(_session_encode_level != 0);
-        return _session_encode_level;
-    }
-
-    void set_encode_levels_in_pb(ChunkPB* const res);
-
-    static constexpr uint16_t STREAMVBYTE_PADDING_SIZE = STREAMVBYTE_PADDING;
-
-    static bool enable_encode_integer(const int encode_level) { return encode_level & ENCODE_INTEGER; }
-
-    static bool enable_encode_string(const int encode_level) { return encode_level & ENCODE_STRING; }
-
-private:
-    static constexpr int ENCODE_INTEGER = 2;
-    static constexpr int ENCODE_STRING = 4;
-
-    // if encode ratio < EncodeRatioLimit, encode it, otherwise not.
-    void _adjust(const int col_id);
-    const int _session_encode_level;
-    uint64_t _times = 0;
-    uint64_t _frequency = 64;
-    bool _enable_adjust = false;
-    std::vector<uint64_t> _raw_bytes, _encoded_bytes;
-    std::vector<uint32_t> _column_encode_level;
-};
 
 class ProtobufChunkDeserializer;
 
@@ -134,6 +88,8 @@ private:
     const ProtobufChunkMeta& _meta;
     std::vector<int> _encode_level;
 };
+
+StatusOr<Chunk> deserialize_chunk_pb_with_schema(const Schema& schema, std::string_view buff);
 
 StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RowDescriptor& row_desc, const ChunkPB& chunk_pb);
 

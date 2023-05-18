@@ -58,7 +58,6 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
@@ -73,7 +72,6 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -88,6 +86,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -127,10 +126,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     private short rollupShortKeyColumnCount;
     @SerializedName(value = "origStmt")
     private OriginStatement origStmt;
-
-    // optional
-    @SerializedName(value = "storageFormat")
-    private TStorageFormat storageFormat = TStorageFormat.DEFAULT;
 
     // The rollup job will wait all transactions before this txn id finished, then send the rollup tasks.
     @SerializedName(value = "watershedTxnId")
@@ -175,10 +170,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     public String getRollupIndexName() {
         return rollupIndexName;
-    }
-
-    public void setStorageFormat(TStorageFormat storageFormat) {
-        this.storageFormat = storageFormat;
     }
 
     /**
@@ -251,9 +242,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                 tbl.enablePersistentIndex(),
                                 tabletType, tbl.getCompressionType(), index.getSortKeyIdxes());
                         createReplicaTask.setBaseTablet(tabletIdMap.get(rollupTabletId), baseSchemaHash);
-                        if (this.storageFormat != null) {
-                            createReplicaTask.setStorageFormat(this.storageFormat);
-                        }
                         batchTask.addTask(createReplicaTask);
                     } // end for rollupReplicas
                 } // end for rollupTablets
@@ -528,6 +516,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
 
         tbl.rebuildFullSchema();
+        tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());
     }
 
     /**
@@ -798,17 +787,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         Text.writeString(out, json);
     }
 
-    /**
-     * This method is only used to deserialize the text mate which version is less then 86.
-     * If the meta version >=86, it will be deserialized by the `read` of AlterJobV2 rather then here.
-     */
-    public static RollupJobV2 read(DataInput in) throws IOException {
-        Preconditions.checkState(GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_86);
-        RollupJobV2 rollupJob = new RollupJobV2();
-        rollupJob.readFields(in);
-        return rollupJob;
-    }
-
     @Override
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
@@ -845,9 +823,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         rollupShortKeyColumnCount = in.readShort();
 
         watershedTxnId = in.readLong();
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_85) {
-            storageFormat = TStorageFormat.valueOf(Text.readString(in));
-        }
+        Text.readString(in); // placeholder
     }
 
     @Override
@@ -863,5 +839,10 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         Map<String, Expr> columnNameToDefineExpr = MetaUtils.parseColumnNameToDefineExpr(origStmt);
         setColumnsDefineExpr(columnNameToDefineExpr);
+    }
+
+    @Override
+    public Optional<Long> getTransactionId() {
+        return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
     }
 }

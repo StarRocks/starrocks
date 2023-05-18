@@ -43,11 +43,12 @@ import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.Util;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.persist.HbPackage;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 import com.starrocks.thrift.HeartbeatService;
@@ -61,25 +62,26 @@ import com.starrocks.thrift.THeartbeatResult;
 import com.starrocks.thrift.TMasterInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static java.lang.Math.min;
 
 /**
  * Heartbeat manager run as a daemon at a fix interval.
  * For now, it will send heartbeat to all Frontends, Backends and Brokers
  */
-public class HeartbeatMgr extends LeaderDaemon {
+public class HeartbeatMgr extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(HeartbeatMgr.class);
 
     private final ExecutorService executor;
@@ -97,17 +99,9 @@ public class HeartbeatMgr extends LeaderDaemon {
     }
 
     private long computeMinActiveTxnId() {
-        Long a = GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnId();
-        Long b = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getMinActiveTxnId();
-        if (a == null && b == null) {
-            return 0;
-        } else if (a == null) {
-            return b;
-        } else if (b == null) {
-            return a;
-        } else {
-            return min(a, b);
-        }
+        long a = GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnId();
+        Optional<Long> b = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getMinActiveTxnId();
+        return Math.min(a, b.orElse(Long.MAX_VALUE));
     }
 
     public void setLeader(int clusterId, String token, long epoch) {
@@ -243,12 +237,17 @@ public class HeartbeatMgr extends LeaderDaemon {
                                     .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
                         }
                     } else {
-                        if (GlobalStateMgr.getCurrentState().isSharedDataMode() && !isReplay) {
+                        if (RunMode.allowCreateLakeTable() && !isReplay) {
                             // addWorker
                             int starletPort = computeNode.getStarletPort();
                             if (starletPort != 0) {
+                                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                                            getDefaultWarehouse();
+                                long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
                                 String workerAddr = computeNode.getHost() + ":" + starletPort;
-                                GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(computeNode.getId(), workerAddr);
+
+                                GlobalStateMgr.getCurrentStarOSAgent().
+                                            addWorker(computeNode.getId(), workerAddr, workerGroupId);
                             }
                         }
                     }

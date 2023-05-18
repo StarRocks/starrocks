@@ -16,16 +16,21 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -36,15 +41,21 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.thrift.TSinkCommitInfo;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 public interface ConnectorMetadata {
     /**
@@ -88,12 +99,34 @@ public interface ConnectorMetadata {
     }
 
     /**
-     * Get the remote file information from hdfs or s3. It is mainly used to generate ScanRange for scheduling.
+     * Get Table descriptor and materialized index for the materialized view index specific by `dbName`.`tblName`
+     *
+     * @param dbName  - the string represents the database name
+     * @param tblName - the string represents the table name
+     * @return a Table instance
+     */
+    default Pair<Table, MaterializedIndex> getMaterializedViewIndex(String dbName, String tblName) {
+        return null;
+    }
+
+    /**
+     * It is mainly used to generate ScanRange for scheduling.
+     * There are two ways of current connector table.
+     * 1. Get the remote files information from hdfs or s3 according to table or partition.
+     * 2. Get file scan tasks for iceberg metadata by query predicate.
      * @param table
      * @param partitionKeys selected columns
+     * @param predicate used to filter metadata for iceberg, etc
+     * @param snapshotId selected snapshot id
+     *
      * @return the remote file information of the query to scan.
      */
-    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys) {
+    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
+                                                    long snapshotId, ScalarOperator predicate) {
+        return Lists.newArrayList();
+    }
+
+    default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         return Lists.newArrayList();
     }
 
@@ -103,12 +136,15 @@ public interface ConnectorMetadata {
      * @param table
      * @param columns selected columns
      * @param partitionKeys selected partition keys
+     * @param predicate used to filter metadata for iceberg, etc
+     *
      * @return the table statistics for the table.
      */
     default Statistics getTableStatistics(OptimizerContext session,
                                           Table table,
-                                          List<ColumnRefOperator> columns,
-                                          List<PartitionKey> partitionKeys) {
+                                          Map<ColumnRefOperator, Column> columns,
+                                          List<PartitionKey> partitionKeys,
+                                          ScalarOperator predicate) {
         return Statistics.builder().build();
     }
 
@@ -122,33 +158,52 @@ public interface ConnectorMetadata {
     }
 
     default void createDb(String dbName) throws DdlException, AlreadyExistsException {
+        createDb(dbName, new HashMap<>());
+    }
+
+    default boolean dbExists(String dbName) {
+        return listDbNames().contains(dbName.toLowerCase(Locale.ROOT));
+    }
+
+    default void createDb(String dbName, Map<String, String> properties) throws DdlException, AlreadyExistsException {
+        throw new StarRocksConnectorException("This connector doesn't support creating databases");
     }
 
     default void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
-    }
-
-    default List<Long> getDbIds() {
-        return Lists.newArrayList();
-    }
-
-    default Database getDb(String name) {
-        return null;
+        throw new StarRocksConnectorException("This connector doesn't support dropping databases");
     }
 
     default Database getDb(long dbId) {
         return null;
     }
 
+    default Database getDb(String name) {
+        return null;
+    }
+
+    default List<Long> getDbIds() {
+        return Lists.newArrayList();
+    }
+
+    default boolean createTable(CreateTableStmt stmt) throws DdlException {
+        throw new StarRocksConnectorException("This connector doesn't support creating tables");
+    }
+
     default void dropTable(DropTableStmt stmt) throws DdlException {
+        throw new StarRocksConnectorException("This connector doesn't support dropping tables");
+    }
+
+    default void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
+        throw new StarRocksConnectorException("This connector doesn't support sink");
     }
 
     default void alterTable(AlterTableStmt stmt) throws UserException {
     }
 
-    default void createTable(CreateTableStmt stmt) throws DdlException {
+    default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {
     }
 
-    default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {
+    default void alterTableComment(Database db, Table table, AlterTableCommentClause clause) {
     }
 
     default void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
@@ -181,13 +236,16 @@ public interface ConnectorMetadata {
             throws DdlException, MetaNotFoundException, AnalysisException {
     }
 
-    default void refreshMaterializedView(String dbName, String mvName, int priority)
+    default String refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
+                                           int priority, boolean mergeRedundant, boolean isManual)
             throws DdlException, MetaNotFoundException {
+        return null;
     }
 
-    default void refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement,
-                                         int priority)
+    default String refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement,
+                                           int priority)
             throws DdlException, MetaNotFoundException {
+        return null;
     }
 
     default void cancelRefreshMaterializedView(String dbName, String mvName)

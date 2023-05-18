@@ -71,8 +71,7 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`LO_ORDERKEY`) BUCKETS 192\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `dates_n` (\n" +
@@ -99,8 +98,7 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`d_datekey`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();

@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
@@ -55,6 +56,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
@@ -109,6 +112,13 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     private List<String> dataColumnNames = Lists.newArrayList();
     private Map<String, String> hiveProperties = Maps.newHashMap();
 
+    // For `insert into target_table select from hive_table, we set it to false when executing this kind of insert query.
+    // 1. `useMetadataCache` is false means that this query need to list all selected partitions files from hdfs/s3.
+    // 2. Insert into statement could ignore the additional overhead caused by list partitions.
+    // 3. The most import point is that query result may be wrong with cached and expired partition files, causing insert data is wrong.
+    // This error will happen when appending files to an existed partition on user side.
+    private boolean useMetadataCache = true;
+
     public HiveTable() {
         super(TableType.HIVE);
     }
@@ -149,6 +159,29 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @Override
     public String getTableName() {
         return hiveTableName;
+    }
+
+    public boolean isUseMetadataCache() {
+        if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableHiveMetadataCacheWithInsert()) {
+            return true;
+        } else {
+            return useMetadataCache;
+        }
+    }
+
+    public void useMetadataCache(boolean useMetadataCache) {
+        if (!isResourceMappingCatalog(getCatalogName())) {
+            this.useMetadataCache = useMetadataCache;
+        }
+    }
+
+    @Override
+    public String getUUID() {
+        if (CatalogMgr.isExternalCatalog(catalogName)) {
+            return String.join(".", catalogName, hiveDbName, hiveTableName, Long.toString(createTime));
+        } else {
+            return Long.toString(id);
+        }
     }
 
     @Override
@@ -267,6 +300,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
         List<RemoteFileInfo> hivePartitions;
         try {
+            useMetadataCache = true;
             hivePartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .getRemoteFileInfos(getCatalogName(), this, partitionKeys);
         } catch (StarRocksConnectorException e) {
@@ -338,7 +372,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
-        if (GlobalStateMgr.getCurrentStateStarRocksJournalVersion() >= StarRocksFEMetaVersion.VERSION_3) {
+        if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_3) {
             String json = Text.readString(in);
             JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
             hiveDbName = jsonObject.getAsJsonPrimitive(JSON_KEY_HIVE_DB).getAsString();
@@ -431,6 +465,36 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         sb.append('}');
         return sb.toString();
     }
+
+    @Override
+    public List<UniqueConstraint> getUniqueConstraints() {
+        return uniqueConstraints;
+    }
+
+    @Override
+    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
+        return foreignKeyConstraints;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(getCatalogName(), hiveDbName, getTableIdentifier());
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (!(other instanceof HiveTable)) {
+            return false;
+        }
+
+        HiveTable otherTable = (HiveTable) other;
+        String catalogName = getCatalogName();
+        String tableIdentifier = getTableIdentifier();
+        return Objects.equal(catalogName, otherTable.getCatalogName()) &&
+                Objects.equal(hiveDbName, otherTable.hiveDbName) &&
+                Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
+    }
+
 
     public static Builder builder() {
         return new Builder();

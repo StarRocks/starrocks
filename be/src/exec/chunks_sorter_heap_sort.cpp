@@ -116,7 +116,7 @@ size_t ChunksSorterHeapSort::get_output_rows() const {
     return _merged_segment.chunk->num_rows();
 }
 
-Status ChunksSorterHeapSort::done(RuntimeState* state) {
+Status ChunksSorterHeapSort::do_done(RuntimeState* state) {
     ScopedTimer<MonotonicStopWatch> timer(_build_timer);
     if (_sort_heap) {
         auto sorted_values = _sort_heap->sorted_seq();
@@ -177,7 +177,7 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterHeapSort::runtime_filters(ObjectPoo
     if (_runtime_filter.empty()) {
         auto rf = type_dispatch_predicate<JoinRuntimeFilter*>(
                 (*_sort_exprs)[0]->root()->type().type, false, detail::SortRuntimeFilterBuilder(), pool,
-                top_cursor_column, cursor_rid, _sort_desc.descs[0].asc_order());
+                top_cursor_column, cursor_rid, _sort_desc.descs[0].asc_order(), false);
         _runtime_filter.emplace_back(rf);
     } else {
         type_dispatch_predicate<std::nullptr_t>((*_sort_exprs)[0]->root()->type().type, false,

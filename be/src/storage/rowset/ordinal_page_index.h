@@ -43,6 +43,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/index_page.h"
+#include "storage/rowset/options.h"
 #include "storage/rowset/page_pointer.h"
 #include "util/coding.h"
 #include "util/once.h"
@@ -87,8 +88,7 @@ public:
     //
     // Return true if the index data was successfully loaded by the caller, false if
     // the data was loaded by another caller.
-    StatusOr<bool> load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
-                        bool use_page_cache, bool kept_in_memory);
+    StatusOr<bool> load(const IndexReadOptions& opts, const OrdinalIndexPB& meta, ordinal_t num_values);
 
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     OrdinalPageIndexIterator seek_at_or_before(ordinal_t ordinal);
@@ -109,9 +109,6 @@ public:
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     int32_t num_data_pages() const { return _num_pages; }
 
-    // REQUIRES: the index data has been successfully `load()`ed into memory.
-    size_t num_rows() const { return _ordinals.back() - _ordinals.front(); }
-
     bool loaded() const { return invoked(_load_once); }
 
 private:
@@ -120,19 +117,18 @@ private:
     void _reset();
 
     size_t _mem_usage() const {
-        return sizeof(OrdinalIndexReader) + _ordinals.size() * sizeof(ordinal_t) + _pages.size() * sizeof(PagePointer);
+        return sizeof(OrdinalIndexReader) + (_num_pages + 1) * sizeof(ordinal_t) + _num_pages * sizeof(PagePointer);
     }
 
-    Status _do_load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
-                    bool use_page_cache, bool kept_in_memory);
+    Status _do_load(const IndexReadOptions& opts, const OrdinalIndexPB& meta, ordinal_t num_values);
 
     OnceFlag _load_once;
     // valid after load
     int _num_pages = 0;
     // _ordinals[i] = first ordinal of the i-th data page,
-    std::vector<ordinal_t> _ordinals;
+    std::unique_ptr<ordinal_t[]> _ordinals;
     // _pages[i] = page pointer to the i-th data page
-    std::vector<PagePointer> _pages;
+    std::unique_ptr<PagePointer[]> _pages;
 };
 
 class OrdinalPageIndexIterator {

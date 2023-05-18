@@ -85,7 +85,8 @@ The following table describes the default settings. If you need to modify them, 
 | enable_collect_full_statistic         | BOOLEAN  | TRUE              | Whether to enable automatic full collection. This switch is turned on by default. |
 | statistic_collect_interval_sec        | LONG     | 300               | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_auto_collect_ratio          | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
-| statistics_max_full_collect_data_size | INT      | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_max_full_collect_data_size | LONG      | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_collect_max_row_count_per_query | INT  | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |
 | statistic_auto_analyze_start_time | STRING      | 00:00:00   | The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 | statistic_auto_analyze_end_time | STRING      | 23:59:59  | The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 
@@ -93,7 +94,7 @@ You can rely on automatic jobs for a majority of statistics collection, but if y
 
 ### Manual collection
 
-You can use ANALYZE TABLE to create a manual collection task. By default, manual collection is a synchronous operation. You can also set it to an asynchronous operation. In asynchronous mode, the result for running ANALYZE TABLE is returned immediately after you run this command. However, the collection task will be running in the background and you do not have to wait for the result. Asynchronous collection is suitable for tables with large data volume, whereas synchronous collection is suitable for tables with small data volume. **Manual collection tasks are run only once after creation. You do not need to delete manual collection tasks.** You can check the status of the task by running SHOW ANALYZE STATUS.
+You can use ANALYZE TABLE to create a manual collection task. By default, manual collection is a synchronous operation. You can also set it to an asynchronous operation. In asynchronous mode, after you run ANALYZE TABLE, the system immediately returns whether this statement is successful. However, the collection task will be running in the background and you do not have to wait for the result. You can check the status of the task by running SHOW ANALYZE STATUS. Asynchronous collection is suitable for tables with large data volume, whereas synchronous collection is suitable for tables with small data volume. **Manual collection tasks are run only once after creation. You do not need to delete manual collection tasks.**
 
 #### Manually collect basic statistics
 
@@ -110,11 +111,11 @@ Parameter description:
   - SAMPLE: indicates sampled collection.
   - If no collection type is specified, full collection is used by default.
 
-- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (;). If this parameter is not specified, the entire table is collected.
+- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected.
 
-- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you not specify this parameter.
+- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you do not specify this parameter.
 
-- `PROPERTIES`: custom parameters. If `PROPERTIES` is not specified, the default settings in the `fe.conf` file are used.
+- `PROPERTIES`: custom parameters. If `PROPERTIES` is not specified, the default settings in the `fe.conf` file are used. The properties that are actually used can be viewed via the `Properties` column in the output of SHOW ANALYZE STATUS.
 
 | **PROPERTIES**                | **Type** | **Default value** | **Description**                                              |
 | ----------------------------- | -------- | ----------------- | ------------------------------------------------------------ |
@@ -158,7 +159,7 @@ PROPERTIES (property [,property]);
 
 Parameter description:
 
-- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (;). If this parameter is not specified, the entire table is collected. This parameter is required for histograms.
+- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected. This parameter is required for histograms.
 
 - [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you not specify this parameter.
 
@@ -220,7 +221,7 @@ Parameter description:
   - SAMPLE: indicates sampled collection.
   - If no collection type is specified, full collection is used by default.
 
-- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (;). If this parameter is not specified, the entire table is collected.
+- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected.
 
 - `PROPERTIES`: custom parameters. If `PROPERTIES` is not specified, the default settings in `fe.conf` are used.
 
@@ -414,7 +415,8 @@ The task ID for a manual collection task can be obtained from SHOW ANALYZE STATU
 | enable_statistic_collect             | BOOLEAN  | TRUE              | Whether to collect statistics. This parameter is turned on by default. |
 | enable_collect_full_statistic        | BOOLEAN  | TRUE              | Whether to enable automatic full statistics collection. This parameter is turned on by default. |
 | statistic_auto_collect_ratio         | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
-| statistic_max_full_collect_data_size | LONG     | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_max_full_collect_data_size | LONG     | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_collect_max_row_count_per_query | INT | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |
 | statistic_collect_interval_sec       | LONG     | 300               | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_auto_analyze_start_time | STRING      | 00:00:00   | The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 | statistic_auto_analyze_end_time | STRING      | 23:59:59   | The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. |

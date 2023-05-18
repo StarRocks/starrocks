@@ -63,7 +63,8 @@ public abstract class StatementBase implements ParseNode {
     // True if this QueryStmt is the top level query from an EXPLAIN <query>
     protected boolean isExplain = false;
 
-    private OriginStatement origStmt;
+    // Original statement to further usage, eg: enable_sql_blacklist.
+    protected OriginStatement origStmt;
 
     public void setIsExplain(boolean isExplain, ExplainLevel explainLevel) {
         this.isExplain = isExplain;

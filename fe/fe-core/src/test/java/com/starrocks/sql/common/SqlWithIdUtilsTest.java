@@ -36,7 +36,7 @@ public class SqlWithIdUtilsTest {
     public static void beforeClass() throws Exception {
 
         FeConstants.runningUnitTest = true;
-        FeConstants.default_scheduler_interval_millisecond = 100;
+        Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_experimental_mv = true;
@@ -135,7 +135,8 @@ public class SqlWithIdUtilsTest {
             starRocksAssert.dropDatabase("test");
             SqlWithIdUtils.decode(encode, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals(e.getMessage(), "Can not find db id: " + test.getId());
+            Assert.assertEquals(e.getMessage(), "Getting analyzing error. Detail message: Can not find db id: "
+                    + test.getId() + ".");
         } finally {
             starRocksAssert.withDatabase("test").useDatabase("test")
                     .withTable("CREATE TABLE test.tbl1\n" +
@@ -179,7 +180,8 @@ public class SqlWithIdUtilsTest {
             starRocksAssert.dropTable("tbl1");
             SqlWithIdUtils.decode(encode, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals(e.getMessage(), "Can not find table id: " + tbl1.getId() + " in db: test");
+            Assert.assertEquals(e.getMessage(), "Getting analyzing error. Detail message: Can not find table id: "
+                    + tbl1.getId() + " in db: test.");
         } finally {
             starRocksAssert.useDatabase("test")
                     .withTable("CREATE TABLE test.tbl1\n" +

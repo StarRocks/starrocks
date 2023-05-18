@@ -52,10 +52,13 @@ TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, std::v
           _rowsets_inited(true),
           _rowsets(std::move(rowsets)) {}
 
-TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, bool is_key, RowSourceMaskBuffer* mask_buffer)
+TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets, bool is_key,
+                           RowSourceMaskBuffer* mask_buffer)
         : ChunkIterator(std::move(schema)),
           _tablet(tablet),
           _version(version),
+          _rowsets_inited(true),
+          _rowsets(std::move(rowsets)),
           _is_vertical_merge(true),
           _is_key(is_key),
           _mask_buffer(mask_buffer) {
@@ -131,6 +134,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.tablet_schema = _tablet_schema.get();
     rs_opts.global_dictmaps = params.global_dictmaps;
     rs_opts.unused_output_column_ids = params.unused_output_column_ids;
+    rs_opts.runtime_range_pruner = params.runtime_range_pruner;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version;
@@ -138,8 +142,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
-        ASSIGN_OR_RETURN(auto iter, rowset->read(schema(), rs_opts));
-        iters->emplace_back(std::move(iter));
+        ASSIGN_OR_RETURN(auto seg_iters, rowset->read(schema(), rs_opts));
+        iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
     }
     return Status::OK();
 }
@@ -247,7 +251,7 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
 
     if (seg_iters.empty()) {
         _collect_iter = new_empty_iterator(_schema, params.chunk_size);
-    } else if (is_compaction(params.reader_type) && keys_type == DUP_KEYS) {
+    } else if (is_compaction(params.reader_type) && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS)) {
         //             MergeIterator
         //                   |
         //       +-----------+-----------+

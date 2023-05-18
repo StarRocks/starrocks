@@ -21,6 +21,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -73,6 +74,11 @@ public class InsertStmt extends DmlStmt {
     // If this is set to true it means a system refresh operation, which is allowed to write to materialized view.
     private boolean isSystem = false;
 
+    /**
+     * `true` means that it's created by CTAS statement
+     */
+    private boolean forCTAS = false;
+
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite) {
         this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, NodePosition.ZERO);
@@ -97,6 +103,7 @@ public class InsertStmt extends DmlStmt {
         this.targetPartitionNames = null;
         this.targetColumnNames = null;
         this.queryStatement = queryStatement;
+        this.forCTAS = true;
     }
 
     public Table getTargetTable() {
@@ -162,6 +169,10 @@ public class InsertStmt extends DmlStmt {
         return targetPartitionNames;
     }
 
+    public boolean isSpecifyPartition() {
+        return targetPartitionNames != null;
+    }
+
     public List<String> getTargetColumnNames() {
         return targetColumnNames;
     }
@@ -182,6 +193,14 @@ public class InsertStmt extends DmlStmt {
         this.targetColumns = targetColumns;
     }
 
+    public boolean isSpecifyKeyPartition() {
+        return targetTable != null && targetTable instanceof IcebergTable && isStaticKeyPartitionInsert();
+    }
+
+    public boolean isStaticKeyPartitionInsert() {
+        return targetPartitionNames != null && targetPartitionNames.isStaticKeyPartitionInsert();
+    }
+
     @Override
     public RedirectStatus getRedirectStatus() {
         if (isExplain()) {
@@ -189,6 +208,10 @@ public class InsertStmt extends DmlStmt {
         } else {
             return RedirectStatus.FORWARD_WITH_SYNC;
         }
+    }
+
+    public boolean isForCTAS() {
+        return forCTAS;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

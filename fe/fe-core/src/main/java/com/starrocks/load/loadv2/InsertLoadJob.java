@@ -47,7 +47,7 @@ import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TLoadJobType;
-import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TReportExecStatusParams;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -74,7 +74,8 @@ public class InsertLoadJob extends LoadJob {
         this.jobType = EtlJobType.INSERT;
     }
 
-    public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp, long estimateScanRow, TLoadJobType type) 
+    public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp,
+                         long estimateScanRow, TLoadJobType type, long timeout)
             throws MetaNotFoundException {
         super(dbId, label);
         this.tableId = tableId;
@@ -84,6 +85,7 @@ public class InsertLoadJob extends LoadJob {
         this.jobType = EtlJobType.INSERT;
         this.estimateScanRow = estimateScanRow;
         this.loadType = type;
+        this.timeoutSecond = timeout;
     }
 
     // only used for test
@@ -121,7 +123,6 @@ public class InsertLoadJob extends LoadJob {
                 this.failMsg = new FailMsg(CancelType.LOAD_RUN_FAIL, failMsg);
                 this.progress = 0;
             }
-            this.timeoutSecond = Config.insert_load_default_timeout_second;
             this.authorizationInfo = gatherAuthInfo();
             this.loadingStatus.setTrackingUrl(trackingUrl);
         } finally {
@@ -142,11 +143,10 @@ public class InsertLoadJob extends LoadJob {
     }
 
     @Override
-    public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId, 
-            long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
+    public void updateProgess(TReportExecStatusParams params) {
         writeLock();
         try {
-            super.updateProgess(beId, loadId, fragmentId, sinkRows, sinkBytes, sourceRows, sourceBytes, isDone);
+            super.updateProgess(params);
             if (!loadingStatus.getLoadStatistic().getLoadFinish()) {
                 if (this.loadType == TLoadJobType.INSERT_QUERY) {
                     progress = (int) ((double) loadingStatus.getLoadStatistic().totalSourceLoadRows() 

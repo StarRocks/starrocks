@@ -20,9 +20,9 @@
 #include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "column/vectorized_fwd.h"
+#include "exec/csv_scanner.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
-#include "fs/fs_hdfs.h"
 #include "gutil/strings/substitute.h"
 #include "io/compressed_input_stream.h"
 #include "runtime/descriptors.h"
@@ -130,6 +130,13 @@ Status FileScanner::open() {
     if (_strict_mode && !_params.__isset.dest_sid_to_src_sid_without_trans) {
         return Status::InternalError("Slot map of dest to src must be set in strict mode");
     }
+
+    if (_params.__isset.properties) {
+        auto iter = _params.properties.find("case_sensitive");
+        if (iter != _params.properties.end()) {
+            std::istringstream(iter->second) >> std::boolalpha >> _case_sensitive;
+        }
+    }
     return Status::OK();
 }
 
@@ -205,6 +212,15 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
                     filter[i] = 0;
                     _error_counter++;
 
+                    if (_state->enable_log_rejected_record()) {
+                        std::stringstream error_msg;
+                        error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
+                                  << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
+                        // TODO(meegoo): support other file format
+                        _state->append_rejected_record_to_file(src->rebuild_csv_row(i, ","), error_msg.str(),
+                                                               src->source_filename());
+                    }
+
                     // avoid print too many debug log
                     if (_error_counter > 50) {
                         continue;
@@ -276,7 +292,9 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
             src_file = std::shared_ptr<SequentialFile>(std::move(file));
             break;
         } else {
-            BrokerFileSystem fs_broker(address, params.properties);
+            int64_t timeout_ms = _state->query_options().query_timeout * 1000 / 4;
+            timeout_ms = std::max(timeout_ms, static_cast<int64_t>(DEFAULT_TIMEOUT_MS));
+            BrokerFileSystem fs_broker(address, params.properties, timeout_ms);
             ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_sequential_file(range_desc.path));
             src_file = std::shared_ptr<SequentialFile>(std::move(broker_file));
             break;
@@ -312,7 +330,9 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
             src_file = std::shared_ptr<RandomAccessFile>(std::move(file));
             break;
         } else {
-            BrokerFileSystem fs_broker(address, params.properties);
+            int64_t timeout_ms = _state->query_options().query_timeout * 1000 / 4;
+            timeout_ms = std::max(timeout_ms, static_cast<int64_t>(DEFAULT_TIMEOUT_MS));
+            BrokerFileSystem fs_broker(address, params.properties, timeout_ms);
             ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_random_access_file(range_desc.path));
             src_file = std::shared_ptr<RandomAccessFile>(std::move(broker_file));
             break;

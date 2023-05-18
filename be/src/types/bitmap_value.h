@@ -66,7 +66,7 @@ public:
     // Construct an empty bitmap.
     BitmapValue();
 
-    BitmapValue(const BitmapValue& other);
+    BitmapValue(const BitmapValue& other, bool deep_copy = true);
     BitmapValue& operator=(const BitmapValue& other);
 
     BitmapValue(BitmapValue&& other) noexcept;
@@ -148,6 +148,11 @@ public:
     void clear();
 
     int64_t sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap);
+
+    int64_t bitmap_subset_limit_internal(const int64_t& range_start, const int64_t& limit, BitmapValue* ret_bitmap);
+
+    int64_t bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
+                                            BitmapValue* ret_bitmap);
 
 private:
     void _convert_to_smaller_type();

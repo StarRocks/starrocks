@@ -77,6 +77,7 @@ class PluginMgr;
 class RuntimeFilterWorker;
 class RuntimeFilterCache;
 class ProfileReportWorker;
+class QuerySpillManager;
 struct RfTracePoint;
 
 class BackendServiceClient;
@@ -97,6 +98,9 @@ class LocationProvider;
 class TabletManager;
 class UpdateManager;
 } // namespace lake
+namespace spill {
+class DirManager;
+}
 
 // Execution environment for queries/plan fragments.
 // Contains all required global structures, and handles to
@@ -106,6 +110,7 @@ class ExecEnv {
 public:
     // Initial exec environment. must call this to init all
     static Status init(ExecEnv* env, const std::vector<StorePath>& store_paths);
+    static bool is_init();
     static void destroy(ExecEnv* exec_env);
 
     /// Returns the first created exec env instance. In a normal starrocks, this is
@@ -132,6 +137,8 @@ public:
     ClientCache<BackendServiceClient>* client_cache() { return _backend_client_cache; }
     ClientCache<FrontendServiceClient>* frontend_client_cache() { return _frontend_client_cache; }
     ClientCache<TFileBrokerServiceClient>* broker_client_cache() { return _broker_client_cache; }
+
+    static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
 
     // using template to simplify client cache management
     template <typename T>
@@ -230,6 +237,8 @@ public:
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
 
+    spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
+
 private:
     Status _init(const std::vector<StorePath>& store_paths);
     void _destroy();
@@ -240,6 +249,7 @@ private:
     Status _init_storage_page_cache();
 
 private:
+    static bool _is_init;
     std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override
     ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
@@ -348,6 +358,7 @@ private:
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
+    std::shared_ptr<spill::DirManager> _spill_dir_mgr;
 };
 
 template <>

@@ -54,11 +54,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -86,6 +84,7 @@ public class BrokerFileGroup implements Writable {
     // fileFormat may be null, which means format will be decided by file's suffix
     private String fileFormat;
     private boolean isNegative;
+    private boolean specifyPartition = false;
     private List<Long> partitionIds; // can be null, means no partition specified
     private List<String> filePaths;
 
@@ -162,6 +161,7 @@ public class BrokerFileGroup implements Writable {
         // partitionId
         PartitionNames partitionNames = dataDescription.getPartitionNames();
         if (partitionNames != null) {
+            specifyPartition = true;
             partitionIds = Lists.newArrayList();
             for (String pName : partitionNames.getPartitionNames()) {
                 Partition partition = olapTable.getPartition(pName, partitionNames.isTemp());
@@ -265,6 +265,10 @@ public class BrokerFileGroup implements Writable {
             srcTableId = srcTable.getId();
             isLoadFromTable = true;
         }
+    }
+
+    public boolean isSpecifyPartition() {
+        return specifyPartition;
     }
 
     public long getTableId() {
@@ -488,16 +492,12 @@ public class BrokerFileGroup implements Writable {
             }
         }
         // file format
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_50) {
-            if (in.readBoolean()) {
-                fileFormat = Text.readString(in);
-            }
+        if (in.readBoolean()) {
+            fileFormat = Text.readString(in);
         }
         // src table
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_87) {
-            srcTableId = in.readLong();
-            isLoadFromTable = in.readBoolean();
-        }
+        srcTableId = in.readLong();
+        isLoadFromTable = in.readBoolean();
 
         // There are no columnExprList in the previous load job which is created before function is supported.
         // The columnExprList could not be analyzed without origin stmt in the previous load job.

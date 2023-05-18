@@ -52,6 +52,7 @@ import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreFileMapping.IdChain;
 import com.starrocks.backup.Status.ErrCode;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
@@ -64,7 +65,6 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -456,7 +456,7 @@ public class RestoreJob extends AbstractJob {
                     continue;
                 }
 
-                if (!tbl.isOlapOrLakeTable()) {
+                if (!tbl.isOlapOrCloudNativeTable()) {
                     status = new Status(ErrCode.COMMON_ERROR, "Only support retore OLAP table: " + tbl.getName());
                     return;
                 }
@@ -489,12 +489,13 @@ public class RestoreJob extends AbstractJob {
                 Table localTbl = db.getTable(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
                 if (localTbl != null) {
                     if (localTbl instanceof OlapTable && localTbl.hasAutoIncrementColumn()) {
+                        // it must be !isReplay == true
                         ((OlapTable) localTbl).sendDropAutoIncrementMapTask();
                     }
 
-                    backupMeta.checkAndRecoverAutoIncrementId(localTbl);
+                    tblInfo.checkAndRecoverAutoIncrementId(localTbl);
                     // table already exist, check schema
-                    if (!localTbl.isOlapOrLakeTable()) {
+                    if (!localTbl.isOlapOrCloudNativeTable()) {
                         status = new Status(ErrCode.COMMON_ERROR,
                                 "Only support retore olap table: " + localTbl.getName());
                         return;
@@ -509,12 +510,25 @@ public class RestoreJob extends AbstractJob {
                         return;
                     }
                     LOG.debug("get intersect part names: {}, job: {}", intersectPartNames, this);
-                    if (localOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames)
-                            != remoteOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames)) {
+                    if (localOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames, true)
+                            != remoteOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames, true) ||
+                                localOlapTbl.getBaseSchema().size() != remoteOlapTbl.getBaseSchema().size()) {
                         status = new Status(ErrCode.COMMON_ERROR,
                                 "Table " + jobInfo.getAliasByOriginNameIfSet(tblInfo.name)
                                         + " already exist but with different schema");
                         return;
+                    }
+
+                    for (int i = 0; i < localOlapTbl.getBaseSchema().size(); ++i) {
+                        Column localColumn = localOlapTbl.getBaseSchema().get(i);
+                        Column remoteColumn = remoteOlapTbl.getBaseSchema().get(i);
+
+                        if (!localColumn.equals(remoteColumn)) {
+                            status = new Status(ErrCode.COMMON_ERROR,
+                                    "Table " + jobInfo.getAliasByOriginNameIfSet(tblInfo.name)
+                                            + " already exist but with different schema");
+                            return;
+                        }
                     }
 
                     // Table with same name and has same schema. Check partition
@@ -523,7 +537,7 @@ public class RestoreJob extends AbstractJob {
                         if (localPartition != null) {
                             // Partition already exist.
                             PartitionInfo localPartInfo = localOlapTbl.getPartitionInfo();
-                            if (localPartInfo.getType() == PartitionType.RANGE) {
+                            if (localPartInfo.isRangePartition()) {
                                 // If this is a range partition, check range
                                 RangePartitionInfo localRangePartInfo = (RangePartitionInfo) localPartInfo;
                                 RangePartitionInfo remoteRangePartInfo
@@ -553,7 +567,7 @@ public class RestoreJob extends AbstractJob {
                         } else {
                             // partitions does not exist
                             PartitionInfo localPartitionInfo = localOlapTbl.getPartitionInfo();
-                            if (localPartitionInfo.getType() == PartitionType.RANGE) {
+                            if (localPartitionInfo.isRangePartition()) {
                                 // Check if the partition range can be added to the table
                                 RangePartitionInfo localRangePartitionInfo = (RangePartitionInfo) localPartitionInfo;
                                 RangePartitionInfo remoteRangePartitionInfo
@@ -604,7 +618,7 @@ public class RestoreJob extends AbstractJob {
                         return;
                     }
 
-                    backupMeta.checkAndRecoverAutoIncrementId((Table) remoteOlapTbl);
+                    tblInfo.checkAndRecoverAutoIncrementId((Table) remoteOlapTbl);
 
                     // DO NOT set remote table's new name here, cause we will still need the origin name later
                     // remoteOlapTbl.setName(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
@@ -841,7 +855,7 @@ public class RestoreJob extends AbstractJob {
         Partition remotePart = remoteTbl.getPartition(partName);
         Preconditions.checkNotNull(remotePart);
         PartitionInfo localPartitionInfo = localTbl.getPartitionInfo();
-        Preconditions.checkState(localPartitionInfo.getType() == PartitionType.RANGE);
+        Preconditions.checkState(localPartitionInfo.isRangePartition());
 
         // generate new partition id
         long newPartId = globalStateMgr.getNextId();
@@ -1477,7 +1491,7 @@ public class RestoreJob extends AbstractJob {
                 continue;
             }
 
-            if (!tbl.isOlapOrLakeTable()) {
+            if (!tbl.isOlapOrCloudNativeTable()) {
                 continue;
             }
 

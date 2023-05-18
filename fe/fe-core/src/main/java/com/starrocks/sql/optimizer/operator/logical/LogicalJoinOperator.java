@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
@@ -40,24 +39,29 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class LogicalJoinOperator extends LogicalOperator {
-    private final JoinOperator joinType;
-    private final ScalarOperator onPredicate;
-    private final String joinHint;
+    private JoinOperator joinType;
+    private ScalarOperator onPredicate;
+    private String joinHint;
     // For mark the node has been push down join on clause, avoid dead-loop
     private boolean hasPushDownJoinOnClause = false;
     private boolean hasDeriveIsNotNullPredicate = false;
 
+    // NOTE: we keep the original onPredicate for MV's rewrite to distinguish on-predicates and
+    // where-predicates. Take care to pass through original on-predicates when creating a new JoinOperator.
+    private ScalarOperator originalOnPredicate;
+
     public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate) {
-        this(joinType, onPredicate, "", Operator.DEFAULT_LIMIT, null, false);
+        this(joinType, onPredicate, "", Operator.DEFAULT_LIMIT, null, false, onPredicate);
     }
 
     public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate, String joinHint) {
-        this(joinType, onPredicate, joinHint, Operator.DEFAULT_LIMIT, null, false);
+        this(joinType, onPredicate, joinHint, Operator.DEFAULT_LIMIT, null, false, onPredicate);
     }
 
     private LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate, String joinHint,
                                 long limit, ScalarOperator predicate,
-                                boolean hasPushDownJoinOnClause) {
+                                boolean hasPushDownJoinOnClause,
+                                ScalarOperator originalOnPredicate) {
         super(OperatorType.LOGICAL_JOIN, limit, predicate, null);
         this.joinType = joinType;
         this.onPredicate = onPredicate;
@@ -66,25 +70,15 @@ public class LogicalJoinOperator extends LogicalOperator {
 
         this.hasPushDownJoinOnClause = hasPushDownJoinOnClause;
         this.hasDeriveIsNotNullPredicate = false;
+        this.originalOnPredicate = originalOnPredicate;
     }
 
-    private LogicalJoinOperator(Builder builder) {
-        super(OperatorType.LOGICAL_JOIN, builder.getLimit(), builder.getPredicate(), builder.getProjection());
-        this.joinType = builder.joinType;
-        this.onPredicate = builder.onPredicate;
-        this.joinHint = builder.joinHint;
-        this.rowOutputInfo = builder.rowOutputInfo;
-
-        this.hasPushDownJoinOnClause = builder.hasPushDownJoinOnClause;
-        this.hasDeriveIsNotNullPredicate = builder.hasDeriveIsNotNullPredicate;
-    }
-
-    // Constructor for UT, don't use this ctor except ut
     public LogicalJoinOperator() {
         super(OperatorType.LOGICAL_JOIN);
         this.onPredicate = null;
         this.joinType = JoinOperator.INNER_JOIN;
         this.joinHint = "";
+        this.originalOnPredicate = null;
     }
 
     public boolean hasPushDownJoinOnClause() {
@@ -115,6 +109,14 @@ public class LogicalJoinOperator extends LogicalOperator {
         return onPredicate;
     }
 
+    public ScalarOperator getOriginalOnPredicate() {
+        if (originalOnPredicate != null) {
+            return originalOnPredicate;
+        }
+        // `onPredicate` maybe null first, but set by `setOnPredicate` later.
+        return onPredicate;
+    }
+
     public String getJoinHint() {
         return joinHint;
     }
@@ -133,19 +135,6 @@ public class LogicalJoinOperator extends LogicalOperator {
             result.except(new ColumnRefSet(new ArrayList<>(projection.getCommonSubOperatorMap().keySet())));
             projection.getCommonSubOperatorMap().values().forEach(s -> result.union(s.getUsedColumns()));
         }
-        return result;
-    }
-
-    public ColumnRefSet getRequiredCols() {
-        ColumnRefSet result = new ColumnRefSet();
-        if (onPredicate != null) {
-            result.union(onPredicate.getUsedColumns());
-        }
-        if (predicate != null) {
-            result.union(predicate.getUsedColumns());
-        }
-        result.union(rowOutputInfo.getUsedColumnRefSet());
-
         return result;
     }
 
@@ -184,7 +173,7 @@ public class LogicalJoinOperator extends LogicalOperator {
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> entryList = Lists.newArrayList();
         for (OptExpression input : inputs) {
-            for (ColumnOutputInfo entry : input.getRowOutputInfo().getColumnEntries()) {
+            for (ColumnOutputInfo entry : input.getRowOutputInfo().getColumnOutputInfo()) {
                 entryList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
             }
         }
@@ -235,52 +224,51 @@ public class LogicalJoinOperator extends LogicalOperator {
     }
 
     public static class Builder extends LogicalOperator.Builder<LogicalJoinOperator, LogicalJoinOperator.Builder> {
-        private JoinOperator joinType;
-        private ScalarOperator onPredicate;
-        private String joinHint = "";
-        private boolean hasPushDownJoinOnClause = false;
-        private boolean hasDeriveIsNotNullPredicate = false;
-
-        private RowOutputInfo rowOutputInfo;
 
         @Override
-        public LogicalJoinOperator build() {
-            return new LogicalJoinOperator(this);
+        protected LogicalJoinOperator newInstance() {
+            return new LogicalJoinOperator();
         }
 
         @Override
         public LogicalJoinOperator.Builder withOperator(LogicalJoinOperator joinOperator) {
             super.withOperator(joinOperator);
-            this.joinType = joinOperator.joinType;
-            this.onPredicate = joinOperator.onPredicate;
-            this.joinHint = joinOperator.joinHint;
-            this.hasPushDownJoinOnClause = joinOperator.hasPushDownJoinOnClause;
-            this.hasDeriveIsNotNullPredicate = joinOperator.hasDeriveIsNotNullPredicate;
+            builder.joinType = joinOperator.joinType;
+            builder.onPredicate = joinOperator.onPredicate;
+            builder.joinHint = joinOperator.joinHint;
+            builder.hasPushDownJoinOnClause = joinOperator.hasPushDownJoinOnClause;
+            builder.hasDeriveIsNotNullPredicate = joinOperator.hasDeriveIsNotNullPredicate;
+            builder.originalOnPredicate = joinOperator.originalOnPredicate;
             return this;
         }
 
         public Builder setJoinType(JoinOperator joinType) {
-            this.joinType = joinType;
+            builder.joinType = joinType;
             return this;
         }
 
         public Builder setOnPredicate(ScalarOperator onPredicate) {
-            this.onPredicate = onPredicate;
+            builder.onPredicate = onPredicate;
             return this;
         }
 
         public Builder setProjection(Projection projection) {
-            this.projection = projection;
+            builder.projection = projection;
             return this;
         }
 
         public Builder setJoinHint(String joinHint) {
-            this.joinHint = joinHint;
+            builder.joinHint = joinHint;
             return this;
         }
 
         public Builder setRowOutputInfo(RowOutputInfo rowOutputInfo) {
-            this.rowOutputInfo = rowOutputInfo;
+            builder.rowOutputInfo = rowOutputInfo;
+            return this;
+        }
+
+        public Builder setOriginalOnPredicate(ScalarOperator originalOnPredicate) {
+            builder.originalOnPredicate = originalOnPredicate;
             return this;
         }
     }

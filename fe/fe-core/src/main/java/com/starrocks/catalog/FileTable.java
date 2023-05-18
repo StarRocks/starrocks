@@ -30,6 +30,7 @@ import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveRemoteFileIO;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TFileTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -76,6 +77,8 @@ public class FileTable extends Table {
         if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc")) {
             throw new DdlException("not supported format: " + format);
         }
+        // Put path into fileProperties, so that we can get storage account in AzureStorageCloudConfiguration
+        fileProperties.put(AzureCloudConfigurationFactory.AZURE_PATH_KEY, path);
     }
 
     public String getTableLocation() {
@@ -97,7 +100,7 @@ public class FileTable extends Table {
     }
 
     public List<RemoteFileDesc> getFileDescs() throws DdlException {
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(fileProperties, null);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(fileProperties);
         Configuration configuration = hdfsEnvironment.getConfiguration();
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
         boolean recursive = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_RECURSIVE_DIRECTORIES, "false"));

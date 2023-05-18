@@ -16,12 +16,17 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.parser.NodePosition;
 
-public class ImportColumnDesc {
+public class ImportColumnDesc implements ParseNode {
     private String columnName;
     private Expr expr;
 
+    private final NodePosition pos;
+
     public ImportColumnDesc(ImportColumnDesc other) {
+        this.pos = other.pos;
         this.columnName = other.columnName;
         if (other.expr != null) {
             this.expr = other.expr.clone();
@@ -29,10 +34,15 @@ public class ImportColumnDesc {
     }
 
     public ImportColumnDesc(String column) {
-        this.columnName = column;
+        this(column, null, NodePosition.ZERO);
     }
 
     public ImportColumnDesc(String column, Expr expr) {
+        this(column, expr, NodePosition.ZERO);
+    }
+
+    public ImportColumnDesc(String column, Expr expr, NodePosition pos) {
+        this.pos = pos;
         this.columnName = column;
         this.expr = expr;
     }
@@ -62,5 +72,10 @@ public class ImportColumnDesc {
             sb.append("=").append(expr.toSql());
         }
         return sb.toString();
+    }
+
+    @Override
+    public NodePosition getPos() {
+        return pos;
     }
 }

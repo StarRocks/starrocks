@@ -15,7 +15,6 @@
 
 package com.starrocks.load.routineload;
 
-import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
@@ -24,7 +23,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PulsarUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -127,9 +125,6 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
             throw new MetaNotFoundException("table " + routineLoadJob.getTableId() + " does not exist");
         }
         tRoutineLoadTask.setTbl(tbl.getName());
-        // label = job_name+job_id+task_id+txn_id
-        String label =
-                Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id), txnId);
         tRoutineLoadTask.setLabel(label);
         tRoutineLoadTask.setAuth_code(routineLoadJob.getAuthCode());
         TPulsarLoadInfo tPulsarLoadInfo = new TPulsarLoadInfo();
@@ -151,6 +146,9 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
             tRoutineLoadTask.setFormat(TFileFormatType.FORMAT_JSON);
         } else {
             tRoutineLoadTask.setFormat(TFileFormatType.FORMAT_CSV_PLAIN);
+        }
+        if (Math.abs(routineLoadJob.getMaxFilterRatio() - 1) > 0.001) {
+            tRoutineLoadTask.setMax_filter_ratio(routineLoadJob.getMaxFilterRatio());
         }
         return tRoutineLoadTask;
     }
@@ -176,7 +174,7 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws UserException {
         TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         // plan for each task, in case table has change(rollup or schema change)
-        TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId);
+        TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);
         TPlanFragment tPlanFragment = tExecPlanFragmentParams.getFragment();
         tPlanFragment.getOutput_sink().getOlap_table_sink().setTxn_id(txnId);
         return tExecPlanFragmentParams;

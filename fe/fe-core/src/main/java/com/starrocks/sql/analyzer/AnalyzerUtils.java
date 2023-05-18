@@ -17,19 +17,22 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Predicate;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
 import com.starrocks.analysis.AnalyticExpr;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
@@ -37,9 +40,14 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -47,11 +55,15 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -72,10 +84,10 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -103,7 +115,7 @@ public class AnalyzerUtils {
         expression.collectAll((Predicate<Expr>) arg -> arg instanceof FunctionCallExpr &&
                 arg.getFn() instanceof AggregateFunction, functions);
         if (!functions.isEmpty()) {
-            throw new SemanticException("%s clause cannot contain aggregations", clause);
+            throw new SemanticException(clause + " clause cannot contain aggregations", expression.getPos());
         }
     }
 
@@ -111,7 +123,7 @@ public class AnalyzerUtils {
         List<AnalyticExpr> functions = Lists.newArrayList();
         expression.collectAll((Predicate<Expr>) arg -> arg instanceof AnalyticExpr, functions);
         if (!functions.isEmpty()) {
-            throw new SemanticException("%s clause cannot contain window function", clause);
+            throw new SemanticException(clause + " clause cannot contain window function", expression.getPos());
         }
     }
 
@@ -119,7 +131,7 @@ public class AnalyzerUtils {
         List<GroupingFunctionCallExpr> calls = Lists.newArrayList();
         expression.collectAll((Predicate<Expr>) arg -> arg instanceof GroupingFunctionCallExpr, calls);
         if (!calls.isEmpty()) {
-            throw new SemanticException("%s clause cannot contain grouping", clause);
+            throw new SemanticException(clause + " clause cannot contain grouping", expression.getPos());
         }
     }
 
@@ -127,7 +139,7 @@ public class AnalyzerUtils {
         List<Subquery> calls = Lists.newArrayList();
         expression.collectAll((Predicate<Expr>) arg -> arg instanceof Subquery, calls);
         if (!calls.isEmpty()) {
-            throw new SemanticException("%s clause cannot contain subquery", clause);
+            throw new SemanticException(clause + " clause cannot contain subquery", expression.getPos());
         }
     }
 
@@ -142,7 +154,7 @@ public class AnalyzerUtils {
             dbName = context.getDatabase();
         }
 
-        Database db = context.getGlobalStateMgr().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             return null;
         }
@@ -151,11 +163,18 @@ public class AnalyzerUtils {
             db.readLock();
             Function search = new Function(fnName, argTypes, Type.INVALID, false);
             Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            if (fn != null && !PrivilegeActions.checkFunctionAction(context, fn.dbName(),
-                    fn.signatureString(), PrivilegeType.USAGE)) {
-                throw new StarRocksPlannerException(String.format("Access denied. " +
-                        "Found UDF: %s and need the USAGE privilege for FUNCTION", fn.getFunctionName()),
-                        ErrorType.USER_ERROR);
+            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                if (fn != null && !PrivilegeActions.checkFunctionAction(context, db, fn, PrivilegeType.USAGE)) {
+                    throw new StarRocksPlannerException(String.format("Access denied. " +
+                            "Found UDF: %s and need the USAGE privilege for FUNCTION", fn.getFunctionName()),
+                            ErrorType.USER_ERROR);
+                }
+            } else {
+                if (!context.getGlobalStateMgr().getAuth().checkDbPriv(context, dbName, PrivPredicate.SELECT)) {
+                    throw new StarRocksPlannerException(String.format("Access denied. " +
+                            "Found UDF: %s and need the SELECT priv for %s", fnName, dbName),
+                            ErrorType.USER_ERROR);
+                }
             }
 
             return fn;
@@ -169,7 +188,7 @@ public class AnalyzerUtils {
         Function fn = context.getGlobalStateMgr().getGlobalFunctionMgr()
                 .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (fn != null && !PrivilegeActions.checkGlobalFunctionAction(context,
-                fn.signatureString(), PrivilegeType.USAGE)) {
+                fn, PrivilegeType.USAGE)) {
             throw new StarRocksPlannerException(String.format("Access denied. " +
                     "Found UDF: %s and need the USAGE privilege for GLOBAL FUNCTION", fn.getFunctionName()),
                     ErrorType.USER_ERROR);
@@ -313,62 +332,44 @@ public class AnalyzerUtils {
         return tables;
     }
 
-    private static class TableCollector extends AstVisitor<Void, Void> {
-        protected final Map<TableName, Table> tables;
+    private static class TableCollector extends AstTraverser<Void, Void> {
+        protected Map<TableName, Table> tables;
+
+        public TableCollector() {
+        }
 
         public TableCollector(Map<TableName, Table> dbs) {
             this.tables = dbs;
         }
 
+        // ---------------------------------------- Query Statement --------------------------------------------------------------
+
+        @Override
+        public Void visitQueryStatement(QueryStatement statement, Void context) {
+            return visit(statement.getQueryRelation());
+        }
+
+        // ------------------------------------------- DML Statement -------------------------------------------------------
+
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
             Table table = node.getTargetTable();
             tables.put(node.getTableName(), table);
-            return visit(node.getQueryStatement());
+            return super.visitInsertStatement(node, context);
         }
 
         @Override
-        public Void visitQueryStatement(QueryStatement node, Void context) {
-            return visit(node.getQueryRelation());
+        public Void visitUpdateStatement(UpdateStmt node, Void context) {
+            Table table = node.getTable();
+            tables.put(node.getTableName(), table);
+            return super.visitUpdateStatement(node, context);
         }
 
         @Override
-        public Void visitSubquery(SubqueryRelation node, Void context) {
-            return visit(node.getQueryStatement());
-        }
-
-        public Void visitView(ViewRelation node, Void context) {
-            return visit(node.getQueryStatement(), context);
-        }
-
-        @Override
-        public Void visitSelect(SelectRelation node, Void context) {
-            if (node.hasWithClause()) {
-                node.getCteRelations().forEach(this::visit);
-            }
-
-            return visit(node.getRelation());
-        }
-
-        @Override
-        public Void visitSetOp(SetOperationRelation node, Void context) {
-            if (node.hasWithClause()) {
-                node.getRelations().forEach(this::visit);
-            }
-            node.getRelations().forEach(this::visit);
-            return null;
-        }
-
-        @Override
-        public Void visitJoin(JoinRelation node, Void context) {
-            visit(node.getLeft());
-            visit(node.getRight());
-            return null;
-        }
-
-        @Override
-        public Void visitCTE(CTERelation node, Void context) {
-            return visit(node.getCteQueryStatement());
+        public Void visitDeleteStatement(DeleteStmt node, Void context) {
+            Table table = node.getTable();
+            tables.put(node.getTableName(), table);
+            return super.visitDeleteStatement(node, context);
         }
 
         @Override
@@ -397,9 +398,15 @@ public class AnalyzerUtils {
         return tables;
     }
 
-    public static Map<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
-        Map<String, TableRelation> tableRelations = Maps.newHashMap();
+    public static Multimap<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
+        Multimap<String, TableRelation> tableRelations = ArrayListMultimap.create();
         new AnalyzerUtils.TableRelationCollector(tableRelations).visit(statementBase);
+        return tableRelations;
+    }
+
+    public static List<TableRelation> collectTableRelations(StatementBase statementBase) {
+        List<TableRelation> tableRelations = Lists.newArrayList();
+        new AnalyzerUtils.TableRelationsCollector(tableRelations).visit(statementBase);
         return tableRelations;
     }
 
@@ -407,6 +414,14 @@ public class AnalyzerUtils {
         Map<TableName, Table> nonOlapTables = Maps.newHashMap();
         new AnalyzerUtils.NonOlapTableCollector(nonOlapTables).visit(statementBase);
         return nonOlapTables.isEmpty();
+    }
+
+    public static void copyOlapTable(StatementBase statementBase, Set<OlapTable> olapTables) {
+        new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
+    }
+
+    public static void collectSpecifyExternalTables(StatementBase statementBase, List<Table> tables, Predicate<Table> filter) {
+        new ExternalTableCollector(tables, filter).visit(statementBase);
     }
 
     public static Map<TableName, SubqueryRelation> collectAllSubQueryRelation(QueryStatement queryStatement) {
@@ -421,6 +436,12 @@ public class AnalyzerUtils {
         return tables;
     }
 
+    public static Map<TableName, Table> collectAllConnectorTableAndView(StatementBase statementBase) {
+        Map<TableName, Table> tables = Maps.newHashMap();
+        new AnalyzerUtils.ConnectorTableAndViewCollector(tables).visit(statementBase);
+        return tables;
+    }
+
     private static class TableAndViewCollector extends TableCollector {
         public TableAndViewCollector(Map<TableName, Table> dbs) {
             super(dbs);
@@ -431,28 +452,35 @@ public class AnalyzerUtils {
             tables.put(node.getResolveTableName(), table);
             return null;
         }
+    }
 
-        @Override
-        public Void visitSelect(SelectRelation node, Void context) {
-            if (node.hasWithClause()) {
-                node.getCteRelations().forEach(this::visit);
-            }
-            if (node.getPredicate() != null && CollectionUtils.isNotEmpty(node.getPredicate().getChildren())) {
-                node.getPredicate().getChildren().forEach(this::visit);
-            }
-            return visit(node.getRelation());
+    private static class ConnectorTableAndViewCollector extends TableAndViewCollector {
+        public ConnectorTableAndViewCollector(Map<TableName, Table> dbs) {
+            super(dbs);
         }
 
         @Override
-        public Void visitInPredicate(InPredicate node, Void context) {
-            if (CollectionUtils.isNotEmpty(node.getChildren())) {
-                node.getChildren().forEach(this::visit);
+        public Void visitTable(TableRelation node, Void context) {
+            Table table = node.getTable();
+            if (table == null) {
+                tables.put(node.getName(), null);
+                return null;
+            }
+            // For external tables, their db/table names are case-insensitive, need to get real names of them.
+            if (table.isHiveTable() || table.isHudiTable()) {
+                HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
+                TableName tableName = new TableName(hiveMetaStoreTable.getCatalogName(), hiveMetaStoreTable.getDbName(),
+                        hiveMetaStoreTable.getTableName());
+                tables.put(tableName, table);
+            } else if (table.isIcebergTable()) {
+                IcebergTable icebergTable = (IcebergTable) table;
+                TableName tableName = new TableName(icebergTable.getCatalogName(), icebergTable.getRemoteDbName(),
+                        icebergTable.getRemoteTableName());
+                tables.put(tableName, table);
+            } else {
+                tables.put(node.getName(), table);
             }
             return null;
-        }
-
-        public Void visitSubquery(Subquery node, Void context) {
-            return visit(node.getQueryStatement());
         }
     }
 
@@ -463,9 +491,52 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
+            if (!tables.isEmpty()) {
+                return null;
+            }
+            // if olap table has MV, we remove it
+            if (!node.getTable().isOlapTable() ||
+                    !node.getTable().getRelatedMaterializedViews().isEmpty()) {
+                tables.put(node.getName(), node.getTable());
+            }
+            return null;
+        }
+    }
+
+    private static class OlapTableCollector extends TableCollector {
+        Set<OlapTable> olapTables;
+
+        public OlapTableCollector(Set<OlapTable> tables) {
+            this.olapTables = tables;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            if (node.getTable().isOlapTable()) {
+                OlapTable table = (OlapTable) node.getTable();
+                olapTables.add(table);
+                // Only copy the necessary olap table meta to avoid the lock when plan query
+                OlapTable copied = table.copyOnlyForQuery();
+                node.setTable(copied);
+            }
+            return null;
+        }
+    }
+
+    private static class ExternalTableCollector extends TableCollector {
+        List<Table> tables;
+        Predicate<Table> predicate;
+
+        public ExternalTableCollector(List<Table> tables, Predicate<Table> filter) {
+            this.tables = tables;
+            this.predicate = filter;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
             Table table = node.getTable();
-            if (!table.isOlapTable()) {
-                tables.put(node.getResolveTableName(), table);
+            if (predicate.test(table)) {
+                tables.add(table);
             }
             return null;
         }
@@ -498,16 +569,33 @@ public class AnalyzerUtils {
 
     private static class TableRelationCollector extends TableCollector {
 
-        private final Map<String, TableRelation> tableRelations;
+        private final Multimap<String, TableRelation> tableRelations;
 
-        public TableRelationCollector(Map<String, TableRelation> tableRelations) {
+        public TableRelationCollector(Multimap<String, TableRelation> tableRelations) {
             super(null);
             this.tableRelations = tableRelations;
         }
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
-            tableRelations.put(node.getName().getTbl(), node);
+            String tblName = node.getTable() != null ? node.getTable().getName() : node.getName().getTbl();
+            tableRelations.put(tblName, node);
+            return null;
+        }
+    }
+
+    private static class TableRelationsCollector extends TableCollector {
+
+        private final List<TableRelation> tableRelations;
+
+        public TableRelationsCollector(List<TableRelation> tableRelations) {
+            super(null);
+            this.tableRelations = tableRelations;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            tableRelations.add(node);
             return null;
         }
     }
@@ -565,6 +653,9 @@ public class AnalyzerUtils {
             }
         } else if (srcType.isArrayType()) {
             newType = new ArrayType(transformType(((ArrayType) srcType).getItemType()));
+        } else if (srcType.isMapType()) {
+            newType = new MapType(transformType(((MapType) srcType).getKeyType()),
+                    transformType(((MapType) srcType).getValueType()));
         } else {
             throw new SemanticException("Unsupported CTAS transform type: %s", srcType);
         }
@@ -631,8 +722,12 @@ public class AnalyzerUtils {
         }
     }
 
-    public static Map<String, AddPartitionClause> getAddPartitionClauseFromPartitionValues(
-            OlapTable olapTable, List<String> partitionValues, long interval, String granularity) throws AnalysisException {
+    public static Map<String, AddPartitionClause> getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
+                                                                                           List<String> partitionValues,
+                                                                                           long interval,
+                                                                                           String granularity,
+                                                                                           Type firstPartitionColumnType)
+            throws AnalysisException {
         Map<String, AddPartitionClause> result = Maps.newHashMap();
         String partitionPrefix = "p";
         for (String partitionValue : partitionValues) {
@@ -641,38 +736,38 @@ public class AnalyzerUtils {
             LocalDateTime endTime;
             String partitionName;
             try {
+                if ("NULL".equalsIgnoreCase(partitionValue)) {
+                    partitionValue = "0000-01-01";
+                }
                 beginDateTimeFormat = DateUtils.probeFormat(partitionValue);
                 beginTime = DateUtils.parseStringWithDefaultHSM(partitionValue, beginDateTimeFormat);
-
+                // The start date here is passed by BE through function calculation,
+                // so it must be the start date of a certain partition.
                 switch (granularity.toLowerCase()) {
                     case "hour":
                         beginTime = beginTime.withMinute(0).withSecond(0).withNano(0);
-                        partitionName = partitionPrefix + beginTime.format(DateUtils.HOUR_FORMATTER);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.HOUR_FORMATTER_UNIX);
                         endTime = beginTime.plusHours(interval);
                         break;
                     case "day":
                         beginTime = beginTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        partitionName = partitionPrefix + beginTime.format(DateUtils.DATEKEY_FORMATTER);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.DATEKEY_FORMATTER_UNIX);
                         endTime = beginTime.plusDays(interval);
                         break;
                     case "month":
                         beginTime = beginTime.withDayOfMonth(1);
-                        partitionName = partitionPrefix + beginTime.format(DateUtils.MONTH_FORMATTER);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.MONTH_FORMATTER_UNIX);
                         endTime = beginTime.plusMonths(interval);
                         break;
                     case "year":
                         beginTime = beginTime.withDayOfYear(1);
-                        partitionName = partitionPrefix + beginTime.format(DateUtils.YEAR_FORMATTER);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.YEAR_FORMATTER_UNIX);
                         endTime = beginTime.plusYears(interval);
                         break;
                     default:
                         throw new AnalysisException("unsupported automatic partition granularity:" + granularity);
                 }
-                String lowerBound = beginTime.format(DateUtils.DATEKEY_FORMATTER);
-                String upperBound = endTime.format(DateUtils.DATEKEY_FORMATTER);
-                PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
-                        Collections.singletonList(new PartitionValue(lowerBound)),
-                        Collections.singletonList(new PartitionValue(upperBound)));
+                PartitionKeyDesc partitionKeyDesc = createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
                 Map<String, String> partitionProperties = Maps.newHashMap();
                 Short replicationNum = olapTable.getTableProperty().getReplicationNum();
                 partitionProperties.put("replication_num", String.valueOf(replicationNum));
@@ -680,7 +775,7 @@ public class AnalyzerUtils {
 
                 SingleRangePartitionDesc singleRangePartitionDesc =
                         new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
-
+                singleRangePartitionDesc.setSystem(true);
                 AddPartitionClause addPartitionClause =
                         new AddPartitionClause(singleRangePartitionDesc, distributionDesc,
                                 partitionProperties, false);
@@ -690,6 +785,34 @@ public class AnalyzerUtils {
             }
         }
         return result;
+    }
+
+    private static PartitionKeyDesc createPartitionKeyDesc(Type partitionType, LocalDateTime beginTime,
+                                                           LocalDateTime endTime) throws AnalysisException {
+        boolean isMaxValue;
+        DateTimeFormatter outputDateFormat;
+        if (partitionType.isDate()) {
+            outputDateFormat = DateUtils.DATE_FORMATTER_UNIX;
+            isMaxValue = endTime.isAfter(TimeUtils.MAX_DATE.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
+        } else if (partitionType.isDatetime()) {
+            outputDateFormat = DateUtils.DATE_TIME_FORMATTER_UNIX;
+            isMaxValue = endTime.isAfter(TimeUtils.MAX_DATETIME.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
+        } else {
+            throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionType));
+        }
+        String lowerBound = beginTime.format(outputDateFormat);
+
+        PartitionValue upperPartitionValue;
+        if (isMaxValue) {
+            upperPartitionValue = PartitionValue.MAX_VALUE;
+        } else {
+            String upperBound = endTime.format(outputDateFormat);
+            upperPartitionValue = new PartitionValue(upperBound);
+        }
+
+        return new PartitionKeyDesc(
+                Collections.singletonList(new PartitionValue(lowerBound)),
+                Collections.singletonList(upperPartitionValue));
     }
 
     public static SlotRef getSlotRefFromFunctionCall(Expr expr) {
@@ -703,4 +826,66 @@ public class AnalyzerUtils {
         }
         return null;
     }
+
+    public static SlotRef getSlotRefFromCast(Expr expr) {
+        if (expr instanceof CastExpr) {
+            CastExpr castExpr = (CastExpr) expr;
+            ArrayList<Expr> children = castExpr.getChildren();
+            for (Expr child : children) {
+                SlotRef slotRef = null;
+                if (child instanceof SlotRef) {
+                    slotRef = (SlotRef) child;
+                } else if (child instanceof CastExpr) {
+                    slotRef = getSlotRefFromCast(child);
+                } else if (child instanceof FunctionCallExpr) {
+                    slotRef = getSlotRefFromFunctionCall(child);
+                }
+                if (slotRef != null) {
+                    return slotRef;
+                }
+            }
+        }
+        return null;
+    }
+
+    public static Type replaceNullType2Boolean(Type type) {
+        if (type.isNull()) {
+            return Type.BOOLEAN;
+        } else if (type.isArrayType()) {
+            Type childType = ((ArrayType) type).getItemType();
+            Type newType = replaceNullType2Boolean(childType);
+            if (!childType.equals(newType)) {
+                return new ArrayType(newType);
+            }
+        } else if (type.isMapType()) {
+            Type keyType = ((MapType) type).getKeyType();
+            Type valueType = ((MapType) type).getValueType();
+            Type nkt = replaceNullType2Boolean(keyType);
+            Type nvt = replaceNullType2Boolean(valueType);
+            if (!keyType.equals(nkt) || !valueType.equals(nvt)) {
+                return new MapType(nkt, nvt);
+            }
+        } else if (type.isStructType()) {
+            ArrayList<StructField> newFields = Lists.newArrayList();
+            for (StructField sf : ((StructType) type).getFields()) {
+                newFields.add(new StructField(sf.getName(), replaceNullType2Boolean(sf.getType()), sf.getComment()));
+            }
+            return new StructType(newFields);
+        }
+        return type;
+    }
+
+    public static void checkNondeterministicFunction(ParseNode node) {
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
+                if (expr.isNondeterministicBuiltinFnName()) {
+                    throw new SemanticException("Materialized view query statement select item " +
+                            expr.toSql() + " not supported nondeterministic function", expr.getPos());
+                }
+                return null;
+            }
+        }.visit(node);
+    }
+
 }

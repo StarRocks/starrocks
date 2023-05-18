@@ -120,8 +120,8 @@ public class PartitionPruneRuleTest {
                 olapTable.getPartitionInfo();
                 result = partitionInfo;
 
-                partitionInfo.getType();
-                result = PartitionType.RANGE;
+                partitionInfo.isRangePartition();
+                result = true;
 
                 partitionInfo.getIdToRange(false);
                 result = keyRange;
@@ -238,8 +238,8 @@ public class PartitionPruneRuleTest {
                 olapTable.getPartitionInfo();
                 result = partitionInfo;
 
-                partitionInfo.getType();
-                result = PartitionType.RANGE;
+                partitionInfo.isRangePartition();
+                result = true;
 
                 partitionInfo.getIdToRange(false);
                 result = keyRange;
@@ -381,7 +381,7 @@ public class PartitionPruneRuleTest {
         LogicalOlapScanOperator operator =
                 new LogicalOlapScanOperator(olapTable, scanColumnMap, columnMetaToColRefMap,
                         null, -1, null, olapTable.getBaseIndexId(),
-                        null, partitionNames, Lists.newArrayList(), Lists.newArrayList());
+                        null, partitionNames, false, Lists.newArrayList(), Lists.newArrayList());
 
         Partition part1 = new Partition(10001L, "p1", null, null);
         Partition part2 = new Partition(10002L, "p2", null, null);

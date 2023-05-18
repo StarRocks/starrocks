@@ -2,10 +2,11 @@
 
 This QuickStart tutorial guides you through the procedures to deploy a simple StarRocks cluster. Before getting started, you can read [StarRocks Architecture](../quick_start/Architecture.md) for more conceptual details.
 
-Following these steps, you can deploy a StarRocks instance with only one frontend (FE) node and one backend (BE) node on your local machine. This instance can help you complete the upcoming QuickStart tutorials on [creating a table](../quick_start/Create_table.md) and [importing and querying data](../quick_start/Import_and_query.md), and thereby acquaints you with the basic operations of StarRocks.
+Following these steps, you can deploy a StarRocks instance with only one frontend (FE) node and one backend (BE) node on your local machine. This instance can help you complete the upcoming QuickStart tutorials on [creating a table](../quick_start/Create_table.md) and [loading and querying data](../quick_start/Import_and_query.md), and thereby acquaints you with the basic operations of StarRocks.
 
 > **CAUTION**
 >
+> - If you want to run StarRocks on Ubuntu 22.04 or with ARM-arch processors, you must download and run the specific Docker image by the tag from [StarRocks' Docker Hub](https://hub.docker.com/r/starrocks/allin1-ubuntu/tags), and copy the binaries from the Docker container (Directory: **/data/starrocks**) to your host machine.
 > - To guarantee the high availability and performance **in the production environment**, we recommend that you deploy at least three FE nodes and three BE nodes in your StarRocks cluster.
 > - You can deploy an FE node and a BE node on one machine. However, deploying multiple nodes of the same kind on one machine is not allowed, because the same kinds of nodes cannot share a same IP address.
 > - By default, FE nodes in a new cluster are started via IP address access. To start a new cluster with FQDN access, see [Set up a new cluster with FQDN access](../administration/enable_fqdn.md#set-up-a-new-cluster-with-fqdn-access).
@@ -49,13 +50,13 @@ After all the [prerequisites](#prerequisites) are met, you can download the Star
 
     ```Plain
     cd HelloStarRocks
-    wget https://download.starrocks.io/en-US/download/request-download/54/StarRocks-2.4.0.tar.gz
+    wget https://releases.starrocks.io/starrocks/StarRocks-3.0.0.tar.gz
     ```
 
 3. Extract the files in the software package to install StarRocks on your machine.
 
   ```Plain
-  tar -xzvf StarRocks-2.3.0.tar.gz --strip-components 1
+  tar -xzvf StarRocks-2.5.5.tar.gz --strip-components 1
   ```
 
   The software package includes the working directories of FE (**fe**), BE (**be**), [Broker](../administration/deploy_broker.md) (**apache_hdfs_broker**), User Defined Function (**udf**), and **LICENSE** and **NOTICE** files.
@@ -344,12 +345,12 @@ Having identified and resolved the problem, you must first terminate the existin
 
 ## What to do next
 
-Having deployed StarRocks, you can continue the QuickStart tutorials on [creating a table](../quick_start/Create_table.md) and [importing and querying data](../quick_start/Import_and_query.md).
+Having deployed StarRocks, you can continue the QuickStart tutorials on [creating a table](../quick_start/Create_table.md) and [loading and querying data](../quick_start/Import_and_query.md).
 
 You can also:
 
-- [Compile StarRocks from source code](../administration/Build_in_docker.md)
-- [Deploy StarRocks in Docker container](../administration/deploy_with_docker.md)
+- [Compile StarRocks from source code in Docker](../developers/build-starrocks/Build_in_docker.md)
+- [Deploy StarRocks with Docker](../quick_start/deploy_with_docker.md)
 - [Deploy StarRocks with StarGo](../administration/stargo.md), a StarRocks cluster management tool
 - [Scale your StarRocks cluster](../administration/Scale_up_down.md)
 - [Upgrade your StarRocks cluster](../administration/Cluster_administration.md)

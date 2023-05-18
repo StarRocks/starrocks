@@ -49,16 +49,19 @@ import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
@@ -68,6 +71,7 @@ import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -134,7 +138,7 @@ public class ConnectContext {
     // In other word, currentUserIdentity is the entry that matched in StarRocks auth table.
     // This account determines user's access privileges.
     protected UserIdentity currentUserIdentity;
-    protected Set<Long> currentRoleIds = null;
+    protected Set<Long> currentRoleIds = new HashSet<>();
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
     // Variables belong to this session.
@@ -308,10 +312,10 @@ public class ConnectContext {
     public void setCurrentRoleIds(UserIdentity user) {
         try {
             Set<Long> defaultRoleIds;
-            if (this.getSessionVariable().isActivateAllRolesOnLogin()) {
-                defaultRoleIds = this.getGlobalStateMgr().getPrivilegeManager().getRoleIdsByUser(user);
+            if (GlobalVariable.isActivateAllRolesOnLogin()) {
+                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(user);
             } else {
-                defaultRoleIds = this.getGlobalStateMgr().getPrivilegeManager().getDefaultRoleIdsByUser(user);
+                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationManager().getDefaultRoleIdsByUser(user);
             }
             this.currentRoleIds = defaultRoleIds;
         } catch (PrivilegeException e) {
@@ -581,7 +585,10 @@ public class ConnectContext {
     }
 
     public String getCurrentWarehouse() {
-        return currentWarehouse;
+        if (currentWarehouse != null) {
+            return currentWarehouse;
+        }
+        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     }
 
     public void setCurrentWarehouse(String currentWarehouse) {
@@ -709,6 +716,16 @@ public class ConnectContext {
             LOG.warn("construct SSLChannelImp class failed");
             throw new IOException("construct SSLChannelImp class failed");
         }
+    }
+
+    public StmtExecutor executeSql(String sql) throws Exception {
+        StatementBase sqlStmt = SqlParser.parse(sql, getSessionVariable()).get(0);
+        sqlStmt.setOrigStmt(new OriginStatement(sql, 0));
+        StmtExecutor executor = new StmtExecutor(this, sqlStmt);
+        setExecutor(executor);
+        setThreadLocalInfo();
+        executor.execute();
+        return executor;
     }
 
     public class ThreadInfo {

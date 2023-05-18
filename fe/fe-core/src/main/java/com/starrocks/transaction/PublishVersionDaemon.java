@@ -40,6 +40,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -47,12 +48,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.LeaderDaemon;
-import com.starrocks.lake.LakeTable;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -75,7 +76,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import javax.validation.constraints.NotNull;
 
-public class PublishVersionDaemon extends LeaderDaemon {
+public class PublishVersionDaemon extends FrontendDaemon {
 
     private static final Logger LOG = LogManager.getLogger(PublishVersionDaemon.class);
 
@@ -97,13 +98,19 @@ public class PublishVersionDaemon extends LeaderDaemon {
             if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
                 return;
             }
+
+            // TODO: need to refactor after be split into cn + dn
             List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                allBackends.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(false));
+            }
+
             if (allBackends.isEmpty()) {
                 LOG.warn("some transaction state need to publish, but no backend exists");
                 return;
             }
 
-            if (GlobalStateMgr.getCurrentState().isSharedNothingMode()) {
+            if (!RunMode.allowCreateLakeTable()) {
                 publishVersionForOlapTable(readyTransactionStates);
                 return;
             }
@@ -262,7 +269,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             for (long tableId : transactionState.getTableIdList()) {
                 Table table = db.getTable(tableId);
                 if (table != null) {
-                    return table.isLakeTable();
+                    return table.isCloudNativeTableOrMaterializedView();
                 }
             }
         } finally {
@@ -272,13 +279,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
     }
 
     void publishVersionForLakeTable(List<TransactionState> readyTransactionStates) {
-        int maxPublishingTransactions = Config.experimental_lake_publish_version_threads * 2;
         ConcurrentHashSet<Long> publishingTransactions = getPublishingLakeTransactions();
         for (TransactionState txnState : readyTransactionStates) {
-            if (publishingTransactions.size() >= maxPublishingTransactions) {
-                break;
-            }
-
             long txnId = txnState.getTransactionId();
             if (publishingTransactions.add(txnId)) { // the set did not already contain the specified element
                 CompletableFuture<Void> future = publishLakeTransactionAsync(txnState);
@@ -321,6 +323,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             if (success) {
                 try {
                     globalTransactionMgr.finishTransaction(dbId, txnId, null);
+                    refreshMvIfNecessary(txnState);
                 } catch (UserException e) {
                     throw new RuntimeException(e);
                 }
@@ -382,7 +385,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
         db.readLock();
         try {
-            LakeTable table = (LakeTable) db.getTable(tableId);
+            OlapTable table = (OlapTable) db.getTable(tableId);
             if (table == null) {
                 txnState.removeTable(tableCommitInfo.getTableId());
                 LOG.info("Removed non-exist table {} from transaction {}. txn_id={}", tableId, txnLabel, txnId);
@@ -395,8 +398,6 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 return true;
             }
             if (partition.getVisibleVersion() + 1 != txnVersion) {
-                LOG.info("Previous transaction has not finished. txn_id={} partition_version={}, txn_version={}",
-                        txnId, partition.getVisibleVersion(), txnVersion);
                 return false;
             }
             List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
@@ -476,8 +477,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     }
                     if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(),
-                                Constants.TaskRunPriority.NORMAL.value());
+                                mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(), false, null,
+                                Constants.TaskRunPriority.NORMAL.value(), true, false);
                     }
                 } finally {
                     mvDb.readUnlock();

@@ -26,7 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.rpc.BrpcProxy;
@@ -43,7 +43,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class ShardDeleter extends LeaderDaemon {
+public class ShardDeleter extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(ShardDeleter.class);
 
     public ShardDeleter() {
@@ -58,14 +58,14 @@ public class ShardDeleter extends LeaderDaemon {
             if (db == null) {
                 continue;
             }
-            if (db.isInfoSchemaDb()) {
+            if (db.isSystemDatabase()) {
                 continue;
             }
 
             db.readLock();
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getTablesIncludeRecycleBin(db)) {
-                    if (table.isLakeTable()) {
+                    if (table.isCloudNativeTableOrMaterializedView()) {
                         GlobalStateMgr.getCurrentState()
                                 .getAllPartitionsIncludeRecycleBin((OlapTable) table)
                                 .stream()
@@ -86,7 +86,7 @@ public class ShardDeleter extends LeaderDaemon {
         // group shards by be
         for (long shardId : shardIds) {
             try {
-                long backendId = starOSAgent.getPrimaryBackendIdByShard(shardId);
+                long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId);
                 shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
             } catch (UserException ignored1) {
                 // ignore error
@@ -134,7 +134,7 @@ public class ShardDeleter extends LeaderDaemon {
      * 3. shard groups with empty shards and older than threshold, will be permanently deleted.
      */
     private void deleteUnusedShardAndShardGroup() {
-        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentStarOSAgent();
 
         List<Long> groupIdFe = getAllPartitionShardGroupId();
         List<ShardGroupInfo> shardGroupsInfo = starOSAgent.listShardGroup()

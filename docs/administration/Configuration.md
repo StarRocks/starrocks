@@ -53,6 +53,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |meta_delay_toleration_second      | s    | 300     | The maximum duration by which the metadata on the follower and observer FEs can lag behind that on the leader FE. Unit: seconds.<br> If this duration is exceeded, the non-leader FE stops providing services. |
 | drop_backend_after_decommission  | -    | TRUE    | Whether to delete a BE after the BE is decommissioned. `TRUE` indicates that the BE is deleted immediately after it is decommissioned.<br>`FALSE` indicates that the BE is not deleted after it is decommissioned. |
 | enable_collect_query_detail_info | -    | FALSE   | Whether to view the profile of a query. If this parameter is set to `TRUE`, the system collects the profile of the query.<br>If this parameter is set to `FALSE`, the system does not collect the profile of the query. |
+| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This parameter is supported from v2.5.5 onwards. |
+| background_refresh_metadata_interval_millis                  | ms   | 600000 | The interval between two consecutive Hive metadata cache refreshes. This parameter is supported from v2.5.5 onwards. |
+| background_refresh_metadata_time_secs_since_last_access_secs | s    | 86400  | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cahced metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. This parameter is supported from v2.5.5 onwards. |
 
 #### Query engine
 
@@ -72,7 +75,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | enable_statistic_collect                 | -    | TRUE         | Whether to collect statistics for the CBO. This feature is enabled by default. |
 | enable_collect_full_statistic            | -    | TRUE         | Whether to enable automatic full statistics collection. This feature is enabled by default. |
 | statistic_auto_collect_ratio             | -    | 0.8          | The threshold for determining whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
-| statistic_max_full_collect_data_size     | GB   | 100          | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_max_full_collect_data_size | LONG      | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_collect_max_row_count_per_query | INT  | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |
 | statistic_collect_interval_sec           | s    | 300          | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_auto_analyze_start_time | STRING      | 00:00:00   | The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 | statistic_auto_analyze_end_time | STRING      | 23:59:59  | The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
@@ -94,7 +98,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | Parameter                               | Unit | Default                                         | Description                                                  |
 | --------------------------------------- | ---- | ----------------------------------------------- | ------------------------------------------------------------ |
 | load_straggler_wait_second              | s    | 300                                             | The maximum loading lag that can be tolerated by a BE replica. If this value is exceeded, cloning is performed to clone data from other replicas. Unit: seconds. |
-| desired_max_waiting_jobs                | -    | 100                                             | The maximum number of pending jobs in an FE. The number refers to all jobs, such as table creation, loading, and schema change jobs. If the number of pending jobs in an FE reaches this value, the FE will reject new load requests. This parameter takes effect only for asynchronous loading. |
+| desired_max_waiting_jobs                | -    | 1024                                            | The maximum number of pending jobs in an FE. The number refers to all jobs, such as table creation, loading, and schema change jobs. If the number of pending jobs in an FE reaches this value, the FE will reject new load requests. This parameter takes effect only for asynchronous loading. From v2.5 onwards, the default value is changed from 100 to 1024.|
 | max_load_timeout_second                 | s    | 259200                                          | The maximum timeout duration allowed for a load job. The load job fails if this limit is exceeded. This limit applies to all types of load jobs. Unit: seconds. |
 | min_load_timeout_second                 | s    | 1                                               | The minimum timeout duration allowed for a load job. This limit applies to all types of load jobs. Unit: seconds. |
 | max_running_txn_num_per_db              | -    | 100                                             | The maximum number of load jobs that can run in parallel for each database in a StarRocks cluster. The default value is 100. If this value is exceeded, incoming load jobs will not be executed. If the incoming load job is a synchronous load job, it will be rejected. If it is an asynchronous load job, it will be put into the waiting queue. We do not recommend you increase this value because this will increase system load. |
@@ -138,7 +142,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | tablet_create_timeout_second                  | s    | 1                      | The timeout duration for creating a tablet, in seconds.       |
 | tablet_delete_timeout_second                  | s    | 2                      | The timeout duration for deleting a tablet, in seconds.      |
 | check_consistency_default_timeout_second      | s    | 600                    | The timeout duration for a replica consistency check. You can set this parameter based on the size of your tablet. |
-| tablet_sched_slot_num_per_path                | -    | 2                      | The maximum number of tablet-related tasks that can run concurrently in a BE storage directory. The alias is `schedule_slot_num_per_path`. |
+| tablet_sched_slot_num_per_path                | -    | 8                      | The maximum number of tablet-related tasks that can run concurrently in a BE storage directory. The alias is `schedule_slot_num_per_path`. From v2.5 onwards, the default value of this parameter is changed from `4` to `8`.|
 | tablet_sched_max_scheduling_tablets           | -    | 2000                   | The maximum number of tablets that can be scheduled at the same time. If the value is exceeded, tablet balancing and repair checks will be skipped. |
 | tablet_sched_disable_balance                  | -    | FALSE                  | Whether to disable tablet balancing. `TRUE` indicates that tablet balancing is disabled. `FALSE` indicates that tablet balancing is enabled. The alias is `disable_balance`. |
 | tablet_sched_disable_colocate_balance         | -    | FALSE                  | Whether to disable replica balancing for Colocate Table. `TRUE` indicates replica balancing is disabled. `FALSE` indicates replica balancing is enabled. The alias is `disable_colocate_balance`. |
@@ -159,7 +163,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | agent_task_resend_wait_time_ms           | ms   | 5000        | The duration the FE must wait before it can resend an agent task. An agent task can be resent only when the gap between the task creation time and the current time exceeds the value of this parameter. This parameter is used to prevent repetitive sending of agent tasks. Unit: ms. |
 | backup_job_default_timeout_ms            | ms   | 86400*1000  | The timeout duration of a backup job, in ms. If this value is exceeded, the backup job fails. |
 | report_queue_size                        | -    | 100         | The maximum number of jobs that can wait in a report queue. <br>The report is about disk, task, and tablet information of BEs. If too many report jobs are piling up in a queue, OOM will occur. |
-| enable_experimental_mv                   | -    | FALSE       | Whether to enable the asynchronous materialized view feature. `TRUE` indicates this feature is enabled.|
+| enable_experimental_mv                   | -    | TRUE       | Whether to enable the asynchronous materialized view feature. `TRUE` indicates this feature is enabled. From v2.5.2 onwards, this feature is enabled by default. For versions earlier than v2.5.2, this feature is disabled by default. |
 | authentication_ldap_simple_bind_base_dn  | -  | Empty string | The base DN, which is the point from which the LDAP server starts to search for users' authentication information.|
 | authentication_ldap_simple_bind_root_dn  |  -  | Empty string | The administrator DN used to search for users' authentication information.|
 | authentication_ldap_simple_bind_root_pwd |  -  | Empty string | The password of the administrator used to search for users' authentication information.|
@@ -204,7 +208,6 @@ This section provides an overview of the static parameters that you can configur
 | cluster_name                         | StarRocks Cluster | The name of the StarRocks cluster to which the FE belongs. The cluster name is displayed for `Title` on the web page. |
 | rpc_port                             | 9020              | The port on which the Thrift server in the FE node listens.  |
 | thrift_backlog_num                   | 1024              | The length of the backlog queue held by the Thrift server in the FE node. |
-| thrift_server_type                   | THREAD_POOL       | The service model that is used by the Thrift server in the FE node. Valid values: `SIMPLE`, `THREADED`, and `THREAD_POOL`. |
 | thrift_server_max_worker_threads     | 4096              | The maximum number of worker threads that are supported by the Thrift server in the FE node. |
 | thrift_client_timeout_ms             | 5000                 | The length of time after which idle client connections time out. Unit: ms. |
 | thrift_server_queue_size             | 4096              | The length of queue where requests are pending. If the number of threads that are being processed in the thrift server exceeds the value specified in `thrift_server_max_worker_threads`, new requests are added to the pending queue. |
@@ -249,7 +252,7 @@ This section provides an overview of the static parameters that you can configur
 
 | Parameter                         | Default                                                      | Description                                                  |
 | --------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| async_load_task_pool_size         | 10                                                           | The size of the load task thread pool. This parameter is valid only for Broker Load. |
+| async_load_task_pool_size         | 2                                                            | The size of the load task thread pool. This parameter is valid only for Broker Load. The value must be less than `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from 10 to 2.
 | load_checker_interval_second      | 5                                                            | The time interval at which load jobs are processed on a rolling basis. Unit: second. |
 | transaction_clean_interval_second | 30                                                           | The time interval at which finished transactions are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that finished transactions can be cleaned up in a timely manner. |
 | label_clean_interval_second       | 14400                                                        | The time interval at which labels are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that historical labels can be cleaned up in a timely manner. |
@@ -312,9 +315,6 @@ BE dynamic parameters are as follows.
 
 | Configuration item | Default | Unit | Description |
 | ------------------ | ------- | ---- | ----------- |
-| tc_use_memory_min | 0 | Byte | The minimum size of the TCMalloc-reserved memory. StarRocks does not return the released memory resource to the operating system if the size of the memory resource is less than this value. |
-| tc_free_memory_rate | 0 | % | The maximum ratio of the TCMalloc-reserved memory size to the total memory size occupied by TCMalloc. StarRocks does not return the released memory resource to the operating system if the size ratio of the released memory to the total memory used by TCMalloc is less than this value. Range: [0,100]. |
-| tc_gc_period | 60 | Second | The duration of a TCMalloc garbage collection (GC) cycle. |
 | report_task_interval_seconds | 10 | Second | The time interval at which to report the state of a task. A task can be creating a table, dropping a table, loading data, or changing a table schema. |
 | report_disk_state_interval_seconds | 60 | Second | The time interval at which to report the storage volume state, which includes the size of data within the volume. |
 | report_tablet_interval_seconds | 60 | Second | The time interval at which to report the most updated version of all tablets. |
@@ -347,7 +347,7 @@ BE dynamic parameters are as follows.
 | max_base_compaction_num_singleton_deltas | 100 | N/A | The maximum number of segments that can be compacted in each Base Compaction. |
 | base_compaction_interval_seconds_since_last_operation | 86400 | Second | The time interval since the last Base Compaction. This configuration item is one of the conditions that trigger a Base Compaction. |
 | cumulative_compaction_check_interval_seconds | 1 | Second | The time interval of thread polling for a Cumulative Compaction. |
-| update_compaction_check_interval_seconds | 60 | Second | The time interval at which to check the Update Compaction of the Primary Key data model. |
+| update_compaction_check_interval_seconds | 60 | Second | The time interval at which to check the Update Compaction of the Primary Key table. |
 | min_compaction_failure_interval_sec | 120 | Second | The minimum time interval that a Tablet Compaction can be scheduled since the last compaction failure. |
 | periodic_counter_update_period_ms | 500 | ms | The time interval at which to collect the Counter statistics. |
 | load_error_log_reserve_hours | 48 | Hour | The time for which data loading logs are reserved. |
@@ -373,12 +373,12 @@ BE dynamic parameters are as follows.
 | max_runnings_transactions_per_txn_map | 100 | N/A | The maximum number of transactions that can run concurrently in each partition. |
 | tablet_max_pending_versions | 1000 | N/A | The maximum number of pending versions that are tolerable in a Primary Key table. Pending versions refer to versions that are committed but not applied yet. |
 | max_hdfs_file_handle | 1000 | N/A | The maximum number of HDFS file descriptors that can be opened. |
-| parquet_buffer_stream_reserve_size | 1048576 | Byte | The size of buffer that Parquet reader reserves for each column while reading data. |
 | be_exit_after_disk_write_hang_second | 60 | second | The length of time that the BE waits to exit after the disk hangs. |
 | min_cumulative_compaction_failure_interval_sec | 30 | second | The minimum time interval at which Cumulative Compaction retries upon failures. |
 | size_tiered_level_num | 7 | N/A | The number of levels for the Size-tiered Compaction strategy. At most one rowset is reserved for each level. Therefore, under a stable condition, there are, at most, as many rowsets as the level number specified in this configuration item. |
 | size_tiered_level_multiple | 5 | N/A | The multiple of data size between two contiguous levels in the Size-tiered Compaction strategy. |
 | size_tiered_min_level_size | 131072 | Byte | The data size of the minimum level in the Size-tiered Compaction strategy. Rowsets smaller than this value immediately trigger the data compaction. |
+| storage_page_cache_limit | 20% | N/A | The PageCache size. STRING. It can be specified as size, for example, `20G`, `20480M`, `20971520K`, or `21474836480B`. It can also be specified as the ratio (percentage) to the memory size, for example, `20%`. It takes effect only when `disable_storage_page_cache` is set to `false`. |
 
 ### Configure BE static parameters
 
@@ -398,7 +398,7 @@ BE static parameters are as follows.
 | drop_tablet_worker_count | 3 | N/A | The number of threads used to drop a tablet. |
 | push_worker_count_normal_priority | 3 | N/A | The number of threads used to handle a load task with NORMAL priority. |
 | push_worker_count_high_priority | 3 | N/A | The number of threads used to handle a load task with HIGH priority. |
-| transaction_publish_version_worker_count | 8 | N/A | The number of threads used to publish a version. |
+| transaction_publish_version_worker_count | 0 | N/A | The maximum number of threads used to publish a version. When this value is set to less than or equal to `0`, the system uses half of the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from `8` to `0`.  |
 | clear_transaction_task_worker_count | 1 | N/A | The number of threads used for clearing transaction. |
 | alter_tablet_worker_count | 3 | N/A | The number of threads used for schema change. |
 | clone_worker_count | 3 | N/A | The number of threads used for clone. |
@@ -410,21 +410,22 @@ BE static parameters are as follows.
 | sys_log_level | INFO | N/A | The severity levels into which system log entries are classified. Valid values: INFO, WARN, ERROR, and FATAL. |
 | sys_log_roll_mode | SIZE-MB-1024 | N/A | The mode how system logs are segmented into log rolls. Valid values include `TIME-DAY`, `TIME-HOUR`, and `SIZE-MB-<size>`. The default value indicates that logs are segmented into rolls which are 1 GB each. |
 | sys_log_roll_num | 10 | N/A | The number of log rolls to reserve. |
-| sys_log_verbose_modules | Empty string | N/A | The module of the logs to be printed. For example, if you set this configuration item to OLAP, StarRocks only prints the logs of the OLAP module. Valid values are namespaces in BE, including `starrocks`, `starrocks::vectorized`, and `pipeline`. |
+| sys_log_verbose_modules | Empty string | N/A | The module of the logs to be printed. For example, if you set this configuration item to OLAP, StarRocks only prints the logs of the OLAP module. Valid values are namespaces in BE, including `starrocks`, `starrocks::debug`, `starrocks::fs`, `starrocks::io`, `starrocks::lake`, `starrocks::pipeline`, `starrocks::query_cache`, `starrocks::stream`, and `starrocks::workgroup`. |
 | sys_log_verbose_level | 10 | N/A | The level of the logs to be printed. This configuration item is used to control the output of logs initiated with VLOG in codes. |
 | log_buffer_level | Empty string | N/A | The strategy how logs are flushed. The default value indicates that logs are buffered in memory. Valid values are `-1` and `0`. `-1` indicates that logs are not buffering in memory. |
 | num_threads_per_core | 3 | N/A | The number threads started in each CPU core. |
 | compress_rowbatches | TRUE | N/A | The boolean value to control if to compress the row batches in RPCs between BEs. This configuration item is used for the data transmission between query layers. The value true indicates to compress the row batches. The value false indicates not to compress the row batches. |
 | serialize_batch | FALSE | N/A | The boolean value to control if to serialize the row batches in RPCs between BEs. This configuration item is used for the data transmission between query layers. The value true indicates to serialize the row batches. The value false indicates not to serialize the row batches. |
 | storage_root_path | ${STARROCKS_HOME}/storage | N/A | The directory and medium of the storage volume. Multiple volumes are separated by semicolon (;). If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`. |
+|max_length_for_bitmap_function|1000000|Byte|The maximum length of input values for bitmap functions.|
+|max_length_for_to_base64|200000|Byte|The maximum length of input values for to_base6() function.|
 | max_tablet_num_per_shard | 1024 | N/A | The maximum number of tablets in each shard. This configuration item is used to restrict the number of tablet child directories under each storage directory. |
 | max_garbage_sweep_interval | 3600 | Second | The maximum time interval for garbage collection on storage volumes. |
 | min_garbage_sweep_interval | 180 | Second | The minimum time interval for garbage collection on storage volumes. |
 | file_descriptor_cache_capacity | 16384 | N/A | The number of file descriptors that can be cached. |
 | min_file_descriptor_number | 60000 | N/A | The minimum number of file descriptors in the BE process. |
 | index_stream_cache_capacity | 10737418240 | Byte | The cache capacity for the statistical information of BloomFilter, Min, and Max. |
-| storage_page_cache_limit | 0 | | The capacity of page cache. You can set it as a percentage ("20%") or a physical value ("100MB"). |
-| disable_storage_page_cache | TRUE | N/A | The boolean value to control if to disable the Page Cache. The value true indicates to disable the Page Cache. The value false indicates to enable the Page Cache. |
+| disable_storage_page_cache | FALSE | N/A | The boolean value to control if to disable PageCache. When PageCache is enabled, StarRocks caches the query results. PageCache can significantly improve the query performance when similar queries are repeated frequently. `true` indicates to disable PageCache. The value of this item has been changed from `true` to `false` since StarRocks v2.4.|
 | base_compaction_num_threads_per_disk | 1 | N/A | The number of threads used for Base Compaction on each storage volume. |
 | base_cumulative_delta_ratio | 0.3 | N/A | The ratio of cumulative file size to base file size. The ratio reaching this value is one of the conditions that trigger the Base Compaction. |
 | max_compaction_concurrency | -1 | N/A | The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency. |
@@ -448,10 +449,10 @@ BE static parameters are as follows.
 | enable_bitmap_union_disk_format_with_set | FALSE | N/A | The boolean value to control if to enable the new storage format of the BITMAP type, which can improve the performance of bitmap_union. The value true indicates to enable the new storage format. The value false indicates to disable the new storage format. |
 | mem_limit | 90% | N/A | BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100GB"). |
 | flush_thread_num_per_store | 2 | N/A | Number of threads that are used for flushing MemTable in each store. |
-| block_cache_enable  | false | N/A   | Whether to enable Local Cache.<ul><li>`true`: Local Cache is enabled.</li><li>`false`: Local Cache is disabled. </li></ul>To enable Local Cache, set the value of this parameter to `true`. |
+| block_cache_enable  | false | N/A   | Whether to enable Data Cache.<ul><li>`true`: Data Cache is enabled.</li><li>`false`: Data Cache is disabled. </li></ul>To enable Data Cache, set the value of this parameter to `true`. |
 | block_cache_disk_path | N/A | N/A  | The paths of disks. We recommend that the number of paths you configured for this parameter is the same as the number of disks of your BE machine. Multiple paths need to be separated with semicolons (;). After you add this parameter, StarRocks automatically creates a file named **cachelib_data** to cache blocks. |
 | block_cache_meta_path | N/A  | N/A   | The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the **$STARROCKS_HOME** path. |
-| block_cache_mem_size   | 2147483648 | Bytes | The maximum amount of data that can be cached in the memory. Unit: bytes. The default value is `2147483648`, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after Local Cache is enabled, consider increasing the value. |
+| block_cache_mem_size   | 2147483648 | Bytes | The maximum amount of data that can be cached in the memory. Unit: bytes. The default value is `2147483648`, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after Data Cache is enabled, consider increasing the value. |
 | block_cache_disk_size  | 0 | Bytes | The maximum amount of data that can be cached in a single disk. For example, if you configure two disk paths for the `block_cache_disk_path` parameter and set the value of the `block_cache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached in these two disks. The default value is `0`, which indicates that only the memory is used to cache data. Unit: bytes. |
 | jdbc_connection_pool_size  | 8 | The JDBC connection pool size. On each BE node, queries which access the external table with the same `jdbc_url` share the same connection pool. |
 | jdbc_minimum_idle_connections  | 1 | The minimum number of idle connections in the JDBC connection pool. |
@@ -483,7 +484,6 @@ BE static parameters are as follows.
 | compaction_max_memory_limit | -1 | N/A | |
 | compaction_max_memory_limit_percent | 100 | N/A | |
 | compaction_memory_limit_per_worker | 2147483648 | N/A | |
-| connector_io_tasks_per_scan_operator | 16 | N/A | |
 | consistency_max_memory_limit | 10G | N/A | |
 | consistency_max_memory_limit_percent | 20 | N/A | |
 | cumulative_compaction_num_threads_per_disk | 1 | N/A | |
@@ -634,80 +634,3 @@ BE static parameters are as follows.
 | vector_chunk_size | 4096 | N/A | |
 | vertical_compaction_max_columns_per_group | 5 | N/A | |
 | web_log_bytes | 1048576 | N/A | |-->
-
-## Set system configurations
-
-### Linux Kernel
-
-Linux kernel 3.10 or later is recommended.
-
-### CPU configurations
-
-| Configuration item | Description | Recommended value | How to set |
-| ------------------ | ------------------------------------------------------------ | ----------------- | ------------------------------------------------------------ |
-| scaling_governor | The parameter scaling_governor is used to control the CPU power mode. The default value is on-demand. The performance mode consumes more energy, produces better performance, and thereby is recommended in the deployment of StarRocks. | performance | echo 'performance' \| sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor |
-
-### Memory configurations
-
-| Configuration item | Description | Recommended value | How to set |
-| -------------------- | ------------------------------------------------------------ | ----------------- | ------------------------------------------------------------ |
-| overcommit_memory | Memory Overcommit allows the operating system to overcommit memory resource to processes. We recommend you enable Memory Overcommit. | 1 | echo 1 \| sudo tee /proc/sys/vm/overcommit_memory |
-| transparent_hugepage | Transparent Huge Pages is enabled by default. We recommend you disable this feature because it can interfere the memory allocator, and thereby lead to a drop in performance. | madvise | echo 'madvise' \| sudo tee /sys/kernel/mm/transparent_hugepage/enabled |
-| swappiness | We recommend you disable the swappiness to eliminate its affects on the performance. | 0 | echo 0 \| sudo tee /proc/sys/vm/swappiness |
-
-### Storage configurations
-
-We recommend you set different scheduler algorithms in accordance with the medium of your storage volumes.
-
-| Configuration item | Description | Recommended value | How to set |
-| ------------------ | ------------------------------------------------------------ | ----------------- | ----------------------------------------------------------- |
-| scheduler | mq-deadline scheduler algorithm suits SATA disks. | mq-deadline | echo mq-deadline \| sudo tee /sys/block/vdb/queue/scheduler |
-| scheduler | kyber scheduler algorithm suits NVMe or SSD disks. | kyber | echo kyber \| sudo tee /sys/block/vdb/queue/scheduler |
-| scheduler | If your system does not support kyber scheduler algorithm, we recommend you use none scheduler algorithm. | none | echo none \| sudo tee /sys/block/vdb/queue/scheduler |
-
-### Network configurations
-
-We recommend you use 10GB network in your StarRocks cluster. Otherwise, StarRocks will fail to achieve the expected performance. You can use iPerf to check the bandwidth of your cluster.
-
-### File system configurations
-
-We recommend you use the ext4 journaling file system. You can run the following command to check the mount type:
-
-```Shell
-df -Th
-```
-
-### High concurrency configurations
-
-If your StarRocks cluster has a high load concurrency, we recommend you set the following configurations.
-
-```Shell
-echo 120000 > /proc/sys/kernel/threads-max
-echo 60000 > /proc/sys/vm/max_map_count
-echo 200000 > /proc/sys/kernel/pid_max
-```
-
-### User process configuration
-
-You can set the maximum number of user processes by running the following command:
-
-```Shell
-ulimit -u 40960
-```
-
-### File descriptor configuration
-
-Run the following command to the maximum number of file descriptors to `65535`.
-
-```Shell
-ulimit -n 65535
-```
-
-If this configuration becomes invalid after you re-connect to the cluster, you can set the `UsePAM` configuration item under **/etc/ssh/sshd_config** to `yes`, and restart the SSHD service.
-
-### Others
-
-| Configuration item | Recommended value | How to set |
-| --------------------- | ----------------- | ----------------------------------------------------------- |
-| tcp abort on overflow | 1 | echo 1 \| sudo tee /proc/sys/net/ipv4/tcp_abort_on_overflow |
-| somaxconn | 1024 | echo 1024 \| sudo tee /proc/sys/net/core/somaxconn |

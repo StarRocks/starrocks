@@ -202,7 +202,7 @@ public class BDBEnvironment {
         replicationConfig
                 .setConfigParam(ReplicationConfig.REPLICA_TIMEOUT, Config.bdbje_heartbeat_timeout_second + " s");
         replicationConfig
-                .setConfigParam(ReplicationConfig.FEEDER_TIMEOUT, Config.bdbje_heartbeat_timeout_second + " s");
+                .setConfigParam(ReplicationConfig.FEEDER_TIMEOUT, (10 + Config.bdbje_heartbeat_timeout_second) + " s");
         replicationConfig
                 .setConfigParam(ReplicationConfig.REPLAY_COST_PERCENT,
                         String.valueOf(Config.bdbje_replay_cost_percent));
@@ -228,6 +228,8 @@ public class BDBEnvironment {
         environmentConfig.setConfigParam(EnvironmentConfig.FILE_LOGGING_LEVEL, Config.bdbje_log_level);
         environmentConfig.setConfigParam(EnvironmentConfig.CLEANER_THREADS,
                 String.valueOf(Config.bdbje_cleaner_threads));
+        environmentConfig.setConfigParam(EnvironmentConfig.RESERVED_DISK,
+                String.valueOf(Config.bdbje_reserved_disk_size));
 
         if (isElectable) {
             Durability durability = new Durability(getSyncPolicy(Config.master_sync_policy),

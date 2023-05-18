@@ -151,7 +151,7 @@ public class DescriptorTable {
 
     public TDescriptorTable toThrift() {
         TDescriptorTable result = new TDescriptorTable();
-        HashSet<Table> referencedTbls = Sets.newHashSet();
+        Map<Long, Table> referencedTbls = Maps.newHashMap();
         for (TupleDescriptor tupleD : tupleDescs.values()) {
             // inline view of a non-constant select has a non-materialized tuple descriptor
             // in the descriptor table just for type checking, which we need to skip
@@ -161,7 +161,7 @@ public class DescriptorTable {
                 // but its table has no id
                 if (tupleD.getTable() != null
                         && tupleD.getTable().getId() >= 0) {
-                    referencedTbls.add(tupleD.getTable());
+                    referencedTbls.putIfAbsent(tupleD.getTable().getId(), tupleD.getTable());
                 }
                 for (SlotDescriptor slotD : tupleD.getMaterializedSlots()) {
                     result.addToSlotDescriptors(slotD.toThrift());
@@ -169,38 +169,15 @@ public class DescriptorTable {
             }
         }
 
-        referencedTbls.addAll(referencedTables);
+        for (Table tbl : referencedTables) {
+            referencedTbls.putIfAbsent(tbl.getId(), tbl);
+        }
 
-        for (Table tbl : referencedTbls) {
+        for (Table tbl : referencedTbls.values()) {
             result.addToTableDescriptors(
                     tbl.toThrift(referencedPartitionsPerTable.getOrDefault(tbl, Lists.newArrayList())));
         }
         return result;
-    }
-
-    public String debugString() {
-        StringBuilder out = new StringBuilder();
-        out.append("tuples:\n");
-        for (TupleDescriptor desc : tupleDescs.values()) {
-            out.append(desc + "\n");
-        }
-        out.append("\n ");
-        out.append("slotDesc size: " + slotDescs.size() + "\n");
-        for (SlotDescriptor desc : slotDescs.values()) {
-            out.append(desc.debugString());
-            out.append("\n");
-        }
-        out.append("\n ");
-        return out.toString();
-    }
-
-    public String getExplainString() {
-        StringBuilder out = new StringBuilder();
-        out.append("\nTuples:\n");
-        for (TupleDescriptor desc : tupleDescs.values()) {
-            out.append(desc.getExplainString() + "\n");
-        }
-        return out.toString();
     }
 
     public static class ReferencedPartitionInfo {

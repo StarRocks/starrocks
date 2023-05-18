@@ -260,6 +260,32 @@ TEST_F(TimeFunctionsTest, weekOfYearTest) {
     }
 }
 
+TEST_F(TimeFunctionsTest, weekOfYearIsoTest) {
+    auto tc = TimestampColumn::create();
+    tc->append(TimestampValue::create(2023, 1, 5, 0, 5, 0));
+    tc->append(TimestampValue::create(2023, 1, 9, 0, 9, 0));
+    tc->append(TimestampValue::create(2023, 1, 2, 0, 2, 0));
+    tc->append(TimestampValue::create(2023, 1, 6, 0, 6, 0));
+    tc->append(TimestampValue::create(2023, 1, 3, 0, 3, 0));
+    tc->append(TimestampValue::create(2023, 1, 7, 0, 7, 0));
+    tc->append(TimestampValue::create(2023, 1, 10, 0, 10, 0));
+    tc->append(TimestampValue::create(2023, 1, 1, 0, 1, 0));
+    tc->append(TimestampValue::create(2023, 1, 4, 0, 4, 0));
+    tc->append(TimestampValue::create(2023, 1, 8, 0, 8, 0));
+
+    int weeks[] = {1, 2, 1, 1, 1, 1, 2, 52, 1, 1};
+
+    Columns columns;
+    columns.emplace_back(tc);
+
+    ColumnPtr result = TimeFunctions::week_of_year_iso(_utils->get_fn_ctx(), columns).value();
+
+    auto year_weeks = ColumnHelper::cast_to<TYPE_INT>(result);
+    for (size_t i = 0; i < sizeof(weeks) / sizeof(weeks[0]); ++i) {
+        ASSERT_EQ(weeks[i], year_weeks->get_data()[i]);
+    }
+}
+
 TEST_F(TimeFunctionsTest, weekWithDefaultModeTest) {
     auto tc = TimestampColumn::create();
     tc->append(TimestampValue::create(2007, 1, 1, 0, 0, 0));
@@ -766,7 +792,7 @@ TEST_F(TimeFunctionsTest, toUnixForNow) {
     {
         Columns columns;
 
-        ColumnPtr result = TimeFunctions::to_unix_for_now(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::to_unix_for_now_32(_utils->get_fn_ctx(), columns).value();
 
         ASSERT_TRUE(result->is_constant());
 
@@ -786,7 +812,7 @@ TEST_F(TimeFunctionsTest, toUnixFromDatetime) {
 
         columns.emplace_back(tc1);
 
-        ColumnPtr result = TimeFunctions::to_unix_from_datetime(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::to_unix_from_datetime_32(_utils->get_fn_ctx(), columns).value();
 
         ASSERT_TRUE(result->is_numeric());
 
@@ -806,7 +832,7 @@ TEST_F(TimeFunctionsTest, toUnixFromDate) {
 
         columns.emplace_back(tc1);
 
-        ColumnPtr result = TimeFunctions::to_unix_from_date(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::to_unix_from_date_32(_utils->get_fn_ctx(), columns).value();
 
         ASSERT_TRUE(result->is_numeric());
 
@@ -830,7 +856,7 @@ TEST_F(TimeFunctionsTest, toUnixFromDatetimeWithFormat) {
         columns.emplace_back(tc1);
         columns.emplace_back(tc2);
 
-        ColumnPtr result = TimeFunctions::to_unix_from_datetime_with_format(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::to_unix_from_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
 
         ASSERT_TRUE(result->is_numeric());
 
@@ -851,7 +877,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetime) {
 
         columns.emplace_back(tc1);
 
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::from_unix_to_datetime_32(_utils->get_fn_ctx(), columns).value();
 
         //ASSERT_TRUE(result->is_numeric());
 
@@ -884,7 +910,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithFormat) {
                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
 
         //ASSERT_TRUE(result->is_numeric());
 
@@ -918,7 +944,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithConstFormat) {
                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
 
         //ASSERT_TRUE(result->is_numeric());
 
@@ -943,7 +969,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithConstFormat) {
         ASSERT_TRUE(TimeFunctions::from_unix_prepare(_utils->get_fn_ctx(),
                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
         ASSERT_TRUE(result->only_null());
         ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -1679,6 +1705,37 @@ TEST_F(TimeFunctionsTest, utctimestampTest) {
         ASSERT_FALSE(ptr->is_timestamp());
         auto v = ColumnHelper::as_column<ConstColumn>(ptr);
         ASSERT_EQ(TimestampValue::create(2019, 8, 6, 8, 38, 57), v->get(0).get_timestamp());
+    }
+}
+
+TEST_F(TimeFunctionsTest, utctimeTest) {
+    // without RuntimeState
+    {
+        ColumnPtr utc_timestamp = TimeFunctions::utc_timestamp(_utils->get_fn_ctx(), Columns()).value();
+        ColumnPtr ptr = TimeFunctions::utc_time(_utils->get_fn_ctx(), Columns()).value();
+        ASSERT_TRUE(ptr->is_constant());
+        ASSERT_FALSE(ptr->is_numeric());
+        TimestampValue ts = ColumnHelper::as_column<ConstColumn>(utc_timestamp)->get(0).get_timestamp();
+        auto v = ColumnHelper::as_column<ConstColumn>(ptr);
+
+        int h, m, s, us;
+        ts.to_time(&h, &m, &s, &us);
+        ASSERT_EQ(h * 3600 + m * 60 + s, v->get(0).get_double());
+    }
+    // with RuntimeState
+    {
+        TQueryGlobals globals;
+        globals.__set_now_string("2019-08-06 01:38:57");
+        globals.__set_timestamp_ms(1565080737805);
+        globals.__set_time_zone("America/Los_Angeles");
+        starrocks::RuntimeState state(globals);
+        starrocks::FunctionUtils futils(&state);
+        FunctionContext* ctx = futils.get_fn_ctx();
+        ColumnPtr ptr = TimeFunctions::utc_time(ctx, Columns()).value();
+        ASSERT_TRUE(ptr->is_constant());
+        ASSERT_FALSE(ptr->is_numeric());
+        auto v = ColumnHelper::as_column<ConstColumn>(ptr);
+        ASSERT_EQ(8 * 3600 + 38 * 60 + 57, v->get(0).get_double());
     }
 }
 

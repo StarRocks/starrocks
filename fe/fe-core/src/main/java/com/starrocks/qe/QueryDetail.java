@@ -34,7 +34,6 @@
 
 package com.starrocks.qe;
 
-
 import java.io.Serializable;
 
 public class QueryDetail implements Serializable {
@@ -72,6 +71,11 @@ public class QueryDetail implements Serializable {
     private String explain;
     private String profile;
     private String resourceGroupName;
+    private long scanRows = -1;
+    private long scanBytes = -1;
+    private long returnRows = -1;
+    private long cpuCostNs = -1;
+    private long memCostBytes = -1;
 
     public QueryDetail() {
     }
@@ -118,6 +122,11 @@ public class QueryDetail implements Serializable {
         queryDetail.errorMessage = this.errorMessage;
         queryDetail.explain = this.explain;
         queryDetail.profile = this.profile;
+        queryDetail.scanRows = this.scanRows;
+        queryDetail.scanBytes = this.scanBytes;
+        queryDetail.returnRows = this.returnRows;
+        queryDetail.cpuCostNs = this.cpuCostNs;
+        queryDetail.memCostBytes = this.memCostBytes;
         return queryDetail;
     }
 
@@ -239,5 +248,45 @@ public class QueryDetail implements Serializable {
 
     public void setResourceGroupName(String workGroupName) {
         this.resourceGroupName = workGroupName;
+    }
+
+    public long getScanRows() {
+        return scanRows;
+    }
+
+    public void setScanRows(long scanRows) {
+        this.scanRows = scanRows;
+    }
+
+    public long getScanBytes() {
+        return scanBytes;
+    }
+
+    public void setScanBytes(long scanBytes) {
+        this.scanBytes = scanBytes;
+    }
+
+    public long getReturnRows() {
+        return returnRows;
+    }
+
+    public void setReturnRows(long returnRows) {
+        this.returnRows = returnRows;
+    }
+
+    public long getCpuCostNs() {
+        return cpuCostNs;
+    }
+
+    public void setCpuCostNs(long cpuCostNs) {
+        this.cpuCostNs = cpuCostNs;
+    }
+
+    public long getMemCostBytes() {
+        return memCostBytes;
+    }
+
+    public void setMemCostBytes(long memCostBytes) {
+        this.memCostBytes = memCostBytes;
     }
 }

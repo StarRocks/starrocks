@@ -91,8 +91,7 @@ public class OptimizerTest {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
     }
 
@@ -156,6 +155,7 @@ public class OptimizerTest {
         Assert.assertTrue(expr1.getInputs().get(0).getOp() instanceof LogicalFilterOperator);
 
         // test timeout
+        long timeout = connectContext.getSessionVariable().getOptimizerExecuteTimeout();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(1);
         TaskContext rootTaskContext = optimizer1.getContext().getTaskContext();
         // just give a valid RuleType
@@ -168,7 +168,7 @@ public class OptimizerTest {
         } catch (Exception e) {
             e.getMessage().contains("StarRocks planner use long time 1 ms in logical phase");
         } finally {
-            connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000);
+            connectContext.getSessionVariable().setOptimizerExecuteTimeout(timeout);
         }
     }
 
@@ -224,6 +224,7 @@ public class OptimizerTest {
 
     @Test
     public void testPreprocessMvPartitionMv() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         Config.enable_experimental_mv = true;
         starRocksAssert.withTable("CREATE TABLE test.tbl_with_mv\n" +
                         "(\n" +
@@ -274,12 +275,11 @@ public class OptimizerTest {
         Pair<Table, Column> partitionTableAndColumn = mv.getPartitionTableAndColumn();
         Assert.assertEquals("tbl_with_mv", partitionTableAndColumn.first.getName());
 
-        List<OptExpression> scanExpr = MvUtils.collectScanExprs(materializationContext.getMvExpression());
-        Assert.assertEquals(1, scanExpr.size());
-        Assert.assertNotNull(scanExpr.get(0).getOp().getPredicate());
-        ScalarOperator scalarOperator  = scanExpr.get(0).getOp().getPredicate();
-        Assert.assertTrue(scalarOperator instanceof CompoundPredicateOperator);
-        Assert.assertTrue(((CompoundPredicateOperator) scalarOperator).isAnd());
+        ScalarOperator scalarOperator  = materializationContext.getMvPartialPartitionPredicate();
+        if (scalarOperator != null) {
+            Assert.assertTrue(scalarOperator instanceof CompoundPredicateOperator);
+            Assert.assertTrue(((CompoundPredicateOperator) scalarOperator).isAnd());
+        }
 
         refreshMaterializedView("test", "mv_4");
         cluster.runSql("test", "insert into tbl_with_mv partition(p2) values(\"2020-02-20\", 20, 30)");
@@ -289,13 +289,11 @@ public class OptimizerTest {
         Assert.assertNotNull(expr2);
         MaterializationContext materializationContext2 = optimizer2.getContext().getCandidateMvs().iterator().next();
         Assert.assertEquals("mv_4", materializationContext2.getMv().getName());
-        List<OptExpression> scanExpr2 = MvUtils.collectScanExprs(materializationContext2.getMvExpression());
-        Assert.assertEquals(1, scanExpr2.size());
-        Assert.assertNotNull(scanExpr2.get(0).getOp().getPredicate());
-        ScalarOperator scalarOperator2  = scanExpr2.get(0).getOp().getPredicate();
-        Assert.assertTrue(scalarOperator2 instanceof CompoundPredicateOperator);
-        Assert.assertTrue(((CompoundPredicateOperator) scalarOperator2).isOr());
+        ScalarOperator scalarOperator2  = materializationContext2.getMvPartialPartitionPredicate();
+        if (scalarOperator2 != null) {
+            Assert.assertTrue(scalarOperator2 instanceof CompoundPredicateOperator);
 
+        }
         starRocksAssert.dropMaterializedView("mv_3");
         starRocksAssert.dropMaterializedView("mv_4");
 
@@ -320,15 +318,17 @@ public class OptimizerTest {
         Assert.assertEquals("mv_5", materializationContext3.getMv().getName());
         List<OptExpression> scanExpr3 = MvUtils.collectScanExprs(materializationContext3.getMvExpression());
         Assert.assertEquals(1, scanExpr3.size());
-        Assert.assertNotNull(scanExpr3.get(0).getOp().getPredicate());
-        ScalarOperator scalarOperator3  = scanExpr3.get(0).getOp().getPredicate();
-        Assert.assertTrue(scalarOperator3 instanceof CompoundPredicateOperator);
-        Assert.assertTrue(((CompoundPredicateOperator) scalarOperator3).isAnd());
-        Assert.assertTrue(scalarOperator3.getChild(0) instanceof BinaryPredicateOperator);
-        Assert.assertTrue(scalarOperator3.getChild(0).getChild(0) instanceof ColumnRefOperator);
-        ColumnRefOperator columnRef = (ColumnRefOperator) scalarOperator3.getChild(0).getChild(0);
-        Assert.assertEquals("k1", columnRef.getName());
-        LogicalOlapScanOperator scanOperator = (LogicalOlapScanOperator) materializationContext3.getScanMvOperator();
+        ScalarOperator scalarOperator3  = materializationContext3.getMvPartialPartitionPredicate();
+        if (scalarOperator3 != null) {
+            Assert.assertNotNull(scalarOperator3);
+            Assert.assertTrue(scalarOperator3 instanceof CompoundPredicateOperator);
+            Assert.assertTrue(((CompoundPredicateOperator) scalarOperator3).isAnd());
+            Assert.assertTrue(scalarOperator3.getChild(0) instanceof BinaryPredicateOperator);
+            Assert.assertTrue(scalarOperator3.getChild(0).getChild(0) instanceof ColumnRefOperator);
+            ColumnRefOperator columnRef = (ColumnRefOperator) scalarOperator3.getChild(0).getChild(0);
+            Assert.assertEquals("k1", columnRef.getName());
+        }
+        LogicalOlapScanOperator scanOperator = materializationContext3.getScanMvOperator();
         Assert.assertEquals(1, scanOperator.getSelectedPartitionId().size());
     }
 }

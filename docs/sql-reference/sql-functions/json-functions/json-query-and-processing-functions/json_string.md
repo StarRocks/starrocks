@@ -12,7 +12,7 @@ json_string(json_object_expr)
 
 ## Parameters
 
-- `json_object_expr`：the expression that represents the JSON object. The object can be a JSON column, or a JSON object that is produced by a JSON constructor function such as PARSE_JSON.
+- `json_object_expr`: the expression that represents the JSON object. The object can be a JSON column, or a JSON object that is produced by a JSON constructor function such as PARSE_JSON.
 
 ## Return value
 

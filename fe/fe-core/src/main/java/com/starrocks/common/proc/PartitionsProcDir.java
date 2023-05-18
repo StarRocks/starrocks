@@ -99,7 +99,7 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     private void createTitleNames() {
-        if (table.isLakeTable()) {
+        if (table.isCloudNativeTableOrMaterializedView()) {
             ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
                     .add("PartitionId")
                     .add("PartitionName")
@@ -263,13 +263,13 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     private List<List<Comparable>> getPartitionInfos() {
-        return table.isLakeTable() ? getLakePartitionInfos() : getOlapPartitionInfos();
+        return table.isCloudNativeTableOrMaterializedView() ? getLakePartitionInfos() : getOlapPartitionInfos();
     }
 
     private List<List<Comparable>> getOlapPartitionInfos() {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(table);
-        Preconditions.checkState(table.isNativeTable());
+        Preconditions.checkState(table.isOlapTableOrMaterializedView());
 
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
@@ -308,7 +308,7 @@ public class PartitionsProcDir implements ProcDirInterface {
     private List<List<Comparable>> getLakePartitionInfos() {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(table);
-        Preconditions.checkState(table.isNativeTable());
+        Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
 
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
@@ -319,7 +319,7 @@ public class PartitionsProcDir implements ProcDirInterface {
 
             // for range partitions, we return partitions in ascending range order by default.
             // this is to be consistent with the behaviour before 0.12
-            if (tblPartitionInfo.getType() == PartitionType.RANGE) {
+            if (tblPartitionInfo.isRangePartition()) {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) tblPartitionInfo;
                 partitionIds = rangePartitionInfo.getSortedRangeMap(isTempPartition).stream()
                         .map(Map.Entry::getKey).collect(Collectors.toList());
@@ -407,7 +407,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(new ByteSizeValue(partition.getDataSize())); // DataSize
         partitionInfo.add(partition.getRowCount()); // RowCount
         partitionInfo.add(cacheInfo.isEnableStorageCache() ? cacheInfo.getStorageCacheTtlS() : 0); // CacheTTL
-        partitionInfo.add(cacheInfo.isAllowAsyncWriteBack()); // AsyncWrite
+        partitionInfo.add(cacheInfo.isEnableAsyncWriteBack()); // AsyncWrite
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getAvg() : 0.0)); // AvgCS
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getP50() : 0.0)); // P50CS
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getMax() : 0.0)); // MaxCS
@@ -418,7 +418,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         List<Column> partitionColumns;
         if (this.partitionType == PartitionType.LIST) {
             partitionColumns = ((ListPartitionInfo) partitionInfo).getPartitionColumns();
-        } else if (this.partitionType == PartitionType.RANGE) {
+        } else if (partitionInfo.isRangePartition()) {
             partitionColumns = ((RangePartitionInfo) partitionInfo).getPartitionColumns();
         } else {
             partitionColumns = new ArrayList<>();
@@ -430,7 +430,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         if (this.partitionType == PartitionType.LIST) {
             return ((ListPartitionInfo) partitionInfo).getValuesFormat(partitionId);
         }
-        if (this.partitionType == PartitionType.RANGE) {
+        if (partitionInfo.isRangePartition()) {
             return ((RangePartitionInfo) partitionInfo).getRange(partitionId).toString();
         }
         return "";
@@ -448,19 +448,24 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     @Override
-    public ProcNodeInterface lookup(String partitionIdStr) throws AnalysisException {
+    public ProcNodeInterface lookup(String partitionIdOrName) throws AnalysisException {
         long partitionId = -1L;
-        try {
-            partitionId = Long.parseLong(partitionIdStr);
-        } catch (NumberFormatException e) {
-            throw new AnalysisException("Invalid partition id format: " + partitionIdStr);
-        }
+
 
         db.readLock();
         try {
-            Partition partition = table.getPartition(partitionId);
+            Partition partition;
+            try {
+                partition = table.getPartition(Long.parseLong(partitionIdOrName));
+            } catch (NumberFormatException e) {
+                partition = table.getPartition(partitionIdOrName, false);
+                if (partition == null) {
+                    partition = table.getPartition(partitionIdOrName, true);
+                }
+            }
+
             if (partition == null) {
-                throw new AnalysisException("Partition[" + partitionId + "] does not exist");
+                throw new AnalysisException("Unknown partition id or name \"" + partitionIdOrName + "\"");
             }
 
             return new IndicesProcDir(db, table, partition);

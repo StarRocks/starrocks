@@ -21,11 +21,22 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TExprNode;
 
 public class LambdaArgument extends Expr {
     private String name;
     private boolean nullable;
+
+    ColumnRefOperator transformedOp = null;
+
+    public ColumnRefOperator getTransformed() {
+        return transformedOp;
+    }
+
+    public void setTransformed(ColumnRefOperator op) {
+        transformedOp = op;
+    }
 
     public LambdaArgument(String name) {
         this.name = name;

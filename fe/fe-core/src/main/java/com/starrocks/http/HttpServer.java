@@ -80,6 +80,7 @@ import com.starrocks.http.rest.ShowDataAction;
 import com.starrocks.http.rest.ShowMetaInfoAction;
 import com.starrocks.http.rest.ShowProcAction;
 import com.starrocks.http.rest.ShowRuntimeInfoAction;
+import com.starrocks.http.rest.StopFeAction;
 import com.starrocks.http.rest.StorageTypeCheckAction;
 import com.starrocks.http.rest.TableQueryPlanAction;
 import com.starrocks.http.rest.TableRowCountAction;
@@ -171,12 +172,15 @@ public class HttpServer {
         ColocateMetaService.ColocateMetaAction.registerAction(controller);
         ColocateMetaService.MarkGroupStableAction.registerAction(controller);
         ColocateMetaService.MarkGroupUnstableAction.registerAction(controller);
+        ColocateMetaService.UpdateGroupAction.registerAction(controller);
         GlobalDictMetaService.ForbitTableAction.registerAction(controller);
         ProfileAction.registerAction(controller);
         QueryDetailAction.registerAction(controller);
         ConnectionAction.registerAction(controller);
         ShowDataAction.registerAction(controller);
         QueryDumpAction.registerAction(controller);
+        // for stop FE
+        StopFeAction.registerAction(controller);
 
         // meta service action
         File imageDir = MetaHelper.getLeaderImageDir();

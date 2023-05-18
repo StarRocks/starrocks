@@ -239,7 +239,7 @@ void CrossJoinNode::_copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, 
             dest_col->append_nulls(copy_number);
         } else {
             // repeat the value from probe table for copy_number times
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number, false);
         }
     } else {
         if (src_col->is_constant()) {
@@ -250,7 +250,7 @@ void CrossJoinNode::_copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, 
             dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, copy_number);
         } else {
             // repeat the value from probe table for copy_number times
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number, false);
         }
     }
 }
@@ -311,14 +311,14 @@ void CrossJoinNode::_copy_build_rows_with_index_base_build(ColumnPtr& dest_col, 
             _buf_selective.assign(row_count, 0);
             dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, row_count);
         } else {
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, false);
         }
     } else {
         if (src_col->is_constant()) {
             // current can't reach here
             dest_col->append_nulls(row_count);
         } else {
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, false);
         }
     }
 }
@@ -378,6 +378,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
             continue;
         }
 
+        TRY_CATCH_ALLOC_SCOPE_START()
         if ((*chunk) == nullptr) {
             // we need a valid probe chunk to initialize the new chunk.
             _init_chunk(chunk);
@@ -396,7 +397,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
         // Until _probe_chunk be done.
         if (_probe_chunk_index == _probe_chunk->num_rows()) {
             // step 2:
-            // if left chunk is bigger than right, we shuld scan left based on right.
+            // if left chunk is bigger than right, we should scan left based on right.
             if (_probe_chunk_index > _number_of_build_rows - _build_chunks_size) {
                 if (row_count > _probe_chunk_index - _probe_rows_index) {
                     row_count = _probe_chunk_index - _probe_rows_index;
@@ -471,6 +472,8 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
         if ((*chunk)->num_rows() < runtime_state()->chunk_size()) {
             continue;
         }
+
+        TRY_CATCH_ALLOC_SCOPE_END()
 
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(_join_conjuncts, (*chunk).get()));
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
@@ -638,7 +641,6 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     using namespace pipeline;
 
     // step 0: construct pipeline end with cross join right operator.
-    OpFactories left_ops = _children[0]->decompose_to_pipeline(context);
     OpFactories right_ops = _children[1]->decompose_to_pipeline(context);
 
     // define a runtime filter holder
@@ -646,15 +648,9 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
-    // communication with CrossJoinLeft through shared_datas.
-    auto* right_source = down_cast<SourceOperatorFactory*>(right_ops[0].get());
-    auto* left_source = down_cast<SourceOperatorFactory*>(left_ops[0].get());
 
     // step 1: construct pipeline end with cross join left operator(cross join left maybe not sink operator).
-
     NLJoinContextParams context_params;
-    context_params.num_left_probers = left_source->degree_of_parallelism();
-    context_params.num_right_sinkers = right_source->degree_of_parallelism();
     context_params.plan_node_id = _id;
     context_params.rf_hub = context->fragment_context()->runtime_filter_hub();
     context_params.rf_descs = std::move(_build_runtime_filters);
@@ -669,9 +665,13 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
             std::make_shared<NLJoinBuildOperatorFactory>(context->next_operator_id(), id(), cross_join_context);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(right_factory.get(), context, rc_rf_probe_collector);
+
     right_ops.emplace_back(std::move(right_factory));
     context->add_pipeline(right_ops);
+    context->push_dependent_pipeline(context->last_pipeline());
+    DeferOp pop_dependent_pipeline([context]() { context->pop_dependent_pipeline(); });
 
+    OpFactories left_ops = _children[0]->decompose_to_pipeline(context);
     // communication with CrossJoinRight through shared_data.
     auto left_factory = std::make_shared<NLJoinProbeOperatorFactory>(
             context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
@@ -679,7 +679,10 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
             _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
+    left_ops = context->maybe_interpolate_local_adpative_passthrough_exchange(runtime_state(), left_ops,
+                                                                              context->degree_of_parallelism());
     left_ops.emplace_back(std::move(left_factory));
+
     if (limit() != -1) {
         left_ops.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }

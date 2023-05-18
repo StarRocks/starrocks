@@ -19,40 +19,38 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.gson.GsonUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.HashSet;
+import java.util.Set;
 
 public class Cluster implements Writable {
+    private static final Logger LOG = LogManager.getLogger(Cluster.class);
+
     @SerializedName(value = "id")
     private long id;
     @SerializedName(value = "wgid")
     private long workerGroupId;
+    @SerializedName(value = "computeNodeIds")
+    private Set<Long> computeNodeIds = new HashSet<>();
 
-    // Note: we only record running sqls number and pending sqls in Warehouse and Cluster
-    // We suppose that sql queue tool has nothing to do with  Cluster,
-    // Cluster offers related interfaces and sql queue tool will update counter according to the implementation of sqls.
-    private AtomicInteger numRunningSqls;
-
-    public Cluster(long id, long workerGroupId) {
+    public Cluster(long id) {
         this.id = id;
-        this.workerGroupId = workerGroupId;
-    }
-
-    // set the associated worker group id when resizing
-    /*    public void setWorkerGroupId(long id) {
-        this.workerGroupId = id;
-    }*/
-
-    public long getWorkerGroupId() {
-        return workerGroupId;
+        workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
     }
 
     public long getId() {
         return id;
+    }
+
+    public long getWorkerGroupId() {
+        return workerGroupId;
     }
 
     public int getRunningSqls() {
@@ -61,17 +59,23 @@ public class Cluster implements Writable {
     public int getPendingSqls() {
         return -1;
     }
-    /*    public int setRunningSqls(int val) {
-        return 1;
-    }
-    public int addAndGetRunningSqls(int delta) {
-        return 1;
-    }*/
 
     public void getProcNodeData(BaseProcResult result) {
         result.addRow(Lists.newArrayList(String.valueOf(this.getId()),
                 String.valueOf(this.getPendingSqls()),
                 String.valueOf(this.getRunningSqls())));
+    }
+
+    public void addNode(long cnId) {
+        computeNodeIds.add(cnId);
+    }
+
+    public void dropNode(long cnId) {
+        computeNodeIds.remove(cnId);
+    }
+
+    public Set<Long> getComputeNodeIds() {
+        return computeNodeIds;
     }
 
     @Override

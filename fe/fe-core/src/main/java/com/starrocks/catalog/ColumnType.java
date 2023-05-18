@@ -35,9 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
-import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -189,10 +187,8 @@ public abstract class ColumnType {
         int scale = in.readInt();
         int precision = in.readInt();
         int len = in.readInt();
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_22) {
-            // Useless, just for back compatible
-            in.readBoolean();
-        }
+        // Useless, just for back compatible
+        in.readBoolean();
         return ScalarType.createType(primitiveType, len, precision, scale);
     }
 }

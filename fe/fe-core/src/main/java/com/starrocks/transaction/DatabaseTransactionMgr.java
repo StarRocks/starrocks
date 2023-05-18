@@ -90,7 +90,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
-import static java.lang.Long.min;
 
 /**
  * Transaction Manager in database level, as a component in GlobalTransactionMgr
@@ -248,12 +247,17 @@ public class DatabaseTransactionMgr {
         return infos;
     }
 
-    public long getMinActiveTxnId() {
-        long result = Long.MAX_VALUE;
-        for (Long txnId : idToRunningTransactionState.keySet()) {
-            result = min(result, txnId);
+    public Optional<Long> getMinActiveTxnId() {
+        readLock();
+        try {
+            if (idToRunningTransactionState.isEmpty()) {
+                return Optional.empty();
+            }
+            long minId = idToRunningTransactionState.keySet().stream().min(Comparator.comparing(Long::longValue)).get();
+            return Optional.of(minId);
+        } finally {
+            readUnlock();
         }
-        return result;
     }
 
     private void getTxnStateInfo(TransactionState txnState, List<String> info) {
@@ -848,7 +852,7 @@ public class DatabaseTransactionMgr {
                             if (successHealthyReplicaNum != replicaNum
                                     && CollectionUtils.isNotEmpty(unfinishedBackends)
                                     && currentTs
-                                    - txn.getCommitTime() < Config.quorom_publish_wait_time_ms) {
+                                    - txn.getCommitTime() < Config.quorum_publish_wait_time_ms) {
 
                                 // if all unfinished backends already down through heartbeat detect, we don't need to wait anymore
                                 for (Long backendID : unfinishedBackends) {
@@ -941,7 +945,7 @@ public class DatabaseTransactionMgr {
                         return;
                     }
 
-                    if (table.isLakeTable()) {
+                    if (table.isCloudNativeTableOrMaterializedView()) {
                         continue;
                     }
 
@@ -1135,7 +1139,7 @@ public class DatabaseTransactionMgr {
                     continue;
                 }
                 partitionCommitInfo.setVersion(partition.getNextVersion());
-                partitionCommitInfo.setVersionTime(commitTs);
+                partitionCommitInfo.setVersionTime(table.isCloudNativeTable() ? 0 : commitTs);
             }
         }
 
@@ -1222,6 +1226,12 @@ public class DatabaseTransactionMgr {
             readUnlock();
         }
         abortTransaction(transactionId, reason, null);
+    }
+
+    public void abortAllRunningTransaction() throws UserException {
+        for (Map.Entry<Long, TransactionState> entry : idToRunningTransactionState.entrySet()) {
+            abortTransaction(entry.getKey(), "The cluster is under safe mode!", null);
+        }
     }
 
     public void abortTransaction(long transactionId, String reason, TxnCommitAttachment txnCommitAttachment)

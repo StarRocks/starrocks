@@ -216,4 +216,9 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
     return materialize_chunk;
 }
 
+Status ChunksSorter::done(RuntimeState* state) {
+    TRY_CATCH_BAD_ALLOC(do_done(state));
+    return Status::OK();
+}
+
 } // namespace starrocks

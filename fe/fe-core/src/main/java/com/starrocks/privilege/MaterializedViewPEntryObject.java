@@ -19,6 +19,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
+import java.util.Objects;
 
 public class MaterializedViewPEntryObject extends TablePEntryObject {
 
@@ -34,9 +35,9 @@ public class MaterializedViewPEntryObject extends TablePEntryObject {
         String dbUUID;
         String tblUUID;
 
-        if (tokens.get(0).equals("*")) {
-            dbUUID = ALL_DATABASES_UUID;
-            tblUUID = ALL_TABLES_UUID;
+        if (Objects.equals(tokens.get(0), "*")) {
+            dbUUID = PrivilegeBuiltinConstants.ALL_DATABASES_UUID;
+            tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
         } else {
             Database database = mgr.getDb(tokens.get(0));
             if (database == null) {
@@ -44,11 +45,11 @@ public class MaterializedViewPEntryObject extends TablePEntryObject {
             }
             dbUUID = database.getUUID();
 
-            if (tokens.get(1).equals("*")) {
-                tblUUID = ALL_TABLES_UUID;
+            if (Objects.equals(tokens.get(1), "*")) {
+                tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
             } else {
                 Table table = database.getTable(tokens.get(1));
-                if (table == null || !table.getType().equals(Table.TableType.MATERIALIZED_VIEW)) {
+                if (table == null || !table.isMaterializedView()) {
                     throw new PrivObjNotFoundException(
                             "cannot find materialized view " + tokens.get(1) + " in db " + tokens.get(0));
                 }
@@ -61,6 +62,6 @@ public class MaterializedViewPEntryObject extends TablePEntryObject {
 
     @Override
     public String toString() {
-        return toStringImpl("MATERIALIZED_VIEWS");
+        return toStringImpl("MATERIALIZED VIEWS");
     }
 }

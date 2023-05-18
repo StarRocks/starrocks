@@ -34,6 +34,7 @@
 
 package com.starrocks.load.routineload;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
@@ -50,7 +51,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -97,6 +97,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     private String brokerList;
     private String topic;
+
     // optional, user want to load partitions.
     private List<Integer> customKafkaPartitions = Lists.newArrayList();
     // current kafka partitions is the actually partition which will be fetched
@@ -367,7 +368,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             return false;
         }
     }
-
+    
     @Override
     protected String getStatistic() {
         Map<String, Object> summary = Maps.newHashMap();
@@ -501,11 +502,38 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         this.customProperties.put(PROPERTY_KAFKA_GROUP_ID, name + "_" + UUID.randomUUID());
     }
 
+    @VisibleForTesting
     @Override
     protected String dataSourcePropertiesJsonToString() {
         Map<String, String> dataSourceProperties = Maps.newHashMap();
         dataSourceProperties.put("brokerList", brokerList);
         dataSourceProperties.put("topic", topic);
+        String confluentSchemaRegistryUrl = getConfluentSchemaRegistryUrl();
+        if (confluentSchemaRegistryUrl != null) {
+            // confluentSchemaRegistryUrl have three patterns:
+            // 1. https or http://key:password@addr
+            // 2. https://key:password@addr
+            // 3. http://key:password@addr
+            // https://IAP4CQUET7L243C7:QEiI9CwV1szDViwIaBXiow2zXicQ1MY5/PLrmaaJE/FolDCCFmf2KPUkvv+UJozo@psrc-0kywq.us-east-2.aws.confluent.cloud
+            String[] fragments = confluentSchemaRegistryUrl.split("@");
+            if (fragments.length != 2) {
+                // case 1
+                dataSourceProperties.put("confluent.schema.registry.url", confluentSchemaRegistryUrl);
+            } else {
+                if (fragments[0].length() < 5) {
+                    dataSourceProperties.put("confluent.schema.registry.url", "wrong confluent.schema.registry.url");
+                } else {
+                    // case 2
+                    if ("https".equals(fragments[0].substring(0, 5))) {
+                        String addr = "https://" + fragments[1];
+                        dataSourceProperties.put("confluent.schema.registry.url", addr);
+                    } else {
+                        String addr = "http://" + fragments[1];
+                        dataSourceProperties.put("confluent.schema.registry.url", addr);
+                    }
+                }
+            }
+        }
         List<Integer> sortedPartitions = Lists.newArrayList(currentKafkaPartitions);
         Collections.sort(sortedPartitions);
         dataSourceProperties.put("currentKafkaPartitions", Joiner.on(",").join(sortedPartitions));
@@ -554,14 +582,12 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             customKafkaPartitions.add(in.readInt());
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_51) {
-            int count = in.readInt();
-            for (int i = 0; i < count; i++) {
-                String propertyKey = Text.readString(in);
-                String propertyValue = Text.readString(in);
-                if (propertyKey.startsWith("property.")) {
-                    this.customProperties.put(propertyKey.substring(propertyKey.indexOf(".") + 1), propertyValue);
-                }
+        int count = in.readInt();
+        for (int i = 0; i < count; i++) {
+            String propertyKey = Text.readString(in);
+            String propertyValue = Text.readString(in);
+            if (propertyKey.startsWith("property.")) {
+                this.customProperties.put(propertyKey.substring(propertyKey.indexOf(".") + 1), propertyValue);
             }
         }
     }
@@ -614,6 +640,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         if (!customKafkaProperties.isEmpty()) {
             this.customProperties.putAll(customKafkaProperties);
             convertCustomProperties(true);
+        }
+
+        if (dataSourceProperties.getConfluentSchemaRegistryUrl() != null) {
+            confluentSchemaRegistryUrl = dataSourceProperties.getConfluentSchemaRegistryUrl();
         }
 
         LOG.info("modify the data source properties of kafka routine load job: {}, datasource properties: {}",

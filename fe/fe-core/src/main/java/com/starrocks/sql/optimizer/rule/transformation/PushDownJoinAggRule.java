@@ -39,7 +39,6 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -180,7 +179,7 @@ public class PushDownJoinAggRule extends TransformationRule {
         } else {
             newJoinBuilder.setProjection(
                     new Projection(newJoinPruneOutPutColumns.getStream().map(factory::getColumnRef)
-                            .collect(Collectors.toMap(Function.identity(), Function.identity())), new HashMap<>()));
+                            .collect(Collectors.toMap(Function.identity(), Function.identity()))));
         }
 
         OptExpression newJoinExpression = new OptExpression(newJoinBuilder.build());

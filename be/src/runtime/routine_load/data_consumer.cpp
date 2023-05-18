@@ -290,11 +290,17 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
     _last_visit_time = time(nullptr);
     beginning_offsets->reserve(partition_ids->size());
     latest_offsets->reserve(partition_ids->size());
+    MonotonicStopWatch watch;
+    watch.start();
     for (auto p_id : *partition_ids) {
         int64_t beginning_offset;
         int64_t latest_offset;
+        auto left_ms = timeout - watch.elapsed_time() / 1000 / 1000;
+        if (left_ms <= 0) {
+            return Status::TimedOut("get kafka partition offset timeout");
+        }
         RdKafka::ErrorCode err =
-                _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset, timeout);
+                _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset, left_ms);
         if (err != RdKafka::ERR_NO_ERROR) {
             LOG(WARNING) << "failed to query watermark offset of topic: " << _topic << " partition: " << p_id
                          << ", err: " << RdKafka::err2str(err);

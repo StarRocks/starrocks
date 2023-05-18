@@ -149,4 +149,12 @@ public class ExpressionMapping {
     public List<Expr> getAllExpressions() {
         return Lists.newArrayList(expressionToColumns.keySet());
     }
+
+    public Map<Expr, ColumnRefOperator> getExpressionToColumns() {
+        return expressionToColumns;
+    }
+
+    public void addExpressionToColumns(Map<Expr, ColumnRefOperator> expressionToColumns) {
+        this.expressionToColumns.putAll(expressionToColumns);
+    }
 }

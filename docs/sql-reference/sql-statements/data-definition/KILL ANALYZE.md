@@ -4,6 +4,8 @@
 
 Cancels a **running** collection task, including manual and custom automatic tasks.
 
+This statement is supported from v2.4.
+
 ## Syntax
 
 ```SQL

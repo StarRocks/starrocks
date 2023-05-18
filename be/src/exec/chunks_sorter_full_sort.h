@@ -49,7 +49,7 @@ public:
 
     // Append a Chunk for sort.
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
-    Status done(RuntimeState* state) override;
+    Status do_done(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
     size_t get_output_rows() const override;
@@ -75,6 +75,7 @@ private:
     template <typename T>
     ChunkPtr _late_materialize_tmpl(const ChunkPtr& chunk);
 
+protected:
     size_t _total_rows = 0;        // Total rows of sorting data
     Permutation _sort_permutation; // Temp permutation for sorting
     size_t _staging_unsorted_rows = 0;

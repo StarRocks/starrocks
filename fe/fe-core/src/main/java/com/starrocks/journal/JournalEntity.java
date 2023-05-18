@@ -69,8 +69,6 @@ import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
-import com.starrocks.persist.AlterWhClusterOplog;
-import com.starrocks.persist.AlterWhPropertyOplog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
@@ -80,6 +78,7 @@ import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
+import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.CreateUserInfo;
@@ -98,7 +97,6 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
-import com.starrocks.persist.OpWarehouseLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
@@ -109,9 +107,9 @@ import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.ResourceGroupOpEntry;
-import com.starrocks.persist.ResumeWarehouseLog;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
+import com.starrocks.persist.SecurityIntegrationInfo;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.ShardInfo;
 import com.starrocks.persist.SwapTableOperationLog;
@@ -132,14 +130,13 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.AnalyzeJob;
-import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -200,31 +197,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_CREATE_WH: {
-                data = Warehouse.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_SUSPEND_WH:
-            case OperationType.OP_DROP_WH: {
-                data = OpWarehouseLog.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_RESUME_WH: {
-                data = ResumeWarehouseLog.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_ALTER_WH_ADD_CLUSTER:
-            case OperationType.OP_ALTER_WH_REMOVE_CLUSTER: {
-                data = AlterWhClusterOplog.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_ALTER_WH_MOD_PROP: {
-                data = AlterWhPropertyOplog.read(in);
-            }
             case OperationType.OP_SAVE_AUTO_INCREMENT_ID:
             case OperationType.OP_DELETE_AUTO_INCREMENT_ID: {
                 data = new AutoIncrementInfo(null);
@@ -235,6 +207,11 @@ public class JournalEntity implements Writable {
             case OperationType.OP_CREATE_DB: {
                 data = new Database();
                 ((Database) data).readFields(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_DB_V2: {
+                data = CreateDbInfo.read(in);
                 isRead = true;
                 break;
             }
@@ -709,12 +686,12 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_ADD_ANALYZE_STATUS: {
-                data = AnalyzeStatus.read(in);
+                data = NativeAnalyzeStatus.read(in);
                 isRead = true;
                 break;
             }
             case OperationType.OP_REMOVE_ANALYZE_STATUS: {
-                data = AnalyzeStatus.read(in);
+                data = NativeAnalyzeStatus.read(in);
                 isRead = true;
                 break;
             }
@@ -805,6 +782,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DROP_USER_V2: {
                 data = UserIdentity.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_SECURITY_INTEGRATION: {
+                data = SecurityIntegrationInfo.read(in);
                 isRead = true;
                 break;
             }

@@ -37,9 +37,13 @@ package com.starrocks.metric;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.backup.AbstractJob;
+import com.starrocks.backup.BackupJob;
+import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -140,6 +144,9 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
     public static List<GaugeMetricImpl<Long>> GAUGE_ROUTINE_LOAD_LAGS;
+
+    // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
+    public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
 
     private static final ScheduledThreadPoolExecutor METRIC_TIMER =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
@@ -337,6 +344,11 @@ public final class MetricRepo {
         GAUGE_QUERY_LATENCY_P999.setValue(0.0);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_LATENCY_P999);
 
+        GAUGE_SAFE_MODE = new GaugeMetricImpl<>("safe_mode", MetricUnit.NOUNIT, "safe mode flag");
+        GAUGE_SAFE_MODE.addLabel(new MetricLabel("type", "safe_mode"));
+        GAUGE_SAFE_MODE.setValue(0);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_SAFE_MODE);
+
         // 2. counter
         COUNTER_REQUEST_ALL = new LongCounterMetric("request_total", MetricUnit.REQUESTS, "total request");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_REQUEST_ALL);
@@ -408,6 +420,22 @@ public final class MetricRepo {
         COUNTER_UNFINISHED_RESTORE_JOB = new LongCounterMetric("unfinished_restore_job", MetricUnit.REQUESTS,
         "current unfinished restore job");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_RESTORE_JOB);
+        List<Database> dbs = Lists.newArrayList();
+        if (GlobalStateMgr.getCurrentState().getIdToDb() != null) {
+            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
+                dbs.add(entry.getValue());
+            }
+
+            for (Database db : dbs) {
+                AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
+                if (jobI instanceof BackupJob && !((BackupJob) jobI).isDone()) {
+                    COUNTER_UNFINISHED_BACKUP_JOB.increase(1L);
+                } else if (jobI instanceof RestoreJob && !((RestoreJob) jobI).isDone()) {
+                    COUNTER_UNFINISHED_RESTORE_JOB.increase(1L);
+                }
+
+            }
+        }
 
         // 3. histogram
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));
@@ -528,7 +556,9 @@ public final class MetricRepo {
 
     public static void updateRoutineLoadProcessMetrics() {
         List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadManager().getRoutineLoadJobByState(
-                Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE, RoutineLoadJob.JobState.RUNNING));
+                Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
+                                RoutineLoadJob.JobState.PAUSED,
+                                RoutineLoadJob.JobState.RUNNING));
 
         List<RoutineLoadJob> kafkaJobs = jobs.stream()
                 .filter(job -> (job instanceof KafkaRoutineLoadJob)
@@ -683,26 +713,20 @@ public final class MetricRepo {
     private static void collectDatabaseMetrics(MetricVisitor visitor) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<String> dbNames = globalStateMgr.getDbNames();
-        GaugeMetricImpl databaseNum = new GaugeMetricImpl<>(
+        GaugeMetricImpl<Integer> databaseNum = new GaugeMetricImpl<>(
                 "database_num", MetricUnit.OPERATIONS, "count of database");
-        long dbNum = 0;
+        int dbNum = 0;
         for (String dbName : dbNames) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (null == db) {
                 continue;
             }
             dbNum++;
-            db.readLock();
-            try {
-                GaugeMetricImpl tableNum = new GaugeMetricImpl<>(
-                        "table_num", MetricUnit.OPERATIONS, "count of table");
-                tableNum.setValue(0L);
-                tableNum.setValue(db.getTables().size());
-                tableNum.addLabel(new MetricLabel("db_name", dbName));
-                visitor.visit(tableNum);
-            } finally {
-                db.readUnlock();
-            }
+            GaugeMetricImpl<Integer> tableNum = new GaugeMetricImpl<>(
+                    "table_num", MetricUnit.OPERATIONS, "count of table");
+            tableNum.setValue(db.getTableNumber());
+            tableNum.addLabel(new MetricLabel("db_name", dbName));
+            visitor.visit(tableNum);
         }
         databaseNum.setValue(dbNum);
         visitor.visit(databaseNum);

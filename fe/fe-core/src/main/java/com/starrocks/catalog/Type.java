@@ -151,6 +151,8 @@ public abstract class Type implements Cloneable {
     public static final Type ARRAY_DECIMAL64 = new ArrayType(Type.DECIMAL64);
     public static final Type ARRAY_DECIMAL128 = new ArrayType(Type.DECIMAL128);
 
+    public static final Type MAP_VARCHAR_VARCHAR = new MapType(Type.VARCHAR, Type.VARCHAR);
+
     public static final ImmutableList<ScalarType> INTEGER_TYPES =
             ImmutableList.of(BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT);
 
@@ -580,7 +582,7 @@ public abstract class Type implements Cloneable {
     /**
      * Used for Nest Type
      */
-    public void setSelectedField(int pos, boolean needSetChildren) {
+    public void setSelectedField(ComplexTypeAccessPath accessPath, boolean needSetChildren) {
         throw new IllegalStateException("setSelectedField() is not implemented for type " + toSql());
     }
 
@@ -666,6 +668,10 @@ public abstract class Type implements Cloneable {
     public boolean isOnlyMetricType() {
         return isScalarType(PrimitiveType.HLL) || isScalarType(PrimitiveType.BITMAP) ||
                 isScalarType(PrimitiveType.PERCENTILE);
+    }
+
+    public boolean isValidMapKeyType() {
+        return !isComplexType() && !isJsonType() && !isOnlyMetricType() && !isFunctionType();
     }
 
     public static List<Type> getSupportedTypes() {
@@ -771,11 +777,6 @@ public abstract class Type implements Cloneable {
         // TODO(mofei) support distributed by for JSON
         return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType()
                 && !isFunctionType() && !isBinaryType();
-    }
-
-    public boolean isKeyType() {
-        // TODO(zhuming): support define a key column of type array.
-        return !(isFloatingPointType() || isComplexType() || isOnlyMetricType() || isJsonType() || isBinaryType());
     }
 
     public boolean canBeWindowFunctionArgumentTypes() {
@@ -980,6 +981,15 @@ public abstract class Type implements Cloneable {
     public abstract void toThrift(TTypeDesc container);
 
     /**
+     * Returns true if the other can be fully compatible with this type.
+     * fully compatible means that all possible values of this type can be represented by the other type,
+     * and no null values will be produced if we cast this as the other.
+     * This is closely related to the implementation by BE.
+     * @TODO: the currently implementation is conservative, we can add more rules later.
+     */
+    public abstract boolean isFullyCompatible(Type other);
+
+    /**
      * Returns true if this type is equal to t, or if t is a wildcard variant of this
      * type. Subclasses should override this as appropriate. The default implementation
      * here is to avoid special-casing logic in callers for concrete types.
@@ -1048,6 +1058,8 @@ public abstract class Type implements Cloneable {
             return ScalarType.canCastTo((ScalarType) from, (ScalarType) to);
         } else if (from.isArrayType() && to.isArrayType()) {
             return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
+        } else if (from.isMapType() && to.isMapType()) {
+            return canCastTo(from, to);
         } else {
             return false;
         }

@@ -64,6 +64,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -83,7 +84,7 @@ public class ResourceMgr implements Writable {
             .build();
 
     public static final ImmutableList<String> NEED_MAPPING_CATALOG_RESOURCES = new ImmutableList.Builder<String>()
-            .add("hive").add("hudi")
+            .add("hive").add("hudi").add("iceberg")
             .build();
 
     @SerializedName(value = "nameToResource")
@@ -208,6 +209,15 @@ public class ResourceMgr implements Writable {
         this.readLock();
         try {
             return nameToResource.containsKey(name);
+        } finally {
+            this.readUnlock();
+        }
+    }
+
+    public Set<String> getAllResourceName() {
+        this.readLock();
+        try {
+            return nameToResource.keySet();
         } finally {
             this.readUnlock();
         }

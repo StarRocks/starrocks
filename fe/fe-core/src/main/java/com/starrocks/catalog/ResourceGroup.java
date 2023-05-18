@@ -118,8 +118,8 @@ public class ResourceGroup implements Writable {
         return row;
     }
 
-    public List<List<String>> showVisible(String user, String roleName, String ip) {
-        return classifiers.stream().filter(c -> c.isVisible(user, roleName, ip))
+    public List<List<String>> showVisible(String user, List<String> activeRoles, String ip) {
+        return classifiers.stream().filter(c -> c.isVisible(user, activeRoles, ip))
                 .map(this::showClassifier).collect(Collectors.toList());
     }
 

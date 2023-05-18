@@ -2,7 +2,7 @@
 
 ## Description
 
-Returns the number of elements in a MAP value.
+Returns the number of elements in a MAP value, it has an alias [cardinality()](cardinality.md).
 
 From version 2.5, StarRocks supports querying complex data types MAP and STRUCT from data lakes. MAP is an unordered collection of key-value pairs, for example, `{"a":1, "b":2}`. One key-value pair constitutes one element, for example, `{"a":1, "b":2}` contains two elements.
 

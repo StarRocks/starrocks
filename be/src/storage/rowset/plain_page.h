@@ -124,7 +124,7 @@ private:
 template <LogicalType Type>
 class PlainPageDecoder : public PageDecoder {
 public:
-    PlainPageDecoder(Slice data, const PageDecoderOptions& options) : _data(data), _options(options) {}
+    PlainPageDecoder(Slice data) : _data(data) {}
 
     Status init() override {
         CHECK(!_parsed);
@@ -247,7 +247,6 @@ public:
 
 private:
     Slice _data;
-    PageDecoderOptions _options;
     bool _parsed{false};
     uint32_t _num_elems{0};
     uint32_t _cur_idx{0};

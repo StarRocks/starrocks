@@ -63,7 +63,7 @@ import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowLoadStmt;
 import com.starrocks.sql.ast.ShowLoadWarningsStmt;
-import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
@@ -163,7 +163,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowMaterializedViewStatement(ShowMaterializedViewStmt node, ConnectContext context) {
+        public Void visitShowMaterializedViewStatement(ShowMaterializedViewsStmt node, ConnectContext context) {
             String db = node.getDb();
             db = getDatabaseName(db, context);
             node.setDb(db);
@@ -401,7 +401,7 @@ public class ShowStmtAnalyzer {
                         throw new SemanticException(String.format("Unknown proc node path: %s", procString));
                     }
                 } else {
-                    if (table.isNativeTable()) {
+                    if (table.isNativeTableOrMaterializedView()) {
                         node.setOlapTable(true);
                         OlapTable olapTable = (OlapTable) table;
                         Set<String> bfColumns = olapTable.getCopiedBfColumns();

@@ -1,0 +1,10 @@
+{
+  "type" : "array",
+  "items" : {
+    "type" : "array",
+    "items" : {
+      "type" : "array",
+      "items" : "long"
+    }
+  }
+}

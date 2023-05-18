@@ -16,8 +16,8 @@
 package com.starrocks.lake.backup;
 
 import autovalue.shaded.com.google.common.common.collect.Maps;
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.backup.BackupJobInfo;
@@ -125,7 +125,7 @@ public class LakeRestoreJob extends RestoreJob {
                 Partition part = tbl.getPartition(idChain.getPartId());
                 MaterializedIndex index = part.getIndex(idChain.getIdxId());
                 tablet = (LakeTablet) index.getTablet(idChain.getTabletId());
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tablet.getPrimaryBackendId());
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tablet.getPrimaryComputeNodeId());
                 LakeTableSnapshotInfo info = new LakeTableSnapshotInfo(db.getId(), idChain.getTblId(),
                         idChain.getPartId(), idChain.getIdxId(), idChain.getTabletId(),
                         backend.getId(), tbl.getSchemaHashByIndexId(index.getId()), -1);
@@ -307,8 +307,7 @@ public class LakeRestoreJob extends RestoreJob {
             FilePathInfo pathInfo = globalStateMgr.getStarOSAgent().allocateFilePath(remoteOlapTbl.getId());
             LakeTable remoteLakeTbl = (LakeTable) remoteOlapTbl;
             StorageInfo storageInfo = remoteLakeTbl.getTableProperty().getStorageInfo();
-            remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.isEnableStorageCache(),
-                    storageInfo.getStorageCacheTtlS(), storageInfo.isAllowAsyncWriteBack());
+            remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.getStorageCacheInfo());
             remoteLakeTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
         } catch (DdlException e) {
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());

@@ -3,12 +3,12 @@ show backends;
 create database test_number_bf58dfca_6183_11ed_b695_00163e0b9de0;
 use test_number_bf58dfca_6183_11ed_b695_00163e0b9de0;
 select 601070.968843214312543654*8.54914236*0.4790000000019*0.98901*18727.790683412432141;
--- result: 
-E: (1064, 'Return scale(39) exceeds maximum value(38), please cast decimal type to low-precision one')
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Return scale(39) exceeds maximum value(38), please cast decimal type to low-precision one.')
 -- !result
 set sql_mode = 'MODE_DOUBLE_LITERAL,ONLY_FULL_GROUP_BY,PIPES_AS_CONCAT';
 select 601070.968843214312543654*8.54914236*0.4790000000019*0.98901*18727.790683412432141;
--- result: 
+-- result:
 45590152444.36925
 -- !result
 drop database test_number_bf58dfca_6183_11ed_b695_00163e0b9de0;
@@ -72,7 +72,6 @@ CREATE TABLE `test_decimal_type6` (
              PROPERTIES (
              "replication_num" = "3",
              "in_memory" = "false",
-             "storage_format" = "DEFAULT",
              "enable_persistent_index" = "false"
              );
 insert into test_decimal_type6 values(1,1,0.100000000000000000),(2,10,0.100000000000000000);

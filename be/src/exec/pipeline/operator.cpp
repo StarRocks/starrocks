@@ -32,6 +32,7 @@ const int32_t Operator::s_pseudo_plan_node_id_for_export_sink = -97;
 const int32_t Operator::s_pseudo_plan_node_id_for_olap_table_sink = -98;
 const int32_t Operator::s_pseudo_plan_node_id_for_result_sink = -99;
 const int32_t Operator::s_pseudo_plan_node_id_upper_bound = -100;
+const int32_t Operator::s_pseudo_plan_node_id_for_iceberg_table_sink = -101;
 
 Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id,
                    int32_t driver_sequence)
@@ -62,7 +63,7 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 
 Status Operator::prepare(RuntimeState* state) {
     _mem_tracker = std::make_shared<MemTracker>(_common_metrics.get(), std::make_tuple(true, true, true), "Operator",
-                                                -1, _name, state->instance_mem_tracker());
+                                                -1, _name, nullptr);
     _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_common_metrics, "PushTotalTime");
     _pull_timer = ADD_TIMER(_common_metrics, "PullTotalTime");

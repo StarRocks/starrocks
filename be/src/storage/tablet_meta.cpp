@@ -196,7 +196,7 @@ Status TabletMeta::deserialize(std::string_view data) {
     return Status::OK();
 }
 
-void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
+void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaPB* ptablet_schema_pb) {
     auto& tablet_meta_pb = *ptablet_meta_pb;
     _table_id = tablet_meta_pb.table_id();
     _partition_id = tablet_meta_pb.partition_id();
@@ -242,11 +242,20 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
     }
 
     // init _schema
-    if (tablet_meta_pb.schema().has_id() && tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
-        // Does not collect the memory usage of |_schema|.
-        _schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema()).first;
+    if (ptablet_schema_pb == nullptr) {
+        if (tablet_meta_pb.schema().has_id() && tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
+            // Does not collect the memory usage of |_schema|.
+            _schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema()).first;
+        } else {
+            _schema = std::make_shared<const TabletSchema>(tablet_meta_pb.schema());
+        }
     } else {
-        _schema = std::make_shared<const TabletSchema>(tablet_meta_pb.schema());
+        if (ptablet_schema_pb->has_id() && ptablet_schema_pb->id() != TabletSchema::invalid_id()) {
+            // Does not collect the memory usage of |_schema|.
+            _schema = GlobalTabletSchemaMap::Instance()->emplace(*ptablet_schema_pb).first;
+        } else {
+            _schema = std::make_shared<const TabletSchema>(*ptablet_schema_pb);
+        }
     }
 
     // init _rs_metas
@@ -275,6 +284,13 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
         binlog_config.update(tablet_meta_pb.binlog_config());
         set_binlog_config(binlog_config);
     }
+
+    if (tablet_meta_pb.has_binlog_min_lsn()) {
+        auto& lsnPb = tablet_meta_pb.binlog_min_lsn();
+        _binlog_min_lsn = BinlogLsn(lsnPb.version(), lsnPb.seq_id());
+    }
+
+    _enable_shortcut_compaction = tablet_meta_pb.enable_shortcut_compaction();
 }
 
 void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
@@ -327,7 +343,12 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
 
     if (_binlog_config != nullptr) {
         _binlog_config->to_pb(tablet_meta_pb->mutable_binlog_config());
+        BinlogLsnPB* lsn = tablet_meta_pb->mutable_binlog_min_lsn();
+        lsn->set_version(_binlog_min_lsn.version());
+        lsn->set_seq_id(_binlog_min_lsn.seq_id());
     }
+
+    tablet_meta_pb->set_enable_shortcut_compaction(_enable_shortcut_compaction);
 }
 
 void TabletMeta::to_json(string* json_string, json2pb::Pb2JsonOptions& options) {

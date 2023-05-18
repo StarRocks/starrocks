@@ -39,13 +39,14 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.system.information.InfoSchemaDb;
+import com.starrocks.catalog.system.starrocks.StarRocksDb;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
@@ -55,6 +56,7 @@ import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropInfo;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -97,6 +99,9 @@ public class Database extends MetaObject implements Writable {
     public static final long TRY_LOCK_TIMEOUT_MS = 100L;
 
     private long id;
+
+    // catalogName is set if the database comes from an external catalog
+    private String catalogName;
     private String fullQualifiedName;
     private QueryableReentrantReadWriteLock rwLock;
 
@@ -119,11 +124,18 @@ public class Database extends MetaObject implements Writable {
     // but that'ok to meet our needs.
     private volatile boolean exist = true;
 
+    // For external database location like hdfs://name_node:9000/user/hive/warehouse/test.db/
+    private String location;
+
     public Database() {
         this(0, null);
     }
 
     public Database(long id, String name) {
+        this(id, name, "");
+    }
+
+    public Database(long id, String name, String location) {
         this.id = id;
         this.fullQualifiedName = name;
         if (this.fullQualifiedName == null) {
@@ -134,6 +146,7 @@ public class Database extends MetaObject implements Writable {
         this.nameToTable = new ConcurrentHashMap<>();
         this.dataQuotaBytes = FeConstants.DEFAULT_DB_DATA_QUOTA_BYTES;
         this.replicaQuotaSize = FeConstants.DEFAULT_DB_REPLICA_QUOTA_SIZE;
+        this.location = location;
     }
 
     private String getOwnerInfo(Thread owner) {
@@ -305,6 +318,9 @@ public class Database extends MetaObject implements Writable {
      * @return unique id of database in string format
      */
     public String getUUID() {
+        if (CatalogMgr.isExternalCatalog(catalogName)) {
+            return catalogName + "." + fullQualifiedName;
+        }
         return Long.toString(id);
     }
 
@@ -314,6 +330,15 @@ public class Database extends MetaObject implements Writable {
 
     public String getFullName() {
         return fullQualifiedName;
+    }
+
+    public String getLocation() {
+        return location;
+    }
+
+    public Database setLocation(String location) {
+        this.location = location;
+        return this;
     }
 
     public void setNameWithLock(String newName) {
@@ -360,7 +385,7 @@ public class Database extends MetaObject implements Writable {
         readLock();
         try {
             for (Table table : this.idToTable.values()) {
-                if (!table.isLocalTable()) {
+                if (!table.isOlapTableOrMaterializedView()) {
                     continue;
                 }
 
@@ -378,7 +403,7 @@ public class Database extends MetaObject implements Writable {
         readLock();
         try {
             for (Table table : this.idToTable.values()) {
-                if (!table.isLocalTable()) {
+                if (!table.isOlapTableOrMaterializedView()) {
                     continue;
                 }
 
@@ -507,8 +532,9 @@ public class Database extends MetaObject implements Writable {
         }
 
         if (table instanceof OlapTable && table.hasAutoIncrementColumn()) {
-            GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId);
-            ((OlapTable) table).sendDropAutoIncrementMapTask();
+            if (!isReplay) {
+                ((OlapTable) table).sendDropAutoIncrementMapTask();
+            }
         }
 
         table.onDrop(this, isForceDrop, isReplay);
@@ -519,6 +545,7 @@ public class Database extends MetaObject implements Writable {
             Table oldTable = GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table);
             runnable = (oldTable != null) ? oldTable.delete(isReplay) : null;
         } else {
+            GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, isReplay);
             runnable = table.delete(isReplay);
         }
 
@@ -574,6 +601,10 @@ public class Database extends MetaObject implements Writable {
         return new ArrayList<Table>(idToTable.values());
     }
 
+    public int getTableNumber() {
+        return idToTable.size();
+    }
+
     public List<Table> getViews() {
         List<Table> views = new ArrayList<>();
         for (Table table : idToTable.values()) {
@@ -587,7 +618,7 @@ public class Database extends MetaObject implements Writable {
     public List<MaterializedView> getMaterializedViews() {
         List<MaterializedView> materializedViews = new ArrayList<>();
         for (Table table : idToTable.values()) {
-            if (TableType.MATERIALIZED_VIEW == table.getType()) {
+            if (table.isMaterializedView()) {
                 materializedViews.add((MaterializedView) table);
             }
         }
@@ -606,6 +637,25 @@ public class Database extends MetaObject implements Writable {
     public Table getTable(String tableName) {
         if (nameToTable.containsKey(tableName)) {
             return nameToTable.get(tableName);
+        }
+        return null;
+    }
+
+    public Pair<Table, MaterializedIndex> getMaterializedViewIndex(String mvName) {
+        // TODO: add an index to speed it up.
+        for (Table table : idToTable.values()) {
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                for (MaterializedIndex mvIndex : olapTable.getVisibleIndex()) {
+                    String indexName = olapTable.getIndexNameById(mvIndex.getId());
+                    if (indexName == null) {
+                        continue;
+                    }
+                    if (indexName.equals(mvName)) {
+                        return Pair.create(table, mvIndex);
+                    }
+                }
+            }
         }
         return null;
     }
@@ -676,11 +726,7 @@ public class Database extends MetaObject implements Writable {
         super.readFields(in);
 
         id = in.readLong();
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            fullQualifiedName = Text.readString(in);
-        } else {
-            fullQualifiedName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        }
+        fullQualifiedName = ClusterNamespace.getNameFromFullName(Text.readString(in));
         // read groups
         int numTables = in.readInt();
         for (int i = 0; i < numTables; ++i) {
@@ -698,25 +744,19 @@ public class Database extends MetaObject implements Writable {
         // Compatible for attachDbName
         Text.readString(in);
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_47) {
-            int numEntries = in.readInt();
-            for (int i = 0; i < numEntries; ++i) {
-                String name = Text.readString(in);
-                ImmutableList.Builder<Function> builder = ImmutableList.builder();
-                int numFunctions = in.readInt();
-                for (int j = 0; j < numFunctions; ++j) {
-                    builder.add(Function.read(in));
-                }
-
-                name2Function.put(name, builder.build());
+        int numEntries = in.readInt();
+        for (int i = 0; i < numEntries; ++i) {
+            String name = Text.readString(in);
+            ImmutableList.Builder<Function> builder = ImmutableList.builder();
+            int numFunctions = in.readInt();
+            for (int j = 0; j < numFunctions; ++j) {
+                builder.add(Function.read(in));
             }
+
+            name2Function.put(name, builder.build());
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_81) {
-            replicaQuotaSize = in.readLong();
-        } else {
-            replicaQuotaSize = FeConstants.DEFAULT_DB_REPLICA_QUOTA_SIZE;
-        }
+        replicaQuotaSize = in.readLong();
     }
 
     @Override
@@ -755,6 +795,14 @@ public class Database extends MetaObject implements Writable {
 
     public void setName(String name) {
         this.fullQualifiedName = name;
+    }
+
+    public void setCatalogName(String name) {
+        this.catalogName = name;
+    }
+
+    public String getCatalogName() {
+        return catalogName;
     }
 
     public synchronized void addFunction(Function function) throws UserException {
@@ -886,8 +934,9 @@ public class Database extends MetaObject implements Writable {
         return functions;
     }
 
-    public boolean isInfoSchemaDb() {
-        return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME);
+    public boolean isSystemDatabase() {
+        return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) ||
+                fullQualifiedName.equalsIgnoreCase(StarRocksDb.DATABASE_NAME);
     }
 
     // the invoker should hold db's writeLock

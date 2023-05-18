@@ -72,6 +72,8 @@ public:
     ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs) : ExecNode(pool, tnode, descs) {}
     ~ScanNode() override = default;
 
+    Status init(const TPlanNode& tnode, RuntimeState* state) override;
+
     // Set up counters
     Status prepare(RuntimeState* state) override;
 
@@ -114,8 +116,8 @@ public:
 
     const std::string& name() const { return _name; }
 
-    virtual int io_tasks_per_scan_operator() const { return config::io_tasks_per_scan_operator; }
-    virtual bool always_shared_scan() const { return config::scan_node_always_shared_scan; }
+    virtual int io_tasks_per_scan_operator() const { return _io_tasks_per_scan_operator; }
+    virtual bool always_shared_scan() const { return false; }
 
     // TODO: support more share_scan strategy
     void enable_shared_scan(bool enable);
@@ -136,6 +138,8 @@ protected:
     RuntimeProfile::Counter* _num_scanner_threads_started_counter = nullptr;
     std::string _name;
     bool _enable_shared_scan = false;
+    int64_t _mem_limit = 0;
+    int32_t _io_tasks_per_scan_operator = config::io_tasks_per_scan_operator;
 };
 
 } // namespace starrocks

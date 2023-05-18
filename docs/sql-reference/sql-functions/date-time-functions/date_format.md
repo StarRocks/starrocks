@@ -36,7 +36,7 @@ Here are the formats available:
 %M | Month name in full
 %m | Month name as a numeric value (00-12)
 %p | AM or PM
-%r | Time in 12 hour（hh:mm:ss AM or PM）
+%r | Time in 12 hour (hh:mm:ss AM or PM)
 %S | Seconds (00-59)
 %s | Seconds (00-59)
 %T | Time in 24 hour format (hh:mm:ss)

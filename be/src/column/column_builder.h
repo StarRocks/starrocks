@@ -87,6 +87,14 @@ public:
         _column->append_default();
     }
 
+    void append_nulls(int count) {
+        _has_null = true;
+        for (int i = 0; i < count; i++) {
+            _null_column->append(DATUM_NULL);
+        }
+        _column->append_default(count);
+    }
+
     ColumnPtr build(bool is_const) {
         if (is_const && _has_null) {
             return ColumnHelper::create_const_null_column(_column->size());

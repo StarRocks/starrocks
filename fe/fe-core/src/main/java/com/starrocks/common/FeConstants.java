@@ -43,9 +43,9 @@ public class FeConstants {
     // bloom filter false positive probability
     public static final double DEFAULT_BLOOM_FILTER_FPP = 0.05;
     // general model
-    // Current metadata version. Use this version to write journals and image
-    // for community meta version
-    public static final int META_VERSION = FeMetaVersion.VERSION_CURRENT;
+    @Deprecated
+    // for rollback compatible
+    public static final int META_VERSION = 92;
     // Current starrocks metadata version. Use this version to write journals and image
     public static final int STARROCKS_META_VERSION = StarRocksFEMetaVersion.VERSION_CURRENT;
     // use \N to indicate NULL
@@ -68,13 +68,17 @@ public class FeConstants {
 
     public static boolean USE_MOCK_DICT_MANAGER = false;
 
-    // Database and table's default configurations, we will never change them
-    public static short default_replication_num = 3;
     public static int checkpoint_interval_second = 60; // 1 minutes
     // set to true to skip some step when running FE unit test
     public static boolean runningUnitTest = false;
-    // default scheduler interval is 10 seconds
-    public static int default_scheduler_interval_millisecond = 10000;
+    // Set this flag to false to suppress showing local shuffle columns in verbose explain, when running FE unit tests.
+    public static boolean showLocalShuffleColumnsInExplain = true;
+    // set to true when replay from query dump
+    public static boolean isReplayFromQueryDump = false;
+
+    // Every 3GB, corresponds a new tablet. Assume compression ratio equals to 3,
+    // the raw data of one tablet equals to 10GB approximately
+    public static final long AUTO_DISTRIBUTION_UNIT = 3221225472L;
 
     public static String getNodeNotFoundError(boolean chooseComputeNode) {
         return chooseComputeNode ? COMPUTE_NODE_NOT_FOUND_ERROR : BACKEND_NODE_NOT_FOUND_ERROR;

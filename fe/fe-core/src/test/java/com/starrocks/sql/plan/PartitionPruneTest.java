@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.plan;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -46,8 +46,7 @@ public class PartitionPruneTest extends PlanTestBase {
                 + "DISTRIBUTED BY HASH(`k1`) BUCKETS 10\n"
                 + "PROPERTIES (\n"
                 + "\"replication_num\" = \"1\",\n"
-                + "\"in_memory\" = \"false\",\n"
-                + "\"storage_format\" = \"DEFAULT\"\n"
+                + "\"in_memory\" = \"false\"\n"
                 + ");");
     }
 

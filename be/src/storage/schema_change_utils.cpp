@@ -14,8 +14,10 @@
 
 #include "storage/schema_change_utils.h"
 
+#include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "runtime/mem_pool.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
@@ -29,6 +31,16 @@ ChunkChanger::ChunkChanger(const TabletSchema& tablet_schema) {
 
 ChunkChanger::~ChunkChanger() {
     _schema_mapping.clear();
+    for (auto it : _mc_exprs) {
+        if (it.second != nullptr) {
+            it.second->close(_state);
+        }
+    }
+}
+
+void ChunkChanger::init_runtime_state(TQueryOptions query_options, TQueryGlobals query_globals) {
+    _state = _obj_pool.add(
+            new RuntimeState(TUniqueId(), TUniqueId(), query_options, query_globals, ExecEnv::GetInstance()));
 }
 
 ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
@@ -438,6 +450,40 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
     return true;
 }
 
+Status ChunkChanger::fill_materialized_columns(ChunkPtr& new_chunk) {
+    if (_mc_exprs.size() == 0) {
+        return Status::OK();
+    }
+
+    // init for expression evaluation only
+    for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
+        new_chunk->set_slot_id_to_index(i, i);
+    }
+
+    for (auto it : _mc_exprs) {
+        ASSIGN_OR_RETURN(ColumnPtr tmp, it.second->evaluate(new_chunk.get()));
+        if (tmp->only_null()) {
+            // Only null column maybe lost type info, we append null
+            // for the chunk instead of swapping the tmp column.
+            std::dynamic_pointer_cast<NullableColumn>(new_chunk->get_column_by_index(it.first))->reset_column();
+            std::dynamic_pointer_cast<NullableColumn>(new_chunk->get_column_by_index(it.first))
+                    ->append_nulls(new_chunk->num_rows());
+        } else if (tmp->is_nullable()) {
+            new_chunk->get_column_by_index(it.first).swap(tmp);
+        } else {
+            // materialized column must be a nullable column. If tmp is not nullable column,
+            // new_chunk can not swap it directly
+            std::dynamic_pointer_cast<NullableColumn>(new_chunk->get_column_by_index(it.first))
+                    ->swap_by_data_column(tmp);
+        }
+    }
+
+    // reset the slot-index map for compatibility
+    new_chunk->reset_slot_id_to_index();
+
+    return Status::OK();
+}
+
 #undef CONVERT_FROM_TYPE
 #undef TYPE_REINTERPRET_CAST
 #undef ASSIGN_DEFAULT_VALUE
@@ -483,7 +529,8 @@ void SchemaChangeUtils::init_materialized_params(const TAlterTabletReqV2& reques
 Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const TabletSchema& new_schema,
                                         ChunkChanger* chunk_changer,
                                         const MaterializedViewParamMap& materialized_view_param_map,
-                                        bool has_delete_predicates, bool* sc_sorting, bool* sc_directly) {
+                                        bool has_delete_predicates, bool* sc_sorting, bool* sc_directly,
+                                        std::unordered_set<int>* materialized_column_idxs) {
     std::map<ColumnId, ColumnId> base_to_new;
     for (int i = 0; i < new_schema.num_columns(); ++i) {
         const TabletColumn& new_column = new_schema.column(i);
@@ -506,7 +553,11 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
         }
 
         int32_t column_index = base_schema.field_index(column_name);
-        if (column_index >= 0) {
+        // if materialized_column_idxs contain column_index, it means that
+        // MODIFY MATERIALIZED COLUMN is executed. The value for the new schema
+        // must be re-compute by the new expression so the column mapping can not be set.
+        if (column_index >= 0 && ((materialized_column_idxs == nullptr) ||
+                                  materialized_column_idxs->find(column_index) == materialized_column_idxs->end())) {
             column_mapping->ref_column = column_index;
             base_to_new[column_index] = i;
             continue;

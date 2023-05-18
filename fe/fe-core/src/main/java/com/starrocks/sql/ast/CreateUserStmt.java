@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.UserDesc;
+import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
@@ -37,7 +38,11 @@ public class CreateUserStmt extends BaseCreateAlterUserStmt {
     private final boolean ifNotExists;
 
     public CreateUserStmt(boolean ifNotExists, UserDesc userDesc, List<String> defaultRoles) {
-        super(userDesc, SetRoleType.ROLE, defaultRoles);
+        this(ifNotExists, userDesc, defaultRoles, NodePosition.ZERO);
+    }
+
+    public CreateUserStmt(boolean ifNotExists, UserDesc userDesc, List<String> defaultRoles, NodePosition pos) {
+        super(userDesc, SetRoleType.ROLE, defaultRoles, pos);
         this.ifNotExists = ifNotExists;
     }
 

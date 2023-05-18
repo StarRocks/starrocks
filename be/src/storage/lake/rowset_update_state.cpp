@@ -19,6 +19,7 @@
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/location_provider.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/segment_rewriter.h"
@@ -41,7 +42,7 @@ RowsetUpdateState::~RowsetUpdateState() {
 }
 
 Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version,
-                               Tablet* tablet, const MetaFileBuilder* builder) {
+                               Tablet* tablet, const MetaFileBuilder* builder, bool need_resolve_conflict) {
     if (UNLIKELY(!_status.ok())) {
         return _status;
     }
@@ -57,88 +58,19 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMet
             }
         }
     });
+    if (need_resolve_conflict) {
+        RETURN_IF_ERROR(_resolve_conflict(op_write, metadata, base_version, tablet, builder));
+    }
     return _status;
 }
 
 Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet) {
-    std::stringstream cost_str;
-    MonotonicStopWatch watch;
-    watch.start();
-
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
-
-    vector<uint32_t> pk_columns;
-    for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
-        pk_columns.push_back((uint32_t)i);
-    }
-    Schema pkey_schema = ChunkHelper::convert_schema(*tablet_schema, pk_columns);
-    std::unique_ptr<Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
-        CHECK(false) << "create column for primary key encoder failed";
-    }
-
-    auto root_path = tablet->metadata_root_location();
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
-    // always one file for now.
-    for (const std::string& path : op_write.dels()) {
-        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(tablet->del_location(path)));
-        ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
-        std::vector<uint8_t> read_buffer(file_size);
-        RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
-        auto col = pk_column->clone();
-        if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
-            return Status::InternalError("column deserialization failed");
-        }
-        _deletes.emplace_back(std::move(col));
-    }
-    cost_str << " [read deletes] " << watch.elapsed_time();
-    watch.reset();
-
     std::unique_ptr<Rowset> rowset_ptr =
             std::make_unique<Rowset>(tablet, std::make_shared<RowsetMetadataPB>(op_write.rowset()));
-    OlapReaderStatistics stats;
-    auto res = rowset_ptr->get_each_segment_iterator(pkey_schema, &stats);
-    if (!res.ok()) {
-        return res.status();
-    }
-    auto& itrs = res.value();
-    CHECK(itrs.size() == rowset_ptr->num_segments())
-            << "itrs.size != num_segments " << itrs.size() << ", " << rowset_ptr->num_segments();
-    _upserts.resize(rowset_ptr->num_segments());
-    // only hold pkey, so can use larger chunk size
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
-    auto chunk = chunk_shared_ptr.get();
-    for (size_t i = 0; i < itrs.size(); i++) {
-        auto& dest = _upserts[i];
-        auto col = pk_column->clone();
-        auto itr = itrs[i].get();
-        if (itr != nullptr) {
-            auto num_rows = rowset_ptr->num_rows();
-            col->reserve(num_rows);
-            while (true) {
-                chunk->reset();
-                auto st = itr->get_next(chunk);
-                if (st.is_end_of_file()) {
-                    break;
-                } else if (!st.ok()) {
-                    return st;
-                } else {
-                    PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
-                }
-            }
-            itr->close();
-        }
-        dest = std::move(col);
-    }
-    cost_str << " [read upserts] " << watch.elapsed_time();
-    LOG(INFO) << "RowsetUpdateState do_load cost: " << cost_str.str();
 
-    for (const auto& upsert : _upserts) {
-        _memory_usage += upsert != nullptr ? upsert->memory_usage() : 0;
-    }
-    for (const auto& one_delete : _deletes) {
-        _memory_usage += one_delete != nullptr ? one_delete->memory_usage() : 0;
-    }
+    RETURN_IF_ERROR(_do_load_upserts_deletes(op_write, *tablet_schema, tablet, rowset_ptr.get()));
+
     if (!op_write.has_txn_meta() || rowset_ptr->num_segments() == 0 || op_write.txn_meta().has_merge_condition()) {
         return Status::OK();
     }
@@ -220,10 +152,87 @@ void RowsetUpdateState::plan_read_by_rssid(const std::vector<uint64_t>& rowids, 
     }
 }
 
-Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite& op_write,
-                                                         const TabletMetadata& metadata, Tablet* tablet,
-                                                         const TabletSchema& tablet_schema) {
-    int64_t t_start = MonotonicMillis();
+Status RowsetUpdateState::_do_load_upserts_deletes(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema,
+                                                   Tablet* tablet, Rowset* rowset_ptr) {
+    std::stringstream cost_str;
+    MonotonicStopWatch watch;
+    watch.start();
+
+    vector<uint32_t> pk_columns;
+    for (size_t i = 0; i < tablet_schema.num_key_columns(); i++) {
+        pk_columns.push_back((uint32_t)i);
+    }
+    Schema pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+    std::unique_ptr<Column> pk_column;
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+        CHECK(false) << "create column for primary key encoder failed";
+    }
+
+    auto root_path = tablet->metadata_root_location();
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
+    // always one file for now.
+    for (const std::string& path : op_write.dels()) {
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(tablet->del_location(path)));
+        ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
+        std::vector<uint8_t> read_buffer(file_size);
+        RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
+        auto col = pk_column->clone();
+        if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
+            return Status::InternalError("column deserialization failed");
+        }
+        _deletes.emplace_back(std::move(col));
+    }
+    cost_str << " [read deletes] " << watch.elapsed_time();
+    watch.reset();
+
+    OlapReaderStatistics stats;
+    auto res = rowset_ptr->get_each_segment_iterator(pkey_schema, &stats);
+    if (!res.ok()) {
+        return res.status();
+    }
+    auto& itrs = res.value();
+    CHECK(itrs.size() == rowset_ptr->num_segments())
+            << "itrs.size != num_segments " << itrs.size() << ", " << rowset_ptr->num_segments();
+    _upserts.resize(rowset_ptr->num_segments());
+    // only hold pkey, so can use larger chunk size
+    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
+    auto chunk = chunk_shared_ptr.get();
+    for (size_t i = 0; i < itrs.size(); i++) {
+        auto& dest = _upserts[i];
+        auto col = pk_column->clone();
+        auto itr = itrs[i].get();
+        if (itr != nullptr) {
+            auto num_rows = rowset_ptr->num_rows();
+            col->reserve(num_rows);
+            while (true) {
+                chunk->reset();
+                auto st = itr->get_next(chunk);
+                if (st.is_end_of_file()) {
+                    break;
+                } else if (!st.ok()) {
+                    return st;
+                } else {
+                    PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+                }
+            }
+            itr->close();
+        }
+        dest = std::move(col);
+    }
+    cost_str << " [read upserts] " << watch.elapsed_time();
+    LOG(INFO) << "RowsetUpdateState do_load cost: " << cost_str.str();
+
+    for (const auto& upsert : _upserts) {
+        _memory_usage += upsert != nullptr ? upsert->memory_usage() : 0;
+    }
+    for (const auto& one_delete : _deletes) {
+        _memory_usage += one_delete != nullptr ? one_delete->memory_usage() : 0;
+    }
+
+    return Status::OK();
+}
+
+static std::vector<uint32_t> get_read_columns_ids(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema) {
     const auto& txn_meta = op_write.txn_meta();
 
     std::vector<uint32_t> update_column_ids(txn_meta.partial_update_column_ids().begin(),
@@ -236,6 +245,15 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
             read_column_ids.push_back(i);
         }
     }
+
+    return read_column_ids;
+}
+
+Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite& op_write,
+                                                         const TabletMetadata& metadata, Tablet* tablet,
+                                                         const TabletSchema& tablet_schema) {
+    int64_t t_start = MonotonicMillis();
+    std::vector<uint32_t> read_column_ids = get_read_columns_ids(op_write, tablet_schema);
 
     auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, read_column_ids);
     size_t num_segments = op_write.rowset().segments_size();
@@ -349,9 +367,91 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
         rowset_meta->set_segments(i, op_write.rewrite_segments(i));
     }
 
-    if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
+    if (watch.elapsed_time() > /*100ms=*/100 * 1000 * 1000) {
         LOG(INFO) << "RowsetUpdateState rewrite_segment cost(ms): " << watch.elapsed_time() / 1000000;
     }
+    return Status::OK();
+}
+
+Status RowsetUpdateState::_resolve_conflict(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
+                                            int64_t base_version, Tablet* tablet, const MetaFileBuilder* builder) {
+    _builder = builder;
+    // check if base version is match and pk index has not been updated yet, and we can skip resolve conflict
+    if (base_version == _base_version && !_builder->has_update_index()) {
+        return Status::OK();
+    }
+    _base_version = base_version;
+    // skip resolve conflict when not partial update happen.
+    if (!op_write.has_txn_meta() || op_write.rowset().segments_size() == 0 ||
+        op_write.txn_meta().has_merge_condition()) {
+        return Status::OK();
+    }
+
+    const int num_segments = _partial_update_states.size();
+    // use upserts to get rowids in each segment
+    // segment id -> [rowids list]
+    std::vector<std::vector<uint64_t>> new_rss_rowids_vec;
+    new_rss_rowids_vec.resize(num_segments);
+    for (uint32_t segment_id = 0; segment_id < num_segments; segment_id++) {
+        new_rss_rowids_vec[segment_id].resize(_upserts[segment_id]->size());
+    }
+    RETURN_IF_ERROR(tablet->update_mgr()->get_rowids_from_pkindex(tablet, metadata, _upserts, _base_version, _builder,
+                                                                  &new_rss_rowids_vec));
+
+    size_t total_conflicts = 0;
+    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
+    std::vector<uint32_t> read_column_ids = get_read_columns_ids(op_write, *tablet_schema);
+    // get rss_rowids to identify conflict exist or not
+    int64_t t_start = MonotonicMillis();
+    for (uint32_t segment_id = 0; segment_id < num_segments; segment_id++) {
+        std::vector<uint64_t>& new_rss_rowids = new_rss_rowids_vec[segment_id];
+
+        uint32_t num_rows = new_rss_rowids.size();
+        std::vector<uint32_t> conflict_idxes;
+        std::vector<uint64_t> conflict_rowids;
+        DCHECK_EQ(num_rows, _partial_update_states[segment_id].src_rss_rowids.size());
+        for (size_t i = 0; i < new_rss_rowids.size(); ++i) {
+            uint64_t new_rss_rowid = new_rss_rowids[i];
+            uint32_t new_rssid = new_rss_rowid >> 32;
+            uint64_t rss_rowid = _partial_update_states[segment_id].src_rss_rowids[i];
+            uint32_t rssid = rss_rowid >> 32;
+
+            if (rssid != new_rssid) {
+                conflict_idxes.emplace_back(i);
+                conflict_rowids.emplace_back(new_rss_rowid);
+            }
+        }
+        if (!conflict_idxes.empty()) {
+            total_conflicts += conflict_idxes.size();
+            std::vector<std::unique_ptr<Column>> read_columns;
+            read_columns.resize(_partial_update_states[segment_id].write_columns.size());
+            for (uint32_t i = 0; i < read_columns.size(); ++i) {
+                read_columns[i] = _partial_update_states[segment_id].write_columns[i]->clone_empty();
+            }
+            size_t num_default = 0;
+            std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+            std::vector<uint32_t> read_idxes;
+            plan_read_by_rssid(conflict_rowids, &num_default, &rowids_by_rssid, &read_idxes);
+            DCHECK_EQ(conflict_idxes.size(), read_idxes.size());
+            RETURN_IF_ERROR(tablet->update_mgr()->get_column_values(tablet, metadata, op_write, *tablet_schema,
+                                                                    read_column_ids, num_default > 0, rowids_by_rssid,
+                                                                    &read_columns));
+
+            for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
+                std::unique_ptr<Column> new_write_column =
+                        _partial_update_states[segment_id].write_columns[col_idx]->clone_empty();
+                new_write_column->append_selective(*read_columns[col_idx], read_idxes.data(), 0, read_idxes.size());
+                RETURN_IF_ERROR(_partial_update_states[segment_id].write_columns[col_idx]->update_rows(
+                        *new_write_column, conflict_idxes.data()));
+            }
+        }
+    }
+    int64_t t_end = MonotonicMillis();
+    LOG(INFO) << strings::Substitute(
+            "lake resolve_conflict tablet:$0 base_version:$1 #conflict-row:$2 "
+            "#column:$3 time:$4ms",
+            tablet->id(), _base_version, total_conflicts, read_column_ids.size(), t_end - t_start);
+
     return Status::OK();
 }
 

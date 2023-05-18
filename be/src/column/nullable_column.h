@@ -87,8 +87,6 @@ public:
         return _has_null && immutable_null_column_data()[index];
     }
 
-    bool low_cardinality() const override { return false; }
-
     const uint8_t* raw_data() const override { return _data_column->raw_data(); }
 
     uint8_t* mutable_raw_data() override { return reinterpret_cast<uint8_t*>(_data_column->mutable_raw_data()); }
@@ -142,7 +140,7 @@ public:
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
-    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
 
     bool append_nulls(size_t count) override;
 
@@ -273,6 +271,13 @@ public:
         std::swap(_has_null, r._has_null);
     }
 
+    void swap_by_data_column(ColumnPtr& src) {
+        reset_column();
+        _data_column.swap(src);
+        null_column_data().insert(null_column_data().end(), _data_column->size(), 0);
+        update_has_null();
+    }
+
     void reset_column() override {
         Column::reset_column();
         _data_column->reset_column();
@@ -296,7 +301,7 @@ public:
         std::stringstream ss;
         ss << "[";
         size_t size = _data_column->size();
-        for (size_t i = 0; i < size - 1; ++i) {
+        for (size_t i = 0; i + 1 < size; ++i) {
             ss << debug_item(i) << ", ";
         }
         if (size > 0) {

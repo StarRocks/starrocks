@@ -20,15 +20,16 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
@@ -140,15 +141,20 @@ public class PartitionUtilTest {
     }
 
     @Test
-    public void testGetPartitionRange(@Mocked Table table) throws UserException {
+    public void testGetPartitionRange(@Mocked HiveTable table) throws UserException {
         Column partitionColumn = new Column("date", Type.DATE);
         List<String> partitionNames = ImmutableList.of("date=2022-08-02", "date=2022-08-19", "date=2022-08-21",
                 "date=2022-09-01", "date=2022-10-01", "date=2022-12-02");
 
         new MockUp<PartitionUtil>() {
             @Mock
-            public Pair<List<String>, List<Column>> getPartitionNamesAndColumns(Table table) {
-                return Pair.create(partitionNames, ImmutableList.of(partitionColumn));
+            public List<String> getPartitionNames(Table table) {
+                return partitionNames;
+            }
+
+            @Mock
+            public List<Column> getPartitionColumns(Table table) {
+                return ImmutableList.of(partitionColumn);
             }
         };
         new Expectations() {
@@ -166,6 +172,8 @@ public class PartitionUtilTest {
         Map<String, Range<PartitionKey>> partitionMap = PartitionUtil.getPartitionRange(table, partitionColumn);
         Assert.assertEquals(partitionMap.size(), partitionNames.size());
         Assert.assertTrue(partitionMap.containsKey("p20221202"));
-        Assert.assertTrue(partitionMap.get("p20221202").upperEndpoint().isMaxValue());
+        PartitionKey upperBound = new PartitionKey();
+        upperBound.pushColumn(new DateLiteral(2022, 12, 03), PrimitiveType.DATE);
+        Assert.assertTrue(partitionMap.get("p20221202").upperEndpoint().equals(upperBound));
     }
 }

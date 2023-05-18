@@ -65,7 +65,7 @@ public:
 private:
     bool _is_finished = false;
     const std::shared_ptr<LocalExchanger>& _exchanger;
-
+    RuntimeProfile::HighWaterMarkCounter* _peak_memory_usage_counter = nullptr;
     // STREAM MV
     bool _is_epoch_finished = false;
 };

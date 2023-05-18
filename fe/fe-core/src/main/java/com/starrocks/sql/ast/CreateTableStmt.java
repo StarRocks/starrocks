@@ -17,7 +17,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
@@ -179,6 +178,10 @@ public class CreateTableStmt extends DdlStmt {
         return tableName;
     }
 
+    public String getCatalogName() {
+        return tableName.getCatalog();
+    }
+
     public String getTableName() {
         return tableName.getTbl();
     }
@@ -221,14 +224,6 @@ public class CreateTableStmt extends DdlStmt {
 
     public boolean isOlapEngine() {
         return engineName.equalsIgnoreCase(EngineType.OLAP.name());
-    }
-
-    public boolean isLakeEngine() {
-        return engineName.equalsIgnoreCase(EngineType.STARROCKS.name());
-    }
-
-    public boolean isOlapOrLakeEngine() {
-        return isOlapEngine() || isLakeEngine();
     }
 
     public String getCharsetName() {
@@ -293,7 +288,7 @@ public class CreateTableStmt extends DdlStmt {
 
     @Override
     public boolean needAuditEncryption() {
-        return !isOlapOrLakeEngine();
+        return !isOlapEngine();
     }
 
     @Override

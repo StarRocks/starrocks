@@ -67,7 +67,7 @@ Status RowsetMetaManager::save(KVStore* meta, const TabletUid& tablet_uid, const
 }
 
 Status RowsetMetaManager::flush(KVStore* meta) {
-    return meta->flush();
+    return meta->flushWAL();
 }
 
 Status RowsetMetaManager::remove(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id) {

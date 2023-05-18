@@ -106,7 +106,7 @@ public:
 
     // Caller should free returned iterator after unused.
     // TODO: StatusOr<std::unique_ptr<ColumnIterator>> new_bitmap_index_iterator()
-    Status new_bitmap_index_iterator(BitmapIndexIterator** iterator);
+    Status new_bitmap_index_iterator(BitmapIndexIterator** iterator, bool skip_fill_local_cache);
 
     // Seek to the first entry in the column.
     Status seek_to_first(OrdinalPageIndexIterator* iter);
@@ -138,7 +138,8 @@ public:
     // page-level zone map filter.
     Status zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p,
                            const ::starrocks::ColumnPredicate* del_predicate,
-                           std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange* row_ranges);
+                           std::unordered_set<uint32_t>* del_partial_filtered_pages, SparseRange* row_ranges,
+                           bool skip_fill_local_cache);
 
     // segment-level zone map filter.
     // Return false to filter out this segment.
@@ -146,9 +147,10 @@ public:
     bool segment_zone_map_filter(const std::vector<const ::starrocks::ColumnPredicate*>& predicates) const;
 
     // prerequisite: at least one predicate in |predicates| support bloom filter.
-    Status bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange* ranges);
+    Status bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p, SparseRange* ranges,
+                        bool skip_fill_local_cache);
 
-    Status load_ordinal_index();
+    Status load_ordinal_index(bool skip_fill_local_cache);
 
     uint32_t num_rows() const { return _segment->num_rows(); }
 
@@ -169,10 +171,10 @@ private:
 
     Status _init(ColumnMetaPB* meta);
 
-    Status _load_zonemap_index();
-    Status _load_ordinal_index();
-    Status _load_bitmap_index();
-    Status _load_bloom_filter_index();
+    Status _load_zonemap_index(bool skip_fill_local_cache);
+    Status _load_ordinal_index(bool skip_fill_local_cache);
+    Status _load_bitmap_index(bool skip_fill_local_cache);
+    Status _load_bloom_filter_index(bool skip_fill_local_cache);
 
     Status _parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail) const;
 

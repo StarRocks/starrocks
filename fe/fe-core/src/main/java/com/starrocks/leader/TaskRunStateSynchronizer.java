@@ -16,7 +16,7 @@
 package com.starrocks.leader;
 
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
@@ -27,7 +27,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.HashMap;
 import java.util.Map;
 
-public class TaskRunStateSynchronizer extends LeaderDaemon {
+public class TaskRunStateSynchronizer extends FrontendDaemon {
     public static final Logger LOG = LogManager.getLogger(TaskRunStateSynchronizer.class);
     // taskId -> progress
     private Map<Long, Integer> runningTaskRunProgressMap;

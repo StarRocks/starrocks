@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
@@ -51,6 +52,9 @@ public class WarehouseAnalyzer {
             String whName = statement.getFullWhName();
             if (Strings.isNullOrEmpty(whName)) {
                 throw new SemanticException("warehouse name can not be null or empty");
+            }
+            if (whName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
+                throw new SemanticException("warehouse name can not be 'default_warehouse'");
             }
             FeNameFormat.checkWarehouseName(whName);
             return null;

@@ -37,6 +37,7 @@
 #include "column/chunk.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
+#include "exec/pipeline/exchange/exchange_parallel_merge_source_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -58,6 +59,8 @@ ExchangeNode::ExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
                   std::vector<bool>(tnode.nullable_tuples.begin(),
                                     tnode.nullable_tuples.begin() + tnode.exchange_node.input_row_tuples.size())),
           _is_merging(tnode.exchange_node.__isset.sort_info),
+          _is_parallel_merge(tnode.exchange_node.__isset.enable_parallel_merge &&
+                             tnode.exchange_node.enable_parallel_merge),
           _offset(tnode.exchange_node.__isset.offset ? tnode.exchange_node.offset : 0),
           _num_rows_skipped(0) {
     DCHECK_GE(_offset, 0);
@@ -251,11 +254,22 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
         exchange_source_op->set_degree_of_parallelism(context->degree_of_parallelism());
         operators.emplace_back(exchange_source_op);
     } else {
-        auto exchange_merge_sort_source_operator = std::make_shared<ExchangeMergeSortSourceOperatorFactory>(
-                context->next_operator_id(), id(), _num_senders, _input_row_desc, &_sort_exec_exprs, _is_asc_order,
-                _nulls_first, _offset, _limit);
-        exchange_merge_sort_source_operator->set_degree_of_parallelism(1);
-        operators.emplace_back(std::move(exchange_merge_sort_source_operator));
+        if (_is_parallel_merge) {
+            auto exchange_merge_sort_source_operator = std::make_shared<ExchangeParallelMergeSourceOperatorFactory>(
+                    context->next_operator_id(), id(), _num_senders, _input_row_desc, &_sort_exec_exprs, _is_asc_order,
+                    _nulls_first, _offset, _limit);
+            exchange_merge_sort_source_operator->set_degree_of_parallelism(context->degree_of_parallelism());
+            operators.emplace_back(std::move(exchange_merge_sort_source_operator));
+            // This particular exchange source will be executed in a concurrent way, and finally we need to gather them into one
+            // stream to satisfied the ordering property
+            operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators);
+        } else {
+            auto exchange_merge_sort_source_operator = std::make_shared<ExchangeMergeSortSourceOperatorFactory>(
+                    context->next_operator_id(), id(), _num_senders, _input_row_desc, &_sort_exec_exprs, _is_asc_order,
+                    _nulls_first, _offset, _limit);
+            exchange_merge_sort_source_operator->set_degree_of_parallelism(1);
+            operators.emplace_back(std::move(exchange_merge_sort_source_operator));
+        }
     }
 
     // Create a shared RefCountedRuntimeFilterCollector

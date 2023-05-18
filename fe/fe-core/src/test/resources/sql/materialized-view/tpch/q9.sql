@@ -32,5 +32,11 @@ order by
     nation,
     o_year desc ;
 [result]
+TOP-N (order by [[: n_name ASC NULLS FIRST, : year DESC NULLS LAST]])
+    TOP-N (order by [[: n_name ASC NULLS FIRST, : year DESC NULLS LAST]])
+        AGGREGATE ([GLOBAL] aggregate [{: sum=sum(: sum)}] group by [[: n_name, : year]] having [null]
+            EXCHANGE SHUFFLE[, ]
+                AGGREGATE ([LOCAL] aggregate [{: sum=sum(: expr)}] group by [[: n_name, : year]] having [null]
+                    SCAN (mv[lineitem_mv] columns[: c_nationkey, : p_name, : s_nationkey, : l_amount, : o_orderyear, : n_name] predicate[: c_nationkey = : s_nationkey AND : p_name LIKE %peru%])
 [end]
 

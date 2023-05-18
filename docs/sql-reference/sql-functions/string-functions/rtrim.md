@@ -34,7 +34,7 @@ mysql> SELECT rtrim('   ab d   ');
 1 row in set (0.00 sec)
 ```
 
-Example 2：Remove specified characters from the end of the string.
+Example 2: Remove specified characters from the end of the string.
 
 ```Plain Text
 MySQL > SELECT rtrim("xxabcdxx", "x");

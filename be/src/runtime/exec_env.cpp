@@ -46,11 +46,12 @@
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/spill/dir_manager.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
-#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
+#include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
@@ -102,6 +103,17 @@ static int64_t calc_max_load_memory(int64_t process_mem_limit) {
     return std::min<int64_t>(max_load_memory_bytes, config::load_process_max_memory_limit_bytes);
 }
 
+int64_t ExecEnv::calc_max_query_memory(int64_t process_mem_limit, int64_t percent) {
+    if (process_mem_limit <= 0) {
+        // -1 means no limit
+        return -1;
+    }
+    if (percent < 0 || percent > 100) {
+        percent = 90;
+    }
+    return process_mem_limit * percent / 100;
+}
+
 static int64_t calc_max_compaction_memory(int64_t process_mem_limit) {
     int64_t limit = config::compaction_max_memory_limit;
     int64_t percent = config::compaction_max_memory_limit_percent;
@@ -138,8 +150,15 @@ static int64_t calc_max_consistency_memory(int64_t process_mem_limit) {
     return std::min<int64_t>(limit, process_mem_limit * percent / 100);
 }
 
+bool ExecEnv::_is_init = false;
+
 Status ExecEnv::init(ExecEnv* env, const std::vector<StorePath>& store_paths) {
+    DeferOp op([]() { ExecEnv::_is_init = true; });
     return env->_init(store_paths);
+}
+
+bool ExecEnv::is_init() {
+    return _is_init;
 }
 
 Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
@@ -234,8 +253,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&connector_scan_worker_thread_pool_without_workgroup));
     _connector_scan_executor_without_workgroup = new workgroup::ScanExecutor(
-            std::move(connector_scan_worker_thread_pool_without_workgroup),
-            std::make_unique<workgroup::PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size));
+            std::move(connector_scan_worker_thread_pool_without_workgroup), workgroup::create_scan_task_queue());
     _connector_scan_executor_without_workgroup->initialize(connector_num_io_threads);
 
     std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_with_workgroup;
@@ -285,9 +303,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&scan_worker_thread_pool_without_workgroup));
-    _scan_executor_without_workgroup = new workgroup::ScanExecutor(
-            std::move(scan_worker_thread_pool_without_workgroup),
-            std::make_unique<workgroup::PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size));
+    _scan_executor_without_workgroup = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_without_workgroup),
+                                                                   workgroup::create_scan_task_queue());
     _scan_executor_without_workgroup->initialize(num_io_threads);
 
     std::unique_ptr<ThreadPool> scan_worker_thread_pool_with_workgroup;
@@ -302,42 +319,54 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                         std::make_unique<workgroup::WorkGroupScanTaskQueue>(
                                                 workgroup::WorkGroupScanTaskQueue::SchedEntityType::OLAP));
     _scan_executor_with_workgroup->initialize(num_io_threads);
-
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
-    bool is_compute_node = store_paths.empty();
-    if (!is_compute_node) {
+    if (!store_paths.empty()) {
         Status status = _load_path_mgr->init();
         if (!status.ok()) {
             LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
             exit(-1);
         }
-#if defined(USE_STAROS) && !defined(BE_TEST)
-        _lake_location_provider = new lake::StarletLocationProvider();
-        _lake_update_manager = new lake::UpdateManager(_lake_location_provider, update_mem_tracker());
-        _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, _lake_update_manager,
-                                                       config::lake_metadata_cache_limit);
-#elif defined(BE_TEST)
-        _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
-        _lake_update_manager = new lake::UpdateManager(_lake_location_provider, update_mem_tracker());
-        _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, _lake_update_manager,
-                                                       config::lake_metadata_cache_limit);
-#endif
-
-#if defined(USE_STAROS) && !defined(BE_TEST)
-        _lake_tablet_manager->start_gc();
-#endif
     }
 
-    _agent_server = new AgentServer(this, is_compute_node);
+#if defined(USE_STAROS) && !defined(BE_TEST)
+    _lake_location_provider = new lake::StarletLocationProvider();
+    _lake_update_manager = new lake::UpdateManager(_lake_location_provider, update_mem_tracker());
+    _lake_tablet_manager =
+            new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
+    if (config::starlet_cache_dir.empty()) {
+        std::vector<std::string> starlet_cache_paths;
+        std::for_each(store_paths.begin(), store_paths.end(), [&](StorePath root_path) {
+            std::string starlet_cache_path = root_path.path + "/starlet_cache";
+            starlet_cache_paths.emplace_back(starlet_cache_path);
+        });
+        config::starlet_cache_dir = JoinStrings(starlet_cache_paths, ":");
+    }
+
+#elif defined(BE_TEST)
+    _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
+    _lake_update_manager = new lake::UpdateManager(_lake_location_provider, update_mem_tracker());
+    _lake_tablet_manager =
+            new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
+#endif
+
+#if defined(USE_STAROS) && !defined(BE_TEST)
+    _lake_tablet_manager->start_gc();
+#endif
+
+    _agent_server = new AgentServer(this, false);
     _agent_server->init_or_die();
 
     _broker_mgr->init();
     _small_file_mgr->init();
 
     RETURN_IF_ERROR(_load_channel_mgr->init(load_mem_tracker()));
+
     _heartbeat_flags = new HeartbeatFlags();
     auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
     _cache_mgr = new query_cache::CacheManager(capacity);
+
+    _spill_dir_mgr = std::make_shared<spill::DirManager>();
+    RETURN_IF_ERROR(_spill_dir_mgr->init());
     return Status::OK();
 }
 
@@ -389,8 +418,10 @@ Status ExecEnv::init_mem_tracker() {
     }
 
     _process_mem_tracker = regist_tracker(MemTracker::PROCESS, bytes_limit, "process");
+    int64_t query_pool_mem_limit =
+            calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker =
-            regist_tracker(MemTracker::QUERY_POOL, bytes_limit * 0.9, "query_pool", this->process_mem_tracker());
+            regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit, "query_pool", this->process_mem_tracker());
 
     int64_t load_mem_limit = calc_max_load_memory(_process_mem_tracker->limit());
     _load_mem_tracker = regist_tracker(MemTracker::LOAD, load_mem_limit, "load", process_mem_tracker());
@@ -502,9 +533,10 @@ void ExecEnv::_destroy() {
         _lake_tablet_manager->prune_metacache();
     }
 
-    // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate _query_pool_mem_tracker.
-    workgroup::WorkGroupManager::instance()->destroy();
     SAFE_DELETE(_query_context_mgr);
+    // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate
+    // _query_pool_mem_tracker.
+    workgroup::WorkGroupManager::instance()->destroy();
     SAFE_DELETE(_runtime_filter_cache);
     SAFE_DELETE(_driver_limiter);
     SAFE_DELETE(_broker_client_cache);

@@ -23,6 +23,7 @@ import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
 import com.starrocks.sql.PlannerProfile;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -38,12 +39,11 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.transport.TTransportException;
 
 import java.lang.reflect.Method;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.connector.ClassUtils.getCompatibleParamClasses;
-import static com.starrocks.connector.hive.HiveConnector.DUMMY_THRIFT_URI;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
@@ -72,12 +72,9 @@ public class HiveMetaClient {
     public static HiveMetaClient createHiveMetaClient(Map<String, String> properties) {
         HiveConf conf = new HiveConf();
         properties.forEach(conf::set);
-        if (!properties.containsKey(HIVE_METASTORE_URIS)) {
-            // set value for compatible with the rollback
-            properties.put(HIVE_METASTORE_URIS, DUMMY_THRIFT_URI);
+        if (properties.containsKey(HIVE_METASTORE_URIS)) {
+            conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
         }
-
-        conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
         conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
                 String.valueOf(Config.hive_meta_store_timeout_s));
         return new HiveMetaClient(conf);
@@ -95,7 +92,7 @@ public class HiveMetaClient {
                         AWSCatalogMetastoreClient.class.getName());
             } else {
                 hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
-                        HiveMetaStoreThriftClient.class.getName());
+                        HiveMetaStoreClient.class.getName());
             }
         }
 
@@ -146,12 +143,17 @@ public class HiveMetaClient {
     }
 
     public <T> T callRPC(String methodName, String messageIfError, Object... args) {
+        return callRPC(methodName, messageIfError, null, args);
+    }
+
+    public <T> T callRPC(String methodName, String messageIfError, Class<?>[] argClasses, Object... args) {
         RecyclableClient client = null;
         StarRocksConnectorException connectionException = null;
 
         try {
             client = getClient();
-            Method method = client.hiveClient.getClass().getDeclaredMethod(methodName, getCompatibleParamClasses(args));
+            argClasses = argClasses == null ? ClassUtils.getCompatibleParamClasses(args) : argClasses;
+            Method method = client.hiveClient.getClass().getDeclaredMethod(methodName, argClasses);
             return (T) method.invoke(client.hiveClient, args);
         } catch (Exception e) {
             LOG.error(messageIfError, e);
@@ -162,7 +164,7 @@ public class HiveMetaClient {
                 LOG.error("Failed to get hive client. {}", connectionException.getMessage());
             } else if (connectionException != null) {
                 LOG.error("An exception occurred when using the current long link " +
-                        "to access metastore. msg： {}", messageIfError);
+                        "to access metastore. msg: {}", messageIfError);
                 client.close();
             } else if (client != null) {
                 client.finish();
@@ -210,16 +212,17 @@ public class HiveMetaClient {
     }
 
     /**
-     * Both 'getPartitionByNames' and 'getPartitionColumnStatistics' could throw exception or no response
+     * Both 'getPartitionsByNames' and 'getPartitionColumnStatistics' could throw exception or no response
      * when querying too many partitions at present. Due to statistics don't affect accuracy, user could adjust
      * session variable 'hive_partition_stats_sample_size' to ensure 'getPartitionColumnStat' normal return.
-     * But "getPartitionByNames" interface must return the full contents due to the need to get partition file information.
-     * So we resend request "getPartitionByNames" when an exception occurs.
+     * But "getPartitionsByNames" interface must return the full contents due to the need to get partition file information.
+     * So we resend request "getPartitionsByNames" when an exception occurs.
      */
     public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
         int size = partitionNames.size();
         List<Partition> partitions;
-        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionsByNames", String.format("%s partitions", size));
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionsByNames." + tblName,
+                String.format("%s partitions", size));
 
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionsByNames")) {
             RecyclableClient client = null;
@@ -243,7 +246,7 @@ public class HiveMetaClient {
                     LOG.error("Failed to get hive client. {}", connectionException.getMessage());
                 } else if (connectionException != null) {
                     LOG.error("An exception occurred when using the current long link " +
-                            "to access metastore. msg： {}", connectionException.getMessage());
+                            "to access metastore. msg: {}", connectionException.getMessage());
                     client.close();
                 } else if (client != null) {
                     client.finish();
@@ -266,7 +269,8 @@ public class HiveMetaClient {
                                                                           List<String> partitionNames,
                                                                           List<String> columnNames) {
         int size = partitionNames.size();
-        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionColumnStatistics", String.format("%s partitions", size));
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionColumnStatistics." + tableName,
+                String.format("%s partitions", size));
 
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionColumnStatistics")) {
             return callRPC("getPartitionColumnStatistics",
@@ -335,10 +339,51 @@ public class HiveMetaClient {
                                                          IMetaStoreClient.NotificationFilter filter)
             throws MetastoreNotificationFetchException {
         try {
+            Class<?>[] argClasses = {long.class, int.class, IMetaStoreClient.NotificationFilter.class};
             return callRPC("getNextNotification", "Failed to get next notification based on last event id: " + lastEventId,
-                    lastEventId, maxEvents, filter);
+                    argClasses, lastEventId, maxEvents, filter);
         } catch (Exception e) {
             throw new MetastoreNotificationFetchException(e.getMessage());
+        }
+    }
+
+    static class ClassUtils {
+        private static final HashMap WRAPPER_TO_PRIMITIVE = new HashMap();
+        static {
+            WRAPPER_TO_PRIMITIVE.put(Boolean.class, Boolean.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Character.class, Character.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Byte.class, Byte.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Short.class, Short.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Integer.class, Integer.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Float.class, Float.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Long.class, Long.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(Double.class, Double.TYPE);
+            WRAPPER_TO_PRIMITIVE.put(String.class, String.class);
+        }
+
+        public static Class<?>[] getCompatibleParamClasses(Object[] args) {
+            Class<?>[] argTypes = new Class[args.length];
+            for (int i = 0; i < args.length; i++) {
+                argTypes[i] = toPrimitiveClass(args[i].getClass());
+            }
+            return argTypes;
+        }
+
+        public static Class<?> toPrimitiveClass(Class<?> parameterType) {
+            if (List.class.isAssignableFrom(parameterType)) {
+                return List.class;
+            } else if (!parameterType.isPrimitive()) {
+                Class<?> wrapperType = getWrapperType(parameterType);
+
+                assert wrapperType != null;
+                return wrapperType;
+            } else {
+                return parameterType;
+            }
+        }
+
+        public static Class<?> getWrapperType(Class<?> primitiveType) {
+            return (Class) WRAPPER_TO_PRIMITIVE.get(primitiveType);
         }
     }
 }

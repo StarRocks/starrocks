@@ -35,6 +35,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/sink/export_sink_operator.h"
 #include "exec/pipeline/sink/file_sink_operator.h"
+#include "exec/pipeline/sink/iceberg_table_sink_operator.h"
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
@@ -49,6 +50,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/export_sink.h"
+#include "runtime/iceberg_table_sink.h"
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/mysql_table_sink.h"
@@ -222,7 +224,9 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
 
-    int func_version = request.common().__isset.func_version ? request.common().func_version : 2;
+    int func_version = request.common().__isset.func_version
+                               ? request.common().func_version
+                               : TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_2;
     runtime_state->set_func_version(func_version);
     runtime_state->init_mem_trackers(query_mem_tracker);
     runtime_state->set_be_number(request.backend_num());
@@ -297,6 +301,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     const auto& fragment = request.common().fragment;
     const auto dop = _calc_dop(exec_env, request);
     const auto& query_options = request.common().query_options;
+    const int chunk_size = runtime_state->chunk_size();
 
     bool enable_shared_scan = request.common().__isset.enable_shared_scan && request.common().enable_shared_scan;
     bool enable_tablet_internal_parallel =
@@ -329,7 +334,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
 
-    if (fragment.__isset.cache_param) {
+    // If spill is turned on, then query cache will be turned off automatically
+    // TODO: Fix
+    if (fragment.__isset.cache_param && !runtime_state->enable_spill()) {
         auto const& tcache_param = fragment.cache_param;
         auto& cache_param = _fragment_ctx->cache_param();
         cache_param.plan_node_id = tcache_param.id;
@@ -407,11 +414,13 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
         if (scan_node->limit() > 0) {
-            // the upper bound of records we actually will scan is `limit * dop * io_parallelism`.
+            // The upper bound of records we actually will scan is `limit * dop * io_parallelism`.
             // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
-            // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
+            // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization.
+            // Some chunk sources scan `chunk_size` rows at a time, so normalize `limit` to be rounded up to `chunk_size`.
             logical_scan_limit += scan_node->limit();
-            physical_scan_limit += scan_node->limit() * dop * scan_node->io_tasks_per_scan_operator();
+            int64_t normalized_limit = (scan_node->limit() + chunk_size - 1) / chunk_size * chunk_size;
+            physical_scan_limit += normalized_limit * dop * scan_node->io_tasks_per_scan_operator();
         } else {
             // Not sure how many rows will be scan.
             logical_scan_limit = -1;
@@ -606,33 +615,39 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         int64_t prepare_fragment_ctx_time = 0;
         int64_t prepare_runtime_state_time = 0;
         int64_t prepare_pipeline_driver_time = 0;
+
+        int64_t process_mem_bytes = ExecEnv::GetInstance()->process_mem_tracker()->consumption();
+        size_t num_process_drivers = ExecEnv::GetInstance()->driver_limiter()->num_total_drivers();
     } profiler;
 
     DeferOp defer([this, &request, &prepare_success, &profiler]() {
         if (prepare_success) {
             auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.fragment_instance_id());
-            auto* prepare_timer =
-                    ADD_TIMER(fragment_ctx->runtime_state()->runtime_profile(), "FragmentInstancePrepareTime");
+            auto* profile = fragment_ctx->runtime_state()->runtime_profile();
+
+            auto* prepare_timer = ADD_TIMER(profile, "FragmentInstancePrepareTime");
             COUNTER_SET(prepare_timer, profiler.prepare_time);
+
             auto* prepare_query_ctx_timer =
-                    ADD_CHILD_TIMER_THESHOLD(fragment_ctx->runtime_state()->runtime_profile(), "prepare-query-ctx",
-                                             "FragmentInstancePrepareTime", 10_ms);
+                    ADD_CHILD_TIMER_THESHOLD(profile, "prepare-query-ctx", "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_query_ctx_timer, profiler.prepare_query_ctx_time);
 
             auto* prepare_fragment_ctx_timer =
-                    ADD_CHILD_TIMER_THESHOLD(fragment_ctx->runtime_state()->runtime_profile(), "prepare-fragment-ctx",
-                                             "FragmentInstancePrepareTime", 10_ms);
+                    ADD_CHILD_TIMER_THESHOLD(profile, "prepare-fragment-ctx", "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_fragment_ctx_timer, profiler.prepare_fragment_ctx_time);
 
             auto* prepare_runtime_state_timer =
-                    ADD_CHILD_TIMER_THESHOLD(fragment_ctx->runtime_state()->runtime_profile(), "prepare-runtime-state",
-                                             "FragmentInstancePrepareTime", 10_ms);
+                    ADD_CHILD_TIMER_THESHOLD(profile, "prepare-runtime-state", "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_runtime_state_timer, profiler.prepare_runtime_state_time);
 
             auto* prepare_pipeline_driver_timer =
-                    ADD_CHILD_TIMER_THESHOLD(fragment_ctx->runtime_state()->runtime_profile(),
-                                             "prepare-pipeline-driver", "FragmentInstancePrepareTime", 10_ms);
+                    ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver", "FragmentInstancePrepareTime", 10_ms);
             COUNTER_SET(prepare_pipeline_driver_timer, profiler.prepare_runtime_state_time);
+
+            auto* process_mem_counter = ADD_COUNTER(profile, "InitialProcessMem", TUnit::BYTES);
+            COUNTER_SET(process_mem_counter, profiler.process_mem_bytes);
+            auto* num_process_drivers_counter = ADD_COUNTER(profile, "InitialProcessDriverCount", TUnit::UNIT);
+            COUNTER_SET(num_process_drivers_counter, static_cast<int64_t>(profiler.num_process_drivers));
         } else {
             _fail_cleanup();
         }
@@ -850,26 +865,8 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                     down_cast<SourceOperatorFactory*>(fragment_ctx->pipelines().back()->get_op_factories()[0].get());
             max_input_dop += source_operator->degree_of_parallelism();
 
-            auto pseudo_plan_node_id = context->next_pseudo_plan_node_id();
-            auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(max_input_dop);
-            auto local_exchange_source = std::make_shared<LocalExchangeSourceOperatorFactory>(
-                    context->next_operator_id(), pseudo_plan_node_id, mem_mgr);
-            local_exchange_source->set_runtime_state(runtime_state);
-            local_exchange_source->set_group_leader(source_operator);
-            auto exchanger = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
-
-            auto local_exchange_sink = std::make_shared<LocalExchangeSinkOperatorFactory>(
-                    context->next_operator_id(), pseudo_plan_node_id, exchanger);
-            fragment_ctx->pipelines().back()->add_op_factory(local_exchange_sink);
-
-            OpFactories operators_source_with_local_exchange;
-            local_exchange_source->set_degree_of_parallelism(desired_tablet_sink_dop);
-            operators_source_with_local_exchange.emplace_back(std::move(local_exchange_source));
-            operators_source_with_local_exchange.emplace_back(std::move(tablet_sink_op));
-
-            auto pipeline_with_local_exchange_source =
-                    std::make_shared<Pipeline>(context->next_pipe_id(), operators_source_with_local_exchange);
-            fragment_ctx->pipelines().emplace_back(std::move(pipeline_with_local_exchange_source));
+            context->maybe_interpolate_local_passthrough_exchange_for_sink(runtime_state, tablet_sink_op, max_input_dop,
+                                                                           desired_tablet_sink_dop);
         } else {
             fragment_ctx->pipelines().back()->add_op_factory(tablet_sink_op);
         }
@@ -898,6 +895,43 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         OpFactoryPtr op = std::make_shared<MemoryScratchSinkOperatorFactory>(context->next_operator_id(), row_desc,
                                                                              output_expr, fragment_ctx);
         fragment_ctx->pipelines().back()->add_op_factory(op);
+    } else if (typeid(*datasink) == typeid(starrocks::IcebergTableSink)) {
+        auto* iceberg_table_sink = down_cast<starrocks::IcebergTableSink*>(datasink.get());
+        TableDescriptor* table_desc =
+                runtime_state->desc_tbl().get_table_descriptor(thrift_sink.iceberg_table_sink.target_table_id);
+        auto* iceberg_table_desc = down_cast<IcebergTableDescriptor*>(table_desc);
+
+        std::vector<TExpr> partition_expr;
+        std::vector<ExprContext*> partition_expr_ctxs;
+        auto output_expr = iceberg_table_sink->get_output_expr();
+        for (const auto& index : iceberg_table_desc->partition_index_in_schema()) {
+            partition_expr.push_back(output_expr[index]);
+        }
+
+        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_expr, &partition_expr_ctxs,
+                                                runtime_state));
+
+        auto* source_operator =
+                down_cast<SourceOperatorFactory*>(fragment_ctx->pipelines().back()->source_operator_factory());
+
+        size_t desired_iceberg_sink_dop = request.pipeline_sink_dop();
+        size_t source_operator_dop = source_operator->degree_of_parallelism();
+        OpFactoryPtr iceberg_table_sink_op = std::make_shared<IcebergTableSinkOperatorFactory>(
+                context->next_operator_id(), fragment_ctx, iceberg_table_sink->get_output_expr(), iceberg_table_desc,
+                thrift_sink.iceberg_table_sink, partition_expr_ctxs);
+
+        if (iceberg_table_desc->is_unpartitioned_table() || thrift_sink.iceberg_table_sink.is_static_partition_sink) {
+            if (desired_iceberg_sink_dop != source_operator_dop) {
+                context->maybe_interpolate_local_passthrough_exchange_for_sink(
+                        runtime_state, iceberg_table_sink_op, source_operator_dop, desired_iceberg_sink_dop);
+            } else {
+                fragment_ctx->pipelines().back()->get_op_factories().emplace_back(std::move(iceberg_table_sink_op));
+            }
+        } else {
+            context->maybe_interpolate_local_key_partition_exchange_for_sink(runtime_state, iceberg_table_sink_op,
+                                                                             partition_expr_ctxs, source_operator_dop,
+                                                                             desired_iceberg_sink_dop);
+        }
     }
 
     return Status::OK();

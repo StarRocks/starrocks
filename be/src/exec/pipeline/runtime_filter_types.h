@@ -240,11 +240,11 @@ public:
     }
 
     RuntimeInFilterList get_total_in_filters() {
-        return std::list(_partial_in_filters[0].begin(), _partial_in_filters[0].end());
+        return {_partial_in_filters[0].begin(), _partial_in_filters[0].end()};
     }
 
     RuntimeBloomFilterList get_total_bloom_filters() {
-        return std::list(_bloom_filter_descriptors.begin(), _bloom_filter_descriptors.end());
+        return {_bloom_filter_descriptors.begin(), _bloom_filter_descriptors.end()};
     }
 
     Status merge_local_in_filters() {
@@ -380,6 +380,8 @@ public:
         }
         return Status::OK();
     }
+
+    size_t limit() const { return _limit; }
 
 private:
     ObjectPool* _pool;

@@ -62,12 +62,14 @@ set(EXEC_FILES
     lake_meta_scan_node.cpp
     hash_joiner.cpp
     hash_join_node.cpp
+    hash_join_components.cpp
     join_hash_map.cpp
     topn_node.cpp
     chunks_sorter.cpp
     chunks_sorter_heap_sort.cpp
     chunks_sorter_topn.cpp
     chunks_sorter_full_sort.cpp
+    spillable_chunks_sorter_full_sort.cpp
     cross_join_node.cpp
     union_node.cpp
     except_hash_set.cpp
@@ -79,6 +81,7 @@ set(EXEC_FILES
     arrow_to_json_converter.cpp
     parquet_scanner.cpp
     parquet_reader.cpp
+    parquet_writer.cpp
     parquet_builder.cpp
     file_scan_node.cpp
     assert_num_rows_node.cpp
@@ -90,6 +93,7 @@ set(EXEC_FILES
     hdfs_scanner_text.cpp
     json_scanner.cpp
     json_parser.cpp
+    avro_scanner.cpp
     project_node.cpp
     dict_decode_node.cpp
     repeat_node.cpp
@@ -97,6 +101,7 @@ set(EXEC_FILES
     schema_scanner.cpp
     schema_scan_node.cpp
     iceberg/iceberg_delete_builder.cpp
+    iceberg/iceberg_delete_file_iterator.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
     schema_scanner/schema_schemata_scanner.cpp
@@ -111,20 +116,35 @@ set(EXEC_FILES
     schema_scanner/schema_materialized_views_scanner.cpp
     schema_scanner/schema_tasks_scanner.cpp
     schema_scanner/schema_task_runs_scanner.cpp
+    schema_scanner/schema_loads_scanner.cpp
+    schema_scanner/schema_load_tracking_logs_scanner.cpp
     schema_scanner/schema_user_privileges_scanner.cpp
     schema_scanner/schema_schema_privileges_scanner.cpp
     schema_scanner/schema_table_privileges_scanner.cpp
     schema_scanner/schema_tables_config_scanner.cpp
+    schema_scanner/schema_be_metrics_scanner.cpp
     schema_scanner/schema_be_tablets_scanner.cpp
+    schema_scanner/schema_be_txns_scanner.cpp
+    schema_scanner/schema_be_configs_scanner.cpp
+    schema_scanner/schema_be_threads_scanner.cpp
+    schema_scanner/schema_be_logs_scanner.cpp
+    schema_scanner/schema_fe_tablet_schedules_scanner.cpp
+    schema_scanner/schema_be_compactions_scanner.cpp
+    schema_scanner/schema_be_bvars_scanner.cpp
+    schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
+    schema_scanner/starrocks_role_edges_scanner.cpp
+    schema_scanner/starrocks_grants_to_scanner.cpp
     schema_scanner/schema_helper.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
+    sorting/merge_path.cpp
     sorting/merge_cascade.cpp
     sorting/sort_column.cpp
     sorting/sort_permute.cpp
     connector_scan_node.cpp
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
+    pipeline/exchange/exchange_parallel_merge_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp
     pipeline/exchange/exchange_source_operator.cpp
     pipeline/exchange/local_exchange.cpp
@@ -159,6 +179,7 @@ set(EXEC_FILES
     pipeline/scan/olap_schema_chunk_source.cpp
     pipeline/scan/olap_schema_scan_operator.cpp
     pipeline/scan/olap_schema_scan_context.cpp
+    pipeline/sink/iceberg_table_sink_operator.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp
@@ -174,6 +195,8 @@ set(EXEC_FILES
     pipeline/sort/local_partition_topn_source.cpp
     pipeline/sort/local_partition_topn_context.cpp
     pipeline/sort/local_merge_sort_source_operator.cpp
+    pipeline/sort/spillable_partition_sort_sink_operator.cpp
+    pipeline/sort/local_parallel_merge_sort_source_operator.cpp
     pipeline/sort/sort_context.cpp
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
@@ -195,6 +218,9 @@ set(EXEC_FILES
     pipeline/aggregate/aggregate_distinct_streaming_source_operator.cpp
     pipeline/aggregate/sorted_aggregate_streaming_sink_operator.cpp
     pipeline/aggregate/sorted_aggregate_streaming_source_operator.cpp
+    pipeline/aggregate/spillable_aggregate_blocking_sink_operator.cpp
+    pipeline/aggregate/spillable_aggregate_blocking_source_operator.cpp
+    pipeline/aggregate/spillable_aggregate_distinct_blocking_operator.cpp
     pipeline/aggregate/repeat/repeat_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp
@@ -205,6 +231,8 @@ set(EXEC_FILES
     pipeline/hashjoin/hash_join_build_operator.cpp
     pipeline/hashjoin/hash_join_probe_operator.cpp
     pipeline/hashjoin/hash_joiner_factory.cpp
+    pipeline/hashjoin/spillable_hash_join_build_operator.cpp
+    pipeline/hashjoin/spillable_hash_join_probe_operator.cpp
     pipeline/set/except_context.cpp
     pipeline/set/except_build_sink_operator.cpp
     pipeline/set/except_probe_sink_operator.cpp
@@ -223,6 +251,8 @@ set(EXEC_FILES
     pipeline/adaptive/utils.cpp
     pipeline/chunk_accumulate_operator.cpp
     pipeline/pipeline.cpp
+    pipeline/spill_process_operator.cpp
+    pipeline/spill_process_channel.cpp
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
@@ -232,9 +262,15 @@ set(EXEC_FILES
     query_cache/lane_arbiter.cpp
     query_cache/conjugate_operator.cpp
     query_cache/ticket_checker.cpp
+    spill/spill_components.cpp
     spill/spiller.cpp
     spill/spiller_factory.cpp
-    spill/spilled_stream.cpp
+    spill/spill_components.cpp
+    spill/mem_table.cpp
+    spill/dir_manager.cpp
+    spill/serde.cpp
+    spill/input_stream.cpp
+    spill/log_block_manager.cpp
     stream/state/mem_state_table.cpp
     stream/aggregate/agg_state_data.cpp
     stream/aggregate/agg_group_state.cpp

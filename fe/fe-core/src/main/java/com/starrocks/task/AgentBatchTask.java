@@ -37,7 +37,8 @@ package com.starrocks.task;
 import com.google.common.collect.Lists;
 import com.starrocks.common.ClientPool;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TAgentServiceVersion;
 import com.starrocks.thrift.TAgentTaskRequest;
@@ -46,6 +47,7 @@ import com.starrocks.thrift.TCheckConsistencyReq;
 import com.starrocks.thrift.TClearAlterTaskRequest;
 import com.starrocks.thrift.TClearTransactionTaskRequest;
 import com.starrocks.thrift.TCloneReq;
+import com.starrocks.thrift.TCompactionReq;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TDownloadReq;
 import com.starrocks.thrift.TDropAutoIncrementMapReq;
@@ -170,13 +172,21 @@ public class AgentBatchTask implements Runnable {
             TNetworkAddress address = null;
             boolean ok = false;
             try {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-                if (backend == null || !backend.isAlive()) {
+                ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && computeNode == null) {
+                    computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendId);
+                }
+
+                if (computeNode == null || !computeNode.isAlive()) {
                     continue;
                 }
+
+                String host = computeNode.getHost();
+                int port = computeNode.getBePort();
+
                 List<AgentTask> tasks = this.backendIdToTasks.get(backendId);
                 // create AgentClient
-                address = new TNetworkAddress(backend.getHost(), backend.getBePort());
+                address = new TNetworkAddress(host, port);
                 client = ClientPool.backendPool.borrowObject(address);
                 List<TAgentTaskRequest> agentTaskRequests = new LinkedList<TAgentTaskRequest>();
                 for (AgentTask task : tasks) {
@@ -201,7 +211,7 @@ public class AgentBatchTask implements Runnable {
                     ClientPool.backendPool.invalidateObject(address, client);
                 }
             }
-        } // end for backend
+        } // end for compute node
     }
 
     private TAgentTaskRequest toAgentTaskRequest(AgentTask task) {
@@ -369,6 +379,12 @@ public class AgentBatchTask implements Runnable {
                     LOG.debug(request.toString());
                 }
                 tAgentTaskRequest.setAlter_tablet_req_v2(request);
+                return tAgentTaskRequest;
+            }
+            case COMPACTION: {
+                CompactionTask compactionTask = (CompactionTask) task;
+                TCompactionReq req = compactionTask.toThrift();
+                tAgentTaskRequest.setCompaction_req(req);
                 return tAgentTaskRequest;
             }
             default:

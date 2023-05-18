@@ -16,13 +16,11 @@ package com.starrocks.privilege;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -101,28 +99,6 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                             PrivilegeType.DROP))
                     .build();
 
-    private static final List<Pair<ObjectType, String>> OBJECT_TO_PLURAL = ImmutableList.of(
-            new Pair<>(ObjectType.TABLE, "TABLES"),
-            new Pair<>(ObjectType.DATABASE, "DATABASES"),
-            new Pair<>(ObjectType.SYSTEM, null),
-            new Pair<>(ObjectType.USER, "USERS"),
-            new Pair<>(ObjectType.RESOURCE, "RESOURCES"),
-            new Pair<>(ObjectType.VIEW, "VIEWS"),
-            new Pair<>(ObjectType.CATALOG, "CATALOGS"),
-            new Pair<>(ObjectType.MATERIALIZED_VIEW, "MATERIALIZED_VIEWS"),
-            new Pair<>(ObjectType.FUNCTION, "FUNCTIONS"),
-            new Pair<>(ObjectType.RESOURCE_GROUP, "RESOURCE_GROUPS"),
-            new Pair<>(ObjectType.GLOBAL_FUNCTION, "GLOBAL_FUNCTIONS")
-    );
-
-    private static final Map<String, ObjectType> PLURAL_TO_TYPE = new HashMap<>();
-
-    static {
-        for (Pair<ObjectType, String> pair : OBJECT_TO_PLURAL) {
-            PLURAL_TO_TYPE.put(pair.second, pair.first);
-        }
-    }
-
     public static final String UNEXPECTED_TYPE = "unexpected type ";
 
     @Override
@@ -155,15 +131,6 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
 
 
     @Override
-    public ObjectType getTypeNameByPlural(String plural) throws PrivilegeException {
-        ObjectType ret = PLURAL_TO_TYPE.get(plural);
-        if (ret == null) {
-            throw new PrivilegeException("invalid plural privilege type " + plural);
-        }
-        return ret;
-    }
-
-    @Override
     public PEntryObject generateObject(ObjectType objectType, List<String> objectTokens, GlobalStateMgr mgr)
             throws PrivilegeException {
         switch (objectType) {
@@ -185,14 +152,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             case CATALOG:
                 return CatalogPEntryObject.generate(mgr, objectTokens);
 
-            case FUNCTION:
-                return FunctionPEntryObject.generate(mgr, objectTokens);
-
             case RESOURCE_GROUP:
                 return ResourceGroupPEntryObject.generate(mgr, objectTokens);
-
-            case GLOBAL_FUNCTION:
-                return GlobalFunctionPEntryObject.generate(mgr, objectTokens);
 
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());
@@ -204,6 +165,15 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             ObjectType objectType, UserIdentity user, GlobalStateMgr globalStateMgr) throws PrivilegeException {
         if (objectType.equals(ObjectType.USER)) {
             return UserPEntryObject.generate(globalStateMgr, user);
+        }
+        throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());
+    }
+
+    @Override
+    public PEntryObject generateFunctionObject(ObjectType objectType, Long databaseId, Long functionId,
+                                               GlobalStateMgr globalStateMgr) throws PrivilegeException {
+        if (objectType.equals(ObjectType.FUNCTION) || objectType.equals(ObjectType.GLOBAL_FUNCTION)) {
+            return FunctionPEntryObject.generate(globalStateMgr, databaseId, functionId);
         }
         throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());
     }

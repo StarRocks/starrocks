@@ -16,7 +16,6 @@
 package com.starrocks.connector.iceberg.glue;
 
 import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
-import com.starrocks.connector.iceberg.hive.HiveClientPool;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
@@ -25,6 +24,7 @@ import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.iceberg.ClientPoolImpl;
 import org.apache.iceberg.common.DynMethods;
+import org.apache.iceberg.hive.HiveClientPool;
 import org.apache.iceberg.hive.RuntimeMetaException;
 import org.apache.thrift.TException;
 import org.apache.thrift.transport.TTransportException;

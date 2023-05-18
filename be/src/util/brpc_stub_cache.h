@@ -37,6 +37,7 @@
 #include <memory>
 #include <mutex>
 
+#include "common/statusor.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -82,6 +83,36 @@ public:
         auto stub = new doris::PBackendService_Stub(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
         _stub_map.insert(endpoint, stub);
         return stub;
+    }
+
+    // rarely used, so create as needed
+    static StatusOr<std::unique_ptr<doris::PBackendService_Stub>> create_http_stub(const TNetworkAddress& taddr) {
+        butil::EndPoint endpoint;
+        std::string realhost;
+        realhost = taddr.hostname;
+        if (!is_valid_ip(taddr.hostname)) {
+            realhost = hostname_to_ip(taddr.hostname);
+            if (realhost == "") {
+                return Status::RuntimeError("failed to get ip from host " + taddr.hostname);
+            }
+        }
+        if (str2endpoint(realhost.c_str(), taddr.port, &endpoint)) {
+            return Status::RuntimeError("unknown endpoint, host = " + taddr.hostname);
+        }
+        // create
+        brpc::ChannelOptions options;
+        options.connect_timeout_ms = 3000;
+        options.protocol = "http";
+        // Explicitly set the max_retry
+        // TODO(meegoo): The retry strategy can be customized in the future
+        options.max_retry = 3;
+        std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
+        if (channel->Init(endpoint, &options)) {
+            return Status::RuntimeError("init brpc http channel error on " + taddr.hostname + ":" +
+                                        std::to_string(taddr.port));
+        }
+        return std::make_unique<doris::PBackendService_Stub>(channel.release(),
+                                                             google::protobuf::Service::STUB_OWNS_CHANNEL);
     }
 
     doris::PBackendService_Stub* get_stub(const TNetworkAddress& taddr) { return get_stub(taddr.hostname, taddr.port); }

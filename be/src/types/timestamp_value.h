@@ -114,7 +114,8 @@ public:
     int64_t to_unix_second() const;
 
     bool from_unixtime(int64_t second, const std::string& timezone);
-    bool from_unixtime(int64_t second, const cctz::time_zone& ctz);
+    void from_unixtime(int64_t second, const cctz::time_zone& ctz);
+    void from_unixtime(int64_t second, int64_t microsecond, const cctz::time_zone& ctz);
 
     void from_unix_second(int64_t second);
 

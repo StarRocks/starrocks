@@ -44,6 +44,8 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -77,6 +79,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
     //
     private final List<GroupExpression> childrenBestExprList = Lists.newArrayList();
     private final List<PhysicalPropertySet> childrenOutputProperties = Lists.newArrayList();
+
+    private static final Logger LOG = LogManager.getLogger(EnforceAndCostTask.class);
 
     EnforceAndCostTask(TaskContext context, GroupExpression expression) {
         super(context);
@@ -211,23 +215,24 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         }
     }
 
-    private boolean checkCTEPropertyValid(GroupExpression childBestExpr, PhysicalPropertySet requiredPropertySet) {
-        if (!OperatorType.PHYSICAL_CTE_CONSUME.equals(childBestExpr.getOp().getOpType()) &&
-                !OperatorType.PHYSICAL_NO_CTE.equals(childBestExpr.getOp().getOpType())) {
-            return true;
-        }
-
+    private boolean checkCTEPropertyValid(GroupExpression groupExpression, PhysicalPropertySet requiredPropertySet) {
+        OperatorType operatorType = groupExpression.getOp().getOpType();
         CTEProperty property = requiredPropertySet.getCteProperty();
-
-        if (OperatorType.PHYSICAL_NO_CTE.equals(childBestExpr.getOp().getOpType())) {
-            int cteId = ((PhysicalNoCTEOperator) childBestExpr.getOp()).getCteId();
-            return !property.getCteIds().contains(cteId);
-        } else if (OperatorType.PHYSICAL_CTE_CONSUME.equals(childBestExpr.getOp().getOpType())) {
-            int cteId = ((PhysicalCTEConsumeOperator) childBestExpr.getOp()).getCteId();
-            return property.getCteIds().contains(cteId);
+        CTEProperty usedCTEs;
+        switch (operatorType) {
+            case PHYSICAL_CTE_ANCHOR:
+            case PHYSICAL_CTE_PRODUCE:
+                usedCTEs = groupExpression.getGroup().getLogicalProperty().getUsedCTEs();
+                return property.getCteIds().containsAll(usedCTEs.getCteIds());
+            case PHYSICAL_CTE_CONSUME:
+                PhysicalCTEConsumeOperator consumeOperator = (PhysicalCTEConsumeOperator) groupExpression.getOp();
+                return property.getCteIds().contains(consumeOperator.getCteId());
+            case PHYSICAL_NO_CTE:
+                PhysicalNoCTEOperator noCTEOperator = (PhysicalNoCTEOperator) groupExpression.getOp();
+                return !property.getCteIds().contains(noCTEOperator.getCteId());
+            default:
+                return true;
         }
-
-        return true;
     }
 
     private void initRequiredProperties() {
@@ -340,6 +345,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
         if (curTotalCost < context.getUpperBoundCost()) {
             // update context upperbound cost
+            LOG.debug("Update upperBoundCost: prev={} curr={}", context.getUpperBoundCost(), curTotalCost);
             context.setUpperBoundCost(curTotalCost);
         }
     }
@@ -372,6 +378,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         // 1. check the agg node is global aggregation without split and child expr is PhysicalDistributionOperator
         if (aggregate.getType().isGlobal() && !aggregate.isSplit() &&
                 childBestExpr.getOp() instanceof PhysicalDistributionOperator) {
+            // 1.0 if distinct column is skew, optimization is permitted
+            if (aggregate.getDistinctColumnDataSkew() != null) {
+                return true;
+            }
             // 1.1 check default column statistics or child output row may not be accurate
             if (groupExpression.getGroup().getStatistics().getColumnStatistics().values().stream()
                     .anyMatch(ColumnStatistic::isUnknown) ||

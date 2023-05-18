@@ -55,7 +55,7 @@ public class RefreshMaterializedViewStatementTest {
         cluster = PseudoCluster.getInstance();
 
         FeConstants.runningUnitTest = true;
-        FeConstants.default_scheduler_interval_millisecond = 100;
+        Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_experimental_mv = true;
@@ -76,7 +76,8 @@ public class RefreshMaterializedViewStatementTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Can not find materialized view:no_exists", e.getMessage());
+            Assert.assertEquals("Getting analyzing error at line 1, column 26. Detail message: " +
+                    "Can not find materialized view:no_exists.", e.getMessage());
         }
     }
 

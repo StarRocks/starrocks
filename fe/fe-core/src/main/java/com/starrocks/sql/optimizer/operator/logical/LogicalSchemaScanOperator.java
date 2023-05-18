@@ -12,13 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -41,17 +40,11 @@ public class LogicalSchemaScanOperator extends LogicalScanOperator {
                 limit,
                 predicate,
                 projection);
-        Preconditions.checkState(table instanceof SchemaTable);
+        Preconditions.checkState(table instanceof SystemTable);
     }
 
-    private LogicalSchemaScanOperator(Builder builder) {
-        super(OperatorType.LOGICAL_SCHEMA_SCAN,
-                builder.table,
-                builder.colRefToColumnMetaMap,
-                builder.columnMetaToColRefMap,
-                builder.getLimit(),
-                builder.getPredicate(),
-                builder.getProjection());
+    private LogicalSchemaScanOperator() {
+        super(OperatorType.LOGICAL_SCHEMA_SCAN);
     }
 
     @Override
@@ -62,14 +55,8 @@ public class LogicalSchemaScanOperator extends LogicalScanOperator {
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalSchemaScanOperator, LogicalSchemaScanOperator.Builder> {
         @Override
-        public LogicalSchemaScanOperator build() {
-            return new LogicalSchemaScanOperator(this);
-        }
-
-        @Override
-        public LogicalSchemaScanOperator.Builder withOperator(LogicalSchemaScanOperator operator) {
-            super.withOperator(operator);
-            return this;
+        protected LogicalSchemaScanOperator newInstance() {
+            return new LogicalSchemaScanOperator();
         }
     }
 }

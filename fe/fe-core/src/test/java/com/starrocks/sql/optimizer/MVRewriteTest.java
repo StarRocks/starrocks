@@ -35,6 +35,7 @@
 package com.starrocks.sql.optimizer;
 
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -67,7 +68,7 @@ public class MVRewriteTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        FeConstants.default_scheduler_interval_millisecond = 1;
+        Config.alter_scheduler_interval_millisecond = 1;
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
         GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());
@@ -1069,8 +1070,7 @@ public class MVRewriteTest {
                 ") ENGINE=OLAP\n" +
                 "DISTRIBUTED BY HASH(`is_finish`, `is_subscribe`, `dt`) BUCKETS 16\n" +
                 "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"replication_num\" = \"1\"\n" +
                 ");";
         starRocksAssert.withTable(createTableSQL);
         String createMVSQL = "CREATE materialized view kkk_mv as\n" +

@@ -62,6 +62,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnBitmapUnionPattern;
@@ -299,7 +300,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         public Void visitCreateMaterializedViewStmt(CreateMaterializedViewStmt statement,
                                                     ConnectContext context) {
             QueryStatement queryStatement = statement.getQueryStatement();
+            long originSelectLimit = context.getSessionVariable().getSqlSelectLimit();
+            // ignore limit in creating mv
+            context.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
             com.starrocks.sql.analyzer.Analyzer.analyze(statement.getQueryStatement(), context);
+            context.getSessionVariable().setSqlSelectLimit(originSelectLimit);
 
             // forbid explain query
             if (queryStatement.isExplain()) {
@@ -313,15 +318,17 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             if (tables.size() != 1) {
                 throw new SemanticException("The materialized view only support one table in from clause.");
             }
-            Table table = tables.entrySet().iterator().next().getValue();
+            Map.Entry<TableName, Table> entry = tables.entrySet().iterator().next();
+            Table table = entry.getValue();
             if (table instanceof View) {
                 // Only in order to make the error message keep compatibility
                 throw new SemanticException("Do not support alter non-OLAP table[" + table.getName() + "]");
             } else if (!(table instanceof OlapTable)) {
                 throw new SemanticException("The materialized view only support olap table.");
             }
+            TableName tableName = entry.getKey();
             statement.setBaseIndexName(table.getName());
-            statement.setDBName(context.getDatabase());
+            statement.setDBName(tableName.getDb());
 
             SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
             if (!(selectRelation.getRelation() instanceof TableRelation)) {

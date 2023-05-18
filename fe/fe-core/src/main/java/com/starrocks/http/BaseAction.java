@@ -39,10 +39,10 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -301,6 +301,7 @@ public abstract class BaseAction implements IAction {
     protected void checkActionOnSystem(UserIdentity currentUser, PrivilegeType... systemActions)
             throws UnauthorizedException {
         for (PrivilegeType systemAction : systemActions) {
+            // TODO(yiming): set role ids for ephemeral user
             if (!PrivilegeActions.checkSystemAction(currentUser, null, systemAction)) {
                 throw new UnauthorizedException("Access denied; you need (at least one of) the "
                         + systemAction.name() + " privilege(s) for this operation");
@@ -312,7 +313,7 @@ public abstract class BaseAction implements IAction {
     // operation which checks `PrivPredicate.ADMIN` in global table in old Auth framework.
     protected void checkUserOwnsAdminRole(UserIdentity currentUser) throws UnauthorizedException {
         try {
-            Set<Long> userOwnedRoles = PrivilegeManager.getOwnedRolesByUser(currentUser);
+            Set<Long> userOwnedRoles = AuthorizationManager.getOwnedRolesByUser(currentUser);
             if (!(currentUser.equals(UserIdentity.ROOT) ||
                     userOwnedRoles.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID) ||
                     (userOwnedRoles.contains(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID) &&

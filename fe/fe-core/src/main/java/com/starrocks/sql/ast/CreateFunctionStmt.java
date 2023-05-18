@@ -253,6 +253,10 @@ public class CreateFunctionStmt extends DdlStmt {
         return function;
     }
 
+    public void setFunction(Function function) {
+        this.function = function;
+    }
+
     public void analyze(ConnectContext context) throws AnalysisException {
         analyzeCommon(context.getDatabase());
         Preconditions.checkArgument(isStarrocksJar);
@@ -288,7 +292,7 @@ public class CreateFunctionStmt extends DdlStmt {
         try {
             computeObjectChecksum();
         } catch (IOException | NoSuchAlgorithmException e) {
-            throw new AnalysisException("cannot to compute object's checksum");
+            throw new AnalysisException("cannot to compute object's checksum", e);
         }
 
         String md5sum = properties.get(MD5_CHECKSUM);

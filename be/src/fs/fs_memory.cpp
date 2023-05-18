@@ -50,7 +50,9 @@ private:
 
 class MemoryWritableFile final : public WritableFile {
 public:
-    MemoryWritableFile(std::string path, InodePtr inode) : _path(std::move(path)), _inode(std::move(inode)) {}
+    MemoryWritableFile(std::string path, InodePtr inode) : _path(std::move(path)), _inode(std::move(inode)) {
+        FileSystem::on_file_write_open(this);
+    }
 
     Status append(const Slice& data) override {
         if (_closed) return Status::IOError(fmt::format("{} has been closed", _path));
@@ -73,6 +75,7 @@ public:
 
     Status close() override {
         _closed = true;
+        FileSystem::on_file_write_close(this);
         return Status::OK();
     }
 
@@ -176,6 +179,42 @@ public:
                 continue;
             }
             if (!cb(child.data)) {
+                break;
+            }
+        }
+        return Status::OK();
+    }
+
+    Status iterate_dir2(const butil::FilePath& path, const std::function<bool(DirEntry)>& cb) {
+        auto inode = get_inode(path);
+        if (inode == nullptr || inode->type != kDir) {
+            return Status::NotFound(path.value());
+        }
+        DCHECK(path.value().back() != '/' || path.value() == "/");
+        std::string s = (path.value() == "/") ? path.value() : path.value() + "/";
+        for (auto iter = _namespace.lower_bound(s); iter != _namespace.end(); ++iter) {
+            Slice child(iter->first);
+            if (!child.starts_with(s)) {
+                break;
+            }
+            DirEntry entry;
+            ASSIGN_OR_RETURN(bool is_dir, is_directory(butil::FilePath(child.to_string())));
+            entry.is_dir = is_dir;
+            if (!is_dir) {
+                ASSIGN_OR_RETURN(int64_t size, get_file_size(butil::FilePath(child.to_string())));
+                entry.size = size;
+            }
+            // Get the relative path.
+            child.remove_prefix(s.size());
+            if (child.empty()) {
+                continue;
+            }
+            auto slash = (const char*)memchr(child.data, '/', child.size);
+            if (slash != nullptr) {
+                continue;
+            }
+            entry.name = child.data;
+            if (!cb(entry)) {
                 break;
             }
         }
@@ -418,6 +457,12 @@ Status MemoryFileSystem::iterate_dir(const std::string& dir, const std::function
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(dir, &new_path));
     return _impl->iterate_dir(butil::FilePath(new_path), cb);
+}
+
+Status MemoryFileSystem::iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) {
+    std::string new_path;
+    RETURN_IF_ERROR(canonicalize(dir, &new_path));
+    return _impl->iterate_dir2(butil::FilePath(new_path), cb);
 }
 
 Status MemoryFileSystem::delete_file(const std::string& path) {

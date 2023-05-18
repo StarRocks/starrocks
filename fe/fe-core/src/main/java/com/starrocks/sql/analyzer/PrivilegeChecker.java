@@ -54,6 +54,7 @@ import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
@@ -91,6 +92,7 @@ import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
@@ -121,7 +123,7 @@ import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
-import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
@@ -275,7 +277,7 @@ public class PrivilegeChecker {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "ALTER VIEW",
                         session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
             }
-            check(statement.getQueryStatement(), session);
+            check(((AlterViewClause) statement.getAlterClause()).getQueryStatement(), session);
             return null;
         }
 
@@ -773,10 +775,19 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowMaterializedViewStatement(ShowMaterializedViewStmt statement, ConnectContext session) {
+        public Void visitExecuteScriptStatement(ExecuteScriptStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "EXECUTE SCRIPT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, ConnectContext session) {
             String db = statement.getDb();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "SHOW MATERIALIZED VIEW",
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "SHOW MATERIALIZED VIEWS",
                         session.getQualifiedUser(),
                         session.getRemoteIP(),
                         db);
@@ -1079,7 +1090,7 @@ public class PrivilegeChecker {
                     }
 
                     for (Table table : sortedTables) {
-                        if (!table.isNativeTable()) {
+                        if (!table.isNativeTableOrMaterializedView()) {
                             continue;
                         }
 
@@ -1137,7 +1148,7 @@ public class PrivilegeChecker {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
                     }
 
-                    if (!table.isLocalTable()) {
+                    if (!table.isNativeTableOrMaterializedView()) {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
                     }
 

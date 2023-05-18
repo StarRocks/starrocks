@@ -25,6 +25,7 @@ add_library(Webserver STATIC
   http_channel.cpp
   http_status.cpp
   http_parser.cpp
+  http_stream_channel.cpp
   web_page_handler.cpp
   monitor_action.cpp
   default_path_handlers.cpp
@@ -33,6 +34,7 @@ add_library(Webserver STATIC
   http_client.cpp
   action/health_action.cpp
   action/checksum_action.cpp
+  action/greplog_action.cpp
   action/snapshot_action.cpp
   action/reload_tablet_action.cpp
   action/restore_tablet_action.cpp
@@ -46,7 +48,9 @@ add_library(Webserver STATIC
   action/update_config_action.cpp
   action/runtime_filter_cache_action.cpp
   action/query_cache_action.cpp
-  action/pipeline_blocking_drivers_action.cpp)
+  action/pipeline_blocking_drivers_action.cpp
+  action/lake/dump_tablet_metadata_action.cpp
+  action/stop_be_action.cpp)
 
 # target_link_libraries(Webserver pthread dl Util)
 #ADD_BE_TEST(integer-array-test)

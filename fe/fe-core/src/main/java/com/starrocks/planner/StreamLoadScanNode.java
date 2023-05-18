@@ -222,6 +222,9 @@ public class StreamLoadScanNode extends LoadScanNode {
         params.setEnclose(streamLoadInfo.getEnclose());
         params.setEscape(streamLoadInfo.getEscape());
         params.setStrict_mode(streamLoadInfo.isStrictMode());
+        if (streamLoadInfo.getConfluentSchemaRegistryUrl() != null) {
+            params.setConfluent_schema_registry_url(streamLoadInfo.getConfluentSchemaRegistryUrl());
+        }
         initColumns();
         initWhereExpr(streamLoadInfo.getWhereExpr(), analyzer);
     }
@@ -289,7 +292,9 @@ public class StreamLoadScanNode extends LoadScanNode {
                     } else if (defaultValueType == Column.DefaultValueType.NULL) {
                         if (column.isAllowNull() || column.isAutoIncrement()) {
                             expr = NullLiteral.create(column.getType());
-                            nullExprInAutoIncrement = false;
+                            if (column.isAutoIncrement()) {
+                                nullExprInAutoIncrement = false;
+                            }
                         } else {
                             throw new AnalysisException("column has no source field, column=" + column.getName());
                         }
@@ -354,6 +359,11 @@ public class StreamLoadScanNode extends LoadScanNode {
                     rangeDesc.setJson_root(streamLoadInfo.getJsonRoot());
                 }
                 rangeDesc.setStrip_outer_array(streamLoadInfo.isStripOuterArray());
+            }
+            if (rangeDesc.format_type == TFileFormatType.FORMAT_AVRO) {
+                if (!streamLoadInfo.getJsonPaths().isEmpty()) {
+                    rangeDesc.setJsonpaths(streamLoadInfo.getJsonPaths());
+                }
             }
             rangeDesc.setSplittable(false);
             switch (streamLoadInfo.getFileType()) {

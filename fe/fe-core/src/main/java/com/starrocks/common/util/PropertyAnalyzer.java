@@ -34,10 +34,10 @@
 
 package com.starrocks.common.util;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.analysis.DateLiteral;
@@ -59,11 +59,13 @@ import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.Property;
 import com.starrocks.thrift.TCompressionType;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -78,7 +80,6 @@ import java.util.regex.Matcher;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.TableProperty.INVALID;
-
 
 public class PropertyAnalyzer {
     private static final Logger LOG = LogManager.getLogger(PropertyAnalyzer.class);
@@ -112,12 +113,6 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_COMPRESSION = "compression";
 
     public static final String PROPERTIES_COLOCATE_MV = "colocate_mv";
-    /*
-     * for upgrade alpha rowset to beta rowset, valid value: v1, v2
-     * v1: alpha rowset
-     * v2: beta rowset
-     */
-    public static final String PROPERTIES_STORAGE_FORMAT = "storage_format";
 
     public static final String PROPERTIES_INMEMORY = "in_memory";
 
@@ -148,17 +143,23 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_STORAGE_CACHE = "enable_storage_cache";
     public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
-    public static final String PROPERTIES_ALLOW_ASYNC_WRITE_BACK = "allow_async_write_back";
-    public static final String PROPERTIES_PARTITION_TTL_NUMBER  = "partition_ttl_number";
-    public static final String PROPERTIES_PARTITION_LIVE_NUMBER  = "partition_live_number";
-    public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT  = "auto_refresh_partitions_limit";
-    public static final String PROPERTIES_PARTITION_REFRESH_NUMBER  = "partition_refresh_number";
+    public static final String PROPERTIES_ENABLE_ASYNC_WRITE_BACK = "enable_async_write_back";
+    public static final String PROPERTIES_PARTITION_TTL_NUMBER = "partition_ttl_number";
+    public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
+    public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
+    public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
+
+    public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
+
+    public static final String PROPERTIES_STORAGE_VOLUME = "storage_volume";
 
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";
+
+    public static final String PROPERTIES_MV_REWRITE_STALENESS_SECOND = "mv_rewrite_staleness_second";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
             throws AnalysisException {
@@ -283,7 +284,8 @@ public class PropertyAnalyzer {
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv)
             throws AnalysisException {
         if (mv.getRefreshScheme().getType() == MaterializedView.RefreshType.MANUAL) {
-            throw new AnalysisException("The auto_refresh_partitions_limit property does not support manual refresh mode.");
+            throw new AnalysisException(
+                    "The auto_refresh_partitions_limit property does not support manual refresh mode.");
         }
         int autoRefreshPartitionsLimit = -1;
         if (properties != null && properties.containsKey(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
@@ -339,11 +341,28 @@ public class PropertyAnalyzer {
         return tables;
     }
 
+    public static int analyzeMVRewriteStaleness(Map<String, String> properties)
+            throws AnalysisException {
+        int maxMVRewriteStaleness = INVALID;
+        if (properties != null && properties.containsKey(PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+            try {
+                maxMVRewriteStaleness = Integer.parseInt(properties.get(PROPERTIES_MV_REWRITE_STALENESS_SECOND));
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Invalid maxMVRewriteStaleness Number: " + e.getMessage());
+            }
+            if (maxMVRewriteStaleness != INVALID && maxMVRewriteStaleness < 0) {
+                throw new AnalysisException("Illegal maxMVRewriteStaleness: " + maxMVRewriteStaleness);
+            }
+            properties.remove(PROPERTIES_MV_REWRITE_STALENESS_SECOND);
+        }
+        return maxMVRewriteStaleness;
+    }
+
     public static boolean analyzeForceExternalTableQueryRewrite(Map<String, String> properties) {
         boolean forceExternalTableQueryRewrite = false;
         if (properties != null && properties.containsKey(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
             forceExternalTableQueryRewrite = Boolean.parseBoolean(properties.
-                        get(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE));
+                    get(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE));
             properties.remove(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
         }
         return forceExternalTableQueryRewrite;
@@ -381,15 +400,19 @@ public class PropertyAnalyzer {
         if (replicationNum <= 0) {
             throw new AnalysisException("Replication num should larger than 0");
         }
-        // Skip the alive nodes checking if running on Shared-data mode, because on this mode, only
-        // compute-storage-separation table will be created and in this case the replication_num will
-        // be ignored, so there is no need to check whether the number of alive nodes is greater than the
-        // replication_num.
-        if (GlobalStateMgr.getCurrentState().isSharedNothingMode()) {
-            List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            backendIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodeIds());
+            if (RunMode.defaultReplicationNum() > backendIds.size()) {
+                throw new AnalysisException("Number of available CN nodes is " + backendIds.size()
+                        + ", less than " + RunMode.defaultReplicationNum());
+            }
+        } else {
             if (replicationNum > backendIds.size()) {
                 throw new AnalysisException("Replication num should be less than the number of available BE nodes. "
-                        + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size());
+                        + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size() +
+                        ", You can change this default by setting the replication_num table properties.");
             }
         }
     }
@@ -575,29 +598,6 @@ public class PropertyAnalyzer {
         return timeout;
     }
 
-    // analyzeStorageFormat will parse the storage format from properties
-    // sql: alter table tablet_name set ("storage_format" = "v2")
-    // Use this sql to convert all tablets(base and rollup index) to a new format segment
-    public static TStorageFormat analyzeStorageFormat(Map<String, String> properties) throws AnalysisException {
-        String storageFormat;
-        if (properties != null && properties.containsKey(PROPERTIES_STORAGE_FORMAT)) {
-            storageFormat = properties.get(PROPERTIES_STORAGE_FORMAT);
-            properties.remove(PROPERTIES_STORAGE_FORMAT);
-        } else {
-            return TStorageFormat.DEFAULT;
-        }
-
-        if (storageFormat.equalsIgnoreCase("v1")) {
-            return TStorageFormat.V1;
-        } else if (storageFormat.equalsIgnoreCase("v2")) {
-            return TStorageFormat.V2;
-        } else if (storageFormat.equalsIgnoreCase("default")) {
-            return TStorageFormat.DEFAULT;
-        } else {
-            throw new AnalysisException("unknown storage format: " + storageFormat);
-        }
-    }
-
     // analyzeCompressionType will parse the compression type from properties
     public static TCompressionType analyzeCompressionType(Map<String, String> properties) throws AnalysisException {
         TCompressionType compressionType = TCompressionType.LZ4_FRAME;
@@ -654,6 +654,14 @@ public class PropertyAnalyzer {
         return type;
     }
 
+    public static String analyzeType(Property property) {
+        String type = null;
+        if (PROPERTIES_TYPE.equals(property.getKey())) {
+            type = property.getValue();
+        }
+        return type;
+    }
+
     public static long analyzeLongProp(Map<String, String> properties, String propKey, long defaultVal)
             throws AnalysisException {
         long val = defaultVal;
@@ -670,8 +678,10 @@ public class PropertyAnalyzer {
     }
 
     public static List<UniqueConstraint> analyzeUniqueConstraint(
-            Map<String, String> properties, OlapTable table) throws AnalysisException {
+            Map<String, String> properties, Database db, OlapTable table) throws AnalysisException {
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
+        List<UniqueConstraint> analyzedUniqueConstraints = Lists.newArrayList();
+
         if (properties != null && properties.containsKey(PROPERTIES_UNIQUE_CONSTRAINT)) {
             String uniqueConstraintStr = properties.get(PROPERTIES_UNIQUE_CONSTRAINT);
             if (Strings.isNullOrEmpty(uniqueConstraintStr)) {
@@ -683,29 +693,156 @@ public class PropertyAnalyzer {
             }
 
             for (UniqueConstraint uniqueConstraint : uniqueConstraints) {
-                boolean columnExist = uniqueConstraint.getUniqueColumns().stream().allMatch(table::containColumn);
-                if (!columnExist) {
-                    throw new AnalysisException(
-                            String.format("some columns of:%s do not exist in table:%s",
-                                    uniqueConstraint.getUniqueColumns(), table.getName()));
+                if (table.isMaterializedView()) {
+                    String catalogName = uniqueConstraint.getCatalogName() != null ? uniqueConstraint.getCatalogName()
+                            : InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+                    String dbName = uniqueConstraint.getDbName() != null ? uniqueConstraint.getDbName()
+                            : db.getFullName();
+                    if (uniqueConstraint.getTableName() == null) {
+                        throw new AnalysisException("must set table name for unique constraint in materialized view");
+                    }
+                    String tableName = uniqueConstraint.getTableName();
+                    Table uniqueConstraintTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName,
+                            dbName, tableName);
+                    if (uniqueConstraintTable == null) {
+                        throw new AnalysisException(
+                                String.format("table: %s.%s.%s does not exist", catalogName, dbName, tableName));
+                    }
+                    boolean columnExist = uniqueConstraint.getUniqueColumns().stream()
+                            .allMatch(uniqueConstraintTable::containColumn);
+                    if (!columnExist) {
+                        throw new AnalysisException(
+                                String.format("some columns of:%s do not exist in table:%s.%s.%s",
+                                        uniqueConstraint.getUniqueColumns(), catalogName, dbName, tableName));
+                    }
+                    analyzedUniqueConstraints.add(new UniqueConstraint(catalogName, dbName, tableName,
+                            uniqueConstraint.getUniqueColumns()));
+                } else {
+                    boolean columnExist = uniqueConstraint.getUniqueColumns().stream().allMatch(table::containColumn);
+                    if (!columnExist) {
+                        throw new AnalysisException(
+                                String.format("some columns of:%s do not exist in table:%s",
+                                        uniqueConstraint.getUniqueColumns(), table.getName()));
+                    }
+                    analyzedUniqueConstraints.add(uniqueConstraint);
                 }
             }
             properties.remove(PROPERTIES_UNIQUE_CONSTRAINT);
         }
-        return uniqueConstraints;
+        return analyzedUniqueConstraints;
+    }
+
+    private static Pair<BaseTableInfo, Table> analyzeForeignKeyConstraintTablePath(String tablePath,
+                                                                                   String foreignKeyConstraintDesc,
+                                                                                   Database db)
+            throws AnalysisException {
+        String[] parts = tablePath.split("\\.");
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        String dbName = db.getFullName();
+        String tableName = "";
+        if (parts.length == 3) {
+            catalogName = parts[0];
+            dbName = parts[1];
+            tableName = parts[2];
+        } else if (parts.length == 2) {
+            dbName = parts[0];
+            tableName = parts[1];
+        } else if (parts.length == 1) {
+            tableName = parts[0];
+        } else {
+            throw new AnalysisException(String.format("invalid foreign key constraint:%s," +
+                    "table path is invalid", foreignKeyConstraintDesc));
+        }
+
+        if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+            throw new AnalysisException(String.format("catalog: %s do not exist", catalogName));
+        }
+        Database parentDb = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        if (parentDb == null) {
+            throw new AnalysisException(
+                    String.format("catalog: %s, database: %s do not exist", catalogName, dbName));
+        }
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(catalogName, dbName, tableName);
+        if (table == null) {
+            throw new AnalysisException(String.format("catalog:%s, database: %s, table:%s do not exist",
+                    catalogName, dbName, tableName));
+        }
+
+        BaseTableInfo tableInfo;
+        if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
+            tableInfo = new BaseTableInfo(parentDb.getId(), dbName, table.getId());
+        } else {
+            tableInfo = new BaseTableInfo(catalogName, dbName, table.getTableIdentifier());
+        }
+
+        return Pair.create(tableInfo, table);
+    }
+
+    private static void analyzeForeignKeyUniqueConstraint(Table parentTable, List<String> parentColumns,
+                                                          Table analyzedTable)
+            throws AnalysisException {
+        KeysType parentTableKeyType = KeysType.DUP_KEYS;
+        if (parentTable.isNativeTableOrMaterializedView()) {
+            OlapTable parentOlapTable = (OlapTable) parentTable;
+            parentTableKeyType =
+                    parentOlapTable.getIndexMetaByIndexId(parentOlapTable.getBaseIndexId()).getKeysType();
+        }
+
+        List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
+        if (analyzedTable.isMaterializedView() && analyzedTable.hasUniqueConstraints()) {
+            mvUniqueConstraints = analyzedTable.getUniqueConstraints().stream().filter(
+                    uniqueConstraint -> parentTable.getName().equals(uniqueConstraint.getTableName()))
+                    .collect(Collectors.toList());
+        }
+
+        if (parentTableKeyType == KeysType.AGG_KEYS) {
+            throw new AnalysisException(
+                    String.format("do not support reference agg table:%s", parentTable.getName()));
+        } else if (parentTableKeyType == KeysType.DUP_KEYS) {
+            // for DUP_KEYS type olap table or external table
+            if (!parentTable.hasUniqueConstraints() && mvUniqueConstraints.isEmpty()) {
+                throw new AnalysisException(
+                        String.format("dup table:%s has no unique constraint", parentTable.getName()));
+            } else {
+                List<UniqueConstraint> uniqueConstraints = parentTable.getUniqueConstraints();
+                if (uniqueConstraints == null) {
+                    uniqueConstraints = mvUniqueConstraints;
+                } else {
+                    uniqueConstraints.addAll(mvUniqueConstraints);
+                }
+                boolean matched = false;
+                for (UniqueConstraint uniqueConstraint : uniqueConstraints) {
+                    if (uniqueConstraint.isMatch(parentTable, Sets.newHashSet(parentColumns))) {
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched) {
+                    throw new AnalysisException(
+                            String.format("columns:%s are not dup table:%s's unique constraint", parentColumns,
+                                    parentTable.getName()));
+                }
+            }
+        } else {
+            // for PRIMARY_KEYS and UNIQUE_KEYS type table
+            // parent columns should be keys
+            if (!((OlapTable) parentTable).isKeySet(Sets.newHashSet(parentColumns))) {
+                throw new AnalysisException(String.format("columns:%s are not key columns of table:%s",
+                        parentColumns, parentTable.getName()));
+            }
+        }
     }
 
     public static List<ForeignKeyConstraint> analyzeForeignKeyConstraint(
-            Map<String, String> properties, Database db, Table baseTable) throws AnalysisException {
+            Map<String, String> properties, Database db, Table analyzedTable) throws AnalysisException {
         List<ForeignKeyConstraint> foreignKeyConstraints = Lists.newArrayList();
         if (properties != null && properties.containsKey(PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
             String foreignKeyConstraintsDesc = properties.get(PROPERTIES_FOREIGN_KEY_CONSTRAINT);
             if (Strings.isNullOrEmpty(foreignKeyConstraintsDesc)) {
                 return foreignKeyConstraints;
             }
-            if (Strings.isNullOrEmpty(foreignKeyConstraintsDesc)) {
-                throw new AnalysisException("empty foreign key constraint is invalid");
-            }
+
             String[] foreignKeyConstraintDescArray = foreignKeyConstraintsDesc.trim().split(";");
             for (String foreignKeyConstraintDesc : foreignKeyConstraintDescArray) {
                 String trimed = foreignKeyConstraintDesc.trim();
@@ -713,104 +850,60 @@ public class PropertyAnalyzer {
                     continue;
                 }
                 Matcher foreignKeyMatcher = ForeignKeyConstraint.FOREIGN_KEY_PATTERN.matcher(trimed);
-                if (!foreignKeyMatcher.find() || foreignKeyMatcher.groupCount() != 7) {
-                    throw new AnalysisException(String.format("invalid foreign key constraint:%s", foreignKeyConstraintDesc));
+                if (!foreignKeyMatcher.find() || foreignKeyMatcher.groupCount() != 9) {
+                    throw new AnalysisException(
+                            String.format("invalid foreign key constraint:%s", foreignKeyConstraintDesc));
                 }
-                String sourceColumns = foreignKeyMatcher.group(1);
-                String tablePath = foreignKeyMatcher.group(4);
-                String targetColumns = foreignKeyMatcher.group(6);
-                List<String> baseColumns = Arrays.asList(sourceColumns.split(","))
-                        .stream().map(String::trim).collect(Collectors.toList());
-                List<String> parentColumns = Arrays.asList(targetColumns.split(","))
-                        .stream().map(String::trim).collect(Collectors.toList());
-                if (baseColumns.size() != parentColumns.size()) {
+                String sourceTablePath = foreignKeyMatcher.group(1);
+                String sourceColumns = foreignKeyMatcher.group(3);
+
+                String targetTablePath = foreignKeyMatcher.group(6);
+                String targetColumns = foreignKeyMatcher.group(8);
+                // case insensitive
+                List<String> childColumns = Arrays.stream(sourceColumns.split(",")).
+                        map(String::trim).map(String::toLowerCase).collect(Collectors.toList());
+                List<String> parentColumns = Arrays.stream(targetColumns.split(",")).
+                        map(String::trim).map(String::toLowerCase).collect(Collectors.toList());
+                if (childColumns.size() != parentColumns.size()) {
                     throw new AnalysisException(String.format("invalid foreign key constraint:%s," +
                             " columns' size does not match", foreignKeyConstraintDesc));
                 }
-
-                String[] parts = tablePath.split("\\.");
-                String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-                String dbName = db.getFullName();
-                String parentTableName = "";
-                if (parts.length == 3) {
-                    catalogName = parts[0];
-                    dbName = parts[1];
-                    parentTableName = parts[2];
-                } else if (parts.length == 2) {
-                    dbName = parts[0];
-                    parentTableName = parts[1];
-                } else if (parts.length == 1) {
-                    parentTableName = parts[0];
-                } else {
-                    throw new AnalysisException(String.format("invalid foreign key constraint:%s," +
-                            "table path is invalid", foreignKeyConstraintDesc));
-                }
-
-                if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
-                    throw new AnalysisException(String.format("catalog: %s do not exist", catalogName));
-                }
-                Database parentDb = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
-                if (parentDb == null) {
-                    throw new AnalysisException(String.format("catalog: %s, database: %s do not exist", catalogName, dbName));
-                }
-                Table parentTable =
-                        GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, parentTableName);
-                if (parentTable == null) {
-                    throw new AnalysisException(String.format("catalog:%s, database: %s, table:%s do not exist",
-                            catalogName, dbName, parentTableName));
-                }
-
-                if (!baseTable.isLocalTable()) {
-                    throw new AnalysisException("now do not support add foreign key on external table");
-                }
-
-                OlapTable baseOlapTable = (OlapTable) baseTable;
-                if (!baseColumns.stream().allMatch(baseOlapTable::containColumn)) {
-                    throw new AnalysisException(String.format("some columns of:%s do not exist in table:%s",
-                            baseColumns, baseOlapTable.getName()));
-                }
-
-                OlapTable parentOlapTable = (OlapTable) parentTable;
-                if (!parentColumns.stream().allMatch(parentOlapTable::containColumn)) {
+                // analyze table exist for foreign key constraint
+                Pair<BaseTableInfo, Table> parentTablePair = analyzeForeignKeyConstraintTablePath(targetTablePath,
+                        foreignKeyConstraintDesc, db);
+                BaseTableInfo parentTableInfo = parentTablePair.first;
+                Table parentTable = parentTablePair.second;
+                if (!parentColumns.stream().allMatch(parentTable::containColumn)) {
                     throw new AnalysisException(String.format("some columns of:%s do not exist in parent table:%s",
-                            parentColumns, parentOlapTable.getName()));
+                            parentColumns, parentTable.getName()));
                 }
-                KeysType parentTableKeyType =
-                        parentOlapTable.getIndexMetaByIndexId(parentOlapTable.getBaseIndexId()).getKeysType();
-                if (parentTableKeyType == KeysType.AGG_KEYS) {
-                    throw new AnalysisException(String.format("do not support reference agg table:%s", parentTable.getName()));
-                } else if (parentTableKeyType == KeysType.DUP_KEYS) {
-                    if (!parentOlapTable.hasUniqueConstraints()) {
-                        throw new AnalysisException(
-                                String.format("dup table:%s has no unique constraint", parentTable.getName()));
-                    } else {
-                        List<UniqueConstraint> uniqueConstraints = parentOlapTable.getUniqueConstraints();
-                        boolean matched = false;
-                        for (UniqueConstraint uniqueConstraint : uniqueConstraints) {
-                            if (uniqueConstraint.getUniqueColumns().containsAll(parentColumns)) {
-                                matched = true;
-                                break;
-                            }
-                        }
-                        if (!matched) {
-                            throw new AnalysisException(String.format("columns:%s are not dup table:%s's unique constraint",
-                                    parentColumns, parentTable.getName()));
-                        }
+
+                Pair<BaseTableInfo, Table> childTablePair = Pair.create(null, analyzedTable);
+                Table childTable = analyzedTable;
+                if (analyzedTable.isMaterializedView()) {
+                    childTablePair = analyzeForeignKeyConstraintTablePath(sourceTablePath, foreignKeyConstraintDesc,
+                            db);
+                    childTable = childTablePair.second;
+                    if (!childColumns.stream().allMatch(childTable::containColumn)) {
+                        throw new AnalysisException(String.format("some columns of:%s do not exist in table:%s",
+                                childColumns, childTable.getName()));
                     }
                 } else {
-                    // for PRIMARY_KEYS and UNIQUE_KEYS type table
-                    // parent columns should be keys
-                    List<String> keyColumnNames =
-                            parentOlapTable.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());
-                    if (!keyColumnNames.equals(parentColumns)) {
-                        throw new AnalysisException(String.format("columns:%s are not key columns of table:%s",
-                                parentColumns, parentTable.getName()));
+                    if (!analyzedTable.isNativeTable()) {
+                        throw new AnalysisException("do not support add foreign key on external table");
+                    }
+                    if (!childColumns.stream().allMatch(analyzedTable::containColumn)) {
+                        throw new AnalysisException(String.format("some columns of:%s do not exist in table:%s",
+                                childColumns, analyzedTable.getName()));
                     }
                 }
-                List<Pair<String, String>> columnRefPairs =
-                        Streams.zip(baseColumns.stream(), parentColumns.stream(), Pair::create).collect(Collectors.toList());
+
+                analyzeForeignKeyUniqueConstraint(parentTable, parentColumns, analyzedTable);
+                
+                List<Pair<String, String>> columnRefPairs = Streams.zip(childColumns.stream(),
+                        parentColumns.stream(), Pair::create).collect(Collectors.toList());
                 for (Pair<String, String> pair : columnRefPairs) {
-                    Column childColumn = baseOlapTable.getColumn(pair.first);
+                    Column childColumn = childTable.getColumn(pair.first);
                     Column parentColumn = parentTable.getColumn(pair.second);
                     if (!childColumn.getType().equals(parentColumn.getType())) {
                         throw new AnalysisException(String.format(
@@ -818,22 +911,49 @@ public class PropertyAnalyzer {
                     }
                 }
 
-                BaseTableInfo parentTableInfo;
-                if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
-                    parentTableInfo = new BaseTableInfo(parentDb.getId(), dbName, parentTable.getId());
-                } else {
-                    parentTableInfo = new BaseTableInfo(catalogName, dbName, parentTable.getTableIdentifier());
-                }
-
-                ForeignKeyConstraint foreignKeyConstraint = new ForeignKeyConstraint(parentTableInfo, columnRefPairs);
+                BaseTableInfo childTableInfo = childTablePair.first;
+                ForeignKeyConstraint foreignKeyConstraint = new ForeignKeyConstraint(parentTableInfo, childTableInfo,
+                        columnRefPairs);
                 foreignKeyConstraints.add(foreignKeyConstraint);
             }
             if (foreignKeyConstraints.isEmpty()) {
-                throw new AnalysisException(String.format("invalid foreign key constrain:%s", foreignKeyConstraintsDesc));
+                throw new AnalysisException(
+                        String.format("invalid foreign key constrain:%s", foreignKeyConstraintsDesc));
             }
             properties.remove(PROPERTIES_FOREIGN_KEY_CONSTRAINT);
         }
 
         return foreignKeyConstraints;
+    }
+
+    // analyze enable storage cache and cache ttl, and whether allow async write back
+    public static StorageCacheInfo analyzeStorageCacheInfo(Map<String, String> properties) throws AnalysisException {
+        boolean enableStorageCache =
+                analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, true);
+
+        long storageCacheTtlS = 0;
+        boolean isTtlSet = properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL);
+        if (isTtlSet) {
+            storageCacheTtlS = analyzeLongProp(properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
+            if (storageCacheTtlS < -1) {
+                throw new AnalysisException("Storage cache ttl should not be less than -1");
+            }
+            if (!enableStorageCache && storageCacheTtlS != 0) {
+                throw new AnalysisException("Storage cache ttl should be 0 when cache is disabled");
+            }
+            if (enableStorageCache && storageCacheTtlS == 0) {
+                throw new AnalysisException("Storage cache ttl should not be 0 when cache is enabled");
+            }
+        } else {
+            storageCacheTtlS = enableStorageCache ? Config.lake_default_storage_cache_ttl_seconds : 0L;
+        }
+
+        boolean enableAsyncWriteBack =
+                analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK, false);
+        if (!enableStorageCache && enableAsyncWriteBack) {
+            throw new AnalysisException("enable_async_write_back can't be turned on when cache is disabled");
+        }
+
+        return new StorageCacheInfo(enableStorageCache, storageCacheTtlS, enableAsyncWriteBack);
     }
 }

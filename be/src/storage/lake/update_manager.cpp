@@ -41,6 +41,10 @@ UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* me
 
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
+
+    int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
+    int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
+    _index_cache.set_capacity(byte_limits * update_mem_percent);
 }
 
 Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {
@@ -48,20 +52,21 @@ Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelV
 }
 
 // |metadata| contain last tablet meta info with new version
-Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
-                                                 Tablet* tablet, MetaFileBuilder* builder, int64_t base_version) {
+Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                                 const TabletMetadata& metadata, Tablet* tablet,
+                                                 MetaFileBuilder* builder, int64_t base_version) {
     std::stringstream cost_str;
     MonotonicStopWatch watch;
     watch.start();
     // 1. load rowset update data to cache, get upsert and delete list
     const uint32_t rowset_id = metadata.next_rowset_id();
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata.schema());
-    auto state_entry = _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->id(), rowset_id));
+    auto state_entry = _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->id(), txn_id));
     state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     // only use state entry once, remove it when publish finish or fail
     DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
     auto& state = state_entry->value();
-    RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet, builder));
+    RETURN_IF_ERROR(state.load(op_write, metadata, base_version, tablet, builder, true));
     cost_str << " [UpdateStateCache load] " << watch.elapsed_time();
     watch.reset();
     // 2. rewrite segment file if it is partial update
@@ -248,10 +253,8 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
     return Status::OK();
 }
 
-Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
-                                              const std::vector<ColumnUniquePtr>& upserts, const int64_t base_version,
-                                              const MetaFileBuilder* builder,
-                                              std::vector<std::vector<uint64_t>*>* rss_rowids) {
+Status UpdateManager::_handle_index_op(Tablet* tablet, const TabletMetadata& metadata, const int64_t base_version,
+                                       const MetaFileBuilder* builder, std::function<void(LakePrimaryIndex&)> op) {
     auto index_entry = _index_cache.get_or_create(tablet->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -266,15 +269,37 @@ Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, const TabletMetada
     }
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
-
-    // get rss_rowids for each segment of rowset
-    uint32_t num_segments = upserts.size();
-    for (size_t i = 0; i < num_segments; i++) {
-        auto& pks = *upserts[i];
-        index.get(pks, (*rss_rowids)[i]);
-    }
+    op(index);
 
     return Status::OK();
+}
+
+Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
+                                              const std::vector<ColumnUniquePtr>& upserts, const int64_t base_version,
+                                              const MetaFileBuilder* builder,
+                                              std::vector<std::vector<uint64_t>*>* rss_rowids) {
+    return _handle_index_op(tablet, metadata, base_version, builder, [&](LakePrimaryIndex& index) {
+        // get rss_rowids for each segment of rowset
+        uint32_t num_segments = upserts.size();
+        for (size_t i = 0; i < num_segments; i++) {
+            auto& pks = *upserts[i];
+            index.get(pks, (*rss_rowids)[i]);
+        }
+    });
+}
+
+Status UpdateManager::get_rowids_from_pkindex(Tablet* tablet, const TabletMetadata& metadata,
+                                              const std::vector<ColumnUniquePtr>& upserts, const int64_t base_version,
+                                              const MetaFileBuilder* builder,
+                                              std::vector<std::vector<uint64_t>>* rss_rowids) {
+    return _handle_index_op(tablet, metadata, base_version, builder, [&](LakePrimaryIndex& index) {
+        // get rss_rowids for each segment of rowset
+        uint32_t num_segments = upserts.size();
+        for (size_t i = 0; i < num_segments; i++) {
+            auto& pks = *upserts[i];
+            index.get(pks, &((*rss_rowids)[i]));
+        }
+    });
 }
 
 Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& metadata,
@@ -374,6 +399,24 @@ void UpdateManager::expire_cache() {
         _index_cache.clear_expired();
         _last_clear_expired_cache_millis = MonotonicMillis();
     }
+}
+
+void UpdateManager::evict_cache(int64_t memory_urgent_level, int64_t memory_high_level) {
+    int64_t capacity = _index_cache.capacity();
+    int64_t size = _index_cache.size();
+    int64_t memory_urgent = capacity * memory_urgent_level / 100;
+    int64_t memory_high = capacity * memory_high_level / 100;
+
+    if (size > memory_urgent) {
+        _index_cache.try_evict(memory_urgent);
+    }
+
+    size = _index_cache.size();
+    if (size > memory_high) {
+        int64_t target_memory = std::max((size * 9 / 10), memory_high);
+        _index_cache.try_evict(target_memory);
+    }
+    return;
 }
 
 size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta) {
@@ -488,6 +531,7 @@ Status UpdateManager::check_meta_version(const Tablet& tablet, int64_t base_vers
         auto& index = index_entry->value();
         if (index.data_version() > base_version) {
             // return error, and ignore this publish later
+            _index_cache.release(index_entry);
             LOG(INFO) << "Primary index version is greater than the base version. tablet_id: " << tablet.id()
                       << " index_version: " << index.data_version() << " base_version: " << base_version;
             return Status::AlreadyExist("lake primary publish txn already finish");
@@ -537,6 +581,40 @@ int32_t UpdateManager::_get_condition_column(const TxnLogPB_OpWrite& op_write, c
         }
     }
     return -1;
+}
+
+bool UpdateManager::TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint32_t ref_cnt) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
+        if (index_entry->get_ref() != ref_cnt + 1) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
+    // use tabletid-txnid as update state cache's key, so it can retry safe.
+    auto state_entry = _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->id(), txnlog.txn_id()));
+    state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
+    auto& state = state_entry->value();
+    // get latest metadata from cache, it is not matter if it isn't the real latest metadata.
+    auto metadata_ptr = _tablet_mgr->get_latest_cached_tablet_metadata(tablet->id());
+    if (metadata_ptr != nullptr) {
+        auto st = state.load(txnlog.op_write(), *metadata_ptr, metadata_ptr->version(), tablet, nullptr, false);
+        if (!st.ok()) {
+            _update_state_cache.remove(state_entry);
+            LOG(ERROR) << strings::Substitute("lake primary table preload_update_state id:$0 error:$1", tablet->id(),
+                                              st.to_string());
+            // not return error even it fail, because we can load update state in publish again.
+        } else {
+            // just release it, will use it again in publish
+            _update_state_cache.release(state_entry);
+        }
+    } else {
+        // if latest metadata not in cache, do nothing
+    }
 }
 
 } // namespace lake

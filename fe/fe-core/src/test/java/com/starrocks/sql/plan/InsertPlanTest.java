@@ -14,7 +14,13 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -22,11 +28,17 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
+import mockit.Expectations;
+import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.SortOrder;
+import org.apache.iceberg.Table;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.stream.Stream;
+
 
 public class InsertPlanTest extends PlanTestBase {
     @BeforeClass
@@ -108,8 +120,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         String createMVSQL = "create materialized view mvs as select v1,sum(v2) from test_insert_mv_sum group by v1";
@@ -147,8 +158,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         String createMVSQL =
@@ -203,8 +213,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `ti2` (\n" +
@@ -216,8 +225,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         String explainString = getInsertExecPlan("insert into ti1 select * from ti2");
@@ -320,7 +328,7 @@ public class InsertPlanTest extends PlanTestBase {
                 ") ENGINE=OLAP DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) " +
                 "COMMENT \"OLAP\" DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) " +
                 "BUCKETS 3 " +
-                "PROPERTIES ( \"replication_num\" = \"1\", \"storage_format\" = \"v2\" );");
+                "PROPERTIES ( \"replication_num\" = \"1\" );");
         String sql = "insert into duplicate_table_with_default values " +
                 "('2020-06-25', '2020-06-25 00:16:23', 'beijing', 'haidian', 0, 87, -31785, " +
                 "default, default, -18446744073709550633, default, default, -2.18);";
@@ -348,7 +356,8 @@ public class InsertPlanTest extends PlanTestBase {
         try {
             getInsertExecPlan(sql);
         } catch (SemanticException e) {
-            Assert.assertTrue(e.getMessage().equals("Column has no default value, column=k5"));
+            Assert.assertTrue(e.getMessage(), e.getMessage().equals("Getting analyzing error. Detail message: " +
+                    "Column has no default value, column=k5."));
         }
 
         sql = "insert into duplicate_table_with_default(K1,k2,k3) " +
@@ -451,8 +460,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"colocate_with\" = \"edu\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE `user_info` (\n" +
                 "  `distinct_id` bigint(20) NULL ,\n" +
@@ -735,6 +743,27 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testInsertMapColumn() throws Exception {
+        String explainString = getInsertExecPlan("insert into tmap values (2,2,map())");
+        Assert.assertTrue(explainString.contains("2 | 2 | {}"));
+
+        explainString = getInsertExecPlan("insert into tmap values (2,2,null)");
+        Assert.assertTrue(explainString.contains("2 | 2 | NULL"));
+
+        explainString = getInsertExecPlan("insert into tmap values (2,2,map(2,2))");
+        Assert.assertTrue(explainString.contains("2 | 2 | {2:'2'}")); // implicit cast
+
+        explainString = getInsertExecPlan("insert into tmap values (2,2,{})");
+        Assert.assertTrue(explainString.contains("2 | 2 | {}"));
+
+        explainString = getInsertExecPlan("insert into tmap values (2,2,{2:3, 2:4})");
+        Assert.assertTrue(explainString.contains("2 | 2 | {2:'3',2:'4'}")); // will distinct in BE
+
+        explainString = getInsertExecPlan("insert into tmap values (2,2,{2:2})");
+        Assert.assertTrue(explainString.contains("2 | 2 | {2:'2'}")); // implicit cast
+    }
+
+    @Test
     public void testInsertAggLimit() throws Exception {
         FeConstants.runningUnitTest = true;
         InsertPlanner.enableSingleReplicationShuffle = true;
@@ -749,5 +778,85 @@ public class InsertPlanTest extends PlanTestBase {
             InsertPlanner.enableSingleReplicationShuffle = false;
             FeConstants.runningUnitTest = false;
         }
+    }
+
+    @Test
+    public void testInsertIcebergTableSink() throws Exception {
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        starRocksAssert.withCatalog(createIcebergCatalogStmt);
+        MetadataMgr metadata = starRocksAssert.getCtx().getGlobalStateMgr().getMetadataMgr();
+
+        Table nativeTable = new BaseTable(null, null);
+
+        Column k1 = new Column("k1", Type.INT);
+        Column k2 = new Column("k2", Type.INT);
+        IcebergTable.Builder builder = IcebergTable.builder();
+        builder.setCatalogName("iceberg_catalog");
+        builder.setRemoteDbName("iceberg_db");
+        builder.setRemoteTableName("iceberg_table");
+        builder.setSrTableName("iceberg_table");
+        builder.setFullSchema(Lists.newArrayList(k1, k2));
+        builder.setNativeTable(nativeTable);
+        IcebergTable icebergTable = builder.build();
+
+        new Expectations(icebergTable) {
+            {
+                icebergTable.getUUID();
+                result = 12345566;
+                minTimes = 0;
+
+                icebergTable.isUnPartitioned();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(nativeTable) {
+            {
+                nativeTable.sortOrder();
+                result = SortOrder.unsorted();
+                minTimes = 0;
+
+                nativeTable.location();
+                result = "hdfs://fake_location";
+                minTimes = 0;
+
+                nativeTable.properties();
+                result = new HashMap<String, String>();
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(metadata) {
+            {
+                metadata.getDb("iceberg_catalog", "iceberg_db");
+                result = new Database(12345566, "iceberg_db");
+                minTimes = 0;
+
+                metadata.getTable("iceberg_catalog", "iceberg_db", "iceberg_table");
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        String actualRes = getInsertExecPlan("explain insert into iceberg_catalog.iceberg_db.iceberg_table select 1, 2");
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:4: k1 | 5: k2\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  Iceberg TABLE SINK\n" +
+                "    TABLE: 12345566\n" +
+                "    TUPLE ID: 2\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : CAST(1 AS INT)\n" +
+                "  |  <slot 5> : CAST(2 AS INT)\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL\n";
+        Assert.assertEquals(expected, actualRes);
     }
 }

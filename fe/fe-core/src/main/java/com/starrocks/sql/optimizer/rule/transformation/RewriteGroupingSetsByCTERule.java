@@ -80,7 +80,7 @@ public class RewriteGroupingSetsByCTERule extends TransformationRule {
         OptExpression repeatOpt = input.inputAt(0);
 
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
-        int cteId = columnRefFactory.getNextRelationId();
+        int cteId = context.getCteContext().getNextCteId();
         OptExpression cteProduce = OptExpression.create(new LogicalCTEProduceOperator(cteId), repeatOpt.getInputs());
 
         List<OptExpression> children = new ArrayList<>();

@@ -43,7 +43,7 @@ The database's default data quota and the default replica quota are 2^63-1.
     ALTER DATABASE example_db SET DATA QUOTA 200M;
     ```
 
-2. Rename the database expamle_db as example_db2
+2. Rename the database example_db as example_db2
 
     ```SQL
     ALTER DATABASE example_db RENAME example_db2;

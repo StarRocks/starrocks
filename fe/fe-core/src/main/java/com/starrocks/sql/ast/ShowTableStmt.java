@@ -23,8 +23,8 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -41,10 +41,6 @@ public class ShowTableStmt extends ShowStmt {
 
     public ShowTableStmt(String db, boolean isVerbose, String pattern) {
         this(db, isVerbose, pattern, null, null, NodePosition.ZERO);
-    }
-
-    public ShowTableStmt(String db, boolean isVerbose, String pattern, Expr where) {
-        this(db, isVerbose, pattern, where, null, NodePosition.ZERO);
     }
 
     public ShowTableStmt(String db, boolean isVerbose, String pattern, String catalogName) {
@@ -111,7 +107,7 @@ public class ShowTableStmt extends ShowStmt {
                 whereDbEQ,
                 where);
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
-                finalWhere, null, null));
+                finalWhere, null, null), this.origStmt);
     }
 
     @Override

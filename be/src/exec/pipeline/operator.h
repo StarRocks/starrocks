@@ -177,6 +177,7 @@ public:
     static const int32_t s_pseudo_plan_node_id_for_export_sink;
     static const int32_t s_pseudo_plan_node_id_for_olap_table_sink;
     static const int32_t s_pseudo_plan_node_id_for_result_sink;
+    static const int32_t s_pseudo_plan_node_id_for_iceberg_table_sink;
     static const int32_t s_pseudo_plan_node_id_upper_bound;
 
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
@@ -221,6 +222,15 @@ public:
     // Called when the new Epoch starts at first to reset operator's internal state.
     virtual Status reset_epoch(RuntimeState* state) { return Status::OK(); }
 
+    // it means this operator need spill
+    virtual void mark_need_spill() { _marked_need_spill = true; }
+    bool need_mark_spill() { return _marked_need_spill; }
+    // the memory that can be freed by the current operator
+    size_t revocable_mem_bytes() { return _revocable_mem_bytes; }
+    void set_revocable_mem_bytes(size_t bytes) { _revocable_mem_bytes = bytes; }
+    int32_t get_driver_sequence() const { return _driver_sequence; }
+    OperatorFactory* get_factory() const { return _factory; }
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
@@ -241,6 +251,11 @@ protected:
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 
     RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
+
+    // if _need_spill is true. reserved data in this operator need spill
+    bool _marked_need_spill = false;
+    // the memory that can be released by this operator
+    size_t _revocable_mem_bytes = 0;
 
     // Common metrics
     RuntimeProfile::Counter* _total_timer = nullptr;

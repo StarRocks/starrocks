@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import org.apache.logging.log4j.LogManager;
@@ -59,7 +60,7 @@ public class OptOlapPartitionPruner {
 
         PartitionInfo partitionInfo = table.getPartitionInfo();
 
-        if (partitionInfo.getType() == PartitionType.RANGE) {
+        if (partitionInfo.isRangePartition()) {
             selectedPartitionIds = rangePartitionPrune(table, (RangePartitionInfo) partitionInfo, logicalOlapScanOperator);
         } else if (partitionInfo.getType() == PartitionType.LIST) {
             selectedPartitionIds = listPartitionPrune(table, (ListPartitionInfo) partitionInfo, logicalOlapScanOperator);
@@ -103,7 +104,7 @@ public class OptOlapPartitionPruner {
 
         OlapTable table = (OlapTable) logicalOlapScanOperator.getTable();
         PartitionInfo tablePartitionInfo = table.getPartitionInfo();
-        if (tablePartitionInfo.getType() != PartitionType.RANGE) {
+        if (!tablePartitionInfo.isRangePartition()) {
             return null;
         }
 
@@ -120,10 +121,25 @@ public class OptOlapPartitionPruner {
         List<Range<PartitionKey>> partitionRanges =
                 selectedPartitionIds.stream().map(partitionInfo::getRange).collect(Collectors.toList());
 
+        // we convert range to [minRange, maxRange]
         PartitionKey minRange =
-                Collections.min(partitionRanges.stream().map(Range::lowerEndpoint).collect(Collectors.toList()));
+                Collections.min(partitionRanges.stream().map(range -> {
+                    PartitionKey lower = range.lowerEndpoint();
+                    if (range.contains(lower)) {
+                        return lower;
+                    } else {
+                        return lower.successor();
+                    }
+                }).collect(Collectors.toList()));
         PartitionKey maxRange =
-                Collections.max(partitionRanges.stream().map(Range::upperEndpoint).collect(Collectors.toList()));
+                Collections.max(partitionRanges.stream().map(range -> {
+                    PartitionKey upper = range.upperEndpoint();
+                    if (range.contains(upper)) {
+                        return upper;
+                    } else {
+                        return upper.predecessor();
+                    }
+                }).collect(Collectors.toList()));
 
         for (ScalarOperator predicate : scanPredicates) {
             if (!Utils.containColumnRef(predicate, columnName)) {
@@ -167,7 +183,7 @@ public class OptOlapPartitionPruner {
                 PartitionKey max = new PartitionKey();
                 max.pushColumn(pcf.upperBound, column.getPrimitiveType());
                 int cmp = maxRange.compareTo(max);
-                if (cmp < 0 || (0 == cmp && !pcf.upperBoundInclusive)) {
+                if (cmp < 0 || (0 == cmp && pcf.upperBoundInclusive)) {
                     upperBind = true;
                 }
             }
@@ -182,6 +198,12 @@ public class OptOlapPartitionPruner {
         }
 
         scanPredicates.removeAll(prunedPartitionPredicates);
+
+        if (column.isAllowNull() && containsNullValue(column, minRange)
+                && !checkFilterNullValue(scanPredicates, logicalOlapScanOperator.getPredicate().clone())) {
+            return null;
+        }
+
         return Pair.create(Utils.compoundAnd(scanPredicates), prunedPartitionPredicates);
     }
 
@@ -205,6 +227,7 @@ public class OptOlapPartitionPruner {
         // Currently queries either specify a temporary partition, or do not. There is no situation
         // where two partitions are checked at the same time
         boolean isTemporaryPartitionPrune = false;
+        List<Long> specifyPartitionIds = null;
         // single item list partition has only one column mapper
         Map<Long, List<LiteralExpr>> literalExprValuesMap = listPartitionInfo.getLiteralExprValues();
         List<Long> partitionIds = Lists.newArrayList();
@@ -220,6 +243,7 @@ public class OptOlapPartitionPruner {
                 }
                 partitionIds.add(part.getId());
             }
+            specifyPartitionIds = partitionIds;
         } else {
             partitionIds = listPartitionInfo.getPartitionIds(false);
         }
@@ -268,10 +292,10 @@ public class OptOlapPartitionPruner {
 
         List<ScalarOperator> scalarOperatorList = Utils.extractConjuncts(operator.getPredicate());
         PartitionPruner partitionPruner = new ListPartitionPruner(columnToPartitionValuesMap,
-                columnToNullPartitions, scalarOperatorList);
+                columnToNullPartitions, scalarOperatorList, specifyPartitionIds);
         try {
             List<Long> prune = partitionPruner.prune();
-            if (prune == null && isTemporaryPartitionPrune)  {
+            if (prune == null && isTemporaryPartitionPrune) {
                 return partitionIds;
             } else {
                 return prune;
@@ -312,9 +336,13 @@ public class OptOlapPartitionPruner {
         boolean probeResult = true;
         if (candidatePartitions.isEmpty()) {
             probeResult = false;
-        } else if (partitionInfo.getType() != PartitionType.RANGE) {
+        } else if (!partitionInfo.isRangePartition()) {
             probeResult = false;
         } else if (((RangePartitionInfo) partitionInfo).getPartitionColumns().size() > 1) {
+            probeResult = false;
+        } else if (((RangePartitionInfo) partitionInfo).getIdToRange(true)
+                .containsKey(candidatePartitions.get(0))) {
+            // it's a temp partition list, no need to do the further prune
             probeResult = false;
         } else if (olapScanOperator.getPredicate() == null) {
             probeResult = false;
@@ -323,5 +351,48 @@ public class OptOlapPartitionPruner {
         return probeResult;
     }
 
+    private static boolean containsNullValue(Column column, PartitionKey minRange) {
+        PartitionKey nullValue = new PartitionKey();
+        try {
+            nullValue.pushColumn(LiteralExpr.createInfinity(column.getType(), false), column.getPrimitiveType());
+            return minRange.compareTo(nullValue) <= 0;
+        } catch (AnalysisException e) {
+            return false;
+        }
+    }
+
+
+    private static boolean checkFilterNullValue(List<ScalarOperator> scanPredicates, ScalarOperator predicate) {
+        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+        ScalarOperator newPredicate = Utils.compoundAnd(scanPredicates);
+        boolean newPredicateFilterNulls = false;
+        boolean predicateFilterNulls = false;
+
+        BaseScalarOperatorShuttle shuttle = new BaseScalarOperatorShuttle() {
+            @Override
+            public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+                return ConstantOperator.createNull(variable.getType());
+            }
+        };
+
+        if (newPredicate != null) {
+            newPredicate = newPredicate.accept(shuttle, null);
+
+            ScalarOperator value = scalarRewriter.rewrite(newPredicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            if ((value.isConstantRef() && ((ConstantOperator) value).isNull()) ||
+                    value.equals(ConstantOperator.createBoolean(false))) {
+                newPredicateFilterNulls = true;
+            }
+        }
+
+        predicate = predicate.accept(shuttle, null);
+        ScalarOperator value = scalarRewriter.rewrite(predicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+        if ((value.isConstantRef() && ((ConstantOperator) value).isNull())
+                || value.equals(ConstantOperator.createBoolean(false))) {
+            predicateFilterNulls = true;
+        }
+
+        return newPredicateFilterNulls == predicateFilterNulls;
+    }
 
 }

@@ -20,11 +20,13 @@ import com.starrocks.common.util.ParseUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+
 public class AlterDbQuotaAnalyzer {
     public static void analyze(AlterDatabaseQuotaStmt statement, ConnectContext context) {
         if (Strings.isNullOrEmpty(statement.getCatalogName())) {
             if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
-                throw new SemanticException("No catalog selected");
+                throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
             }
             statement.setCatalogName(context.getCurrentCatalog());
         }

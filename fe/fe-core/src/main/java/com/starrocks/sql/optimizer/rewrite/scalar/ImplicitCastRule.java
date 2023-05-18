@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -34,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
@@ -116,6 +118,18 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
     public ScalarOperator visitBetweenPredicate(BetweenPredicateOperator predicate,
                                                 ScalarOperatorRewriteContext context) {
         return castForBetweenAndIn(predicate);
+    }
+
+    @Override
+    public ScalarOperator visitMap(MapOperator map, ScalarOperatorRewriteContext context) {
+        MapType mapType = (MapType) map.getType();
+        Type[] kvType = {mapType.getKeyType(), mapType.getValueType()};
+        for (int i = 0; i < map.getChildren().size(); i++) {
+            if (!map.getChildren().get(i).getType().matchesType(kvType[i % 2])) {
+                addCastChild(kvType[i % 2], map, i);
+            }
+        }
+        return map;
     }
 
     @Override

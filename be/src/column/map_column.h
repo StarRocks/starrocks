@@ -18,6 +18,7 @@
 
 #include "column/column.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 
 namespace starrocks {
@@ -28,7 +29,7 @@ class MapColumn final : public ColumnFactory<Column, MapColumn> {
 public:
     using ValueType = void;
 
-    MapColumn(ColumnPtr keys, ColumnPtr values, UInt32Column::Ptr offests);
+    MapColumn(ColumnPtr keys, ColumnPtr values, UInt32Column::Ptr offsets);
 
     MapColumn(const MapColumn& rhs)
             : _keys(rhs._keys->clone_shared()),
@@ -81,7 +82,7 @@ public:
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
-    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
 
     bool append_nulls(size_t count) override;
 
@@ -178,13 +179,18 @@ public:
 
     const Column& keys() const { return *_keys; }
     ColumnPtr& keys_column() { return _keys; }
+    ColumnPtr keys_column() const { return _keys; }
 
     const Column& values() const { return *_values; }
     ColumnPtr& values_column() { return _values; }
+    ColumnPtr values_column() const { return _values; }
 
     size_t get_map_size(size_t idx) const;
+    std::pair<size_t, size_t> get_map_offset_size(size_t idx) const;
 
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
+
+    void remove_duplicated_keys(bool need_recursive = false);
 
 private:
     // Keys must be NullableColumn to facilitate handling nested types.

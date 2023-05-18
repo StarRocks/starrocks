@@ -46,7 +46,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.iceberg.StarRocksIcebergException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -60,6 +59,7 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -209,7 +209,7 @@ public class ConnectProcessor {
 
         if (!ctx.getState().isQuery() && (parsedStmt != null && parsedStmt.needAuditEncryption())) {
             // Some information like username, password in the stmt should not be printed.
-            ctx.getAuditEventBuilder().setStmt(AstToStringBuilder.toString(parsedStmt));
+            ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQL(parsedStmt));
         } else if (ctx.getState().isQuery() && containsComment(origStmt)) {
             // avoid audit log can't replay
             ctx.getAuditEventBuilder().setStmt(origStmt);
@@ -261,6 +261,16 @@ public class ConnectProcessor {
         queryDetail.setEndTime(endTime);
         queryDetail.setLatency(elapseMs);
         queryDetail.setResourceGroupName(ctx.getResourceGroup() != null ? ctx.getResourceGroup().getName() : "");
+        // add execution statistics into queryDetail
+        queryDetail.setReturnRows(ctx.getReturnRows());
+        PQueryStatistics statistics = executor.getQueryStatisticsForAuditLog();
+        if (statistics != null) {
+            queryDetail.setScanBytes(statistics.scanBytes);
+            queryDetail.setScanRows(statistics.scanRows);
+            queryDetail.setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
+            queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
+        }
+
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
     }
 
@@ -268,7 +278,13 @@ public class ConnectProcessor {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
-        String sql = parsedStmt.getOrigStmt().originStmt;
+        String sql;
+        if (!ctx.getState().isQuery() && parsedStmt.needAuditEncryption()) {
+            sql = AstToStringBuilder.toString(parsedStmt);
+        } else {
+            sql = parsedStmt.getOrigStmt().originStmt;
+        }
+
         boolean isQuery = parsedStmt instanceof QueryStatement;
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(ctx.getQueryId()),
@@ -424,9 +440,6 @@ public class ConnectProcessor {
                 serializer.writeField(db.getOriginName(), table.getName(), column, true);
                 channel.sendOnePacket(serializer.toByteBuffer());
             }
-
-        } catch (StarRocksIcebergException e) {
-            LOG.error("errors happened when getting Iceberg table {}", tableName, e);
         } catch (StarRocksConnectorException e) {
             LOG.error("errors happened when getting table {}", tableName, e);
         } finally {
@@ -441,7 +454,7 @@ public class ConnectProcessor {
         if (command == null) {
             ErrorReport.report(ErrorCode.ERR_UNKNOWN_COM_ERROR);
             ctx.getState().setError("Unknown command(" + command + ")");
-            LOG.warn("Unknown command(" + command + ")");
+            LOG.debug("Unknown MySQL protocol command");
             return;
         }
         ctx.setCommand(command);
@@ -474,7 +487,7 @@ public class ConnectProcessor {
                 break;
             default:
                 ctx.getState().setError("Unsupported command(" + command + ")");
-                LOG.warn("Unsupported command(" + command + ")");
+                LOG.debug("Unsupported command: {}", command);
                 break;
         }
     }
@@ -596,6 +609,8 @@ public class ConnectProcessor {
         if (request.isSetUser_roles()) {
             List<Long> roleIds = request.getUser_roles().getRole_id_list();
             ctx.setCurrentRoleIds(new HashSet<>(roleIds));
+        } else {
+            ctx.setCurrentRoleIds(new HashSet<>());
         }
 
         if (request.isSetIsLastStmt()) {

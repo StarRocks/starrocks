@@ -91,7 +91,7 @@ public class AnalyzeBackupRestoreTest {
     public void testShowBackup() {
         analyzeSuccess("SHOW BACKUP FROM test;");
         analyzeSuccess("SHOW BACKUP;");
-        analyzeSuccess("SHOW BACKUP FROM test1;");
+        analyzeFail("SHOW BACKUP FROM test1;");
         analyzeFail("SHOW BACKUP FROM 1a;");
     }
 
@@ -137,7 +137,7 @@ public class AnalyzeBackupRestoreTest {
         analyzeSuccess("SHOW RESTORE FROM test where true;");
         analyzeSuccess("SHOW RESTORE;");
         analyzeSuccess("SHOW RESTORE WHERE a=1;");
-        analyzeSuccess("SHOW RESTORE FROM test1;");
+        analyzeFail("SHOW RESTORE FROM test1;");
         analyzeFail("SHOW RESTORE FROM `a:test1`;");
     }
 

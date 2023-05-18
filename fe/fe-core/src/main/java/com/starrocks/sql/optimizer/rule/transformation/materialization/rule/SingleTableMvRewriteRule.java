@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Binder;
@@ -61,6 +62,7 @@ public class SingleTableMvRewriteRule extends Rule {
                 extractExpr = binder.next();
             }
         }
+        OptimizerTraceUtil.logApplyRule(context.getSessionVariable(), context.getTraceInfo(), this, input, newExpressions);
 
         for (OptExpression expression : newExpressions) {
             // Insert new OptExpression to memo

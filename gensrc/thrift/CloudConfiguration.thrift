@@ -16,7 +16,10 @@ namespace cpp starrocks
 namespace java com.starrocks.thrift
 
 enum TCloudType {
-    AWS
+    DEFAULT,
+    AWS,
+    AZURE,
+    GCP
 }
 
 struct TCloudProperty {

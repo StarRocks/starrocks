@@ -192,7 +192,7 @@ tar zxvf canal.deployer-$version.tar.gz -C /tmp/canal
 ~~~bash
 ## mysql serverId
 canal.instance.mysql.slaveId = 1234
-#position info，need to change to your own database information
+#position info, need to change to your own database information
 canal.instance.master.address = 127.0.0.1:3306
 canal.instance.master.journal.name =
 canal.instance.master.position =
@@ -201,7 +201,7 @@ canal.instance.master.timestamp =
 #canal.instance.standby.journal.name =
 #canal.instance.standby.position =
 #canal.instance.standby.timestamp =
-#username/password，need to change to your own database information
+#username/password, need to change to your own database information
 canal.instance.dbUsername = canal  
 canal.instance.dbPassword = canal
 canal.instance.defaultDatabaseName =

@@ -14,5 +14,6 @@ PROPERTIES (
     "replication_num" = "1",
     "colocate_with" = "groupa4",
     "in_memory" = "false",
+    "unique_constraints" = "s_suppkey",
     "storage_format" = "DEFAULT"
 )

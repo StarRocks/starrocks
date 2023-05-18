@@ -15,8 +15,8 @@
 
 package com.starrocks.common.proc;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.QueryStatisticsFormatter;
 import com.starrocks.qe.QueryStatisticsItem;

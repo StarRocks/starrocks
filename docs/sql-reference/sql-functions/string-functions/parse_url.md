@@ -15,16 +15,17 @@ parse_url(expr1,expr2);
 `expr1`: the URL. The supported data type is VARCHAR.
 
 `expr2`: the component to extract from this URL. The supported data type is VARCHAR. Valid values:
-    - PROTOCOL
-    - HOST
-    - PATH
-    - REF
-    - AUTHORITY
-    - FILE
-    - USERINFO
-    - QUERY (Parameters in QUERY cannot be returned.）
 
-`expr2` is case-sensitive.
+- PROTOCOL
+- HOST
+- PATH
+- REF
+- AUTHORITY
+- FILE
+- USERINFO
+- QUERY. Parameters in QUERY cannot be returned. If you want to return specific parameters, use parse_url with [trim](trim.md) to achieve this implementation. For details, see [Examples](#examples).
+
+`expr2` is **case-sensitive**.
 
 ## Return value
 
@@ -53,4 +54,11 @@ select parse_url('http://facebook.com/path/p1.php?query=1', 'QUERY');
 +---------------------------------------------------------------+
 | query=1                                                       |
 +---------------------------------------------------------------+
+
+select trim(parse_url('http://facebook.com/path/p1.php?query=1', 'QUERY'),'query='); 
++-------------------------------------------------------------------------------+
+| trim(parse_url('http://facebook.com/path/p1.php?query=1', 'QUERY'), 'query=') |
++-------------------------------------------------------------------------------+
+| 1                                                                             |
++-------------------------------------------------------------------------------+
 ```

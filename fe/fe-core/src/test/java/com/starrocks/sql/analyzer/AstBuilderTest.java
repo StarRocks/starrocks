@@ -60,7 +60,6 @@ public class AstBuilderTest {
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
-        StarRocksParser.sqlMode = 32;
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
         StatementBase statement = (StatementBase) new AstBuilder(32).visitSingleStatement(sqlStatements.singleStatement(0));
         Field field = statement.getClass().getDeclaredField("alterClause");
@@ -76,7 +75,6 @@ public class AstBuilderTest {
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
-        StarRocksParser.sqlMode = 32;
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
         StatementBase statement = (StatementBase) new AstBuilder(32).visitSingleStatement(sqlStatements.singleStatement(0));
         Field field = statement.getClass().getDeclaredField("alterClause");

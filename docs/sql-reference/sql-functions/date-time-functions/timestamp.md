@@ -16,7 +16,7 @@ DATETIME timestamp(DATETIME|DATE expr);
 
 ## Return value
 
-Returns a DATETIME value. If the input time is empty or does not exist, such as `2021-02-29`，NULL is returned.
+Returns a DATETIME value. If the input time is empty or does not exist, such as `2021-02-29`, NULL is returned.
 
 ## Examples
 

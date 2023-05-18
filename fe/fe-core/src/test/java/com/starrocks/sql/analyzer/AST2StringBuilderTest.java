@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
@@ -139,5 +140,26 @@ public class AST2StringBuilderTest {
         Assert.assertEquals(SetType.SESSION, ((SystemVariable) convertStmt.getSetListItems().get(0)).getType());
         Assert.assertEquals(SetType.SESSION, ((SystemVariable) convertStmt.getSetListItems().get(1)).getType());
         Assert.assertEquals(AstToStringBuilder.toString(originStmt), AstToStringBuilder.toString(convertStmt));
+    }
+
+    @Test
+    public void testReservedCteNameView() {
+        String sql;
+        sql = "CREATE VIEW abc AS ( \n" +
+                "with `case` as (select 1 as c) SELECT v1 FROM t0 WHERE ((NOT false) IS NOT NULL));";
+        List<StatementBase>
+                statementBase =
+                SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
+        Assert.assertEquals(1, statementBase.size());
+        StatementBase baseStmt = statementBase.get(0);
+        Analyzer.analyze(baseStmt, AnalyzeTestUtil.getConnectContext());
+        Assert.assertTrue(baseStmt instanceof CreateViewStmt);
+        CreateViewStmt viewStmt = (CreateViewStmt) baseStmt;
+        Assert.assertEquals(viewStmt.getInlineViewDef(),
+                "(WITH `case` (`c`) AS (SELECT 1 AS `c`) SELECT `test`.`t0`.`v1`\n" +
+                        "FROM `test`.`t0`\n" +
+                        "WHERE (NOT FALSE) IS NOT NULL)", viewStmt.getInlineViewDef());
+        statementBase = SqlParser.parse(sql, new SessionVariable());
+        Assert.assertEquals(1, statementBase.size());
     }
 }

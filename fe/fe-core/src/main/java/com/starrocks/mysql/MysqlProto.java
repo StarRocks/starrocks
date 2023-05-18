@@ -36,6 +36,8 @@ package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -49,6 +51,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static com.starrocks.mysql.MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT;
@@ -72,18 +75,33 @@ public class MysqlProto {
 
         // In new RBAC privilege framework
         if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+            AuthenticationManager authenticationManager = context.getGlobalStateMgr().getAuthenticationManager();
+            UserIdentity currentUser = null;
             if (Config.enable_auth_check) {
-                UserIdentity currentUser = context.getGlobalStateMgr().getAuthenticationManager().checkPassword(
-                        user, remoteIp, scramble, randomString);
+                currentUser = authenticationManager.checkPassword(user, remoteIp, scramble, randomString);
                 if (currentUser == null) {
                     ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
                     return false;
                 }
-                context.setAuthDataSalt(randomString);
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
-                context.setQualifiedUser(user);
+            } else {
+                Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
+                        authenticationManager.getBestMatchedUserIdentity(user, remoteIp);
+                if (matchedUserIdentity == null) {
+                    LOG.info("enable_auth_check is false, but cannot find user '{}'@'{}'", user, remoteIp);
+                    ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
+                    return false;
+                } else {
+                    currentUser = matchedUserIdentity.getKey();
+                }
             }
+
+
+            context.setCurrentUserIdentity(currentUser);
+            if (!currentUser.isEphemeral()) {
+                context.setCurrentRoleIds(currentUser);
+                context.setAuthDataSalt(randomString);
+            }
+            context.setQualifiedUser(user);
             return true;
         }
 
@@ -123,7 +141,7 @@ public class MysqlProto {
      * Exception:
      * IOException:
      */
-    public static boolean negotiate(ConnectContext context) throws IOException {
+    public static NegotiateResult negotiate(ConnectContext context) throws IOException {
         MysqlSerializer serializer = context.getSerializer();
         MysqlChannel channel = context.getMysqlChannel();
         context.getState().setOk();
@@ -137,7 +155,7 @@ public class MysqlProto {
 
         MysqlAuthPacket authPacket = readAuthPacket(context);
         if (authPacket == null) {
-            return false;
+            return new NegotiateResult(null, false);
         }
 
         if (authPacket.isSSLConnRequest()) {
@@ -147,7 +165,7 @@ public class MysqlProto {
                 LOG.warn("enable ssl connection failed");
                 ErrorReport.report(ErrorCode.ERR_CHANGE_TO_SSL_CONNECTION_FAILED);
                 sendResponsePacket(context);
-                return false;
+                return new NegotiateResult(authPacket, false);
             } else {
                 LOG.info("enable ssl connection successfully");
             }
@@ -155,7 +173,7 @@ public class MysqlProto {
             // read the authentication package again from client
             authPacket = readAuthPacket(context);
             if (authPacket == null) {
-                return false;
+                return new NegotiateResult(null, false);
             }
         }
 
@@ -164,7 +182,7 @@ public class MysqlProto {
             // TODO: client return capability can not support
             ErrorReport.report(ErrorCode.ERR_NOT_SUPPORTED_AUTH_MODE);
             sendResponsePacket(context);
-            return false;
+            return new NegotiateResult(authPacket, false);
         }
 
         // Starting with MySQL 8.0.4, MySQL changed the default authentication plugin for MySQL client
@@ -182,20 +200,36 @@ public class MysqlProto {
             // 1. clear the serializer
             serializer.reset();
             // 2. build the auth switch request and send to the client
-            // TODO(yiming): support kerberos in new RBAC privilege framework later
             if (authPluginName.equals(AUTHENTICATION_KERBEROS_CLIENT)) {
-                if (GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {
-                    try {
-                        handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
-                    } catch (Exception e) {
-                        ErrorReport.report("Building handshake with kerberos error, msg: %s", e.getMessage());
+                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    if (GlobalStateMgr.getCurrentState().getAuthenticationManager().isSupportKerberosAuth()) {
+                        try {
+                            handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
+                        } catch (Exception e) {
+                            ErrorReport.report("Building handshake with kerberos error, msg: %s", e.getMessage());
+                            sendResponsePacket(context);
+                            return new NegotiateResult(authPacket, false);
+                        }
+                    } else {
+                        ErrorReport.report(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, "authentication_kerberos");
                         sendResponsePacket(context);
-                        return false;
+                        return new NegotiateResult(authPacket, false);
                     }
                 } else {
-                    ErrorReport.report(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, "authentication_kerberos");
-                    sendResponsePacket(context);
-                    return false;
+                    if (GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {
+                        try {
+                            handshakePacket.buildKrb5AuthRequestDeprecated(serializer, context.getRemoteIP(),
+                                    authPacket.getUser());
+                        } catch (Exception e) {
+                            ErrorReport.report("Building handshake with kerberos error, msg: %s", e.getMessage());
+                            sendResponsePacket(context);
+                            return new NegotiateResult(authPacket, false);
+                        }
+                    } else {
+                        ErrorReport.report(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, "authentication_kerberos");
+                        sendResponsePacket(context);
+                        return new NegotiateResult(authPacket, false);
+                    }
                 }
             } else {
                 handshakePacket.buildAuthSwitchRequest(serializer);
@@ -205,7 +239,9 @@ public class MysqlProto {
             ByteBuffer authSwitchResponse = channel.fetchOnePacket();
             if (authSwitchResponse == null) {
                 // receive response failed.
-                return false;
+                LOG.error("Building handshake with kerberos error, msg: Failed to get a valid service ticket for" +
+                        " {} from the client", authPacket.getUser());
+                return new NegotiateResult(authPacket, false);
             }
             // 3. the client use default password plugin of StarRocks to dispose
             // password
@@ -216,12 +252,14 @@ public class MysqlProto {
         context.setCapability(context.getServerCapability());
         serializer.setCapability(context.getCapability());
 
+        LOG.info("database in auth packet is {}", authPacket.getDb());
+
         // NOTE: when we behind proxy, we need random string sent by proxy.
         byte[] randomString = handshakePacket.getAuthPluginData();
         // check authenticate
         if (!authenticate(context, authPacket.getAuthResponse(), randomString, authPacket.getUser())) {
             sendResponsePacket(context);
-            return false;
+            return new NegotiateResult(authPacket, false);
         }
 
         // set database
@@ -231,10 +269,10 @@ public class MysqlProto {
                 GlobalStateMgr.getCurrentState().changeCatalogDb(context, db);
             } catch (DdlException e) {
                 sendResponsePacket(context);
-                return false;
+                return new NegotiateResult(authPacket, false);
             }
         }
-        return true;
+        return new NegotiateResult(authPacket, true);
     }
 
     private static MysqlAuthPacket readAuthPacket(ConnectContext context) throws IOException {
@@ -394,4 +432,21 @@ public class MysqlProto {
         return buf;
     }
 
+    public static class NegotiateResult {
+        private final MysqlAuthPacket authPacket;
+        private final boolean success;
+
+        public NegotiateResult(MysqlAuthPacket authPacket, boolean success) {
+            this.authPacket = authPacket;
+            this.success = success;
+        }
+
+        public MysqlAuthPacket getAuthPacket() {
+            return authPacket;
+        }
+
+        public boolean isSuccess() {
+            return success;
+        }
+    }
 }

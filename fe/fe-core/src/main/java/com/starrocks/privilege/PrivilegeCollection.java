@@ -20,6 +20,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -71,7 +72,15 @@ public class PrivilegeCollection {
         }
 
         @Override
-        public int compareTo(PrivilegeEntry o) {
+        public int compareTo(@NotNull PrivilegeEntry o) {
+            //object is null when objectType is SYSTEM
+            if (this.object == null && o.object == null) {
+                return 0;
+            } else if (this.object == null) {
+                return -1;
+            } else if (o.object == null) {
+                return 1;
+            }
             return this.object.compareTo(o.object);
         }
     }
@@ -96,9 +105,7 @@ public class PrivilegeCollection {
             }
         } else {
             for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
-                if (privilegeEntry.object != null
-                        && object.equals(privilegeEntry.object)
-                        && withGrantOption == privilegeEntry.withGrantOption) {
+                if (object.equals(privilegeEntry.object) && withGrantOption == privilegeEntry.withGrantOption) {
                     return privilegeEntry;
                 }
             }
@@ -137,11 +144,6 @@ public class PrivilegeCollection {
             throws PrivilegeException {
         typeToPrivilegeEntryList.computeIfAbsent(objectType, k -> new ArrayList<>());
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(objectType);
-        if (objects == null) {
-            // objects can be null, we should adjust it to a list of one null object
-            objects = new ArrayList<>();
-            objects.add(null);
-        }
         for (PEntryObject object : objects) {
             grantObjectToList(new ActionSet(privilegeTypes), object, isGrant, privilegeEntryList);
         }
@@ -180,11 +182,6 @@ public class PrivilegeCollection {
         if (privilegeEntryList == null) {
             LOG.debug("revoke a non-existence type {}", objectType);
             return;
-        }
-        if (objects == null) {
-            // objects can be null, we should adjust it to a list of one null object
-            objects = new ArrayList<>();
-            objects.add(null);
         }
         for (PEntryObject object : objects) {
             PrivilegeEntry entry = findEntry(privilegeEntryList, object, false);
@@ -256,6 +253,7 @@ public class PrivilegeCollection {
         if (privilegeEntryList == null) {
             return false;
         }
+
         List<PEntryObject> unCheckedObjects = new ArrayList<>(objects);
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
             Iterator<PEntryObject> iterator = unCheckedObjects.iterator();

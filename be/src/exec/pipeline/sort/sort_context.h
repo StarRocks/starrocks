@@ -53,10 +53,21 @@ public:
     void incr_sinker() { ++_num_partition_sinkers; }
     const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters() { return _build_runtime_filters; }
     void add_partition_chunks_sorter(const std::shared_ptr<ChunksSorter>& chunks_sorter);
+    ChunksSorter* get_chunks_sorter(int32_t driver_sequence) {
+        DCHECK_LT(driver_sequence, _chunks_sorter_partitions.size());
+        return _chunks_sorter_partitions[driver_sequence].get();
+    }
+    TTopNType::type topn_type() const { return _topn_type; }
+    int64_t offset() const { return _offset; }
+    int64_t limit() const { return _limit; }
+    const std::vector<ExprContext*>& sort_exprs() const { return _sort_exprs; }
+    const SortDescs& sort_descs() const { return _sort_desc; }
 
     void finish_partition(uint64_t partition_rows);
     bool is_partition_sort_finished() const;
     bool is_output_finished() const;
+    bool is_partition_ready() const;
+    void cancel();
 
     StatusOr<ChunkPtr> pull_chunk();
 
@@ -90,9 +101,11 @@ private:
 
 class SortContextFactory {
 public:
-    SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging, int64_t offset,
-                       int64_t limit, std::vector<ExprContext*> sort_exprs, const std::vector<bool>& _is_asc_order,
-                       const std::vector<bool>& is_null_first,
+    SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
+                       std::vector<ExprContext*> sort_exprs, const std::vector<bool>& is_asc_order,
+                       const std::vector<bool>& is_null_first, const std::vector<TExpr>& partition_exprs,
+                       int64_t offset, int64_t limit, const std::string& sort_keys,
+                       const std::vector<OrderByType>& order_by_types,
                        const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters);
 
     SortContextPtr create(int32_t idx);

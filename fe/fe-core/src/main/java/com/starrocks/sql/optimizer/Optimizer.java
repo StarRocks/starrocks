@@ -48,9 +48,9 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
-import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxAggToMetaScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.SingleTableMvRewriteRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
@@ -60,12 +60,14 @@ import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
+import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
+import com.starrocks.sql.optimizer.validate.PlanValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -183,11 +185,15 @@ public class Optimizer {
         final CostEstimate costs = Explain.buildCost(result);
         connectContext.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost())
                 .setPlanMemCosts(costs.getMemoryCost());
+        OptExpression finalPlan;
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.PhysicalRewrite")) {
-            OptExpression finalPlan = physicalRuleRewrite(rootTaskContext, result);
+            finalPlan = physicalRuleRewrite(rootTaskContext, result);
             OptimizerTraceUtil.logOptExpression(connectContext, "final plan after physical rewrite:\n%s", finalPlan);
             OptimizerTraceUtil.log(connectContext, context.getTraceInfo());
+        }
 
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.PlanValidate")) {
+            PlanValidator.getInstance().validatePlan(finalPlan, rootTaskContext);
             return finalPlan;
         }
     }
@@ -199,7 +205,7 @@ public class Optimizer {
             memo = new Memo();
         }
 
-        context = new OptimizerContext(memo, columnRefFactory, connectContext);
+        context = new OptimizerContext(memo, columnRefFactory, connectContext, optimizerConfig);
         OptimizerTraceInfo traceInfo;
         if (connectContext.getExecutor() == null) {
             traceInfo = new OptimizerTraceInfo(connectContext.getQueryId(), null);
@@ -295,8 +301,11 @@ public class Optimizer {
             }
         }
 
-        tree = new MaterializedViewRule().transform(tree, context).get(0);
-        deriveLogicalProperty(tree);
+        if (sessionVariable.isEnableSyncMaterializedViewRewrite()) {
+            // Add a config to decide whether to rewrite sync mv.
+            tree = new MaterializedViewRule().transform(tree, context).get(0);
+            deriveLogicalProperty(tree);
+        }
 
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
@@ -316,26 +325,56 @@ public class Optimizer {
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        ruleRewriteIterative(tree, rootTaskContext, new RewriteSimpleAggToMetaScanRule());
 
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
 
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
-        ruleRewriteIterative(tree, rootTaskContext, new RewriteMinMaxAggToMetaScanRule());
 
-        // if mv has multi table sources, we will process it in memo to support view delta join rewrite
-        if (!optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
-                && sessionVariable.isEnableMaterializedViewRewrite()
-                && sessionVariable.isEnableRuleBasedMaterializedViewRewrite()
-                && !rootTaskContext.getOptimizerContext().getCandidateMvs().isEmpty()
-                && rootTaskContext.getOptimizerContext().getCandidateMvs()
-                .stream().allMatch(context -> !context.hasMultiTables())) {
+        if (isEnableSingleTableMVRewrite(rootTaskContext, sessionVariable, tree)) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }
+
+        // NOTE: This rule should be after MV Rewrite because MV Rewrite cannot handle
+        // select count(distinct c) from t group by a, b
+        // if this rule has applied before MV.
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
+
         return tree.getInputs().get(0);
+    }
+
+    private boolean isEnableSingleTableMVRewrite(TaskContext rootTaskContext,
+                                                 SessionVariable sessionVariable,
+                                                 OptExpression queryPlan) {
+        // if disable single mv rewrite, return false.
+        if (optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)) {
+            return false;
+        }
+        // if disable isEnableMaterializedViewRewrite/isEnableRuleBasedMaterializedViewRewrite, return false.
+        if (!sessionVariable.isEnableMaterializedViewRewrite()
+                || !sessionVariable.isEnableRuleBasedMaterializedViewRewrite()) {
+            return false;
+        }
+        // if mv candidates are empty, return false.
+        if (rootTaskContext.getOptimizerContext().getCandidateMvs().isEmpty()) {
+            return false;
+        }
+        // If query only has one table use single table rewrite, view delta only rewrites multi-tables query.
+        if (!sessionVariable.isEnableMaterializedViewSingleTableViewDeltaRewrite() &&
+                MvUtils.getAllTables(queryPlan).size() <= 1) {
+            return true;
+        }
+        // If view delta is enabled and there are multi-table mvs, return false.
+        // if mv has multi table sources, we will process it in memo to support view delta join rewrite
+        if (sessionVariable.isEnableMaterializedViewViewDeltaRewrite() &&
+                rootTaskContext.getOptimizerContext().getCandidateMvs()
+                        .stream().anyMatch(context -> context.hasMultiTables())) {
+            return false;
+        }
+        return true;
     }
 
     private OptExpression rewriteAndValidatePlan(OptExpression tree, TaskContext rootTaskContext) {
@@ -347,6 +386,12 @@ public class Optimizer {
 
     private OptExpression pushDownAggregation(OptExpression tree, TaskContext rootTaskContext,
                                               ColumnRefSet requiredColumns) {
+        if (context.getSessionVariable().isCboPushDownDistinctBelowWindow()) {
+            // TODO(by satanson): in future, PushDownDistinctAggregateRule and PushDownAggregateRule should be
+            //  fused one rule to tackle with all scenarios of agg push-down.
+            tree = new PushDownDistinctAggregateRule().rewrite(tree, rootTaskContext);
+        }
+
         if (context.getSessionVariable().getCboPushDownAggregateMode() == -1) {
             return tree;
         }
@@ -413,17 +458,33 @@ public class Optimizer {
             context.getRuleSet().addRealtimeMVRules();
         }
 
-        if (!context.getCandidateMvs().isEmpty()
-                && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()) {
-            if (rootTaskContext.getOptimizerContext().getCandidateMvs()
-                    .stream().anyMatch(context -> context.hasMultiTables())) {
-                new SingleTableMvRewriteRule().transform(tree, context);
+        if (isEnableMultiTableRewrite(connectContext, tree)) {
+            if (sessionVariable.isEnableMaterializedViewViewDeltaRewrite() &&
+                    rootTaskContext.getOptimizerContext().getCandidateMvs()
+                            .stream().anyMatch(context -> context.hasMultiTables())) {
+                context.getRuleSet().addSingleTableMvRewriteRule();
             }
             context.getRuleSet().addMultiTableMvRewriteRule();
         }
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(rootTaskContext, memo.getRootGroup()));
         context.getTaskScheduler().executeTasks(rootTaskContext);
+    }
+
+    private boolean isEnableMultiTableRewrite(ConnectContext connectContext, OptExpression queryPlan) {
+        if (context.getCandidateMvs().isEmpty()) {
+            return false;
+        }
+
+        if (!connectContext.getSessionVariable().isEnableMaterializedViewRewrite()) {
+            return false;
+        }
+
+        if (!connectContext.getSessionVariable().isEnableMaterializedViewSingleTableViewDeltaRewrite() &&
+                MvUtils.getAllTables(queryPlan).size() <= 1) {
+            return false;
+        }
+        return true;
     }
 
     private OptExpression physicalRuleRewrite(TaskContext rootTaskContext, OptExpression result) {

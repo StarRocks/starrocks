@@ -46,6 +46,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -105,7 +107,11 @@ public class RangePartitionPruner implements PartitionPruner {
             return result;
         }
         List<LiteralExpr> inPredicateLiterals = filter.getInPredicateLiterals();
-        if (null == inPredicateLiterals || inPredicateLiterals.size() * complex > 100) {
+        int inPredicateMaxLen = 100;
+        if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable() != null) {
+            inPredicateMaxLen = ConnectContext.get().getSessionVariable().getRangePrunerPredicateMaxLen();
+        }
+        if (null == inPredicateLiterals || inPredicateLiterals.size() * complex > inPredicateMaxLen) {
             if (filter.lowerBoundInclusive && filter.upperBoundInclusive
                     && filter.lowerBound != null && filter.upperBound != null
                     && 0 == filter.lowerBound.compareLiteral(filter.upperBound)) {

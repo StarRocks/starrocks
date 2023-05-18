@@ -69,7 +69,8 @@ public:
               _type(rhs._type),
               _sub_fields(rhs._sub_fields ? new Buffer<Field>(*rhs._sub_fields) : nullptr),
               _short_key_length(rhs._short_key_length),
-              _flags(rhs._flags) {}
+              _flags(rhs._flags),
+              _uid(rhs._uid) {}
 
     Field(Field&& rhs) noexcept
             : _id(rhs._id),
@@ -78,7 +79,8 @@ public:
               _type(std::move(rhs._type)),
               _sub_fields(rhs._sub_fields),
               _short_key_length(rhs._short_key_length),
-              _flags(rhs._flags) {
+              _flags(rhs._flags),
+              _uid(rhs._uid) {
         rhs._sub_fields = nullptr;
     }
 
@@ -92,6 +94,7 @@ public:
             _short_key_length = rhs._short_key_length;
             _flags = rhs._flags;
             _sub_fields = rhs._sub_fields ? new Buffer<Field>(*rhs._sub_fields) : nullptr;
+            _uid = rhs._uid;
         }
         return *this;
     }
@@ -104,6 +107,7 @@ public:
             _agg_method = rhs._agg_method;
             _short_key_length = rhs._short_key_length;
             _flags = rhs._flags;
+            _uid = rhs._uid;
             std::swap(_sub_fields, rhs._sub_fields);
         }
         return *this;
@@ -157,6 +161,9 @@ public:
 
     ColumnPtr create_column() const;
 
+    void set_uid(ColumnUID uid) { _uid = uid; }
+    const ColumnUID& uid() const { return _uid; }
+
     static FieldPtr convert_to_dict_field(const Field& field) {
         DCHECK(field.type()->type() == TYPE_VARCHAR);
         FieldPtr res = std::make_shared<Field>(field);
@@ -176,6 +183,7 @@ private:
     int32_t _length = 0;
     uint8_t _short_key_length;
     uint8_t _flags;
+    ColumnUID _uid = -1;
 };
 
 inline bool Field::is_nullable() const {
@@ -222,7 +230,7 @@ inline FieldPtr Field::with_nullable(bool nullable) {
 inline std::ostream& operator<<(std::ostream& os, const Field& field) {
     os << field.id() << ":" << field.name() << " " << field.type()->type() << " "
        << (field.is_nullable() ? "NULL" : "NOT NULL") << (field.is_key() ? " KEY" : "") << " "
-       << field.aggregate_method();
+       << field.aggregate_method() << " uid:" << field.uid();
     return os;
 }
 

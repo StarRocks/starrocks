@@ -21,8 +21,9 @@
 #include "column/chunk.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "fs/fs_hdfs.h"
+#include "fs/fs.h"
 #include "io/cache_input_stream.h"
+#include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
@@ -49,6 +50,7 @@ struct HdfsScanStats {
     // parquet only!
     // read & decode
     int64_t request_bytes_read = 0;
+    int64_t request_bytes_read_uncompressed = 0;
     int64_t level_decode_ns = 0;
     int64_t value_decode_ns = 0;
     int64_t page_read_ns = 0;
@@ -65,10 +67,6 @@ struct HdfsScanStats {
     // ORC only!
     int64_t delete_build_ns = 0;
     int64_t delete_file_per_scan = 0;
-
-    int64_t get_cpu_time_ns() const {
-        return expr_filter_ns + column_convert_ns + column_read_ns + reader_init_ns - io_ns;
-    }
 };
 
 class HdfsParquetProfile;
@@ -76,14 +74,11 @@ class HdfsParquetProfile;
 struct HdfsScanProfile {
     RuntimeProfile* runtime_profile = nullptr;
     RuntimeProfile::Counter* rows_read_counter = nullptr;
-    RuntimeProfile::Counter* bytes_read_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
+
     RuntimeProfile::Counter* reader_init_timer = nullptr;
     RuntimeProfile::Counter* open_file_timer = nullptr;
     RuntimeProfile::Counter* expr_filter_timer = nullptr;
-
-    RuntimeProfile::Counter* io_timer = nullptr;
-    RuntimeProfile::Counter* io_counter = nullptr;
     RuntimeProfile::Counter* column_read_timer = nullptr;
     RuntimeProfile::Counter* column_convert_timer = nullptr;
 
@@ -93,6 +88,22 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* block_cache_write_counter = nullptr;
     RuntimeProfile::Counter* block_cache_write_bytes = nullptr;
     RuntimeProfile::Counter* block_cache_write_timer = nullptr;
+    RuntimeProfile::Counter* block_cache_write_fail_counter = nullptr;
+    RuntimeProfile::Counter* block_cache_write_fail_bytes = nullptr;
+
+    RuntimeProfile::Counter* shared_buffered_shared_io_count = nullptr;
+    RuntimeProfile::Counter* shared_buffered_shared_io_bytes = nullptr;
+    RuntimeProfile::Counter* shared_buffered_shared_io_timer = nullptr;
+    RuntimeProfile::Counter* shared_buffered_direct_io_count = nullptr;
+    RuntimeProfile::Counter* shared_buffered_direct_io_bytes = nullptr;
+    RuntimeProfile::Counter* shared_buffered_direct_io_timer = nullptr;
+
+    RuntimeProfile::Counter* app_io_bytes_read_counter = nullptr;
+    RuntimeProfile::Counter* app_io_timer = nullptr;
+    RuntimeProfile::Counter* app_io_counter = nullptr;
+    RuntimeProfile::Counter* fs_bytes_read_counter = nullptr;
+    RuntimeProfile::Counter* fs_io_timer = nullptr;
+    RuntimeProfile::Counter* fs_io_counter = nullptr;
 };
 
 struct HdfsScannerParams {
@@ -148,6 +159,8 @@ struct HdfsScannerParams {
 
     std::vector<const TIcebergDeleteFile*> deletes;
 
+    const TIcebergSchema* iceberg_schema = nullptr;
+
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
     bool use_block_cache = false;
@@ -194,6 +207,8 @@ struct HdfsScannerContext {
     bool case_sensitive = false;
 
     std::string timezone;
+
+    const TIcebergSchema* iceberg_schema = nullptr;
 
     HdfsScanStats* stats = nullptr;
 
@@ -242,7 +257,9 @@ public:
     int64_t num_bytes_read() const { return _stats.bytes_read; }
     int64_t raw_rows_read() const { return _stats.raw_rows_read; }
     int64_t num_rows_read() const { return _stats.num_rows_read; }
-    int64_t cpu_time_spent() const { return _stats.get_cpu_time_ns(); }
+    int64_t cpu_time_spent() const { return _total_running_time - _stats.io_ns; }
+    int64_t io_time_spent() const { return _stats.io_ns; }
+    int64_t estimated_mem_usage() const;
     void set_keep_priority(bool v) { _keep_priority = v; }
     bool keep_priority() const { return _keep_priority; }
     void update_counter();
@@ -297,11 +314,14 @@ protected:
     HdfsScannerParams _scanner_params;
     RuntimeState* _runtime_state = nullptr;
     HdfsScanStats _stats;
+    HdfsScanStats _fs_stats;
     std::unique_ptr<RandomAccessFile> _raw_file;
     std::unique_ptr<RandomAccessFile> _file;
     // by default it's no compression.
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
+    std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
+    int64_t _total_running_time = 0;
 };
 
 } // namespace starrocks

@@ -25,6 +25,7 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "runtime/descriptors.h"
+#include "util/random.h"
 
 namespace starrocks {
 
@@ -102,6 +103,7 @@ public:
         for (auto& location : locations) {
             if (_tablets.count(location.tablet_id) == 0) {
                 _tablets.emplace(location.tablet_id, std::move(location));
+                VLOG(2) << "add location " << location;
             }
         }
     }
@@ -151,6 +153,8 @@ private:
 struct ChunkRow {
     ChunkRow() = default;
     ChunkRow(Columns* columns_, uint32_t index_) : columns(columns_), index(index_) {}
+
+    std::string debug_string();
 
     Columns* columns = nullptr;
     uint32_t index = 0;
@@ -209,7 +213,7 @@ public:
     // has been filtered out for not being able to find tablet.
     // it could be any row, becauset it's just for outputing error message for user to diagnose.
     Status find_tablets(Chunk* chunk, std::vector<OlapTablePartition*>* partitions, std::vector<uint32_t>* indexes,
-                        std::vector<uint8_t>* selection, int* invalid_row_index, int64_t txn_id,
+                        std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs, int64_t txn_id,
                         std::vector<std::vector<std::string>>* partition_not_exist_row_values);
 
     const std::map<int64_t, OlapTablePartition*>& get_partitions() const { return _partitions; }
@@ -245,6 +249,8 @@ private:
     ObjectPool _obj_pool;
     std::map<int64_t, OlapTablePartition*> _partitions;
     std::map<ChunkRow*, OlapTablePartition*, PartionKeyComparator> _partitions_map;
+
+    Random _rand{(uint32_t)time(nullptr)};
 };
 
 } // namespace starrocks

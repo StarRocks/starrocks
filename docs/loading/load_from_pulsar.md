@@ -44,7 +44,7 @@ The type of a subscription is defined when a consumer connects to it, and the ty
 
 ## Create a Routine Load job
 
-The following examples describe how to consume CSV-formatted messages in Pulsar, and load the data into StarRocks by creating a Routine Load job. For detailed instruction and reference, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+The following examples describe how to consume CSV-formatted messages in Pulsar, and load the data into StarRocks by creating a Routine Load job. For detailed instruction and reference, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 ```SQL
 CREATE ROUTINE LOAD load_test.routine_wiki_edit_1 ON routine_wiki_edit
@@ -69,16 +69,16 @@ FROM PULSAR
 );
 ```
 
-When Routine Load is created to consume data from Pulsar, most input parameters except for `data_source_properties` are the same as consuming data from Kafka . For descriptions about parameters except data_source_properties `data_source_properties` , see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+When Routine Load is created to consume data from Pulsar, most input parameters except for `data_source_properties` are the same as consuming data from Kafka . For descriptions about parameters except data_source_properties `data_source_properties` , see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 The parameters related to `data_source_properties` and their descriptions are as follows:
 
 | **Parameter**                               | **Required** | **Description**                                              |
 | ------------------------------------------- | ------------ | ------------------------------------------------------------ |
 | pulsar_service_url                          | Yes          | The URL that is used to connect to the Pulsar cluster.  Format: `"pulsar://ip:port"` or `"pulsar://service:port"`.Example: `"pulsar_service_url" = "pulsar://``localhost:6650``"` |
-| pulsar_topic                                | Yes          | Subscribed topic.Example："pulsar_topic" = "persistent://tenant/namespace/topic-name" |
+| pulsar_topic                                | Yes          | Subscribed topic. Example: "pulsar_topic" = "persistent://tenant/namespace/topic-name" |
 | pulsar_subscription                         | Yes          | Subscription configured for the topic.Example: `"pulsar_subscription" = "my_subscription"` |
-| pulsar_partitions，pulsar_initial_positions | No           | `pulsar_partitions` :  Subscribed partitions in the topic.`pulsar_initial_positions`: initial positions of partitions specified by `pulsar_partitions`. The initial positions must correspond to the partitions in `pulsar_partitions`. Valid values:`POSITION_EARLIEST` (Default value): Subscription starts from the earliest available message in the partition. `POSITION_LATEST`：Subscription starts from the latest available message in the partition.Note:If `pulsar_partitions` is not specified, the topic's all partitions are subscribed.If both `pulsar_partitions` and `property.pulsar_default_initial_position` are specified, the `pulsar_partitions` value overrides `property.pulsar_default_initial_position` value.If neither `pulsar_partitions` nor `property.pulsar_default_initial_position` is specified, subscription starts from the latest available message in the partition.Example:`"pulsar_partitions" = "my-partition-0,my-partition-1,my-partition-2,my-partition-3", "pulsar_initial_positions" = "POSITION_EARLIEST,POSITION_EARLIEST,POSITION_LATEST,POSITION_LATEST"` |
+| pulsar_partitions, pulsar_initial_positions | No           | `pulsar_partitions` :  Subscribed partitions in the topic.`pulsar_initial_positions`: initial positions of partitions specified by `pulsar_partitions`. The initial positions must correspond to the partitions in `pulsar_partitions`. Valid values:`POSITION_EARLIEST` (Default value): Subscription starts from the earliest available message in the partition. `POSITION_LATEST`: Subscription starts from the latest available message in the partition.Note:If `pulsar_partitions` is not specified, the topic's all partitions are subscribed.If both `pulsar_partitions` and `property.pulsar_default_initial_position` are specified, the `pulsar_partitions` value overrides `property.pulsar_default_initial_position` value.If neither `pulsar_partitions` nor `property.pulsar_default_initial_position` is specified, subscription starts from the latest available message in the partition.Example:`"pulsar_partitions" = "my-partition-0,my-partition-1,my-partition-2,my-partition-3", "pulsar_initial_positions" = "POSITION_EARLIEST,POSITION_EARLIEST,POSITION_LATEST,POSITION_LATEST"` |
 
 Routine Load supports the following custom parameters for Pulsar.
 
@@ -129,7 +129,7 @@ MySQL [example_db]> SHOW ROUTINE LOAD TASK WHERE JobName = "routine_wiki_edit_1"
 
 ## Alter a load job
 
-Before altering a load job, you must pause it by using the [PAUSE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/PAUSE%20ROUTINE%20LOAD.md) statement. Then you can execute the [ALTER ROUTINE LOAD](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/alter-routine-load). After altering it, you can execute the [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md) statement to resume it, and check its status by using the [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md) statement.
+Before altering a load job, you must pause it by using the [PAUSE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/PAUSE%20ROUTINE%20LOAD.md) statement. Then you can execute the [ALTER ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/alter-routine-load.md). After altering it, you can execute the [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md) statement to resume it, and check its status by using the [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md) statement.
 
 When Routine Load is used to consume data from Pulsar, most returned parameters except for `data_source_properties` are the same as consuming data from Kafka.
 

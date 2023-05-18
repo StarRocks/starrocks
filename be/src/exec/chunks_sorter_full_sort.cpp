@@ -47,8 +47,8 @@ void ChunksSorterFullSort::setup_runtime(starrocks::RuntimeProfile* profile, Mem
     _profiler = _object_pool->add(new ChunksSorterFullSortProfiler(profile, parent_mem_tracker));
 }
 Status ChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) {
-    _merge_unsorted(state, chunk);
-    _partial_sort(state, false);
+    RETURN_IF_ERROR(_merge_unsorted(state, chunk));
+    RETURN_IF_ERROR(_partial_sort(state, false));
 
     return Status::OK();
 }
@@ -249,7 +249,7 @@ starrocks::ChunkPtr ChunksSorterFullSort::_late_materialize_tmpl(const starrocks
     }
     return final_chunk;
 }
-Status ChunksSorterFullSort::done(RuntimeState* state) {
+Status ChunksSorterFullSort::do_done(RuntimeState* state) {
     RETURN_IF_ERROR(_partial_sort(state, true));
     {
         _sort_permutation = {};

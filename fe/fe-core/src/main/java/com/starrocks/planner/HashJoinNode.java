@@ -50,7 +50,6 @@ import com.starrocks.thrift.TPlanNodeType;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Hash join between left child and right child.

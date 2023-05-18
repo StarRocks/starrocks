@@ -108,8 +108,7 @@ public class StatisticsCalculatorTest {
                 "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `test_all_type_day_partition` (\n" +
@@ -134,8 +133,7 @@ public class StatisticsCalculatorTest {
                 "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
     }
 
@@ -252,6 +250,7 @@ public class StatisticsCalculatorTest {
                     ((OlapTable) table).getBaseIndexId(),
                     partitionIds,
                     null,
+                    false,
                     Lists.newArrayList(),
                     Lists.newArrayList());
 
@@ -314,6 +313,7 @@ public class StatisticsCalculatorTest {
                         ((OlapTable) table).getBaseIndexId(),
                         partitionIds,
                         null,
+                        false,
                         Lists.newArrayList(),
                         Lists.newArrayList());
 
@@ -369,6 +369,7 @@ public class StatisticsCalculatorTest {
                         ((OlapTable) table).getBaseIndexId(),
                         partitionIds,
                         null,
+                        false,
                         Lists.newArrayList(),
                         Lists.newArrayList());
 
@@ -396,6 +397,7 @@ public class StatisticsCalculatorTest {
                         null, -1, null, ((OlapTable) table).getBaseIndexId(),
                         partitionIds,
                         null,
+                        false,
                         Lists.newArrayList(),
                         Lists.newArrayList());
         olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,
@@ -454,6 +456,7 @@ public class StatisticsCalculatorTest {
                         ((OlapTable) table).getBaseIndexId(),
                         partitionIds,
                         null,
+                        false,
                         Lists.newArrayList(),
                         Lists.newArrayList());
 
@@ -483,6 +486,7 @@ public class StatisticsCalculatorTest {
                         ((OlapTable) table).getBaseIndexId(),
                         partitionIds,
                         null,
+                        false,
                         Lists.newArrayList(),
                         Lists.newArrayList());
         olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,

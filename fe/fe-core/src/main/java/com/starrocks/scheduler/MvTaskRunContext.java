@@ -16,6 +16,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.Range;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.Map;
@@ -31,11 +32,15 @@ public class MvTaskRunContext extends TaskRunContext {
     String nextPartitionEnd = null;
     ExecPlan execPlan = null;
 
+    int partitionTTLNumber = TableProperty.INVALID;
+
     public MvTaskRunContext(TaskRunContext context) {
         this.ctx = context.ctx;
         this.definition = context.definition;
         this.remoteIp = context.remoteIp;
         this.properties = context.properties;
+        this.type = context.type;
+        this.status = context.status;
     }
 
     public Map<String, Set<String>> getBaseToMvNameRef() {
@@ -88,5 +93,17 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setExecPlan(ExecPlan execPlan) {
         this.execPlan = execPlan;
+    }
+
+    public Constants.TaskType getTaskType() {
+        return this.type;
+    }
+
+    public int getPartitionTTLNumber() {
+        return partitionTTLNumber;
+    }
+
+    public void setPartitionTTLNumber(int partitionTTLNumber) {
+        this.partitionTTLNumber = partitionTTLNumber;
     }
 }

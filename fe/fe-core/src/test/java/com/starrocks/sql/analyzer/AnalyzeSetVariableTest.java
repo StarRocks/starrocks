@@ -244,4 +244,18 @@ public class AnalyzeSetVariableTest {
         sql = "SET GLOBAL TRANSACTION ISOLATION LEVEL SERIALIZABLE";
         analyzeSuccess(sql);
     }
+
+    @Test
+    public void testSetAdaptiveDopMaxBlockRowsPerDriverSeq() {
+        String sql;
+
+        sql = "SET runtime_adaptive_dop_max_block_rows_per_driver_seq = 0";
+        analyzeFail(sql);
+
+        sql = "SET runtime_adaptive_dop_max_block_rows_per_driver_seq = -1";
+        analyzeFail(sql);
+
+        sql = "SET runtime_adaptive_dop_max_block_rows_per_driver_seq = 1";
+        analyzeSuccess(sql);
+    }
 }

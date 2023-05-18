@@ -128,8 +128,8 @@ public class DynamicPartitionUtil {
             ErrorReport.reportDdlException(ErrorCode.ERROR_DYNAMIC_PARTITION_BUCKETS_EMPTY);
         }
         try {
-            if (Integer.parseInt(buckets) <= 0) {
-                ErrorReport.reportDdlException(ErrorCode.ERROR_DYNAMIC_PARTITION_BUCKETS_ZERO, buckets);
+            if (Integer.parseInt(buckets) < 0) {
+                buckets = "0";
             }
         } catch (NumberFormatException e) {
             ErrorReport.reportDdlException(ErrorCode.ERROR_DYNAMIC_PARTITION_BUCKETS_FORMAT, buckets);
@@ -212,12 +212,10 @@ public class DynamicPartitionUtil {
         String start = properties.get(DynamicPartitionProperty.START);
         String timeZone = properties.get(DynamicPartitionProperty.TIME_ZONE);
         String end = properties.get(DynamicPartitionProperty.END);
-        String buckets = properties.get(DynamicPartitionProperty.BUCKETS);
         String enable = properties.get(DynamicPartitionProperty.ENABLE);
 
         if (!(Strings.isNullOrEmpty(enable) && Strings.isNullOrEmpty(timeUnit) && Strings.isNullOrEmpty(timeZone)
-                && Strings.isNullOrEmpty(prefix) && Strings.isNullOrEmpty(start) && Strings.isNullOrEmpty(end)
-                && Strings.isNullOrEmpty(buckets))) {
+                && Strings.isNullOrEmpty(prefix) && Strings.isNullOrEmpty(start) && Strings.isNullOrEmpty(end))) {
             if (Strings.isNullOrEmpty(enable)) {
                 properties.put(DynamicPartitionProperty.ENABLE, "true");
             }
@@ -232,9 +230,6 @@ public class DynamicPartitionUtil {
             }
             if (Strings.isNullOrEmpty(end)) {
                 throw new DdlException("Must assign dynamic_partition.end properties");
-            }
-            if (Strings.isNullOrEmpty(buckets)) {
-                throw new DdlException("Must assign dynamic_partition.buckets properties");
             }
             if (Strings.isNullOrEmpty(timeZone)) {
                 properties.put(DynamicPartitionProperty.TIME_ZONE, TimeUtils.getSystemTimeZone().getID());
@@ -430,19 +425,14 @@ public class DynamicPartitionUtil {
             TableProperty tableProperty = olapTable.getTableProperty();
             if (tableProperty != null) {
                 tableProperty.modifyTableProperties(dynamicPartitionProperties);
-                tableProperty.buildDynamicProperty();
             } else {
-                olapTable.setTableProperty(new TableProperty(dynamicPartitionProperties).buildDynamicProperty());
+                tableProperty = new TableProperty(dynamicPartitionProperties);
+                olapTable.setTableProperty(tableProperty);
             }
-        }
-    }
-
-    public static void checkAndSetDynamicPartitionBuckets(Map<String, String> properties, int bucketNum) {
-        if (properties == null || properties.isEmpty()) {
-            return;
-        }
-        if (!Strings.isNullOrEmpty(properties.get(DynamicPartitionProperty.ENABLE))) {
-            properties.putIfAbsent(DynamicPartitionProperty.BUCKETS, String.valueOf(bucketNum));
+            if (!tableProperty.getProperties().containsKey(DynamicPartitionProperty.BUCKETS)) {
+                tableProperty.modifyTableProperties(DynamicPartitionProperty.BUCKETS, "0");
+            }
+            tableProperty.buildDynamicProperty();
         }
     }
 

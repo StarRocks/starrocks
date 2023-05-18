@@ -14,8 +14,12 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.load.loadv2.InsertLoadJob;
@@ -26,6 +30,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -56,6 +61,8 @@ public class TaskRun implements Comparable<TaskRun> {
     private TaskRunProcessor processor;
 
     private TaskRunStatus status;
+
+    private Constants.TaskType type;
 
     TaskRun() {
         future = new CompletableFuture<>();
@@ -92,14 +99,53 @@ public class TaskRun implements Comparable<TaskRun> {
     public TaskRunProcessor getProcessor() {
         return processor;
     }
-
     public void setProcessor(TaskRunProcessor processor) {
         this.processor = processor;
     }
 
+    public void setType(Constants.TaskType type) {
+        this.type = type;
+    }
+
+    public Constants.TaskType getType() {
+        return this.type;
+    }
+
+    public Map<String, String>  refreshTaskProperties(ConnectContext ctx) {
+        Map<String, String> newProperties = Maps.newHashMap();
+        if (task.getSource() != Constants.TaskSource.MV) {
+            return newProperties;
+        }
+
+        try {
+            // NOTE: mvId is set in Task's properties when creating
+            long mvId = Long.parseLong(properties.get(PartitionBasedMaterializedViewRefreshProcessor.MV_ID));
+            Database database = GlobalStateMgr.getCurrentState().getDb(ctx.getDatabase());
+            if (database == null) {
+                LOG.warn("database {} do not exist when refreshing materialized view:{}", ctx.getDatabase(), mvId);
+                return newProperties;
+            }
+
+            Table table = database.getTable(mvId);
+            if (table == null) {
+                LOG.warn("materialized view:{} in database:{} do not exist when refreshing", mvId,
+                        ctx.getDatabase());
+                return newProperties;
+            }
+            MaterializedView materializedView = (MaterializedView) table;
+            Preconditions.checkState(materializedView != null);
+            newProperties = materializedView.getProperties();
+        } catch (Exception e) {
+            LOG.warn("refresh task properties failed:", e);
+        }
+        return newProperties;
+    }
+
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
+        Preconditions.checkNotNull(status.getDefinition(), "The definition of task run should not null");
         taskRunContext.setDefinition(status.getDefinition());
+        taskRunContext.setPostRun(status.getPostRun());
         runCtx = new ConnectContext(null);
         runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         runCtx.setDatabase(task.getDbName());
@@ -108,6 +154,10 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.setCurrentRoleIds(runCtx.getCurrentUserIdentity());
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
+
+        Map<String, String> newProperties = refreshTaskProperties(runCtx);
+        properties.putAll(newProperties);
+
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
         runCtx.resetSessionVariable();
         if (properties != null) {
@@ -124,6 +174,9 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setRemoteIp(runCtx.getMysqlChannel().getRemoteHostPortString());
         taskRunContext.setProperties(taskRunContextProperties);
         taskRunContext.setPriority(status.getPriority());
+        taskRunContext.setTaskType(type);
+        taskRunContext.setStatus(status);
+
         processor.processTaskRun(taskRunContext);
         QueryState queryState = runCtx.getState();
         if (runCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
@@ -134,6 +187,15 @@ public class TaskRun implements Comparable<TaskRun> {
             }
             status.setErrorCode(errorCode);
             return false;
+        }
+
+        // Execute post task action, but ignore any exception
+        if (StringUtils.isNotEmpty(taskRunContext.getPostRun())) {
+            try {
+                processor.postTaskRun(taskRunContext);
+            } catch (Exception ignored) {
+                LOG.warn("Execute post taskRun failed {} ", status, ignored);
+            }
         }
         return true;
     }
@@ -174,7 +236,9 @@ public class TaskRun implements Comparable<TaskRun> {
     public TaskRunStatus initStatus(String queryId, Long createTime) {
         TaskRunStatus status = new TaskRunStatus();
         status.setQueryId(queryId);
+        status.setTaskId(task.getId());
         status.setTaskName(task.getName());
+        status.setSource(task.getSource());
         if (createTime == null) {
             status.setCreateTime(System.currentTimeMillis());
         } else {
@@ -183,6 +247,7 @@ public class TaskRun implements Comparable<TaskRun> {
         status.setUser(task.getCreateUser());
         status.setDbName(task.getDbName());
         status.setDefinition(task.getDefinition());
+        status.setPostRun(task.getPostRun());
         status.setExpireTime(System.currentTimeMillis() + Config.task_runs_ttl_second * 1000L);
         this.status = status;
         return status;
@@ -212,5 +277,19 @@ public class TaskRun implements Comparable<TaskRun> {
     @Override
     public int hashCode() {
         return Objects.hash(status);
+    }
+
+    @Override
+    public String toString() {
+        return "TaskRun{" +
+                "taskId=" + taskId +
+                ", properties=" + properties +
+                ", future=" + future +
+                ", task=" + task +
+                ", runCtx=" + runCtx +
+                ", processor=" + processor +
+                ", status=" + status +
+                ", type=" + type +
+                '}';
     }
 }

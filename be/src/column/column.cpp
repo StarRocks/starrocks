@@ -14,6 +14,8 @@
 
 #include "column/column.h"
 
+#include <fmt/format.h>
+
 #include "common/statusor.h"
 
 namespace starrocks {
@@ -62,6 +64,46 @@ StatusOr<ColumnPtr> Column::upgrade_helper_func(ColumnPtr* col) {
         (*col) = ret.value();
         return nullptr;
     }
+}
+
+bool Column::empty_null_in_complex_column(const Filter& null_data, const std::vector<uint32_t>& offsets) {
+    DCHECK(null_data.size() == this->size());
+    if (!is_array() && !is_map()) {
+        throw std::runtime_error("empty_null_in_complex_column() only works for array and map column.");
+    }
+    bool need_empty = false;
+    size_t size = this->size();
+    if (size + 1 != offsets.size()) {
+        throw std::runtime_error(
+                fmt::format("inputs offsets' size {} != the column's offsets' size {}.", offsets.size(), size + 1));
+    }
+    // TODO: optimize it using SIMD
+    for (auto i = 0; i < size && !need_empty; ++i) {
+        if (null_data[i] && offsets[i + 1] != offsets[i]) {
+            need_empty = true;
+        }
+    }
+    // TODO: copy too much may result in worse performance.
+    if (need_empty) {
+        auto new_column = clone_empty();
+        uint32_t from = 0;
+        uint32_t to = size;
+        while (from < to) {
+            uint32_t new_from = from + 1;
+            while (new_from < to && null_data[from] == null_data[new_from]) {
+                ++new_from;
+            }
+            if (null_data[from]) {
+                new_column->append_default(new_from - from);
+            } else {
+                new_column->append(*this, from, new_from - from);
+            }
+            from = new_from;
+        }
+
+        swap_column(*new_column.get());
+    }
+    return need_empty;
 }
 
 } // namespace starrocks

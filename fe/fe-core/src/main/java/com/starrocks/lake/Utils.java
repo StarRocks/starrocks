@@ -17,6 +17,7 @@ package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.NoAliveBackendException;
@@ -30,7 +31,9 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -51,7 +54,9 @@ public class Utils {
     // Returns null if no backend available.
     public static Long chooseBackend(LakeTablet tablet) {
         try {
-            return tablet.getPrimaryBackendId();
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+            return tablet.getPrimaryComputeNodeId(workerGroupId);
         } catch (UserException ex) {
             LOG.info("Ignored error {}", ex.getMessage());
         }
@@ -64,7 +69,7 @@ public class Utils {
 
     // Preconditions: Has required the database's reader lock.
     // Returns a map from backend ID to a list of tablet IDs.
-    public static Map<Long, List<Long>> groupTabletID(LakeTable table) throws NoAliveBackendException {
+    public static Map<Long, List<Long>> groupTabletID(OlapTable table) throws NoAliveBackendException {
         return groupTabletID(table.getPartitions(), MaterializedIndex.IndexExtState.ALL);
     }
 
@@ -105,11 +110,13 @@ public class Utils {
         List<Long> txnIds = Lists.newArrayList(txnId);
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
-        List<Backend> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
+        List<ComputeNode> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            Backend backend = systemInfoService.getBackend(entry.getKey());
+            // TODO: need to refactor after be split into cn + dn
+            ComputeNode backend = systemInfoService.getBackendOrComputeNode(entry.getKey());
             if (backend == null) {
-                throw new NoAliveBackendException("Backend been dropped while building publish version request");
+                throw new NoAliveBackendException("Backend or computeNode been " +
+                        "dropped while building publish version request");
             }
             PublishVersionRequest request = new PublishVersionRequest();
             request.baseVersion = baseVersion;

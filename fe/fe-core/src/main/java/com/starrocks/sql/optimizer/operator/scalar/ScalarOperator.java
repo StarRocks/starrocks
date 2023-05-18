@@ -14,11 +14,14 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
+import java.util.Collections;
 import java.util.List;
+import javax.annotation.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -29,6 +32,12 @@ public abstract class ScalarOperator implements Cloneable {
     protected boolean notEvalEstimate = false;
     // Used to determine if it is derive from predicate range extractor
     protected boolean fromPredicateRangeDerive = false;
+    // Check weather the scalar operator is redundant which will not affect the final
+    // if it's not considered. eg, `IsNullPredicateOperator` which is pushed down
+    // from JoinNode.
+    protected boolean isRedundant = false;
+
+    private List<String> hints = Collections.emptyList();
 
     public ScalarOperator(OperatorType opType, Type type) {
         this.opType = requireNonNull(opType, "opType is null");
@@ -48,6 +57,28 @@ public abstract class ScalarOperator implements Cloneable {
         }
 
         return true;
+    }
+
+    public static boolean isTrue(@Nullable ScalarOperator op) {
+        if (op == null) {
+            return false;
+        }
+        return op.isTrue();
+    }
+
+    public static boolean isFalse(@Nullable ScalarOperator op) {
+        if (op == null) {
+            return false;
+        }
+        return op.isFalse();
+    }
+
+    public boolean isTrue() {
+        return this.equals(ConstantOperator.TRUE);
+    }
+
+    public boolean isFalse() {
+        return this.equals(ConstantOperator.FALSE);
     }
 
     public abstract boolean isNullable();
@@ -113,6 +144,8 @@ public abstract class ScalarOperator implements Cloneable {
         ScalarOperator operator = null;
         try {
             operator = (ScalarOperator) super.clone();
+            operator.hints = Lists.newArrayList(hints);
+            operator.isRedundant = this.isRedundant;
         } catch (CloneNotSupportedException ignored) {
         }
         return operator;
@@ -138,5 +171,34 @@ public abstract class ScalarOperator implements Cloneable {
 
     public boolean isConstantNull() {
         return this instanceof ConstantOperator && ((ConstantOperator) this).isNull();
+    }
+
+    public boolean isConstantZero() {
+        return this instanceof ConstantOperator && ((ConstantOperator) this).isZero();
+    }
+
+    public boolean isConstantFalse() {
+        return this instanceof ConstantOperator && this.getType() == Type.BOOLEAN &&
+                !((ConstantOperator) this).getBoolean();
+    }
+
+    public boolean isConstantNullOrFalse() {
+        return isConstantNull() || isConstantFalse();
+    }
+
+    public void setHints(List<String> hints) {
+        this.hints = hints;
+    }
+
+    public List<String> getHints() {
+        return hints;
+    }
+
+    public boolean isRedundant() {
+        return isRedundant;
+    }
+
+    public void setRedundant(boolean redundant) {
+        isRedundant = redundant;
     }
 }

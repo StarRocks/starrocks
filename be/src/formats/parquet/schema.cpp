@@ -84,6 +84,7 @@ void SchemaDescriptor::leaf_to_field(const tparquet::SchemaElement& t_schema, co
     field->type_length = t_schema.type_length;
     field->scale = t_schema.scale;
     field->precision = t_schema.precision;
+    field->field_id = t_schema.field_id;
     field->level_info = cur_level_info;
 
     _physical_fields.push_back(field);
@@ -124,9 +125,6 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
     //     }
     //   }
     auto& level1_schema = t_schemas[pos];
-    if (level1_schema.repetition_type == tparquet::FieldRepetitionType::REPEATED) {
-        return Status::InvalidArgument("LIST-annotated group must be not repeated");
-    }
     if (level1_schema.num_children != 1) {
         return Status::InvalidArgument("LIST-annotated group must have only one child");
     }
@@ -141,7 +139,7 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
         return Status::InvalidArgument("LIST-annotated list should be repeated");
     }
 
-    // This indicate if this list is nullable.
+    // This indicates if this list is nullable.
     bool is_optional = schema_is_optional(level1_schema);
     if (is_optional) {
         cur_level_info.max_def_level++;
@@ -157,9 +155,26 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
             // this is 3-level case, it will generate a list<element>
             RETURN_IF_ERROR(node_to_field(t_schemas, pos + 2, cur_level_info, element, next_pos));
         } else {
-            // Have a required group field with chidren, this will generate a group element
+            // Have a required group field with children, this will generate a group element
             // list<group<child>>
-            RETURN_IF_ERROR(group_to_struct_field(t_schemas, pos + 1, cur_level_info, element, next_pos));
+            // the level2_schema may have converted_type = "MAP", in this scenario we should parse
+            // level2_schema as map, otherwise when we create column reader we will get wrong type.
+            // optional group col_array_map (LIST) {
+            //     repeated group array (MAP) {
+            //         repeated group map (MAP_KEY_VALUE) {
+            //             required binary key (UTF8);
+            //             optional int32 value;
+            //         }
+            //     }
+            // }
+            // The above case is also applied to "LIST".
+            if (is_map(level2_schema)) {
+                RETURN_IF_ERROR(map_to_field(t_schemas, pos + 1, cur_level_info, element, next_pos));
+            } else if (is_list(level2_schema)) {
+                RETURN_IF_ERROR(list_to_field(t_schemas, pos + 1, cur_level_info, element, next_pos));
+            } else {
+                RETURN_IF_ERROR(group_to_struct_field(t_schemas, pos + 1, cur_level_info, element, next_pos));
+            }
         }
     } else if (num_children == 0) {
         // This is backward-compatibility two-level
@@ -173,6 +188,7 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
     }
 
     field->name = level1_schema.name;
+    field->field_id = level1_schema.field_id;
     field->type.type = TYPE_ARRAY;
     field->type.children.push_back(field->children[0].type);
     field->is_nullable = is_optional;
@@ -196,9 +212,11 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
     if (map_schema.num_children != 1) {
         return Status::InvalidArgument("MAP-annotated group must have a single child.");
     }
-    if (is_repeated(map_schema)) {
-        return Status::InvalidArgument("MAP-annotated group must not be repeated.");
-    }
+    // when map as array's element type, there is a scenario, the array's level_2_schema is converted_type = 'MAP'
+    // we should parse this as map, and in this scenario the level_2_schema is repeated.
+    // if (is_repeated(map_schema)) {
+    //     return Status::InvalidArgument("MAP-annotated group must not be repeated.");
+    // }
     auto& kv_schema = t_schemas[pos + 1];
     if (!is_group(kv_schema) || !is_repeated(kv_schema)) {
         return Status::InvalidArgument("key_value in map group must be a repeated group");
@@ -231,6 +249,8 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
     RETURN_IF_ERROR(group_to_struct_field(t_schemas, pos + 1, cur_level_info, kv_field, next_pos));
 
     field->name = map_schema.name;
+    // Actually, we don't need to put field_id here
+    field->field_id = map_schema.field_id;
     field->type.type = TYPE_MAP;
     field->is_nullable = is_optional;
     field->level_info = cur_level_info;
@@ -256,6 +276,7 @@ Status SchemaDescriptor::group_to_struct_field(const std::vector<tparquet::Schem
     field->is_nullable = is_optional;
     field->level_info = cur_level_info;
     field->type.type = TYPE_STRUCT;
+    field->field_id = group_schema.field_id;
     return Status::OK();
 }
 
@@ -315,6 +336,7 @@ Status SchemaDescriptor::node_to_field(const std::vector<tparquet::SchemaElement
         field->name = t_schema.name;
         field->type.type = TYPE_ARRAY;
         field->is_nullable = false;
+        field->field_id = t_schema.field_id;
         field->level_info = cur_level_info;
         field->level_info.immediate_repeated_ancestor_def_level = last_immediate_repeated_ancestor_def_level;
 
@@ -338,21 +360,30 @@ Status SchemaDescriptor::from_thrift(const std::vector<tparquet::SchemaElement>&
         return Status::InvalidArgument("Empty parquet Schema");
     }
     auto& root_schema = t_schemas[0];
+
+    // root_schema has no field_id, but it's child will have.
+    // Below code used to check this parquet field exist field id.
+    if (root_schema.num_children > 0) {
+        _exist_field_id = t_schemas[1].__isset.field_id;
+    }
+
     if (!is_group(root_schema)) {
         return Status::InvalidArgument("Root Schema is not group");
     }
     _fields.resize(root_schema.num_children);
     // skip root SchemaElement
     size_t next_pos = 1;
-    for (int i = 0; i < root_schema.num_children; ++i) {
+    for (size_t i = 0; i < root_schema.num_children; ++i) {
         RETURN_IF_ERROR(node_to_field(t_schemas, next_pos, LevelInfo(), &_fields[i], &next_pos));
         if (!case_sensitive) {
             _fields[i].name = boost::algorithm::to_lower_copy(_fields[i].name);
         }
-        if (_field_idx_by_name.find(_fields[i].name) != _field_idx_by_name.end()) {
+        if (_formatted_column_name_2_field_idx.find(_fields[i].name) != _formatted_column_name_2_field_idx.end()) {
             return Status::InvalidArgument(strings::Substitute("Duplicate field name: $0", _fields[i].name));
         }
-        _field_idx_by_name.emplace(_fields[i].name, i);
+
+        _formatted_column_name_2_field_idx.emplace(_fields[i].name, i);
+        _field_id_2_field_idx.emplace(_fields[i].field_id, i);
     }
     _case_sensitive = case_sensitive;
 
@@ -376,28 +407,30 @@ std::string SchemaDescriptor::debug_string() const {
     return ss.str();
 }
 
-int SchemaDescriptor::get_column_index(const std::string& column) const {
-    auto it = _field_idx_by_name.begin();
-    if (_case_sensitive) {
-        it = _field_idx_by_name.find(column);
-    } else {
-        it = _field_idx_by_name.find(boost::algorithm::to_lower_copy(column));
-    }
-    if (it == _field_idx_by_name.end()) return -1;
+const int32_t SchemaDescriptor::get_field_idx_by_column_name(const std::string& column_name) const {
+    const auto& format_name = _case_sensitive ? column_name : boost::algorithm::to_lower_copy(column_name);
+    auto it = _formatted_column_name_2_field_idx.find(format_name);
+    if (it == _formatted_column_name_2_field_idx.end()) return -1;
     return it->second;
 }
 
-const ParquetField* SchemaDescriptor::resolve_by_name(const std::string& name) const {
-    int idx = get_column_index(name);
+const int32_t SchemaDescriptor::get_field_idx_by_field_id(int32_t field_id) const {
+    auto it = _field_id_2_field_idx.find(field_id);
+    if (it == _field_id_2_field_idx.end()) {
+        return -1;
+    }
+    return it->second;
+}
+
+const ParquetField* SchemaDescriptor::get_stored_column_by_field_id(int32_t field_id) const {
+    int32_t idx = get_field_idx_by_field_id(field_id);
+    if (idx == -1) return nullptr;
+    return &_fields[idx];
+}
+
+const ParquetField* SchemaDescriptor::get_stored_column_by_column_name(const std::string& column_name) const {
+    int idx = get_field_idx_by_column_name(column_name);
     if (idx == -1) return nullptr;
     return &(_fields[idx]);
 }
-
-void SchemaDescriptor::get_field_names(std::unordered_set<std::string>* names) const {
-    names->clear();
-    for (const ParquetField& f : _fields) {
-        names->emplace(std::move(f.name));
-    }
-}
-
 } // namespace starrocks::parquet

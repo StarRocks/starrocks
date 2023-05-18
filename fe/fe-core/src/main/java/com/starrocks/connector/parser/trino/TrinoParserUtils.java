@@ -15,11 +15,18 @@
 package com.starrocks.connector.parser.trino;
 
 import com.starrocks.sql.ast.StatementBase;
+import io.trino.sql.tree.Explain;
+import io.trino.sql.tree.Query;
+import io.trino.sql.tree.Statement;
 
 public class TrinoParserUtils {
     public static StatementBase toStatement(String query, long sqlMode) {
         String trimmedQuery = query.trim();
-        return (StatementBase) TrinoParser.parse(trimmedQuery).
-                accept(new AstBuilder(sqlMode), new ParseTreeContext());
+        Statement statement = TrinoParser.parse(trimmedQuery);
+        if (statement instanceof Query || statement instanceof Explain) {
+            return (StatementBase) statement.accept(new AstBuilder(sqlMode), new ParseTreeContext());
+        } else {
+            throw new UnsupportedOperationException("Unsupported statement type: " + statement.getClass().getName());
+        }
     }
 }

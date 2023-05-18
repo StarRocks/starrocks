@@ -101,11 +101,11 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
         if (old_tablet->schema_hash_path() == new_tablet->schema_hash_path()) {
             LOG(WARNING) << "add the same tablet twice! tablet_id=" << new_tablet->tablet_id()
                          << " schema_hash_path=" << new_tablet->schema_hash_path();
-            return Status::InternalError("tablet already exists");
+            return Status::InternalError(fmt::format("tablet already exists, tablet_id: {}", old_tablet->tablet_id()));
         }
         if (old_tablet->data_dir() == new_tablet->data_dir()) {
             LOG(WARNING) << "add tablet with same data dir twice! tablet_id=" << new_tablet->tablet_id();
-            return Status::InternalError("tablet already exists");
+            return Status::InternalError(fmt::format("tablet already exists, tablet_id: {}", old_tablet->tablet_id()));
         }
         old_tablet->obtain_header_rdlock();
         auto old_rowset = old_tablet->rowset_with_max_version();
@@ -123,7 +123,7 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
                       << " old_tablet_path=" << old_tablet->schema_hash_path()
                       << " new_tablet_path=" << new_tablet->schema_hash_path();
         } else {
-            return Status::InternalError("tablet already exists");
+            return Status::AlreadyExist(fmt::format("tablet already exists, tablet_id: {}", old_tablet->tablet_id()));
         }
     }
     if (update_meta) {
@@ -1462,6 +1462,9 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     for (const auto& [segid, dv] : snapshot_meta->delete_vectors()) {
         RETURN_IF_ERROR(TabletMetaManager::put_del_vector(store, &wb, tablet_id, segid, dv));
     }
+    for (const auto& [segid, dcg] : snapshot_meta->delta_column_groups()) {
+        RETURN_IF_ERROR(TabletMetaManager::put_delta_column_group(store, &wb, tablet_id, segid, dcg));
+    }
     RETURN_IF_ERROR(TabletMetaManager::put_tablet_meta(store, &wb, snapshot_meta->tablet_meta()));
 
     auto tablet_meta = std::make_shared<TabletMeta>();
@@ -1494,6 +1497,7 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
         LOG(WARNING) << "Fail to init cloned tablet " << tablet_id << ", try to clear meta store";
         wb.Clear();
         RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(store, &wb, tablet_id));
+        RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(store, &wb, tablet_id));
         RETURN_IF_ERROR(TabletMetaManager::clear_rowset(store, &wb, tablet_id));
         RETURN_IF_ERROR(TabletMetaManager::clear_log(store, &wb, tablet_id));
         RETURN_IF_ERROR(TabletMetaManager::remove_tablet_meta(store, &wb, tablet_id, schema_hash));

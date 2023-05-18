@@ -62,6 +62,9 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
     private List<LiteralExpr> keys;
     private List<PrimitiveType> types;
 
+    private static final DateLiteral SHADOW_DATE_LITERAL = new DateLiteral(0, 0, 0);
+    private static final DateLiteral SHADOW_DATETIME_LITERAL = new DateLiteral(0, 0, 0, 0, 0, 0, 0);
+
     // constructor for partition prune
     public PartitionKey() {
         keys = Lists.newArrayList();
@@ -85,10 +88,23 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         return partitionKey;
     }
 
-    public static PartitionKey createShadowPartitionKey(List<Column> columns) {
+    public static PartitionKey createShadowPartitionKey(List<Column> columns) 
+            throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
         for (Column column : columns) {
-            partitionKey.keys.add(new DateLiteral(0, 1, 1));
+            PrimitiveType primitiveType = column.getPrimitiveType();
+            DateLiteral shadowLiteral;
+            switch (primitiveType) {
+                case DATE:
+                    shadowLiteral = SHADOW_DATE_LITERAL;
+                    break;
+                case DATETIME:
+                    shadowLiteral = SHADOW_DATETIME_LITERAL;
+                    break;
+                default:
+                    throw new AnalysisException("Unsupported shadow partition type:" + primitiveType);
+            }
+            partitionKey.keys.add(shadowLiteral);
             partitionKey.types.add(column.getPrimitiveType());
         }
         return partitionKey;
@@ -188,6 +204,71 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
             }
         }
         return Integer.compare(thisKeyLen, otherKeyLen);
+    }
+
+    public PartitionKey predecessor() {
+        Preconditions.checkArgument(keys.size() == 1);
+        if (isMinValue() || isMaxValue()) {
+            return this;
+        }
+        LiteralExpr literal = keys.get(0);
+        PrimitiveType type = types.get(0);
+        PartitionKey key = new PartitionKey();
+
+        switch (type) {
+            case TINYINT:
+            case SMALLINT:
+            case INT:
+            case BIGINT: {
+                IntLiteral intLiteral = (IntLiteral) literal;
+                final long minValue = -(1L << ((type.getSlotSize() << 3) - 1));
+                long pred = intLiteral.getValue();
+                pred -= pred > minValue ? 1L : 0L;
+                key.pushColumn(new IntLiteral(pred, Type.fromPrimitiveType(type)), type);
+                return key;
+            }
+            case LARGEINT: {
+                LargeIntLiteral largeIntLiteral = (LargeIntLiteral) literal;
+                final BigInteger minValue = BigInteger.ONE.shiftLeft(127).negate();
+                BigInteger pred = largeIntLiteral.getValue();
+                pred = pred.subtract(pred.compareTo(minValue) > 0 ? BigInteger.ONE : BigInteger.ZERO);
+                try {
+                    key.pushColumn(new LargeIntLiteral(pred.toString()), type);
+                    return key;
+                } catch (Exception ignored) {
+                    Preconditions.checkArgument(false, "Never reach here");
+                }
+            }
+            case DATE:
+            case DATETIME: {
+                DateLiteral dateLiteral = (DateLiteral) literal;
+                Calendar calendar = Calendar.getInstance();
+                int year = (int) dateLiteral.getYear();
+                int mon = (int) dateLiteral.getMonth() - 1;
+                int day = (int) dateLiteral.getDay();
+                int hour = (int) dateLiteral.getHour();
+                int min = (int) dateLiteral.getMinute();
+                int sec = (int) dateLiteral.getSecond();
+                calendar.set(year, mon, day, hour, min, sec);
+                calendar.add(type == PrimitiveType.DATE ? Calendar.DATE : Calendar.SECOND, -1);
+                year = calendar.get(Calendar.YEAR);
+                mon = calendar.get(Calendar.MONTH) + 1;
+                day = calendar.get(Calendar.DATE);
+                hour = calendar.get(Calendar.HOUR_OF_DAY);
+                min = calendar.get(Calendar.MINUTE);
+                sec = calendar.get(Calendar.SECOND);
+                if (type == PrimitiveType.DATE) {
+                    dateLiteral = new DateLiteral(year, mon, day);
+                } else {
+                    dateLiteral = new DateLiteral(year, mon, day, hour, min, sec, 0);
+                }
+                key.pushColumn(dateLiteral, type);
+                return key;
+            }
+            default:
+                Preconditions.checkArgument(false, "Never reach here");
+                return null;
+        }
     }
 
     public PartitionKey successor() {

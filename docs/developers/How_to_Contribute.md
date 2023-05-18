@@ -2,7 +2,7 @@
 
 Contributing to StarRocks is cordially welcome from everyone. Contributing to StarRocks is not limited to contributing code. Below, we list different approaches to contributing to our community.
 
-| Report a bug                        | You can [file an issue](https://github.com/StarRocks/starrocks/issues/new/choose) to report a bug with StarRocks. You can also click `Feedback` in the upper-right corner of the page you are reading in the [Documentation Center](https://docs.starrocks.io/en-us/latest/introduction/StarRocks_intro) to report a bug. |
+| Report a bug                        | You can [file an issue](https://github.com/StarRocks/starrocks/issues/new/choose) to report a bug with StarRocks. You can also click `Feedback` in the upper-right corner of the page you are reading in the Documentation Site to report a bug. |
 | ----------------------------------- | ------------------------------------------------------------ |
 | **Contribute code**                 | You can contribute your code by fixing a bug or implementing a feature. |
 | **Contribute test case**            | You can contribute your test cases.                          |
@@ -10,6 +10,11 @@ Contributing to StarRocks is cordially welcome from everyone. Contributing to St
 | **Contribute documentation**        | StarRocks community maintains a tremendous amount of documentation both in Chinese and English. You can contribute documentation changes by fixing a documentation bug or proposing a new piece of content. |
 | **Help StarRocks users**            | You can help newcomers who meet difficulties in our community. |
 | **Spread the word about StarRocks** | You can author an article or give a talk about us to help spread our technology to the world. |
+
+> **NOTE**
+>
+> To contribute documentation, remember to **sign off** your commit using `git commit -s`. Otherwise, the Developer Certificate of Origin (DCO) check will fail and the PR may be blocked. In addition, prefix `[Doc]` to your PR title and select the **Doc** check box.
+> ![Doc title](../assets/doctitle.png)
 
 ## Community resources
 

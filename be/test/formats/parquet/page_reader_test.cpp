@@ -20,6 +20,7 @@
 
 #include "fs/fs_memory.h"
 #include "gen_cpp/parquet_types.h"
+#include "io/shared_buffered_input_stream.h"
 #include "io/string_input_stream.h"
 #include "util/thrift_util.h"
 
@@ -33,6 +34,11 @@ public:
 
 TEST_F(ParquetPageReaderTest, Normal) {
     std::string buffer;
+
+    std::vector<uint8_t> read_buffer;
+    read_buffer.reserve(1024);
+    uint8_t* data = read_buffer.data();
+
     // page 0
     {
         tparquet::PageHeader page_header;
@@ -69,7 +75,8 @@ TEST_F(ParquetPageReaderTest, Normal) {
     size_t total_size = buffer.size();
 
     RandomAccessFile file(std::make_shared<io::StringInputStream>(std::move(buffer)), "string-file");
-    DefaultBufferedInputStream stream(&file, 0, total_size);
+
+    io::SharedBufferedInputStream stream(file.stream(), file.filename(), file.get_size().value());
 
     PageReader reader(&stream, 0, total_size);
 
@@ -83,11 +90,11 @@ TEST_F(ParquetPageReaderTest, Normal) {
     st = reader.next_header();
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(200, reader.current_header()->uncompressed_page_size);
-    const uint8_t* data;
-    st = reader.read_bytes(&data, 100);
+
+    st = reader.read_bytes(data, 100);
     ASSERT_TRUE(st.ok());
 
-    st = reader.read_bytes(&data, 250);
+    st = reader.read_bytes(data, 250);
     ASSERT_FALSE(st.ok());
 
     // read out-of-page

@@ -14,6 +14,7 @@
 
 package com.starrocks.lake;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
@@ -21,7 +22,6 @@ import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.LakeTableAlterJobV2Builder;
 import com.starrocks.backup.Status;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
@@ -50,6 +50,7 @@ import java.util.Map;
 
 /**
  * Metadata for StarRocks lake table
+ * todo: Rename to CloudNativeTable
  */
 public class LakeTable extends OlapTable {
 
@@ -58,7 +59,7 @@ public class LakeTable extends OlapTable {
     public LakeTable(long id, String tableName, List<Column> baseSchema, KeysType keysType, PartitionInfo partitionInfo,
                      DistributionInfo defaultDistributionInfo, TableIndexes indexes) {
         super(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
-                GlobalStateMgr.getCurrentState().getClusterId(), indexes, TableType.LAKE);
+                GlobalStateMgr.getCurrentState().getClusterId(), indexes, TableType.CLOUD_NATIVE);
     }
 
     public LakeTable(long id, String tableName, List<Column> baseSchema, KeysType keysType, PartitionInfo partitionInfo,
@@ -66,24 +67,21 @@ public class LakeTable extends OlapTable {
         this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, null);
     }
 
-    public static LakeTable read(DataInput in) throws IOException {
-        // type is already read in Table
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeTable.class);
-    }
-
-    public String getStorageGroup() {
-        return getDefaultFilePathInfo().getFullPath();
-    }
-
-    public FilePathInfo getDefaultFilePathInfo() {
+    private FilePathInfo getDefaultFilePathInfo() {
         return tableProperty.getStorageInfo().getFilePathInfo();
     }
 
+    @Override
+    public String getStoragePath() {
+        return getDefaultFilePathInfo().getFullPath();
+    }
+
+    @Override
     public FilePathInfo getPartitionFilePathInfo() {
         return getDefaultFilePathInfo();
     }
 
+    @Override
     public FileCacheInfo getPartitionFileCacheInfo(long partitionId) {
         FileCacheInfo cacheInfo = null;
         StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(partitionId);
@@ -95,14 +93,12 @@ public class LakeTable extends OlapTable {
         return cacheInfo;
     }
 
-    public void setStorageInfo(FilePathInfo pathInfo, boolean enableCache, long cacheTtlS,
-                               boolean asyncWriteBack) throws DdlException {
-        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(cacheTtlS)
-                .setAsyncWriteBack(asyncWriteBack).build();
+    @Override
+    public void setStorageInfo(FilePathInfo pathInfo, StorageCacheInfo storageCacheInfo) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
-        tableProperty.setStorageInfo(new StorageInfo(pathInfo, cacheInfo));
+        tableProperty.setStorageInfo(new StorageInfo(pathInfo, storageCacheInfo.getCacheInfo()));
     }
 
     @Override
@@ -116,16 +112,17 @@ public class LakeTable extends OlapTable {
         return selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
     }
 
+    public static LakeTable read(DataInput in) throws IOException {
+        // type is already read in Table
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, LakeTable.class);
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         // write type first
         Text.writeString(out, type.name());
         Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
-    @Override
-    public void onDrop(Database db, boolean force, boolean replay) {
-        dropAllTempPartitions();
     }
 
     @Override
@@ -153,9 +150,9 @@ public class LakeTable extends OlapTable {
                 properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
                         String.valueOf(storageInfo.getStorageCacheTtlS()));
 
-                // allow_async_write_back
-                properties.put(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK,
-                        String.valueOf(storageInfo.isAllowAsyncWriteBack()));
+                // enable_async_write_back
+                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
+                        String.valueOf(storageInfo.isEnableAsyncWriteBack()));
             }
         }
         return properties;
@@ -183,12 +180,6 @@ public class LakeTable extends OlapTable {
         return Status.OK;
     }
 
-    @Override
-    public Short getDefaultReplicationNum() {
-        // Unlike OlapTable, LakeTable will ignore the user provided "replication_num" parameter.
-        return 1;
-    }
-
     // used in colocate table index, return an empty list for LakeTable
     @Override
     public List<List<Long>> getArbitraryTabletBucketsSeq() throws DdlException {
@@ -201,5 +192,13 @@ public class LakeTable extends OlapTable {
             shardGroupIds.add(p.getShardGroupId());
         }
         return shardGroupIds;
+    }
+
+    @Override
+    public String getComment() {
+        if (!Strings.isNullOrEmpty(comment)) {
+            return comment;
+        }
+        return TableType.OLAP.name();
     }
 }

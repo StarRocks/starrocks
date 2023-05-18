@@ -191,7 +191,9 @@ static Status do_writev_at(int fd, const string& filename, uint64_t offset, cons
 class PosixWritableFile : public WritableFile {
 public:
     PosixWritableFile(std::string filename, int fd, uint64_t filesize, bool sync_on_close)
-            : _filename(std::move(filename)), _fd(fd), _sync_on_close(sync_on_close), _filesize(filesize) {}
+            : _filename(std::move(filename)), _fd(fd), _sync_on_close(sync_on_close), _filesize(filesize) {
+        FileSystem::on_file_write_open(this);
+    }
 
     ~PosixWritableFile() override { WARN_IF_ERROR(close(), "Failed to close file, file=" + _filename); }
 
@@ -232,6 +234,7 @@ public:
         if (_closed) {
             return Status::OK();
         }
+        FileSystem::on_file_write_close(this);
         Status s;
 
         // If we've allocated more space than we used, truncate to the
@@ -399,6 +402,38 @@ public:
             }
             // callback returning false means to terminate iteration
             if (!cb(name)) {
+                break;
+            }
+        }
+        closedir(d);
+        if (errno != 0) return io_error(dir, errno);
+        return Status::OK();
+    }
+
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
+        DIR* d = opendir(dir.c_str());
+        if (d == nullptr) {
+            return io_error(dir, errno);
+        }
+        errno = 0;
+        struct dirent* entry;
+        while ((entry = readdir(d)) != nullptr) {
+            std::string_view name(entry->d_name);
+            if (name == "." || name == "..") {
+                continue;
+            }
+            struct stat child_stat;
+            std::string child_path = fmt::format("{}/{}", dir, name);
+            if (stat(child_path.c_str(), &child_stat) != 0) {
+                break;
+            }
+            DirEntry de;
+            de.name = name;
+            de.is_dir = S_ISDIR(child_stat.st_mode);
+            de.mtime = static_cast<int64_t>(child_stat.st_mtime);
+            de.size = child_stat.st_size;
+            // callback returning false means to terminate iteration
+            if (!cb(de)) {
                 break;
             }
         }

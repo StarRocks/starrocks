@@ -28,7 +28,7 @@ public:
 TEST_F(AnalytorTest, find_peer_group_end) {
     TPlanNode plan_node;
     RowDescriptor row_desc;
-    Analytor analytor(plan_node, row_desc, nullptr);
+    Analytor analytor(plan_node, row_desc, nullptr, false);
 
     int32_t v;
     auto c1 = Int32Column::create();
@@ -49,7 +49,7 @@ TEST_F(AnalytorTest, find_peer_group_end) {
 TEST_F(AnalytorTest, reset_state_for_cur_partition) {
     TPlanNode plan_node;
     RowDescriptor row_desc;
-    Analytor analytor(plan_node, row_desc, nullptr);
+    Analytor analytor(plan_node, row_desc, nullptr, false);
 
     analytor._partition_start = 3;
     analytor._partition_end = 10;
@@ -64,7 +64,7 @@ TEST_F(AnalytorTest, reset_state_for_cur_partition) {
 TEST_F(AnalytorTest, reset_state_for_next_partition) {
     TPlanNode plan_node;
     RowDescriptor row_desc;
-    Analytor analytor(plan_node, row_desc, nullptr);
+    Analytor analytor(plan_node, row_desc, nullptr, false);
 
     analytor._partition_start = 10;
     analytor._partition_end = 10;
@@ -79,7 +79,7 @@ TEST_F(AnalytorTest, reset_state_for_next_partition) {
 TEST_F(AnalytorTest, find_partition_end) {
     TPlanNode plan_node;
     RowDescriptor row_desc;
-    Analytor analytor1(plan_node, row_desc, nullptr);
+    Analytor analytor1(plan_node, row_desc, nullptr, false);
 
     int32_t v;
     auto c1 = Int32Column::create();
@@ -118,7 +118,7 @@ TEST_F(AnalytorTest, find_partition_end) {
     ASSERT_EQ(analytor1.found_partition_end().second, 20);
 
     // partition columns is empty
-    Analytor analytor2(plan_node, row_desc, nullptr);
+    Analytor analytor2(plan_node, row_desc, nullptr, false);
     analytor2.update_input_rows(20);
 
     analytor2._current_row_position = analytor2.found_partition_end().second;
@@ -127,7 +127,7 @@ TEST_F(AnalytorTest, find_partition_end) {
     ASSERT_EQ(analytor2.found_partition_end().second, 20);
 
     // input rows = 0
-    Analytor analytor3(plan_node, row_desc, nullptr);
+    Analytor analytor3(plan_node, row_desc, nullptr, false);
     analytor3.update_input_rows(0);
 
     analytor2._current_row_position = analytor2.found_partition_end().second;

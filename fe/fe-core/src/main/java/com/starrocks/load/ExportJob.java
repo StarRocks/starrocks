@@ -60,7 +60,6 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
@@ -332,7 +331,7 @@ public class ExportJob implements Writable {
         ScanNode scanNode = null;
         switch (exportTable.getType()) {
             case OLAP:
-            case LAKE:
+            case CLOUD_NATIVE:
                 scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport");
                 scanNode.setColumnFilters(Maps.newHashMap());
                 ((OlapScanNode) scanNode).setIsPreAggregation(false, "This an export operation");
@@ -363,7 +362,7 @@ public class ExportJob implements Writable {
         PlanFragment fragment = null;
         switch (exportTable.getType()) {
             case OLAP:
-            case LAKE:
+            case CLOUD_NATIVE:
                 fragment = new PlanFragment(
                         new PlanFragmentId(nextId.getAndIncrement()), scanNode, DataPartition.RANDOM);
                 break;
@@ -466,7 +465,7 @@ public class ExportJob implements Writable {
                 TimeUtils.DEFAULT_TIME_ZONE, coord.getStartTime(), Maps.newHashMap());
         newCoord.setExecMemoryLimit(getMemLimit());
         this.coordList.set(taskIndex, newCoord);
-        LOG.info("reset coordinator for export job: {}, taskIdx {}", coordList.size(), taskIndex);
+        LOG.info("reset coordinator for export job: {}, taskIdx: {}", id, taskIndex);
         return newCoord;
     }
 
@@ -685,7 +684,7 @@ public class ExportJob implements Writable {
             case OLAP:
             case MYSQL:
                 return releaseSnapshotPaths();
-            case LAKE:
+            case CLOUD_NATIVE:
                 return releaseMetadataLocks();
             default:
                 return Status.OK;
@@ -921,13 +920,11 @@ public class ExportJob implements Writable {
             exportTable = db.getTable(tableId);
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_53) {
-            int count = in.readInt();
-            for (int i = 0; i < count; i++) {
-                String propertyKey = Text.readString(in);
-                String propertyValue = Text.readString(in);
-                this.properties.put(propertyKey, propertyValue);
-            }
+        int count = in.readInt();
+        for (int i = 0; i < count; i++) {
+            String propertyKey = Text.readString(in);
+            String propertyValue = Text.readString(in);
+            this.properties.put(propertyKey, propertyValue);
         }
 
         boolean hasPartition = in.readBoolean();
@@ -951,12 +948,8 @@ public class ExportJob implements Writable {
             brokerDesc = BrokerDesc.read(in);
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_43) {
-            tableName = new TableName();
-            tableName.readFields(in);
-        } else {
-            tableName = new TableName("DUMMY", "DUMMY");
-        }
+        tableName = new TableName();
+        tableName.readFields(in);
     }
 
     /**
@@ -991,7 +984,7 @@ public class ExportJob implements Writable {
     }
 
     public boolean exportLakeTable() {
-        return exportTable.isLakeTable();
+        return exportTable.isCloudNativeTableOrMaterializedView();
     }
 
     public boolean exportOlapTable() {

@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.parser;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.common.Config;
 import com.starrocks.connector.parser.trino.TrinoParserUtils;
@@ -63,7 +63,12 @@ public class SqlParser {
             }
         } catch (ParsingException e) {
             // we only support trino partial syntax, use StarRocks parser to parse now
-            LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
+            if (sql.toLowerCase().contains("select")) {
+                LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
+            }
+            return parseWithStarRocksDialect(sql, sessionVariable);
+        } catch (UnsupportedOperationException e) {
+            // For unsupported statement, use StarRocks parser to parse
             return parseWithStarRocksDialect(sql, sessionVariable);
         }
         if (statements.isEmpty() || statements.stream().anyMatch(Objects::isNull)) {
@@ -126,6 +131,7 @@ public class SqlParser {
 
     private static StarRocksParser parserBuilder(String sql, SessionVariable sessionVariable) {
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
+        lexer.setSqlMode(sessionVariable.getSqlMode());
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
 
@@ -163,12 +169,11 @@ public class SqlParser {
             }
         });
 
-        StarRocksParser.sqlMode = sessionVariable.getSqlMode();
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();
-        parser.addParseListener(
-                new PostProcessListener(sessionVariable.getParseTokensLimit(), Config.expr_children_limit));
+        parser.addParseListener(new PostProcessListener(sessionVariable.getParseTokensLimit(),
+                Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit())));
         return parser;
     }
 

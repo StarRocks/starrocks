@@ -116,29 +116,62 @@ public class StarMgrServer {
         journalSystem = new BDBJEJournalSystem(environment);
         imageDir = baseImageDir + IMAGE_SUBDIR;
 
-        String[] starMgrAddr = Config.starmgr_address.split(":");
-        if (starMgrAddr.length != 2) {
-            LOG.fatal("Config.starmgr_address {} bad format.", Config.starmgr_address);
-            System.exit(-1);
-        }
-        int port = Integer.parseInt(starMgrAddr[1]);
-
+        // TODO: remove separate deployment capability for now
         // necessary starMgr config setting
         com.staros.util.Config.STARMGR_IP = FrontendOptions.getLocalHostAddress();
-        com.staros.util.Config.STARMGR_RPC_PORT = port;
-        com.staros.util.Config.S3_BUCKET = Config.starmgr_s3_bucket;
-        com.staros.util.Config.S3_REGION = Config.starmgr_s3_region;
-        com.staros.util.Config.S3_ENDPOINT = Config.starmgr_s3_endpoint;
-        com.staros.util.Config.AWS_CREDENTIAL_TYPE = Config.starmgr_aws_credential_type;
-        com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_ID = Config.starmgr_simple_credential_access_key_id;
-        com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_SECRET = Config.starmgr_simple_credential_access_key_secret;
-        com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_ARN = Config.starmgr_assume_role_credential_arn;
-        com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_EXTERNAL_ID = Config.starmgr_assume_role_credential_external_id;
-        com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.starmgr_disable_shard_balance;
+        com.staros.util.Config.STARMGR_RPC_PORT = Config.cloud_native_meta_port;
 
+        // Storage fs type
+        com.staros.util.Config.DEFAULT_FS_TYPE = Config.cloud_native_storage_type;
+        if (com.staros.util.Config.DEFAULT_FS_TYPE.equalsIgnoreCase("HDFS")) {
+            // HDFS related configuration
+            com.staros.util.Config.HDFS_URL = Config.cloud_native_hdfs_url;
+            if (com.staros.util.Config.HDFS_URL.isEmpty()) {
+                LOG.error("The configuration item \"cloud_native_hdfs_url\" is empty.");
+                System.exit(-1);
+            }
+        } else if (com.staros.util.Config.DEFAULT_FS_TYPE.equalsIgnoreCase("S3")) {
+            // AWS related configuration
+            String[] bucketAndPrefix = getBucketAndPrefix();
+            com.staros.util.Config.S3_BUCKET = bucketAndPrefix[0];
+            com.staros.util.Config.S3_PATH_PREFIX = bucketAndPrefix[1];
+            com.staros.util.Config.S3_REGION = Config.aws_s3_region;
+            com.staros.util.Config.S3_ENDPOINT = Config.aws_s3_endpoint;
+            if (com.staros.util.Config.S3_BUCKET.isEmpty()) {
+                LOG.error("The configuration item \"aws_s3_path = {}\" is invalid, s3 bucket is empty.", Config.aws_s3_path);
+                System.exit(-1);
+            }
+            // aws credential related configuration
+            String credentialType = getAwsCredentialType();
+            if (credentialType == null) {
+                LOG.error("Invalid aws credential configuration.");
+                System.exit(-1);
+            }
+            com.staros.util.Config.AWS_CREDENTIAL_TYPE = credentialType;
+            com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_ID = Config.aws_s3_access_key;
+            com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_SECRET = Config.aws_s3_secret_key;
+            com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_ARN = Config.aws_s3_iam_role_arn;
+            com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_EXTERNAL_ID = Config.aws_s3_external_id;
+        } else {
+            LOG.error("The configuration item \"cloud_native_storage_type = {}\" is invalid, must be HDFS or S3.", 
+                    Config.cloud_native_storage_type);
+            System.exit(-1);
+        }
+
+        // use tablet_sched_disable_balance
+        com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.tablet_sched_disable_balance;
         // turn on 0 as default worker group id, to be compatible with add/drop backend in FE
         com.staros.util.Config.ENABLE_ZERO_WORKER_GROUP_COMPATIBILITY = true;
+        // set the same heartbeat configuration to starmgr, but not able to change in runtime.
+        com.staros.util.Config.WORKER_HEARTBEAT_INTERVAL_SEC = Config.heartbeat_timeout_second;
+        com.staros.util.Config.WORKER_HEARTBEAT_RETRY_COUNT = Config.heartbeat_retry_times;
 
+        // sync the mutable configVar to StarMgr in case any changes
+        GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+            com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.tablet_sched_disable_balance;
+            com.staros.util.Config.WORKER_HEARTBEAT_INTERVAL_SEC = Config.heartbeat_timeout_second;
+            com.staros.util.Config.WORKER_HEARTBEAT_RETRY_COUNT = Config.heartbeat_retry_times;
+        });
         // set the following config, in order to provide a customized worker group definition
         // com.staros.util.Config.RESOURCE_MANAGER_WORKER_GROUP_SPEC_RESOURCE_FILE = "";
 
@@ -151,8 +184,6 @@ public class StarMgrServer {
 
         // set the following config, in order to enable the builtin test resource provisioner dump its meta to disk
         // com.staros.util.Config.BUILTIN_PROVISION_SERVER_DATA_DIR = "./";
-
-        com.staros.util.Config.HDFS_URL = Config.hdfs_url;
 
         // start rpc server
         starMgrServer = new StarManagerServer(journalSystem);
@@ -251,5 +282,41 @@ public class StarMgrServer {
 
     public long getReplayId() {
         return getJournalSystem().getReplayId();
+    }
+
+    public static String[] getBucketAndPrefix() {
+        int index = Config.aws_s3_path.indexOf('/');
+        if (index < 0) {
+            return new String[] {Config.aws_s3_path, ""};
+        }
+
+        return new String[] {Config.aws_s3_path.substring(0, index), 
+                Config.aws_s3_path.substring(index + 1)};
+    }
+
+    public static String getAwsCredentialType() {
+        if (Config.aws_s3_use_aws_sdk_default_behavior) {
+            return "default";
+        }
+
+        if (Config.aws_s3_use_instance_profile) {
+            if (Config.aws_s3_iam_role_arn.isEmpty()) {
+                return "instance_profile";
+            }
+
+            return "assume_role";
+        }
+
+        if (Config.aws_s3_access_key.isEmpty() || Config.aws_s3_secret_key.isEmpty()) {
+            // invalid credential configuration
+            return null;
+        }
+
+        if (Config.aws_s3_iam_role_arn.isEmpty()) {
+            return "simple";
+        }
+
+        //assume_role with ak sk, not supported now, just return null
+        return null;
     }
 }

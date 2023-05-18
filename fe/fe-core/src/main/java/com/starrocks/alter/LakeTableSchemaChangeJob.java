@@ -21,6 +21,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
@@ -29,6 +30,8 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
@@ -46,6 +49,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.Utils;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -55,7 +59,6 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -71,7 +74,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -116,8 +121,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     // The schema change job will wait all transactions before this txn id finished, then send the schema change tasks.
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
-    @SerializedName(value = "storageFormat")
-    private TStorageFormat storageFormat = TStorageFormat.DEFAULT;
     @SerializedName(value = "startTime")
     private long startTime;
 
@@ -145,10 +148,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     void setStartTime(long startTime) {
         this.startTime = startTime;
-    }
-
-    void setStorageFormat(TStorageFormat storageFormat) {
-        this.storageFormat = storageFormat;
     }
 
     void addTabletIdMap(long partitionId, long shadowIdxId, long shadowTabletId, long originTabletId) {
@@ -240,6 +239,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     @VisibleForTesting
+    public static Future<Boolean> writeEditLogAsync(LakeTableSchemaChangeJob job) {
+        return GlobalStateMgr.getCurrentState().getEditLog().logAlterJobNoWait(job);
+    }
+
+    @VisibleForTesting
     public static long getNextTransactionId() {
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
     }
@@ -301,7 +305,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         Long baseTabletId = partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
                         assert baseTabletId != null;
                         createReplicaTask.setBaseTablet(baseTabletId, 0/*unused*/);
-                        createReplicaTask.setStorageFormat(this.storageFormat);
                         batchTask.addTask(createReplicaTask);
                     }
                 }
@@ -447,12 +450,10 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             return;
         }
 
-        this.jobState = JobState.FINISHED;
-        this.finishedTimeMs = System.currentTimeMillis();
-
-        writeEditLog(this);
-
+        long startWriteTs;
+        Future<Boolean> editLogFuture;
         // Replace the current index with shadow index.
+        Set<String> modifiedColumns;
         List<MaterializedIndex> droppedIndexes;
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
             LakeTable table = (db != null) ? db.getTable(tableId) : null;
@@ -460,9 +461,30 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 LOG.info("database or table been dropped while doing schema change job {}", jobId);
                 return;
             }
+            // collect modified columns for inactivating mv
+            // Note: should collect before visualiseShadowIndex
+            modifiedColumns = collectModifiedColumnsForRelatedMVs(table);
             // Below this point, all query and load jobs will use the new schema.
             droppedIndexes = visualiseShadowIndex(table);
+
+            // update colocation info and inactivate related mv
+            try {
+                GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo(table, true, null);
+            } catch (DdlException e) {
+                // log an error if update colocation info failed, schema change already succeeded
+                LOG.error("table {} update colocation info failed after schema change, {}.", tableId, e.getMessage());
+            }
+
+            inactiveRelatedMv(modifiedColumns, table);
+
+            this.jobState = JobState.FINISHED;
+            this.finishedTimeMs = System.currentTimeMillis();
+
+            startWriteTs = System.nanoTime();
+            editLogFuture = writeEditLogAsync(this);
         }
+
+        EditLog.waitInfinity(startWriteTs, editLogFuture);
 
         // Delete tablet and shards
         List<Long> unusedShards = new ArrayList<>();
@@ -472,20 +494,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
         // TODO: what if unusedShards deletion is partially successful?
         ShardDeleter.dropTabletAndDeleteShard(unusedShards, GlobalStateMgr.getCurrentStarOSAgent());
-
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            LakeTable table = (db != null) ? db.getTable(tableId) : null;
-            if (table != null) {
-                try {
-                    GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo((OlapTable) table);
-                } catch (DdlException e) {
-                    // log an error if update colocation info failed, schema change already succeeded
-                    LOG.error("table {} update colocation info failed after schema change, {}.", tableId, e.getMessage());
-                }
-            } else {
-                LOG.info("database or table has been dropped while trying to update colocation info for job {}.", jobId);
-            }
-        }
 
         if (span != null) {
             span.end();
@@ -525,6 +533,61 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         } catch (Exception e) {
             LOG.error("Fail to publish version for schema change job {}: {}", jobId, e.getMessage());
             return false;
+        }
+    }
+
+    private Set<String> collectModifiedColumnsForRelatedMVs(@NotNull LakeTable tbl) {
+        if (tbl.getRelatedMaterializedViews().isEmpty()) {
+            return Sets.newHashSet();
+        }
+        Set<String> modifiedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+
+        for (Map.Entry<Long, List<Column>> entry : indexSchemaMap.entrySet()) {
+            Long shadowIdxId = entry.getKey();
+            long originIndexId = indexIdMap.get(shadowIdxId);
+            List<Column> shadowSchema = entry.getValue();
+            List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
+            if (shadowSchema.size() == originSchema.size()) {
+                // modify column
+                for (Column col : shadowSchema) {
+                    if (col.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
+                        modifiedColumns.add(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
+                    }
+                }
+            } else if (shadowSchema.size() < originSchema.size()) {
+                // drop column
+                List<Column> differences = originSchema.stream().filter(element ->
+                        !shadowSchema.contains(element)).collect(Collectors.toList());
+                // can just drop one column one time, so just one element in differences
+                Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
+                modifiedColumns.add(originSchema.get(dropIdx).getName());
+            } else {
+                // add column should not affect old mv, just ignore.
+            }
+        }
+        return modifiedColumns;
+    }
+
+    private void inactiveRelatedMv(Set<String> modifiedColumns, @NotNull LakeTable tbl) {
+        if (modifiedColumns.isEmpty()) {
+            return;
+        }
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        for (MvId mvId : tbl.getRelatedMaterializedViews()) {
+            MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
+            if (mv == null) {
+                LOG.warn("Ignore materialized view {} does not exists", mvId);
+                continue;
+            }
+            for (Column mvColumn : mv.getColumns()) {
+                if (modifiedColumns.contains(mvColumn.getName())) {
+                    LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                            "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
+                            mvColumn.getName(), tbl.getName());
+                    mv.setActive(false);
+                    return;
+                }
+            }
         }
     }
 
@@ -588,7 +651,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             this.indexChange = other.indexChange;
             this.indexes = other.indexes;
             this.watershedTxnId = other.watershedTxnId;
-            this.storageFormat = other.storageFormat;
             this.startTime = other.startTime;
             this.commitVersionMap = other.commitVersionMap;
             // this.schemaChangeBatchTask = other.schemaChangeBatchTask;
@@ -742,11 +804,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         // update index
         if (indexChange) {
             table.setIndexes(indexes);
-        }
-
-        // set storage format of table, only set if format is v2
-        if (storageFormat == TStorageFormat.V2) {
-            table.setStorageFormat(storageFormat);
         }
 
         table.setState(OlapTable.OlapTableState.NORMAL);
@@ -910,5 +967,10 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         void unlock(Database db) {
             db.writeUnlock();
         }
+    }
+
+    @Override
+    public Optional<Long> getTransactionId() {
+        return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
     }
 }

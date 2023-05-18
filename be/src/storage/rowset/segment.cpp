@@ -52,6 +52,7 @@
 #include "storage/rowset/segment_writer.h" // k_segment_magic_length
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
+#include "storage/utils.h"
 #include "util/crc32c.h"
 #include "util/slice.h"
 
@@ -75,18 +76,19 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs,
                                                  const FooterPointerPB* partial_rowset_footer) {
     auto segment = std::make_shared<Segment>(private_type(0), std::move(fs), path, segment_id, tablet_schema);
 
-    RETURN_IF_ERROR(segment->_open(footer_length_hint, partial_rowset_footer));
+    RETURN_IF_ERROR(segment->_open(footer_length_hint, partial_rowset_footer, true));
     return std::move(segment);
 }
 
 StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs, const std::string& path,
                                                  uint32_t segment_id, std::shared_ptr<const TabletSchema> tablet_schema,
                                                  size_t* footer_length_hint,
-                                                 const FooterPointerPB* partial_rowset_footer) {
+                                                 const FooterPointerPB* partial_rowset_footer,
+                                                 bool skip_fill_local_cache) {
     auto segment =
             std::make_shared<Segment>(private_type(0), std::move(fs), path, segment_id, std::move(tablet_schema));
 
-    RETURN_IF_ERROR(segment->_open(footer_length_hint, partial_rowset_footer));
+    RETURN_IF_ERROR(segment->_open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache));
     return std::move(segment);
 }
 
@@ -200,9 +202,11 @@ Segment::~Segment() {
     MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->short_key_index_mem_tracker(), _short_key_index_mem_usage());
 }
 
-Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer) {
+Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
+                      bool skip_fill_local_cache) {
     SegmentFooterPB footer;
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(_fname));
+    RandomAccessFileOptions opts{.skip_fill_local_cache = skip_fill_local_cache};
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _fname));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
 
     RETURN_IF_ERROR(_create_column_readers(&footer));
@@ -210,6 +214,19 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     _short_key_index_page = PagePointer(footer.short_key_index_page());
     _prepare_adapter_info();
     return Status::OK();
+}
+
+bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_options) {
+    if (!read_options.is_primary_keys || read_options.dcg_loader == nullptr) {
+        return true;
+    }
+    SCOPED_RAW_TIMER(&read_options.stats->get_delta_column_group_ns);
+    DeltaColumnGroupList dcgs;
+    TabletSegmentId tsid;
+    tsid.tablet_id = read_options.tablet_id;
+    tsid.segment_id = read_options.rowset_id + _segment_id;
+    auto st = read_options.dcg_loader->load(tsid, read_options.version, &dcgs);
+    return st.ok() && dcgs.size() == 0;
 }
 
 StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
@@ -221,8 +238,14 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const Se
             continue;
         }
         if (!_column_readers[column_id]->segment_zone_map_filter(pair.second)) {
-            read_options.stats->segment_stats_filtered += _column_readers[column_id]->num_rows();
-            return Status::EndOfFile(strings::Substitute("End of file $0, empty iterator", _fname));
+            // skip segment zonemap filter when this segment has column files link to it.
+            const TabletColumn& tablet_column = _tablet_schema->column(column_id);
+            if (tablet_column.is_key() || _use_segment_zone_map_filter(read_options)) {
+                read_options.stats->segment_stats_filtered += _column_readers[column_id]->num_rows();
+                return Status::EndOfFile(strings::Substitute("End of file $0, empty iterator", _fname));
+            } else {
+                break;
+            }
         }
     }
     return new_segment_iterator(shared_from_this(), schema, read_options);
@@ -250,11 +273,11 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const Schema& schema, const Seg
     }
 }
 
-Status Segment::load_index() {
-    auto res = success_once(_load_index_once, [this] {
+Status Segment::load_index(bool skip_fill_local_cache) {
+    auto res = success_once(_load_index_once, [&] {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
 
-        Status st = _load_index();
+        Status st = _load_index(skip_fill_local_cache);
         if (st.ok()) {
             MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->short_key_index_mem_tracker(),
                                      _short_key_index_mem_usage());
@@ -266,9 +289,10 @@ Status Segment::load_index() {
     return res.status();
 }
 
-Status Segment::_load_index() {
+Status Segment::_load_index(bool skip_fill_local_cache) {
     // read and parse short key index page
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(_fname));
+    RandomAccessFileOptions file_opts{.skip_fill_local_cache = skip_fill_local_cache};
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(file_opts, _fname));
 
     PageReadOptions opts;
     opts.use_page_cache = !config::disable_storage_page_cache;
@@ -363,11 +387,16 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(uint32_t 
     return _column_readers[cid]->new_iterator();
 }
 
-Status Segment::new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** iter) {
+Status Segment::new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** iter, bool skip_fill_local_cache) {
     if (_column_readers[cid] != nullptr && _column_readers[cid]->has_bitmap_index()) {
-        return _column_readers[cid]->new_bitmap_index_iterator(iter);
+        return _column_readers[cid]->new_bitmap_index_iterator(iter, skip_fill_local_cache);
     }
     return Status::OK();
+}
+
+StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg) {
+    return Segment::open(_fs, dcg.column_file(parent_name(_fname)), 0,
+                         TabletSchema::create_with_uid(*_tablet_schema, dcg.column_ids()), nullptr);
 }
 
 } // namespace starrocks

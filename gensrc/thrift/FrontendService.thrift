@@ -366,14 +366,24 @@ struct TMaterializedViewStatus {
     7: optional string last_refresh_finished_time
     8: optional string last_refresh_duration
     9: optional string last_refresh_state
-    10: optional string inactive_code
-    11: optional string inactive_reason 
+    10: optional string last_refresh_error_code
+    11: optional string last_refresh_error_message
     12: optional string text
     13: optional string rows
+
+    14: optional string partition_type 
+    15: optional string last_refresh_force_refresh
+    16: optional string last_refresh_start_partition
+    17: optional string last_refresh_end_partition
+    18: optional string last_refresh_base_refresh_partitions
+    19: optional string last_refresh_mv_refresh_partitions
 
     20: optional i64 last_check_time
     21: optional i64 create_time
     22: optional string ddl_sql
+
+    23: optional string task_id
+    24: optional string task_name
 }
 
 struct TListMaterializedViewStatusResult {
@@ -411,10 +421,50 @@ struct TTaskRunInfo {
     9: optional i32 error_code
     10: optional string error_message
     11: optional string progress
+
+    12: optional string extra_message
 }
 
 struct TGetTaskRunInfoResult {
     1: optional list<TTaskRunInfo> task_runs
+}
+
+struct TGetLoadsParams {
+    1: optional string db
+    2: optional i64 job_id
+    3: optional i64 txn_id
+    4: optional string label
+}
+
+struct TGetLoadsResult {
+    1: optional list<TLoadInfo> loads
+}
+
+struct TLoadInfo {
+    1: optional i64 job_id
+    2: optional string label
+    3: optional string state
+    4: optional string progress
+    5: optional string type
+    6: optional string priority
+    7: optional string etl_info
+    8: optional string task_info
+    9: optional string create_time
+    10: optional string etl_start_time
+    11: optional string etl_finish_time
+    12: optional string load_start_time
+    13: optional string load_finish_time
+    14: optional string url
+    15: optional string job_details
+    16: optional string error_msg
+    17: optional string db
+    18: optional i64 txn_id
+    19: optional string tracking_sql
+    20: optional i64 num_scan_rows
+    21: optional i64 num_filtered_rows
+    22: optional i64 num_unselected_rows
+    23: optional i64 num_sink_rows
+    24: optional string rejected_record_path
 }
 
 // getTableNames returns a list of unqualified table names
@@ -496,6 +546,16 @@ struct TReportExecStatusParams {
   20: optional InternalService.TLoadJobType load_type
 
   21: optional list<Types.TTabletFailInfo> failInfos
+
+  22: optional i64 filtered_rows
+
+  23: optional i64 unselected_rows
+
+  24: optional string rejected_record_path
+
+  25: optional list<Types.TSinkCommitInfo> sink_commit_infos
+
+  26: optional i64 source_scan_bytes
 }
 
 struct TFeResult {
@@ -643,6 +703,7 @@ struct TStreamLoadPutRequest {
     29: optional i32 load_dop
     30: optional bool enable_replicated_storage
     31: optional string merge_condition
+    32: optional i64 log_rejected_record_num
     // only valid when file type is CSV
     50: optional string rowDelimiter
     // only valid when file type is CSV
@@ -653,6 +714,7 @@ struct TStreamLoadPutRequest {
     53: optional byte enclose
     // only valid when file type is CSV
     54: optional byte escape
+    55: optional Types.TPartialUpdateMode partial_update_mode
 }
 
 struct TStreamLoadPutResult {
@@ -987,6 +1049,7 @@ struct TTableMeta {
     15: optional list<TIndexInfo> index_infos
     16: optional string colocate_group
     17: optional list<string> bloomfilter_columns
+    18: optional string table_type;
 }
 
 struct TGetTableMetaResponse {
@@ -1097,6 +1160,37 @@ struct TGetTablesInfoResponse {
     1: optional list<TTableInfo> tables_infos
 }
 
+struct TTabletSchedule {
+    1: optional i64 table_id
+    2: optional i64 partition_id
+    3: optional i64 tablet_id
+    4: optional string type
+    5: optional string priority
+    6: optional string state
+    7: optional string tablet_status
+    8: optional double create_time
+    9: optional double schedule_time
+    10: optional double finish_time
+    11: optional i64 clone_src
+    12: optional i64 clone_dest
+    13: optional i64 clone_bytes
+    14: optional double clone_duration
+    15: optional string error_msg
+}
+
+struct TGetTabletScheduleRequest {
+    1: optional i64 table_id
+    2: optional i64 partition_id
+    3: optional i64 tablet_id
+    4: optional string type
+    5: optional string state
+    6: optional i64 limit
+}
+
+struct TGetTabletScheduleResponse {
+    1: optional list<TTabletSchedule> tablet_schedules
+}
+
 struct TUpdateResourceUsageRequest {
     1: optional i64 backend_id 
     2: optional ResourceUsage.TResourceUsage resource_usage
@@ -1141,6 +1235,42 @@ struct TAllocateAutoIncrementIdResult {
     3: optional Status.TStatus status
 }
 
+struct TGetRoleEdgesRequest {
+
+}
+
+struct TGetRoleEdgesItem {
+    1: optional string from_role
+    2: optional string to_role
+    3: optional string to_user
+}
+struct TGetRoleEdgesResponse {
+    1: optional list<TGetRoleEdgesItem> role_edges
+}
+
+enum TGrantsToType {
+    ROLE,
+    USER,
+}
+
+struct TGetGrantsToRolesOrUserRequest {
+    1: optional TGrantsToType type;
+}
+
+struct TGetGrantsToRolesOrUserItem {
+    1: optional string grantee
+    2: optional string object_catalog
+    3: optional string object_database
+    4: optional string object_name
+    5: optional string object_type
+    6: optional string privilege_type
+    7: optional bool is_grantable
+}
+
+struct TGetGrantsToRolesOrUserResponse {
+    1: optional list<TGetGrantsToRolesOrUserItem> grants_to
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1152,6 +1282,8 @@ service FrontendService {
     TGetUserPrivsResult getUserPrivs(1:TGetUserPrivsParams params)
     TGetDBPrivsResult getDBPrivs(1:TGetDBPrivsParams params)
     TGetTablePrivsResult getTablePrivs(1:TGetTablePrivsParams params)
+
+    TGetLoadsResult getLoads(1:TGetLoadsParams params)
 
     TDescribeTableResult describeTable(1:TDescribeTableParams params)
     TShowVariableResult showVariables(1:TShowVariableRequest params)
@@ -1204,5 +1336,10 @@ service FrontendService {
     MVMaintenance.TMVReportEpochResponse mvReport(1: MVMaintenance.TMVMaintenanceTasks request)
 
     TAllocateAutoIncrementIdResult allocAutoIncrementId (1:TAllocateAutoIncrementIdParam params)
+
+    TGetTabletScheduleResponse getTabletSchedule(1: TGetTabletScheduleRequest request)
+
+    TGetRoleEdgesResponse getRoleEdges(1: TGetRoleEdgesRequest request)
+    TGetGrantsToRolesOrUserResponse getGrantsTo(1: TGetGrantsToRolesOrUserRequest request)
 }
 

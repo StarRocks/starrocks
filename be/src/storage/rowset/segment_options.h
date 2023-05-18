@@ -30,6 +30,7 @@ class Condition;
 struct OlapReaderStatistics;
 class RuntimeProfile;
 class TabletSchema;
+class DeltaColumnGroupLoader;
 } // namespace starrocks
 
 namespace starrocks {
@@ -59,6 +60,8 @@ public:
     uint64_t tablet_id = 0;
     uint32_t rowset_id = 0;
     int64_t version = 0;
+    // used for primary key tablet to get delta column group
+    std::shared_ptr<DeltaColumnGroupLoader> dcg_loader;
 
     // REQUIRED (null is not allowed)
     OlapReaderStatistics* stats = nullptr;
@@ -75,7 +78,7 @@ public:
 
     bool has_delete_pred = false;
 
-    RowidRangeOptionPtr rowid_range_option = nullptr;
+    SparseRangePtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
     OlapRuntimeScanRangePruner runtime_range_pruner;

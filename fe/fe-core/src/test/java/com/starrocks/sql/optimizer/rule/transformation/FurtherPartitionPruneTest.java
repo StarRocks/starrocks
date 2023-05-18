@@ -25,6 +25,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.List;
 import java.util.stream.Stream;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 class FurtherPartitionPruneTest extends PlanTestBase {
@@ -32,7 +33,6 @@ class FurtherPartitionPruneTest extends PlanTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         FeConstants.runningUnitTest = true;
         starRocksAssert.withTable("CREATE TABLE `ptest` (\n"
                 + "  `k1` int(11) NOT NULL COMMENT \"\",\n"
@@ -52,8 +52,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
                 + "DISTRIBUTED BY HASH(`k1`) BUCKETS 10\n"
                 + "PROPERTIES (\n"
                 + "\"replication_num\" = \"1\",\n"
-                + "\"in_memory\" = \"false\",\n"
-                + "\"storage_format\" = \"DEFAULT\"\n"
+                + "\"in_memory\" = \"false\"\n"
                 + ");");
         starRocksAssert.withTable("CREATE TABLE `tbl_int` (\n" +
                 "  `k1` int(11) NULL,\n" +
@@ -70,8 +69,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`s1`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE `two_key` (\n" +
                 "  `k1` int(11) NULL,\n" +
@@ -88,8 +86,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`s1`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE `less_than_tbl` " +
                 "( `k1` date, `k2` datetime, `k3` char(20), `k4` varchar(20), `k5` boolean) " +
@@ -100,7 +97,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
                 "PARTITION `p202008` VALUES LESS THAN (\"2020-09-01\")," +
                 "PARTITION `p202009` VALUES LESS THAN (\"2020-10-01\") ) " +
                 "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3 " +
-                "PROPERTIES ( \"replication_num\" = \"1\", \"storage_format\" = \"v2\" );;");
+                "PROPERTIES ( \"replication_num\" = \"1\");");
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -137,6 +134,21 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertTrue(plan, plan.contains("partitions=4/4"));
     }
+
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("cannotPrunePredicateSqls")
+    void testCannotPrunePredicateSqls(String sql) throws Exception {
+        String plan = getFragmentPlan(sql);
+        assertTrue(plan, plan.contains("PREDICATES: "));
+    }
+
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("canPrunePredicateSqls")
+    void testCanPrunePredicateSqls(String sql) throws Exception {
+        String plan = getFragmentPlan(sql);
+        assertFalse(plan, plan.contains("PREDICATES: "));
+    }
+
 
     private static Stream<Arguments> emptyPartitionSqlList() {
         List<String> sqlList = Lists.newArrayList();
@@ -220,7 +232,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 
-    public static Stream<Arguments> twoPartitionsSqlList() {
+    private static Stream<Arguments> twoPartitionsSqlList() {
         List<String> sqlList = Lists.newArrayList();
         sqlList.add("select * from less_than_tbl where k1 = '2020-07-30' or k1 is null");
         sqlList.add("select * from less_than_tbl where k1 < '2020-07-30' or k1 is null");
@@ -275,7 +287,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 
-    public static Stream<Arguments> threePartitionsSqlList() {
+    private static Stream<Arguments> threePartitionsSqlList() {
         List<String> sqlList = Lists.newArrayList();
         sqlList.add("select * from less_than_tbl where k1 < '2020-07-30' or k1 > '2020-09-30' or k1 is null");
         sqlList.add("select * from less_than_tbl where k1 < '2020-07-30' or k1 > '2020-09-30' or k1 <=> null");
@@ -345,6 +357,36 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from tbl_int where k1 = 1 = true");
         sqlList.add("select * from tbl_int where b1 or (k1 < 100) or k1 > 200");
         sqlList.add("select * from tbl_int where b1");
+        return sqlList.stream().map(e -> Arguments.of(e));
+    }
+
+
+    private static Stream<Arguments> cannotPrunePredicateSqls() {
+        List<String> sqlList = Lists.newArrayList();
+        sqlList.add("select * from tbl_int where (k1 >= 0 and k1 < 200) or s1 = 'a'");
+        sqlList.add("select * from tbl_int where (k1 >= 0 and k1 < 200) or k1 = 300");
+        sqlList.add("select * from tbl_int where (abs(abs(k1)) >= 0 and abs(abs(k1)) < 200)");
+        sqlList.add("select * from tbl_int where k1 >= abs(0) and k1 < abs(200)");
+        sqlList.add("select * from tbl_int where k1 in (0, 1, 2, 3)");
+        sqlList.add("select * from less_than_tbl where k1 < '2020-08-01'");
+        sqlList.add("select * from ptest where d2 >= str_to_date('1000-01-01 12:34:56', '%Y-%m-%d') and " +
+                "d2 < str_to_date('2020-04-01 12:34:56', '%Y-%m-%d')");
+        sqlList.add("select * from less_than_tbl where k1 < str_to_date('20200801', '%Y%m%d')");
+        sqlList.add("select * from less_than_tbl where k1 < '2020-08-01' and k1 is not null");
+        sqlList.add("select * from less_than_tbl where k1 < '2020-08-01' and k1 is null");
+        return sqlList.stream().map(e -> Arguments.of(e));
+    }
+
+    private static Stream<Arguments> canPrunePredicateSqls() {
+        List<String> sqlList = Lists.newArrayList();
+        sqlList.add("select * from tbl_int where k1 >= 0 and k1 < 200 ");
+        sqlList.add("select * from tbl_int where k1 < cast('200' as int)");
+        sqlList.add("select * from ptest where d2 < '2020-04-01'");
+        sqlList.add("select * from ptest where d2 >= '1000-01-01' and d2 < '2020-04-01'");
+        sqlList.add("select * from ptest where cast(d2 as date) >= cast('1000-01-01' as date) " +
+                "and cast(d2 as date) < '2020-04-01'");
+        sqlList.add("select * from ptest where d2 < cast('20200101' as date)");
+        sqlList.add("select * from ptest where d2 < str_to_date('20200401', '%Y%m%d')");
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 }

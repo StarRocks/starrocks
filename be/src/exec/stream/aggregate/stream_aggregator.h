@@ -44,7 +44,7 @@ namespace starrocks::stream {
  */
 class StreamAggregator final : public Aggregator {
 public:
-    StreamAggregator(AggregatorParamsPtr&& params);
+    StreamAggregator(AggregatorParamsPtr params);
 
     static constexpr StreamRowOp INSERT_OP = StreamRowOp::OP_INSERT;
     static constexpr StreamRowOp DELETE_OP = StreamRowOp::OP_DELETE;

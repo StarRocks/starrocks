@@ -19,10 +19,12 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.system.SystemId;
+import com.starrocks.catalog.system.information.InfoSchemaDb;
+import com.starrocks.catalog.system.starrocks.StarRocksDb;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -37,6 +39,8 @@ import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class DropStmtAnalyzer {
     private static final Logger LOG = LogManager.getLogger(DropStmtAnalyzer.class);
@@ -53,9 +57,18 @@ public class DropStmtAnalyzer {
         @Override
         public Void visitDropTableStatement(DropTableStmt statement, ConnectContext context) {
             MetaUtils.normalizationTableName(context, statement.getTableNameObject());
+
+            // check catalog
+            String catalogName = statement.getCatalogName();
+            try {
+                MetaUtils.checkCatalogExistAndReport(catalogName);
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+            }
+
             String dbName = statement.getDbName();
             // check database
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
@@ -63,7 +76,7 @@ public class DropStmtAnalyzer {
             Table table;
             String tableName = statement.getTableName();
             try {
-                table = db.getTable(statement.getTableName());
+                table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
                 if (table == null) {
                     if (statement.isSetIfExists()) {
                         LOG.info("drop table[{}] which does not exist", tableName);
@@ -99,14 +112,25 @@ public class DropStmtAnalyzer {
         public Void visitDropDbStatement(DropDbStmt statement, ConnectContext context) {
             if (Strings.isNullOrEmpty(statement.getCatalogName())) {
                 if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
-                    throw new SemanticException("No catalog selected");
+                    throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
                 }
                 statement.setCatalogName(context.getCurrentCatalog());
+            }
+
+            try {
+                MetaUtils.checkCatalogExistAndReport(statement.getCatalogName());
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, statement.getCatalogName());
             }
 
             String dbName = statement.getDbName();
             if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, context.getQualifiedUser(), dbName);
+            } else if (dbName.equalsIgnoreCase(StarRocksDb.DATABASE_NAME)) {
+                Database db = GlobalStateMgr.getCurrentState().getDb(StarRocksDb.DATABASE_NAME.toLowerCase());
+                if (db.getId() == SystemId.STARROCKS_DB_ID) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, context.getQualifiedUser(), dbName);
+                }
             }
             return null;
         }
@@ -123,7 +147,7 @@ public class DropStmtAnalyzer {
 
                 FunctionSearchDesc funcDesc = new FunctionSearchDesc(functionName, argsDef.getArgTypes(),
                         argsDef.isVariadic());
-                statement.setFunction(funcDesc);
+                statement.setFunctionSearchDesc(funcDesc);
 
                 // check function existence
                 Function func;
@@ -137,7 +161,7 @@ public class DropStmtAnalyzer {
                     if (db != null) {
                         try {
                             db.readLock();
-                            func = db.getFunction(statement.getFunction());
+                            func = db.getFunction(statement.getFunctionSearchDesc());
                             if (func == null) {
                                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
                             }

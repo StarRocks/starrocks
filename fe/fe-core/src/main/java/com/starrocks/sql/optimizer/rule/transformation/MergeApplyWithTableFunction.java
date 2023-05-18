@@ -70,11 +70,9 @@ public class MergeApplyWithTableFunction extends TransformationRule {
             childOptExpression = OptExpression.create(projectOperator, input.inputAt(0));
         }
 
-        LogicalTableFunctionOperator newTableFunctionOperator =
-                new LogicalTableFunctionOperator(tableFunctionOperator.getFnResultColumnRefSet(),
-                        tableFunctionOperator.getFn(), tableFunctionOperator.getFnParamColumnProject(),
-                        input.inputAt(0).getOutputColumns());
-        newTableFunctionOperator.setLimit(tableFunctionOperator.getLimit());
+        LogicalTableFunctionOperator newTableFunctionOperator = (new LogicalTableFunctionOperator.Builder())
+                .withOperator(tableFunctionOperator)
+                .setOuterColRefs(input.inputAt(0).getRowOutputInfo().getOutputColRefs()).build();
 
         return Lists.newArrayList(OptExpression.create(newTableFunctionOperator, childOptExpression));
     }

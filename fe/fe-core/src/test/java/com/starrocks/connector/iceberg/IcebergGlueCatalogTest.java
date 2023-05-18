@@ -15,8 +15,6 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -27,6 +25,7 @@ import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.hive.IcebergGlueCatalog;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.junit.Assert;
 import org.junit.Test;
@@ -40,15 +39,14 @@ public class IcebergGlueCatalogTest {
     @Test
     public void testCatalogType() {
         Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
-        IcebergGlueCatalog icebergGlueCatalog =
-                IcebergGlueCatalog.getInstance("glue_iceberg", icebergProperties, hdfsEnvironment);
+        IcebergGlueCatalog icebergGlueCatalog = (IcebergGlueCatalog) CatalogUtil.loadCatalog(
+                IcebergGlueCatalog.class.getName(), "glue_native_catalog", icebergProperties, new Configuration());
         Assert.assertEquals(IcebergCatalogType.GLUE_CATALOG, icebergGlueCatalog.getIcebergCatalogType());
     }
 
     @Test
     public void testLoadTable(@Mocked IcebergGlueCatalog glueCatalog) {
-        TableIdentifier identifier = IcebergUtil.getIcebergTableIdentifier("db", "table");
+        TableIdentifier identifier = TableIdentifier.of("db", "table");
         new Expectations() {
             {
                 glueCatalog.loadTable(identifier);
@@ -67,9 +65,8 @@ public class IcebergGlueCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
-        IcebergGlueCatalog icebergGlueCatalog =
-                IcebergGlueCatalog.getInstance("glue_iceberg", icebergProperties, hdfsEnvironment);
+        IcebergGlueCatalog icebergGlueCatalog = (IcebergGlueCatalog) CatalogUtil.loadCatalog(
+                IcebergGlueCatalog.class.getName(), "glue_native_catalog", icebergProperties, new Configuration());
         Table table = icebergGlueCatalog.loadTable(identifier);
         Assert.assertEquals("test", table.name());
     }
@@ -95,9 +92,8 @@ public class IcebergGlueCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
-        IcebergGlueCatalog icebergGlueCatalog =
-                IcebergGlueCatalog.getInstance("glue_iceberg", icebergProperties, hdfsEnvironment);
+        IcebergGlueCatalog icebergGlueCatalog = (IcebergGlueCatalog) CatalogUtil.loadCatalog(
+                IcebergGlueCatalog.class.getName(), "glue_native_catalog", icebergProperties, new Configuration());
         List<String> dbs = icebergGlueCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }

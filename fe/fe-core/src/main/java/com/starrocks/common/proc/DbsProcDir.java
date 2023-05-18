@@ -59,7 +59,7 @@ public class DbsProcDir implements ProcDirInterface {
             .add("LastConsistencyCheckTime").add("ReplicaQuota")
             .build();
 
-    private GlobalStateMgr globalStateMgr;
+    private final GlobalStateMgr globalStateMgr;
 
     public DbsProcDir(GlobalStateMgr globalStateMgr) {
         this.globalStateMgr = globalStateMgr;
@@ -71,21 +71,23 @@ public class DbsProcDir implements ProcDirInterface {
     }
 
     @Override
-    public ProcNodeInterface lookup(String dbIdStr) throws AnalysisException {
-        if (globalStateMgr == null || Strings.isNullOrEmpty(dbIdStr)) {
-            throw new AnalysisException("Db id is null");
+    public ProcNodeInterface lookup(String dbIdOrName) throws AnalysisException {
+        if (globalStateMgr == null) {
+            throw new AnalysisException("globalStateMgr is null");
+        }
+        if (Strings.isNullOrEmpty(dbIdOrName)) {
+            throw new AnalysisException("database id or name is null or empty");
         }
 
-        long dbId = -1L;
+        Database db;
         try {
-            dbId = Long.valueOf(dbIdStr);
+            db = globalStateMgr.getDb(Long.parseLong(dbIdOrName));
         } catch (NumberFormatException e) {
-            throw new AnalysisException("Invalid db id format: " + dbIdStr);
+            db = globalStateMgr.getDb(dbIdOrName);
         }
 
-        Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
-            throw new AnalysisException("Database[" + dbId + "] does not exist.");
+            throw new AnalysisException("Unknown database id or name \"" + dbIdOrName + "\"");
         }
 
         return new TablesProcDir(db);

@@ -48,12 +48,35 @@ class Schema;
 class TabletReader;
 class ChunkChanger;
 class SegmentIterator;
-class ChunkAllocator;
 
 struct CompactionInfo {
     EditVersion start_version;
     std::vector<uint32_t> inputs;
     uint32_t output = UINT32_MAX;
+};
+
+struct EditVersionInfo {
+    EditVersion version;
+    int64_t creation_time;
+    std::vector<uint32_t> rowsets;
+    // used for rowset commit
+    std::vector<uint32_t> deltas;
+    // used for compaction commit
+    std::unique_ptr<CompactionInfo> compaction;
+    EditVersionInfo() = default;
+    // add a copy constructor to better expose to scripting engine
+    EditVersionInfo(const EditVersionInfo& rhs) {
+        version = rhs.version;
+        creation_time = rhs.creation_time;
+        rowsets = rhs.rowsets;
+        deltas = rhs.deltas;
+        if (rhs.compaction) {
+            compaction = std::make_unique<CompactionInfo>();
+            *compaction = *rhs.compaction;
+        }
+    }
+    // add method to better expose to scripting engine
+    CompactionInfo* get_compaction() { return compaction.get(); }
 };
 
 // maintain all states for updatable tablets
@@ -62,6 +85,9 @@ public:
     using ColumnUniquePtr = std::unique_ptr<Column>;
     using segment_rowid_t = uint32_t;
     using DeletesMap = std::unordered_map<uint32_t, vector<segment_rowid_t>>;
+
+    TabletUpdates(const TabletUpdates&) = delete;
+    const TabletUpdates& operator=(const TabletUpdates&) = delete;
 
     explicit TabletUpdates(Tablet& tablet);
     ~TabletUpdates();
@@ -137,6 +163,9 @@ public:
 
     // perform compaction with specified rowsets, this may be a manual compaction invoked by tools or data fixing jobs
     Status compaction(MemTracker* mem_tracker, const vector<uint32_t>& input_rowset_ids);
+    // picks rowsets whose size is below rowset_size_threshold for compaction
+    Status get_rowsets_for_compaction(int64_t rowset_size_threshold, std::vector<uint32_t>& rowset_ids,
+                                      size_t& total_bytes);
 
     // vertical compaction introduced a bug that may generate rowset with lots of small segment files
     // this method go through all rowsets and identify them for further repair
@@ -178,7 +207,8 @@ public:
     Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
                         ChunkChanger* chunk_changer);
 
-    Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version);
+    Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
+                        ChunkChanger* chunk_changer);
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false);
 
@@ -235,15 +265,10 @@ public:
     //          column 2 value@rssid:6 rowid:4,
     //   ]
     // ]
-    Status get_column_values(std::vector<uint32_t>& column_ids, bool with_default,
+    Status get_column_values(const std::vector<uint32_t>& column_ids, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<Column>>* columns, void* state);
 
-    /*
-    Status prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
-                                         EditVersion* read_version, uint32_t* next_rowset_id,
-                                         std::vector<std::vector<uint64_t>*>* rss_rowids);
-    */
     Status prepare_partial_update_states(Tablet* tablet, const ColumnUniquePtr& upserts, EditVersion* read_version,
                                          std::vector<uint64_t>* rss_rowids);
 
@@ -262,6 +287,16 @@ public:
 
     void get_basic_info_extra(TabletBasicInfo& info);
 
+    // methods used by scripting engine
+    std::vector<std::string> get_version_list() const;
+
+    std::shared_ptr<EditVersionInfo> get_edit_version(const string& version) const;
+
+    std::shared_ptr<std::unordered_map<uint32_t, RowsetSharedPtr>> get_rowset_map() const;
+
+    Status get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
+                                         std::vector<uint32_t>* rowset_ids);
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -271,16 +306,6 @@ private:
     template <typename K, typename V>
     using OrderedMap = std::map<K, V>;
 
-    struct EditVersionInfo {
-        EditVersion version;
-        int64_t creation_time;
-        std::vector<uint32_t> rowsets;
-        // used for rowset commit
-        std::vector<uint32_t> deltas;
-        // used for compaction commit
-        std::unique_ptr<CompactionInfo> compaction;
-    };
-
     struct RowsetStats {
         size_t num_segments = 0;
         size_t num_rows = 0;
@@ -289,12 +314,6 @@ private:
         int64_t compaction_score = 0;
         std::string to_string() const;
     };
-
-    Status _get_rowsets(int64_t version, std::vector<RowsetSharedPtr>* rowsets, EditVersion* full_version);
-
-    // used for PrimaryIndex load
-    Status _get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
-                                          std::vector<uint32_t>* rowset_ids);
 
     void _redo_edit_version_log(const EditVersionMetaPB& v);
 
@@ -311,6 +330,11 @@ private:
     void _ignore_rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
 
     void _apply_rowset_commit(const EditVersionInfo& version_info);
+
+    // used for normal update or row-mode partial update
+    void _apply_normal_rowset_commit(const EditVersionInfo& version_info, RowsetSharedPtr rowset);
+    // used for column-mode partial update
+    void _apply_column_partial_update_commit(const EditVersionInfo& version_info, RowsetSharedPtr rowset);
 
     void _apply_compaction_commit(const EditVersionInfo& version_info);
 
@@ -357,6 +381,8 @@ private:
 
     void _clear_rowset_del_vec_cache(const Rowset& rowset);
 
+    void _clear_rowset_delta_column_group_cache(const Rowset& rowset);
+
     void _update_total_stats(const std::vector<uint32_t>& rowsets, size_t* row_count_before, size_t* row_count_after);
 
     Status _convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet,
@@ -364,6 +390,8 @@ private:
                                      const std::unique_ptr<RowsetWriter>& rowset_writer);
 
     void _check_creation_time_increasing();
+
+    Status _check_conflict_with_partial_update(CompactionInfo* info);
 
     // these functions is only used in ut
     void stop_apply(bool apply_stopped) { _apply_stopped = apply_stopped; }
@@ -405,7 +433,7 @@ private:
     int64_t _last_compaction_time_ms = 0;
     std::atomic<int64_t> _last_compaction_success_millis{0};
     std::atomic<int64_t> _last_compaction_failure_millis{0};
-    int64_t _compaction_cost_seek = 32 * 1024 * 1024; // 32MB
+    static const int64_t _compaction_cost_seek = 32 * 1024 * 1024; // 32MB
 
     mutable std::mutex _rowset_stats_lock;
     // maintain current version(applied version) rowsets' stats
@@ -426,11 +454,6 @@ private:
     // the whole BE, and more more operation on this tablet is allowed
     std::atomic<bool> _error{false};
     std::string _error_msg;
-
-    ChunkAllocator* _chunk_allocator = nullptr;
-
-    TabletUpdates(const TabletUpdates&) = delete;
-    const TabletUpdates& operator=(const TabletUpdates&) = delete;
 };
 
 } // namespace starrocks

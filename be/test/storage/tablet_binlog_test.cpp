@@ -107,12 +107,15 @@ public:
     }
 
 protected:
+    void ingest_random_binlog(TabletSharedPtr tablet, int64_t start_version, int64_t num_version,
+                              std::vector<DupKeyVersionInfo>* version_infos);
+
     TabletSharedPtr _tablet;
 };
 
-TEST_F(TabletBinlogTest, test_generate_binlog) {
-    std::vector<DupKeyVersionInfo> version_infos;
-    for (int32_t version = 2; version < 100; version++) {
+void TabletBinlogTest::ingest_random_binlog(TabletSharedPtr tablet, int64_t start_version, int64_t num_version,
+                                            std::vector<DupKeyVersionInfo>* version_infos) {
+    for (int32_t version = start_version; version < start_version + num_version; version++) {
         int32_t num_segments = std::rand() % 5;
         int32_t num_rows_per_segment = std::rand() % 100 + 1;
         std::vector<int32_t> segment_rows;
@@ -120,18 +123,49 @@ TEST_F(TabletBinlogTest, test_generate_binlog) {
             segment_rows.push_back(num_rows_per_segment);
         }
         RowsetSharedPtr rowset;
-        create_rowset(_tablet, segment_rows, &rowset);
+        create_rowset(tablet, segment_rows, &rowset);
+        ASSERT_OK(tablet->add_inc_rowset(rowset, version));
         int64_t timestamp = rowset->creation_time() * 1000000;
-        ASSERT_OK(_tablet->add_inc_rowset(rowset, version));
-
-        version_infos.push_back(DupKeyVersionInfo(version, num_segments, num_rows_per_segment, timestamp));
+        version_infos->push_back(DupKeyVersionInfo(version, num_segments, num_rows_per_segment, timestamp));
     }
+}
 
+TEST_F(TabletBinlogTest, test_config_binlog) {
+    std::shared_ptr<BinlogConfig> binlog_config = _tablet->tablet_meta()->get_binlog_config();
+    ASSERT_EQ(1, binlog_config->version);
+    ASSERT_TRUE(binlog_config->binlog_enable);
+    ASSERT_EQ(30 * 60, binlog_config->binlog_ttl_second);
+    ASSERT_EQ(INT64_MAX, binlog_config->binlog_max_size);
+
+    // higher version will override the configuration
+    BinlogConfig binlog_config_3;
+    binlog_config_3.update(3, true, 823, 984);
+    _tablet->update_binlog_config(binlog_config_3);
+    binlog_config = _tablet->tablet_meta()->get_binlog_config();
+    ASSERT_EQ(3, binlog_config->version);
+    ASSERT_TRUE(binlog_config->binlog_enable);
+    ASSERT_EQ(823, binlog_config->binlog_ttl_second);
+    ASSERT_EQ(984, binlog_config->binlog_max_size);
+
+    // lower version would not override the configuration
+    BinlogConfig binlog_config_2;
+    binlog_config_2.update(2, true, 323, 475);
+    _tablet->update_binlog_config(binlog_config_2);
+    binlog_config = _tablet->tablet_meta()->get_binlog_config();
+    ASSERT_EQ(3, binlog_config->version);
+    ASSERT_TRUE(binlog_config->binlog_enable);
+    ASSERT_EQ(823, binlog_config->binlog_ttl_second);
+    ASSERT_EQ(984, binlog_config->binlog_max_size);
+}
+
+TEST_F(TabletBinlogTest, test_generate_binlog) {
+    std::vector<DupKeyVersionInfo> version_infos;
+    ingest_random_binlog(_tablet, 2, 100, &version_infos);
     BinlogManager* binlog_manager = _tablet->binlog_manager();
-    std::map<int128_t, BinlogFileMetaPBPtr>& lsn_map = binlog_manager->file_metas();
+    std::map<BinlogLsn, BinlogFilePtr>& lsn_map = binlog_manager->alive_binlog_files();
     std::vector<BinlogFileMetaPBPtr> file_metas;
     for (auto it : lsn_map) {
-        file_metas.push_back(it.second);
+        file_metas.push_back(it.second->file_meta());
     }
     verify_dup_key_multiple_versions(version_infos, _tablet->schema_hash_path(), file_metas);
 }
@@ -149,9 +183,8 @@ TEST_F(TabletBinlogTest, test_publish_out_of_order) {
             }
             RowsetSharedPtr rowset;
             create_rowset(_tablet, segment_rows, &rowset);
-            int64_t timestamp = rowset->creation_time() * 1000000;
             ASSERT_OK(_tablet->add_inc_rowset(rowset, sub_version));
-
+            int64_t timestamp = rowset->creation_time() * 1000000;
             if (k == 1) {
                 version_infos.push_back(DupKeyVersionInfo(sub_version, num_segments, num_rows_per_segment, timestamp));
             }
@@ -159,12 +192,49 @@ TEST_F(TabletBinlogTest, test_publish_out_of_order) {
     }
 
     BinlogManager* binlog_manager = _tablet->binlog_manager();
-    std::map<int128_t, BinlogFileMetaPBPtr>& lsn_map = binlog_manager->file_metas();
+    std::map<BinlogLsn, BinlogFilePtr>& lsn_map = binlog_manager->alive_binlog_files();
     std::vector<BinlogFileMetaPBPtr> file_metas;
     for (auto it : lsn_map) {
-        file_metas.push_back(it.second);
+        file_metas.push_back(it.second->file_meta());
     }
     verify_dup_key_multiple_versions(version_infos, _tablet->schema_hash_path(), file_metas);
+}
+
+TEST_F(TabletBinlogTest, test_load) {
+    // verify load empty rowsets
+    ASSERT_OK(_tablet->finish_load_rowsets());
+    std::vector<DupKeyVersionInfo> version_infos;
+    ingest_random_binlog(_tablet, 2, 50, &version_infos);
+    // simulate to checkpoint tablet meta
+    std::shared_ptr<TabletMetaPB> meta_checkpoint = std::make_shared<TabletMetaPB>();
+    _tablet->tablet_meta()->to_meta_pb(meta_checkpoint.get());
+    ingest_random_binlog(_tablet, 52, 50, &version_infos);
+
+    // simulate the process of loading tablet as DataDir#load
+    TabletMetaSharedPtr load_tablet_meta = TabletMeta::create();
+    load_tablet_meta->init_from_pb(meta_checkpoint.get());
+    auto load_tablet = Tablet::create_tablet_from_meta(load_tablet_meta, _tablet->data_dir());
+    ASSERT_OK(load_tablet->init());
+    for (int64_t version = 52; version < 102; version++) {
+        ASSERT_OK(load_tablet->load_rowset(_tablet->get_inc_rowset_by_version(Version(version, version))));
+    }
+    ASSERT_OK(load_tablet->finish_load_rowsets());
+
+    for (int64_t version = 2; version < 102; version++) {
+        RowsetSharedPtr raw_rowset = _tablet->get_inc_rowset_by_version(Version(version, version));
+        RowsetSharedPtr load_rowset = load_tablet->get_inc_rowset_by_version(Version(version, version));
+        ASSERT_TRUE(raw_rowset != nullptr);
+        ASSERT_TRUE(load_rowset != nullptr);
+        ASSERT_EQ(raw_rowset->rowset_id(), load_rowset->rowset_id());
+    }
+
+    BinlogManager* binlog_manager = load_tablet->binlog_manager();
+    std::map<BinlogLsn, BinlogFilePtr>& lsn_map = binlog_manager->alive_binlog_files();
+    std::vector<BinlogFileMetaPBPtr> file_metas;
+    for (auto it : lsn_map) {
+        file_metas.push_back(it.second->file_meta());
+    }
+    verify_dup_key_multiple_versions(version_infos, load_tablet->schema_hash_path(), file_metas);
 }
 
 } // namespace starrocks

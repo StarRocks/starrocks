@@ -35,6 +35,7 @@
 package com.starrocks.http.rest;
 
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseAction;
@@ -93,6 +94,7 @@ public class RestBaseAction extends BaseAction {
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setRemoteIP(authInfo.remoteIp);
         ctx.setCurrentUserIdentity(currentUser);
+        // TODO(yiming): set role ids for ephemeral user
         ctx.setCurrentRoleIds(currentUser);
         ctx.setThreadLocalInfo();
         executeWithoutPassword(request, response);
@@ -155,8 +157,9 @@ public class RestBaseAction extends BaseAction {
         if (globalStateMgr.isLeader()) {
             return false;
         }
+        Pair<String, Integer> leaderIpAndPort = globalStateMgr.getLeaderIpAndHttpPort();
         redirectTo(request, response,
-                new TNetworkAddress(globalStateMgr.getLeaderIp(), globalStateMgr.getLeaderHttpPort()));
+                new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second));
         return true;
     }
 }

@@ -293,8 +293,10 @@ Status BinlogFileWriter::commit(bool end_of_version) {
         file_meta->set_start_timestamp_in_us(version_context->change_event_timestamp_in_us);
     }
     file_meta->set_end_version(version_context->version);
-    file_meta->set_end_seq_id(page_context->end_seq_id);
+    // for empty version, set file_meta's end_seq_id to 0
+    file_meta->set_end_seq_id(page_context->end_seq_id == -1 ? 0 : page_context->end_seq_id);
     file_meta->set_end_timestamp_in_us(version_context->change_event_timestamp_in_us);
+    file_meta->set_version_eof(end_of_version);
     file_meta->set_num_pages(file_meta->num_pages() + version_context->num_pages);
     file_meta->set_file_size(_file->size());
     for (auto& rowset_id : version_context->rowsets) {
@@ -305,6 +307,10 @@ Status BinlogFileWriter::commit(bool end_of_version) {
     }
     _reset_pending_context();
     _writer_state = WAITING_BEGIN;
+
+    VLOG(3) << "Successfully commit binlog writer: " << _file_path
+            << ", current file meta: " << BinlogUtil::file_meta_to_string(file_meta);
+
     return Status::OK();
 }
 
@@ -462,6 +468,11 @@ Status BinlogFileWriter::_append_page(bool end_of_version) {
     } else {
         data.emplace_back(compressed_body);
     }
+
+    VLOG(3) << "Append page, file path: " << _file_path << ", file pos: " << _file->size()
+            << ", page header size: " << data[1].get_size() << ", page body size: " << data[2].get_size()
+            << ", page header: " << BinlogUtil::page_header_to_string(&page_header);
+
     // sync file when commit
     status = _file->appendv(&data[0], data.size());
     if (!status.ok()) {
@@ -469,6 +480,7 @@ Status BinlogFileWriter::_append_page(bool end_of_version) {
                      << ", num entries: " << _pending_page_context->num_log_entries << ", file id: " << _file_id
                      << ", file path: " << _file_path << ", " << status;
     }
+
     return status;
 }
 
@@ -524,6 +536,10 @@ void BinlogFileWriter::_reset_pending_context() {
     _pending_page_context->rowsets.clear();
     _pending_page_context->page_header.Clear();
     _pending_page_context->page_content.Clear();
+}
+
+Status BinlogFileWriter::force_flush_page(bool end_version) {
+    return _flush_page(end_version);
 }
 
 StatusOr<std::shared_ptr<BinlogFileWriter>> BinlogFileWriter::reopen(int64_t file_id, const std::string& file_path,

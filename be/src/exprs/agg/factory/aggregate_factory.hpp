@@ -22,6 +22,7 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/any_value.h"
+#include "exprs/agg/array_agg.h"
 #include "exprs/agg/avg.h"
 #include "exprs/agg/bitmap_intersect.h"
 #include "exprs/agg/bitmap_union.h"
@@ -104,11 +105,18 @@ public:
         return std::make_shared<ExchangePerfAggregateFunction<PerfType>>();
     }
 
+    static AggregateFunctionPtr MakeArrayAggAggregateFunctionV2() {
+        return std::make_shared<ArrayAggAggregateFunctionV2>();
+    }
+
     template <LogicalType LT>
     static auto MakeMaxAggregateFunction();
 
     template <LogicalType LT>
     static auto MakeMaxByAggregateFunction();
+
+    template <LogicalType LT>
+    static auto MakeMinByAggregateFunction();
 
     template <LogicalType LT>
     static auto MakeMinAggregateFunction();
@@ -162,6 +170,9 @@ public:
 
     template <LogicalType LT>
     static AggregateFunctionPtr MakePercentileContAggregateFunction();
+
+    template <LogicalType PT>
+    static AggregateFunctionPtr MakePercentileDiscAggregateFunction();
 
     // Windows functions:
     static AggregateFunctionPtr MakeDenseRankWindowFunction();
@@ -245,7 +256,13 @@ auto AggregateFactory::MakeMaxAggregateFunction() {
 template <LogicalType LT>
 auto AggregateFactory::MakeMaxByAggregateFunction() {
     return std::make_shared<
-            MaxByAggregateFunction<LT, MaxByAggregateData<LT>, MaxByElement<LT, MaxByAggregateData<LT>>>>();
+            MaxMinByAggregateFunction<LT, MaxByAggregateData<LT>, MaxByElement<LT, MaxByAggregateData<LT>>>>();
+}
+
+template <LogicalType LT>
+auto AggregateFactory::MakeMinByAggregateFunction() {
+    return std::make_shared<
+            MaxMinByAggregateFunction<LT, MinByAggregateData<LT>, MinByElement<LT, MinByAggregateData<LT>>>>();
 }
 
 template <LogicalType LT>
@@ -321,6 +338,11 @@ AggregateFunctionPtr AggregateFactory::MakeHllRawAggregateFunction() {
 template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakePercentileContAggregateFunction() {
     return std::make_shared<PercentileContAggregateFunction<LT>>();
+}
+
+template <LogicalType PT>
+AggregateFunctionPtr AggregateFactory::MakePercentileDiscAggregateFunction() {
+    return std::make_shared<PercentileDiscAggregateFunction<PT>>();
 }
 
 // Stream MV Retractable Aggregate Functions

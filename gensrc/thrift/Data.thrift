@@ -116,6 +116,8 @@ struct TStatisticData {
     // the latest partition version for this table
     13: optional i64 meta_version
     14: optional i64 partitionId
+    // the batch load version
+    15: optional binary hll
 }
 
 // Result data for user variable

@@ -35,6 +35,7 @@
 namespace cpp starrocks
 namespace java com.starrocks.thrift
 
+include "CloudConfiguration.thrift"
 include "Exprs.thrift"
 include "Types.thrift"
 include "Descriptors.thrift"
@@ -50,6 +51,8 @@ enum TDataSinkType {
     OLAP_TABLE_SINK,
     MEMORY_SCRATCH_SINK,
     MULTI_CAST_DATA_STREAM_SINK,
+    SCHEMA_TABLE_SINK,
+    ICEBERG_TABLE_SINK
 }
 
 enum TResultSinkType {
@@ -193,8 +196,24 @@ struct TOlapTableSink {
     20: optional string merge_condition
     21: optional bool null_expr_in_auto_increment
     22: optional bool miss_auto_increment_column
-    23: optional bool abort_delete
-    24: optional i32 auto_increment_slot_id;
+    23: optional bool abort_delete // Deprecated
+    24: optional i32 auto_increment_slot_id
+    25: optional Types.TPartialUpdateMode partial_update_mode
+    26: optional string label
+}
+
+struct TSchemaTableSink {
+    1: optional string table
+    2: optional Descriptors.TNodesInfo nodes_info
+}
+
+struct TIcebergTableSink {
+    1: optional string location
+    2: optional string file_format
+    3: optional i64 target_table_id
+    4: optional Types.TCompressionType compression_type
+    5: optional bool is_static_partition_sink
+    6: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
 struct TDataSink {
@@ -206,4 +225,6 @@ struct TDataSink {
   7: optional TOlapTableSink olap_table_sink
   8: optional TMemoryScratchSink memory_scratch_sink
   9: optional TMultiCastDataStreamSink multi_cast_stream_sink
+  10: optional TSchemaTableSink schema_table_sink
+  11: optional TIcebergTableSink iceberg_table_sink
 }

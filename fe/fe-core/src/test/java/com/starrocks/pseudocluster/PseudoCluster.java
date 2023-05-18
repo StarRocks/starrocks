@@ -14,8 +14,7 @@
 
 package com.starrocks.pseudocluster;
 
-import com.clearspring.analytics.util.Lists;
-import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.ibm.icu.impl.Assert;
 import com.staros.proto.FileCacheInfo;
@@ -138,9 +137,7 @@ public class PseudoCluster {
 
         @Override
         protected LakeService getLakeServiceImpl(TNetworkAddress address) {
-            Preconditions.checkNotNull(getBackendByHost(address.getHostname()));
-            Preconditions.checkState(false, "not implemented");
-            return null;
+            return getBackendByHost(address.getHostname()).pLakeService;
         }
     }
 
@@ -160,6 +157,11 @@ public class PseudoCluster {
         private long nextId = 65535;
         private final List<Worker> workers = new ArrayList<>();
         private final List<ShardInfo> shardInfos = new ArrayList<>();
+
+        @Override
+        public boolean registerAndBootstrapService() {
+            return true;
+        }
 
         @Override
         public FilePathInfo allocateFilePath(long tableId) throws DdlException {
@@ -182,7 +184,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public void addWorker(long backendId, String hostAndPort) {
+        public void addWorker(long backendId, String hostAndPort, long workerGroupId) {
             workers.add(new Worker(backendId, nextId++, hostAndPort));
         }
 
@@ -204,7 +206,7 @@ public class PseudoCluster {
 
         @Override
         public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
-                                       long groupId)
+                                       long groupId, List<Long> matchShardIds)
                 throws DdlException {
             List<Long> shardIds = new ArrayList<>();
             for (int i = 0; i < numShards; i++) {
@@ -239,12 +241,12 @@ public class PseudoCluster {
         }
 
         @Override
-        public long getPrimaryBackendIdByShard(long shardId) throws UserException {
+        public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
             return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
         }
 
         @Override
-        public Set<Long> getBackendIdsByShard(long shardId) throws UserException {
+        public Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
             Set<Long> results = new HashSet<>();
             shardInfos.stream().filter(x -> x.getShardId() == shardId).forEach(y -> {
                 for (ReplicaInfo info : y.getReplicaInfoList()) {
@@ -439,8 +441,8 @@ public class PseudoCluster {
             cluster.backends.put(backend.getHost(), backend);
             cluster.backendIdToHost.put(beId, backend.getHost());
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
-            GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1));
+            GlobalStateMgr.getCurrentStarOSAgent()
+                    .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1), 0);
             LOG.info("add PseudoBackend {} {}", beId, host);
         }
         int retry = 0;
@@ -464,8 +466,8 @@ public class PseudoCluster {
             this.backends.put(backend.getHost(), backend);
             this.backendIdToHost.put(beId, backend.getHost());
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
-            GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1));
+            GlobalStateMgr.getCurrentStarOSAgent()
+                    .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1), 0);
             LOG.info("add PseudoBackend {} {}", beId, host);
             beIds.add(beId);
         }
@@ -566,7 +568,7 @@ public class PseudoCluster {
                                 "\"write_quorum\" = \"%s\", " +
                                 "\"replication_num\" = \"%d\", " +
                                 "\"storage_medium\" = \"%s\", " +
-                                "\"group_with\" = \"%s\")",
+                                "\"colocate_with\" = \"%s\")",
                     tableName,
                     buckets, quorum, replication,
                     ssd ? "SSD" : "HDD",

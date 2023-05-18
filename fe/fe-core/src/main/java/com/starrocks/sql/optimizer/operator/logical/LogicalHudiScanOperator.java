@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Table;
@@ -27,7 +25,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
-import java.util.Set;
 
 public class LogicalHudiScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
@@ -50,17 +47,8 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
         partitionColumns.addAll(hudiTable.getPartitionColumnNames());
     }
 
-    private LogicalHudiScanOperator(LogicalHudiScanOperator.Builder builder) {
-        super(OperatorType.LOGICAL_HUDI_SCAN,
-                builder.table,
-                builder.colRefToColumnMetaMap,
-                builder.columnMetaToColRefMap,
-                builder.getLimit(),
-                builder.getPredicate(),
-                builder.getProjection());
-
-        this.predicates = builder.predicates;
-        this.partitionColumns = builder.partitionColumns;
+    private LogicalHudiScanOperator() {
+        super(OperatorType.LOGICAL_HUDI_SCAN);
     }
 
     @Override
@@ -88,20 +76,18 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalHudiScanOperator, LogicalHudiScanOperator.Builder> {
-        private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
-        private Set<String> partitionColumns = Sets.newHashSet();
 
         @Override
-        public LogicalHudiScanOperator build() {
-            return new LogicalHudiScanOperator(this);
+        protected LogicalHudiScanOperator newInstance() {
+            return new LogicalHudiScanOperator();
         }
 
         @Override
         public LogicalHudiScanOperator.Builder withOperator(LogicalHudiScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
-            this.predicates = scanOperator.predicates;
-            this.partitionColumns = scanOperator.partitionColumns;
+            builder.predicates = scanOperator.predicates.clone();
+            builder.partitionColumns = scanOperator.partitionColumns;
             return this;
         }
     }

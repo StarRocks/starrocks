@@ -35,7 +35,6 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateType;
@@ -52,18 +51,16 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.task.AgentTaskQueue;
-import com.starrocks.thrift.TStorageFormat;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -264,7 +261,6 @@ public class RollupJobV2Test extends DDLTestBase {
                 KeysType.AGG_KEYS, keysCount,
                 new OriginStatement("create materialized view rollup as select bitmap_union(to_bitmap(c1)) from test",
                         0));
-        rollupJobV2.setStorageFormat(TStorageFormat.V2);
 
         // write rollup job
         rollupJobV2.write(out);
@@ -272,13 +268,9 @@ public class RollupJobV2Test extends DDLTestBase {
         out.close();
 
         // read objects from file
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_86);
-        metaContext.setThreadLocalInfo();
 
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         RollupJobV2 result = (RollupJobV2) AlterJobV2.read(in);
-        assertEquals(TStorageFormat.V2, Deencapsulation.getField(result, "storageFormat"));
         List<Column> resultColumns = Deencapsulation.getField(result, "rollupSchema");
         assertEquals(1, resultColumns.size());
         Column resultColumn1 = resultColumns.get(0);

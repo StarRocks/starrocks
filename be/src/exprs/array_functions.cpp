@@ -20,6 +20,7 @@
 #include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "common/statusor.h"
+#include "simd/simd.h"
 #include "util/raw_container.h"
 
 namespace starrocks {
@@ -701,8 +702,11 @@ private:
                            const ElementColumn& targets, uint32 target_start, uint32 target_end,
                            const NullColumn::Container* null_map_elements,
                            const NullColumn::Container* null_map_targets) {
-        using ValueType = std::conditional_t<std::is_same_v<ArrayColumn, ElementColumn>, uint8_t,
-                                             typename ElementColumn::ValueType>;
+        using ValueType = std::conditional_t<std::is_same_v<ArrayColumn, ElementColumn> ||
+                                                     std::is_same_v<MapColumn, ElementColumn> ||
+                                                     std::is_same_v<StructColumn, ElementColumn>,
+                                             uint8_t, typename ElementColumn::ValueType>;
+
         [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
         [[maybe_unused]] auto targets_ptr = (const ValueType*)(targets.raw_data());
 
@@ -744,7 +748,8 @@ private:
                     continue;
                 }
                 //[null, x*, x] - [null, x*, x]
-                if constexpr (std::is_same_v<ArrayColumn, ElementColumn>) {
+                if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
+                              std::is_same_v<StructColumn, ElementColumn>) {
                     found = (elements.compare_at(j, i, targets, -1) == 0);
                 } else {
                     found = (elements_ptr[j] == targets_ptr[i]);
@@ -848,6 +853,8 @@ private:
         HANDLE_HAS_TYPE(DateColumn);
         HANDLE_HAS_TYPE(TimestampColumn);
         HANDLE_HAS_TYPE(ArrayColumn);
+        HANDLE_HAS_TYPE(MapColumn);
+        HANDLE_HAS_TYPE(StructColumn);
 
         LOG(ERROR) << "unhandled column type: " << typeid(array_elements).name();
         DCHECK(false) << "unhandled column type: " << typeid(array_elements).name();
@@ -998,534 +1005,6 @@ StatusOr<ColumnPtr> ArrayFunctions::array_map([[maybe_unused]] FunctionContext* 
 
 StatusOr<ColumnPtr> ArrayFunctions::array_filter(FunctionContext* context, const Columns& columns) {
     return ArrayFilter::process(context, columns);
-}
-
-class ArrayArithmeticImpl {
-public:
-    using ArithmeticType = typename ArrayFunctions::ArithmeticType;
-
-    template <ArithmeticType type, LogicalType value_type, LogicalType sum_result_type, LogicalType avg_result_type,
-              bool has_null, typename ElementColumn>
-    static StatusOr<ColumnPtr> _sum_and_avg(const ElementColumn& elements, const UInt32Column& offsets,
-                                            const NullColumn::Container* null_elements,
-                                            std::vector<uint8_t>* null_ptr) {
-        const size_t num_array = offsets.size() - 1;
-        auto offsets_ptr = offsets.get_data().data();
-
-        using ValueType = RunTimeCppType<value_type>;
-        using ResultColumnType = std::conditional_t<type == ArithmeticType::SUM, RunTimeColumnType<sum_result_type>,
-                                                    RunTimeColumnType<avg_result_type>>;
-
-        using ResultType = std::conditional_t<
-                type == ArithmeticType::SUM, RunTimeCppType<sum_result_type>,
-                std::conditional_t<std::is_same_v<DateColumn, ResultColumnType>, double,
-                                   std::conditional_t<std::is_same_v<TimestampColumn, ResultColumnType>, double,
-                                                      RunTimeCppType<avg_result_type>>>>;
-
-        auto result_column = ResultColumnType::create();
-        result_column->reserve(num_array);
-
-        auto elements_ptr = (const ValueType*)(elements.raw_data());
-
-        for (size_t i = 0; i < num_array; i++) {
-            size_t offset = offsets_ptr[i];
-            size_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
-            ResultType sum{};
-
-            bool has_data = false;
-            for (size_t j = 0; j < array_size; j++) {
-                if constexpr (has_null) {
-                    if ((*null_elements)[offset + j] != 0) {
-                        continue;
-                    }
-                }
-
-                has_data = true;
-                auto& value = elements_ptr[offset + j];
-                if constexpr (lt_is_datetime<value_type>) {
-                    sum += value.to_unix_second();
-                } else if constexpr (lt_is_date<value_type>) {
-                    sum += value.julian();
-                } else {
-                    sum += value;
-                }
-            }
-
-            if (has_data) {
-                if constexpr (lt_is_decimalv2<value_type>) {
-                    if constexpr (type == ArithmeticType::SUM) {
-                        result_column->append(sum);
-                    } else {
-                        result_column->append(sum / DecimalV2Value(array_size, 0));
-                    }
-                } else if constexpr (lt_is_arithmetic<value_type> || lt_is_decimal<value_type>) {
-                    if constexpr (type == ArithmeticType::SUM) {
-                        result_column->append(sum);
-                    } else {
-                        result_column->append(sum / array_size);
-                    }
-                } else if constexpr (lt_is_datetime<value_type>) {
-                    static_assert(type == ArithmeticType::AVG);
-                    TimestampValue value;
-                    value.from_unix_second(sum / array_size);
-                    result_column->append(value);
-                } else if constexpr (lt_is_date<value_type>) {
-                    static_assert(type == ArithmeticType::AVG);
-                    DateValue value;
-                    value._julian = sum / array_size;
-                    result_column->append(value);
-                } else {
-                    LOG(ERROR) << "unhandled types other than arithmetic/time/decimal for sum and avg";
-                    DCHECK(false) << "other types than arithmetic/time/decimal is not support sum "
-                                     "and avg";
-                    result_column->append_default();
-                }
-            } else {
-                result_column->append_default();
-                (*null_ptr)[i] = 1;
-            }
-        }
-
-        return result_column;
-    }
-
-    template <bool is_min, ArithmeticType type, LogicalType value_type, bool has_null, typename ElementColumn>
-    static StatusOr<ColumnPtr> _min_and_max(const ElementColumn& elements, const UInt32Column& offsets,
-                                            const NullColumn::Container* null_elements,
-                                            std::vector<uint8_t>* null_ptr) {
-        const size_t num_array = offsets.size() - 1;
-        auto offsets_ptr = offsets.get_data().data();
-
-        using ValueType = RunTimeCppType<value_type>;
-        using ResultColumnType = RunTimeColumnType<value_type>;
-        using ResultType = ValueType;
-
-        auto result_column = ResultColumnType::create();
-        result_column->reserve(num_array);
-
-        auto elements_ptr = (const ValueType*)(elements.raw_data());
-
-        for (size_t i = 0; i < num_array; i++) {
-            size_t offset = offsets_ptr[i];
-            size_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
-
-            if (array_size > 0) {
-                ResultType result;
-
-                size_t index;
-                if constexpr (!lt_is_string<value_type>) {
-                    if constexpr (is_min) {
-                        result = RunTimeTypeLimits<value_type>::max_value();
-                    } else {
-                        result = RunTimeTypeLimits<value_type>::min_value();
-                    }
-                    index = 0;
-                } else {
-                    int j = 0;
-                    if constexpr (has_null) {
-                        while (j < array_size && (*null_elements)[offset + j] != 0) {
-                            ++j;
-                        }
-                    }
-                    if (j < array_size) {
-                        result = elements_ptr[offset + j];
-                    } else {
-                        result_column->append_default();
-                        (*null_ptr)[i] = 1;
-                        continue;
-                    }
-
-                    index = j + 1;
-                }
-
-                bool has_data = false;
-                for (; index < array_size; index++) {
-                    if constexpr (has_null) {
-                        if ((*null_elements)[offset + index] != 0) {
-                            continue;
-                        }
-                    }
-
-                    has_data = true;
-                    auto& value = elements_ptr[offset + index];
-                    if constexpr (is_min) {
-                        result = result < value ? result : value;
-                    } else {
-                        result = result < value ? value : result;
-                    }
-                }
-
-                if constexpr (!lt_is_string<value_type>) {
-                    if (has_data) {
-                        result_column->append(result);
-                    } else {
-                        result_column->append_default();
-                        (*null_ptr)[i] = 1;
-                    }
-                } else {
-                    result_column->append(result);
-                }
-            } else {
-                result_column->append_default();
-                (*null_ptr)[i] = 1;
-            }
-        }
-
-        return result_column;
-    }
-};
-
-template <LogicalType column_type, bool has_null, ArrayFunctions::ArithmeticType type>
-StatusOr<ColumnPtr> ArrayFunctions::_array_process_not_nullable_types(const Column* elements,
-                                                                      const UInt32Column& offsets,
-                                                                      const NullColumn::Container* null_elements,
-                                                                      std::vector<uint8_t>* null_ptr) {
-    [[maybe_unused]] auto c = down_cast<const RunTimeColumnType<column_type>*>(elements);
-
-    // FOR ARITHEMIC TYPE (BOOLEAN, TINYINT, SMALLINT, INT, BIGINT)
-    if constexpr (column_type == TYPE_BOOLEAN || column_type == TYPE_TINYINT || column_type == TYPE_SMALLINT ||
-                  column_type == TYPE_INT || column_type == TYPE_BIGINT) {
-        if constexpr (type == ArithmeticType::SUM || type == ArithmeticType::AVG) {
-            return ArrayArithmeticImpl::template _sum_and_avg<type, column_type, TYPE_BIGINT, TYPE_DOUBLE, has_null>(
-                    *c, offsets, null_elements, null_ptr);
-        } else {
-            static_assert(type == ArithmeticType::MIN || type == ArithmeticType::MAX);
-            return ArrayArithmeticImpl::template _min_and_max<type == ArithmeticType::MIN, type, column_type, has_null>(
-                    *c, offsets, null_elements, null_ptr);
-        }
-    } else if constexpr (column_type == TYPE_LARGEINT) {
-        // FOR ARITHEMIC TYPE (LARGEINT)
-        if constexpr (type == ArithmeticType::SUM || type == ArithmeticType::AVG) {
-            return ArrayArithmeticImpl::template _sum_and_avg<type, TYPE_LARGEINT, TYPE_LARGEINT, TYPE_DOUBLE,
-                                                              has_null>(*c, offsets, null_elements, null_ptr);
-        } else {
-            static_assert(type == ArithmeticType::MIN || type == ArithmeticType::MAX);
-            return ArrayArithmeticImpl::template _min_and_max<type == ArithmeticType::MIN, type, TYPE_LARGEINT,
-                                                              has_null>(*c, offsets, null_elements, null_ptr);
-        }
-    } else if constexpr (column_type == TYPE_FLOAT || column_type == TYPE_DOUBLE) {
-        // FOR FLOAT TYPE (FLOAT, DOUBLE)
-        if constexpr (type == ArithmeticType::SUM || type == ArithmeticType::AVG) {
-            return ArrayArithmeticImpl::template _sum_and_avg<type, column_type, TYPE_DOUBLE, TYPE_DOUBLE, has_null>(
-                    *c, offsets, null_elements, null_ptr);
-        } else {
-            static_assert(type == ArithmeticType::MIN || type == ArithmeticType::MAX);
-            return ArrayArithmeticImpl::template _min_and_max<type == ArithmeticType::MIN, type, column_type, has_null>(
-                    *c, offsets, null_elements, null_ptr);
-        }
-    } else if constexpr (column_type == TYPE_DECIMALV2) {
-        // FOR DECIMALV2 TYPE
-        if constexpr (type == ArithmeticType::SUM || type == ArithmeticType::AVG) {
-            return ArrayArithmeticImpl::template _sum_and_avg<type, TYPE_DECIMALV2, TYPE_DECIMALV2, TYPE_DECIMALV2,
-                                                              has_null>(*c, offsets, null_elements, null_ptr);
-        } else {
-            static_assert(type == ArithmeticType::MIN || type == ArithmeticType::MAX);
-            return ArrayArithmeticImpl::template _min_and_max<type == ArithmeticType::MIN, type, TYPE_DECIMALV2,
-                                                              has_null>(*c, offsets, null_elements, null_ptr);
-        }
-    } else if constexpr (column_type == TYPE_DATE || column_type == TYPE_DATETIME || column_type == TYPE_VARCHAR ||
-                         column_type == TYPE_CHAR) {
-        // FOR DATE/DATETIME TYPE
-        if constexpr (type == ArithmeticType::SUM || type == ArithmeticType::AVG) {
-            LOG(ERROR) << "sum and avg not support date/datetime/char/varchar";
-            DCHECK(false) << "sum and avg not support date/datetime/char/varchar";
-            return nullptr;
-        } else {
-            static_assert(type == ArithmeticType::MIN || type == ArithmeticType::MAX);
-            return ArrayArithmeticImpl::template _min_and_max<type == ArithmeticType::MIN, type, column_type, has_null>(
-                    *c, offsets, null_elements, null_ptr);
-        }
-    } else {
-        LOG(ERROR) << "unhandled column type: " << typeid(*elements).name();
-        DCHECK(false) << "unhandled column type: " << typeid(*elements).name();
-        auto all_null = ColumnHelper::create_const_null_column(elements->size());
-        return all_null;
-    }
-}
-
-template <LogicalType column_type, ArrayFunctions::ArithmeticType type>
-StatusOr<ColumnPtr> ArrayFunctions::_array_process_not_nullable(const Column* raw_array_column,
-                                                                std::vector<uint8_t>* null_ptr) {
-    const auto& array_column = down_cast<const ArrayColumn&>(*raw_array_column);
-    const UInt32Column& offsets = array_column.offsets();
-    const Column* elements = &array_column.elements();
-
-    const NullColumn::Container* null_elements = nullptr;
-
-    bool has_null = elements->has_null();
-    if (has_null) {
-        null_elements = &(down_cast<const NullableColumn*>(elements)->null_column()->get_data());
-    }
-
-    if (auto nullable = dynamic_cast<const NullableColumn*>(elements); nullable != nullptr) {
-        elements = nullable->data_column().get();
-    }
-
-    if (has_null) {
-        return ArrayFunctions::template _array_process_not_nullable_types<column_type, true, type>(
-                elements, offsets, null_elements, null_ptr);
-    } else {
-        return ArrayFunctions::template _array_process_not_nullable_types<column_type, false, type>(
-                elements, offsets, null_elements, null_ptr);
-    }
-}
-
-template <LogicalType column_type, ArrayFunctions::ArithmeticType type>
-StatusOr<ColumnPtr> ArrayFunctions::array_arithmetic(const Columns& columns) {
-    DCHECK_EQ(1, columns.size());
-    const ColumnPtr& array_column = columns[0]; // array
-    const auto& raw_array_column = *array_column;
-
-    if (raw_array_column.only_null()) {
-        return array_column;
-    }
-
-    if (auto nullable = dynamic_cast<const NullableColumn*>(&raw_array_column); nullable != nullptr) {
-        auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
-        auto null_column = NullColumn::create(*nullable->null_column());
-        auto result = ArrayFunctions::template _array_process_not_nullable<column_type, type>(array_col,
-                                                                                              &null_column->get_data());
-        RETURN_IF_ERROR(result);
-
-        DCHECK_EQ(nullable->size(), result.value()->size());
-        return NullableColumn::create(std::move(result.value()), null_column);
-    } else {
-        auto null_column = NullColumn::create();
-        null_column->resize(raw_array_column.size());
-        auto result = ArrayFunctions::template _array_process_not_nullable<column_type, type>(&raw_array_column,
-                                                                                              &null_column->get_data());
-        RETURN_IF_ERROR(result);
-        return NullableColumn::create(std::move(result.value()), null_column);
-    }
-}
-
-template <LogicalType type>
-StatusOr<ColumnPtr> ArrayFunctions::array_sum(const Columns& columns) {
-    return ArrayFunctions::template array_arithmetic<type, ArithmeticType::SUM>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_sum_boolean([[maybe_unused]] FunctionContext* context,
-                                                      const Columns& columns) {
-    return ArrayFunctions::template array_sum<TYPE_BOOLEAN>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_sum_tinyint([[maybe_unused]] FunctionContext* context,
-                                                      const Columns& columns) {
-    return ArrayFunctions::template array_sum<TYPE_TINYINT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_sum_smallint([[maybe_unused]] FunctionContext* context,
-                                                       const Columns& columns) {
-    return ArrayFunctions::template array_sum<TYPE_SMALLINT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_sum_int([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    return ArrayFunctions::template array_sum<TYPE_INT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_sum_bigint([[maybe_unused]] FunctionContext* context,
-                                                     const Columns& columns) {
-    return ArrayFunctions::template array_sum<TYPE_BIGINT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_sum_largeint([[maybe_unused]] FunctionContext* context,
-                                                       const Columns& columns) {
-    return ArrayFunctions::template array_sum<TYPE_LARGEINT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_sum_float([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    return ArrayFunctions::template array_sum<TYPE_FLOAT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_sum_double([[maybe_unused]] FunctionContext* context,
-                                                     const Columns& columns) {
-    return ArrayFunctions::template array_sum<TYPE_DOUBLE>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_sum_decimalv2([[maybe_unused]] FunctionContext* context,
-                                                        const Columns& columns) {
-    return ArrayFunctions::template array_sum<TYPE_DECIMALV2>(columns);
-}
-
-template <LogicalType type>
-StatusOr<ColumnPtr> ArrayFunctions::array_avg(const Columns& columns) {
-    return ArrayFunctions::template array_arithmetic<type, ArithmeticType::AVG>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_avg_boolean([[maybe_unused]] FunctionContext* context,
-                                                      const Columns& columns) {
-    return ArrayFunctions::template array_avg<TYPE_BOOLEAN>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_avg_tinyint([[maybe_unused]] FunctionContext* context,
-                                                      const Columns& columns) {
-    return ArrayFunctions::template array_avg<TYPE_TINYINT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_avg_smallint([[maybe_unused]] FunctionContext* context,
-                                                       const Columns& columns) {
-    return ArrayFunctions::template array_avg<TYPE_SMALLINT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_avg_int([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    return ArrayFunctions::template array_avg<TYPE_INT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_avg_bigint([[maybe_unused]] FunctionContext* context,
-                                                     const Columns& columns) {
-    return ArrayFunctions::template array_avg<TYPE_BIGINT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_avg_largeint([[maybe_unused]] FunctionContext* context,
-                                                       const Columns& columns) {
-    return ArrayFunctions::template array_avg<TYPE_LARGEINT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_avg_float([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    return ArrayFunctions::template array_avg<TYPE_FLOAT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_avg_double([[maybe_unused]] FunctionContext* context,
-                                                     const Columns& columns) {
-    return ArrayFunctions::template array_avg<TYPE_DOUBLE>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_avg_decimalv2([[maybe_unused]] FunctionContext* context,
-                                                        const Columns& columns) {
-    return ArrayFunctions::template array_avg<TYPE_DECIMALV2>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_avg_date([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    return ArrayFunctions::template array_avg<TYPE_DATE>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_avg_datetime([[maybe_unused]] FunctionContext* context,
-                                                       const Columns& columns) {
-    return ArrayFunctions::template array_avg<TYPE_DATETIME>(columns);
-}
-
-template <LogicalType type>
-StatusOr<ColumnPtr> ArrayFunctions::array_min(const Columns& columns) {
-    return ArrayFunctions::template array_arithmetic<type, ArithmeticType::MIN>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_min_boolean([[maybe_unused]] FunctionContext* context,
-                                                      const Columns& columns) {
-    return ArrayFunctions::template array_min<TYPE_BOOLEAN>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_min_tinyint([[maybe_unused]] FunctionContext* context,
-                                                      const Columns& columns) {
-    return ArrayFunctions::template array_min<TYPE_TINYINT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_min_smallint([[maybe_unused]] FunctionContext* context,
-                                                       const Columns& columns) {
-    return ArrayFunctions::template array_min<TYPE_SMALLINT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_min_int([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    return ArrayFunctions::template array_min<TYPE_INT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_min_bigint([[maybe_unused]] FunctionContext* context,
-                                                     const Columns& columns) {
-    return ArrayFunctions::template array_min<TYPE_BIGINT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_min_largeint([[maybe_unused]] FunctionContext* context,
-                                                       const Columns& columns) {
-    return ArrayFunctions::template array_min<TYPE_LARGEINT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_min_float([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    return ArrayFunctions::template array_min<TYPE_FLOAT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_min_double([[maybe_unused]] FunctionContext* context,
-                                                     const Columns& columns) {
-    return ArrayFunctions::template array_min<TYPE_DOUBLE>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_min_decimalv2([[maybe_unused]] FunctionContext* context,
-                                                        const Columns& columns) {
-    return ArrayFunctions::template array_min<TYPE_DECIMALV2>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_min_date([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    return ArrayFunctions::template array_min<TYPE_DATE>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_min_datetime([[maybe_unused]] FunctionContext* context,
-                                                       const Columns& columns) {
-    return ArrayFunctions::template array_min<TYPE_DATETIME>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_min_varchar([[maybe_unused]] FunctionContext* context,
-                                                      const Columns& columns) {
-    return ArrayFunctions::template array_min<TYPE_VARCHAR>(columns);
-}
-
-template <LogicalType type>
-StatusOr<ColumnPtr> ArrayFunctions::array_max(const Columns& columns) {
-    return ArrayFunctions::template array_arithmetic<type, ArithmeticType::MAX>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_max_boolean([[maybe_unused]] FunctionContext* context,
-                                                      const Columns& columns) {
-    return ArrayFunctions::template array_max<TYPE_BOOLEAN>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_max_tinyint([[maybe_unused]] FunctionContext* context,
-                                                      const Columns& columns) {
-    return ArrayFunctions::template array_max<TYPE_TINYINT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_max_smallint([[maybe_unused]] FunctionContext* context,
-                                                       const Columns& columns) {
-    return ArrayFunctions::template array_max<TYPE_SMALLINT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_max_int([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    return ArrayFunctions::template array_max<TYPE_INT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_max_bigint([[maybe_unused]] FunctionContext* context,
-                                                     const Columns& columns) {
-    return ArrayFunctions::template array_max<TYPE_BIGINT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_max_largeint([[maybe_unused]] FunctionContext* context,
-                                                       const Columns& columns) {
-    return ArrayFunctions::template array_max<TYPE_LARGEINT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_max_float([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    return ArrayFunctions::template array_max<TYPE_FLOAT>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_max_double([[maybe_unused]] FunctionContext* context,
-                                                     const Columns& columns) {
-    return ArrayFunctions::template array_max<TYPE_DOUBLE>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_max_decimalv2([[maybe_unused]] FunctionContext* context,
-                                                        const Columns& columns) {
-    return ArrayFunctions::template array_max<TYPE_DECIMALV2>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_max_date([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    return ArrayFunctions::template array_max<TYPE_DATE>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_max_datetime([[maybe_unused]] FunctionContext* context,
-                                                       const Columns& columns) {
-    return ArrayFunctions::template array_max<TYPE_DATETIME>(columns);
-}
-
-StatusOr<ColumnPtr> ArrayFunctions::array_max_varchar([[maybe_unused]] FunctionContext* context,
-                                                      const Columns& columns) {
-    return ArrayFunctions::template array_max<TYPE_VARCHAR>(columns);
 }
 
 StatusOr<ColumnPtr> ArrayFunctions::concat(FunctionContext* ctx, const Columns& columns) {
@@ -1727,4 +1206,220 @@ StatusOr<ColumnPtr> ArrayFunctions::array_slice(FunctionContext* ctx, const Colu
     }
 }
 
+// unpack array column, return: null_column, element_column, offset_column
+static inline std::tuple<NullColumnPtr, Column*, const UInt32Column*> unpack_array_column(const ColumnPtr& input) {
+    NullColumnPtr array_null = nullptr;
+    ArrayColumn* array_col = nullptr;
+
+    auto array = ColumnHelper::unpack_and_duplicate_const_column(input->size(), input);
+    if (array->is_nullable()) {
+        auto nullable = down_cast<NullableColumn*>(array.get());
+        array_col = down_cast<ArrayColumn*>(nullable->data_column().get());
+        array_null = NullColumn::create(*nullable->null_column());
+    } else {
+        array_null = NullColumn::create(input->size(), 0);
+        array_col = down_cast<ArrayColumn*>(array.get());
+    }
+
+    const UInt32Column* offsets = &array_col->offsets();
+    Column* elements = array_col->elements_column().get();
+
+    return {array_null, elements, offsets};
+}
+
+StatusOr<ColumnPtr> ArrayFunctions::array_distinct_any_type(FunctionContext* ctx, const Columns& columns) {
+    DCHECK_EQ(1, columns.size());
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto [array_null, elements, offsets] = unpack_array_column(columns[0]);
+    auto* offsets_ptr = offsets->get_data().data();
+    auto* row_nulls = array_null->get_data().data();
+
+    auto result_elements = elements->clone_empty();
+    auto result_offsets = UInt32Column::create();
+    result_offsets->reserve(offsets->size());
+    result_offsets->append(0);
+
+    phmap::flat_hash_set<uint32_t> sets;
+
+    uint32_t hash[elements->size()];
+    memset(hash, 0, elements->size() * sizeof(uint32_t));
+    elements->fnv_hash(hash, 0, elements->size());
+
+    size_t rows = columns[0]->size();
+    for (auto i = 0; i < rows; i++) {
+        size_t offset = offsets_ptr[i];
+        int64_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
+
+        if (row_nulls[i] == 1) {
+            // append offsets directly
+        } else if (array_size <= 1) {
+            for (size_t j = 0; j < array_size; j++) {
+                result_elements->append(*elements, offset + j, 1);
+            }
+        } else {
+            // put first
+            result_elements->append(*elements, offset, 1);
+
+            sets.clear();
+            sets.emplace(hash[offset]);
+
+            for (size_t j = 1; j < array_size; j++) {
+                auto elements_idx = offset + j;
+                // hash check
+                if (!sets.contains(hash[elements_idx])) {
+                    result_elements->append(*elements, elements_idx, 1);
+                    sets.emplace(hash[elements_idx]);
+                    continue;
+                }
+
+                // find same hash
+                bool is_contains = false;
+                for (size_t k = offset; k < elements_idx; k++) {
+                    if (hash[k] == hash[elements_idx] && elements->equals(k, *elements, elements_idx)) {
+                        is_contains = true;
+                        break;
+                    }
+                }
+
+                if (!is_contains) {
+                    result_elements->append(*elements, elements_idx, 1);
+                }
+            }
+        }
+
+        result_offsets->append(result_elements->size());
+    }
+
+    return NullableColumn::create(ArrayColumn::create(std::move(result_elements), result_offsets), array_null);
+}
+
+StatusOr<ColumnPtr> ArrayFunctions::array_reverse_any_types(FunctionContext* ctx, const Columns& columns) {
+    DCHECK_EQ(1, columns.size());
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto [array_null, elements, offsets] = unpack_array_column(columns[0]);
+    auto* offsets_ptr = offsets->get_data().data();
+    auto* row_nulls = array_null->get_data().data();
+
+    auto result_elements = elements->clone_empty();
+    auto result_offsets = UInt32Column::create();
+    result_offsets->reserve(offsets->size());
+    result_offsets->append(0);
+
+    size_t rows = columns[0]->size();
+    for (auto i = 0; i < rows; i++) {
+        size_t offset = offsets_ptr[i];
+        int64_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
+
+        if (row_nulls[i] == 0) {
+            for (int64_t j = array_size - 1; j >= 0; j--) {
+                result_elements->append(*elements, offset + j, 1);
+            }
+        }
+
+        result_offsets->append(result_elements->size());
+    }
+
+    return NullableColumn::create(ArrayColumn::create(std::move(result_elements), std::move(result_offsets)),
+                                  array_null);
+}
+
+inline static void nestloop_intersect(uint8_t* hits, const Column* base, size_t base_start, size_t base_end,
+                                      const Column* cmp, size_t cmp_start, size_t cmp_end) {
+    for (size_t base_ele_idx = base_start; base_ele_idx < base_end; base_ele_idx++) {
+        if (hits[base_ele_idx] == 0) {
+            continue;
+        }
+
+        size_t cmp_idx = cmp_start;
+        for (; cmp_idx < cmp_end; cmp_idx++) {
+            if (base->equals(base_ele_idx, *cmp, cmp_idx)) {
+                break;
+            }
+        }
+
+        if (cmp_idx >= cmp_end) {
+            hits[base_ele_idx] = 0;
+        }
+    }
+}
+
+StatusOr<ColumnPtr> ArrayFunctions::array_intersect_any_type(FunctionContext* ctx, const Columns& columns) {
+    DCHECK_LE(2, columns.size());
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    size_t rows = columns[0]->size();
+    size_t usage = columns[0]->memory_usage();
+    ColumnPtr base_col = columns[0];
+    int base_idx = 0;
+
+    auto nulls = NullColumn::create(rows, 0);
+    // find minimum column
+    for (size_t i = 0; i < columns.size(); i++) {
+        if (columns[i]->memory_usage() < usage) {
+            base_col = columns[i];
+            base_idx = i;
+            usage = columns[i]->memory_usage();
+        }
+
+        FunctionHelper::union_produce_nullable_column(columns[i], &nulls);
+    }
+
+    // do distinct first
+    auto distinct_col = array_distinct_any_type(ctx, {base_col});
+    DCHECK(distinct_col.ok());
+
+    auto* dis_array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(distinct_col.value().get()));
+
+    auto& base_elements = dis_array_col->elements_column();
+    auto* base_offsets = &dis_array_col->offsets();
+    auto* base_offsets_ptr = base_offsets->get_data().data();
+    auto* nulls_ptr = nulls->get_data().data();
+
+    Filter filter;
+    filter.resize(base_elements->size(), 1);
+    auto* hits = filter.data();
+
+    // mark intersect filter
+    for (size_t col_idx = 0; col_idx < columns.size(); col_idx++) {
+        if (col_idx == base_idx) {
+            continue;
+        }
+
+        auto [_2, cmp_elements, cmp_offsets] = unpack_array_column(columns[col_idx]);
+        auto* cmp_offsets_ptr = cmp_offsets->get_data().data();
+
+        for (size_t row_idx = 0; row_idx < rows; row_idx++) {
+            if (nulls_ptr[row_idx] == 1) {
+                continue;
+            }
+
+            size_t base_start = base_offsets_ptr[row_idx];
+            size_t base_end = base_offsets_ptr[row_idx + 1];
+
+            size_t cmp_start = cmp_offsets_ptr[row_idx];
+            size_t cmp_end = cmp_offsets_ptr[row_idx + 1];
+
+            nestloop_intersect(hits, base_elements.get(), base_start, base_end, cmp_elements, cmp_start, cmp_end);
+        }
+    }
+
+    // result column
+    auto result_offsets = UInt32Column::create();
+    base_elements->filter(filter);
+
+    result_offsets->append(0);
+    uint32_t pre_offset = 0;
+    for (size_t row_idx = 0; row_idx < rows; row_idx++) {
+        size_t base_start = base_offsets_ptr[row_idx];
+        size_t size = base_offsets_ptr[row_idx + 1] - base_start;
+
+        auto count = SIMD::count_nonzero(hits + base_start, size);
+        pre_offset += count;
+        result_offsets->append(pre_offset);
+    }
+
+    return NullableColumn::create(ArrayColumn::create(base_elements, result_offsets), nulls);
+}
 } // namespace starrocks

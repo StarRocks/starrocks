@@ -18,8 +18,10 @@
 #include "column/column_viewer.h"
 #include "column/json_column.h"
 #include "column/type_traits.h"
+#include "exprs/arithmetic_operation.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
+#include "runtime/current_thread.h"
 #include "types/logical_type.h"
 #include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
@@ -130,15 +132,26 @@ public:
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
-        if constexpr (lt_is_arithmetic<LT> || lt_is_decimalv2<LT>) {
-            return _array_difference(columns);
+        if constexpr (lt_is_float<LT>) {
+            return _array_difference<TYPE_DOUBLE>(ctx, columns);
+        } else if constexpr (lt_is_sum_bigint<LT>) {
+            return _array_difference<TYPE_BIGINT>(ctx, columns);
+        } else if constexpr (lt_is_largeint<LT>) {
+            return _array_difference<TYPE_LARGEINT>(ctx, columns);
+        } else if constexpr (lt_is_decimalv2<LT>) {
+            return _array_difference<TYPE_DECIMALV2>(ctx, columns);
+        } else if constexpr (lt_is_decimal32<LT> || lt_is_decimal64<LT>) {
+            return _array_difference<TYPE_DECIMAL64>(ctx, columns);
+        } else if constexpr (lt_is_decimal128<LT>) {
+            return _array_difference<TYPE_DECIMAL128>(ctx, columns);
         } else {
             assert(false);
         }
     }
 
 private:
-    static ColumnPtr _array_difference(const Columns& columns) {
+    template <LogicalType ResultType>
+    static ColumnPtr _array_difference(FunctionContext* ctx, const Columns& columns) {
         DCHECK_EQ(columns.size(), 1);
 
         size_t chunk_size = columns[0]->size();
@@ -146,12 +159,15 @@ private:
         ColumnPtr dest_column_data = nullptr;
         ColumnPtr dest_column = nullptr;
 
-        if constexpr (lt_is_float<LT>) {
-            dest_column_data = NullableColumn::create(DoubleColumn::create(), NullColumn::create());
-        } else if constexpr (lt_is_integer<LT> || lt_is_boolean<LT>) {
-            dest_column_data = NullableColumn::create(Int64Column::create(), NullColumn::create());
-        } else if constexpr (lt_is_decimalv2<LT>) {
-            dest_column_data = NullableColumn::create(DecimalColumn::create(), NullColumn::create());
+        if constexpr (lt_is_decimal<LT>) {
+            // array<decimal<>>
+            auto desc = ctx->get_return_type();
+            DCHECK(desc.children.size() == 1);
+            dest_column_data = NullableColumn::create(
+                    RunTimeColumnType<ResultType>::create(desc.children[0].precision, desc.children[0].scale),
+                    NullColumn::create());
+        } else {
+            dest_column_data = NullableColumn::create(RunTimeColumnType<ResultType>::create(), NullColumn::create());
         }
 
         if (columns[0]->is_nullable()) {
@@ -172,12 +188,12 @@ private:
             if (src_nullable_column->has_null()) {
                 for (size_t i = 0; i < chunk_size; i++) {
                     if (!src_nullable_column->is_null(i)) {
-                        _array_difference_item(*src_data_column, i, &dest_data_column);
+                        _array_difference_item<ResultType>(*src_data_column, i, &dest_data_column);
                     }
                 }
             } else {
                 for (size_t i = 0; i < chunk_size; i++) {
-                    _array_difference_item(*src_data_column, i, &dest_data_column);
+                    _array_difference_item<ResultType>(*src_data_column, i, &dest_data_column);
                 }
             }
         } else {
@@ -186,43 +202,52 @@ private:
 
             auto* dest_data_column = down_cast<ArrayColumn*>(dest_column.get());
             for (size_t i = 0; i < chunk_size; i++) {
-                _array_difference_item(*src_data_column, i, dest_data_column);
+                _array_difference_item<ResultType>(*src_data_column, i, dest_data_column);
             }
         }
         return dest_column;
     }
 
+    template <LogicalType ResultType>
     static void _array_difference_item(const ArrayColumn& column, size_t index, ArrayColumn* dest_column) {
         Datum v = column.get(index);
         const auto& items = v.get<DatumArray>();
-
         auto& dest_data_column = dest_column->elements_column();
+
+        RunTimeCppType<ResultType> zero = RunTimeCppType<ResultType>{0};
+        RunTimeCppType<ResultType> sub = RunTimeCppType<ResultType>{0};
+
+        int scale = 0;
+        if constexpr (lt_is_decimal<LT>) {
+            auto* ele = &column.elements();
+            if (ele->is_nullable()) {
+                scale = down_cast<const RunTimeColumnType<LT>*>(
+                                down_cast<const NullableColumn*>(ele)->data_column().get())
+                                ->scale();
+            } else {
+                scale = down_cast<const RunTimeColumnType<LT>*>(ele)->scale();
+            }
+        }
+
         for (size_t i = 0; i < items.size(); ++i) {
             if (i == 0) {
                 if (items[i].is_null()) {
                     dest_data_column->append_nulls(1);
                 } else {
-                    if constexpr (lt_is_integer<LT> || lt_is_boolean<LT>) {
-                        dest_data_column->append_datum((int64_t)0);
-                    } else if constexpr (lt_is_float<LT>) {
-                        dest_data_column->append_datum((double)0);
-                    } else {
-                        dest_data_column->append_datum((DecimalV2Value)0);
-                    }
+                    dest_data_column->append_datum(zero);
                 }
             } else {
                 if (items[i - 1].is_null() || items[i].is_null()) {
                     dest_data_column->append_nulls(1);
                 } else {
-                    if constexpr (lt_is_integer<LT> || lt_is_boolean<LT>) {
-                        dest_data_column->append_datum(
-                                (int64_t)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
-                    } else if constexpr (lt_is_float<LT>) {
-                        dest_data_column->append_datum((double)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
-                    } else {
-                        dest_data_column->append_datum(
-                                (DecimalV2Value)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
+                    if constexpr (!lt_is_decimal<LT>) {
+                        sub = items[i].get<CppType>() - items[i - 1].get<CppType>();
+                    } else if constexpr (lt_is_decimal<LT>) {
+                        RunTimeCppType<ResultType> lhs = RunTimeCppType<ResultType>{items[i].get<CppType>()};
+                        RunTimeCppType<ResultType> rhs = RunTimeCppType<ResultType>{items[i - 1].get<CppType>()};
+                        sub = decimal_sub<RunTimeCppType<ResultType>>(lhs, rhs, scale);
                     }
+                    dest_data_column->append_datum(sub);
                 }
             }
         }
@@ -236,7 +261,7 @@ public:
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
-        if constexpr (lt_is_largeint<LT>) {
+        if constexpr (lt_is_largeint<LT> || lt_is_decimal128<LT>) {
             return _array_overlap<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
         } else if constexpr (lt_is_fixedlength<LT>) {
             return _array_overlap<phmap::flat_hash_set<CppType, StdHash<CppType>>>(columns);
@@ -535,14 +560,14 @@ protected:
         const auto& data = down_cast<const ColumnType&>(src_column).get_data();
 
         auto less_fn = [&data](uint32_t l, uint32_t r) -> bool { return data[l] < data[r]; };
-        pdqsort(false, sort_index->begin() + offset, sort_index->begin() + offset + count, less_fn);
+        pdqsort(sort_index->begin() + offset, sort_index->begin() + offset + count, less_fn);
     }
 
     // For JSON type
     static void _sort_column(std::vector<uint32_t>* sort_index, const JsonColumn& src_column, size_t offset,
                              size_t count) {
         auto less_fn = [&](uint32_t l, uint32_t r) -> bool { return src_column.compare_at(l, r, src_column, -1) < 0; };
-        pdqsort(false, sort_index->begin() + offset, sort_index->begin() + offset + count, less_fn);
+        pdqsort(sort_index->begin() + offset, sort_index->begin() + offset + count, less_fn);
     }
 
     static void _sort_item(std::vector<uint32_t>* sort_index, const Column& src_column,
@@ -1057,6 +1082,364 @@ private:
         }
         // the element of src_sort_index should less than the size of src_elements_column
         dest_elements_column->append_selective(src_elements_column, src_sort_index);
+    }
+};
+
+template <bool isMin>
+class ArrayMinMax {
+public:
+    template <LogicalType ResultType, LogicalType ElementType, bool HasNull>
+    static void process(const Column* elements, const NullColumn* elements_null_col, const UInt32Column* offsets,
+                        Column* result_col, NullColumn* null_cols) {
+        const RunTimeCppType<TYPE_NULL>* elements_nulls = nullptr;
+        if constexpr (HasNull) {
+            elements_nulls = elements_null_col->get_data().data();
+        }
+        auto* elements_data = down_cast<const RunTimeColumnType<ElementType>*>(elements)->get_data().data();
+
+        auto* offsets_ptr = offsets->get_data().data();
+        auto* null_ptr = null_cols->get_data().data();
+        const size_t rows = offsets->size() - 1;
+
+        result_col->reserve(rows);
+        auto result_ptr = down_cast<RunTimeColumnType<ResultType>*>(result_col);
+
+        for (size_t i = 0; i < rows; i++) {
+            size_t offset = offsets_ptr[i];
+            size_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
+
+            if (array_size <= 0 || null_ptr[i] == 1) {
+                result_ptr->append_default();
+                null_ptr[i] = 1;
+                continue;
+            }
+
+            RunTimeCppType<ResultType> result;
+            int index = 0;
+            if constexpr (!lt_is_string<ResultType>) {
+                if constexpr (isMin) {
+                    result = RunTimeTypeLimits<ResultType>::max_value();
+                } else {
+                    result = RunTimeTypeLimits<ResultType>::min_value();
+                }
+                index = 0;
+            } else {
+                if constexpr (HasNull) {
+                    while (index < array_size && elements_nulls[offset + index] != 0) {
+                        index++;
+                    }
+
+                    if (index < array_size) {
+                        result = elements_data[offset + index];
+                    } else {
+                        result_ptr->append_default();
+                        null_ptr[i] = 1;
+                        continue;
+                    }
+                } else {
+                    result = elements_data[offset + index];
+                }
+                index++;
+            }
+
+            bool has_data = false;
+            for (; index < array_size; index++) {
+                if constexpr (HasNull) {
+                    if (elements_nulls[offset + index] != 0) {
+                        continue;
+                    }
+                }
+
+                has_data = true;
+                auto& value = elements_data[offset + index];
+                if constexpr (isMin) {
+                    result = result < value ? result : value;
+                } else {
+                    result = result < value ? value : result;
+                }
+            }
+
+            if constexpr (!lt_is_string<ResultType>) {
+                if (has_data) {
+                    result_ptr->append(result);
+                } else {
+                    result_ptr->append_default();
+                    null_ptr[i] = 1;
+                }
+            } else {
+                result_ptr->append(result);
+            }
+        }
+    }
+};
+
+template <bool isSum>
+class ArraySumAvg {
+public:
+    template <LogicalType ResultType, LogicalType ElementType, bool HasNull>
+    static void process(const Column* elements, const NullColumn* elements_null_col, const UInt32Column* offsets,
+                        Column* result_col, NullColumn* null_cols) {
+        const RunTimeCppType<TYPE_NULL>* elements_nulls = nullptr;
+        if constexpr (HasNull) {
+            elements_nulls = elements_null_col->get_data().data();
+        }
+
+        auto* elements_data = down_cast<const RunTimeColumnType<ElementType>*>(elements)->get_data().data();
+        auto* offsets_ptr = offsets->get_data().data();
+        auto* null_ptr = null_cols->get_data().data();
+        const int64_t rows = offsets->size() - 1;
+
+        result_col->reserve(rows);
+        auto result_ptr = down_cast<RunTimeColumnType<ResultType>*>(result_col);
+
+        using ResultCppType = RunTimeCppType<ResultType>;
+        int scale = 0;
+        if constexpr (lt_is_decimal<ElementType>) {
+            scale = down_cast<const RunTimeColumnType<ElementType>*>(elements)->scale();
+        }
+
+        for (size_t i = 0; i < rows; i++) {
+            size_t offset = offsets_ptr[i];
+            int64_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
+            RunTimeCppType<ResultType> sum{};
+
+            bool has_data = false;
+            if (null_ptr[i] != 1) {
+                for (size_t j = 0; j < array_size; j++) {
+                    if constexpr (HasNull) {
+                        if (elements_nulls[offset + j] != 0) {
+                            continue;
+                        }
+                    }
+
+                    has_data = true;
+                    auto& value = elements_data[offset + j];
+                    sum += value;
+                }
+            }
+
+            if (has_data) {
+                if constexpr (lt_is_decimalv2<ElementType>) {
+                    if constexpr (isSum) {
+                        result_ptr->append(sum);
+                    } else {
+                        result_ptr->append(sum / DecimalV2Value(array_size, 0));
+                    }
+                } else if constexpr (lt_is_arithmetic<ElementType>) {
+                    if constexpr (isSum) {
+                        result_ptr->append(sum);
+                    } else {
+                        result_ptr->append(sum / array_size);
+                    }
+                } else if constexpr (lt_is_decimal<ElementType>) {
+                    if constexpr (isSum) {
+                        result_ptr->append(sum);
+                    } else {
+                        ResultCppType ds = ResultCppType(sum);
+                        ResultCppType dc = ResultCppType(array_size);
+                        result_ptr->append(decimal_div_integer<ResultCppType>(ds, dc, scale));
+                    }
+                } else {
+                    LOG(ERROR) << "unhandled types other than arithmetic/time/decimal for sum and avg";
+                    DCHECK(false) << "other types than arithmetic/time/decimal is not support sum "
+                                     "and avg";
+                    result_ptr->append_default();
+                }
+            } else {
+                result_ptr->append_default();
+                null_ptr[i] = 1;
+            }
+        }
+    }
+};
+
+class ArrayArithmetic {
+public:
+    template <LogicalType ElementType>
+    static StatusOr<ColumnPtr> array_max(FunctionContext* context, const Columns& columns) {
+        return ArrayArithmetic::template process<ElementType, ElementType, ArrayMinMax<false>>(context, columns);
+    }
+
+    template <LogicalType ElementType>
+    static StatusOr<ColumnPtr> array_min(FunctionContext* context, const Columns& columns) {
+        return ArrayArithmetic::template process<ElementType, ElementType, ArrayMinMax<true>>(context, columns);
+    }
+
+    template <LogicalType ElementType>
+    static StatusOr<ColumnPtr> array_avg(FunctionContext* context, const Columns& columns) {
+        if constexpr (lt_is_sum_bigint<ElementType> || lt_is_float<ElementType> || lt_is_largeint<ElementType>) {
+            return ArrayArithmetic::template process<TYPE_DOUBLE, ElementType, ArraySumAvg<false>>(context, columns);
+        } else if constexpr (ElementType == TYPE_DECIMALV2) {
+            return ArrayArithmetic::template process<TYPE_DECIMALV2, ElementType, ArraySumAvg<false>>(context, columns);
+        } else if constexpr (lt_is_decimal<ElementType>) {
+            return ArrayArithmetic::template process<TYPE_DECIMAL128, ElementType, ArraySumAvg<false>>(context,
+                                                                                                       columns);
+        } else {
+            LOG(ERROR) << "array_avg doesn't support column type: " << ElementType;
+            DCHECK(false) << "array_avg doesn't support column type: " << ElementType;
+            auto all_null = ColumnHelper::create_const_null_column(1);
+            return all_null;
+        }
+    }
+
+    template <LogicalType ElementType>
+    static StatusOr<ColumnPtr> array_sum(FunctionContext* context, const Columns& columns) {
+        if constexpr (lt_is_sum_bigint<ElementType>) {
+            return ArrayArithmetic::template process<TYPE_BIGINT, ElementType, ArraySumAvg<true>>(context, columns);
+        } else if constexpr (lt_is_largeint<ElementType>) {
+            return ArrayArithmetic::template process<TYPE_LARGEINT, ElementType, ArraySumAvg<true>>(context, columns);
+        } else if constexpr (lt_is_float<ElementType>) {
+            return ArrayArithmetic::template process<TYPE_DOUBLE, ElementType, ArraySumAvg<true>>(context, columns);
+        } else if constexpr (ElementType == TYPE_DECIMALV2) {
+            return ArrayArithmetic::template process<TYPE_DECIMALV2, ElementType, ArraySumAvg<true>>(context, columns);
+        } else if constexpr (lt_is_decimal<ElementType>) {
+            return ArrayArithmetic::template process<TYPE_DECIMAL128, ElementType, ArraySumAvg<true>>(context, columns);
+        } else {
+            LOG(ERROR) << "array_sum doesn't support column type: " << ElementType;
+            DCHECK(false) << "array_sum doesn't support column type: " << ElementType;
+            auto all_null = ColumnHelper::create_const_null_column(1);
+            return all_null;
+        }
+    }
+
+private:
+    template <LogicalType ResultType, LogicalType ElementType, typename FUNC>
+    static StatusOr<ColumnPtr> process(FunctionContext* context, const Columns& columns) {
+        DCHECK_EQ(1, columns.size());
+        if (columns[0]->only_null()) {
+            return columns[0];
+        }
+
+        NullColumnPtr array_null = nullptr;
+        ArrayColumn* array_col = nullptr;
+
+        auto array_column = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]);
+        if (array_column->is_nullable()) {
+            auto nullable = down_cast<NullableColumn*>(array_column.get());
+
+            array_col = down_cast<ArrayColumn*>(nullable->data_column().get());
+            array_null = NullColumn::create(*nullable->null_column());
+        } else {
+            array_col = down_cast<ArrayColumn*>(array_column.get());
+            array_null = NullColumn::create(array_column->size(), 0);
+        }
+
+        const UInt32Column& offsets = array_col->offsets();
+        auto elements = array_col->elements_column().get();
+
+        ColumnPtr result = nullptr;
+
+        if constexpr (lt_is_decimal<ResultType>) {
+            auto desc = context->get_return_type();
+            result = RunTimeColumnType<ResultType>::create(desc.precision, desc.scale);
+        } else {
+            result = RunTimeColumnType<ResultType>::create();
+        }
+
+        Column* elements_data = elements;
+        NullColumn* elements_nulls = nullptr;
+        if (elements->is_nullable()) {
+            auto nullable = down_cast<NullableColumn*>(elements);
+            elements_data = nullable->data_column().get();
+            elements_nulls = nullable->null_column().get();
+        }
+
+        if (elements->has_null()) {
+            FUNC::template process<ResultType, ElementType, true>(elements_data, elements_nulls, &offsets, result.get(),
+                                                                  array_null.get());
+        } else {
+            FUNC::template process<ResultType, ElementType, false>(elements_data, elements_nulls, &offsets,
+                                                                   result.get(), array_null.get());
+        }
+
+        return NullableColumn::create(std::move(result), array_null);
+    }
+};
+
+// Todo:support datatime/data
+template <LogicalType Type>
+class ArrayGenerate {
+public:
+    using InputColumnType = RunTimeColumnType<Type>;
+    using InputCppType = RunTimeCppType<Type>;
+    static StatusOr<ColumnPtr> process(FunctionContext* ctx, const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+        DCHECK(columns.size() == 3);
+
+        auto num_rows = columns[0]->size();
+
+        // compute nulls first. if any input is null, then output is null
+        NullColumnPtr nulls;
+        for (auto& column : columns) {
+            if (column->has_null()) {
+                auto nullable_column = down_cast<NullableColumn*>(column.get());
+                if (nulls == nullptr) {
+                    nulls = std::static_pointer_cast<NullColumn>(nullable_column->null_column()->clone_shared());
+                } else {
+                    ColumnHelper::or_two_filters(num_rows, nulls->get_data().data(),
+                                                 nullable_column->null_column()->get_data().data());
+                }
+            }
+        }
+
+        auto array_offsets = UInt32Column::create(0);
+        auto array_elements = ColumnHelper::create_column(TypeDescriptor(Type), true, false, 0);
+
+        auto offsets = array_offsets.get();
+        auto elements = down_cast<NullableColumn*>(array_elements.get());
+
+        offsets->reserve(num_rows + 1);
+        offsets->append(0);
+
+        auto all_const_cols = columns[0]->is_constant() && columns[1]->is_constant() && columns[2]->is_constant();
+
+        auto num_rows_to_process = all_const_cols ? 1 : num_rows;
+
+        size_t total_elements_num = 0;
+        for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {
+            if (nulls && nulls->get_data()[cur_row]) {
+                offsets->append(offsets->get_data().back());
+                continue;
+            }
+
+            auto start = columns[0]->get(cur_row).get<InputCppType>();
+            auto stop = columns[1]->get(cur_row).get<InputCppType>();
+            auto step = columns[2]->get(cur_row).get<InputCppType>();
+
+            // just return empty array
+            if (step == 0) {
+                offsets->append(offsets->get_data().back());
+                continue;
+            }
+
+            InputCppType temp;
+            for (InputCppType cur_element = start; step > 0 ? cur_element <= stop : cur_element >= stop;
+                 cur_element += step) {
+                TRY_CATCH_BAD_ALLOC(elements->append_numbers(&cur_element, sizeof(InputCppType)));
+                total_elements_num++;
+                if (__builtin_add_overflow(cur_element, step, &temp)) break;
+            }
+            offsets->append(total_elements_num);
+        }
+
+        CHECK_EQ(offsets->get_data().back(), elements->size());
+
+        auto dst = ArrayColumn::create(std::move(array_elements), std::move(array_offsets));
+
+        if (all_const_cols) {
+            if (nulls->is_null(0)) {
+                return ColumnHelper::create_const_null_column(num_rows);
+            } else {
+                return ConstColumn::create(std::move(dst), num_rows);
+            }
+        }
+
+        if (nulls == nullptr) {
+            return std::move(dst);
+        } else {
+            // if any of input column has null value, then output column is nullable
+            return NullableColumn::create(std::move(dst), std::move(nulls));
+        }
     }
 };
 

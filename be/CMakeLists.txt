@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 3.5.1)
+cmake_minimum_required(VERSION 3.11.1)
 
 # set CMAKE_C_COMPILER, this must set before project command
 if (DEFINED ENV{CC} AND DEFINED ENV{CXX})
@@ -73,11 +73,17 @@ option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
 option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
-option(WITH_BLOCK_CACHE "Build binary with block cache feature" OFF)
+option(WITH_CACHELIB "Build binary with cachelib library" OFF)
 
 option(WITH_BENCH "Build binary with bench" OFF)
 
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
+
+option(USE_SSE4_2 "Build with SSE4.2 instruction" ON)
+
+option(USE_AVX2 "Build with AVX2 instruction" ON)
+
+option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
 
 # Check gcc
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -89,7 +95,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         message(STATUS "GCC version ${CMAKE_CXX_COMPILER_VERSION} is greater than 10.3.0, disable -Werror. Be careful with compile warnings.")
     else()
         #   -Werror: compile warnings should be errors when using the toolchain compiler.
-        set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -Werror")
+#        set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -Werror")
     endif()
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 elseif (NOT APPLE)
@@ -144,9 +150,9 @@ set(BOOST_ROOT ${THIRDPARTY_DIR})
 set(Boost_NO_WARN_NEW_VERSIONS ON)
 
 if (NOT APPLE)
-    find_package(Boost 1.75.0 REQUIRED COMPONENTS thread regex program_options filesystem context)
+    find_package(Boost 1.80.0 REQUIRED COMPONENTS thread regex program_options filesystem context)
 else()
-    find_package(Boost 1.75.0 COMPONENTS thread regex program_options filesystem context)
+    find_package(Boost 1.80.0 COMPONENTS thread regex program_options filesystem context)
 endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
@@ -161,7 +167,7 @@ set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/
 add_library(glog STATIC IMPORTED)
 set_target_properties(glog PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libglog.a)
 
-add_library(re2 STATIC IMPORTED)
+add_library(re2 STATIC IMPORTED GLOBAL)
 set_target_properties(re2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libre2.a)
 
 add_library(pprof STATIC IMPORTED)
@@ -172,7 +178,7 @@ add_library(tcmalloc STATIC IMPORTED)
 set_target_properties(tcmalloc PROPERTIES IMPORTED_LOCATION
     ${GPERFTOOLS_HOME}/lib/libtcmalloc.a)
 
-add_library(protobuf STATIC IMPORTED)
+add_library(protobuf STATIC IMPORTED GLOBAL)
 set_target_properties(protobuf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libprotobuf.a)
 
 add_library(protoc STATIC IMPORTED)
@@ -230,10 +236,7 @@ add_library(leveldb STATIC IMPORTED)
 set_target_properties(leveldb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libleveldb.a)
 
 add_library(jemalloc STATIC IMPORTED)
-set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libjemalloc_for_starrocks.a)
-
-add_library(jemalloc_for_arrow STATIC IMPORTED)
-set_target_properties(jemalloc_for_arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libjemalloc.a)
+set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libjemalloc_pic.a)
 
 add_library(brotlicommon STATIC IMPORTED)
 set_target_properties(brotlicommon PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrotlicommon.a)
@@ -261,6 +264,9 @@ set_target_properties(brpc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/
 
 add_library(rocksdb STATIC IMPORTED)
 set_target_properties(rocksdb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/librocksdb.a)
+
+add_library(sasl STATIC IMPORTED GLOBAL)
+set_target_properties(sasl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsasl2.a)
 
 add_library(librdkafka_cpp STATIC IMPORTED)
 set_target_properties(librdkafka_cpp PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/librdkafka++.a)
@@ -361,7 +367,7 @@ set(CACHELIB_DEPENDENCIES
     wangle
 )
 
-if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+if (${WITH_CACHELIB} STREQUAL "ON")
     LINK_LIBRARIES(${THIRDPARTY_DIR}/cachelib/deps/lib64/libunwind.so)
     LINK_LIBRARIES(${THIRDPARTY_DIR}/cachelib/deps/lib64/liblzma.so)
     foreach(dep ${CACHELIB_DEPENDENCIES})
@@ -376,41 +382,44 @@ if (${WITH_BLOCK_CACHE} STREQUAL "ON")
 endif()
 
 if ("${USE_STAROS}" STREQUAL "ON")
-     find_package(protobuf CONFIG REQUIRED)
-     message(STATUS "Using protobuf ${protobuf_VERSION}")
-     message(STATUS "protobuf include path: ${protobuf_INCLUDE_DIRS}")
-     message(STATUS "protobuf libs: ${protobuf_LIBS}")
+    # explicitly import ZLIB::ZLIB which is required by starlet thirdparty
+    add_library(ZLIB::ZLIB STATIC IMPORTED)
+    set_target_properties(ZLIB::ZLIB PROPERTIES IMPORTED_LOCATION ${LIBZ})
+    # starrocks project has its imported libprotobuf.a and libre2.a
+    # add following ALIAS so grpc can find the correct dependent libraries
+    add_library(protobuf::libprotobuf ALIAS protobuf)
+    add_library(re2::re2 ALIAS re2)
 
-     find_package(gRPC CONFIG REQUIRED)
-     message(STATUS "Using gRPC ${gRPC_VERSION}")
-     get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
-     include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
+    find_package(gRPC CONFIG REQUIRED)
+    message(STATUS "Using gRPC ${gRPC_VERSION}")
+    get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
+    include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 
-     find_package(starlet CONFIG REQUIRED)
-     message(STATUS "Using starlet ${starlet_VERSION}")
-     message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
-     message(STATUS "starlet lib dir: ${STARLET_LIBS}")
-     include_directories(SYSTEM ${STARLET_INCLUDE_DIRS})
-     add_library(starlet STATIC IMPORTED)
-     set_target_properties(starlet PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet.a)
+    find_package(starlet CONFIG REQUIRED)
+    message(STATUS "Using starlet ${starlet_VERSION}")
+    message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
+    message(STATUS "starlet lib dir: ${STARLET_LIBS}")
+    include_directories(SYSTEM ${STARLET_INCLUDE_DIRS})
+    add_library(starlet STATIC IMPORTED)
+    set_target_properties(starlet PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet.a)
 
-     find_package (prometheus-cpp CONFIG REQUIRED)
-     get_target_property(prometheus-cpp_INCLUDE_DIR prometheus-cpp::core INTERFACE_INCLUDE_DIRECTORIES)
-     message(STATUS "Using prometheus-cpp")
-     message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
-     include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
+    find_package (prometheus-cpp CONFIG REQUIRED)
+    get_target_property(prometheus-cpp_INCLUDE_DIR prometheus-cpp::core INTERFACE_INCLUDE_DIRECTORIES)
+    message(STATUS "Using prometheus-cpp")
+    message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
+    include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
 
-     add_library(starlet_fslib_all STATIC IMPORTED GLOBAL)
-     set_target_properties(starlet_fslib_all PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet_fslib_all.a)
+    add_library(starlet_fslib_all STATIC IMPORTED GLOBAL)
+    set_target_properties(starlet_fslib_all PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet_fslib_all.a)
 
-     set(STARROCKS_DEPENDENCIES
-        ${STARROCKS_DEPENDENCIES}
-        starlet
-        gRPC::grpc++_reflection
-        gRPC::grpc++
-        starlet_fslib_all
-        prometheus-cpp::core
-        )
+    set(STARROCKS_DEPENDENCIES
+       ${STARROCKS_DEPENDENCIES}
+       starlet
+       gRPC::grpc++_reflection
+       gRPC::grpc++
+       starlet_fslib_all
+       prometheus-cpp::core
+       )
 endif()
 
 # Check if functions are supported in this platform. All flags will generated
@@ -452,6 +461,10 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-bitwise-instead-of-logical")
     endif()
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "16.0.0")
+        # ignore warning from apache-orc
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unsafe-buffer-usage")
+    endif ()
 endif()
 
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_DATE_TIME_POSIX_TIME_STD_CONFIG")
@@ -460,8 +473,8 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=return-type -Werror=switch")
 if (${USE_STAROS} STREQUAL "ON")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DUSE_STAROS")
 endif()
-if (${WITH_BLOCK_CACHE} STREQUAL "ON")
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_BLOCK_CACHE")
+if (${WITH_CACHELIB} STREQUAL "ON")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_CACHELIB")
 endif()
 
 # When LLVM is used, should give GCC_HOME to get c++11 header to use new string and list
@@ -474,14 +487,17 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 endif()
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    if (USE_SSE4_2)
+    if (${USE_SSE4_2})
+        # the compiler will define __SSE4_2__
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -msse4.2")
     endif()
-    if (USE_AVX2)
+    if (${USE_AVX2})
+        # the compiler will define __AVX2__
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx2")
     endif()
-    if (USE_AVX512)
-        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f")
+    if (${USE_AVX512})
+        # the compiler will define __AVX512F__ __AVX512BW__
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f -mavx512bw")
     endif()
 elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a+crc")
@@ -611,17 +627,16 @@ set(STARROCKS_LINK_LIBS
     Types
     Udf
     Util
+    Script
     StarRocksGen
     Webserver
     TestUtil
     Tools
     Geo
+    BlockCache
+    starcache
     ${WL_END_GROUP}
 )
-
-if (${WITH_BLOCK_CACHE} STREQUAL "ON")
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} BlockCache)
-endif()
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
     mysql
@@ -673,14 +688,13 @@ set(STARROCKS_DEPENDENCIES
     leveldb
     bitshuffle
     roaring
-    # arrow compiles jemalloc with a specific prefix, we should keep it
-    jemalloc_for_arrow
     brotlicommon
     brotlidec
     brotlienc
     zstd
     streamvbyte
     arrow
+    jemalloc # required by arrow
     parquet
     orc
     cctz
@@ -688,6 +702,7 @@ set(STARROCKS_DEPENDENCIES
     ryu
     hyperscan
     simdjson
+    sasl
     librdkafka_cpp
     librdkafka
     libpulsar
@@ -703,7 +718,7 @@ set(STARROCKS_DEPENDENCIES
     ${WL_END_GROUP}
 )
 
-if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+if (${WITH_CACHELIB} STREQUAL "ON")
     set(STARROCKS_DEPENDENCIES
         ${STARROCKS_DEPENDENCIES}
         ${WL_START_GROUP}
@@ -855,17 +870,16 @@ add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/testutil)
 add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)
+add_subdirectory(${SRC_DIR}/block_cache)
+add_subdirectory(${SRC_DIR}/thirdparty/starcache)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
+add_subdirectory(${SRC_DIR}/script)
 
 if (WITH_BENCH STREQUAL "ON")
      message(STATUS "Build binary with bench")
     add_subdirectory(${SRC_DIR}/bench)
-endif()
-
-if (${WITH_BLOCK_CACHE} STREQUAL "ON")
-    add_subdirectory(${SRC_DIR}/block_cache)
 endif()
 
 if (${MAKE_TEST} STREQUAL "ON")

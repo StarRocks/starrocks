@@ -83,11 +83,14 @@ struct AddBatchCounter {
     int64_t add_batch_num = 0;
     // total time of client rpc
     int64_t client_prc_time_us = 0;
+    // total time of wait memtable flush
+    int64_t add_batch_wait_memtable_flush_time_us = 0;
 
     AddBatchCounter& operator+=(const AddBatchCounter& rhs) {
         add_batch_execution_time_us += rhs.add_batch_execution_time_us;
         add_batch_wait_lock_time_us += rhs.add_batch_wait_lock_time_us;
         add_batch_num += rhs.add_batch_num;
+        add_batch_wait_memtable_flush_time_us += rhs.add_batch_wait_memtable_flush_time_us;
         return *this;
     }
     friend AddBatchCounter operator+(const AddBatchCounter& lhs, const AddBatchCounter& rhs) {
@@ -99,7 +102,7 @@ struct AddBatchCounter {
 
 class NodeChannel {
 public:
-    NodeChannel(OlapTableSink* parent, int64_t node_id);
+    NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental);
     ~NodeChannel() noexcept;
 
     // called before open, used to add tablet loacted in this backend
@@ -113,7 +116,7 @@ public:
     // if is_open_done() return true, open_wait() will not block
     // otherwise open_wait() will block
     void try_open();
-    void try_incremental_open(std::vector<PTabletWithPartition>& tablets);
+    void try_incremental_open();
     bool is_open_done();
     Status open_wait();
 
@@ -148,6 +151,8 @@ public:
     std::string print_load_info() const { return _load_info; }
     std::string name() const { return _name; }
     bool enable_colocate_mv_index() const { return _enable_colocate_mv_index; }
+
+    bool is_incremental() const { return _is_incremental; }
 
 private:
     Status _wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure);
@@ -218,6 +223,8 @@ private:
     bool _enable_colocate_mv_index = config::enable_load_colocate_mv;
 
     WriteQuorumTypePB _write_quorum_type = WriteQuorumTypePB::MAJORITY;
+
+    bool _is_incremental;
 };
 
 class IndexChannel {
@@ -231,20 +238,21 @@ public:
         for (auto& it : _node_channels) {
             func(it.second.get());
         }
-        for (auto& it : _incremental_node_channels) {
-            func(it.second.get());
-        }
     }
 
     void for_each_initial_node_channel(const std::function<void(NodeChannel*)>& func) {
         for (auto& it : _node_channels) {
-            func(it.second.get());
+            if (!it.second->is_incremental()) {
+                func(it.second.get());
+            }
         }
     }
 
     void for_each_incremental_node_channel(const std::function<void(NodeChannel*)>& func) {
-        for (auto& it : _incremental_node_channels) {
-            func(it.second.get());
+        for (auto& it : _node_channels) {
+            if (it.second->is_incremental()) {
+                func(it.second.get());
+            }
         }
     }
 
@@ -254,7 +262,7 @@ public:
 
     bool has_intolerable_failure();
 
-    bool has_incremental_node_channel() { return !_incremental_node_channels.empty(); }
+    bool has_incremental_node_channel() const { return _has_incremental_node_channel; }
 
 private:
     friend class OlapTableSink;
@@ -272,7 +280,7 @@ private:
 
     TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;
 
-    std::unordered_map<int64_t, std::unique_ptr<NodeChannel>> _incremental_node_channels;
+    bool _has_incremental_node_channel = false;
 };
 
 // Write data to Olap Table.
@@ -288,8 +296,6 @@ public:
     Status init(const TDataSink& sink, RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
-
-    void cancel() override;
 
     // sync open interface
     Status open(RuntimeState* state) override;
@@ -333,7 +339,7 @@ public:
 
 private:
     template <LogicalType LT>
-    void _validate_decimal(RuntimeState* state, Column* column, const SlotDescriptor* desc,
+    void _validate_decimal(RuntimeState* state, Chunk* chunk, Column* column, const SlotDescriptor* desc,
                            std::vector<uint8_t>* validate_selection);
     // This method will change _validate_selection
     void _validate_data(RuntimeState* state, Chunk* chunk);
@@ -390,6 +396,7 @@ private:
     friend class IndexChannel;
 
     ObjectPool* _pool;
+    int64_t _rpc_http_min_size = 0;
 
     // unique load id
     PUniqueId _load_id;
@@ -400,6 +407,7 @@ private:
     bool _need_gen_rollup = false;
     int _tuple_desc_id = -1;
     std::string _merge_condition;
+    TPartialUpdateMode::type _partial_update_mode;
 
     // this is tuple descriptor of destination OLAP table
     TupleDescriptor* _output_tuple_desc = nullptr;
@@ -467,6 +475,7 @@ private:
     RuntimeProfile::Counter* _client_rpc_timer = nullptr;
     RuntimeProfile::Counter* _server_rpc_timer = nullptr;
     RuntimeProfile::Counter* _alloc_auto_increment_timer = nullptr;
+    RuntimeProfile::Counter* _server_wait_flush_timer = nullptr;
 
     // load mem limit is for remote load channel
     int64_t _load_mem_limit = 0;
@@ -496,8 +505,6 @@ private:
 
     bool _miss_auto_increment_column = false;
 
-    bool _abort_delete = false;
-
     std::unique_ptr<ThreadPoolToken> _automatic_partition_token;
 
     std::vector<std::vector<std::string>> _partition_not_exist_row_values;
@@ -505,6 +512,8 @@ private:
     bool _enable_automatic_partition = false;
 
     bool _nonblocking_send_chunk = false;
+
+    bool _has_automatic_partition = false;
 
     std::atomic<bool> _is_automatic_partition_running = false;
     Status _automatic_partition_status;

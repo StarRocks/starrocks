@@ -57,6 +57,11 @@ def doc_func(_, num, param):
         return "%-5d: %s" % (num, param[0][0].file + ":" + param[0][0].name)
 
 
+def name_func(testcase_func, param_num, param):
+    """name func"""
+    return parameterized.to_safe_name(param.args[0].name)
+
+
 class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
     """
     SQL Framework Run Test
@@ -104,6 +109,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
     @parameterized.expand(
         [[case_info] for case_info in case_list],
         doc_func=doc_func,
+        name_func=name_func
     )
     @sql_annotation.init(record_mode)
     def test_sql_basic(self, case_info: choose_cases.ChooseCase.CaseTR):

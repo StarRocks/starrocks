@@ -49,7 +49,9 @@ public class IcebergResource extends Resource {
     private static final String ICEBERG_CATALOG = "iceberg.catalog.type";
     @Deprecated
     private static final String ICEBERG_CATALOG_LEGACY = "starrocks.catalog-type";
+    @Deprecated
     private static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
+    private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private static final String ICEBERG_IMPL = "iceberg.catalog-impl";
 
     @SerializedName(value = "catalogType")
@@ -83,9 +85,12 @@ public class IcebergResource extends Resource {
 
         switch (IcebergCatalogType.fromString(catalogType)) {
             case HIVE_CATALOG:
-                metastoreURIs = properties.get(ICEBERG_METASTORE_URIS);
+                metastoreURIs = properties.get(HIVE_METASTORE_URIS);
+                if (metastoreURIs == null) {
+                    metastoreURIs = properties.get(ICEBERG_METASTORE_URIS);
+                }
                 if (StringUtils.isBlank(metastoreURIs)) {
-                    throw new DdlException(ICEBERG_METASTORE_URIS + " must be set in properties");
+                    throw new DdlException(HIVE_METASTORE_URIS + " must be set in properties");
                 }
                 break;
             case CUSTOM_CATALOG:
@@ -109,7 +114,7 @@ public class IcebergResource extends Resource {
         String lowerCaseType = type.name().toLowerCase();
         switch (IcebergCatalogType.fromString(catalogType)) {
             case HIVE_CATALOG:
-                result.addRow(Lists.newArrayList(name, lowerCaseType, ICEBERG_METASTORE_URIS, metastoreURIs));
+                result.addRow(Lists.newArrayList(name, lowerCaseType, HIVE_METASTORE_URIS, metastoreURIs));
                 break;
             case CUSTOM_CATALOG:
                 result.addRow(Lists.newArrayList(name, lowerCaseType, ICEBERG_IMPL, catalogImpl));
@@ -149,9 +154,9 @@ public class IcebergResource extends Resource {
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
-            if (ICEBERG_METASTORE_URIS.equals(key)) {
+            if (ICEBERG_METASTORE_URIS.equals(key) || HIVE_METASTORE_URIS.equals(key)) {
                 if (StringUtils.isBlank(value)) {
-                    throw new DdlException(ICEBERG_METASTORE_URIS + " can not be null");
+                    throw new DdlException(HIVE_METASTORE_URIS + " can not be null");
                 }
                 validateMetastoreUris(value);
                 this.metastoreURIs = value;

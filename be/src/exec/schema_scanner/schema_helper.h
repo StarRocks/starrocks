@@ -62,11 +62,24 @@ public:
     static Status get_tasks(const std::string& ip, const int32_t port, const TGetTasksParams& var_params,
                             TGetTaskInfoResult* var_result);
 
+    static Status get_loads(const std::string& ip, const int32_t port, const TGetLoadsParams& var_params,
+                            TGetLoadsResult* var_result, int timeout_ms);
+
     static Status get_task_runs(const std::string& ip, const int32_t port, const TGetTasksParams& var_params,
                                 TGetTaskRunInfoResult* var_result);
 
     static Status get_tables_config(const std::string& ip, const int32_t port,
                                     const TGetTablesConfigRequest& var_params, TGetTablesConfigResponse* var_result);
+
+    static Status get_tablet_schedules(const std::string& ip, const int32_t port,
+                                       const TGetTabletScheduleRequest& request, TGetTabletScheduleResponse* response);
+
+    static Status get_role_edges(const std::string& ip, const int32_t port, const TGetRoleEdgesRequest& request,
+                                 TGetRoleEdgesResponse* response);
+
+    static Status get_grants_to(const std::string& ip, const int32_t port,
+                                const TGetGrantsToRolesOrUserRequest& request,
+                                TGetGrantsToRolesOrUserResponse* response);
 };
 
 template <LogicalType SlotType>

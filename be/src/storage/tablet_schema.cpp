@@ -297,6 +297,18 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_table
     return std::make_shared<TabletSchema>(partial_tablet_schema_pb);
 }
 
+std::shared_ptr<TabletSchema> TabletSchema::create_with_uid(const TabletSchema& tablet_schema,
+                                                            const std::vector<uint32_t>& unique_column_ids) {
+    std::unordered_set<int32_t> unique_cid_filter(unique_column_ids.begin(), unique_column_ids.end());
+    std::vector<int32_t> column_indexes;
+    for (int cid = 0; cid < tablet_schema.columns().size(); cid++) {
+        if (unique_cid_filter.count(tablet_schema.column(cid).unique_id()) > 0) {
+            column_indexes.push_back(cid);
+        }
+    }
+    return TabletSchema::create(tablet_schema, column_indexes);
+}
+
 void TabletSchema::_init_schema() const {
     starrocks::Fields fields;
     for (ColumnId cid = 0; cid < num_columns(); ++cid) {

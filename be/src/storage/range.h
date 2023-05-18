@@ -200,6 +200,7 @@ private:
 
     std::vector<Range> _ranges;
 };
+using SparseRangePtr = std::shared_ptr<SparseRange>;
 
 inline void SparseRange::_add_uncheck(const Range& r) {
     if (!r.empty()) {

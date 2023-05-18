@@ -49,8 +49,8 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 //fehost:port/metrics
 //fehost:port/metrics?type=core

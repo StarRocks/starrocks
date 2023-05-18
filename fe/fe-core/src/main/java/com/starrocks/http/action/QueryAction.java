@@ -71,6 +71,7 @@ public class QueryAction extends WebBaseAction {
     // Note: we do not show 'Query ID' column in web page
     private void addFinishedQueryInfo(StringBuilder buffer) {
         buffer.append("<h2>Finished Queries</h2>");
+        buffer.append("<button style=\"float:right\" onclick=\"download_query()\">Download CSV</button>");
         buffer.append("<p>This table lists the latest 100 queries</p>");
 
         List<List<String>> finishedQueries = ProfileManager.getInstance().getAllQueries();

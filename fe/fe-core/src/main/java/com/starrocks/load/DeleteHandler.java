@@ -168,7 +168,7 @@ public class DeleteHandler implements Writable {
                     throw new DdlException("Table does not exist. name: " + tableName);
                 }
 
-                if (!table.isOlapOrLakeTable()) {
+                if (!table.isOlapOrCloudNativeTable()) {
                     throw new DdlException("Delete is not supported on " + table.getType() + " table");
                 }
 
@@ -267,7 +267,7 @@ public class DeleteHandler implements Writable {
         deleteInfo.setPartitions(noPartitionSpecified,
                 partitions.stream().map(Partition::getId).collect(Collectors.toList()), partitionNames);
         DeleteJob deleteJob = null;
-        if (olapTable.isLakeTable()) {
+        if (olapTable.isCloudNativeTable()) {
             deleteJob = new LakeDeleteJob(jobId, transactionId, label, deleteInfo);
         } else {
             deleteJob = new OlapDeleteJob(jobId, transactionId, label, partitionReplicaNum, deleteInfo);

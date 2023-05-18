@@ -31,7 +31,7 @@ namespace starrocks {
 class ORCFileStream : public ORCHdfsFileStream {
 public:
     ORCFileStream(std::shared_ptr<RandomAccessFile> file, uint64_t length, starrocks::ScannerCounter* counter)
-            : ORCHdfsFileStream(file.get(), length), _file(std::move(file)), _counter(counter) {}
+            : ORCHdfsFileStream(file.get(), length, nullptr), _file(std::move(file)), _counter(counter) {}
 
     ~ORCFileStream() override { _file.reset(); }
 
@@ -86,7 +86,7 @@ Status ORCScanner::open() {
     _orc_reader->set_timezone(_state->timezone());
     _orc_reader->drop_nanoseconds_in_datetime();
     _orc_reader->set_runtime_state(_state);
-    _orc_reader->set_case_sensitive(true);
+    _orc_reader->set_case_sensitive(_case_sensitive);
     RETURN_IF_ERROR(_open_next_orc_reader());
 
     return Status::OK();
@@ -183,6 +183,7 @@ Status ORCScanner::_next_orc_batch(ChunkPtr* result) {
 
 Status ORCScanner::_open_next_orc_reader() {
     while (true) {
+        _state->update_num_bytes_scan_from_source(_last_file_size);
         if (_next_range >= _scan_range.ranges.size()) {
             return Status::EndOfFile("no more file to be read");
         }
@@ -198,6 +199,7 @@ Status ORCScanner::_open_next_orc_reader() {
         ASSIGN_OR_RETURN(uint64_t file_size, file->get_size());
         auto inStream = std::make_unique<ORCFileStream>(file, file_size, _counter);
         _next_range++;
+        _last_file_size = file_size;
         _orc_reader->set_read_chunk_size(_max_chunk_size);
         _orc_reader->set_current_file_name(file_name);
         st = _orc_reader->init(std::move(inStream));

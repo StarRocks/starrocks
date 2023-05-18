@@ -317,7 +317,7 @@ Status GroupReaderTest::_create_filemeta(FileMetaData** file_meta, GroupReaderPa
 static GroupReaderParam::Column _create_group_reader_param_of_column(int idx, tparquet::Type::type par_type,
                                                                      LogicalType prim_type) {
     GroupReaderParam::Column c;
-    c.col_idx_in_parquet = idx;
+    c.field_idx_in_parquet = idx;
     c.col_idx_in_chunk = idx;
     c.col_type_in_parquet = par_type;
     c.col_type_in_chunk = TypeDescriptor::from_logical_type(prim_type);
@@ -365,7 +365,8 @@ TEST_F(GroupReaderTest, TestInit) {
     param->chunk_size = config::vector_chunk_size;
     param->file = file;
     param->file_metadata = file_meta;
-    auto* group_reader = _pool.add(new GroupReader(*param, 0));
+    std::set<std::int64_t> need_skip_rowids;
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, &need_skip_rowids, 0));
 
     // init row group reader
     status = group_reader->init();
@@ -399,7 +400,8 @@ TEST_F(GroupReaderTest, TestGetNext) {
     param->chunk_size = config::vector_chunk_size;
     param->file = file;
     param->file_metadata = file_meta;
-    auto* group_reader = _pool.add(new GroupReader(*param, 0));
+    std::set<std::int64_t> need_skip_rowids;
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, &need_skip_rowids, 0));
 
     // init row group reader
     status = group_reader->init();

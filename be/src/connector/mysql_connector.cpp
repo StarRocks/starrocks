@@ -49,6 +49,10 @@ DataSourcePtr MySQLDataSourceProvider::create_data_source(const TScanRange& scan
     return std::make_unique<MySQLDataSource>(this, scan_range);
 }
 
+const TupleDescriptor* MySQLDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_mysql_scan_node.tuple_id);
+}
+
 // ================================
 
 MySQLDataSource::MySQLDataSource(const MySQLDataSourceProvider* provider, const TScanRange& scan_range)

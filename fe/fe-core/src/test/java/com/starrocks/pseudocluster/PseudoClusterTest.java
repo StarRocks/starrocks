@@ -14,8 +14,11 @@
 
 package com.starrocks.pseudocluster;
 
-import com.starrocks.common.RunMode;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -56,18 +59,30 @@ public class PseudoClusterTest {
 
     @Test
     public void testCreateLakeTable() throws Exception {
-        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_DATA);
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
+                return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+            }
+        };
+
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
         try {
             stmt.execute("create database db_test_lake");
             stmt.execute("use db_test_lake");
             stmt.execute("create table test (k0 bigint NOT NULL, v0 string not null, v1 int not null ) " +
-                    "ENGINE=STARROCKS duplicate KEY(k0) DISTRIBUTED BY HASH(k0) BUCKETS 7");
+                    "duplicate KEY(k0) DISTRIBUTED BY HASH(k0) BUCKETS 7");
         } finally {
             stmt.close();
             connection.close();
         }
-        GlobalStateMgr.getCurrentState().setRunMode(RunMode.SHARED_NOTHING);
     }
 }

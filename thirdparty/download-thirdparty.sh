@@ -362,6 +362,15 @@ fi
 cd -
 echo "Finished patching $LIBRDKAFKA_SOURCE"
 
+# patch roaring-bitmap
+cd $TP_SOURCE_DIR/$CROARINGBITMAP_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $CROARINGBITMAP_SOURCE = "CRoaring-0.2.60" ]; then
+    patch -p1 < $TP_PATCH_DIR/roaring-bitmap-patch-v0.2.60.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $CROARINGBITMAP_SOURCE"
+
 # patch pulsar
 cd $TP_SOURCE_DIR/$PULSAR_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $PULSAR_SOURCE = "pulsar-2.10.1" ]; then
@@ -390,6 +399,8 @@ if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.9.179" ]; th
     patch -p0 < $TP_PATCH_DIR/aws-sdk-cpp-1.9.179.patch    
     # Fix crt BB, refer to https://github.com/aws/s2n-tls/issues/3166
     patch -p1 -f -i $TP_PATCH_DIR/aws-sdk-cpp-patch-1.9.179-s2n-compile-error.patch
+    # refer to https://github.com/aws/aws-sdk-cpp/issues/1824
+    patch -p1 < $TP_PATCH_DIR/aws-sdk-cpp-patch-1.9.179-LINK_LIBRARIES_ALL.patch
     touch $PATCHED_MARK
     echo "Finished patching $AWS_SDK_CPP_SOURCE"
 else
@@ -451,3 +462,13 @@ fi
 echo "Finished patching $SERDES_SOURCE"
 cd -
 
+# patch arrows to use our built jemalloc
+if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$ARROW_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-5.0.0" ] ; then
+        patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-force-use-external-jemalloc.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $ARROW_SOURCE"
+fi

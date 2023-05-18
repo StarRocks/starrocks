@@ -93,11 +93,15 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
 }
 
 Status SegmentWriter::init() {
+    return init(true);
+}
+
+Status SegmentWriter::init(bool has_key) {
     std::vector<uint32_t> all_column_indexes;
     for (uint32_t i = 0; i < _tablet_schema->num_columns(); ++i) {
         all_column_indexes.emplace_back(i);
     }
-    return init(all_column_indexes, true);
+    return init(all_column_indexes, has_key);
 }
 
 Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has_key, SegmentFooterPB* footer) {
@@ -144,8 +148,12 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         // now we create zone map for key columns
         // and not support zone map for array type.
         // TODO(mofei) refactor it to type specification
-        opts.need_zone_map = column.is_key() ||
-                             (_tablet_schema->keys_type() == KeysType::DUP_KEYS && is_zone_map_key_type(column.type()));
+        const bool enable_pk_zone_map = config::enable_pk_value_column_zonemap &&
+                                        _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
+                                        is_zone_map_key_type(column.type());
+        const bool enable_dup_zone_map =
+                _tablet_schema->keys_type() == KeysType::DUP_KEYS && is_zone_map_key_type(column.type());
+        opts.need_zone_map = column.is_key() || enable_pk_zone_map || enable_dup_zone_map;
         if (column.type() == LogicalType::TYPE_ARRAY) {
             opts.need_zone_map = false;
         }
@@ -201,7 +209,8 @@ Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size
 }
 
 Status SegmentWriter::finalize_columns(uint64_t* index_size) {
-    if (_has_key) {
+    if (_has_key || _num_rows == 0) {
+        // _num_rows == 0 && !_has_key means this segment not contains key columns
         _num_rows = _num_rows_written;
     } else if (_num_rows != _num_rows_written) {
         return Status::InternalError(strings::Substitute("num rows written $0 is not equal to segment num rows $1",
@@ -314,7 +323,8 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
             if ((_num_rows_written % _opts.num_rows_per_block) == 0) {
                 size_t keys = _tablet_schema->num_short_key_columns();
                 SeekTuple tuple(*chunk.schema(), chunk.get(i).datums());
-                std::string encoded_key = tuple.short_key_encode(keys, 0);
+                std::string encoded_key;
+                encoded_key = tuple.short_key_encode(keys, _tablet_schema->sort_key_idxes(), 0);
                 RETURN_IF_ERROR(_index_builder->add_item(encoded_key));
             }
             ++_num_rows_written;

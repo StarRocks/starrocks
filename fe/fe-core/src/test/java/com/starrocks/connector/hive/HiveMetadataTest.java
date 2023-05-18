@@ -16,6 +16,7 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
@@ -46,6 +47,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -164,7 +166,7 @@ public class HiveMetadataTest {
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
 
         List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFileInfos(
-                hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+                hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), -1, null);
         Assert.assertEquals(2, remoteFileInfos.size());
 
         RemoteFileInfo fileInfo = remoteFileInfos.get(0);
@@ -210,9 +212,11 @@ public class HiveMetadataTest {
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
 
-        Statistics statistics = hiveMetadata.getTableStatistics(
-                optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+        Map<ColumnRefOperator, Column> columns = new HashMap<>();
+        columns.put(partColumnRefOperator, null);
+        columns.put(dataColumnRefOperator, null);
+        Statistics statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null);
         Assert.assertEquals(1, statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
         Assert.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
@@ -228,16 +232,19 @@ public class HiveMetadataTest {
                 Lists.newArrayList("1"), hiveTable.getPartitionColumns());
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
-        Statistics statistics = hiveMetadata.getTableStatistics(
-                optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+        Map<ColumnRefOperator, Column> columns = new HashMap<>();
+        columns.put(partColumnRefOperator, null);
+        columns.put(dataColumnRefOperator, null);
+
+        Statistics statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null);
         Assert.assertEquals(1,  statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
 
         cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1", "col1=2"));
-        statistics = hiveMetadata.getTableStatistics(
-                optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+        statistics = hiveMetadata.getTableStatistics(optimizerContext, hiveTable, columns,
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null);
+
         Assert.assertEquals(100, statistics.getOutputRowCount(), 0.001);
         Map<ColumnRefOperator, ColumnStatistic> columnStatistics = statistics.getColumnStatistics();
         ColumnStatistic partitionColumnStats = columnStatistics.get(partColumnRefOperator);

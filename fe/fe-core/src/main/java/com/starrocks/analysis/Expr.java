@@ -65,12 +65,14 @@ import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunction;
+
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -201,6 +203,8 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     protected final NodePosition pos;
 
+    private List<String> hints = Collections.emptyList();
+
     protected Expr() {
         pos = NodePosition.ZERO;
         type = Type.INVALID;
@@ -236,6 +240,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         fn = other.fn;
         printSqlInParens = other.printSqlInParens;
         children = Expr.cloneList(other.children);
+        hints = Lists.newArrayList(hints);
     }
 
     @SuppressWarnings("unchecked")
@@ -440,6 +445,10 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public static Expr compoundAnd(Collection<Expr> conjuncts) {
         return createCompound(CompoundPredicate.Operator.AND, conjuncts);
+    }
+
+    public static Expr compoundOr(Collection<Expr> conjuncts) {
+        return createCompound(CompoundPredicate.Operator.OR, conjuncts);
     }
 
     // Build a compound tree by bottom up
@@ -704,6 +713,12 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
     }
 
+
+    /**
+     * toSql is an obsolete interface, because of historical reasons, the implementation of toSql is not rigorous enough.
+     * Newly developed code should use AstToSQLBuilder::toSQL instead
+     */
+    @Deprecated
     public String toSql() {
         return (printSqlInParens) ? "(" + toSqlImpl() + ")" : toSqlImpl();
     }
@@ -969,6 +984,9 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     /**
+     * Attention: if you just want check whether the expr is a constant literal, please consider
+     * use isLiteral()
+     *
      * Returns true if this expression should be treated as constant. I.e. if the frontend
      * and backend should assume that two evaluations of the expression within a query will
      * return the same value. Examples of constant expressions include:
@@ -1175,7 +1193,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
                 // otherwise we may recurse infinitely.
                 Method m = root.getChild(0).getClass().getDeclaredMethod(NEGATE_FN);
                 return pushNegationToOperands(root.getChild(0).negate());
-            } catch (NoSuchMethodException|IllegalStateException e) {
+            } catch (NoSuchMethodException | IllegalStateException e) {
                 // The 'negate' function is not implemented. Break the recursion.
                 return root;
             }
@@ -1339,9 +1357,13 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         this.fn = fn;
     }
 
-    public void setIgnoreNulls(boolean ignoreNulls) { this.ignoreNulls = ignoreNulls; }
+    public void setIgnoreNulls(boolean ignoreNulls) {
+        this.ignoreNulls = ignoreNulls;
+    }
 
-    public boolean getIgnoreNulls() { return ignoreNulls; }
+    public boolean getIgnoreNulls() {
+        return ignoreNulls;
+    }
 
     // only the first/last one can be lambda functions.
     public boolean hasLambdaFunction(Expr expression) {
@@ -1369,7 +1391,8 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         } else if (num == 0) {
             if (expression instanceof FunctionCallExpr) {
                 String funcName = ((FunctionCallExpr) expression).getFnName().getFunction();
-                if (funcName.equals(FunctionSet.ARRAY_MAP) || funcName.equals(FunctionSet.TRANSFORM)) {
+                if (funcName.equals(FunctionSet.ARRAY_MAP) || funcName.equals(FunctionSet.TRANSFORM) ||
+                        funcName.equals(FunctionSet.MAP_APPLY)) {
                     throw new SemanticException("There are no lambda functions in high-order function " + funcName);
                 }
             }
@@ -1407,4 +1430,13 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             return expr;
         }
     }
+
+    public void setHints(List<String> hints) {
+        this.hints = hints;
+    }
+
+    public List<String> getHints() {
+        return hints;
+    }
+
 }

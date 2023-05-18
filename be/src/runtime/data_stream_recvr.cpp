@@ -34,14 +34,10 @@
 
 #include "runtime/data_stream_recvr.h"
 
-#include <fmt/format.h>
 #include <util/time.h>
 
 #include <condition_variable>
 #include <deque>
-#include <memory>
-#include <unordered_map>
-#include <unordered_set>
 #include <utility>
 
 #include "column/chunk.h"
@@ -53,7 +49,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/sender_queue.h"
 #include "runtime/sorted_chunks_merger.h"
-#include "serde/protobuf_serde.h"
 #include "util/compression/block_compression.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
@@ -129,6 +124,29 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
     return Status::OK();
 }
 
+std::vector<merge_path::MergePathChunkProvider> DataStreamRecvr::create_merge_path_chunk_providers() {
+    DCHECK(_is_merging);
+    std::vector<merge_path::MergePathChunkProvider> chunk_providers;
+    for (SenderQueue* q : _sender_queues) {
+        chunk_providers.emplace_back([q](bool only_check_if_has_data, ChunkPtr* chunk, bool* eos) {
+            if (!q->has_chunk()) {
+                return false;
+            }
+
+            if (!only_check_if_has_data) {
+                Chunk* chunk_ptr;
+                if (q->try_get_chunk(&chunk_ptr)) {
+                    chunk->reset(chunk_ptr);
+                } else {
+                    *eos = true;
+                }
+            }
+            return true;
+        });
+    }
+    return chunk_providers;
+}
+
 DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state, const RowDescriptor& row_desc,
                                  const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
                                  bool is_merging, int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
@@ -194,7 +212,10 @@ Status DataStreamRecvr::get_next(ChunkPtr* chunk, bool* eos) {
 
 Status DataStreamRecvr::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit) {
     DCHECK(_cascade_merger);
-    return _cascade_merger->get_next(chunk, eos, should_exit);
+    ChunkUniquePtr chunk_ptr;
+    RETURN_IF_ERROR(_cascade_merger->get_next(&chunk_ptr, eos, should_exit));
+    *chunk = std::move(chunk_ptr);
+    return Status::OK();
 }
 
 bool DataStreamRecvr::is_data_ready() {

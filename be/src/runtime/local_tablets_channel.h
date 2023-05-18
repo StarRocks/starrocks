@@ -44,7 +44,8 @@ public:
 
     const TabletsChannelKey& key() const { return _key; }
 
-    Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema) override;
+    Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
+                bool is_incremental) override;
 
     void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
@@ -63,6 +64,10 @@ public:
 
     MemTracker* mem_tracker() { return _mem_tracker; }
 
+    void incr_num_ref_senders() { _num_ref_senders.fetch_add(1); }
+
+    int num_ref_senders() { return _num_ref_senders.load(std::memory_order_acquire); }
+
 private:
     using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
@@ -75,6 +80,7 @@ private:
         std::set<int64_t> success_sliding_window;
 
         int64_t last_sliding_packet_seq = -1;
+        bool has_incremental_open = false;
     };
 
     class WriteContext {
@@ -173,9 +179,10 @@ private:
     TupleDescriptor* _tuple_desc = nullptr;
 
     // next sequence we expect
-    std::atomic<int> _num_remaining_senders;
+    std::atomic<int> _num_remaining_senders = 0;
     std::vector<Sender> _senders;
     size_t _max_sliding_window_size = config::max_load_dop * 3;
+    std::atomic<int> _num_ref_senders = 0;
 
     mutable bthread::Mutex _partitions_ids_lock;
     std::unordered_set<int64_t> _partition_ids;
@@ -190,6 +197,11 @@ private:
     bool _is_replicated_storage = false;
 
     std::unordered_map<int64_t, PNetworkAddress> _node_id_to_endpoint;
+
+    // Initially load tablets are not present on this node, so there will be no TabletsChannel.
+    // After the partition is created during data loading, there are some tablets of the new partitions on this node,
+    // so a TabletsChannel needs to be created, such that _is_incremental_channel=true
+    bool _is_incremental_channel = false;
 };
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,

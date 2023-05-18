@@ -43,6 +43,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 
 import java.util.ArrayList;
@@ -105,8 +106,13 @@ public class AnalyticExpr extends Expr {
     // The function of HLL_UNION_AGG can't be used with a window by now.
     public static String HLL_UNION_AGG = "HLL_UNION_AGG";
 
-    public AnalyticExpr(FunctionCallExpr fnCall, List<Expr> partitionExprs,
-                        List<OrderByElement> orderByElements, AnalyticWindow window, String partitionHint) {
+    public AnalyticExpr(FunctionCallExpr fnCall, List<Expr> partitionExprs, List<OrderByElement> orderByElements,
+                        AnalyticWindow window, String partitionHint) {
+        this(fnCall, partitionExprs, orderByElements, window, partitionHint, NodePosition.ZERO);
+    }
+    public AnalyticExpr(FunctionCallExpr fnCall, List<Expr> partitionExprs, List<OrderByElement> orderByElements,
+                        AnalyticWindow window, String partitionHint, NodePosition pos) {
+        super(pos);
         Preconditions.checkNotNull(fnCall);
         this.fnCall = fnCall;
         this.partitionExprs = partitionExprs != null ? partitionExprs : new ArrayList<Expr>();

@@ -17,7 +17,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -70,6 +69,10 @@ public class ListPartitionDesc extends PartitionDesc {
         }
     }
 
+    public List<String> getPartitionColNames() {
+        return partitionColNames;
+    }
+
     public List<String> findAllPartitionNames() {
         List<String> partitionNames = new ArrayList<>();
         this.singleListPartitionDescs.forEach(desc -> partitionNames.add(desc.getPartitionName()));
@@ -93,7 +96,7 @@ public class ListPartitionDesc extends PartitionDesc {
         this.analyzeMultiListPartition(tableProperties, columnDefList);
     }
 
-    private List<ColumnDef> analyzePartitionColumns(List<ColumnDef> columnDefs) throws AnalysisException {
+    public List<ColumnDef> analyzePartitionColumns(List<ColumnDef> columnDefs) throws AnalysisException {
         if (this.partitionColNames == null || this.partitionColNames.isEmpty()) {
             throw new AnalysisException("No partition columns.");
         }
@@ -205,8 +208,7 @@ public class ListPartitionDesc extends PartitionDesc {
     }
 
     @Override
-    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId,
-                                         boolean isTemp, boolean isExprPartition)
+    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
             throws DdlException {
         try {
             List<Column> partitionColumns = this.findPartitionColumns(columns);

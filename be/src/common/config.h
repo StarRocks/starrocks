@@ -109,12 +109,8 @@ CONF_Int32(push_worker_count_normal_priority, "3");
 // The count of thread to high priority batch load.
 CONF_Int32(push_worker_count_high_priority, "3");
 
-#ifdef BE_TEST
-CONF_Int32(transaction_publish_version_worker_count, "1");
-#else
 // The count of thread to publish version per transaction
-CONF_Int32(transaction_publish_version_worker_count, "8");
-#endif
+CONF_mInt32(transaction_publish_version_worker_count, "0");
 
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
@@ -125,11 +121,11 @@ CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
 CONF_Int32(alter_tablet_worker_count, "3");
 // The count of parallel clone task per storage path
-CONF_Int32(parallel_clone_task_per_path, "2");
-// The count of thread to clone.
+CONF_mInt32(parallel_clone_task_per_path, "8");
+// The count of thread to clone. Deprecated
 CONF_Int32(clone_worker_count, "3");
 // The count of thread to clone.
-CONF_Int32(storage_medium_migrate_count, "1");
+CONF_Int32(storage_medium_migrate_count, "3");
 // The count of thread to check consistency.
 CONF_Int32(check_consistency_worker_count, "1");
 // The count of thread to upload.
@@ -214,7 +210,6 @@ CONF_String(local_library_dir, "${UDF_RUNTIME_DIR}");
 CONF_mInt32(scanner_thread_pool_thread_num, "48");
 // Number of olap/external scanner thread pool size.
 CONF_Int32(scanner_thread_pool_queue_size, "102400");
-CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 CONF_Int32(udf_thread_pool_size, "1");
 // Port on which to run StarRocks test backend.
 CONF_Int32(port, "20001");
@@ -305,6 +300,7 @@ CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
+CONF_Int32(manual_compaction_threads, "4");
 
 // if compaction of a tablet failed, this tablet should not be chosen to
 // compaction until this interval passes.
@@ -333,6 +329,7 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mInt64(size_tiered_min_level_size, "131072");
 CONF_mInt64(size_tiered_level_multiple, "5");
+CONF_mInt64(size_tiered_level_multiple_dupkey, "10");
 CONF_mInt64(size_tiered_level_num, "7");
 
 CONF_Bool(enable_check_string_lengths, "true");
@@ -358,6 +355,7 @@ CONF_Int64(load_data_reserve_hours, "4");
 // log error log will be removed after this time
 CONF_mInt64(load_error_log_reserve_hours, "48");
 CONF_Int32(number_tablet_writer_threads, "16");
+CONF_mInt64(max_queueing_memtable_per_tablet, "2");
 
 // delta writer hang after this time, be will exit since storage is in error state
 CONF_Int32(be_exit_after_disk_write_hang_second, "60");
@@ -436,12 +434,6 @@ CONF_mBool(enable_prefetch, "true");
 // Otherwise, StarRocks will use all cores returned from "/proc/cpuinfo".
 CONF_Int32(num_cores, "0");
 
-// CONF_Bool(thread_creation_fault_injection, "false");
-
-// Set this to encrypt and perform an integrity
-// check on all data spilled to disk during a query
-// CONF_Bool(disk_spill_encryption, "false");
-
 // When BE start, If there is a broken disk, BE process will exit by default.
 // Otherwise, we will ignore the broken disk,
 CONF_Bool(ignore_broken_disk, "false");
@@ -473,9 +465,10 @@ CONF_mInt64(write_buffer_size, "104857600");
 // NOTICE(cmy): set these default values very large because we don't want to
 // impact the load performace when user upgrading StarRocks.
 // user should set these configs properly if necessary.
+CONF_Int32(query_max_memory_limit_percent, "90");
 CONF_Int64(load_process_max_memory_limit_bytes, "107374182400"); // 100GB
 CONF_Int32(load_process_max_memory_limit_percent, "30");         // 30%
-CONF_Bool(enable_new_load_on_memory_limit_exceeded, "false");
+CONF_mBool(enable_new_load_on_memory_limit_exceeded, "true");
 CONF_Int64(compaction_max_memory_limit, "-1");
 CONF_Int32(compaction_max_memory_limit_percent, "100");
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
@@ -511,7 +504,7 @@ CONF_mInt32(max_consumer_num_per_group, "3");
 CONF_mInt32(max_pulsar_consumer_num_per_group, "10");
 
 // The size of thread pool for routine load task.
-// this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5).
+// this should be larger than FE config 'max_routine_load_task_num_per_be' (default 5).
 CONF_Int32(routine_load_thread_pool_size, "10");
 
 // kafka reqeust timeout
@@ -691,6 +684,20 @@ CONF_Int64(pipeline_sink_brpc_dop, "64");
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 CONF_mBool(pipeline_print_profile, "false");
 
+// The arguments of multilevel feedback pipeline_driver_queue. It prioritizes small queries over larger ones,
+// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
+CONF_Int64(pipeline_driver_queue_level_time_slice_base_ns, "200000000");
+CONF_Double(pipeline_driver_queue_ratio_of_adjacent_queue, "1.2");
+// 0 represents PriorityScanTaskQueue (by default), while 1 represents MultiLevelFeedScanTaskQueue.
+// - PriorityScanTaskQueue prioritizes scan tasks with lower committed times.
+// - MultiLevelFeedScanTaskQueue prioritizes scan tasks with shorter execution time.
+//   It is advisable to use MultiLevelFeedScanTaskQueue when scan tasks from large queries may impact those from small queries.
+CONF_Int64(pipeline_scan_queue_mode, "0");
+// The arguments of MultiLevelFeedScanTaskQueue. It prioritizes small queries over larger ones,
+// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
+CONF_Int64(pipeline_scan_queue_level_time_slice_base_ns, "100000000");
+CONF_Double(pipeline_scan_queue_ratio_of_adjacent_queue, "1.5");
+
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
 // It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
@@ -732,29 +739,29 @@ CONF_Bool(object_storage_endpoint_use_https, "false");
 // https://hadoop.apache.org/docs/current2/hadoop-aws/tools/hadoop-aws/index.html
 CONF_Bool(object_storage_endpoint_path_style_access, "false");
 
+// orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
 // orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
 CONF_Int32(orc_file_cache_max_size, "8388608");
 CONF_Int32(orc_natural_read_size, "8388608");
 CONF_mBool(orc_coalesce_read_enable, "true");
 
-// parquet reader, each column will reserve X bytes for read
-// but with coalesce read enabled, this value is not used.
-CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
+// parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_mInt32(parquet_header_max_size, "16384");
 CONF_Bool(parquet_late_materialization_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
-
-CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 CONF_Int32(io_tasks_per_scan_operator, "4");
-CONF_Bool(connector_chunk_source_accumulate_chunk_enable, "true");
-CONF_Bool(connector_dynamic_chunk_buffer_limiter_enable, "true");
-CONF_Bool(connector_min_max_predicate_from_runtime_filter_enable, "true");
-CONF_Bool(scan_node_always_shared_scan, "false");
-CONF_Bool(connector_scan_node_always_shared_scan, "true");
+CONF_Int32(connector_io_tasks_per_scan_operator, "16");
+CONF_Int32(connector_io_tasks_min_size, "2");
+CONF_Int32(connector_io_tasks_adjust_interval_ms, "50");
+CONF_Int32(connector_io_tasks_adjust_step, "1");
+CONF_Int32(connector_io_tasks_adjust_smooth, "4");
+CONF_Int32(connector_io_tasks_slow_io_latency_ms, "50");
+CONF_mDouble(scan_use_query_mem_ratio, "0.25");
+CONF_Double(connector_scan_use_query_mem_ratio, "0.3");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
@@ -783,9 +790,6 @@ CONF_Int64(deliver_broadcast_rf_passthrough_bytes_limit, "131072");
 CONF_Int64(deliver_broadcast_rf_passthrough_inflight_num, "10");
 CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
 
-// enable optimized implementation of schema change
-CONF_Bool(enable_schema_change_v2, "true");
-
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
 // Config for opentelemetry tracing.
@@ -796,16 +800,37 @@ CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
 
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
+CONF_Int32(starlet_cache_thread_num, "64");
 // Root dir used for cache if cache enabled.
 CONF_String(starlet_cache_dir, "");
+// Cache backend check interval (in seconds), for async write sync check and ttl clean, e.t.c.
+CONF_Int32(starlet_cache_check_interval, "900");
+// Cache backend cache evictor interval (in seconds)
+CONF_Int32(starlet_cache_evict_interval, "60");
+// Cache will start evict cache files if free space belows this value(percentage)
+CONF_Double(starlet_cache_evict_low_water, "0.1");
+// Cache will stop evict cache files if free space is above this value(percentage)
+CONF_Double(starlet_cache_evict_high_water, "0.2");
+// type:Integer. cache directory allocation policy. (0:default, 1:random, 2:round-robin)
+CONF_Int32(starlet_cache_dir_allocate_policy, "0");
+// Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
+// Only support in S3/HDFS currently.
+CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
 #endif
 
 CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
-CONF_Int64(lake_gc_metadata_max_versions, "10");
-CONF_Int64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
-CONF_Int64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
+CONF_mBool(lake_print_delete_log, "true");
+CONF_mInt64(lake_gc_metadata_max_versions, "10");
+CONF_mInt64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
+CONF_mInt64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
 // This value should be much larger than the maximum timeout of loading/compaction/schema change jobs.
-CONF_Int64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
+// The actual effective value is max(lake_gc_segment_expire_seconds, 86400)
+CONF_mInt64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
+CONF_mBool(lake_compaction_check_txn_log_first, "false");
+CONF_mInt64(experimental_lake_segment_gc_max_retries, "3");
+CONF_mBool(experimental_lake_enable_fast_gc, "false");
+// Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
+CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -829,6 +854,16 @@ CONF_Int16(jdbc_minimum_idle_connections, "1");
 // this setting only applies when jdbc_minimum_idle_connections is less than jdbc_connection_pool_size.
 // The minimum allowed value is 10000(10 seconds).
 CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
+
+// spill dirs
+CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
+// when spill occurs, whether enable skip synchronous flush
+CONF_mBool(experimental_spill_skip_sync, "true");
+// spill Initial number of partitions
+CONF_mInt32(spill_init_partition, "4");
+// The maximum size of a single log block container file, this is not a hard limit.
+// If the file size exceeds this limit, a new file will be created to store the block.
+CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
 
 // Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
@@ -860,14 +895,28 @@ CONF_Bool(block_cache_enable, "false");
 CONF_Int64(block_cache_disk_size, "0");
 CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
 CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
-CONF_Int64(block_cache_block_size, "1048576");  // 1MB
+CONF_Int64(block_cache_block_size, "262144");   // 256K
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
-CONF_Bool(block_cache_checksum_enable, "true");
+CONF_Bool(block_cache_checksum_enable, "false");
+// Maximum number of concurrent inserts we allow globally for block cache.
+// 0 means unlimited.
+CONF_Int64(block_cache_max_concurrent_inserts, "1500000");
+// Total memory limit for in-flight parcels.
+// Once this is reached, requests will be rejected until the parcel memory usage gets under the limit.
+CONF_Int64(block_cache_max_parcel_memory_mb, "256");
+CONF_Bool(block_cache_report_stats, "false");
+// This essentially turns the LRU into a two-segmented LRU. Setting this to 1 means every new insertion
+// will be inserted 1/2 from the end of the LRU, 2 means 1/4 from the end of the LRU, and so on.
+// It is only useful for the cachelib engine currently.
+CONF_Int64(block_cache_lru_insertion_point, "1");
+// cachelib, starcache
+CONF_String(block_cache_engine, "starcache");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 CONF_mInt64(l0_max_mem_usage, "67108864");  // 64MB
 CONF_mInt64(max_tmp_l1_num, "10");
+CONF_mBool(enable_parallel_get_and_bf, "true");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
@@ -885,15 +934,29 @@ CONF_Int32(exception_stack_level, "1");
 CONF_String(exception_stack_white_list, "std::");
 CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
 
-CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache=128M}");
+// PK table's tabletmeta object size may got very large(lot's of edit versions), so it may not fit into block cache
+// that may impact BE load dir time when restart. here we change num_shard_bits to 0 to disable block cache sharding,
+// so large tabletmeta object can fit in block cache. After we optimize PK table's tabletmeta object size, we can
+// revert this config change.
+CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache={capacity=256M;num_shard_bits=0}}");
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
-CONF_mInt64(wait_apply_time, "6000")                                 // 6s
+CONF_mInt64(wait_apply_time, "6000");                                // 6s
 
-        // Max size of a binlog file. The default is 512MB.
-        CONF_Int64(binlog_file_max_size, "536870912");
-
+// Max size of a binlog file. The default is 512MB.
+CONF_Int64(binlog_file_max_size, "536870912");
 // Max size of a binlog page. The default is 1MB.
 CONF_Int32(binlog_page_max_size, "1048576");
+
+CONF_mInt64(txn_info_history_size, "20000");
+CONF_mInt64(file_write_history_size, "10000");
+
+CONF_mInt32(update_cache_evict_internal_sec, "11");
+CONF_mBool(enable_auto_evict_update_cache, "true");
+
+CONF_mInt64(load_tablet_timeout_seconds, "30");
+
+CONF_mBool(enable_pk_value_column_zonemap, "true");
+
 } // namespace starrocks::config

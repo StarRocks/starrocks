@@ -16,11 +16,15 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.MaterializationContext;
+import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -34,6 +38,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public abstract class BaseMaterializedViewRewriteRule extends TransformationRule {
 
@@ -41,13 +46,38 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         super(type, pattern);
     }
 
+    private boolean checkOlapScanWithoutTabletOrPartitionHints(OptExpression input) {
+        if (input.getOp() instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator scan = input.getOp().cast();
+            if (scan.hasTableHints()) {
+                return false;
+            }
+        }
+        if (input.getInputs().isEmpty()) {
+            return true;
+        }
+        return input.getInputs().stream().allMatch(this::checkOlapScanWithoutTabletOrPartitionHints);
+    }
+
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        return !context.getCandidateMvs().isEmpty();
+        return !context.getCandidateMvs().isEmpty() && checkOlapScanWithoutTabletOrPartitionHints(input);
     }
 
     @Override
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
+        List<MaterializationContext> mvCandidateContexts = Lists.newArrayList();
+        if (queryExpression.getGroupExpression() != null) {
+            int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
+            for (MaterializationContext mvContext : context.getCandidateMvs()) {
+                if (!mvContext.isMatchedGroup(currentRootGroupId)) {
+                    mvCandidateContexts.add(mvContext);
+                }
+            }
+        } else {
+            mvCandidateContexts = context.getCandidateMvs();
+        }
+
         List<OptExpression> results = Lists.newArrayList();
 
         // Construct queryPredicateSplit to avoid creating multi times for multi MVs.
@@ -66,20 +96,45 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
         }
         final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
-
-        for (MaterializationContext mvContext : context.getCandidateMvs()) {
-            mvContext.setQueryExpression(queryExpression);
-            mvContext.setOptimizerContext(context);
-            MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvContext);
-            List<OptExpression> candidates = mvRewriter.rewrite(queryColumnRefRewriter,
-                    queryPredicateSplit);
-            candidates = postRewriteMV(context, candidates);
-            if (!candidates.isEmpty()) {
-                results.addAll(candidates);
+        List<ScalarOperator> onPredicates = collectOnPredicate(queryExpression);
+        onPredicates = onPredicates.stream().map(MvUtils::canonizePredicate).collect(Collectors.toList());
+        List<Table> queryTables = MvUtils.getAllTables(queryExpression);
+        for (MaterializationContext mvContext : mvCandidateContexts) {
+            MvRewriteContext mvRewriteContext = new MvRewriteContext(
+                    mvContext, queryTables, queryExpression, queryColumnRefRewriter, queryPredicateSplit, onPredicates);
+            MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
+            OptExpression candidate = mvRewriter.rewrite();
+            if (candidate == null) {
+                continue;
             }
+
+            candidate = postRewriteMV(context, mvRewriteContext, candidate);
+            if (queryExpression.getGroupExpression() != null) {
+                int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
+                mvContext.addMatchedGroup(currentRootGroupId);
+            }
+            results.add(candidate);
+            mvContext.updateMVUsedCount();
         }
 
         return results;
+    }
+
+    private List<ScalarOperator> collectOnPredicate(OptExpression optExpression) {
+        List<ScalarOperator> onPredicates = Lists.newArrayList();
+        collectOnPredicate(optExpression, onPredicates);
+        return onPredicates;
+    }
+
+    private void collectOnPredicate(OptExpression optExpression, List<ScalarOperator> onPredicates) {
+        if (optExpression.getOp() instanceof LogicalJoinOperator) {
+            LogicalJoinOperator joinOperator = optExpression.getOp().cast();
+            onPredicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
+        } else {
+            for (OptExpression child : optExpression.getInputs()) {
+                collectOnPredicate(child, onPredicates);
+            }
+        }
     }
 
     /**
@@ -88,21 +143,17 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
      * 2. partition prune
      * 3. bucket prune
      */
-    private List<OptExpression> postRewriteMV(OptimizerContext context, List<OptExpression> candidates) {
-        if (candidates == null || candidates.isEmpty()) {
-            return Lists.newArrayList();
+    private OptExpression postRewriteMV(
+            OptimizerContext optimizerContext, MvRewriteContext mvRewriteContext, OptExpression candidate) {
+        if (candidate == null) {
+            return null;
         }
-        List<OptExpression> result = Lists.newArrayList();
-        for (OptExpression candidate : candidates) {
-            candidate = new MVColumnPruner().pruneColumns(candidate);
-            candidate = new MVPartitionPruner().prunePartition(context, candidate);
-            result.add(candidate);
-        }
-        return result;
+        candidate = new MVColumnPruner().pruneColumns(candidate);
+        candidate = new MVPartitionPruner(optimizerContext, mvRewriteContext).prunePartition(candidate);
+        return candidate;
     }
 
-    public MaterializedViewRewriter getMaterializedViewRewrite(MaterializationContext mvContext) {
+    public MaterializedViewRewriter getMaterializedViewRewrite(MvRewriteContext mvContext) {
         return new MaterializedViewRewriter(mvContext);
     }
-
 }
