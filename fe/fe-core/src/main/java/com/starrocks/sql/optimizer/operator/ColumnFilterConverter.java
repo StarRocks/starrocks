@@ -35,7 +35,6 @@ import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -112,14 +111,9 @@ public class ColumnFilterConverter {
             return;
         }
 
-        if (table instanceof OlapTable) {
+        if (table.isExprPartitionTable()) {
             OlapTable olapTable = (OlapTable) table;
-            if (olapTable.getPartitionInfo().getType() == PartitionType.EXPR_RANGE_V2) {
-                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-                if (partitionInfo instanceof ExpressionRangePartitionInfoV2) {
-                    predicate = convertPredicate(predicate, (ExpressionRangePartitionInfoV2) partitionInfo);
-                }
-            }
+            predicate = convertPredicate(predicate, (ExpressionRangePartitionInfoV2) olapTable.getPartitionInfo());
         }
 
         if (!checkColumnRefCanPartition(predicate.getChild(0), table)) {

@@ -22,6 +22,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.DistributionPruner;
 import com.starrocks.planner.HashDistributionPruner;
@@ -58,13 +59,13 @@ public class OptDistributionPruner {
             DistributionPruner distributionPruner;
             if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
                 HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
-                // Bucketing needs to use the original predicate for hashing
                 Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
-                if (operator.getTable().isMaterializedView()) {
+                Table table = operator.getTable();
+                if (table.isExprPartitionTable()) {
+                    // Bucketing needs to use the original predicate for hashing
+                    ColumnFilterConverter.convertColumnFilterWithoutExpr(operator.getPredicate(), filters, table);
+                } else {
                     filters = operator.getColumnFilters();
-                } else if (operator.getPredicate() != null) {
-                    ColumnFilterConverter.convertColumnFilterWithoutExpr(operator.getPredicate(),
-                            filters, operator.getTable());
                 }
                 distributionPruner = new HashDistributionPruner(index.getTabletIdsInOrder(),
                         info.getDistributionColumns(),
