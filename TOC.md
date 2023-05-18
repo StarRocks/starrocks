@@ -662,7 +662,7 @@
   + [视频资源](/faq/Video.md)
   + [其他](/faq/Others.md)
 + 性能测试
-  + [SSB 性能测试](/benchmarking/SSB_Benchmarking.md)
+  + [SSB Flat Table 性能测试](/benchmarking/SSB_Benchmarking.md)
   + [TPC-H 基准测试](/benchmarking/TPC-H_Benchmark.md)
 + 开发指南
   + [编译 StarRocks](/developers/build-starrocks/Build_in_docker.md)
