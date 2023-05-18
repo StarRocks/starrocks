@@ -177,9 +177,13 @@ public class AnalyzeTestUtil {
         starRocksAssert.withTable("CREATE TABLE `ttypes` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
                 "  `vm` map<bigint(20), char(20)>  NULL,\n" +
+                "  `vm1` map<bigint(20), char(20)>  NULL,\n" +
                 "  `va` array<bigint(20)>  NULL,\n" +
+                "  `va1` array<bigint(20)>  NULL,\n" +
                 "  `vs` struct<a bigint(20), b char(20)>  NULL,\n" +
-                "  `vj` json  NULL\n" +
+                "  `vs1` struct<a bigint(20), b char(20)>  NULL,\n" +
+                "  `vj` json  NULL,\n" +
+                "  `vj1` json  NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v1`)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
