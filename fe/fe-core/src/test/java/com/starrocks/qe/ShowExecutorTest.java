@@ -1102,7 +1102,7 @@ public class ShowExecutorTest {
         Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE TABLE `test_table` (\n" +
                 "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
-                "  `name` varchar(1048576) DEFAULT NULL,\n" +
+                "  `name` varchar DEFAULT NULL,\n" +
                 "  `year` int(11) DEFAULT NULL,\n" +
                 "  `dt` int(11) DEFAULT NULL\n" +
                 ")\n" +
