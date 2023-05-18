@@ -42,11 +42,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class PruneSubfiledRule implements TreeRewriteRule {
+public class PruneSubfieldRule implements TreeRewriteRule {
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        SubfiledAccessPathComputer computer = new SubfiledAccessPathComputer();
+        SubfieldAccessPathComputer computer = new SubfieldAccessPathComputer();
         return root.getOp().accept(computer, root, null);
     }
 
@@ -102,7 +102,7 @@ public class PruneSubfiledRule implements TreeRewriteRule {
      * compute all complex column access path in whole plan, we only need check the expression
      * which one in project and predicate (the rule execute order promise this)
      */
-    private static class SubfiledAccessPathComputer extends OptExpressionVisitor<OptExpression, Void> {
+    private static class SubfieldAccessPathComputer extends OptExpressionVisitor<OptExpression, Void> {
         private final Map<ScalarOperator, ColumnRefSet> allComplexColumns = Maps.newHashMap();
 
         public void visitPredicate(OptExpression optExpression) {
@@ -171,7 +171,7 @@ public class PruneSubfiledRule implements TreeRewriteRule {
             LogicalScanOperator scan = optExpression.getOp().cast();
             Set<ColumnRefOperator> scanColumns = scan.getColRefToColumnMetaMap().keySet();
 
-            ComplexColumnAccessPathNormalizer normalizer = new ComplexColumnAccessPathNormalizer();
+            SubfieldAccessPathNormalizer normalizer = new SubfieldAccessPathNormalizer();
 
             allComplexColumns.forEach((k, v) -> {
                 if (v.containsAny(scanColumns)) {
@@ -206,7 +206,7 @@ public class PruneSubfiledRule implements TreeRewriteRule {
     /*
      * normalize expression to ColumnAccessPath
      */
-    private static class ComplexColumnAccessPathNormalizer extends ScalarOperatorVisitor<Void, Void> {
+    private static class SubfieldAccessPathNormalizer extends ScalarOperatorVisitor<Void, Void> {
         private static final List<String> NORMALIZE_FUNCTIONS =
                 ImmutableList.of(FunctionSet.MAP_KEYS, FunctionSet.MAP_SIZE, FunctionSet.MAP_VALUES);
 

@@ -268,7 +268,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
-    public static final String CBO_PRUNE_SUBFILED = "cbo_prune_subfiled";
+    public static final String CBO_PRUNE_Subfield = "cbo_prune_Subfield";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
 
@@ -660,8 +660,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_CTE_MAX_LIMIT, flag = VariableMgr.INVISIBLE)
     private int cboCTEMaxLimit = 10;
 
-    @VarAttr(name = CBO_PRUNE_SUBFILED, flag = VariableMgr.INVISIBLE)
-    private boolean cboPruneSubfiled = true;
+    @VarAttr(name = CBO_PRUNE_Subfield, flag = VariableMgr.INVISIBLE)
+    private boolean cboPruneSubfield = true;
 
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
@@ -2109,12 +2109,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enablePlanValidation = val;
     }
 
-    public boolean isCboPruneSubfiled() {
-        return cboPruneSubfiled;
+    public boolean isCboPruneSubfield() {
+        return cboPruneSubfield;
     }
 
-    public void setCboPruneSubfiled(boolean cboPruneSubfiled) {
-        this.cboPruneSubfiled = cboPruneSubfiled;
+    public void setCboPruneSubfield(boolean cboPruneSubfield) {
+        this.cboPruneSubfield = cboPruneSubfield;
     }
 
     // Serialize to thrift object

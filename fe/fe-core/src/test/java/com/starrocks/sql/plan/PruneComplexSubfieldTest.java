@@ -20,7 +20,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class PruneComplexSubfiledTest extends PlanTestNoneDBBase {
+public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass();
@@ -64,14 +64,14 @@ public class PruneComplexSubfiledTest extends PlanTestNoneDBBase {
 
     @Before
     public void setUp() {
-        connectContext.getSessionVariable().setCboPruneSubfiled(true);
+        connectContext.getSessionVariable().setCboPruneSubfield(true);
         connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
     }
 
     @After
     public void tearDown() {
-        connectContext.getSessionVariable().setCboPruneSubfiled(false);
+        connectContext.getSessionVariable().setCboPruneSubfield(false);
         connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
     }

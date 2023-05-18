@@ -58,8 +58,8 @@ import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
+import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
-import com.starrocks.sql.optimizer.rule.tree.PruneSubfiledRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
@@ -258,7 +258,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
-        tree = pruneSubfiled(tree, rootTaskContext);
+        tree = pruneSubfield(tree, rootTaskContext);
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         deriveLogicalProperty(tree);
@@ -408,12 +408,12 @@ public class Optimizer {
         return tree;
     }
 
-    private OptExpression pruneSubfiled(OptExpression tree, TaskContext rootTaskContext) {
-        if (!context.getSessionVariable().isCboPruneSubfiled()) {
+    private OptExpression pruneSubfield(OptExpression tree, TaskContext rootTaskContext) {
+        if (!context.getSessionVariable().isCboPruneSubfield()) {
             return tree;
         }
 
-        tree = new PruneSubfiledRule().rewrite(tree, rootTaskContext);
+        tree = new PruneSubfieldRule().rewrite(tree, rootTaskContext);
         return tree;
     }
 
