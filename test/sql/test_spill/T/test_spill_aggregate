@@ -1,7 +1,7 @@
 -- name: test_spill_agg_with_empty_agg_operator
 -- for issue: https://github.com/StarRocks/starrocks/issues/23491
 set enable_spill=true;
-set spill_mode="force";
+set spill_mode="auto";
 -- 
 CREATE TABLE t1 (
     k1 INT,

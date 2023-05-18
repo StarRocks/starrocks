@@ -2,7 +2,7 @@
 set enable_spill=true;
 -- result:
 -- !result
-set spill_mode="force";
+set spill_mode="auto";
 -- result:
 -- !result
 CREATE TABLE t1 (
