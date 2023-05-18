@@ -323,7 +323,6 @@ public abstract class BulkLoadJob extends LoadJob {
         unprotectReadEndOperation((LoadJobFinalOperation) txnState.getTxnCommitAttachment(), true);
     }
 
-    // TODO [meta-format-change] remove
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
