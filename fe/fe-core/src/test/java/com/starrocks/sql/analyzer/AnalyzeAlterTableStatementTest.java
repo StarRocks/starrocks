@@ -138,4 +138,10 @@ public class AnalyzeAlterTableStatementTest {
         analyzeSuccess("alter table t0 drop rollup test1");
         analyzeSuccess("alter table t0 drop rollup test1, test2");
     }
+
+    @Test
+    public void testAlterWithTimeType() {
+        analyzeFail("alter table t0 add column testcol TIME");
+        analyzeFail("alter table t0 modify column v0 TIME");
+    }
 }
