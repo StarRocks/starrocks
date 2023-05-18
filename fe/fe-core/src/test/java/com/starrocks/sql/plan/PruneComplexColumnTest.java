@@ -20,7 +20,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class PruneColumnTest extends PlanTestNoneDBBase {
+public class PruneComplexColumnTest extends PlanTestNoneDBBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass();
@@ -33,7 +33,8 @@ public class PruneColumnTest extends PlanTestNoneDBBase {
                 "  `map1` MAP<INT, INT> NULL, \n" +
                 "  `map2` MAP<INT, MAP<INT, INT>> NULL, " +
                 "  `map3` MAP<INT, MAP<INT, MAP<INT, INT>>> NULL, " +
-                "  `map4` MAP<INT, MAP<INT, MAP<INT, MAP<INT, INT>>>> NULL " +
+                "  `map4` MAP<INT, MAP<INT, MAP<INT, MAP<INT, INT>>>> NULL, " +
+                "  `map5` MAP<INT, STRUCT<s1 INT, m2 MAP<INT, STRUCT>>>" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v1`)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
