@@ -14,7 +14,7 @@ Stream Load 适用于以下业务场景：
 
   一般可采用 Apache Flink® 等程序提交一个导入作业，持续生成一系列导入任务，将实时产生的数据流持续不断地导入到 StarRocks 中。
 
-另外，Stream Load 支持在导入过程中做数据的转换，具体请参见[导入过程中实现数据转换](../loading/Etl_in_loading.md)。
+Stream Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 DELETE 操作实现数据变更。请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)和[通过导入实现数据变更](../loading/Load_to_Primary_Key_tables.md)。
 
 > 注意：Stream Load 操作会同时更新和 StarRocks 原始表相关的物化视图的数据。
 
