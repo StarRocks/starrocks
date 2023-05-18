@@ -39,6 +39,18 @@ bool SpillableAggregateBlockingSinkOperator::is_finished() const {
 }
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
+<<<<<<< HEAD
+=======
+    if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
+        RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
+        _aggregator->spill_channel()->set_finishing();
+        return Status::OK();
+    }
+
+    if (state->is_cancelled()) {
+        _aggregator->spiller()->cancel();
+    }
+>>>>>>> 6832dd344 ([BugFix] fix stuck issue when some agg operator has no data to process under auto spill mode (#23601))
     // ugly code
     // TODO: fixme
     auto io_executor = _aggregator->spill_channel()->io_executor();
