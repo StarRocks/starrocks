@@ -65,7 +65,7 @@ public:
     int64_t direct_io_count() const { return _direct_io_count; }
     int64_t direct_io_bytes() const { return _direct_io_bytes; }
     int64_t direct_io_timer() const { return _direct_io_timer; }
-    int64_t estimated_mem_usage() const;
+    int64_t estimated_mem_usage() const { return _estimated_mem_usage; }
 
     StatusOr<std::string_view> peek(int64_t count) override;
 
@@ -82,6 +82,8 @@ private:
         std::vector<uint8_t> buffer;
         void align(int64_t align_size, int64_t file_size);
     };
+
+    void _update_estimated_mem_usage();
     Status _get_bytes(const uint8_t** buffer, size_t offset, size_t nbytes);
     StatusOr<SharedBuffer*> _find_shared_buffer(size_t offset, size_t count);
     Status _read_stream_buffer(SharedBuffer& sb, size_t offset, size_t count);
@@ -98,6 +100,7 @@ private:
     int64_t _direct_io_bytes = 0;
     int64_t _direct_io_timer = 0;
     int64_t _align_size = 0;
+    int64_t _estimated_mem_usage = 0;
 };
 
 } // namespace starrocks::io
