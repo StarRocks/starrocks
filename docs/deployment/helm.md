@@ -87,7 +87,7 @@
 
 - Access StarRocks cluster
 
-  You can access the StarRocks cluster from inside and outside the Kubernetes cluster. For detailed instructions, see [Access StarRocks Cluster](https://chat.openai.com/sr_operator#accessing-the-starrocks-cluster).
+  You can access the StarRocks cluster from inside and outside the Kubernetes cluster. For detailed instructions, see [Access StarRocks Cluster](./sr_operator.md#access-starrocks-cluster).
 
   > **NOTICE**
   >

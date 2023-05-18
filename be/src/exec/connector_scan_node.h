@@ -47,8 +47,6 @@ public:
 
     connector::DataSourceProvider* data_source_provider() { return _data_source_provider.get(); }
     connector::ConnectorType connector_type() { return _connector_type; }
-
-    int io_tasks_per_scan_operator() const override;
     bool always_shared_scan() const override;
 
 private:
@@ -113,11 +111,19 @@ private:
         RuntimeProfile::Counter* scanner_queue_counter = nullptr;
         RuntimeProfile::Counter* scanner_queue_timer = nullptr;
     };
+
     std::mutex _mtx;
     Stack<ChunkPtr> _chunk_pool;
     std::atomic_bool _pending_token = true;
     Stack<ConnectorScanner*> _pending_scanners;
     UnboundedBlockingQueue<ChunkPtr> _result_chunks;
     Profile _profile;
+
+    void _estimate_scan_row_bytes();
+    void _estimate_mem_usage_per_chunk_source();
+    int _estimated_max_concurrent_chunks() const;
+    int64_t _mem_limit = 0;
+    size_t _estimated_scan_row_bytes = 0;
+    size_t _estimated_mem_usage_per_chunk_source = 0;
 };
 } // namespace starrocks

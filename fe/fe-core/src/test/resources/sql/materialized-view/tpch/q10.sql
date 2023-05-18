@@ -36,6 +36,6 @@ TOP-N (order by [[39: sum DESC NULLS LAST]])
         AGGREGATE ([GLOBAL] aggregate [{39: sum=sum(39: sum)}] group by [[1: c_custkey, 2: c_name, 6: c_acctbal, 5: c_phone, 35: n_name, 3: c_address, 8: c_comment]] having [null]
             EXCHANGE SHUFFLE[1, 2, 6, 5, 35, 3, 8]
                 AGGREGATE ([LOCAL] aggregate [{39: sum=sum(38: expr)}] group by [[1: c_custkey, 2: c_name, 6: c_acctbal, 5: c_phone, 35: n_name, 3: c_address, 8: c_comment]] having [null]
-                    SCAN (mv[lineitem_mv] columns[40: c_address, 41: c_acctbal, 42: c_comment, 44: c_name, 46: c_phone, 54: l_returnflag, 59: o_custkey, 60: o_orderdate, 73: l_saleprice, 79: n_name2] predicate[60: o_orderdate >= 1994-05-01 AND 60: o_orderdate < 1994-08-01 AND 54: l_returnflag = R])
+                    SCAN (mv[lineitem_mv] columns[101: c_address, 102: c_acctbal, 103: c_comment, 105: c_name, 107: c_phone, 115: l_returnflag, 120: o_custkey, 121: o_orderdate, 134: l_saleprice, 140: n_name2] predicate[121: o_orderdate >= 1994-05-01 AND 121: o_orderdate < 1994-08-01 AND 115: l_returnflag = R])
 [end]
 

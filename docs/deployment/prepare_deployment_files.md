@@ -2,13 +2,13 @@
 
 This topic describes how to prepare StarRocks deployment files.
 
-Currently, the binary distribution packages StarRocks provides on [the StarRocks official website](https://www.starrocks.io/download/community) support deployments only on x86-based CentOS 7.0. If you want to deploy StarRocks with the ARM architecture CPUs or on Ubuntu 22.04, you need to prepare the deployment files using the StarRocks Docker image.
+Currently, the binary distribution packages StarRocks provides on [the StarRocks official website](https://www.starrocks.io/download/community) support deployments only on x86-based CentOS 7.9. If you want to deploy StarRocks with the ARM architecture CPUs or on Ubuntu 22.04, you need to prepare the deployment files using the StarRocks Docker image.
 
-## For x86-based CentOS 7.0
+## For x86-based CentOS 7.9
 
-StarRocks binary distribution packages are named in the **StarRocks-*****version*****.tar.gz** format, where ***version*** is a number (for example, ***2.5.2***) that indicates the version information of the binary distribution package. Make sure that you have chosen the correct version of the package.
+StarRocks binary distribution packages are named in the **StarRocks-version.tar.gz** format, where **version** is a number (for example, **2.5.2**) that indicates the version information of the binary distribution package. Make sure that you have chosen the correct version of the package.
 
-Follow these steps to prepare deployment files for the x86-based CentOS platform:
+Follow these steps to prepare deployment files for the x86-based CentOS 7.9 platform:
 
 1. Obtain the StarRocks binary distribution package directly from the [Download StarRocks](https://www.starrocks.io/download/community) page or by running the following command in your terminal:
 

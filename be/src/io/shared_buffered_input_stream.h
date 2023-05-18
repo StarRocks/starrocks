@@ -55,7 +55,6 @@ public:
 
     Status set_io_ranges(const std::vector<IORange>& ranges);
     void release_to_offset(int64_t offset);
-    Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes);
     void release();
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
     void set_align_size(int64_t size) { _align_size = size; }
@@ -66,6 +65,7 @@ public:
     int64_t direct_io_count() const { return _direct_io_count; }
     int64_t direct_io_bytes() const { return _direct_io_bytes; }
     int64_t direct_io_timer() const { return _direct_io_timer; }
+    int64_t estimated_mem_usage() const;
 
     StatusOr<std::string_view> peek(int64_t count) override;
 

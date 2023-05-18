@@ -27,8 +27,8 @@ namespace starrocks::pipeline {
 
 class StreamScanOperatorFactory final : public ConnectorScanOperatorFactory {
 public:
-    StreamScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop, ChunkBufferLimiterPtr buffer_limiter,
-                              bool is_stream_pipeline);
+    StreamScanOperatorFactory(int32_t id, ScanNode* scan_node, RuntimeState* state, size_t dop,
+                              ChunkBufferLimiterPtr buffer_limiter, bool is_stream_pipeline);
 
     ~StreamScanOperatorFactory() override = default;
 
@@ -64,7 +64,7 @@ private:
 
 class StreamChunkSource : public ConnectorChunkSource {
 public:
-    StreamChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
+    StreamChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                       ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
 };
 

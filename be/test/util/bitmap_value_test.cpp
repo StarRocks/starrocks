@@ -48,6 +48,8 @@
 
 namespace starrocks {
 
+using Roaring = roaring::Roaring;
+
 TEST(BitmapValueTest, bitmap_union) {
     BitmapValue empty;
     BitmapValue single(1024);

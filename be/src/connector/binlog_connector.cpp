@@ -35,6 +35,10 @@ DataSourcePtr BinlogDataSourceProvider::create_data_source(const TScanRange& sca
     return std::make_unique<BinlogDataSource>(this, scan_range);
 }
 
+const TupleDescriptor* BinlogDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_binlog_scan_node.tuple_id);
+}
+
 // ================================
 
 BinlogDataSource::BinlogDataSource(const BinlogDataSourceProvider* provider, const TScanRange& scan_range)
