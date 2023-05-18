@@ -78,22 +78,22 @@ PROPERTIES
 
 ### 参数说明
 
-#### `catalog_name`
+#### catalog_name
 
 Iceberg Catalog 的名称。命名规则如下：
 
 - 可以包含字母、数字 0 到 9 和下划线 (_)，并且必须以字母开头。
 - 长度不能超过 64 个字符。
 
-#### `comment`
+#### comment
 
 Iceberg Catalog 的描述。此参数为可选。
 
-#### `type`
+#### type
 
 数据源的类型。设置为 `iceberg`。
 
-#### `MetastoreParams`
+#### MetastoreParams
 
 StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 
@@ -170,7 +170,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 | iceberg.catalog.type   | 是       | Iceberg 中 Catalog 的类型。取值为 `CUSTOM`。使用自定义元数据服务则需要在 Iceberg 中配置 Custom Catalog。 |
 | iceberg.catalog-impl   | 是       | Custom Catalog 的全限定类名。FE 会根据该类名查找开发的 Custom Catalog。如果您在 Custom Catalog 中自定义了配置项，且希望在查询外部数据时这些配置项能生效，您可以在创建 Iceberg Catalog 时将这些配置项以键值对的形式添加到 SQL 语句的 `PROPERTIES` 中。 |
 
-#### `StorageCredentialParams`
+#### StorageCredentialParams
 
 StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
 
