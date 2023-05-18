@@ -129,6 +129,9 @@ struct ConnectorScanOperatorAdaptiveProcessor {
 };
 
 // ==================== ConnectorScanOperator ====================
+ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
+                                             ScanNode* scan_node)
+        : ScanOperator(factory, id, driver_sequence, dop, scan_node) {}
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     const TQueryOptions& options = state->query_options();
