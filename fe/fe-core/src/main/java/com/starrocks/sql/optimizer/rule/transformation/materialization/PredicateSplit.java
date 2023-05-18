@@ -65,25 +65,23 @@ public class PredicateSplit {
         List<ScalarOperator> columnEqualityPredicates = Lists.newArrayList();
         List<ScalarOperator> rangePredicates = Lists.newArrayList();
         List<ScalarOperator> residualPredicates = Lists.newArrayList();
+        // Split predicates into three kinds:
+        //  - Equal Predicates:  col1 = col2 (both col1 and col2 are ColumnRefs)
+        //  - Range Predicates:  col1 >/>=/=/</<= 2 (col1 is ColumnRef and right is ConstantRef)
+        // TODO: support NotEqual/Or Range as range predicates
+        //  - Other Predicates:  others(eg: NonEqual BinaryPredicateOperator or others)
         for (ScalarOperator scalarOperator : predicateConjuncts) {
             if (scalarOperator instanceof BinaryPredicateOperator) {
                 BinaryPredicateOperator binary = (BinaryPredicateOperator) scalarOperator;
                 ScalarOperator leftChild = scalarOperator.getChild(0);
                 ScalarOperator rightChild = scalarOperator.getChild(1);
-                if (binary.getBinaryType().isEqual()) {
-                    if (leftChild.isColumnRef() && rightChild.isColumnRef()) {
-                        columnEqualityPredicates.add(scalarOperator);
-                    } else if (leftChild.isColumnRef() && rightChild.isConstantRef()) {
-                        rangePredicates.add(scalarOperator);
-                    } else {
-                        residualPredicates.add(scalarOperator);
-                    }
-                } else if (binary.getBinaryType().isRangeOrNe()) {
-                    if (leftChild.isColumnRef() && rightChild.isConstantRef()) {
-                        rangePredicates.add(scalarOperator);
-                    } else {
-                        residualPredicates.add(scalarOperator);
-                    }
+                BinaryPredicateOperator.BinaryType binaryType = binary.getBinaryType();
+                if (binaryType.isEqual() && leftChild.isColumnRef() && rightChild.isColumnRef()) {
+                    columnEqualityPredicates.add(scalarOperator);
+                } else if (binaryType.isEqualOrRange() && leftChild.isColumnRef() && rightChild.isConstantRef()) {
+                    rangePredicates.add(scalarOperator);
+                } else {
+                    residualPredicates.add(scalarOperator);
                 }
             } else {
                 residualPredicates.add(scalarOperator);
