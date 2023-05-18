@@ -81,22 +81,22 @@ For more information, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-stat
 
 ### Parameters
 
-#### `catalog_name`
+#### catalog_name
 
 The name of the Iceberg catalog. The naming conventions are as follows:
 
 - The name can contain letters, digits 0 through 9, and underscores (_) and must start with a letter.
 - The name cannot exceed 64 characters in length.
 
-#### `comment`
+#### comment
 
 The description of the Iceberg catalog. This parameter is optional.
 
-#### `type`
+#### type
 
 The type of your data source. Set the value to `iceberg`.
 
-#### `MetastoreParams`
+#### MetastoreParams
 
 A set of parameters about how StarRocks integrates with the metastore of your data source.
 

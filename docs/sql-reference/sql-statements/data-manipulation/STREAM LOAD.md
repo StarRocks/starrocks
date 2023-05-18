@@ -30,15 +30,15 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 ## Parameters
 
-### `username` and `password`
+### username and password
 
 Specify the username and password of the account that you use to connect to your StarRocks cluster. This is a required parameter. If you use the account `root` for which no password is set, you need to input only `root:`.
 
-### `XPUT`
+### XPUT
 
 Specifies the HTTP request method. This is a required parameter. Stream Load supports only the PUT method.
 
-### `url`
+### url
 
 Specifies the URL of the StarRocks table. Syntax:
 
@@ -55,7 +55,7 @@ The following table describes the parameters in the URL.
 | database_name | Yes      | The name of the database to which the StarRocks table belongs. |
 | table_name    | Yes      | The name of the StarRocks table.                             |
 
-### `data_desc`
+### data_desc
 
 Describes the data file that you want to load. The `data_desc` descriptor can include the data file's name, format, column separator, row separator, destination partitions, and column mapping against the StarRocks table. Syntax:
 
@@ -110,7 +110,7 @@ The parameters in the `data_desc` descriptor can be divided into three types: co
 
 When you load JSON data, also note that the size per JSON object cannot exceed 4 GB. If an individual JSON object in the JSON data file exceeds 4 GB in size, an error "This parser can't support a document that big." is reported.
 
-### `opt_properties`
+### opt_properties
 
 Specifies some optional parameters, which are applied to the entire load job. Syntax:
 
