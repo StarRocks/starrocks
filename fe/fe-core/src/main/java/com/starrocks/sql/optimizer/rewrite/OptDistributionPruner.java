@@ -60,8 +60,10 @@ public class OptDistributionPruner {
                 HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
                 // Bucketing needs to use the original predicate for hashing
                 Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
-                ColumnFilterConverter.convertColumnFilterWithoutExpr(operator.getPredicate(),
-                        filters, operator.getTable());
+                if (operator.getPredicate() != null) {
+                    ColumnFilterConverter.convertColumnFilterWithoutExpr(operator.getPredicate(),
+                            filters, operator.getTable());
+                }
                 distributionPruner = new HashDistributionPruner(index.getTabletIdsInOrder(),
                         info.getDistributionColumns(),
                         filters,
