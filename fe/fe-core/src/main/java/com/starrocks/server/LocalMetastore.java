@@ -104,6 +104,7 @@ import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
@@ -3884,6 +3885,14 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public long loadCluster(DataInputStream dis, long checksum) throws IOException {
+        if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() <= StarRocksFEMetaVersion.VERSION_3) {
+            return loadClusterV1(dis, checksum);
+        } else {
+            return loadClusterV2(dis, checksum);
+        }
+    }
+
+    public long loadClusterV1(DataInputStream dis, long checksum) throws IOException {
         int clusterCount = dis.readInt();
         checksum ^= clusterCount;
         for (long i = 0; i < clusterCount; ++i) {
@@ -3933,6 +3942,29 @@ public class LocalMetastore implements ConnectorMetadata {
         return checksum;
     }
 
+    // put built-in database into cluster
+    public long loadClusterV2(DataInputStream dis, long checksum) throws IOException {
+        InfoSchemaDb infoSchemaDb = new InfoSchemaDb();
+        Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
+                "InfoSchemaDb id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+        idToDb.put(infoSchemaDb.getId(), infoSchemaDb);
+        fullNameToDb.put(infoSchemaDb.getFullName(), infoSchemaDb);
+
+        if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
+            LOG.warn("Since the the database of starrocks already exists, " +
+                    "the system will not automatically create the database of starrocks for system.");
+        } else {
+            StarRocksDb starRocksDb = new StarRocksDb();
+            Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
+                    "starocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+            idToDb.put(starRocksDb.getId(), starRocksDb);
+            fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
+        }
+
+        return checksum;
+    }
+
+    // TODO [meta-format-change] deprecated
     public void initDefaultCluster() {
         final List<Long> backendList = Lists.newArrayList();
         final List<Backend> defaultClusterBackends = systemInfoService.getBackends();
@@ -3969,6 +4001,7 @@ public class LocalMetastore implements ConnectorMetadata {
         editLog.logCreateCluster(cluster);
     }
 
+    //TODO [meta-format-change] deprecated
     public long saveCluster(DataOutputStream dos, long checksum) throws IOException {
         final int clusterCount = 1;
         checksum ^= clusterCount;
