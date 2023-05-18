@@ -97,6 +97,8 @@ struct ParquetField {
 
     // Only valid when this field is a leaf node
     tparquet::Type::type physical_type;
+    // Only valid when this field is a leaf node
+    tparquet::ConvertedType::type converted_type;
     // If type is FIXED_LEN_BYTE_ARRAY, this is the byte length of the vales.
     int32_t type_length;
 

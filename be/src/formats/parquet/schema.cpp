@@ -122,6 +122,7 @@ Status SchemaDescriptor::new_leaf_to_field(const tparquet::SchemaElement* t_sche
     field->schema_element = *t_schema;
     field->is_nullable = is_nullable;
     field->physical_type = t_schema->type;
+    field->converted_type = t_schema->converted_type;
     field->type_length = t_schema->type_length;
     field->scale = t_schema->scale;
     field->precision = t_schema->precision;
@@ -677,14 +678,14 @@ Status SchemaDescriptor::from_thrift(const std::vector<tparquet::SchemaElement>&
 
 std::string SchemaDescriptor::debug_string() const {
     std::stringstream ss;
-    ss << "fields=[\n";
+    ss << "fields=[";
     for (int i = 0; i < _fields.size(); ++i) {
         if (i != 0) {
-            ss << ",\n";
+            ss << ",";
         }
         ss << _fields[i].debug_string();
     }
-    ss << "\n]";
+    ss << "]";
     return ss.str();
 }
 
