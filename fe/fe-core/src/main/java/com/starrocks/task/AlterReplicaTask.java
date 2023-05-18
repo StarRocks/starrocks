@@ -155,6 +155,9 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
      *      There are new load jobs after alter task, and at least one of them is succeed on this replica.
      *      So the replica's version should be larger than X. So we don't need to modify the replica version
      *      because its already looks like normal.
+     * Case 3:
+     *      There are new load jobs after alter task, and their version and LFV is smaller or equal to X. 
+     *      And because alter request report success, it means that we can increase replica's version to X.
      */
     public void handleFinishAlterTask() throws MetaNotFoundException {
         Database db = GlobalStateMgr.getCurrentState().getDb(getDbId());
@@ -189,18 +192,9 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             if (replica.getVersion() > getVersion()) {
                 // Case 2.2, do nothing
             } else {
-                if (replica.getLastFailedVersion() > getVersion()) {
-                    // Case 2.1
-                    replica.updateRowCount(getVersion(), replica.getDataSize(),
-                            replica.getRowCount());
-                    versionChanged = true;
-                } else {
-                    // Case 1
-                    Preconditions.checkState(replica.getLastFailedVersion() == -1, replica.getLastFailedVersion());
-                    replica.updateRowCount(getVersion(), replica.getDataSize(),
-                            replica.getRowCount());
-                    versionChanged = true;
-                }
+                // Case 1, Case 2.1 or Case 3
+                replica.updateRowCount(getVersion(), replica.getDataSize(), replica.getRowCount());
+                versionChanged = true;
             }
 
             if (versionChanged) {
