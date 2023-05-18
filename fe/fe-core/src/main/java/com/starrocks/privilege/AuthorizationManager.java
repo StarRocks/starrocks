@@ -1594,7 +1594,7 @@ public class AuthorizationManager {
 
             try {
                 // 1 json for myself
-                ret = (AuthorizationManager) reader.readJson(AuthorizationManager.class);
+                ret = reader.readJson(AuthorizationManager.class);
                 ret.globalStateMgr = globalStateMgr;
                 if (provider == null) {
                     ret.provider = new DefaultAuthorizationProvider();
@@ -1603,13 +1603,12 @@ public class AuthorizationManager {
                 }
                 ret.initBuiltinRolesAndUsers();
                 // 1 json for num user
-                int numUser = (int) reader.readJson(int.class);
+                int numUser = reader.readJson(int.class);
                 LOG.info("loading {} users", numUser);
                 for (int i = 0; i != numUser; ++i) {
                     // 2 json for each user(kv)
-                    UserIdentity userIdentity = (UserIdentity) reader.readJson(UserIdentity.class);
-                    UserPrivilegeCollection collection =
-                            (UserPrivilegeCollection) reader.readJson(UserPrivilegeCollection.class);
+                    UserIdentity userIdentity = reader.readJson(UserIdentity.class);
+                    UserPrivilegeCollection collection = reader.readJson(UserPrivilegeCollection.class);
 
                     if (userIdentity.equals(UserIdentity.ROOT)) {
                         UserPrivilegeCollection rootUserPrivCollection =
@@ -1624,13 +1623,12 @@ public class AuthorizationManager {
                     ret.userToPrivilegeCollection.put(userIdentity, collection);
                 }
                 // 1 json for num roles
-                int numRole = (int) reader.readJson(int.class);
+                int numRole = reader.readJson(int.class);
                 LOG.info("loading {} roles", numRole);
                 for (int i = 0; i != numRole; ++i) {
                     // 2 json for each role(kv)
-                    Long roleId = (Long) reader.readJson(Long.class);
-                    RolePrivilegeCollection collection =
-                            (RolePrivilegeCollection) reader.readJson(RolePrivilegeCollection.class);
+                    Long roleId = reader.readJson(Long.class);
+                    RolePrivilegeCollection collection = reader.readJson(RolePrivilegeCollection.class);
 
                     // Use hard-code PrivilegeCollection in the memory as the built-in role permission.
                     // The reason why need to replay from the image here

@@ -852,6 +852,7 @@ public class SparkLoadJob extends BulkLoadJob {
         }
     }
 
+    // TODO [meta-format-change] remove
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
