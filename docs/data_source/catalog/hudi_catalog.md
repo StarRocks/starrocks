@@ -393,7 +393,7 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hudi_table
 ```
 
-## Manually/Automatically update metadata
+## Manually or automatically update metadata
 
 ### Manual update
 
@@ -488,7 +488,7 @@ You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file o
 | enable_hms_parallel_process_evens | Specifies whether StarRocks processes events in parallel as it reads the events. Valid values: `true` and `false`. Default value: `true`. The value `true` enables parallelism, and the value `false` disables parallelism. |
 | hms_process_events_parallel_num   | The maximum number of events that StarRocks can process in parallel. Default value: `4`. |
 
-## Appendix: Understand automatic asynchronous update
+## Appendix: Understand metadata automatic asynchronous update
 
 Automatic asynchronous update is the default policy that StarRocks uses to update the metadata in Hudi catalogs.
 
