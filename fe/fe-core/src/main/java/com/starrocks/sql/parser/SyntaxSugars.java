@@ -29,13 +29,10 @@ import java.util.function.Function;
  * This class is used to parse the syntax sugars in the sql.
  */
 public class SyntaxSugars {
-    private final static Map<String, Function<FunctionCallExpr, FunctionCallExpr>> FUNCTION_PARSER;
-
-    static {
-        FUNCTION_PARSER = ImmutableMap.<String, Function<FunctionCallExpr, FunctionCallExpr>>builder()
-                .put(FunctionSet.ILIKE, SyntaxSugars::iLike)
-                .build();
-    }
+    private final static Map<String, Function<FunctionCallExpr, FunctionCallExpr>> FUNCTION_PARSER =
+            ImmutableMap.<String, Function<FunctionCallExpr, FunctionCallExpr>>builder()
+                    .put(FunctionSet.ILIKE, SyntaxSugars::ilike)
+                    .build();
 
     /*
      * function call syntax sugars
@@ -58,7 +55,7 @@ public class SyntaxSugars {
     /*
      * ilike(a, b) -> like(low(a), low(b))
      */
-    private static FunctionCallExpr iLike(FunctionCallExpr call) {
+    private static FunctionCallExpr ilike(FunctionCallExpr call) {
         List<Expr> newArguments = new ArrayList<>();
         for (Expr arg : call.getChildren()) {
             FunctionCallExpr lower = new FunctionCallExpr(FunctionSet.LOWER, Lists.newArrayList(arg));
