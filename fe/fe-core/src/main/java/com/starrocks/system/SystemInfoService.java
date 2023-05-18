@@ -347,7 +347,7 @@ public class SystemInfoService {
                 // only need to remove worker after be reported its staretPort
                 if (starletPort != 0) {
                     String workerAddr = dropComputeNode.getHost() + ":" + starletPort;
-                    GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
+                    GlobalStateMgr.getCurrentStarOSAgent().removeWorker(workerAddr);
                 }
             }
             
@@ -463,7 +463,7 @@ public class SystemInfoService {
                 // only need to remove worker after be reported its staretPort
                 if (starletPort != 0) {
                     String workerAddr = droppedBackend.getHost() + ":" + starletPort;
-                    GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
+                    GlobalStateMgr.getCurrentStarOSAgent().removeWorker(workerAddr);
                 }
             }
 
@@ -1092,8 +1092,8 @@ public class SystemInfoService {
                     return;
                 }
                 String workerAddr = cn.getHost() + ":" + starletPort;
-                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerId(workerAddr);
-                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerId, workerAddr);
+                long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerId(workerAddr);
+                GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerId, workerAddr);
             }
         } else {
             LOG.error("Cluster DEFAULT_CLUSTER " + DEFAULT_CLUSTER + " no exist.");
@@ -1126,8 +1126,8 @@ public class SystemInfoService {
                     return;
                 }
                 String workerAddr = backend.getHost() + ":" + starletPort;
-                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerId(workerAddr);
-                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerId, workerAddr);
+                long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerId(workerAddr);
+                GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerId, workerAddr);
             }
         } else {
             LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);

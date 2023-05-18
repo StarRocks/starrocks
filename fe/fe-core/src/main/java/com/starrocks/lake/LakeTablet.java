@@ -22,6 +22,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -80,7 +81,9 @@ public class LakeTablet extends Tablet {
     }
 
     public long getPrimaryComputeNodeId() throws UserException {
-        return getPrimaryComputeNodeId(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+        long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+        return getPrimaryComputeNodeId(workerGroupId);
     }
 
     public long getPrimaryComputeNodeId(long clusterId) throws UserException {
@@ -95,7 +98,9 @@ public class LakeTablet extends Tablet {
             return Collections.emptySet();
         }
         try {
-            return GlobalStateMgr.getCurrentStarOSAgent().getBackendIdsByShard(getShardId());
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+            return GlobalStateMgr.getCurrentStarOSAgent().getBackendIdsByShard(getShardId(), workerGroupId);
         } catch (UserException e) {
             LOG.warn("Failed to get backends by shard. tablet id: {}", getId(), e);
             return Sets.newHashSet();
