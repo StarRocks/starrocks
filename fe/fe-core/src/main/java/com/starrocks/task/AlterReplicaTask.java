@@ -155,6 +155,9 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
      *      There are new load jobs after alter task, and at least one of them is succeed on this replica.
      *      So the replica's version should be larger than X. So we don't need to modify the replica version
      *      because its already looks like normal.
+     * Case 3:
+     *      There are new load jobs after alter task, and their version and LFV is smaller or equal to X. 
+     *      And because alter request report success, it means that we can increase replica's version to X.
      */
     public void handleFinishAlterTask() throws MetaNotFoundException {
         Database db = GlobalStateMgr.getCurrentState().getDb(getDbId());
@@ -178,9 +181,39 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             }
             Tablet tablet = index.getTablet(getTabletId());
             Preconditions.checkNotNull(tablet, getTabletId());
+<<<<<<< HEAD
             Replica replica = ((LocalTablet) tablet).getReplicaById(getNewReplicaId());
             if (replica == null) {
                 throw new MetaNotFoundException("replica " + getNewReplicaId() + " does not exist");
+=======
+            if (!tbl.isCloudNativeTable()) {
+                Replica replica = ((LocalTablet) tablet).getReplicaById(getNewReplicaId());
+                if (replica == null) {
+                    throw new MetaNotFoundException("replica " + getNewReplicaId() + " does not exist");
+                }
+
+                LOG.info("before handle alter task tablet {}, replica: {}, task version: {}", getSignature(), replica,
+                        getVersion());
+                boolean versionChanged = false;
+                if (replica.getVersion() <= getVersion()) {
+                    // Case 1, Case 2.1 or Case 3
+                    replica.updateRowCount(getVersion(), replica.getDataSize(),
+                            replica.getRowCount());
+                    versionChanged = true;
+                }
+
+                if (versionChanged) {
+                    ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(getDbId(), getTableId(),
+                            getPartitionId(), getIndexId(), getTabletId(), getBackendId(),
+                            replica.getId(), replica.getVersion(), -1,
+                            replica.getDataSize(), replica.getRowCount(),
+                            replica.getLastFailedVersion(),
+                            replica.getLastSuccessVersion(), 0);
+                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
+                }
+
+                LOG.info("after handle alter task tablet: {}, replica: {}", getSignature(), replica);
+>>>>>>> 084a19c63 ([BugFix] fix schema change hang when data loading concurrent with schema change (#23456))
             }
 
             LOG.info("before handle alter task tablet {}, replica: {}, task version: {}-{}",
