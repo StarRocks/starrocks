@@ -1,16 +1,4 @@
-// Copyright 2021-present StarRocks, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include <gtest/gtest.h>
 
@@ -82,6 +70,28 @@ TEST(BitPacking, UnpackValues) {
     const uint8_t* pos = nullptr;
     int64_t num = 0;
     std::tie(pos, num) = BitPacking::UnpackValues<uint64_t>(4, data, 4 * 48 / 8, 48, result);
+    ASSERT_EQ(pos, data + 4 * 48 / 8);
+    ASSERT_EQ(num, 48);
+
+    for (size_t i = 0; i < 48; i++) {
+        if (i % 2 == 0) {
+            ASSERT_EQ(result[i], 8);
+        } else {
+            ASSERT_EQ(result[i], 0);
+        }
+    }
+}
+
+TEST(BitPacking, UnpackValuesSIMD) {
+    uint8_t data[BitPacking::MAX_BITWIDTH * 48 / 8];
+    for (unsigned char& i : data) {
+        i = 0x8;
+    }
+
+    uint64_t result[48];
+    const uint8_t* pos = nullptr;
+    int64_t num = 0;
+    std::tie(pos, num) = BitPacking::UnpackValuesSIMD<uint64_t>(4, data, 4 * 48 / 8, 48, result);
     ASSERT_EQ(pos, data + 4 * 48 / 8);
     ASSERT_EQ(num, 48);
 
