@@ -372,7 +372,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
 
-        if (GlobalStateMgr.getCurrentStateStarRocksJournalVersion() >= StarRocksFEMetaVersion.VERSION_3) {
+        if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_3) {
             String json = Text.readString(in);
             JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
             hiveDbName = jsonObject.getAsJsonPrimitive(JSON_KEY_HIVE_DB).getAsString();
@@ -474,12 +474,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @Override
     public List<ForeignKeyConstraint> getForeignKeyConstraints() {
         return foreignKeyConstraints;
-    }
-
-    public void setColumnAllowNull(String column, boolean allowNull) {
-        if (nameToColumn.containsKey(column)) {
-            nameToColumn.get(column).setIsAllowNull(allowNull);
-        }
     }
 
     @Override

@@ -10,7 +10,7 @@ To make partitions creation more easy to use and flexible, StarRocks supports th
 
 ### Syntax
 
-The `PARTITION BY` clause contains a function expression that specifies the partition granularity and partition column for automatic partitioning.
+The PARTITION BY clause contains a function expression that specifies the partition granularity and partition column for automatic partitioning.
 
 ```SQL
 PARTITION BY date_trunc(<time_unit>,<partition_column_name>)

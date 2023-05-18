@@ -85,11 +85,14 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.UnauthorizedException;
+import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.streamload.StreamLoadInfo;
+import com.starrocks.load.streamload.StreamLoadManager;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -107,6 +110,7 @@ import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
+import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.ShowExecutor;
@@ -515,8 +519,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             status.setLast_refresh_error_code(rowSet.get(17));
             status.setLast_refresh_error_message(rowSet.get(18));
-            status.setText(rowSet.get(19));
-            status.setRows(rowSet.get(20));
+            status.setRows(rowSet.get(19));
+            status.setText(rowSet.get(20));
             tablesResult.add(status);
         }
         return result;
@@ -1148,9 +1152,24 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new UserException("unknown table \"" + request.getDb() + "." + request.getTbl() + "\"");
         }
 
-        // begin
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
+
+        // just use default value of session variable
+        // as there is no connectContext for sync stream load
+        ConnectContext connectContext = new ConnectContext();
+        if (connectContext.getSessionVariable().isEnableLoadProfile()) {
+            TransactionResult resp = new TransactionResult();
+            StreamLoadManager streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadManager();
+            streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), timeoutSecond, resp);
+
+            StreamLoadTask task = streamLoadManager.getSyncSteamLoadTaskByLabel(request.getLabel());
+            if (task == null || task.getTxnId() == -1) {
+                throw new UserException(String.format("Load label: {} begin transacton failed", request.getLabel()));
+            }
+            return task.getTxnId();
+        }
+
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                 db.getId(), Lists.newArrayList(table.getId()), request.getLabel(), request.getRequest_id(),
                 new TxnCoordinator(TxnSourceType.BE, clientIp),
@@ -1208,6 +1227,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
         long timeoutMs = request.isSetThrift_rpc_timeout_ms() ? request.getThrift_rpc_timeout_ms() : 5000;
+
         // Make publish timeout is less than thrift_rpc_timeout_ms
         // Otherwise, the publish process will be successful but commit timeout in BE
         // It will result in error like "call frontend service failed"
@@ -1315,6 +1335,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (db == null) {
             throw new UserException("unknown database, database=" + dbName);
         }
+
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
         GlobalStateMgr.getCurrentGlobalTransactionMgr().prepareTransaction(
                 db.getId(), request.getTxnId(),
@@ -1438,6 +1459,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
             StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadInfo);
             TExecPlanFragmentParams plan = planner.plan(streamLoadInfo.getId());
+
+            if (plan.query_options.enable_profile) {
+                StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadManager().
+                        getSyncSteamLoadTaskByTxnId(request.getTxnId());
+                if (streamLoadTask == null) {
+                    throw new UserException("can not find stream load task by txnId " + request.getTxnId());
+                }
+
+                streamLoadTask.setTUniqueId(request.getLoadId());
+
+                Coordinator coord = new Coordinator(planner, getClientAddr());
+                streamLoadTask.setCoordinator(coord);
+
+                QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);
+            }
+
             plan.query_options.setLoad_job_type(TLoadJobType.STREAM_LOAD);
             // add table indexes to transaction state
             TransactionState txnState =

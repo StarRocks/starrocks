@@ -134,7 +134,7 @@ public class ShardDeleter extends FrontendDaemon {
      * 3. shard groups with empty shards and older than threshold, will be permanently deleted.
      */
     private void deleteUnusedShardAndShardGroup() {
-        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentStarOSAgent();
 
         List<Long> groupIdFe = getAllPartitionShardGroupId();
         List<ShardGroupInfo> shardGroupsInfo = starOSAgent.listShardGroup()

@@ -979,7 +979,24 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
     // avoid inconsistency between persistent index file and PersistentIndexMeta
     bool enable_persistent_index = index.enable_persistent_index();
-    st = index.prepare(version);
+    size_t merge_num = 0;
+    {
+        std::lock_guard lg(_rowset_stats_lock);
+        auto iter = _rowset_stats.find(rowset_id);
+        if (iter == _rowset_stats.end()) {
+            string msg = strings::Substitute("inconsistent rowset_stats, rowset not found tablet=$0 rowsetid=$1",
+                                             _tablet.tablet_id(), rowset_id);
+            DCHECK(false) << msg;
+            LOG(ERROR) << msg;
+            _set_error(msg);
+            return;
+        } else {
+            size_t num_adds = iter->second->num_rows;
+            size_t num_dels = iter->second->num_dels;
+            merge_num = num_adds + num_dels;
+        }
+    }
+    st = index.prepare(version, merge_num);
     if (!st.ok()) {
         manager->index_cache().remove(index_entry);
         std::string msg = strings::Substitute("_apply_rowset_commit error: primary index prepare failed: $0 $1",
@@ -1676,7 +1693,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         _set_error(msg);
         return;
     }
-    index.prepare(version);
+    index.prepare(version, 0);
     int64_t t_load = MonotonicMillis();
     // 2. iterator new rowset's pks, update primary index, generate delvec
     size_t total_deletes = 0;
@@ -1927,11 +1944,21 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         } else {
             delvec_deleted = res.value();
         }
+        // Remove useless delta column group
+        auto update_manager = StorageEngine::instance()->update_manager();
+        size_t dcg_deleted = 0;
+        res = update_manager->clear_delta_column_group_before_version(meta_store, tablet_id, min_readable_version);
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to clear_delta_column_group_before_version tablet:" << tablet_id
+                         << " min_readable_version:" << min_readable_version << " msg:" << res.status();
+        } else {
+            dcg_deleted = res.value();
+        }
         LOG(INFO) << strings::Substitute(
                 "remove_expired_versions $0 time:$1 min_readable_version:$2 deletes: #version:$3 #rowset:$4 "
-                "#delvec:$5",
+                "#delvec:$5 #dcgs:$6",
                 _debug_version_info(true), expire_time, min_readable_version, num_version_removed, num_rowset_removed,
-                delvec_deleted);
+                delvec_deleted, dcg_deleted);
     }
     _remove_unused_rowsets();
 }
@@ -2303,6 +2330,9 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
     EditVersion last_version;
     std::vector<RowsetSharedPtr> rowsets;
     std::vector<uint32_t> rowset_ids;
+    bool compaction_running = _compaction_running.load();
+    std::vector<RowsetSharedPtr> apply_version_rowsets;
+    std::vector<uint32_t> apply_version_rowset_ids;
     {
         std::lock_guard l1(_lock);
         if (_edit_version_infos.empty()) {
@@ -2317,12 +2347,24 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
             auto it = _rowsets.find(rowset_id);
             if (it != _rowsets.end()) {
                 rowsets.push_back(it->second);
-            } else {
-                // should not happen
-                rowsets.push_back(nullptr);
+            }
+        }
+
+        apply_version_rowset_ids = _edit_version_infos[_apply_version_idx]->rowsets;
+        std::sort(apply_version_rowset_ids.begin(), apply_version_rowset_ids.end());
+        apply_version_rowsets.reserve(apply_version_rowset_ids.size());
+        for (unsigned int& rowset_id : apply_version_rowset_ids) {
+            auto it = _rowsets.find(rowset_id);
+            if (it != _rowsets.end()) {
+                apply_version_rowsets.push_back(it->second);
             }
         }
     }
+
+    rapidjson::Value compaction_status;
+    std::string compaction_status_value = compaction_running ? "RUNNING" : "NO_RUNNING_TASK";
+    compaction_status.SetString(compaction_status_value.c_str(), compaction_status_value.length(), root.GetAllocator());
+    root.AddMember("compaction_status", compaction_status, root.GetAllocator());
 
     rapidjson::Value last_compaction_success_time;
     std::string format_str = ToStringFromUnixMillis(_last_compaction_success_millis.load());
@@ -2334,27 +2376,60 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
     last_compaction_failure_time.SetString(format_str.c_str(), format_str.length(), root.GetAllocator());
     root.AddMember("last compaction failure time", last_compaction_failure_time, root.GetAllocator());
 
-    std::string version_str = strings::Substitute("tablet:$0 #version:[$1_$2] rowsets:$3", _tablet.tablet_id(),
-                                                  last_version.major(), last_version.minor(), rowsets.size());
+    rapidjson::Value rowsets_count;
+    rowsets_count.SetUint64(rowsets.size());
+    root.AddMember("rowsets_count", rowsets_count, root.GetAllocator());
 
-    rapidjson::Value rowset_version;
-    rowset_version.SetString(version_str.c_str(), version_str.length(), root.GetAllocator());
-    root.AddMember("rowset_version", rowset_version, root.GetAllocator());
+    rapidjson::Value last_version_value;
+    std::string last_version_str = strings::Substitute("$1_$2", last_version.major(), last_version.minor());
+    rowsets_count.SetString(last_version_str.c_str(), last_version_str.size(), root.GetAllocator());
+    root.AddMember("last_version", last_version_value, root.GetAllocator());
 
-    rapidjson::Document rowsets_arr;
-    rowsets_arr.SetArray();
+    rapidjson::Document rowset_details;
+    rowset_details.SetArray();
     for (int i = 0; i < rowset_ids.size(); ++i) {
         rapidjson::Value value;
-        std::string rowset_str;
-        if (rowsets[i] != nullptr) {
-            rowset_str = strings::Substitute("id:$0 #seg:$1", rowset_ids[i], rowsets[i]->num_segments());
-        } else {
-            rowset_str = strings::Substitute("id:$0/NA", rowset_ids[i]);
-        }
-        value.SetString(rowset_str.c_str(), rowset_str.length(), rowsets_arr.GetAllocator());
-        rowsets_arr.PushBack(value, rowsets_arr.GetAllocator());
+        value.SetObject();
+
+        rapidjson::Value rowset_id;
+        std::string rowset_id_value = rowsets[i]->rowset_id().to_string();
+        rowset_id.SetString(rowset_id_value.c_str(), rowset_id_value.length(), root.GetAllocator());
+        value.AddMember("rowset_id", rowset_id, root.GetAllocator());
+
+        rapidjson::Value num_segments;
+        num_segments.SetInt64(rowsets[i]->num_segments());
+        value.AddMember("num_segments", num_segments, root.GetAllocator());
+
+        rapidjson::Value rowset_size;
+        rowset_size.SetInt64(rowsets[i]->data_disk_size());
+        value.AddMember("rowset_size", rowset_size, root.GetAllocator());
+
+        rowset_details.PushBack(value, rowset_details.GetAllocator());
     }
-    root.AddMember("rowsets", rowsets_arr, root.GetAllocator());
+    root.AddMember("rowset_details", rowset_details, root.GetAllocator());
+
+    rapidjson::Document apply_rowset_details;
+    apply_rowset_details.SetArray();
+    for (int i = 0; i < apply_version_rowset_ids.size(); ++i) {
+        rapidjson::Value value;
+        value.SetObject();
+
+        rapidjson::Value rowset_id;
+        std::string rowset_id_value = rowsets[i]->rowset_id().to_string();
+        rowset_id.SetString(rowset_id_value.c_str(), rowset_id_value.length(), root.GetAllocator());
+        value.AddMember("rowset_id", rowset_id, root.GetAllocator());
+
+        rapidjson::Value num_segments;
+        num_segments.SetInt64(rowsets[i]->num_segments());
+        value.AddMember("num_segments", num_segments, root.GetAllocator());
+
+        rapidjson::Value rowset_size;
+        rowset_size.SetInt64(rowsets[i]->data_disk_size());
+        value.AddMember("rowset_size", rowset_size, root.GetAllocator());
+
+        apply_rowset_details.PushBack(value, apply_rowset_details.GetAllocator());
+    }
+    root.AddMember("apply_rowset_details", apply_rowset_details, root.GetAllocator());
 
     // to json string
     rapidjson::StringBuffer strbuf;

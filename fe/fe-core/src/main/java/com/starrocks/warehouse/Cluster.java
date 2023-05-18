@@ -19,7 +19,10 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.gson.GsonUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -28,6 +31,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class Cluster implements Writable {
+    private static final Logger LOG = LogManager.getLogger(Cluster.class);
+
     @SerializedName(value = "id")
     private long id;
     @SerializedName(value = "wgid")
@@ -37,15 +42,15 @@ public class Cluster implements Writable {
 
     public Cluster(long id) {
         this.id = id;
-    }
-
-    public Cluster(long id, long workerGroupId) {
-        this.id = id;
-        this.workerGroupId = workerGroupId;
+        workerGroupId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
     }
 
     public long getId() {
         return id;
+    }
+
+    public long getWorkerGroupId() {
+        return workerGroupId;
     }
 
     public int getRunningSqls() {
@@ -67,6 +72,10 @@ public class Cluster implements Writable {
 
     public void dropNode(long cnId) {
         computeNodeIds.remove(cnId);
+    }
+
+    public Set<Long> getComputeNodeIds() {
+        return computeNodeIds;
     }
 
     @Override

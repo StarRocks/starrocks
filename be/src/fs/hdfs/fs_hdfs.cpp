@@ -17,7 +17,6 @@
 #include <fmt/format.h>
 #include <hdfs/hdfs.h>
 
-#include <atomic>
 #include <utility>
 
 #include "fs/fs_util.h"
@@ -419,7 +418,7 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
     int flags = O_WRONLY;
     if (opts.mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE) {
         if (auto st = _path_exists(hdfs_client->hdfs_fs, path); st.ok()) {
-            return Status::NotSupported("Cannot truncate a file by hdfs writer, path="_format(path));
+            return Status::NotSupported(fmt::format("Cannot truncate a file by hdfs writer, path={}", path));
         }
     } else if (opts.mode == MUST_CREATE) {
         if (auto st = _path_exists(hdfs_client->hdfs_fs, path); st.ok()) {

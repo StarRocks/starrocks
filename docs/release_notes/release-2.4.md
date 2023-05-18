@@ -179,7 +179,7 @@ Release date: October 20, 2022
 
 - Supports overwriting data via INSERT OVERWRITE. For more information, see [Load data using INSERT](../loading/InsertInto.md).
 
-- [Preview] Provides stateless Compute Nodes (CN) that can be horizontally scaled. You can use StarRocks Operator to deploy CN into your Kubernetes (K8s) cluster to achieve automatic horizontal scaling. For more information, see [Deploy and manage CN on Kubernetes with StarRocks Operator](../administration/sr_operator.md).
+- [Preview] Provides stateless Compute Nodes (CN) that can be horizontally scaled. You can use StarRocks Operator to deploy CN into your Kubernetes (K8s) cluster to achieve automatic horizontal scaling. For more information, see [Deploy and manage CN on Kubernetes with StarRocks Operator](../deployment/sr_operator.md).
 
 - Outer Join supports non-equi joins in which join items are related by comparison operators including `<`, `<=`, `>`, `>=`, and `<>`. For more information, see [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md).
 
@@ -257,7 +257,9 @@ The following bugs are fixed:
 
 ### Behavior Change
 
-Page Cache is enabled by default. The default cache size is 20% of the system memory.
+- Page Cache is enabled by default ("disable_storage_page_cache" = "false"). The default cache size (`storage_page_cache_limit`) is 20% of the system memory.
+- CBO is enabled by default. Deprecated the session variable `enable_cbo`.
+- Vectorized engine is enabled by default. Deprecated the session variable `vectorized_engine_enable`.
 
 ### Others
 

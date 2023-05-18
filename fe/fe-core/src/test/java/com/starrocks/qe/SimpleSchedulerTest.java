@@ -101,29 +101,29 @@ public class SimpleSchedulerTest {
 
         {   // null Backends
             address = SimpleScheduler.getHost(Long.valueOf(0), nullLocations,
-                    nullBackends, ref);
+                    nullBackends, null, ref);
             Assert.assertNull(address);
         }
         {   // empty Backends
             address = SimpleScheduler.getHost(Long.valueOf(0), emptyLocations,
-                    emptyBackends, ref);
+                    emptyBackends, null, ref);
             Assert.assertNull(address);
         }
         {   // normal Backends
 
             // BackendId exists
-            Assert.assertEquals(SimpleScheduler.getHost(0, emptyLocations, immutableThreeBackends, ref)
+            Assert.assertEquals(SimpleScheduler.getHost(0, emptyLocations, immutableThreeBackends, null, ref)
                     .hostname, "addressA");
-            Assert.assertEquals(SimpleScheduler.getHost(2, emptyLocations, immutableThreeBackends, ref)
+            Assert.assertEquals(SimpleScheduler.getHost(2, emptyLocations, immutableThreeBackends, null, ref)
                     .hostname, "addressC");
 
             // BacknedId not exists and location exists, choose the locations's first
-            Assert.assertEquals(SimpleScheduler.getHost(3, twoLocations, immutableThreeBackends, ref)
+            Assert.assertEquals(SimpleScheduler.getHost(3, twoLocations, immutableThreeBackends, null, ref)
                     .hostname, "addressA");
         }
         {   // abnormal
             // BackendId not exists and location not exists
-            Assert.assertNull(SimpleScheduler.getHost(3, emptyLocations, immutableThreeBackends, ref));
+            Assert.assertNull(SimpleScheduler.getHost(3, emptyLocations, immutableThreeBackends, null, ref));
         }
 
     }

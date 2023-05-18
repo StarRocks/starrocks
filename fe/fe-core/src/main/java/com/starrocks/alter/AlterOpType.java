@@ -59,6 +59,9 @@ public enum AlterOpType {
     // comment
     ALTER_COMMENT,
 
+    //Alter View
+    ALTER_VIEW,
+
     INVALID_OP; // INVALID_OP must be the last one
 
     // true means 2 operations have no conflict.

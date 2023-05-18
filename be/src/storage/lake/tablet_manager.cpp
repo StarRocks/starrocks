@@ -40,6 +40,7 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
+#include "storage/lake/vertical_compaction_task.h"
 #include "storage/metadata_util.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
@@ -98,8 +99,8 @@ std::string TabletManager::del_location(int64_t tablet_id, std::string_view del_
     return _location_provider->del_location(tablet_id, del_name);
 }
 
-std::string TabletManager::delvec_location(int64_t tablet_id, int64_t version) const {
-    return _location_provider->tablet_delvec_location(tablet_id, version);
+std::string TabletManager::delvec_location(int64_t tablet_id, std::string_view delvec_name) const {
+    return _location_provider->delvec_location(tablet_id, delvec_name);
 }
 
 std::string TabletManager::tablet_metadata_lock_location(int64_t tablet_id, int64_t version,
@@ -231,7 +232,6 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb->set_version(1);
     tablet_metadata_pb->set_next_rowset_id(1);
     tablet_metadata_pb->set_cumulative_point(0);
-    LOG(INFO) << "lake create tablet " << fmt::format("tid:{}", req.tablet_id);
 
     if (req.__isset.base_tablet_id && req.base_tablet_id > 0) {
         struct Finder {
@@ -645,7 +645,15 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t ve
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_RETURN(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets(version));
-    return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet_ptr), std::move(input_rowsets));
+    ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
+    if (algorithm == VERTICAL_COMPACTION) {
+        return std::make_shared<VerticalCompactionTask>(txn_id, version, std::move(tablet_ptr),
+                                                        std::move(input_rowsets));
+    } else {
+        DCHECK(algorithm == HORIZONTAL_COMPACTION);
+        return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet_ptr),
+                                                          std::move(input_rowsets));
+    }
 }
 
 void TabletManager::abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size) {

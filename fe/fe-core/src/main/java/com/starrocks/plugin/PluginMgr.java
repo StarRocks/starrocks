@@ -40,7 +40,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
@@ -346,9 +345,7 @@ public class PluginMgr implements Writable {
     }
 
     public long loadPlugins(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_78) {
-            readFields(dis);
-        }
+        readFields(dis);
         LOG.info("finished replay plugins from image");
         return checksum;
     }

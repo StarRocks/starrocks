@@ -46,7 +46,7 @@ struct ConcatState {
     std::string tail;
 };
 
-class StringFunctionsState;
+struct StringFunctionsState;
 
 struct MatchInfo {
     size_t from;
@@ -286,6 +286,14 @@ public:
 
     static Status split_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status split_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /**
+    * @param: [array_string, delimiter]
+    * @paramType: [ArrayBinaryColumn, BinaryColumn]
+    * @return: MapColumn map<string,string>
+    */
+
+    DEFINE_VECTORIZED_FN(str_to_map);
 
     /**
      * @param: [string_value, delimiter, field]

@@ -127,7 +127,7 @@ public:
 protected:
     void _generate_chunk_writer();
 
-    virtual void _flush_row_group() = 0;
+    virtual Status _flush_row_group() = 0;
 
 private:
     bool is_last_row_group() {
@@ -170,7 +170,7 @@ public:
     bool closed() const override { return _closed; }
 
 private:
-    void _flush_row_group() override;
+    Status _flush_row_group() override;
 
     bool _closed = false;
 };
@@ -200,7 +200,7 @@ public:
     std::string partition_location() const { return _partition_location; }
 
 private:
-    void _flush_row_group() override;
+    Status _flush_row_group() override;
 
     std::string _file_location;
     std::string _partition_location;

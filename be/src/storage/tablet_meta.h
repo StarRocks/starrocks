@@ -118,7 +118,7 @@ public:
 
     Status serialize(std::string* meta_binary);
     Status deserialize(std::string_view data);
-    void init_from_pb(TabletMetaPB* ptablet_meta_pb);
+    void init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaPB* ptablet_schema_pb = nullptr);
 
     void to_meta_pb(TabletMetaPB* tablet_meta_pb);
     void to_json(std::string* json_string, json2pb::Pb2JsonOptions& options);
@@ -205,6 +205,12 @@ public:
 
     void set_binlog_min_lsn(BinlogLsn& binlog_lsn) { _binlog_min_lsn = binlog_lsn; }
 
+    bool enable_shortcut_compaction() const { return _enable_shortcut_compaction; }
+
+    void set_enable_shortcut_compaction(bool enable_shortcut_compaction) {
+        _enable_shortcut_compaction = enable_shortcut_compaction;
+    }
+
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }
 
@@ -260,6 +266,8 @@ private:
     // 2. config::inc_rowset_expired_sec is larger than the expired time of binlog, so
     //    a rowset will not be removed from _inc_rs_metas if only the binlog is expired
     BinlogLsn _binlog_min_lsn;
+
+    bool _enable_shortcut_compaction = true;
 
     std::shared_mutex _meta_lock;
 };

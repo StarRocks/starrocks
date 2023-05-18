@@ -24,7 +24,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -257,11 +256,7 @@ public class BackupRestoreAnalyzer {
         if (Strings.isNullOrEmpty(dbName)) {
             dbName = context.getDatabase();
         } else {
-            try {
-                FeNameFormat.checkDbName(dbName);
-            } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
-            }
+            FeNameFormat.checkDbName(dbName);
         }
         return dbName;
     }

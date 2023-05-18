@@ -149,21 +149,21 @@ public class IcebergApiConverterTest {
     @Test
     public void testToIcebergApiSchema() {
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column(new Column("c1", Type.BOOLEAN)));
-        columns.add(new Column(new Column("c2", Type.INT)));
-        columns.add(new Column(new Column("c3", Type.BIGINT)));
-        columns.add(new Column(new Column("c4", Type.FLOAT)));
-        columns.add(new Column(new Column("c5", Type.DOUBLE)));
-        columns.add(new Column(new Column("c6", Type.DATE)));
-        columns.add(new Column(new Column("c7", Type.DATETIME)));
-        columns.add(new Column(new Column("c8", Type.VARCHAR)));
-        columns.add(new Column(new Column("c9", Type.CHAR)));
-        columns.add(new Column(new Column("c10", Type.DECIMAL32)));
-        columns.add(new Column(new Column("c11", Type.DECIMAL64)));
-        columns.add(new Column(new Column("c12", Type.DECIMAL128)));
-        columns.add(new Column(new Column("c13", new ArrayType(Type.INT))));
-        columns.add(new Column(new Column("c14", new MapType(Type.INT, Type.INT))));
-        columns.add(new Column(new Column("c15", new StructType(ImmutableList.of(Type.INT)))));
+        columns.add(new Column("c1", Type.BOOLEAN));
+        columns.add(new Column("c2", Type.INT));
+        columns.add(new Column("c3", Type.BIGINT));
+        columns.add(new Column("c4", Type.FLOAT));
+        columns.add(new Column("c5", Type.DOUBLE));
+        columns.add(new Column("c6", Type.DATE));
+        columns.add(new Column("c7", Type.DATETIME));
+        columns.add(new Column("c8", Type.VARCHAR));
+        columns.add(new Column("c9", Type.CHAR));
+        columns.add(new Column("c10", Type.DECIMAL32));
+        columns.add(new Column("c11", Type.DECIMAL64));
+        columns.add(new Column("c12", Type.DECIMAL128));
+        columns.add(new Column("c13", new ArrayType(Type.INT)));
+        columns.add(new Column("c14", new MapType(Type.INT, Type.INT)));
+        columns.add(new Column("c15", new StructType(ImmutableList.of(Type.INT))));
 
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
         Assert.assertEquals("table {\n" +

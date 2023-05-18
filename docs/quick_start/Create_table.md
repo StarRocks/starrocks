@@ -2,7 +2,7 @@
 
 This QuickStart tutorial will walk you through the necessary steps to create a table in StarRocks, and introduce some basic features of StarRocks.
 
-After the StarRocks instance is deployed (see [Deploy StarRocks](../quick_start/Deploy.md) for details), you need to create a database and a table to [load and query data](../quick_start/Import_and_query.md). Creating databases and tables requires corresponding [user privilege](../administration/User_privilege.md). In this QuickStart tutorial, you can perform the following steps with the default `root` user, which has the highest privileges on the StarRocks instance.
+After the StarRocks instance is deployed (see [Deploy StarRocks](../quick_start/deploy_with_docker.md) for details), you need to create a database and a table to [load and query data](../quick_start/Import_and_query.md). Creating databases and tables requires corresponding [user privilege](../administration/User_privilege.md). In this QuickStart tutorial, you can perform the following steps with the default `root` user, which has the highest privileges on the StarRocks instance.
 
 > **NOTE**
 >

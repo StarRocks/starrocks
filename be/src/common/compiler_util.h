@@ -59,6 +59,7 @@
 /// needs to be inlined for a specific reason or the compiler's heuristics make a bad
 /// decision, e.g. not inlining a small function on a hot path.
 #define ALWAYS_INLINE __attribute__((always_inline))
+#define ALWAYS_NOINLINE __attribute__((noinline))
 
 #define ALIGN_CACHE_LINE __attribute__((aligned(CACHE_LINE_SIZE)))
 

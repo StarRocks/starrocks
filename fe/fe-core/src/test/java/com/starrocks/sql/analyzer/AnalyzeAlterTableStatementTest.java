@@ -141,4 +141,10 @@ public class AnalyzeAlterTableStatementTest {
     public void testAlterTableComment() {
         analyzeSuccess("alter table t0 comment = \"new comment\"");
     }
+
+    @Test
+    public void testAlterWithTimeType() {
+        analyzeFail("alter table t0 add column testcol TIME");
+        analyzeFail("alter table t0 modify column v0 TIME");
+    }
 }
