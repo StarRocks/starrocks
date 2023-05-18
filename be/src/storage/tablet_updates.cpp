@@ -849,7 +849,24 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
     // avoid inconsistency between persistent index file and PersistentIndexMeta
     bool enable_persistent_index = index.enable_persistent_index();
-    st = index.prepare(version);
+    size_t merge_num = 0;
+    {
+        std::lock_guard lg(_rowset_stats_lock);
+        auto iter = _rowset_stats.find(rowset_id);
+        if (iter == _rowset_stats.end()) {
+            string msg = strings::Substitute("inconsistent rowset_stats, rowset not found tablet=$0 rowsetid=$1",
+                                             _tablet.tablet_id(), rowset_id);
+            DCHECK(false) << msg;
+            LOG(ERROR) << msg;
+            _set_error(msg);
+            return;
+        } else {
+            size_t num_adds = iter->second->num_rows;
+            size_t num_dels = iter->second->num_dels;
+            merge_num = num_adds + num_dels;
+        }
+    }
+    st = index.prepare(version, merge_num);
     if (!st.ok()) {
         manager->index_cache().remove(index_entry);
         std::string msg = Substitute("_apply_rowset_commit error: primary index prepare failed: $0 $1", st.to_string(),
@@ -1446,7 +1463,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         _set_error(msg);
         return;
     }
-    index.prepare(version);
+    index.prepare(version, 0);
     int64_t t_load = MonotonicMillis();
     // 2. iterator new rowset's pks, update primary index, generate delvec
     size_t total_deletes = 0;
