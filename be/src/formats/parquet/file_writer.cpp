@@ -376,7 +376,9 @@ Status SyncFileWriter::_flush_row_group() {
         try {
             _chunk_writer->close();
         } catch (const ::parquet::ParquetStatusException& e) {
-            // this is to avoid ParquetFileWriter.Close which cause segfaults
+            _chunk_writer.reset();
+
+            // this is to avoid calling ParquetFileWriter.Close which incurs segfault
             _closed = true;
             _writer.release();
 
