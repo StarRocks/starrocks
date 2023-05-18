@@ -38,6 +38,7 @@ constexpr uint64_t kPageMax = 1ULL << 32;
 constexpr size_t kPackSize = 16;
 constexpr size_t kPagePackLimit = (kPageSize - kPageHeaderSize) / kPackSize;
 constexpr size_t kBucketSizeMax = 256;
+constexpr size_t kMinEnableBFKVNum = 10000000;
 // if l0_mem_size exceeds this value, l0 need snapshot
 #if BE_TEST
 constexpr size_t kL0SnapshotSizeMax = 1 * 1024 * 1024;
@@ -2767,15 +2768,18 @@ Status PersistentIndex::prepare(const EditVersion& version, size_t n) {
     _dump_snapshot = false;
     _flushed = false;
     _version = version;
-    if (config::enable_parallel_get_and_bf && n > _size / 2 && n > config::min_enable_bf_kv_num) {
+
+    if (config::enable_parallel_get_and_bf) {
         _need_bloom_filter = true;
-        RETURN_IF_ERROR(ThreadPoolBuilder("get_kv_thread")
-                                .set_min_threads(config::min_get_kv_thread_num)
-                                .set_max_threads(config::max_get_kv_thread_num)
-                                .set_max_queue_size(4096)
-                                .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
-                                .build(&_get_thread_pool));
-        LOG(INFO) << "get kv thread num: " << _get_thread_pool->num_threads();
+        if (n > _size / 4 && n > kMinEnableBFKVNum) {
+            RETURN_IF_ERROR(ThreadPoolBuilder("get_kv_thread")
+                                    .set_min_threads(1)
+                                    .set_max_threads(config::l0_l1_merge_ratio)
+                                    .set_max_queue_size(4096)
+                                    .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
+                                    .build(&_get_thread_pool));
+            LOG(INFO) << "get kv thread num: " << _get_thread_pool->num_threads();
+        }
     }
     _set_error(false, "");
     return Status::OK();
