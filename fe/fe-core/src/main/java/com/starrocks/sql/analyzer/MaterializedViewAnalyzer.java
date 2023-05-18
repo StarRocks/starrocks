@@ -541,7 +541,8 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private Expr resolvePartitionExpr(Expr partitionColumnExpr, ConnectContext connectContext, Map<TableName, Table> aliasTableMap) {
+        private Expr resolvePartitionExpr(
+                Expr partitionColumnExpr, ConnectContext connectContext, Map<TableName, Table> aliasTableMap) {
             if (partitionColumnExpr instanceof SlotRef) {
                 return resolveSlotRefForView((SlotRef) partitionColumnExpr, connectContext, aliasTableMap);
             } else {
