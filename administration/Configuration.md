@@ -447,11 +447,11 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |enable_bitmap_union_disk_format_with_set|FALSE|Bitmap 新存储格式，可以优化 bitmap_union 性能。|
 |mem_limit|90%|BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100GB"）。|
 |flush_thread_num_per_store|2|每个 Store 用以 Flush MemTable 的线程数。|
-| block_cache_enable     | false | 是否启用 Local Cache。<ul><li>`true`：启用。</li><li>`false`：不启用，为默认值。</li></ul> 如要启用，设置该参数值为 `true`。|
+| block_cache_enable     | false | 是否启用 Data Cache。<ul><li>`true`：启用。</li><li>`false`：不启用，为默认值。</li></ul> 如要启用，设置该参数值为 `true`。|
 | block_cache_disk_path  | N/A | 磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。配置路径后，StarRocks 会自动创建名为 **cachelib_data** 的文件用于缓存 block。 |
 | block_cache_meta_path  | N/A | Block 的元数据存储目录，可自定义。推荐创建在 **$STARROCKS_HOME** 路径下。 |
 | block_cache_block_size | 1048576 | 单个 block 大小，单位：字节。默认值为 `1048576`，即 1 MB。   |
-| block_cache_mem_size   | 2147483648 | 内存缓存数据量的上限，单位：字节。默认值为 `2147483648`，即 2 GB。推荐将该参数值最低设置成 20 GB。如在开启 Local Cache 期间，存在大量从磁盘读取数据的情况，可考虑调大该参数。 |
+| block_cache_mem_size   | 2147483648 | 内存缓存数据量的上限，单位：字节。默认值为 `2147483648`，即 2 GB。推荐将该参数值最低设置成 20 GB。如在开启 Data Cache 期间，存在大量从磁盘读取数据的情况，可考虑调大该参数。 |
 | block_cache_disk_size  | 0 | 单个磁盘缓存数据量的上限，单位：字节。举例：在 `block_cache_disk_path` 中配置了 2 个磁盘，并设置 `block_cache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。 |
 | jdbc_connection_pool_size  | 8 | JDBC 连接池大小。每个 BE 节点上访问 `jdbc_url` 相同的外表时会共用同一个连接池。 |
 | jdbc_minimum_idle_connections  | 1 | JDBC 连接池中最少的空闲连接数量。 |

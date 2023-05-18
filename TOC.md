@@ -74,7 +74,7 @@
     + [查询外部数据](/data_source/catalog/query_external_data.md)
   + [外部表](/data_source/External_table.md)
   + [文件外部表](/data_source/file_external_table.md)
-  + [Local Cache](/data_source/Block_cache.md)
+  + [Data Cache](/data_source/data_cache.md)
 + 查询加速
   + [CBO 统计信息](/using_starrocks/Cost_based_optimizer.md)
   + [同步物化视图](/using_starrocks/Materialized_view-single_table.md)
@@ -82,7 +82,7 @@
   + [Colocate Join](/using_starrocks/Colocate_join.md)
   + 索引
     + [Bitmap 索引](/using_starrocks/Bitmap_index.md)
-    + [Bloomfilter 索引](/using_starrocks/Bloomfilter_index.md)
+    + [Bloom filter 索引](/using_starrocks/Bloomfilter_index.md)
   + 数据去重
     + [使用 Bitmap 实现精确去重](/using_starrocks/Using_bitmap.md)
     + [使用 HyperLogLog 实现近似去重](/using_starrocks/Using_HLL.md)
