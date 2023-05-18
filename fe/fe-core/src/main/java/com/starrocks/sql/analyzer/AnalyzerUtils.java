@@ -34,12 +34,14 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MapType;
@@ -83,6 +85,11 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.parser.ParsingException;
 import org.apache.commons.lang3.StringUtils;
 
@@ -216,6 +223,64 @@ public class AnalyzerUtils {
         Map<String, Database> dbs = Maps.newHashMap();
         new AnalyzerUtils.DBCollector(dbs, context).visit(statementBase);
         return dbs;
+    }
+
+    // replaces a field in an expression with a constant
+    private static class ExprRewriter extends AstVisitor<Boolean, Void> {
+
+        private final ColumnRefOperator columnRef;
+        private final ConstantOperator constant;
+
+        public ExprRewriter(ColumnRefOperator columnRef, ConstantOperator constant) {
+            this.columnRef = columnRef;
+            this.constant = constant;
+        }
+
+        @Override
+        public Boolean visitCastExpr(CastExpr node, Void context) {
+            ArrayList<Expr> children = node.getChildren();
+            boolean success = false;
+            for (Expr child : children) {
+                if (visit(child)) {
+                    success = true;
+                }
+            }
+            return success;
+        }
+
+        @Override
+        public Boolean visitFunctionCall(FunctionCallExpr node, Void context) {
+            if (FunctionSet.SUBSTRING.equalsIgnoreCase(node.getFnName().getFunction()) ||
+                    FunctionSet.SUBSTR.equalsIgnoreCase(node.getFnName().getFunction())) {
+                Expr firstExpr = node.getChild(0);
+                if (firstExpr instanceof SlotRef) {
+                    SlotRef slotRef = (SlotRef) node.getChild(0);
+                    if (columnRef.getName().equals(slotRef.getColumnName())) {
+                        node.setChild(0, new StringLiteral(constant.getVarchar()));
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+    }
+
+    public static boolean rewritePredicate(Expr expr, ColumnRefOperator columnRef, ConstantOperator constant) {
+        Boolean success = new ExprRewriter(columnRef, constant).visit(expr);
+        if (success == null) {
+            return false;
+        } else {
+            return success;
+        }
+    }
+
+    public static CallOperator getCallOperator(ScalarOperator operator) {
+        if (operator instanceof CastOperator) {
+            return getCallOperator(operator.getChild(0));
+        } else if (operator instanceof CallOperator) {
+            return (CallOperator) operator;
+        }
+        return null;
     }
 
     private static class DBCollector extends AstVisitor<Void, Void> {

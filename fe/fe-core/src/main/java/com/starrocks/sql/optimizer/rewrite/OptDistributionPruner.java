@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
@@ -24,12 +25,15 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.DistributionPruner;
 import com.starrocks.planner.HashDistributionPruner;
+import com.starrocks.planner.PartitionColumnFilter;
+import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 public class OptDistributionPruner {
     private static final Logger LOG = LogManager.getLogger(OptDistributionPruner.class);
@@ -54,9 +58,13 @@ public class OptDistributionPruner {
             DistributionPruner distributionPruner;
             if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
                 HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
+                // Bucketing needs to use the original predicate for hashing
+                Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
+                ColumnFilterConverter.convertColumnFilterWithoutExpr(operator.getPredicate(),
+                        filters, operator.getTable());
                 distributionPruner = new HashDistributionPruner(index.getTabletIdsInOrder(),
                         info.getDistributionColumns(),
-                        operator.getColumnFilters(),
+                        filters,
                         info.getBucketNum());
                 return distributionPruner.prune();
             }
