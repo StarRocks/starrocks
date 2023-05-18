@@ -72,7 +72,7 @@
     + [Query external data](./data_source/catalog/query_external_data.md)
   + [External tables](./data_source/External_table.md)
   + [File external table](./data_source/file_external_table.md)
-  + [Local Cache](./data_source/Block_cache.md)
+  + [Data Cache](./data_source/data_cache.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
   + [Synchronous materialized view](./using_starrocks/Materialized_view-single_table.md)
