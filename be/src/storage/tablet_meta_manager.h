@@ -192,6 +192,7 @@ public:
                                           int64_t begin_version, int64_t end_version, DeltaColumnGroupList* dcgs);
 
     static Status delete_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t rowset_id, uint32_t segments);
+    static Status delete_delta_column_group(KVStore* meta, WriteBatch* batch, TabletSegmentId tsid, int64_t version);
 
     // delete all delete vectors of a tablet not useful anymore for query version < `version`, for example
     // suppose we have delete vectors of version 1, 3, 5, 6, 7, 12, 16

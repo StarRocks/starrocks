@@ -85,4 +85,10 @@ public:
     static Status deserialize_delta_column_group_list(const char* data, size_t length, DeltaColumnGroupList* dcgs);
 };
 
+class DeltaColumnGroupListHelper {
+public:
+    static void garbage_collection(DeltaColumnGroupList& dcg_list, TabletSegmentId tsid, int64_t min_readable_version,
+                                   std::vector<std::pair<TabletSegmentId, int64_t>>& garbage_dcgs);
+};
+
 } // namespace starrocks
