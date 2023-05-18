@@ -101,15 +101,13 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("No backend alive.");
         }
 
+        // TODO: need to refactor after be split into cn + dn
         ComputeNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            backend = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(backendIds.get(0));
+        }
         if (backend == null) {
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                backend = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendIds.get(0));
-            }
-
-            if (backend == null) {
-                throw new DdlException("No backend or compute node alive.");
-            }
+            throw new DdlException("No backend or compute node alive.");
         }
 
         TNetworkAddress redirectAddr = new TNetworkAddress(backend.getHost(), backend.getHttpPort());

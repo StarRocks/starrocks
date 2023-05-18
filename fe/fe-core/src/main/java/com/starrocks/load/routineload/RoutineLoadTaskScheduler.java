@@ -323,13 +323,11 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
     private void submitTask(long beId, TRoutineLoadTask tTask) throws LoadException {
         // TODO: need to refactor after be split into cn + dn
         ComputeNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            backend = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(beId);
+        }
         if (backend == null) {
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                backend = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(beId);
-            }
-            if (backend == null) {
-                throw new LoadException("failed to send tasks to backend " + beId + " because not exist");
-            }
+            throw new LoadException("failed to send tasks to backend " + beId + " because not exist");
         }
 
         TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBePort());

@@ -146,10 +146,7 @@ public class PulsarUtil {
                 }
                 Collections.shuffle(backendIds);
                 // TODO: need to refactor after be split into cn + dn
-                ComputeNode be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
-                if (be == null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                    be = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendIds.get(0));
-                }
+                ComputeNode be = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(backendIds.get(0));
                 address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info
