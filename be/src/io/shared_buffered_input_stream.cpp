@@ -94,6 +94,7 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
         }
         update_map(unmerge, small_ranges.size() - 1);
     }
+    _update_estimated_mem_usage();
     return Status::OK();
 }
 
@@ -170,7 +171,7 @@ StatusOr<std::string_view> SharedBufferedInputStream::peek(int64_t count) {
     return std::string_view((const char*)buf, count);
 }
 
-int64_t SharedBufferedInputStream::estimated_mem_usage() const {
+void SharedBufferedInputStream::_update_estimated_mem_usage() {
     int64_t mem_usage = 0;
     for (const auto& [_, sb] : _map) {
         mem_usage += sb.size;
@@ -178,7 +179,7 @@ int64_t SharedBufferedInputStream::estimated_mem_usage() const {
     // in most cases, those data are compressed.
     // to read it, we need to decompress it, and let's say to add 50% overhead.
     mem_usage += mem_usage / 2;
-    return mem_usage;
+    _estimated_mem_usage = std::max(mem_usage, _estimated_mem_usage);
 }
 
 } // namespace starrocks::io
