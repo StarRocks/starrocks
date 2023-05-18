@@ -73,6 +73,10 @@ public:
 
     virtual Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
                            TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
+    void set_alter_msg_header(std::string msg) { _alter_msg_header = msg; }
+    std::string alter_msg_header() { return _alter_msg_header; }
+
+    std::string _alter_msg_header;
 };
 
 class LinkedSchemaChange : public SchemaChange {
@@ -111,7 +115,7 @@ public:
     Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                    TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
-    static bool _internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
+    static Status _internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
                                   TabletSharedPtr tablet);
 
 private:
@@ -143,8 +147,8 @@ private:
         std::unique_ptr<ChunkChanger> chunk_changer = nullptr;
     };
 
-    static Status _get_versions_to_be_changed(const TabletSharedPtr& base_tablet,
-                                              std::vector<Version>* versions_to_be_changed);
+    Status _get_versions_to_be_changed(const TabletSharedPtr& base_tablet,
+                                       std::vector<Version>* versions_to_be_changed);
 
     Status _do_process_alter_tablet_v2(const TAlterTabletReqV2& request);
 
@@ -153,7 +157,7 @@ private:
 
     Status _validate_alter_result(const TabletSharedPtr& new_tablet, const TAlterTabletReqV2& request);
 
-    static Status _convert_historical_rowsets(SchemaChangeParams& sc_params);
+    Status _convert_historical_rowsets(SchemaChangeParams& sc_params);
 
     DISALLOW_COPY(SchemaChangeHandler);
     std::string _alter_msg_header;

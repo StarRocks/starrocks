@@ -78,7 +78,7 @@ public:
     explicit ChunkMerger(TabletSharedPtr tablet);
     virtual ~ChunkMerger();
 
-    bool merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_writer);
+    Status merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_writer);
     static void aggregate_chunk(ChunkAggregator& aggregator, ChunkPtr& chunk, RowsetWriter* rowset_writer);
 
 private:
@@ -167,7 +167,7 @@ void ChunkMerger::aggregate_chunk(ChunkAggregator& aggregator, ChunkPtr& chunk, 
     }
 }
 
-bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_writer) {
+Status ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_writer) {
     auto process_err = [this] {
         VLOG(3) << "merge chunk failed";
         while (!_heap.empty()) {
@@ -203,7 +203,7 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
     }
 
     if (bg_worker_stopped) {
-        return false;
+        return Status::InternalError("back ground worker stopped, BE maybe exit");
     }
 
     if (_tablet->keys_type() == KeysType::AGG_KEYS) {
@@ -219,10 +219,10 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
     if (auto st = rowset_writer->flush(); !st.ok()) {
         LOG(WARNING) << "failed to finalizing writer: " << st;
         process_err();
-        return false;
+        return st;
     }
 
-    return true;
+    return Status::OK();
 }
 
 bool ChunkMerger::_make_heap(std::vector<ChunkPtr>& chunk_arr) {
@@ -448,28 +448,27 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
     return Status::OK();
 }
 
-bool SchemaChangeWithSorting::_internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
-                                                TabletSharedPtr tablet) {
+Status SchemaChangeWithSorting::_internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
+                                                  TabletSharedPtr tablet) {
     if (chunk_arr.size() == 1) {
-        if (auto st = new_rowset_writer->add_chunk(*chunk_arr[0]); !st.ok()) {
-            LOG(WARNING) << alter_msg_header() << "failed to add chunk: " << st;
-            return false;
+        Status st;
+        if (st = new_rowset_writer->add_chunk(*chunk_arr[0]); !st.ok()) {
+            LOG(WARNING) << "failed to add chunk: " << st;
+            return st;
         }
-        if (auto st = new_rowset_writer->flush(); !st.ok()) {
-            LOG(WARNING) << alter_msg_header() << "failed to finalizing writer: " << st;
-            return false;
-        } else {
-            return true;
+        if (st = new_rowset_writer->flush(); !st.ok()) {
+            LOG(WARNING) << "failed to finalizing writer: " << st;
         }
+        return st;
     }
 
     ChunkMerger merger(std::move(tablet));
-    if (!merger.merge(chunk_arr, new_rowset_writer)) {
-        LOG(WARNING) << alter_msg_header() << "merge chunk arr failed";
-        return false;
+    if (auto st = merger.merge(chunk_arr, new_rowset_writer); !st.ok()) {
+        LOG(WARNING) << "merge chunk arr failed";
+        return st;
     }
 
-    return true;
+    return Status::OK();
 }
 
 Status SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2& request) {
@@ -610,12 +609,12 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         }
         if (sc_params.sc_directly) {
             status = new_tablet->updates()->convert_from(base_tablet, request.alter_version,
-                                                         sc_params.chunk_changer.get());
+                                                         sc_params.chunk_changer.get(), _alter_msg_header);
         } else if (sc_params.sc_sorting) {
             status = new_tablet->updates()->reorder_from(base_tablet, request.alter_version,
-                                                         sc_params.chunk_changer.get());
+                                                         sc_params.chunk_changer.get(), _alter_msg_header);
         } else {
-            status = new_tablet->updates()->link_from(base_tablet.get(), request.alter_version);
+            status = new_tablet->updates()->link_from(base_tablet.get(), request.alter_version, _alter_msg_header);
         }
         if (!status.ok()) {
             LOG(WARNING) << _alter_msg_header << "schema change new tablet load snapshot error: " << status.to_string();
