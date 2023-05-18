@@ -3486,6 +3486,7 @@ public class GlobalStateMgr {
         metadataMgr.refreshTable(catalogName, dbName, table, partitions, true);
     }
 
+    // TODO [meta-format-change] deprecated
     public void initDefaultCluster() {
         localMetastore.initDefaultCluster();
     }
