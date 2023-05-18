@@ -71,22 +71,22 @@ PROPERTIES
 
 ### Parameters
 
-#### `catalog_name`
+#### catalog_name
 
 The name of the Delta Lake catalog. The naming conventions are as follows:
 
 - The name can contain letters, digits 0 through 9, and underscores (_) and must start with a letter.
 - The name cannot exceed 64 characters in length.
 
-#### `comment`
+#### comment
 
 The description of the Delta Lake catalog. This parameter is optional.
 
-#### `type`
+#### type
 
 The type of your data source. Set the value to `deltalake`.
 
-#### `MetastoreParams`
+#### MetastoreParams
 
 A set of parameters about how StarRocks integrates with the metastore of your data source.
 
@@ -151,7 +151,7 @@ The following table describes the parameters you need to configure in `Metastore
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
-#### `StorageCredentialParams`
+#### StorageCredentialParams
 
 A set of parameters about how StarRocks integrates with your storage system. This parameter set is optional.
 
@@ -221,7 +221,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key                | Yes      | The access key of your IAM user. |
 | aws.s3.secret_key                | Yes      | The secret key of your IAM user. |
 
-#### `MetadataUpdateParams`
+#### MetadataUpdateParams
 
 A set of parameters about how StarRocks updates the cached metadata of Delta Lake. This parameter set is optional.
 
@@ -393,11 +393,11 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
 ```
 
-## Synchronize metadata updates
+## Manually or automatically update metadata cache
 
 ### Manual update
 
-By default, StarRocks caches the metadata of Delta Lake and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Delta Lake table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
+By default, StarRocks caches the metadata of Delta Lake and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Delta Lake table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to manually update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name>
@@ -475,7 +475,7 @@ You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file o
 | enable_hms_parallel_process_evens | Specifies whether StarRocks processes events in parallel as it reads the events. Valid values: `true` and `false`. Default value: `true`. The value `true` enables parallelism, and the value `false` disables parallelism. |
 | hms_process_events_parallel_num   | The maximum number of events that StarRocks can process in parallel. Default value: `4`. |
 
-## Appendix: Understand automatic asynchronous update
+## Appendix: Understand metadata automatic asynchronous update
 
 Automatic asynchronous update is the default policy that StarRocks uses to update the metadata in Delta Lake catalogs.
 

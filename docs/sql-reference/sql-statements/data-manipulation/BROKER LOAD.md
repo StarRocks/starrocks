@@ -26,7 +26,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 ## Parameters
 
-### `database_name` and `label_name`
+### database_name and label_name
 
 `label_name` specifies the label of the load job.
 
@@ -36,7 +36,7 @@ Each load job has a label that is unique across the entire database. You can use
 
 For label naming conventions, see [System limits](../../../reference/System_limit.md).
 
-### `data_desc`
+### data_desc
 
 The description of a batch of data to be loaded. Each `data_desc` descriptor declares information such as the data source, ETL functions, destination StarRocks table, and destination partitions.
 
@@ -143,11 +143,11 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
   Specifies the conditions based on which you want to filter the source data. StarRocks loads only the source data that meets the filter conditions specified in the WHERE clause.
 
-### `WITH BROKER`
+### WITH BROKER
 
 In v2.4 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker you want to use. From v2.5 onwards, you no longer need to specify a broker, but you still need to retain the `WITH BROKER` keyword. For more information, see [Load data from HDFS or cloud storage > Background information](../../../loading/BrokerLoad.md#background-information).
 
-### `StorageCredentialParams`
+### StorageCredentialParams
 
 The authentication information used by StarRocks to access your storage system.
 
@@ -328,7 +328,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key                | Yes      | The access key of your AWS IAM user. |
 | aws.s3.secret_key                | Yes      | The secret key of your AWS IAM user. |
 
-### `opt_properties`
+### opt_properties
 
 Specifies some optional parameters whose settings are applied to the entire load job. Syntax:
 
