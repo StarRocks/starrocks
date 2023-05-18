@@ -4,7 +4,7 @@ This topic describes how to compile StarRocks using Docker.
 
 ## Overview
 
-StarRocks provides development environment images for both Ubuntu 22.04 and CentOS 7.0. With the image, you can launch a Docker container and compile StarRocks in the container.
+StarRocks provides development environment images for both Ubuntu 22.04 and CentOS 7.9. With the image, you can launch a Docker container and compile StarRocks in the container.
 
 ### StarRocks version and DEV ENV image
 
@@ -18,20 +18,13 @@ Different branches of StarRocks correspond to different development environment 
   | branch-3.0      | starrocks/dev-env-ubuntu:3.0-latest |
   | branch-2.5      | starrocks/dev-env-ubuntu:2.5-latest |
 
-- For CentOS 7:
+- For CentOS 7.9:
 
   | **Branch name** | **Image name**                       |
   | --------------- | ------------------------------------ |
   | main            | starrocks/dev-env-centos7:latest     |
   | branch-3.0      | starrocks/dev-env-centos7:3.0-latest |
   | branch-2.5      | starrocks/dev-env-centos7:2.5-latest |
-
-### Third-party tools
-
-The following third-party tools have been integrated into the images:
-
-- LLVM
-- Clang
 
 ## Prerequisites
 
@@ -43,7 +36,7 @@ Before compiling StarRocks, make sure the following requirements are satisfied:
 
 - **Software**
 
-  - Your machine must be running on Ubuntu 22.04 or CentOS 7.
+  - Your machine must be running on Ubuntu 22.04 or CentOS 7.9.
   - You must have Docker installed on your machine.
 
 ## Step 1: Download the image

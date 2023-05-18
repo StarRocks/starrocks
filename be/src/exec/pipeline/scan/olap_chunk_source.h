@@ -28,7 +28,7 @@ class OlapScanContext;
 
 class OlapChunkSource final : public ChunkSource {
 public:
-    OlapChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+    OlapChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                     vectorized::OlapScanNode* scan_node, OlapScanContext* scan_ctx);
 
     ~OlapChunkSource() override;

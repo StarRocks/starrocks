@@ -30,6 +30,7 @@ public:
     virtual Status open(RuntimeState* state) { return Status::OK(); }
     virtual void close(RuntimeState* state) {}
     virtual Status get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) { return Status::OK(); }
+    virtual bool skip_predicate() const { return false; }
 
     // how many rows read from storage
     virtual int64_t raw_rows_read() const = 0;
@@ -39,6 +40,8 @@ public:
     virtual int64_t num_bytes_read() const = 0;
     // CPU time of this data source
     virtual int64_t cpu_time_spent() const = 0;
+    // IO time of this data source
+    virtual int64_t io_time_spent() const { return 0; }
 
     // following fields are set by framework
     // 1. runtime profile: any metrics you want to record
@@ -87,6 +90,8 @@ public:
     // such as MySQL/JDBC, so `accept_empty_scan_ranges` is false, and most in most cases, these data source(MySQL/JDBC)
     // the method `insert_local_exchange_operator` is true also.
     virtual bool accept_empty_scan_ranges() const { return true; }
+
+    virtual const TupleDescriptor* tuple_descriptor(RuntimeState* state) const = 0;
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 

@@ -36,6 +36,7 @@ public:
     int64_t num_rows_read() const override { return _num_rows_read; }
     int64_t num_bytes_read() const override { return _bytes_read; }
     int64_t cpu_time_spent() const override { return _cpu_time_spent_ns; }
+    bool skip_predicate() const override { return !_has_predicate; }
 
 private:
     Status get_tablet(const TInternalScanRange& scan_range);
@@ -60,6 +61,7 @@ private:
     std::vector<ExprContext*> _not_push_down_conjuncts;
     vectorized::ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
+    bool _has_predicate = false;
 
     ObjectPool _obj_pool;
 
@@ -136,6 +138,7 @@ public:
     ~LakeDataSourceProvider() override = default;
 
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
+    const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
 protected:
     vectorized::ConnectorScanNode* _scan_node;
@@ -344,6 +347,9 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     PredicateParser parser(*_tablet_schema);
     std::vector<PredicatePtr> preds;
     RETURN_IF_ERROR(_conjuncts_manager.get_column_predicates(&parser, &preds));
+    if (preds.size()) {
+        _has_predicate = true;
+    }
     for (auto& p : preds) {
         if (parser.can_pushdown(p.get())) {
             _params.predicates.push_back(p.get());
@@ -580,6 +586,10 @@ LakeDataSourceProvider::LakeDataSourceProvider(vectorized::ConnectorScanNode* sc
 
 DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<LakeDataSource>(this, scan_range);
+}
+
+const TupleDescriptor* LakeDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_t_lake_scan_node.tuple_id);
 }
 
 // ================================
