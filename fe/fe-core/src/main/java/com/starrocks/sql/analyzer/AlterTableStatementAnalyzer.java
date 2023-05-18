@@ -229,6 +229,10 @@ public class AlterTableStatementAnalyzer {
                 throw new SemanticException("Analyze columnDef error: %s", e.getMessage());
             }
 
+            if (columnDef.getType().isTime()) {
+                throw new SemanticException("Unsupported data type: TIME");
+            }
+
             ColumnPosition colPos = clause.getColPos();
             if (colPos != null) {
                 try {
@@ -296,6 +300,10 @@ public class AlterTableStatementAnalyzer {
                 columnDef.analyze(true);
             } catch (AnalysisException e) {
                 throw new SemanticException("Analyze columnDef error: %s", e.getMessage());
+            }
+
+            if (columnDef.getType().isTime()) {
+                throw new SemanticException("Unsupported data type: TIME");
             }
 
             ColumnPosition colPos = clause.getColPos();
