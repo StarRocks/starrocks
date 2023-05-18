@@ -116,7 +116,7 @@ public:
                    TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
     static Status _internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
-                                  TabletSharedPtr tablet);
+                                    TabletSharedPtr tablet);
 
 private:
     ChunkChanger* _chunk_changer = nullptr;
