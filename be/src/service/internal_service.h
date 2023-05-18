@@ -127,7 +127,7 @@ public:
                          PPulsarProxyResult* response, google::protobuf::Closure* done) override;
 
     void get_file_schema(google::protobuf::RpcController* controller, const PGetFileSchemaRequest* request,
-                        PGetFileSchemaResult* response, google::protobuf::Closure* done) override;
+                         PGetFileSchemaResult* response, google::protobuf::Closure* done) override;
 
     void submit_mv_maintenance_task(google::protobuf::RpcController* controller,
                                     const PMVMaintenanceTaskRequest* request, PMVMaintenanceTaskResult* response,
