@@ -441,5 +441,9 @@ int64_t HiveDataSource::io_time_spent() const {
     if (_scanner == nullptr) return 0;
     return _scanner->io_time_spent();
 }
+int64_t HiveDataSource::estimated_mem_usage() const {
+    if (_scanner == nullptr) return 0;
+    return _scanner->estimated_mem_usage();
+}
 
 } // namespace starrocks::connector

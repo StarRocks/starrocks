@@ -32,7 +32,7 @@ SchemaScanNode::~SchemaScanNode() {
 }
 
 Status SchemaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    RETURN_IF_ERROR(ScanNode::init(tnode, state));
     if (tnode.schema_scan_node.__isset.db) {
         _scanner_param.db = _pool->add(new std::string(tnode.schema_scan_node.db));
     }
@@ -293,9 +293,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> SchemaScanNode::decompos
     size_t dop = 1;
 
     size_t buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
-    int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
-            buffer_capacity, buffer_capacity, mem_limit, runtime_state()->chunk_size());
+            buffer_capacity, buffer_capacity, _mem_limit, runtime_state()->chunk_size());
 
     auto scan_op = std::make_shared<pipeline::OlapSchemaScanOperatorFactory>(context->next_operator_id(), this, dop,
                                                                              _tnode, std::move(buffer_limiter));
