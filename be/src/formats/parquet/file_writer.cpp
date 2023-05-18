@@ -380,8 +380,7 @@ Status SyncFileWriter::_flush_row_group() {
             _closed = true;
             _writer.release();
 
-            auto st = Status::IOError(e.what());
-            st = st.clone_and_prepend("flush row group error");
+            auto st = Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what()));
             LOG(WARNING) << st;
             return st;
         }
@@ -396,14 +395,12 @@ Status SyncFileWriter::close() {
         return Status::OK();
     }
 
-    auto st = _flush_row_group();
     RETURN_IF_ERROR(_flush_row_group());
     _writer->Close();
 
     auto arrow_st = _outstream->Close();
     if (!arrow_st.ok()) {
-        st = Status::IOError(arrow_st.message());
-        st = st.clone_and_prepend("close file error");
+        auto st = Status::IOError(fmt::format("{}: {}", "close file error", arrow_st.message()));
         LOG(WARNING) << st;
         return st;
     }
