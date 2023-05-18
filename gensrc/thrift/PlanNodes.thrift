@@ -440,7 +440,7 @@ struct TSchemaScanNode {
 enum TAccessPathType {
     ROOT,
     KEY,
-    VALUE,
+    OFFSET,
     FIELD,
 }
 

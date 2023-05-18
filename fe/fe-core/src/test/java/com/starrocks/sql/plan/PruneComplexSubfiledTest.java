@@ -20,7 +20,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class PruneComplexColumnTest extends PlanTestNoneDBBase {
+public class PruneComplexSubfiledTest extends PlanTestNoneDBBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass();
@@ -34,7 +34,7 @@ public class PruneComplexColumnTest extends PlanTestNoneDBBase {
                 "  `map2` MAP<INT, MAP<INT, INT>> NULL, " +
                 "  `map3` MAP<INT, MAP<INT, MAP<INT, INT>>> NULL, " +
                 "  `map4` MAP<INT, MAP<INT, MAP<INT, MAP<INT, INT>>>> NULL, " +
-                "  `map5` MAP<INT, STRUCT<s1 INT, m2 MAP<INT, STRUCT>>>" +
+                "  `map5` MAP<INT, STRUCT<s1 INT, m2 MAP<INT, STRUCT<s2 int, s3 int>>>>" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v1`)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
@@ -64,14 +64,14 @@ public class PruneComplexColumnTest extends PlanTestNoneDBBase {
 
     @Before
     public void setUp() {
-        connectContext.getSessionVariable().setCboPruneSubColumn(true);
+        connectContext.getSessionVariable().setCboPruneSubfiled(true);
         connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
     }
 
     @After
     public void tearDown() {
-        connectContext.getSessionVariable().setCboPruneSubColumn(false);
+        connectContext.getSessionVariable().setCboPruneSubfiled(false);
         connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
     }
@@ -102,6 +102,13 @@ public class PruneComplexColumnTest extends PlanTestNoneDBBase {
                 "     map_keys(map2)" +
                 " from pc0";
         plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath");
+    }
+
+    @Test
+    public void testPruneMapStructNest() throws Exception {
+        String sql = "select map5[1].m2 from pc0";
+        String plan = getVerboseExplain(sql);
         assertNotContains(plan, "ColumnAccessPath");
     }
 

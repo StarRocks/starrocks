@@ -42,11 +42,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class PruneSubColumnsRule implements TreeRewriteRule {
+public class PruneSubfiledRule implements TreeRewriteRule {
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        SubColumnAccessPathComputer computer = new SubColumnAccessPathComputer();
+        SubfiledAccessPathComputer computer = new SubfiledAccessPathComputer();
         return root.getOp().accept(computer, root, null);
     }
 
@@ -102,7 +102,7 @@ public class PruneSubColumnsRule implements TreeRewriteRule {
      * compute all complex column access path in whole plan, we only need check the expression
      * which one in project and predicate (the rule execute order promise this)
      */
-    private static class SubColumnAccessPathComputer extends OptExpressionVisitor<OptExpression, Void> {
+    private static class SubfiledAccessPathComputer extends OptExpressionVisitor<OptExpression, Void> {
         private final Map<ScalarOperator, ColumnRefSet> allComplexColumns = Maps.newHashMap();
 
         public void visitPredicate(OptExpression optExpression) {
@@ -283,12 +283,17 @@ public class PruneSubColumnsRule implements TreeRewriteRule {
                 return visit(call, context);
             }
 
-            if (call.getFnName().equals(FunctionSet.MAP_KEYS) || call.getFnName().equals(FunctionSet.MAP_SIZE)) {
+            if (call.getFnName().equals(FunctionSet.MAP_KEYS)) {
                 call.getChild(0).accept(this, context);
                 if (currentPath != null) {
                     currentPath.appendPath(AccessPath.PATH_KEY, TAccessPathType.KEY);
                 }
                 return null;
+            } else if (call.getFnName().equals(FunctionSet.MAP_SIZE)) {
+                call.getChild(0).accept(this, context);
+                if (currentPath != null) {
+                    currentPath.appendPath(AccessPath.PATH_OFFSET, TAccessPathType.OFFSET);
+                }
             }
 
             return null;
@@ -297,6 +302,7 @@ public class PruneSubColumnsRule implements TreeRewriteRule {
 
     private static class AccessPath {
         private static final String PATH_KEY = "KEY";
+        private static final String PATH_OFFSET = "OFFSET";
 
         private final ScalarOperator root;
         private final List<String> paths = Lists.newArrayList();

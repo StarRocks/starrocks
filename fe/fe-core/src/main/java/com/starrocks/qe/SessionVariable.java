@@ -661,7 +661,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int cboCTEMaxLimit = 10;
 
     @VarAttr(name = CBO_PRUNE_SUBFILED, flag = VariableMgr.INVISIBLE)
-    private boolean cboPruneSubColumn = true;
+    private boolean cboPruneSubfiled = true;
 
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
@@ -2109,12 +2109,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enablePlanValidation = val;
     }
 
-    public boolean isCboPruneSubColumn() {
-        return cboPruneSubColumn;
+    public boolean isCboPruneSubfiled() {
+        return cboPruneSubfiled;
     }
 
-    public void setCboPruneSubColumn(boolean cboPruneSubColumn) {
-        this.cboPruneSubColumn = cboPruneSubColumn;
+    public void setCboPruneSubfiled(boolean cboPruneSubfiled) {
+        this.cboPruneSubfiled = cboPruneSubfiled;
     }
 
     // Serialize to thrift object
