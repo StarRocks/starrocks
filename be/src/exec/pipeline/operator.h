@@ -178,6 +178,8 @@ public:
 
     void set_prepare_time(int64_t cost_ns);
 
+    int32_t get_driver_sequence() const { return _driver_sequence; }
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;

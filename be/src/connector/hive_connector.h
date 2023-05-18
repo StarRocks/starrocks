@@ -29,6 +29,7 @@ public:
     friend class HiveDataSource;
     HiveDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
+    const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
 protected:
     vectorized::ConnectorScanNode* _scan_node;
@@ -48,6 +49,7 @@ public:
     int64_t num_rows_read() const override;
     int64_t num_bytes_read() const override;
     int64_t cpu_time_spent() const override;
+    int64_t io_time_spent() const override;
 
 private:
     const HiveDataSourceProvider* _provider;
