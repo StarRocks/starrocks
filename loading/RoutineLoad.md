@@ -4,7 +4,9 @@
 
 如果您需要将消息流不间断地导入至 StarRocks，则可以将消息流存储在 Kafka 的 Topic 中，并向 StarRocks 提交一个 Routine Load 导入作业。 StarRocks 会常驻地运行这个导入作业，持续生成一系列导入任务，消费 Kafka 集群中该 Topic 中的全部或部分分区的消息并导入到 StarRocks 中。
 
-Routine load 支持 Exactly-Once 语义，能够保证数据不丢不重。
+Routine Load 支持 Exactly-Once 语义，能够保证数据不丢不重。
+
+Routine Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 DELETE 操作实现数据变更。请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)和[通过导入实现数据变更](../loading/Load_to_Primary_Key_tables.md)。
 
 ## 支持的数据文件格式
 
