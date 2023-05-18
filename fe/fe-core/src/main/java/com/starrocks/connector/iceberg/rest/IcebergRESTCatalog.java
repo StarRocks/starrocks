@@ -13,7 +13,7 @@
 // limitations under the License.
 
 
-package com.starrocks.connector.iceberg;
+package com.starrocks.connector.iceberg.rest;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -21,6 +21,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergCatalog;
+import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import org.apache.hadoop.conf.Configuration;

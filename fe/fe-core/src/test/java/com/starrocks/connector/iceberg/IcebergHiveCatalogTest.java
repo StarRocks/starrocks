@@ -15,6 +15,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;

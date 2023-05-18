@@ -83,7 +83,7 @@ import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSc
 import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.HIVE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.REST_CATALOG;
-import static com.starrocks.connector.iceberg.IcebergHiveCatalog.LOCATION_PROPERTY;
+import static com.starrocks.connector.iceberg.hive.IcebergHiveCatalog.LOCATION_PROPERTY;
 
 public class IcebergMetadata implements ConnectorMetadata {
 

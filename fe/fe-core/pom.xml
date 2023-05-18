@@ -293,14 +293,18 @@ under the License.
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>bundle</artifactId>
             <version>${awsv2.version}</version>
-            <scope>runtime</scope>
         </dependency>
 
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>url-connection-client</artifactId>
             <version>${awsv2.version}</version>
-            <scope>runtime</scope>
+            <exclusions>
+                <exclusion>
+                    <artifactId>utils</artifactId>
+                    <groupId>software.amazon.awssdk</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>

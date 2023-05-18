@@ -26,6 +26,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TSinkCommitInfo;
