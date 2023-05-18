@@ -232,7 +232,6 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb->set_version(1);
     tablet_metadata_pb->set_next_rowset_id(1);
     tablet_metadata_pb->set_cumulative_point(0);
-    LOG(INFO) << "lake create tablet " << fmt::format("tid:{}", req.tablet_id);
 
     if (req.__isset.base_tablet_id && req.base_tablet_id > 0) {
         struct Finder {
