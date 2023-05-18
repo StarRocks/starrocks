@@ -671,4 +671,39 @@ TEST_F(RowsetColumnPartialUpdateTest, test_full_clone2) {
     }
 }
 
+TEST_F(RowsetColumnPartialUpdateTest, test_dcg_gc) {
+    const int N = 100;
+    auto tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+    int64_t version = 1;
+    int64_t version_before_partial_update = 1;
+    auto meta = tablet->data_dir()->get_meta();
+    prepare_tablet(this, tablet, version, version_before_partial_update, N);
+    ASSERT_EQ(version_before_partial_update, 11);
+    // clear dcg before version 13, expect clear 0 dcg
+    StatusOr<size_t> clear_size = StorageEngine::instance()->update_manager()->clear_delta_column_group_before_version(
+            meta, tablet->tablet_id(), version_before_partial_update + 2);
+    ASSERT_TRUE(clear_size.ok());
+    ASSERT_EQ(*clear_size, 0);
+    // clear dcg before version 14, expect clear 1 dcg
+    clear_size = StorageEngine::instance()->update_manager()->clear_delta_column_group_before_version(
+            meta, tablet->tablet_id(), version_before_partial_update + 3);
+    ASSERT_TRUE(clear_size.ok());
+    ASSERT_EQ(*clear_size, 1);
+    // clear dcg before version 15, expect clear 1 dcg
+    clear_size = StorageEngine::instance()->update_manager()->clear_delta_column_group_before_version(
+            meta, tablet->tablet_id(), version_before_partial_update + 4);
+    ASSERT_TRUE(clear_size.ok());
+    ASSERT_EQ(*clear_size, 1);
+    // clear dcg with newest version, expect clear 6 dcg
+    clear_size = StorageEngine::instance()->update_manager()->clear_delta_column_group_before_version(
+            meta, tablet->tablet_id(), version + 1);
+    ASSERT_TRUE(clear_size.ok());
+    ASSERT_EQ(*clear_size, 6);
+    // check data
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
+        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
+    }));
+}
+
 } // namespace starrocks
