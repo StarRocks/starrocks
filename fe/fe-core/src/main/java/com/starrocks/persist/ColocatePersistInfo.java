@@ -38,7 +38,6 @@ import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.io.Writable;
-import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
