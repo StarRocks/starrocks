@@ -361,6 +361,7 @@ set(EXEC_FILES
         ./util/system_metrics_test.cpp
         ./util/ratelimit_test.cpp
         ./util/cpu_usage_info_test.cpp
+        ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         ./block_cache/block_cache_test.cpp

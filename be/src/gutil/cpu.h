@@ -89,6 +89,7 @@ public:
     bool is_running_in_vm() const { return is_running_in_vm_; }
     IntelMicroArchitecture GetIntelMicroArchitecture() const;
     const std::string& cpu_brand() const { return cpu_brand_; }
+    std::string debug_string() const;
     static const CPU* instance();
 
 private:
