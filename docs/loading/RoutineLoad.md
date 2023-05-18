@@ -6,6 +6,8 @@ To continuously load messages of a stream into StarRocks, you can store the mess
 
 A Routine Load job supports exactly-once delivery semantics to guarantee the data loaded into StarRocks is neither lost nor duplicated.
 
+Routine Load supports data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
+
 ## Supported data formats
 
 Routine Load now supports consuming CSV and JSON format data from a Kafka cluster.
