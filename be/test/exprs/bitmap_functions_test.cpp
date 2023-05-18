@@ -64,7 +64,7 @@ TEST_F(VecBitmapFunctionsTest, toBitmapTest) {
 
         columns.push_back(s);
 
-        auto column = BitmapFunctions::to_bitmap(ctx, columns).value();
+        auto column = BitmapFunctions::to_bitmap<TYPE_VARCHAR>(ctx, columns).value();
 
         ASSERT_TRUE(column->is_object());
 
@@ -86,7 +86,53 @@ TEST_F(VecBitmapFunctionsTest, toBitmapTest) {
 
         columns.push_back(s);
 
-        auto v = BitmapFunctions::to_bitmap(ctx, columns).value();
+        auto v = BitmapFunctions::to_bitmap<TYPE_VARCHAR>(ctx, columns).value();
+
+        ASSERT_TRUE(v->is_nullable());
+
+        auto p = ColumnHelper::cast_to<TYPE_OBJECT>(ColumnHelper::as_column<NullableColumn>(v)->data_column());
+
+        ASSERT_TRUE(v->is_null(0));
+        ASSERT_EQ(5, p->get_object(1)->serialize_size());
+        ASSERT_EQ(5, p->get_object(2)->serialize_size());
+    }
+}
+
+TEST_F(VecBitmapFunctionsTest, toBitmapTest_Int) {
+    {
+        Columns columns;
+
+        auto s = Int64Column::create();
+
+        s->append(12312313);
+        s->append(1);
+        s->append(0);
+
+        columns.push_back(s);
+
+        auto column = BitmapFunctions::to_bitmap<TYPE_BIGINT>(ctx, columns).value();
+
+        ASSERT_TRUE(column->is_object());
+
+        auto p = ColumnHelper::cast_to<TYPE_OBJECT>(column);
+
+        ASSERT_EQ(5, p->get_object(0)->serialize_size());
+        ASSERT_EQ(5, p->get_object(1)->serialize_size());
+        ASSERT_EQ(5, p->get_object(2)->serialize_size());
+    }
+
+    {
+        Columns columns;
+
+        auto s = Int32Column::create();
+
+        s->append(-1);
+        s->append(1);
+        s->append(0);
+
+        columns.push_back(s);
+
+        auto v = BitmapFunctions::to_bitmap<TYPE_INT>(ctx, columns).value();
 
         ASSERT_TRUE(v->is_nullable());
 

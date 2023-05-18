@@ -548,7 +548,7 @@ vectorized_functions = [
     [80041, 'hll_deserialize', 'HLL', ['VARCHAR'], 'HyperloglogFunctions::hll_deserialize'],
 
     # bitmap function
-    [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap', False],
+    [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap<TYPE_VARCHAR>', False],
     [90020, 'bitmap_hash', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::bitmap_hash', False],
     [90030, 'bitmap_count', 'BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_count'],
     [90040, 'bitmap_empty', 'BITMAP', [], 'BitmapFunctions::bitmap_empty', False],
@@ -570,6 +570,11 @@ vectorized_functions = [
     [91000, 'sub_bitmap', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::sub_bitmap', False],
     [91001, 'bitmap_subset_limit', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::bitmap_subset_limit', False],
     [91002, 'bitmap_subset_in_range', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::bitmap_subset_in_range', False],
+    [91003, 'to_bitmap', 'BITMAP', ['BOOLEAN'], 'BitmapFunctions::to_bitmap<TYPE_BOOLEAN>', False],
+    [91004, 'to_bitmap', 'BITMAP', ['TINYINT'], 'BitmapFunctions::to_bitmap<TYPE_TINYINT>', False],
+    [91005, 'to_bitmap', 'BITMAP', ['SMALLINT'], 'BitmapFunctions::to_bitmap<TYPE_SMALLINT>', False],
+    [91006, 'to_bitmap', 'BITMAP', ['INT'], 'BitmapFunctions::to_bitmap<TYPE_INT>', False],
+    [91007, 'to_bitmap', 'BITMAP', ['BIGINT'], 'BitmapFunctions::to_bitmap<TYPE_BIGINT>', False],
 
     # hash function
     [100010, 'murmur_hash3_32', 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
