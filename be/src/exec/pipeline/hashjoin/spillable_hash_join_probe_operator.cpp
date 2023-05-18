@@ -472,7 +472,7 @@ bool SpillableHashJoinProbeOperator::_all_loaded_partition_data_ready() {
 }
 
 bool SpillableHashJoinProbeOperator::_all_partition_finished() const {
-    return _processed_partitions.size() == _build_partitions.size();
+    return !_build_partitions.empty() && _processed_partitions.size() == _build_partitions.size();
 }
 
 Status SpillableHashJoinProbeOperatorFactory::prepare(RuntimeState* state) {
