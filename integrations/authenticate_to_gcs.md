@@ -113,7 +113,7 @@ WITH BROKER
 
 | **参数**                               | **默认值** | **取值样例**                                                | **说明**                                                     |
 | -------------------------------------- | ---------- | ----------------------------------------------------------- | ------------------------------------------------------------ |
-| gcp.gcs.service_account_email          | ""         | "user@hello.iam.gserviceaccount.com"                        | 创建 Service Account 时生成的 JSON 文件中的 Email。          |
+| gcp.gcs.service_account_email          | ""         | "`user@hello.iam.gserviceaccount.com`"                        | 创建 Service Account 时生成的 JSON 文件中的 Email。          |
 | gcp.gcs.service_account_private_key_id | ""         | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                  | 创建 Service Account 时生成的 JSON 文件中的 Private Key ID。 |
 | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n" | 创建 Service Account 时生成的 JSON 文件中的 Private Key。    |
 
@@ -150,7 +150,7 @@ WITH BROKER
 
 | **参数**                               | **默认值** | **取值样例**                                                | **说明**                                                     |
 | -------------------------------------- | ---------- | ----------------------------------------------------------- | ------------------------------------------------------------ |
-| gcp.gcs.service_account_email          | ""         | "user@hello.iam.gserviceaccount.com"                        | 创建 Meta Service Account 时生成的 JSON 文件中的 Email。     |
+| gcp.gcs.service_account_email          | ""         | "`user@hello.iam.gserviceaccount.com`"                        | 创建 Meta Service Account 时生成的 JSON 文件中的 Email。     |
 | gcp.gcs.service_account_private_key_id | ""         | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                  | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key ID。 |
 | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n" | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key。 |
 | gcp.gcs.impersonation_service_account  | ""         | "hello"                                                     | 需要模拟的目标 Data Service Account。                        |
