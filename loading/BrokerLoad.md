@@ -6,7 +6,7 @@ Broker Load 是一种异步的导入方式。您提交导入作业以后，StarR
 
 Broker Load 支持单表导入 (Single-Table Load) 和多表导入 (Multi-Table Load)。您可以通过单次导入操作，把一个或多个数据文件导入单张或多张目标表。而且 Broker Load 能够保证单次导入事务的原子性，即单次导入的多个数据文件都成功或者都失败，而不会出现部分导入成功、部分导入失败的情况。
 
-Broker Load 还支持在导入过程中做数据的转换，具体请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)。
+Broker Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 DELETE 操作实现数据变更。请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)和[通过导入实现数据变更](../loading/Load_to_Primary_Key_tables.md)。
 
 ## 背景信息
 
