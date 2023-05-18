@@ -55,11 +55,7 @@ public class MarkedCountDownLatch<K, V> extends CountDownLatch {
         if (st.ok()) {
             st = status;
         }
-        if (marks.remove(key, value)) {
-            super.countDown();
-            return true;
-        }
-        return false;
+        return markedCountDown(key, value);
     }
 
     public synchronized List<Entry<K, V>> getLeftMarks() {
