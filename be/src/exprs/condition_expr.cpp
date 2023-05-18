@@ -64,12 +64,14 @@ struct SelectIfOP {
     }
 };
 
-#define DEFINE_CLASS_CONSTRUCT_FN(NAME)         \
-    NAME(const TExprNode& node) : Expr(node) {} \
-                                                \
-    ~NAME() {}                                  \
-                                                \
-    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new NAME(*this)); }
+#define DEFINE_CLASS_CONSTRUCT_FN(NAME)                    \
+    NAME(const TExprNode& node) : Expr(node) {}            \
+                                                           \
+    ~NAME() {}                                             \
+                                                           \
+    virtual Expr* clone(ObjectPool* pool) const override { \
+        return pool->add(new NAME(*this));                 \
+    }
 
 template <LogicalType Type>
 class VectorizedIfNullExpr : public Expr {
@@ -90,7 +92,11 @@ public:
         }
 
         Columns list = {lhs, rhs};
-        return _evaluate_general(list);
+        if constexpr (lt_is_collection<Type>) {
+            return _evaluate_complex(list);
+        } else {
+            return _evaluate_general(list);
+        }
     }
 
 private:
@@ -110,6 +116,26 @@ private:
         }
 
         return result.build(ColumnHelper::is_all_const(columns));
+    }
+
+    ColumnPtr _evaluate_complex(const Columns& columns) {
+        auto num_rows = columns[0]->size();
+        auto res = ColumnHelper::cast_to_nullable_column(columns[0]->clone_empty());
+        res->reserve(num_rows);
+        NullColumnPtr null = nullptr;
+
+        if (columns[0]->is_nullable()) {
+            null = down_cast<NullableColumn*>(columns[0].get())->null_column();
+        }
+
+        for (int row = 0; row < num_rows; ++row) {
+            if (null == nullptr || !null->get_data()[row]) { // not null
+                res->append(*columns[0], row, 1);
+            } else {
+                res->append(*columns[1], row, 1);
+            }
+        }
+        return res;
     }
 };
 
@@ -131,7 +157,11 @@ public:
         }
 
         Columns list = {lhs, rhs};
-        return _evaluate_general(list);
+        if constexpr (lt_is_collection<Type>) {
+            return _evaluate_complex(list);
+        } else {
+            return _evaluate_general(list);
+        }
     }
 
 private:
@@ -156,6 +186,27 @@ private:
         }
 
         return result.build(ColumnHelper::is_all_const(columns));
+    }
+
+    ColumnPtr _evaluate_complex(const Columns& columns) {
+        auto num_rows = columns[0]->size();
+        auto res = ColumnHelper::cast_to_nullable_column(columns[0]->clone_empty());
+        res->reserve(num_rows);
+        auto right_data = columns[1];
+        NullColumnPtr right_nulls = nullptr;
+        if (columns[1]->is_nullable()) {
+            right_data = down_cast<NullableColumn*>(columns[1].get())->data_column();
+            right_nulls = down_cast<NullableColumn*>(columns[1].get())->null_column();
+        }
+        for (int row = 0; row < num_rows; ++row) {
+            if ((right_nulls == nullptr || !right_nulls->get_data()[row]) &&
+                columns[0]->equals(row, *right_data, row)) {
+                res->append_nulls(1);
+            } else {
+                res->append(*columns[0], row, 1);
+            }
+        }
+        return res;
     }
 };
 
@@ -191,7 +242,9 @@ public:
         // optimization for 3 columns all not null.
         if (bhs_nulls == 0 && lhs_nulls == 0 && rhs_nulls == 0) {
             // only arithmetic type could use SIMD optimization
-            if (bhs->is_constant() || !isArithmeticLT<Type>) {
+            if constexpr (lt_is_collection<Type>) {
+                return _evaluate_complex<false>(list);
+            } else if (bhs->is_constant() || !isArithmeticLT<Type>) {
                 return _evaluate_general<false>(list);
             } else if constexpr (isArithmeticLT<Type>) {
                 return dispatch_nonull_template<SelectIfOP, Type>(lhs, rhs, bhs, type());
@@ -199,7 +252,9 @@ public:
                 __builtin_unreachable();
             }
         } else {
-            if constexpr (isArithmeticLT<Type>) {
+            if constexpr (lt_is_collection<Type>) {
+                return _evaluate_complex<true>(list);
+            } else if constexpr (isArithmeticLT<Type>) {
                 // SIMD branch
                 size_t num_rows = list[0]->size();
                 // get null data
@@ -279,6 +334,32 @@ private:
         }
         return result.build(all_const);
     }
+
+    template <bool check_null>
+    ColumnPtr _evaluate_complex(const Columns& columns) {
+        ColumnViewer<TYPE_BOOLEAN> bhs_viewer(columns[0]);
+        auto num_rows = columns[0]->size();
+        ColumnPtr res = ColumnHelper::cast_to_nullable_column(columns[1]->clone_empty());
+        res->reserve(num_rows);
+        if constexpr (check_null) {
+            for (int row = 0; row < num_rows; ++row) {
+                if (bhs_viewer.is_null(row) || !bhs_viewer.value(row)) {
+                    res->append(*columns[2], row, 1);
+                } else {
+                    res->append(*columns[1], row, 1);
+                }
+            }
+        } else {
+            for (int row = 0; row < num_rows; ++row) {
+                if (!bhs_viewer.value(row)) {
+                    res->append(*columns[2], row, 1);
+                } else {
+                    res->append(*columns[1], row, 1);
+                }
+            }
+        }
+        return res;
+    }
 };
 
 template <LogicalType Type>
@@ -287,7 +368,6 @@ public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedCoalesceExpr);
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
-        std::vector<ColumnViewer<Type>> viewers;
         std::vector<ColumnPtr> columns;
         for (int i = 0; i < _children.size(); ++i) {
             ASSIGN_OR_RETURN(auto value, _children[i]->evaluate_checked(context, ptr));
@@ -297,18 +377,16 @@ public:
             // 2.if there is a column all not null, It at least maybe the choice.
             // 3.don't need check if value is all null
             if (null_count == 0) {
-                if (viewers.size() == 0) {
+                if (columns.size() == 0) {
                     return value->clone();
                 }
 
                 // There is a column all not null.
-                viewers.push_back(ColumnViewer<Type>(value));
                 columns.push_back(value);
 
                 // put it in viewers as last column.
                 break;
             } else if (null_count != value->size()) {
-                viewers.push_back(ColumnViewer<Type>(value));
                 columns.push_back(value);
             }
         }
@@ -324,6 +402,19 @@ public:
             return columns[0]->clone();
         }
 
+        if constexpr (lt_is_collection<Type>) {
+            return _evaluate_complex(columns);
+        } else {
+            return _evaluate_general(columns);
+        }
+    }
+
+private:
+    StatusOr<ColumnPtr> _evaluate_general(const Columns columns) {
+        std::vector<ColumnViewer<Type>> viewers;
+        for (auto value : columns) {
+            viewers.push_back(ColumnViewer<Type>(value));
+        }
         // choose not null
         int size = columns[0]->size();
         int col_size = viewers.size();
@@ -331,25 +422,51 @@ public:
 
         for (int row = 0; row < size; ++row) {
             int col;
-            for (col = 0; col < (col_size - 1); ++col) {
+            for (col = 0; col < col_size; ++col) {
                 // if not null
                 if (!viewers[col].is_null(row)) {
                     builder.append(viewers[col].value(row));
                     break;
                 }
             }
-
-            // if last column
-            if (col == (col_size - 1)) {
-                if (viewers[col].is_null(row)) {
-                    builder.append_null();
-                } else {
-                    builder.append(viewers[col].value(row));
-                }
+            // if all nulls
+            if (col == col_size) {
+                builder.append_null();
             }
         }
 
         return builder.build(ColumnHelper::is_all_const(columns));
+    }
+
+    StatusOr<ColumnPtr> _evaluate_complex(const Columns columns) { // without only-null columns
+        int size = columns[0]->size();
+        int col_size = columns.size();
+        auto res = ColumnHelper::cast_to_nullable_column(columns[0]->clone_empty());
+        res->reserve(size);
+        NullColumns nullColumns;
+        nullColumns.reserve(col_size);
+        for (auto i = 0; i < col_size; ++i) {
+            if (columns[i]->is_nullable()) {
+                nullColumns.emplace_back(down_cast<NullableColumn*>(columns[i].get())->null_column());
+            } else {
+                nullColumns.emplace_back(nullptr);
+            }
+        }
+        for (int row = 0; row < size; ++row) {
+            int col;
+            for (col = 0; col < col_size; ++col) {
+                // if not null
+                if (nullColumns[col] == nullptr || !nullColumns[col]->get_data()[row]) {
+                    res->append(*columns[col], row, 1);
+                    break;
+                }
+            }
+            // if all nulls
+            if (col >= col_size) {
+                res->append_nulls(1);
+            }
+        }
+        return res;
     }
 };
 
@@ -378,6 +495,10 @@ public:
     CASE_TYPE(TYPE_OBJECT, CLASS);     \
     CASE_TYPE(TYPE_HLL, CLASS);        \
     CASE_TYPE(TYPE_PERCENTILE, CLASS); \
+    CASE_TYPE(TYPE_ARRAY, CLASS);      \
+    CASE_TYPE(TYPE_MAP, CLASS);        \
+    CASE_TYPE(TYPE_STRUCT, CLASS);     \
+    CASE_TYPE(TYPE_JSON, CLASS);       \
     CASE_TYPE(TYPE_DECIMAL32, CLASS);  \
     CASE_TYPE(TYPE_DECIMAL64, CLASS);  \
     CASE_TYPE(TYPE_DECIMAL128, CLASS);
