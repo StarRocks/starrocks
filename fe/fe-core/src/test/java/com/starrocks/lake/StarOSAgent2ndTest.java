@@ -92,7 +92,7 @@ public class StarOSAgent2ndTest {
             backend.setStarletPort(workerStarletPort);
             backend.setBePort(workerBePort + 1);
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend);
-            Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId));
+            Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId, 0));
             GlobalStateMgr.getCurrentSystemInfo().dropBackend(backend);
             workerToBackend.clear();
         }
@@ -102,7 +102,7 @@ public class StarOSAgent2ndTest {
             backend.setBePort(workerBePort + 1);
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend);
             // empty result
-            Assert.assertTrue(starosAgent.getBackendIdsByShard(shardId).isEmpty());
+            Assert.assertTrue(starosAgent.getBackendIdsByShard(shardId, 0).isEmpty());
             GlobalStateMgr.getCurrentSystemInfo().dropBackend(backend);
             workerToBackend.clear();
         }
@@ -111,7 +111,7 @@ public class StarOSAgent2ndTest {
             backend.setStarletPort(0);
             backend.setBePort(workerBePort);
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend);
-            Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId));
+            Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId, 0));
             GlobalStateMgr.getCurrentSystemInfo().dropBackend(backend);
             workerToBackend.clear();
         }

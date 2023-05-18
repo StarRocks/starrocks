@@ -290,7 +290,7 @@ public class CreateLakeTableTest {
                 result = Lists.newArrayList(20001L, 20002L, 20003L);
                 agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
-                agent.getBackendIdsByShard(anyLong);
+                agent.getBackendIdsByShard(anyLong, 0);
                 result = Sets.newHashSet(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0));
             }
         };

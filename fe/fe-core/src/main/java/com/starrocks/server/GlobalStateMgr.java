@@ -270,6 +270,7 @@ import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
@@ -291,6 +292,7 @@ import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -329,10 +331,11 @@ public class GlobalStateMgr {
     private static final long REPLAYER_MAX_MS_PER_LOOP = 1000L;
     private static final long REPLAYER_MAX_LOGS_PER_LOOP = 100000L;
 
-    private String metaDir;
+    /**
+     * Meta and Image context
+     */
     private String imageDir;
-
-    private MetaContext metaContext;
+    private final MetaContext metaContext;
     private long epoch = 0;
 
     // Lock to perform atomic modification on map like 'idToDb' and 'fullNameToDb'.
@@ -341,7 +344,13 @@ public class GlobalStateMgr {
     // We use fair ReentrantLock to avoid starvation. Do not use this lock in critical code pass
     // because fair lock has poor performance.
     // Using QueryableReentrantLock to print owner thread in debug mode.
-    private QueryableReentrantLock lock;
+    private final QueryableReentrantLock lock;
+
+    /**
+     * System Manager
+     */
+    private final NodeMgr nodeMgr;
+    private final HeartbeatMgr heartbeatMgr;
 
     private Load load;
     private LoadManager loadManager;
@@ -487,8 +496,6 @@ public class GlobalStateMgr {
     private InsertOverwriteJobManager insertOverwriteJobManager;
 
     private LocalMetastore localMetastore;
-    private final NodeMgr nodeMgr;
-    private HeartbeatMgr heartbeatMgr;
     private GlobalFunctionMgr globalFunctionMgr;
 
     @Deprecated
@@ -509,6 +516,10 @@ public class GlobalStateMgr {
 
     private StorageVolumeMgr storageVolumeMgr;
 
+    public NodeMgr getNodeMgr() {
+        return nodeMgr;
+    }
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -528,10 +539,22 @@ public class GlobalStateMgr {
     public TNodesInfo createNodesInfo(Integer clusterId) {
         TNodesInfo nodesInfo = new TNodesInfo();
         SystemInfoService systemInfoService = getOrCreateSystemInfo(clusterId);
-        for (Long id : systemInfoService.getBackendIds(false)) {
-            Backend backend = systemInfoService.getBackend(id);
-            nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
+        // use default warehouse
+        Warehouse warehouse = warehouseMgr.getDefaultWarehouse();
+        // TODO: need to refactor after be split into cn + dn
+        if (warehouse != null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
+            for (Long cnId : cluster.getComputeNodeIds()) {
+                ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
+                nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getHost(), cn.getBrpcPort()));
+            }
+        } else {
+            for (Long id : systemInfoService.getBackendIds(false)) {
+                Backend backend = systemInfoService.getBackend(id);
+                nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
+            }
         }
+
         return nodesInfo;
     }
 
@@ -979,8 +1002,7 @@ public class GlobalStateMgr {
     }
 
     private void setMetaDir() {
-        this.metaDir = Config.meta_dir;
-        this.imageDir = this.metaDir + IMAGE_DIR;
+        this.imageDir = Config.meta_dir + IMAGE_DIR;
         nodeMgr.setImageDir(imageDir);
     }
 

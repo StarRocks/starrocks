@@ -1039,20 +1039,20 @@ public class NodeMgr {
     }
 
     public Pair<String, Integer> getLeaderIpAndRpcPort() {
-        if (GlobalStateMgr.getCurrentState().isReady()) {
+        if (GlobalStateMgr.getServingState().isReady()) {
             return new Pair<>(this.leaderIp, this.leaderRpcPort);
         } else {
-            String leaderNodeName = GlobalStateMgr.getCurrentState().getHaProtocol().getLeaderNodeName();
+            String leaderNodeName = GlobalStateMgr.getServingState().getHaProtocol().getLeaderNodeName();
             Frontend frontend = frontends.get(leaderNodeName);
             return new Pair<>(frontend.getHost(), frontend.getRpcPort());
         }
     }
 
     public Pair<String, Integer> getLeaderIpAndHttpPort() {
-        if (GlobalStateMgr.getCurrentState().isReady()) {
+        if (GlobalStateMgr.getServingState().isReady()) {
             return new Pair<>(this.leaderIp, this.leaderHttpPort);
         } else {
-            String leaderNodeName = GlobalStateMgr.getCurrentState().getHaProtocol().getLeaderNodeName();
+            String leaderNodeName = GlobalStateMgr.getServingState().getHaProtocol().getLeaderNodeName();
             Frontend frontend = frontends.get(leaderNodeName);
             return new Pair<>(frontend.getHost(), Config.http_port);
         }

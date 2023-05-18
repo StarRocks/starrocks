@@ -196,7 +196,7 @@ public class BackendsProcDir implements ProcDirInterface {
 
             if (RunMode.allowCreateLakeTable()) {
                 backendInfo.add(String.valueOf(backend.getStarletPort()));
-                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(backendId);
+                long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerIdByBackendId(backendId);
                 backendInfo.add(String.valueOf(workerId));
             }
 
