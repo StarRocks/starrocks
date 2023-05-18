@@ -98,7 +98,13 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
                 return;
             }
+
+            // TODO: need to refactor after be split into cn + dn
             List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                allBackends.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(false));
+            }
+
             if (allBackends.isEmpty()) {
                 LOG.warn("some transaction state need to publish, but no backend exists");
                 return;
