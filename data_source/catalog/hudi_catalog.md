@@ -67,22 +67,22 @@ PROPERTIES
 
 ### 参数说明
 
-#### `catalog_name`
+#### catalog_name
 
 Hudi Catalog 的名称。命名规则如下：
 
 - 可以包含字母、数字 0 到 9 和下划线 (_)，并且必须以字母开头。
 - 长度不能超过 64 个字符。
 
-#### `comment`
+#### comment
 
 Hudi Catalog 的描述。此参数为可选。
 
-#### `type`
+#### type
 
 数据源的类型。设置为 `hudi`。
 
-#### `MetastoreParams`
+#### MetastoreParams
 
 StarRocks 访问 Hudi 集群元数据服务的相关参数配置。
 
@@ -147,7 +147,7 @@ StarRocks 访问 Hudi 集群元数据服务的相关参数配置。
 
 有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
 
-#### `StorageCredentialParams`
+#### StorageCredentialParams
 
 StarRocks 访问 Hudi 集群文件存储的相关参数配置。
 
@@ -217,7 +217,7 @@ StarRocks 访问 Hudi 集群文件存储的相关参数配置。
 | aws.s3.access_key                | Yes      | IAM User 的 Access Key。 |
 | aws.s3.secret_key                | Yes      | IAM User 的 Secret Key。 |
 
-#### `MetadataUpdateParams`
+#### MetadataUpdateParams
 
 指定缓存元数据更新策略的一组参数。StarRocks 根据该策略更新缓存的 Hudi 元数据。此组参数为可选。
 
@@ -383,7 +383,7 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hudi_table
 ```
 
-## 手动或自动更新元数据
+## 手动或自动更新元数据缓存
 
 ### 手动更新
 

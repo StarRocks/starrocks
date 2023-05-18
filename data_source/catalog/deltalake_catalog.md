@@ -68,22 +68,22 @@ PROPERTIES
 
 ### 参数说明
 
-#### `catalog_name`
+#### catalog_name
 
 Delta Lake Catalog 的名称。命名规则如下：
 
 - 可以包含字母、数字 0 到 9 和下划线 (_)，并且必须以字母开头。
 - 长度不能超过 64 个字符。
 
-#### `comment`
+#### comment
 
 Delta Lake Catalog 的描述。此参数为可选。
 
-#### `type`
+#### type
 
 数据源的类型。设置为 `deltalake`。
 
-#### `MetastoreParams`
+#### MetastoreParams
 
 StarRocks 访问 Delta Lake 集群元数据服务的相关参数配置。
 
@@ -148,7 +148,7 @@ StarRocks 访问 Delta Lake 集群元数据服务的相关参数配置。
 
 有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
 
-#### `StorageCredentialParams`
+#### StorageCredentialParams
 
 StarRocks 访问 Delta Lake 集群文件存储的相关参数配置。
 
@@ -384,11 +384,11 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
 ```
 
-## 更新缓存元数据
+## 手动或自动更新元数据缓存
 
 ### 手动更新
 
-默认情况下，StarRocks 会缓存 Delta Lake 的元数据、并以异步模式自动更新缓存的元数据，从而提高查询性能。此外，在对 Delta Lake 表做了表结构变更、或其他表更新后，您也可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) 更新该表的元数据，从而确保 StarRocks 第一时间生成合理的查询计划：
+默认情况下，StarRocks 会缓存 Delta Lake 的元数据、并以异步模式自动更新缓存的元数据，从而提高查询性能。此外，在对 Delta Lake 表做了表结构变更、或其他表更新后，您也可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) 手动更新该表的元数据，从而确保 StarRocks 第一时间生成合理的查询计划：
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name>
@@ -466,7 +466,7 @@ HMS 2.x 和 3.x 版本均支持配置事件侦听器。这里以配套 HMS 3.1.2
 | enable_hms_parallel_process_evens | 指定 StarRocks 在读取事件时是否并行处理读取的事件。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 则开启并行机制，取值为 `false` 则关闭并行机制。 |
 | hms_process_events_parallel_num   | StarRocks 每次处理事件的最大并发数。默认值：`4`。                  |
 
-## 附录：理解自动异步更新策略
+## 附录：理解元数据自动异步更新策略
 
 自动异步更新策略是 StarRocks 用于更新 Delta Lake Catalog 中元数据的默认策略。
 

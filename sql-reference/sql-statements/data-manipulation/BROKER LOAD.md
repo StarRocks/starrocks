@@ -26,7 +26,7 @@ WITH BROKER
 
 ## 参数说明
 
-### `database_name` 和 `label_name`
+### database_name 和 label_name
 
 `label_name` 指定导入作业的标签。
 
@@ -36,7 +36,7 @@ WITH BROKER
 
 有关标签的命名规范，请参见[系统限制](/reference/System_limit.md)。
 
-### `data_desc`
+### data_desc
 
 用于描述一批次待导入的数据。每个 `data_desc` 声明了本批次待导入数据所属的数据源地址、ETL 函数、StarRocks 表和分区等信息。
 
@@ -156,11 +156,11 @@ INTO TABLE <table_name>
 
   用于指定过滤条件，对做完转换的数据进行过滤。只有符合 WHERE 子句中指定的过滤条件的数据才会导入到 StarRocks 表中。
 
-### `WITH BROKER`
+### WITH BROKER
 
 在 v2.4 及以前版本，您需要在导入语句中通过 `WITH BROKER "<broker_name>"` 来指定使用哪个 Broker。自 v2.5 起，您不再需要指定 `broker_name`，但继续保留 `WITH BROKER` 关键字。参见[从 HDFS 或外部云存储系统导入数据 > 背景信息](../../../loading/BrokerLoad.md#背景信息)。
 
-### `StorageCredentialParams`
+### StorageCredentialParams
 
 StarRocks 访问存储系统的认证配置。
 
@@ -404,7 +404,7 @@ StarRocks 访问存储系统的认证配置。
 | aws.s3.access_key               | 是       | IAM User 的 Access Key。                                     |
 | aws.s3.secret_key               | 是       | IAM User 的 Secret Key。                                     |
 
-### `opt_properties`
+### opt_properties
 
 用于指定一些导入相关的可选参数，指定的参数设置作用于整个导入作业。语法如下：
 
