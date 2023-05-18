@@ -59,7 +59,6 @@ import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
@@ -739,7 +738,7 @@ public class LoadManager implements Writable {
             reader.readJson(LoadManager.class);
             int size = reader.readInt();
             long now = System.currentTimeMillis();
-            while (size-- >= 0) {
+            while (size-- > 0) {
                 LoadJob loadJob = reader.readJson(LoadJob.class);
                 // discard expired job right away
                 if (isJobExpired(loadJob, now)) {
