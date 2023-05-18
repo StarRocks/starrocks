@@ -14,9 +14,16 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.collect.Lists;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
@@ -34,6 +41,7 @@ import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -147,5 +155,37 @@ public abstract class StatisticsCollectJob {
         StringWriter sw = new StringWriter();
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);
         return sw.toString();
+    }
+
+    public static Expr hllDeserialize(byte[] hll) {
+        String str = new String(hll, StandardCharsets.UTF_8);
+        Function unhex = Expr.getBuiltinFunction("unhex", new Type[] {Type.VARCHAR},
+                Function.CompareMode.IS_IDENTICAL);
+
+        FunctionCallExpr unhexExpr = new FunctionCallExpr("unhex", Lists.newArrayList(new StringLiteral(str)));
+        unhexExpr.setFn(unhex);
+        unhexExpr.setType(unhex.getReturnType());
+
+        Function fn = Expr.getBuiltinFunction("hll_deserialize", new Type[] {Type.VARCHAR},
+                Function.CompareMode.IS_IDENTICAL);
+        FunctionCallExpr fe = new FunctionCallExpr("hll_deserialize", Lists.newArrayList(unhexExpr));
+        fe.setFn(fn);
+        fe.setType(fn.getReturnType());
+        return fe;
+    }
+
+    public static Expr nowFn() {
+        Function fn = Expr.getBuiltinFunction(FunctionSet.NOW, new Type[] {}, Function.CompareMode.IS_IDENTICAL);
+        FunctionCallExpr fe = new FunctionCallExpr("now", Lists.newArrayList());
+        fe.setType(fn.getReturnType());
+        return fe;
+    }
+
+    public static String fullAnalyzeGetDataSize(Column column) {
+        if (column.getPrimitiveType().isCharFamily()) {
+            return "IFNULL(SUM(CHAR_LENGTH(" + StatisticUtils.quoting(column.getName()) + ")), 0)";
+        }
+        long typeSize = column.getType().getTypeSize();
+        return "COUNT(1) * " + typeSize;
     }
 }

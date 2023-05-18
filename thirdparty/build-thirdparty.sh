@@ -172,13 +172,6 @@ build_libevent() {
 }
 
 build_openssl() {
-    OLD_FLAGS=$CXXFLAGS
-    OLD_CFLAGS=$CFLAGS
-
-    unset CXXFLAGS
-    unset CPPFLAGS
-    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
-
     OPENSSL_PLATFORM="linux-x86_64"
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         OPENSSL_PLATFORM="linux-aarch64"
@@ -187,15 +180,18 @@ build_openssl() {
     check_if_source_exist $OPENSSL_SOURCE
     cd $TP_SOURCE_DIR/$OPENSSL_SOURCE
 
+    # use customized CFLAGS/CPPFLAGS/CXXFLAGS/LDFLAGS
+    unset CXXFLAGS
+    unset CPPFLAGS
+    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
+
     LDFLAGS="-L${TP_LIB_DIR}" \
     LIBDIR="lib" \
     ./Configure --prefix=$TP_INSTALL_DIR -lz -no-shared ${OPENSSL_PLATFORM}
     make -j$PARALLEL
     make install_sw
 
-    export CXXFLAGS=$OLD_FLAGS
-    export CPPFLAGS=$OLD_FLAGS
-    export CFLAGS=$OLD_CFLAGS
+    restore_compile_flags
 }
 
 # thrift
@@ -371,19 +367,15 @@ build_gperftools() {
     check_if_source_exist $GPERFTOOLS_SOURCE
     cd $TP_SOURCE_DIR/$GPERFTOOLS_SOURCE
 
-    OLD_FLAGS=$CFLAGS
-    CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
-
     if [ ! -f configure ]; then
         ./autogen.sh
     fi
 
     LDFLAGS="-L${TP_LIB_DIR}" \
+    CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
     ./configure --prefix=$TP_INSTALL_DIR/gperftools --disable-shared --enable-static --disable-libunwind --with-pic --enable-frame-pointers
     make -j$PARALLEL
     make install
-
-    CFLAGS=$OLD_FLAGS
 }
 
 # zlib
@@ -500,9 +492,7 @@ build_rocksdb() {
     cd $TP_SOURCE_DIR/$ROCKSDB_SOURCE
     make clean
 
-    OLD_FLAGS=$CFLAGS
-    CFLAGS=""
-
+    CFLAGS= \
     EXTRA_CFLAGS="-I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy -I ${TP_INCLUDE_DIR}/lz4 -L${TP_LIB_DIR}" \
     EXTRA_CXXFLAGS="-fPIC -Wno-deprecated-copy -Wno-stringop-truncation -Wno-pessimizing-move -I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy" \
     EXTRA_LDFLAGS="-static-libstdc++ -static-libgcc" \
@@ -510,8 +500,6 @@ build_rocksdb() {
 
     cp librocksdb.a $TP_LIB_DIR/librocksdb.a
     cp -r include/rocksdb $TP_INCLUDE_DIR
-
-    export CFLAGS=$OLD_FLAGS
 }
 
 # sasl
@@ -568,9 +556,6 @@ build_flatbuffers() {
 
 # arrow
 build_arrow() {
-    OLD_FLAGS=$CXXFLAGS
-    OLD_CFLAGS=$CFLAGS
-
     export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
     export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
     export CPPFLAGS=$CXXFLAGS
@@ -618,9 +603,7 @@ build_arrow() {
     mkdir -p ${TP_INSTALL_DIR}/include/zstd
     cp ./zstd_ep-install/include/* ${TP_INSTALL_DIR}/include/zstd
 
-    export CXXFLAGS=$OLD_FLAGS
-    export CPPFLAGS=$OLD_FLAGS
-    export CFLAGS=$OLD_CFLAGS
+    restore_compile_flags
 }
 
 # s2
@@ -702,6 +685,8 @@ build_bitshuffle() {
 }
 
 # croaring bitmap
+# If open AVX512 default, current version will be compiled failed on some machine, so close AVX512 default,
+# When this problem is solved, a switch will be added to control.
 build_croaringbitmap() {
     FORCE_AVX=ON
     # avx2 is not supported by aarch64.
@@ -722,6 +707,8 @@ build_croaringbitmap() {
     -DENABLE_ROARING_TESTS=OFF \
     -DROARING_DISABLE_NATIVE=ON \
     -DFORCE_AVX=$FORCE_AVX \
+    -DROARING_DISABLE_AVX512=ON \
+    -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" ..
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -788,12 +775,9 @@ build_breakpad() {
     cd $TP_SOURCE_DIR/$BREAK_PAD_SOURCE
     mkdir -p src/third_party/lss
     cp $TP_PATCH_DIR/linux_syscall_support.h src/third_party/lss
-    OLD_FLAGS=$CFLAGS
-    unset CFLAGS
-    ./configure --prefix=$TP_INSTALL_DIR --enable-shared=no --disable-samples --disable-libevent-regress
+    CFLAGS= ./configure --prefix=$TP_INSTALL_DIR --enable-shared=no --disable-samples --disable-libevent-regress
     make -j$PARALLEL
     make install
-    export CFLAGS=$OLD_FLAGS
 }
 
 #hadoop
@@ -837,8 +821,6 @@ build_hyperscan() {
 
 #mariadb-connector-c
 build_mariadb() {
-    OLD_FLAGS=$CXXFLAGS
-    OLD_CFLAGS=$CFLAGS
     OLD_CMAKE_GENERATOR=${CMAKE_GENERATOR}
     OLD_BUILD_SYSTEM=${BUILD_SYSTEM}
 
@@ -869,9 +851,7 @@ build_mariadb() {
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE/build/include
     ${BUILD_SYSTEM} install
 
-    export CXXFLAGS=$OLD_FLAGS
-    export CPPFLAGS=$OLD_FLAGS
-    export CFLAGS=$OLD_CFLAGS
+    restore_compile_flags
     export CMAKE_GENERATOR=$OLD_CMAKE_GENERATOR
     export BUILD_SYSTEM=$OLD_BUILD_SYSTEM
 }
@@ -897,7 +877,6 @@ build_broker_thirdparty_jars() {
 }
 
 build_aws_cpp_sdk() {
-    OLD_CFLAGS=$CFLAGS
     export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -D_POSIX_C_SOURCE=200112L"
 
     check_if_source_exist $AWS_SDK_CPP_SOURCE
@@ -918,7 +897,7 @@ build_aws_cpp_sdk() {
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 
-    export CFLAGS=$OLD_CFLAGS
+    restore_compile_flags
 }
 
 # velocypack
@@ -958,11 +937,8 @@ build_opentelemetry() {
 
 # jemalloc
 build_jemalloc() {
-    OLD_CFLAGS=$CFLAGS
     check_if_source_exist $JEMALLOC_SOURCE
 
-    unset CFLAGS
-    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
     cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
     # jemalloc supports a runtime page size that's smaller or equal to the build
     # time one, but aborts on a larger one. If not defined, it falls back to the
@@ -973,10 +949,10 @@ build_jemalloc() {
         # change to 64K for arm architecture
         addition_opts=" --with-lg-page=16"
     fi
+    CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
     ./configure --prefix=${TP_INSTALL_DIR} --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl --disable-shared $addition_opts
     make -j$PARALLEL
     make install
-    export CFLAGS=$OLD_CFLAGS
 }
 
 # google benchmark
@@ -1050,8 +1026,6 @@ build_avro_c() {
 
 # serders
 build_serdes() {
-    OLD_CFLAGS=$CFLAGS
-    unset CFLAGS
     export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
     check_if_source_exist $SERDES_SOURCE
     cd $TP_SOURCE_DIR/$SERDES_SOURCE
@@ -1072,7 +1046,7 @@ build_serdes() {
     objcopy --localize-symbol=cnd_timedwait_ms ${TP_INSTALL_DIR}/lib/libserdes.a
     objcopy --localize-symbol=thrd_is_current ${TP_INSTALL_DIR}/lib/libserdes.a
     unset LIBS
-    export CFLAGS=$OLD_CFLAGS
+    restore_compile_flags
 }
 
 # datasketches
@@ -1091,10 +1065,26 @@ build_datasketches() {
     cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/tuple/include/* $TP_INSTALL_DIR/include/datasketches/
 }
 
-export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g"
-export CPPFLAGS="-I ${TP_INCLUDE_DIR}"
+# restore cxxflags/cppflags/cflags to default one
+restore_compile_flags() {
+    # c preprocessor flags
+    export CPPFLAGS=$GLOBAL_CPPFLAGS
+    # c flags
+    export CFLAGS=$GLOBAL_CFLAGS
+    # c++ flags
+    export CXXFLAGS=$GLOBAL_CXXFLAGS
+}
+
+# set GLOBAL_C*FLAGS for easy restore in each sub build process
+export GLOBAL_CPPFLAGS="-I ${TP_INCLUDE_DIR}"
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
-export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=199309L"
+export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=199309L"
+export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g"
+
+# set those GLOBAL_*FLAGS to the CFLAGS/CXXFLAGS/CPPFLAGS
+export CPPFLAGS=$GLOBAL_CPPFLAGS
+export CXXFLAGS=$GLOBAL_CXXFLAGS
+export CFLAGS=$GLOBAL_CFLAGS
 
 build_libevent
 build_zlib

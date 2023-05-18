@@ -2,19 +2,18 @@
 
 ## Description
 
-This statement is used to create an identical empty table based on the structure of another table.
+Creates an identical empty table based on the definition of another table. The definition includes column definition, partitions, and table properties.
 
-Syntax:
+## Syntax
 
 ```sql
 CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name LIKE [database.]table_name
 ```
 
-Note:
+> **NOTE**
 
-1. The replicated table structures include Column Definition, Partitions, Table Properties, etc.
-2. `SELECT`permission is required on the original table.
-3. Support to copy external table such as MySQL.
+1. You must have the `SELECT` privilege on the original table.
+2. You can copy an external table such as MySQL.
 
 ## Example
 

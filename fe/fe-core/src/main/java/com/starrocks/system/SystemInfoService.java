@@ -55,7 +55,6 @@ import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
@@ -68,7 +67,6 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
@@ -183,7 +181,7 @@ public class SystemInfoService {
 
     private void addComputeNodeIntoWarehouse(ComputeNode computeNode) {
         final Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                getDefaultWarehouse();
         if (warehouse != null) {
             warehouse.getAnyAvailableCluster().addNode(computeNode.getId());
         }
@@ -191,7 +189,7 @@ public class SystemInfoService {
 
     private void dropComputeNodeFromWarehouse(ComputeNode computeNode) {
         Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                getDefaultWarehouse();
         if (warehouse != null) {
             warehouse.getAnyAvailableCluster().dropNode(computeNode.getId());
         }
@@ -1033,7 +1031,7 @@ public class SystemInfoService {
 
         // add it to DEFAULT_WAREHOUSE
         final Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                getDefaultWarehouse();
         if (warehouse != null) {
             warehouse.getAnyAvailableCluster().addNode(newComputeNode.getId());
         } else {
@@ -1043,9 +1041,6 @@ public class SystemInfoService {
 
     public void replayAddBackend(Backend newBackend) {
         // update idToBackend
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            newBackend.setBackendState(BackendState.using);
-        }
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
         copiedBackends.put(newBackend.getId(), newBackend);
         idToBackendRef = ImmutableMap.copyOf(copiedBackends);
@@ -1069,7 +1064,7 @@ public class SystemInfoService {
 
         // add it to DEFAULT_WAREHOUSE
         final Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+                getDefaultWarehouse();
         if (warehouse != null) {
             warehouse.getAnyAvailableCluster().addNode(newBackend.getId());
         } else {

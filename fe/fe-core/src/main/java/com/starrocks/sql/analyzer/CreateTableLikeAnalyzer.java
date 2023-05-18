@@ -18,7 +18,6 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -36,11 +35,7 @@ public class CreateTableLikeAnalyzer {
         MetaUtils.normalizationTableName(context, stmt.getDbTbl());
         MetaUtils.normalizationTableName(context, stmt.getExistedDbTbl());
         String tableName = stmt.getTableName();
-        try {
-            FeNameFormat.checkTableName(tableName);
-        } catch (AnalysisException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
-        }
+        FeNameFormat.checkTableName(tableName);
 
         Database db = MetaUtils.getDatabase(context, stmt.getExistedDbTbl());
         Table table = MetaUtils.getTable(stmt.getExistedDbTbl());

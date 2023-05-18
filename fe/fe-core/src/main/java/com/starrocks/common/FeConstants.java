@@ -43,9 +43,9 @@ public class FeConstants {
     // bloom filter false positive probability
     public static final double DEFAULT_BLOOM_FILTER_FPP = 0.05;
     // general model
-    // Current metadata version. Use this version to write journals and image
-    // for community meta version
-    public static final int META_VERSION = FeMetaVersion.VERSION_CURRENT;
+    @Deprecated
+    // for rollback compatible
+    public static final int META_VERSION = 92;
     // Current starrocks metadata version. Use this version to write journals and image
     public static final int STARROCKS_META_VERSION = StarRocksFEMetaVersion.VERSION_CURRENT;
     // use \N to indicate NULL

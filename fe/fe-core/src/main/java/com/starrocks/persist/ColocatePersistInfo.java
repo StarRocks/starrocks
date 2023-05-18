@@ -37,7 +37,6 @@ package com.starrocks.persist;
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
 
@@ -118,13 +117,7 @@ public class ColocatePersistInfo implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         tableId = in.readLong();
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_55) {
-            long grpId = in.readLong();
-            long dbId = in.readLong();
-            groupId = new GroupId(dbId, grpId);
-        } else {
-            groupId = GroupId.read(in);
-        }
+        groupId = GroupId.read(in);
 
         int size = in.readInt();
         backendsPerBucketSeq = new ArrayList<>();

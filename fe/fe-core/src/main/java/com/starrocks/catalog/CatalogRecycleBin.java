@@ -47,7 +47,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
@@ -1094,9 +1093,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             range = RangeUtils.readRange(in);
             dataProperty = DataProperty.read(in);
             replicationNum = in.readShort();
-            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_72) {
-                isInMemory = in.readBoolean();
-            }
+            isInMemory = in.readBoolean();
         }
     }
 
@@ -1178,17 +1175,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     public long loadRecycleBin(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_10) {
-            readFields(dis);
-            if (!isCheckpointThread()) {
-                // add tablet in Recycle bin to TabletInvertedIndex
-                addTabletToInvertedIndex();
-            }
-            // create DatabaseTransactionMgr for db in recycle bin.
-            // these dbs do not exist in `idToDb` of the globalStateMgr.
-            for (Long dbId : getAllDbIds()) {
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
-            }
+        readFields(dis);
+        if (!isCheckpointThread()) {
+            // add tablet in Recycle bin to TabletInvertedIndex
+            addTabletToInvertedIndex();
+        }
+        // create DatabaseTransactionMgr for db in recycle bin.
+        // these dbs do not exist in `idToDb` of the globalStateMgr.
+        for (Long dbId : getAllDbIds()) {
+            GlobalStateMgr.getCurrentGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
         }
         LOG.info("finished replay recycleBin from image");
         return checksum;

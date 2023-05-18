@@ -75,7 +75,7 @@ public class StatisticAutoCollector extends FrontendDaemon {
                             ScheduleStatus.PENDING,
                             LocalDateTime.MIN));
             for (StatisticsCollectJob statsJob : allJobs) {
-                AnalyzeStatus analyzeStatus = new AnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                         statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumns(),
                         statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(), LocalDateTime.now());
                 analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);

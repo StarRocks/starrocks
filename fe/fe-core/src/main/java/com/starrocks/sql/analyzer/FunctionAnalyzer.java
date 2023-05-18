@@ -99,6 +99,7 @@ public class FunctionAnalyzer {
                     "map_apply's lambda function can not be null");
             functionCallExpr.setType(functionCallExpr.getChild(0).getChild(0).getType());
         }
+
     }
 
     private static void analyzeBuiltinAggFunction(FunctionCallExpr functionCallExpr) {

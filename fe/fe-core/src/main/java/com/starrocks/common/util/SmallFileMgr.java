@@ -42,7 +42,6 @@ import com.google.common.collect.Table;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
@@ -543,9 +542,7 @@ public class SmallFileMgr implements Writable {
     }
 
     public long loadSmallFiles(DataInputStream in, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_52) {
-            readFields(in);
-        }
+        readFields(in);
         LOG.info("finished replay smallFiles from image");
         return checksum;
     }

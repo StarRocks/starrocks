@@ -14,6 +14,8 @@
 
 package com.starrocks.pseudocluster;
 
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import mockit.Mock;
 import mockit.MockUp;
@@ -63,6 +65,14 @@ public class PseudoClusterTest {
                 return RunMode.SHARED_DATA;
             }
         };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
+                return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+            }
+        };
+
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
         try {

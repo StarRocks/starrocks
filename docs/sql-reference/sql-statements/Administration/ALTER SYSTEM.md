@@ -135,7 +135,7 @@ Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
 
 ### Create image
 
-Create an image file. An image file is a snapshot of the FE meatadata.
+Create an image file. An image file is a snapshot of the FE metadata.
 
 ```SQL
 ALTER SYSTEM CREATE IMAGE

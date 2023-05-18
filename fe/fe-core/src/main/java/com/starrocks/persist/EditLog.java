@@ -99,6 +99,7 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -491,30 +492,15 @@ public class EditLog {
                 }
                 //compatible with old community meta, newly added log using OP_META_VERSION_V2
                 case OperationType.OP_META_VERSION: {
-                    String versionString = ((Text) journal.getData()).toString();
-                    int version = Integer.parseInt(versionString);
-                    if (version > FeConstants.META_VERSION) {
-                        throw new JournalInconsistentException(
-                                "invalid meta data version found, cat not bigger than FeConstants.meta_version."
-                                        + "please update FeConstants.meta_version bigger or equal to " + version +
-                                        " and restart.");
-                    }
-                    MetaContext.get().setMetaVersion(version);
                     break;
                 }
                 case OperationType.OP_META_VERSION_V2: {
                     MetaVersion metaVersion = (MetaVersion) journal.getData();
-                    if (metaVersion.getCommunityVersion() > FeConstants.META_VERSION) {
-                        throw new JournalInconsistentException("invalid meta data version found, cat not bigger than "
-                                + "FeConstants.meta_version. please update FeConstants.meta_version bigger or equal to "
-                                + metaVersion.getCommunityVersion() + "and restart.");
+                    if (!MetaVersion.isCompatible(metaVersion.getStarRocksVersion(), FeConstants.STARROCKS_META_VERSION)) {
+                        throw new JournalInconsistentException("Not compatible with meta version "
+                                + metaVersion.getStarRocksVersion()
+                                + ", current version is " + FeConstants.STARROCKS_META_VERSION);
                     }
-                    if (metaVersion.getStarRocksVersion() > FeConstants.STARROCKS_META_VERSION) {
-                        throw new JournalInconsistentException("invalid meta data version found, cat not bigger than "
-                                + "FeConstants.starrocks_meta_version. please update FeConstants.starrocks_meta_version"
-                                + " bigger or equal to " + metaVersion.getStarRocksVersion() + "and restart.");
-                    }
-                    MetaContext.get().setMetaVersion(metaVersion.getCommunityVersion());
                     MetaContext.get().setStarRocksMetaVersion(metaVersion.getStarRocksVersion());
                     break;
                 }
@@ -839,12 +825,12 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_ADD_ANALYZE_STATUS: {
-                    AnalyzeStatus analyzeStatus = (AnalyzeStatus) journal.getData();
+                    NativeAnalyzeStatus analyzeStatus = (NativeAnalyzeStatus) journal.getData();
                     globalStateMgr.getAnalyzeManager().replayAddAnalyzeStatus(analyzeStatus);
                     break;
                 }
                 case OperationType.OP_REMOVE_ANALYZE_STATUS: {
-                    AnalyzeStatus analyzeStatus = (AnalyzeStatus) journal.getData();
+                    NativeAnalyzeStatus analyzeStatus = (NativeAnalyzeStatus) journal.getData();
                     globalStateMgr.getAnalyzeManager().replayRemoveAnalyzeStatus(analyzeStatus);
                     break;
                 }
@@ -1586,11 +1572,15 @@ public class EditLog {
     }
 
     public void logAddAnalyzeStatus(AnalyzeStatus status) {
-        logEdit(OperationType.OP_ADD_ANALYZE_STATUS, status);
+        if (status.isNative()) {
+            logEdit(OperationType.OP_ADD_ANALYZE_STATUS, (NativeAnalyzeStatus) status);
+        }
     }
 
     public void logRemoveAnalyzeStatus(AnalyzeStatus status) {
-        logEdit(OperationType.OP_REMOVE_ANALYZE_STATUS, status);
+        if (status.isNative()) {
+            logEdit(OperationType.OP_REMOVE_ANALYZE_STATUS, (NativeAnalyzeStatus) status);
+        }
     }
 
     public void logAddBasicStatsMeta(BasicStatsMeta meta) {

@@ -45,7 +45,6 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -71,7 +70,6 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
@@ -150,46 +148,13 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        static class SelectRelationCollector extends AstVisitor<Void, Void> {
-            private final List<SelectRelation> selectRelations = new ArrayList<>();
-
-            public static List<SelectRelation> collectBaseRelations(QueryRelation queryRelation) {
-                SelectRelationCollector collector = new SelectRelationCollector();
-                queryRelation.accept(collector, null);
-                return collector.selectRelations;
-            }
-
-            @Override
-            public Void visitRelation(Relation node, Void context) {
-                return null;
-            }
-
-            @Override
-            public Void visitSelect(SelectRelation node, Void context) {
-                selectRelations.add(node);
-                return null;
-            }
-
-            @Override
-            public Void visitSetOp(SetOperationRelation node, Void context) {
-                for (QueryRelation sub : node.getRelations()) {
-                    selectRelations.addAll(collectBaseRelations(sub));
-                }
-                return null;
-            }
-        }
-
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
             final TableName tableNameObject = statement.getTableName();
             MetaUtils.normalizationTableName(context, tableNameObject);
             final String tableName = tableNameObject.getTbl();
-            try {
-                FeNameFormat.checkTableName(tableName);
-            } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
-            }
+            FeNameFormat.checkTableName(tableName);
             QueryStatement queryStatement = statement.getQueryStatement();
             // check query relation is select relation
             if (!(queryStatement.getQueryRelation() instanceof SelectRelation) &&

@@ -8,7 +8,7 @@ Release date: April 28, 2023
 
 #### System architecture
 
-- **Decouple storage and compute.** StarRocks now supports data persistence into S3-compatible object storage, enhancing resource isolation, reducing storage costs, and making compute resources more scalable. Local disks are used as hot data cache for boosting query performance. The query performance of the new shared-data architecture is comparable to the classic architecture (shared-nothing) when local cache is hit. For more information, see [Deploy and use shared-data StarRocks](../administration/deploy_shared_data.md).
+- **Decouple storage and compute.** StarRocks now supports data persistence into S3-compatible object storage, enhancing resource isolation, reducing storage costs, and making compute resources more scalable. Local disks are used as hot data cache for boosting query performance. The query performance of the new shared-data architecture is comparable to the classic architecture (shared-nothing) when local cache is hit. For more information, see [Deploy and use shared-data StarRocks](../deployment/deploy_shared_data.md).
 
 #### Storage engine and data ingestion
 
@@ -78,7 +78,7 @@ Release date: April 28, 2023
 #### Data Lake Analytics
 
 - Optimized metadata statistics collection.
-- Supports using [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md) to query the schema information of an external table and using [SHOW CREATE CATALOG](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation statement of an external catalog.
+- Supports using [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md) to view the creation statements of the tables that are managed by an external catalog and are stored in Apache Hive™, Apache Iceberg, Apache Hudi, or Delta Lake.
 
 ### Bug Fixes
 

@@ -132,11 +132,13 @@ public:
         return _mm256_testc_si256(bucket, mask);
 #elif defined(__ARM_NEON)
         uint32x4_t masks[2];
-        uint32x4_t directory_1 = vdupq_n_u32(_directory[bucket_idx][0]);
-        uint32x4_t directory_2 = vdupq_n_u32(_directory[bucket_idx][4]);
+
+        uint32x4_t directory_1 = vld1q_u32(&_directory[bucket_idx][0]);
+        uint32x4_t directory_2 = vld1q_u32(&_directory[bucket_idx][4]);
+
         make_mask(hash >> _log_num_buckets, masks);
-        uint32x4_t out_1 = vbicq_u32(directory_1, masks[0]);
-        uint32x4_t out_2 = vbicq_u32(directory_2, masks[1]);
+        uint32x4_t out_1 = vbicq_u32(masks[0], directory_1);
+        uint32x4_t out_2 = vbicq_u32(masks[1], directory_2);
         out_1 = vorrq_u32(out_1, out_2);
         uint32x2_t low_1 = vget_low_u32(out_1);
         uint32x2_t high_1 = vget_high_u32(out_1);

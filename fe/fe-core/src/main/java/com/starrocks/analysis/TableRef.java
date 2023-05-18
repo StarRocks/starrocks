@@ -40,11 +40,9 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
@@ -418,17 +416,7 @@ public class TableRef implements ParseNode, Writable {
         name = new TableName();
         name.readFields(in);
         if (in.readBoolean()) {
-            if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_77) {
-                List<String> partitions = Lists.newArrayList();
-                int size = in.readInt();
-                for (int i = 0; i < size; i++) {
-                    String partName = Text.readString(in);
-                    partitions.add(partName);
-                }
-                partitionNames = new PartitionNames(false, partitions);
-            } else {
-                partitionNames = PartitionNames.read(in);
-            }
+            partitionNames = PartitionNames.read(in);
         }
 
         if (in.readBoolean()) {

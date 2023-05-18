@@ -38,13 +38,11 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang.NotImplementedException;
 
@@ -250,9 +248,7 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable, Gson
         realOrigUser = ClusterNamespace.getNameFromFullName(Text.readString(in));
         privSet = PrivBitSet.read(in);
         isSetByDomainResolver = in.readBoolean();
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_69) {
-            isDomain = in.readBoolean();
-        }
+        isDomain = in.readBoolean();
     }
 
     @Override

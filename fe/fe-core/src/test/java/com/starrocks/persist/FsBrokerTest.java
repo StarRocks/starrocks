@@ -18,13 +18,10 @@
 package com.starrocks.persist;
 
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.common.FeMetaVersion;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.system.HeartbeatResponse;
 import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.DataInputStream;
@@ -37,13 +34,6 @@ public class FsBrokerTest {
 
     private static String fileName1 = "./FsBrokerTest1";
     private static String fileName2 = "./FsBrokerTest2";
-
-    @BeforeClass
-    public static void setup() {
-        MetaContext context = new MetaContext();
-        context.setMetaVersion(FeMetaVersion.VERSION_73);
-        context.setThreadLocalInfo();
-    }
 
     @AfterClass
     public static void tear() {

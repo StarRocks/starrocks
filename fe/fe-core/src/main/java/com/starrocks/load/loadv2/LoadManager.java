@@ -42,7 +42,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.DataQualityException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -735,9 +734,7 @@ public class LoadManager implements Writable {
     }
 
     public long loadLoadJobsV2(DataInputStream in, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_50) {
-            readFields(in);
-        }
+        readFields(in);
         LOG.info("finished replay loadJobsV2 from image");
         return checksum;
     }

@@ -22,7 +22,6 @@ import "tablet_schema.proto";
 import "olap_file.proto";
 
 message DelvecPagePB {
-    // Delvec data store in {tablet_id}_{version}.delvec
     optional int64 version = 1;
     // position in file
     optional uint64 offset = 2;
@@ -35,8 +34,12 @@ message DelvecCacheKeyPB {
 }
 
 message DelvecMetadataPB {
+    // map from version to delete vector file name (in uuid format)
+    // so that we no need to keep file name (consume more memory) in each DelvecPagePB
+    // instead we can lookup delete vector file name by version saved in DelvecPagePB
+    map<int64, string> version_to_delvec = 1;
     // from segment id to delvec page
-    map<uint32, DelvecPagePB> delvecs = 1;
+    map<uint32, DelvecPagePB> delvecs = 2;
 }
 
 message RowsetMetadataPB {

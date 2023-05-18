@@ -51,6 +51,7 @@ public:
     ~MemtableFlushTask() override = default;
 
     void run() override {
+        _flush_token->_stats.queueing_memtable_num--;
         std::unique_ptr<SegmentPB> segment = nullptr;
         if (_memtable) {
             SCOPED_THREAD_LOCAL_MEM_SETTER(_memtable->mem_tracker(), false);
@@ -99,6 +100,7 @@ Status FlushToken::submit(std::unique_ptr<MemTable> memtable, bool eos,
     // Does not acount the size of MemtableFlushTask into any memory tracker
     SCOPED_THREAD_LOCAL_MEM_SETTER(nullptr, false);
     auto task = std::make_shared<MemtableFlushTask>(this, std::move(memtable), eos, std::move(cb));
+    _stats.queueing_memtable_num++;
     return _flush_token->submit(std::move(task));
 }
 

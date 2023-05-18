@@ -44,6 +44,7 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "common/statusor.h"
 #include "config.h"
@@ -667,6 +668,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     if (closure->result.has_execution_time_us()) {
         _add_batch_counter.add_batch_execution_time_us += closure->result.execution_time_us();
         _add_batch_counter.add_batch_wait_lock_time_us += closure->result.wait_lock_time_us();
+        _add_batch_counter.add_batch_wait_memtable_flush_time_us += closure->result.wait_memtable_flush_time_us();
         _add_batch_counter.add_batch_num++;
     }
 
@@ -964,6 +966,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _compress_timer = ADD_CHILD_TIMER(_profile, "CompressTime", "SendRpcTime");
     _client_rpc_timer = ADD_TIMER(_profile, "RpcClientSideTime");
     _server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
+    _server_wait_flush_timer = ADD_TIMER(_profile, "RpcServerWaitFlushTime");
 
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
@@ -1837,16 +1840,19 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
         COUNTER_SET(_send_rpc_timer, actual_consume_ns);
 
         int64_t total_server_rpc_time_us = 0;
+        int64_t total_server_wait_memtable_flush_time_us = 0;
         // print log of add batch time of all node, for tracing load performance easily
         std::stringstream ss;
         ss << "Olap table sink statistics. load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
            << ", add chunk time(ms)/wait lock time(ms)/num: ";
         for (auto const& pair : node_add_batch_counter_map) {
             total_server_rpc_time_us += pair.second.add_batch_execution_time_us;
+            total_server_wait_memtable_flush_time_us += pair.second.add_batch_wait_memtable_flush_time_us;
             ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000) << ")("
                << (pair.second.add_batch_wait_lock_time_us / 1000) << ")(" << pair.second.add_batch_num << ")} ";
         }
         _server_rpc_timer->update(total_server_rpc_time_us * 1000);
+        _server_wait_flush_timer->update(total_server_wait_memtable_flush_time_us * 1000);
         LOG(INFO) << ss.str();
     } else {
         COUNTER_SET(_input_rows_counter, _number_input_rows);
@@ -1951,6 +1957,7 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, Chunk* chunk, Column*
     }
 }
 
+/// TODO: recursively validate columns for nested columns, including array, map, struct
 void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (int i = 0; i < _output_tuple_desc->slots().size(); ++i) {
@@ -2100,6 +2107,12 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         case TYPE_DECIMAL128:
             _validate_decimal<TYPE_DECIMAL128>(state, chunk, column, desc, &_validate_selection);
             break;
+        case TYPE_MAP: {
+            column = ColumnHelper::get_data_column(column);
+            auto* map = down_cast<MapColumn*>(column);
+            map->remove_duplicated_keys(true);
+            break;
+        }
         default:
             break;
         }

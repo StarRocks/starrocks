@@ -53,8 +53,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |meta_delay_toleration_second      | s    | 300     | The maximum duration by which the metadata on the follower and observer FEs can lag behind that on the leader FE. Unit: seconds.<br> If this duration is exceeded, the non-leader FE stops providing services. |
 | drop_backend_after_decommission  | -    | TRUE    | Whether to delete a BE after the BE is decommissioned. `TRUE` indicates that the BE is deleted immediately after it is decommissioned.<br>`FALSE` indicates that the BE is not deleted after it is decommissioned. |
 | enable_collect_query_detail_info | -    | FALSE   | Whether to view the profile of a query. If this parameter is set to `TRUE`, the system collects the profile of the query.<br>If this parameter is set to `FALSE`, the system does not collect the profile of the query. |
-| background_refresh_metadata_interval_millis                  | ms   | 600000 | The interval between two consecutive Hive metadata refreshes. It is supported from v2.5.5 onwards. |
-| background_refresh_metadata_time_secs_since_last_access_secs | s    | 86400  | The expiration time of a Hive metadata refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its metadata. This parameter is supported from v2.5.5 onwards. |
+| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the Hive Metastore of the frequently accessed Hive catalogs to perceive data changes, and caches the information in the catalog metadata. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This parameter is supported from v2.5.5 onwards. |
+| background_refresh_metadata_interval_millis                  | ms   | 600000 | The interval between two consecutive Hive metadata cache refreshes. This parameter is supported from v2.5.5 onwards. |
+| background_refresh_metadata_time_secs_since_last_access_secs | s    | 86400  | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cahced metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. This parameter is supported from v2.5.5 onwards. |
 
 #### Query engine
 
@@ -207,7 +208,6 @@ This section provides an overview of the static parameters that you can configur
 | cluster_name                         | StarRocks Cluster | The name of the StarRocks cluster to which the FE belongs. The cluster name is displayed for `Title` on the web page. |
 | rpc_port                             | 9020              | The port on which the Thrift server in the FE node listens.  |
 | thrift_backlog_num                   | 1024              | The length of the backlog queue held by the Thrift server in the FE node. |
-| thrift_server_type                   | THREAD_POOL       | The service model that is used by the Thrift server in the FE node. Valid values: `SIMPLE`, `THREADED`, and `THREAD_POOL`. |
 | thrift_server_max_worker_threads     | 4096              | The maximum number of worker threads that are supported by the Thrift server in the FE node. |
 | thrift_client_timeout_ms             | 5000                 | The length of time after which idle client connections time out. Unit: ms. |
 | thrift_server_queue_size             | 4096              | The length of queue where requests are pending. If the number of threads that are being processed in the thrift server exceeds the value specified in `thrift_server_max_worker_threads`, new requests are added to the pending queue. |
@@ -240,7 +240,6 @@ This section provides an overview of the static parameters that you can configur
 | replica_sync_policy               | SYNC                                     | The policy based on which the follower FE flushes logs to disk. This parameter is valid only when the current FE is a follower FE. Valid values:<ul><li>`SYNC`: When a transaction is committed, a log entry is generated and flushed to disk simultaneously.</li><li>`NO_SYNC`: The generation and flushing of a log entry do not occur at the same time when a transaction is committed.</li><li>`WRITE_NO_SYNC`: When a transaction is committed, a log entry is generated simultaneously but is not flushed to disk.</li></ul> |
 | replica_ack_policy                | SIMPLE_MAJORITY                          | The policy based on which a log entry is considered valid. The default value `SIMPLE_MAJORITY` specifies that a log entry is considered valid if a majority of follower FEs return ACK messages. |
 | cluster_id                        | -1                                       | The ID of the StarRocks cluster to which the FE belongs. FEs or BEs that have the same cluster ID belong to the same StarRocks cluster. Valid values: any positive integer. The default value `-1` specifies that StarRocks will generate a random cluster ID for the StarRocks cluster at the time when the leader FE of the cluster is started for the first time. |
-| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic Hive metadata refresh. After it is enabled, StarRocks polls the Hive Metastore of the frequently accessed Hive catalogs to perceive data changes, and caches the information in the catalog metadata. `true` indicates to enable the Hive metadata refresh, and `false` indicates to disable it. It is supported from v2.5.5 onwards. |
 
 #### Query engine
 
@@ -635,80 +634,3 @@ BE static parameters are as follows.
 | vector_chunk_size | 4096 | N/A | |
 | vertical_compaction_max_columns_per_group | 5 | N/A | |
 | web_log_bytes | 1048576 | N/A | |-->
-
-## Set system configurations
-
-### Linux Kernel
-
-Linux kernel 3.10 or later is recommended.
-
-### CPU configurations
-
-| Configuration item | Description | Recommended value | How to set |
-| ------------------ | ------------------------------------------------------------ | ----------------- | ------------------------------------------------------------ |
-| scaling_governor | The parameter scaling_governor is used to control the CPU power mode. The default value is on-demand. The performance mode consumes more energy, produces better performance, and thereby is recommended in the deployment of StarRocks. | performance | echo 'performance' \| sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor |
-
-### Memory configurations
-
-| Configuration item | Description | Recommended value | How to set |
-| -------------------- | ------------------------------------------------------------ | ----------------- | ------------------------------------------------------------ |
-| overcommit_memory | Memory Overcommit allows the operating system to overcommit memory resource to processes. We recommend you enable Memory Overcommit. | 1 | echo 1 \| sudo tee /proc/sys/vm/overcommit_memory |
-| transparent_hugepage | Transparent Huge Pages is enabled by default. We recommend you disable this feature because it can interfere the memory allocator, and thereby lead to a drop in performance. | madvise | echo 'madvise' \| sudo tee /sys/kernel/mm/transparent_hugepage/enabled |
-| swappiness | We recommend you disable the swappiness to eliminate its affects on the performance. | 0 | echo 0 \| sudo tee /proc/sys/vm/swappiness |
-
-### Storage configurations
-
-We recommend you set different scheduler algorithms in accordance with the medium of your storage volumes.
-
-| Configuration item | Description | Recommended value | How to set |
-| ------------------ | ------------------------------------------------------------ | ----------------- | ----------------------------------------------------------- |
-| scheduler | mq-deadline scheduler algorithm suits SATA disks. | mq-deadline | echo mq-deadline \| sudo tee /sys/block/vdb/queue/scheduler |
-| scheduler | kyber scheduler algorithm suits NVMe or SSD disks. | kyber | echo kyber \| sudo tee /sys/block/vdb/queue/scheduler |
-| scheduler | If your system does not support kyber scheduler algorithm, we recommend you use none scheduler algorithm. | none | echo none \| sudo tee /sys/block/vdb/queue/scheduler |
-
-### Network configurations
-
-We recommend you use 10GB network in your StarRocks cluster. Otherwise, StarRocks will fail to achieve the expected performance. You can use iPerf to check the bandwidth of your cluster.
-
-### File system configurations
-
-We recommend you use the ext4 journaling file system. You can run the following command to check the mount type:
-
-```Shell
-df -Th
-```
-
-### High concurrency configurations
-
-If your StarRocks cluster has a high load concurrency, we recommend you set the following configurations.
-
-```Shell
-echo 120000 > /proc/sys/kernel/threads-max
-echo 60000 > /proc/sys/vm/max_map_count
-echo 200000 > /proc/sys/kernel/pid_max
-```
-
-### User process configuration
-
-You can set the maximum number of user processes by running the following command:
-
-```Shell
-ulimit -u 40960
-```
-
-### File descriptor configuration
-
-Run the following command to the maximum number of file descriptors to `65535`.
-
-```Shell
-ulimit -n 65535
-```
-
-If this configuration becomes invalid after you re-connect to the cluster, you can set the `UsePAM` configuration item under **/etc/ssh/sshd_config** to `yes`, and restart the SSHD service.
-
-### Others
-
-| Configuration item | Recommended value | How to set |
-| --------------------- | ----------------- | ----------------------------------------------------------- |
-| tcp abort on overflow | 1 | echo 1 \| sudo tee /proc/sys/net/ipv4/tcp_abort_on_overflow |
-| somaxconn | 1024 | echo 1024 \| sudo tee /proc/sys/net/core/somaxconn |
