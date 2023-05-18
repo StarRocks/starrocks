@@ -46,6 +46,7 @@
 #include "common/config.h"
 #include "common/minidump.h"
 #include "exec/workgroup/work_group.h"
+#include "gutil/cpu.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
@@ -296,6 +297,7 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
     LOG(INFO) << CpuInfo::debug_string();
     LOG(INFO) << DiskInfo::debug_string();
     LOG(INFO) << MemInfo::debug_string();
+    LOG(INFO) << base::CPU::instance()->debug_string();
 
     UserFunctionCache::instance()->init(config::user_function_dir);
 
