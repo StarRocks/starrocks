@@ -476,6 +476,9 @@ Status SchemaDescriptor::new_group_to_struct_field(const std::vector<tparquet::S
     for (size_t i = 0; i < num_children; i++) {
         field->type.children.emplace_back(field->children[i].type);
     }
+    for (size_t i = 0; i < num_children; i++) {
+        field->type.field_names.emplace_back(field->children[i].name);
+    }
     field->field_id = group_schema->field_id;
     return Status::OK();
 }
