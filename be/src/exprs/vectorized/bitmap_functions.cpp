@@ -19,7 +19,7 @@ namespace starrocks::vectorized {
 
 template <PrimitiveType LT>
 ColumnPtr BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
-    ColumnViewer<PrimitiveType> viewer(columns[0]);
+    ColumnViewer<LT> viewer(columns[0]);
 
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
@@ -30,7 +30,7 @@ ColumnPtr BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::
         }
 
         uint64_t value;
-        if constexpr (lt_is_integer<LT> || lt_is_boolean<LT>) {
+        if constexpr (pt_is_integer<LT> || pt_is_boolean<LT>) {
             auto raw_value = viewer.value(row);
             // To be compatible with varchar type, set it null if raw value is less than 0 and less than uint64::max.
             if (UNLIKELY(raw_value < 0 || raw_value > std::numeric_limits<uint64_t>::max())) {
@@ -67,20 +67,20 @@ ColumnPtr BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::
 
     return builder.build(ColumnHelper::is_all_const(columns));
 }
-template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_BOOLEAN>(FunctionContext* context,
-                                                                      const starrocks::vectorized::Columns& columns);
-template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_TINYINT>(FunctionContext* context,
-                                                                      const starrocks::vectorized::Columns& columns);
-template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_SMALLINT>(FunctionContext* context,
-                                                                       const starrocks::vectorized::Columns& columns);
-template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_INT>(FunctionContext* context,
-                                                                  const starrocks::vectorized::Columns& columns);
-template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_BIGINT>(FunctionContext* context,
-                                                                     const starrocks::vectorized::Columns& columns);
-template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_LARGEINT>(FunctionContext* context,
-                                                                       const starrocks::vectorized::Columns& columns);
-template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_VARCHAR>(FunctionContext* context,
-                                                                      const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_BOOLEAN>(FunctionContext* context,
+                                                            const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_TINYINT>(FunctionContext* context,
+                                                            const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_SMALLINT>(FunctionContext* context,
+                                                             const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_INT>(FunctionContext* context,
+                                                        const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_BIGINT>(FunctionContext* context,
+                                                           const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_LARGEINT>(FunctionContext* context,
+                                                             const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_VARCHAR>(FunctionContext* context,
+                                                            const starrocks::vectorized::Columns& columns);
 
 ColumnPtr BitmapFunctions::bitmap_hash(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
