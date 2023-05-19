@@ -44,6 +44,8 @@ namespace starrocks {
  *  ELSE 'other' END
  *
  *  ELSE is not necessary.
+ *  TODO: rewrite the first format to the second due to some advantages: reduce code footprint, compute case-expr
+ *  equivalence in vectorization, benefit SIMD-optimization from no-case evaluation.
  */
 
 template <LogicalType WhenType, LogicalType ResultType>
@@ -137,18 +139,21 @@ private:
         then_columns.emplace_back(else_column);
         size_t size = when_columns[0]->size();
         if constexpr (lt_is_collection<ResultType> || lt_is_collection<WhenType>) {
-            // construct nullable result column
-            ColumnPtr res = nullptr;
+            // construct result column
+            ColumnPtr res = then_columns[0];
+            bool res_nullable = false;
             for (const auto col : then_columns) {
-                if (!col->only_null()) {
-                    res = col->clone_empty();
-                    break;
+                if (col->is_nullable()) {
+                    if (!col->only_null()) {
+                        res = col;
+                    }
+                    res_nullable = true;
                 }
             }
-            if (res == nullptr) {
-                res = else_column->clone_empty();
+            res = res->clone_empty();
+            if (res_nullable) {
+                res = ColumnHelper::cast_to_nullable_column(res);
             }
-            res = ColumnHelper::cast_to_nullable_column(res);
 
             // case_column equals to when_columns[i] or not?
             auto when_num = when_columns.size();
@@ -303,17 +308,20 @@ private:
 
         if constexpr (lt_is_collection<ResultType>) {
             // construct nullable result column
-            ColumnPtr res = nullptr;
+            ColumnPtr res = then_columns[0];
+            bool res_nullable = false;
             for (const auto col : then_columns) {
-                if (!col->only_null()) {
-                    res = col->clone_empty();
-                    break;
+                if (col->is_nullable()) {
+                    if (!col->only_null()) {
+                        res = col;
+                    }
+                    res_nullable = true;
                 }
             }
-            if (res == nullptr) {
-                res = else_column->clone_empty();
+            res = res->clone_empty();
+            if (res_nullable) {
+                res = ColumnHelper::cast_to_nullable_column(res);
             }
-            res = ColumnHelper::cast_to_nullable_column(res);
 
             // when_columns[i] is true or not
             auto when_num = when_columns.size();
@@ -479,6 +487,25 @@ Expr* VectorizedCaseExprFactory::from_thrift(const starrocks::TExprNode& node) {
     LogicalType resultType = TypeDescriptor::from_thrift(node.type).type;
     LogicalType whenType = thrift_to_type(node.child_type);
 
+    if (resultType == TYPE_NULL) {
+        resultType = TYPE_BOOLEAN;
+    }
+
+    switch (resultType) {
+        APPLY_FOR_ALL_SCALAR_TYPE(CASE_RESULT_TYPE)
+        APPLY_FOR_COMPLEX_TYPE(CASE_RESULT_TYPE)
+        CASE_RESULT_TYPE(TYPE_OBJECT)
+        CASE_RESULT_TYPE(TYPE_HLL)
+        CASE_RESULT_TYPE(TYPE_PERCENTILE)
+    default: {
+        LOG(WARNING) << "vectorized engine case expr no support result type: " << resultType;
+        return nullptr;
+    }
+    }
+}
+
+Expr* VectorizedCaseExprFactory::from_thrift(const starrocks::TExprNode& node, LogicalType resultType,
+                                             LogicalType whenType) {
     if (resultType == TYPE_NULL) {
         resultType = TYPE_BOOLEAN;
     }
