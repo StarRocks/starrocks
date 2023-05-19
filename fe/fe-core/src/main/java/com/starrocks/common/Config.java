@@ -1190,18 +1190,24 @@ public class Config extends ConfigBase {
      * to delete the redundant healthy replica which cause resource waste and may also affect
      * the loading process.
      *
-     * <p>When setting this configuration to true, we won't schedule any
-     * {@link LocalTablet.TabletStatus#REPLICA_MISSING} task because of dead backends
-     * (but may still schedule {@link LocalTablet.TabletStatus#REPLICA_MISSING} tasks because of
-     * other reasons, like manually setting a replica as bad, actively decommission a backend etc.)
-     * and let the resource manager like k8s handle the repair process.
+     * <p>When a backend is considered to be dead, this configuration specifies how long the
+     * {@link com.starrocks.clone.TabletScheduler} should wait before starting to schedule
+     * {@link LocalTablet.TabletStatus#REPLICA_MISSING} tasks. It is intended to leave some time for
+     * the external scheduler like k8s to handle the repair process before internal scheduler kicks in
+     * or for the system administrator to restart and put the backend online in time.
+     * To be noticed, it only affects the dead backend situation, the scheduler
+     * may still schedule {@link LocalTablet.TabletStatus#REPLICA_MISSING} tasks because of
+     * other reasons, like manually setting a replica as bad, actively decommission a backend etc.
+     *
+     * <p>Currently this configuration only works for non-colocate tables, for colocate tables,
+     * refer to {@link Config#tablet_sched_colocate_be_down_tolerate_time_s}.
      *
      * <p>For more discussion on this issue, see
      * <a href="https://github.com/StarRocks/starrocks-kubernetes-operator/issues/49">issue49</a>
      *
      */
     @ConfField(mutable = true)
-    public static boolean tablet_sched_ignore_dead_backend = false;
+    public static long tablet_sched_be_down_tolerate_time_s = 900; // 15 min
 
     /**
      * If BE is down beyond this time, tablets on that BE of colocate table will be migrated to other available BEs
