@@ -126,11 +126,6 @@ public class Column implements Writable {
         Preconditions.checkArgument(dataType.isValid());
     }
 
-    public Column(String name, Type dataType, boolean isAllowNull, String comment) {
-        this(name, dataType, false, null, isAllowNull, null, comment);
-        Preconditions.checkArgument(dataType.isValid());
-    }
-
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, String defaultValue,
                   String comment) {
         this(name, type, isKey, aggregateType, false,
