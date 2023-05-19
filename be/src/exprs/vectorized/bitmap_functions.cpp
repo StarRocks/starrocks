@@ -69,20 +69,20 @@ ColumnPtr BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::
 
     return builder.build(ColumnHelper::is_all_const(columns));
 }
-template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_BOOLEAN>(FunctionContext* context,
-                                                                      const starrocks::vectorized::Columns& columns);
-template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_TINYINT>(FunctionContext* context,
-                                                                      const starrocks::vectorized::Columns& columns);
-template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_SMALLINT>(FunctionContext* context,
-                                                                       const starrocks::vectorized::Columns& columns);
-template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_INT>(FunctionContext* context,
-                                                                  const starrocks::vectorized::Columns& columns);
-template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_BIGINT>(FunctionContext* context,
-                                                                     const starrocks::vectorized::Columns& columns);
-template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_LARGEINT>(FunctionContext* context,
-                                                                       const starrocks::vectorized::Columns& columns);
-template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_VARCHAR>(FunctionContext* context,
-                                                                      const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_BOOLEAN>(FunctionContext* context,
+                                                            const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_TINYINT>(FunctionContext* context,
+                                                            const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_SMALLINT>(FunctionContext* context,
+                                                             const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_INT>(FunctionContext* context,
+                                                        const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_BIGINT>(FunctionContext* context,
+                                                           const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_LARGEINT>(FunctionContext* context,
+                                                             const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_VARCHAR>(FunctionContext* context,
+                                                            const starrocks::vectorized::Columns& columns);
 
 ColumnPtr BitmapFunctions::bitmap_hash(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
