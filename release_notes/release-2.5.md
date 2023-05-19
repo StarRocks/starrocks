@@ -1,5 +1,89 @@
 # StarRocks version 2.5
 
+## 2.5.6
+
+发布日期：2023 年 5 月 19 日
+
+### 功能优化
+
+- 优化了因 `thrift_server_max_worker_threads` 过小导致 INSERT INTO SELECT 超时场景下的报错信息。 [#21964](https://github.com/StarRocks/starrocks/pull/21964)
+- CTAS 创建的表与普通表一致，默认为 3 副本。 [#22854](https://github.com/StarRocks/starrocks/pull/22854)
+
+### 问题修复
+
+- Truncate 操作对分区名大小写敏感导致 Truncate Partition 失败。 [#21809](https://github.com/StarRocks/starrocks/pull/21809)
+- 物化视图创建临时分区失败导致 BE 下线卡住。 [#22745](https://github.com/StarRocks/starrocks/pull/22745)
+- 动态修改 FE 参数时，不支持设置空 array。 [#22225](https://github.com/StarRocks/starrocks/pull/22225)
+- 设置了 `partition_refresh_number` property 的物化视图可能无法完全刷新完成。[#21619](https://github.com/StarRocks/starrocks/pull/21619)
+- SHOW CREATE TABLE 导致内存中鉴权信息错误。[#21311](https://github.com/StarRocks/starrocks/pull/21311)
+- 在外表查询中，对于部分 ORC 文件，谓词会失效。[#21901](https://github.com/StarRocks/starrocks/pull/21901)
+- 过滤条件无法正确处理列名大小写问题。[#22626](https://github.com/StarRocks/starrocks/pull/22626)
+- 延迟物化导致查询复杂数据类型（STRUCT 或 MAP）错误。[#22862](https://github.com/StarRocks/starrocks/pull/22862)
+- 主键模型表在备份恢复中出现的问题。[#23384](https://github.com/StarRocks/starrocks/pull/23384)
+
+## 2.5.5
+
+发布日期：2023 年 4 月 28 日
+
+### 新增特性
+
+新增对主键模型表 tablet 状态的监控，包括：
+
+- FE 新增 `err_state_metric` 监控项。
+- `SHOW PROC '/statistic/'` 返回结果中新增统计列 `ErrorStateTabletNum`，用于统计错误状态 (err_state) 的 Tablet 数量。
+- `SHOW PROC '/statistic/<db_id>/'` 返回结果中新增统计列 `ErrorStateTablets`，用于展示当前数据库下处于错误状态的 Tablet ID。[# 19517](https://github.com/StarRocks/starrocks/pull/19517)
+
+更多信息，参见 [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW%20PROC.md)。
+
+### 功能优化
+
+- 优化添加多个 BE 时的磁盘均衡速度。[# 19418](https://github.com/StarRocks/starrocks/pull/19418)
+- 优化 `storage_medium` 的推导机制。当 BE 同时使用 SSD 和 HDD 作为存储介质时，根据 `storage_cooldown_time` 的配置来决定默认存储类型。如果配置了 `storage_cooldown_time`，StarRocks 设置 `storage_medium` 为 `SSD`。如果未配置，则设置 `storage_medium` 为 `HDD`。[#18649](https://github.com/StarRocks/starrocks/pull/18649)
+- 通过禁止收集 Unique Key 表的 Value 列统计信息来优化 Unique Key 表性能。[# 19563](https://github.com/StarRocks/starrocks/pull/19563)
+
+### 问题修复
+
+- 对于 Colocation 表，可以通过命令手动指定副本状态为 bad：`ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "10003", "backend_id" = "10001", "status" = "bad");`，如果 BE 数量小于等于副本数量，则该副本无法被修复。[# 17876](https://github.com/StarRocks/starrocks/issues/17876)
+- 启动 BE 后进程存在但是端口无法启动。[# 19347](https://github.com/StarRocks/starrocks/pull/19347)
+- 子查询使用窗口函数时，聚合结果不准确。[# 19725](https://github.com/StarRocks/starrocks/issues/19725)
+- 首次刷新物化视图时 `auto_refresh_partitions_limit` 设置的限制不生效，导致所有分区都做了刷新。  [# 19759](https://github.com/StarRocks/starrocks/issues/19759)
+- 查询 CSV 格式的 Hive 表时，由于 ARRAY 数组中嵌套了复杂数据类型 (MAP 和 STRUCT)而导致的问题。[# 20233](https://github.com/StarRocks/starrocks/pull/20233)
+- 使用 Spark connector 查询超时。[# 20264](https://github.com/StarRocks/starrocks/pull/20264)
+- 两副本的表如果其中一个副本出现问题，无法自动修复。[# 20681](https://github.com/StarRocks/starrocks/pull/20681)
+- 物化视图查询改写失败而导致查询失败。[# 19549](https://github.com/StarRocks/starrocks/issues/19549)
+- 因 db 锁引起的 metrics 接口超时。[# 20790](https://github.com/StarRocks/starrocks/pull/20790)
+- Broadcast Join 查询结果错误。[# 20952](https://github.com/StarRocks/starrocks/issues/20952)
+- 建表时使用不支持的数据类型时返回空指针。[# 20999](https://github.com/StarRocks/starrocks/issues/20999)
+- 开启 Query Cache 后使用 window_funnel 函数导致的问题。[# 21474](https://github.com/StarRocks/starrocks/issues/21474)
+- CTE 优化查询改写后导致选择优化计划耗时过长。[# 16515](https://github.com/StarRocks/starrocks/pull/16515)
+
+## 2.5.4
+
+发布日期： 2023 年 4 月 4 日
+
+### 功能优化
+
+- 优化查询规划阶段物化视图查询改写的性能，降低约 70% 的规划耗时。[#19579](https://github.com/StarRocks/starrocks/pull/19579)
+- 优化类型推断，如果查询 `SELECT sum(CASE WHEN XXX)FROM xxx;` 中包含常量 `0`，例如 `SELECT sum(CASE WHEN k1 = 1 THEN v1 ELSE 0 END) FROM test;`，则预聚合自动开启以加速查询。[#19474](https://github.com/StarRocks/starrocks/pull/19474)
+- 支持使用 `SHOW CREATE VIEW` 查看物化视图的创建语句。[#19999](https://github.com/StarRocks/starrocks/pull/19999)
+- BE 节点之间单次 bRPC 请求支持传输超过 2 GB 的数据包。[#20283](https://github.com/StarRocks/starrocks/pull/20283) [#20230](https://github.com/StarRocks/starrocks/pull/20230)
+- External Catalog 支持通过 [SHOW CREATE CATALOG](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) 查看 Catalog 的创建信息。
+
+### 问题修复
+
+修复了如下问题：
+
+- 物化视图查询改写后，低基数全局字典优化不生效。[#19615](https://github.com/StarRocks/starrocks/pull/19615)
+- 物化视图查询无法改写，导致查询失败。[#19774](https://github.com/StarRocks/starrocks/pull/19774)
+- 基于主键模型或更新模型的表创建物化视图，物化视图查询无法改写。[#19600](https://github.com/StarRocks/starrocks/pull/19600)
+- 物化视图的列名大小写敏感， 建表时 `PROPERTIES` 中列名大小写错误，仍然返回建表成功，未能返回报错提示，并且基于该表的物化视图查询无法改写。[#19780](https://github.com/StarRocks/starrocks/pull/19780)
+- 物化视图查询改写后，执行计划中可能产生基于分区列的无效谓词，影响查询速度。[#19784](https://github.com/StarRocks/starrocks/pull/19784)
+- 导入数据至新创建的分区后，物化视图查询可能无法改写。[#20323](https://github.com/StarRocks/starrocks/pull/20323)
+- 创建物化视图时配置 `"storage_medium" = "SSD"` ，导致物化视图刷新失败。[#19539](https://github.com/StarRocks/starrocks/pull/19539) [#19626](https://github.com/StarRocks/starrocks/pull/19626)
+- 主键模型的表可能会并行 Compaction。[#19692](https://github.com/StarRocks/starrocks/pull/19692)
+- 大量 DELETE 操作后 Compaction 不及时。[#19623](https://github.com/StarRocks/starrocks/pull/19623)
+- 如果语句的表达式中含有多个低基数列时，表达式改写可能出错，进而导致低基数全局字典优化不生效。[#20161](https://github.com/StarRocks/starrocks/pull/20161)
+
 ## 2.5.3
 
 发布日期： 2023 年 3 月 10 日
@@ -51,7 +135,7 @@
 
 ### 行为变更
 
-- 异步物化视图功能默认开启 （`enable_experimental_mv` 默认值变为 `true`)。
+- 修改 FE 参数 `enable_experimental_mv` 默认值为 `true`，即异步物化视图功能默认开启。
 - 新增保留关键字 CHARACTER。[#17488](https://github.com/StarRocks/starrocks/pull/17488)
 
 ## 2.5.1
