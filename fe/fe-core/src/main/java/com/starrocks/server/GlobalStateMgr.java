@@ -1870,6 +1870,7 @@ public class GlobalStateMgr {
                 checksum = routineLoadManager.saveRoutineLoadJobs(dos, checksum);
                 checksum = loadManager.saveLoadJobsV2(dos, checksum);
                 checksum = smallFileMgr.saveSmallFiles(dos, checksum);
+
                 checksum = pluginMgr.savePlugins(dos, checksum);
                 checksum = deleteHandler.saveDeleteHandler(dos, checksum);
                 dos.writeLong(checksum);

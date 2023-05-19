@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.google.gson.annotations.SerializedName;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -248,6 +249,7 @@ import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 public class LocalMetastore implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(LocalMetastore.class);
 
+    @SerializedName(value = "d")
     private final ConcurrentHashMap<Long, Database> idToDb = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Database> fullNameToDb = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Long> tableIdToIncrementId = new ConcurrentHashMap<>();

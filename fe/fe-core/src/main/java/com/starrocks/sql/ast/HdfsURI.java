@@ -12,22 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.sql.ast;
 
-package com.starrocks.common;
+import com.google.common.base.Preconditions;
+import com.google.gson.annotations.SerializedName;
 
-public class StarRocksFEMetaVersion {
-    //no use version
-    public static final int VERSION_1 = 1;
+/*
+ * Represents an HDFS URI in a SQL statement.
+ */
+public class HdfsURI {
+    @SerializedName(value = "location")
+    private final String location;
 
-    //add user identification info
-    public static final int VERSION_2 = 2;
+    public HdfsURI(String location) {
+        Preconditions.checkNotNull(location);
+        this.location = location.trim();
+    }
 
-    //support hive external read
-    public static final int VERSION_3 = 3;
+    public String getLocation() {
+        return location;
+    }
 
-    //change all serialize format to json
-    public static final int VERSION_4 = 4;
-
-    // note: when increment meta version, should assign the latest version to VERSION_CURRENT
-    public static final int VERSION_CURRENT = VERSION_4;
+    @Override
+    public String toString() {
+        return location;
+    }
 }

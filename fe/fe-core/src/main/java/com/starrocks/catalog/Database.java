@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.starrocks.StarRocksDb;
@@ -93,28 +94,29 @@ import java.util.zip.Adler32;
  */
 public class Database extends MetaObject implements Writable {
     private static final Logger LOG = LogManager.getLogger(Database.class);
-
     // empirical value.
     // assume that the time a lock is held by thread is less than 100ms
     public static final long TRY_LOCK_TIMEOUT_MS = 100L;
 
+    @SerializedName(value = "i")
     private long id;
+    @SerializedName(value = "n")
+    private String fullQualifiedName;
+    @SerializedName(value = "t")
+    private Map<String, Table> nameToTable;
+    private final Map<Long, Table> idToTable;
+    // user define function
+    @SerializedName(value = "f")
+    private ConcurrentMap<String, ImmutableList<Function>> name2Function = Maps.newConcurrentMap();
+    @SerializedName(value = "d")
+    private volatile long dataQuotaBytes;
+    @SerializedName(value = "r")
+    private volatile long replicaQuotaSize;
 
     // catalogName is set if the database comes from an external catalog
     private String catalogName;
-    private String fullQualifiedName;
+
     private QueryableReentrantReadWriteLock rwLock;
-
-    // table family group map
-    private Map<Long, Table> idToTable;
-    private Map<String, Table> nameToTable;
-
-    // user define function
-    private ConcurrentMap<String, ImmutableList<Function>> name2Function = Maps.newConcurrentMap();
-
-    private volatile long dataQuotaBytes;
-
-    private volatile long replicaQuotaSize;
 
     private long lastSlowLockLogTime = 0;
 

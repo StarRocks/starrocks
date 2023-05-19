@@ -18,6 +18,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -37,7 +38,10 @@ import java.util.Objects;
  */
 public class FunctionName implements Writable {
     public static final String GLOBAL_UDF_DB = "__global_udf_db__";
+
+    @SerializedName(value = "db")
     private String db_;
+    @SerializedName(value = "fn")
     private String fn_;
 
     private FunctionName() {
@@ -118,15 +122,6 @@ public class FunctionName implements Writable {
             return fn_;
         }
         return db_ + "." + fn_;
-    }
-
-    // used to analyze db element in function name, add cluster
-    public String analyzeDb(Analyzer analyzer) throws AnalysisException {
-        String db = db_;
-        if (db == null) {
-            db = analyzer.getDefaultDb();
-        }
-        return db;
     }
 
     public void analyze(String defaultDb) throws AnalysisException {

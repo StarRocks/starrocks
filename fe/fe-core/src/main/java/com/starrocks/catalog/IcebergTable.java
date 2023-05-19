@@ -24,6 +24,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.io.Text;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -63,15 +64,19 @@ public class IcebergTable extends Table {
     private static final String JSON_KEY_RESOURCE_NAME = "resource";
     private static final String JSON_KEY_ICEBERG_PROPERTIES = "icebergProperties";
 
-    private org.apache.iceberg.Table nativeTable; // actual iceberg table
     private String catalogName;
+    @SerializedName(value = "dn")
     private String remoteDbName;
+    @SerializedName(value = "tn")
     private String remoteTableName;
+    @SerializedName(value = "rn")
     private String resourceName;
-    private Optional<IcebergMetricsReporter> metricsReporter = Optional.empty();
-
+    @SerializedName(value = "prop")
     private Map<String, String> icebergProperties = Maps.newHashMap();
+
+    private org.apache.iceberg.Table nativeTable; // actual iceberg table
     private List<Column> partitionColumns;
+    private Optional<IcebergMetricsReporter> metricsReporter = Optional.empty();
 
     public IcebergTable() {
         super(TableType.ICEBERG);
