@@ -44,7 +44,21 @@ StatusOr<ColumnPtr> BitmapFunctions::to_bitmap(FunctionContext* context, const s
         }
 
         uint64_t value;
-        if constexpr (lt_is_string<LT>) {
+        if constexpr (lt_is_integer<LT> || lt_is_boolean<LT>) {
+            auto raw_value = viewer.value(row);
+            // To be compatible with varchar type, set it null if raw value is less than 0 and less than uint64::max.
+            if (UNLIKELY(raw_value < 0 || raw_value > std::numeric_limits<uint64_t>::max())) {
+                context->set_error(strings::Substitute("The input: {0} is not valid, to_bitmap only "
+                                                       "support bigint value from 0 to "
+                                                       "18446744073709551615 currently",
+                                                       raw_value)
+                                           .c_str());
+
+                builder.append_null();
+                continue;
+            }
+            value = static_cast<uint64_t>(raw_value);
+        } else {
             StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
             auto slice = viewer.value(row);
             value = StringParser::string_to_unsigned_int<uint64_t>(slice.data, slice.size, &parse_result);
@@ -58,20 +72,6 @@ StatusOr<ColumnPtr> BitmapFunctions::to_bitmap(FunctionContext* context, const s
                 builder.append_null();
                 continue;
             }
-        } else {
-            auto raw_value = viewer.value(row);
-            // To be compatible with varchar type, set it null if raw value is less than 0.
-            if (UNLIKELY(raw_value < 0)) {
-                context->set_error(strings::Substitute("The input: {0} is not valid, to_bitmap only "
-                                                       "support bigint value from 0 to "
-                                                       "18446744073709551615 currently",
-                                                       raw_value)
-                                           .c_str());
-
-                builder.append_null();
-                continue;
-            }
-            value = static_cast<uint64_t>(raw_value);
         }
 
         BitmapValue bitmap;
@@ -92,6 +92,8 @@ template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_INT>(FunctionContex
                                                                   const starrocks::Columns& columns);
 template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_BIGINT>(FunctionContext* context,
                                                                      const starrocks::Columns& columns);
+template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_LARGEINT>(FunctionContext* context,
+                                                                       const starrocks::Columns& columns);
 template StatusOr<ColumnPtr> BitmapFunctions::to_bitmap<TYPE_VARCHAR>(FunctionContext* context,
                                                                       const starrocks::Columns& columns);
 
