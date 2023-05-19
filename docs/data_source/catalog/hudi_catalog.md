@@ -355,7 +355,7 @@ The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_c
 Use MinIO as an example. Run a command like below:
 
 ```SQL
-CREATE EXTERNAL CATALOG hive_catalog_hms
+CREATE EXTERNAL CATALOG hudi_catalog_hms
 PROPERTIES
 (
     "type" = "hudi", 

@@ -356,7 +356,7 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
 Use MinIO as an example. Run a command like below:
 
 ```SQL
-CREATE EXTERNAL CATALOG hive_catalog_hms
+CREATE EXTERNAL CATALOG deltalake_catalog_hms
 PROPERTIES
 (
     "type" = "deltalake", 

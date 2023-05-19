@@ -346,7 +346,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
 Use MinIO as an example. Run a command like below:
 
 ```SQL
-CREATE EXTERNAL CATALOG hive_catalog_hms
+CREATE EXTERNAL CATALOG iceberg_catalog_hms
 PROPERTIES
 (
     "type" = "iceberg", 
