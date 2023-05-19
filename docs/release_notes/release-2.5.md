@@ -1,5 +1,117 @@
 # StarRocks version 2.5
 
+<<<<<<< HEAD
+=======
+## 2.5.6
+
+Release date: May 19, 2023
+
+### Improvements
+
+- Optimized the error message reported when INSERT INTO ... SELECT expires due to a small `thrift_server_max_worker_thread` value. [#21964](https://github.com/StarRocks/starrocks/pull/21964)
+- Tables created using CTAS have three replicas by default, which is consistent with the default replica number for common tables. [#22854](https://github.com/StarRocks/starrocks/pull/22854)
+
+### Bug Fixes
+
+- Truncating partitions fails because the TRUNCATE operation is case-sensitive to partition names. [#21809](https://github.com/StarRocks/starrocks/pull/21809)
+- Decommissioning BE fails due to the failure in creating temporary partitions for materialized views. [#22745](https://github.com/StarRocks/starrocks/pull/22745)
+- Dynamic FE parameters that require an ARRAY value cannot be set to an empty array. [#22225](https://github.com/StarRocks/starrocks/pull/22225)
+- Materialized views with the `partition_refresh_number` property specified may fail to completely refresh. [#21619](https://github.com/StarRocks/starrocks/pull/21619)
+- SHOW CREATE TABLE masks cloud credential information, which causes incorrect credential information in memory. [#21311](https://github.com/StarRocks/starrocks/pull/21311)
+- Predicates cannot take effect on some ORC files that are queried via external tables. [#21901](https://github.com/StarRocks/starrocks/pull/21901)
+- The min-max filter cannot properly handle lower- and upper-case letters in column names. [#22626](https://github.com/StarRocks/starrocks/pull/22626)
+- Late materialization causes errors in querying complex data types (STRUCT or MAP).  [#22862](https://github.com/StarRocks/starrocks/pull/22862)
+- The issue that occurs when restoring a Primary Key table. [#23384](https://github.com/StarRocks/starrocks/pull/23384)
+
+## 2.5.5
+
+Release date: April 28, 2023
+
+### New features
+
+Added a metric to monitor the tablet status of Primary Key tables:
+
+- Added the FE metric `err_state_metric`.
+- Added the `ErrorStateTabletNum` column to the output of `SHOW PROC '/statistic/'` to display the number of **err_state** tablets.
+- Added the `ErrorStateTablets` column to the output of `SHOW PROC '/statistic/<db_id>/'` to display the IDs of **err_state** tablets.
+
+For more information, see [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW%20PROC.md).
+
+### Improvements
+
+- Optimized the disk balancing speed when multiple BEs are added. [# 19418](https://github.com/StarRocks/starrocks/pull/19418)
+- Optimized the inference of `storage_medium`. When BEs use both SSD and HDD as storage devices, if the property `storage_cooldown_time` is specified, StarRocks sets `storage_medium` to `SSD`. Otherwise, StarRocks sets `storage_medium` to `HDD`. [#18649](https://github.com/StarRocks/starrocks/pull/18649)
+- Optimized the performance of Unique Key tables by forbidding the collection of statistics from value columns. [#19563](https://github.com/StarRocks/starrocks/pull/19563)
+
+### Bug Fixes
+
+- For Colocation tables, the replica status can be manually specified as `bad` by using statements like `ADMIN SET REPLICA STATUS PROPERTIES ("tablet_id" = "10003", "backend_id" = "10001", "status" = "bad");`. If the number of BEs is less than or equal to the number of replicas, the corrupted replica cannot be repaired. [# 17876](https://github.com/StarRocks/starrocks/issues/17876)
+- After a BE is started, its process exists but the BE port cannot be enabled. [# 19347](https://github.com/StarRocks/starrocks/pull/19347)
+- Wrong results are returned for aggregate queries whose subquery is nested with a window function. [# 19725](https://github.com/StarRocks/starrocks/issues/19725)
+- `auto_refresh_partitions_limit` does not take effect when the materialized view (MV) is refreshed for the first time. As a result, all the partitions are refreshed. [# 19759](https://github.com/StarRocks/starrocks/issues/19759)
+- An error occurs when querying a CSV Hive external table whose array data is nested with complex data such as MAP and STRUCT. [# 20233](https://github.com/StarRocks/starrocks/pull/20233)
+- Queries that use Spark connector time out. [# 20264](https://github.com/StarRocks/starrocks/pull/20264)
+- If one replica of a two-replica table is corrupted, the table cannot recover. [# 20681](https://github.com/StarRocks/starrocks/pull/20681)
+- Query failure caused by MV query rewrite failure. [# 19549](https://github.com/StarRocks/starrocks/issues/19549)
+- The metric interface expires due to database lock. [# 20790](https://github.com/StarRocks/starrocks/pull/20790)
+- Wrong results are returned for Broadcast Join. [# 20952](https://github.com/StarRocks/starrocks/issues/20952)
+- NPE is returned when an unsupported data type is used in CREATE TABLE. [# 20999](https://github.com/StarRocks/starrocks/issues/20999)
+- The issue caused by using window_funnel() with the Query Cache feature. [# 21474](https://github.com/StarRocks/starrocks/issues/21474)
+- Optimization plan selection takes an unexpectedly long time after the CTE is rewritten. [# 16515](https://github.com/StarRocks/starrocks/pull/16515)
+
+## 2.5.4
+
+Release date: April 4, 2023
+
+### Improvements
+
+- Optimized the performance of rewriting queries on materialized views during query planning. The amount of time taken for query planning is reduced by about 70%. [#19579](https://github.com/StarRocks/starrocks/pull/19579)
+- Optimized the type inference logic. If a query like `SELECT sum(CASE WHEN XXX);` contains a constant `0`, such as `SELECT sum(CASE WHEN k1 = 1 THEN v1 ELSE 0 END) FROM test;`, pre-aggregation is automatically enabled to accelerate the query. [#19474](https://github.com/StarRocks/starrocks/pull/19474)
+- Supports using `SHOW CREATE VIEW` to view the creation statement of a materialized view. [#19999](https://github.com/StarRocks/starrocks/pull/19999)
+- Supports transmitting packets that are 2 GB or larger in size for a single bRPC request between BE nodes. [#20283](https://github.com/StarRocks/starrocks/pull/20283) [#20230](https://github.com/StarRocks/starrocks/pull/20230)
+- Supports using [SHOW CREATE CATALOG](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation statement of an external catalog.
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- After queries on materialized views are rewritten, the global dictionary for low-cardinality optimization does not take effect. [#19615](https://github.com/StarRocks/starrocks/pull/19615)
+- If a query on materialized views fails to be rewritten, the query fails. [#19774](https://github.com/StarRocks/starrocks/pull/19774)
+- If a materialized view is created based on a Primary Key or Unique Key table, queries on that materialized view cannot be rewritten. [#19600](https://github.com/StarRocks/starrocks/pull/19600)
+- The column names of materialized views are case-sensitive. However, when you create a table, the table is successfully created without an error message even if column names are incorrect in the `PROPERTIES` of the table creation statement, and moreover the rewriting of queries on materialized views created on that table fails. [#19780](https://github.com/StarRocks/starrocks/pull/19780)
+- After a query on materialized views is rewritten, the query plan ma contain partition column-based, invalid predicates, which affect query performance. [#19784](https://github.com/StarRocks/starrocks/pull/19784)
+- When data is loaded into a newly created partition, queries on materialized views may fail to be rewritten. [#20323](https://github.com/StarRocks/starrocks/pull/20323)
+- Configuring `"storage_medium" = "SSD"` at the creation of materialized views causes the refresh of the materialized views to fail. [#19539](https://github.com/StarRocks/starrocks/pull/19539) [#19626](https://github.com/StarRocks/starrocks/pull/19626)
+- Concurrent compaction may happen on Primary Key tables. [#19692](https://github.com/StarRocks/starrocks/pull/19692)
+- Compaction does not occur promptly after a large number of DELETE operations. [#19623](https://github.com/StarRocks/starrocks/pull/19623)
+- If the expression of a statement contains multiple low-cardinality columns, the expression may fail to be properly rewritten. As a result, the global dictionary for low-cardinality optimization does not take effect. [#20161](https://github.com/StarRocks/starrocks/pull/20161)
+
+## 2.5.3
+
+Release date: March 10, 2023
+
+### Improvements
+
+- Optimized query rewrite for materialized views (MVs).
+  - Supports rewriting queries with Outer Join and Cross Join. [#18629](https://github.com/StarRocks/starrocks/pull/18629)
+  - Optimized the data scan logic for MVs, further accelerating the rewritten queries. [#18629](https://github.com/StarRocks/starrocks/pull/18629)
+  - Enhanced rewrite capabilities for single-table aggregate queries.  [#18629](https://github.com/StarRocks/starrocks/pull/18629)
+  - Enhanced rewrite capabilities in View Delta scenarios, which is when the queried tables are a subset of the MV's base tables. [#18800](https://github.com/StarRocks/starrocks/pull/18800)
+- Optimized the performance and memory usage when the window function RANK() is used as a filter or a sort key. [#17553](https://github.com/StarRocks/starrocks/issues/17553)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- Errors caused by null literals `[]` in ARRAY data. [#18563](https://github.com/StarRocks/starrocks/pull/18563)
+- Misuse of the low-cardinality optimization dictionary in some complex query scenarios. The dictionary mapping check is now added before applying the dictionary.  [#17318](https://github.com/StarRocks/starrocks/pull/17318)
+- In a single BE environment, Local Shuffle causes GROUP BY to produce duplicate results. [#17845](https://github.com/StarRocks/starrocks/pull/17845)
+- Misuses of partition-related PROPERTIES for a non-partitioned MV may cause the MV refresh to fail. The partition PROPERTIES check is now performed when users create an MV. [#18741](https://github.com/StarRocks/starrocks/pull/18741)
+- Errors in parsing Parquet Repetition columns. [#17626](https://github.com/StarRocks/starrocks/pull/17626) [#17788](https://github.com/StarRocks/starrocks/pull/17788) [#18051](https://github.com/StarRocks/starrocks/pull/18051)
+- The obtained column's nullable information is incorrect. Solution: When CTAS is used to create a Primary Key table, only the primary key columns are non-nullable; non-primary key columns are nullable. [#16431](https://github.com/StarRocks/starrocks/pull/16431)
+- Some issues caused by deleting data from Primary Key tables.  [#18768](https://github.com/StarRocks/starrocks/pull/18768)
+
+>>>>>>> 4cd8592f7 ([Doc] 2.5.6 rn and privilege (#23790))
 ## 2.5.2
 
 Release date: February 17, 2023
