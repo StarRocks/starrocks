@@ -537,10 +537,10 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
 以 MinIO 为例，可以按如下创建 Hudi Catalog：
 
 ```SQL
-CREATE EXTERNAL CATALOG hive_catalog_hms
+CREATE EXTERNAL CATALOG hudi_catalog_hms
 PROPERTIES
 (
-    "type" = "hive", 
+    "type" = "hudi", 
     "hive.metastore.uris" = "thrift://34.132.15.127:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
@@ -557,10 +557,10 @@ PROPERTIES
 - 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Hudi Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "hudi", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
@@ -570,10 +570,10 @@ PROPERTIES
 - 如果基于 SAS Token 进行认证和鉴权，可以按如下创建 Hudi Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "hudi", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.blob.account_name" = "<blob_storage_account_name>",
       "azure.blob.container_name" = "<blob_container_name>",
@@ -586,10 +586,10 @@ PROPERTIES
 - 如果基于 Managed Service Identity 进行认证和鉴权，可以按如下创建 Hudi Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "hudi", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls1.use_managed_service_identity" = "true"    
   );
@@ -598,10 +598,10 @@ PROPERTIES
 - 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Hudi Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "hudi", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls1.oauth2_client_id" = "<application_client_id>",
       "azure.adls1.oauth2_credential" = "<application_client_credential>",
@@ -614,10 +614,10 @@ PROPERTIES
 - 如果基于 Managed Identity 进行认证和鉴权，可以按如下创建 Hudi Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "hudi", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_use_managed_identity" = "true",
       "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
@@ -628,10 +628,10 @@ PROPERTIES
 - 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Hudi Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "hudi", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.storage_account" = "<storage_account_name>",
       "azure.adls2.shared_key" = "<shared_key>"     
@@ -641,10 +641,10 @@ PROPERTIES
 - 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Hudi Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "hudi", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
@@ -657,10 +657,10 @@ PROPERTIES
 - 如果基于 VM 进行认证和鉴权，可以按如下创建 Hudi Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "hudi", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.use_compute_engine_service_account" = "true"    
   );
@@ -669,11 +669,11 @@ PROPERTIES
 - 如果基于 Service Account 进行认证和鉴权，可以按如下创建 Hudi Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
-      "type"="hive", 
-      "hive.metastore.uris"="thrift://34.132.15.127:9083",
+      "type" = "hudi", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
       "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
@@ -685,11 +685,11 @@ PROPERTIES
   - 使用 VM 实例模拟 Service Account，可以按如下创建 Hudi Catalog：
 
     ```SQL
-    CREATE EXTERNAL CATALOG hive_catalog_hms
+    CREATE EXTERNAL CATALOG hudi_catalog_hms
     PROPERTIES
     (
-        "type"="hive", 
-        "hive.metastore.uris"="thrift://34.132.15.127:9083",
+        "type" = "hudi", 
+        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
         "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
     );
@@ -698,11 +698,11 @@ PROPERTIES
   - 使用一个 Service Account 模拟另一个 Service Account，可以按如下创建 Hudi Catalog：
 
     ```SQL
-    CREATE EXTERNAL CATALOG hive_catalog_hms
+    CREATE EXTERNAL CATALOG hudi_catalog_hms
     PROPERTIES
     (
-        "type"="hive", 
-        "hive.metastore.uris"="thrift://34.132.15.127:9083",
+        "type" = "hudi", 
+        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
         "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
