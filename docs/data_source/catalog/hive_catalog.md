@@ -357,6 +357,24 @@ The following examples create a Hive catalog named `hive_catalog_hms` or `hive_c
   );
   ```
 
+#### S3-compatible storage system
+
+Use MinIO as an example. Run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG hive_catalog_hms
+PROPERTIES
+(
+    "type" = "hive", 
+    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "aws.s3.enable_ssl" = "true",
+    "aws.s3.enable_path_style_access" = "true",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
+
 ## View the schema of a Hive table
 
 You can use one of the following syntaxes to view the schema of a Hive table:
