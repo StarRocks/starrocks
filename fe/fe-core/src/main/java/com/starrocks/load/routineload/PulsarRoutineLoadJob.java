@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -72,14 +73,19 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
 
     public static final String PULSAR_FILE_CATALOG = "pulsar";
 
+    @SerializedName("svu")
     private String serviceUrl;
+    @SerializedName("tpc")
     private String topic;
+    @SerializedName("sbs")
     private String subscription;
     // optional, user want to load partitions.
+    @SerializedName("cpp")
     private List<String> customPulsarPartitions = Lists.newArrayList();
     // current pulsar partitions is the actually partition which will be fetched
     private List<String> currentPulsarPartitions = Lists.newArrayList();
     // pulsar properties, property prefix will be mapped to pulsar custom parameters, which can be extended in the future
+    @SerializedName("cpt")
     private Map<String, String> customProperties = Maps.newHashMap();
     private Map<String, String> convertedCustomProperties = Maps.newHashMap();
 

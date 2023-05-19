@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.catalog.Database;
@@ -69,6 +70,7 @@ import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
@@ -114,7 +116,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * The desireTaskConcurrentNum means that user expect the number of concurrent stream load
  * The routine load job support different streaming medium such as KAFKA and Pulsar
  */
-public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback implements Writable {
+public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadJob.class);
 
     public static final long DEFAULT_MAX_ERROR_NUM = 0;
@@ -161,9 +163,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
     }
 
+    @SerializedName("i")
     protected long id;
+    @SerializedName("n")
     protected String name;
+    @SerializedName("d")
     protected long dbId;
+    @SerializedName("t")
     protected long tableId;
     // this code is used to verify be task request
     protected long authCode;
@@ -173,19 +179,25 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected Expr whereExpr; // optional
     protected ColumnSeparator columnSeparator; // optional
     protected RowDelimiter rowDelimiter; // optional
+    @SerializedName("de")
     protected int desireTaskConcurrentNum; // optional
+    @SerializedName("s")
     protected JobState state = JobState.NEED_SCHEDULE;
+    @SerializedName("da")
     protected LoadDataSourceType dataSourceType;
     protected double maxFilterRatio = 1;
     // max number of error data in max batch rows * 10
     // maxErrorNum / (maxBatchRows * 10) = max error rate of routine load job
     // if current error rate is more than max error rate, the job will be paused
+    @SerializedName("me")
     protected long maxErrorNum = DEFAULT_MAX_ERROR_NUM; // optional
     // include strict mode
+    @SerializedName("jp")
     protected Map<String, String> jobProperties = Maps.newHashMap();
 
     // sessionVariable's name -> sessionVariable's value
     // we persist these sessionVariables due to the session is not available when replaying the job.
+    @SerializedName("sv")
     protected Map<String, String> sessionVariables = Maps.newHashMap();
 
     /**
@@ -193,11 +205,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
      * and consume data for Config.routine_load_consume_second or consumed data size exceeds Config.max_routine_load_batch_size
      * maxBatchRows only used to judge error data and dose not limit the batch data
      */
+    @SerializedName("ta")
     protected long taskSchedIntervalS = DEFAULT_TASK_SCHED_INTERVAL_SECOND;
+    @SerializedName("mr")
     protected long maxBatchRows = DEFAULT_MAX_BATCH_ROWS;
 
     // deprecated
     // set to Config.max_routine_load_batch_size, so that if fe rolls back to old version, routine load can still work
+    @SerializedName("mb")
     protected long maxBatchSizeBytes = Config.max_routine_load_batch_size;
 
     /**
@@ -219,6 +234,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected byte escape = 0;
 
     protected int currentTaskConcurrentNum;
+    @SerializedName("p")
     protected RoutineLoadProgress progress;
 
     protected long firstResumeTimestamp; // the first resume time
@@ -229,8 +245,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected ErrorReason pauseReason;
     protected ErrorReason cancelReason;
 
+    @SerializedName("c")
     protected long createTimestamp = System.currentTimeMillis();
+    @SerializedName("pa")
     protected long pauseTimestamp = -1;
+    @SerializedName("e")
     protected long endTimestamp = -1;
 
     /*
@@ -242,14 +261,23 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     /*
      * Rows will be updated after txn state changed when txn state has been successfully changed.
      */
+    @SerializedName("ce")
     protected long currentErrorRows = 0;
+    @SerializedName("ct")
     protected long currentTotalRows = 0;
+    @SerializedName("er")
     protected long errorRows = 0;
+    @SerializedName("tr")
     protected long totalRows = 0;
+    @SerializedName("u")
     protected long unselectedRows = 0;
+    @SerializedName("rb")
     protected long receivedBytes = 0;
+    @SerializedName("tt")
     protected long totalTaskExcutionTimeMs = 1; // init as 1 to avoid division by zero
+    @SerializedName("ct")
     protected long committedTaskNum = 0;
+    @SerializedName("at")
     protected long abortedTaskNum = 0;
 
     // The tasks belong to this job
@@ -257,6 +285,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     // this is the origin stmt of CreateRoutineLoadStmt, we use it to persist the RoutineLoadJob,
     // because we can not serialize the Expressions contained in job.
+    @SerializedName("os")
     protected OriginStatement origStmt;
 
     protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
@@ -1725,5 +1754,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                     copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY));
         }
         this.jobProperties.putAll(copiedJobProperties);
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        setRoutineLoadDesc(CreateRoutineLoadStmt.getLoadDesc(origStmt, sessionVariables));
     }
 }

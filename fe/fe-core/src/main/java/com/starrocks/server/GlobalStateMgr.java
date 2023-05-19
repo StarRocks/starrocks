@@ -1417,6 +1417,7 @@ public class GlobalStateMgr {
                     deleteHandler.load(dis);
                     analyzeManager.load(dis);
                     resourceGroupMgr.load(dis);
+                    routineLoadManager.loadRoutineLoadJobsV2(dis);
                 } catch (SRMetaBlockException | SRMetaBlockEOFException e) {
                     LOG.error("load image failed", e);
                     throw new IOException("load image failed", e);
@@ -1439,9 +1440,7 @@ public class GlobalStateMgr {
                 // global transaction must be replayed before load jobs v2
                 checksum = globalTransactionMgr.loadTransactionState(dis, checksum);
                 checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
-                checksum = routineLoadManager.loadRoutineLoadJobs(dis, checksum);
                 checksum = smallFileMgr.loadSmallFiles(dis, checksum);
-
                 checksum = auth.readAsGson(dis, checksum);
                 remoteChecksum = dis.readLong();
                 checksum = taskManager.loadTasks(dis, checksum);
@@ -1815,6 +1814,7 @@ public class GlobalStateMgr {
                     deleteHandler.save(dos);
                     analyzeManager.save(dos);
                     resourceGroupMgr.save(dos);
+                    routineLoadManager.saveRoutineLoadJobsV2(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("save image failed", e);
                     throw new IOException("save image failed", e);
@@ -1831,7 +1831,6 @@ public class GlobalStateMgr {
                 checksum = auth.saveAuth(dos, checksum);
                 checksum = globalTransactionMgr.saveTransactionState(dos, checksum);
                 checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
-                checksum = routineLoadManager.saveRoutineLoadJobs(dos, checksum);
                 checksum = smallFileMgr.saveSmallFiles(dos, checksum);
 
                 checksum = auth.writeAsGson(dos, checksum);
