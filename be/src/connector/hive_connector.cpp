@@ -42,6 +42,10 @@ DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_
     return std::make_unique<HiveDataSource>(this, scan_range);
 }
 
+const TupleDescriptor* HiveDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_hdfs_scan_node.tuple_id);
+}
+
 // ================================
 
 HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range)
@@ -507,6 +511,16 @@ int64_t HiveDataSource::num_bytes_read() const {
 int64_t HiveDataSource::cpu_time_spent() const {
     if (_scanner == nullptr) return 0;
     return _scanner->cpu_time_spent();
+}
+
+int64_t HiveDataSource::io_time_spent() const {
+    if (_scanner == nullptr) return 0;
+    return _scanner->io_time_spent();
+}
+
+int64_t HiveDataSource::estimated_mem_usage() const {
+    if (_scanner == nullptr) return 0;
+    return _scanner->estimated_mem_usage();
 }
 
 } // namespace starrocks::connector

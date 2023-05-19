@@ -146,7 +146,7 @@ SELECT /*+ SET_VAR
 
 * enable_insert_strict
 
-  Used to enable the strict mode when loading data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md)".
+  Used to enable the strict mode when loading data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md).
 
 * enable_spilling
 
@@ -228,7 +228,7 @@ SELECT /*+ SET_VAR
 
 * enable_scan_block_cache (2.5 and later)
   
-  Specifies whether to enable the Local Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Local Cache](../data_source/Block_cache.md).
+  Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md).
 
 * enable_populate_block_cache (2.5 and later)
   

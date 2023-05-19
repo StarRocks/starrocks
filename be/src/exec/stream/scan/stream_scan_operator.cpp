@@ -18,9 +18,9 @@
 
 namespace starrocks::pipeline {
 
-StreamScanOperatorFactory::StreamScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop,
+StreamScanOperatorFactory::StreamScanOperatorFactory(int32_t id, ScanNode* scan_node, RuntimeState* state, size_t dop,
                                                      ChunkBufferLimiterPtr buffer_limiter, bool is_stream_pipeline)
-        : ConnectorScanOperatorFactory(id, scan_node, dop, std::move(buffer_limiter)),
+        : ConnectorScanOperatorFactory(id, scan_node, state, dop, std::move(buffer_limiter)),
           _is_stream_pipeline(is_stream_pipeline) {}
 
 OperatorPtr StreamScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
@@ -35,8 +35,8 @@ StreamScanOperator::StreamScanOperator(OperatorFactory* factory, int32_t id, int
 ChunkSourcePtr StreamScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* factory = down_cast<StreamScanOperatorFactory*>(_factory);
-    return std::make_shared<StreamChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
-                                               std::move(morsel), this, scan_node, factory->get_chunk_buffer());
+    return std::make_shared<StreamChunkSource>(this, _chunk_source_profiles[chunk_source_index].get(),
+                                               std::move(morsel), scan_node, factory->get_chunk_buffer());
 }
 
 bool StreamScanOperator::is_finished() const {
@@ -93,8 +93,7 @@ StatusOr<ChunkPtr> StreamScanOperator::pull_chunk(RuntimeState* state) {
     return status_or;
 }
 
-StreamChunkSource::StreamChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                                     ScanOperator* op, ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
-        : ConnectorChunkSource(scan_operator_id, runtime_profile, std::move(morsel), op, scan_node, chunk_buffer) {}
-
+StreamChunkSource::StreamChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                                     ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
+        : ConnectorChunkSource(op, runtime_profile, std::move(morsel), scan_node, chunk_buffer) {}
 } // namespace starrocks::pipeline

@@ -75,7 +75,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     public static final String MOCKED_HIVE_CATALOG_NAME = "hive0";
     public static final String MOCKED_TPCH_DB_NAME = "tpch";
     public static final String MOCKED_PARTITIONED_DB_NAME = "partitioned_db";
-    public static final String MOCKED_PARTITIONED_DB_NAME_UPPER_CASE = "partitioned_DB2";
+    public static final String MOCKED_PARTITIONED_DB_NAME2 = "partitioned_db2";
 
     private static ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     static {
@@ -460,6 +460,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         mockLineItemWithMultiPartitionColumns();
         mockT1();
         mockT2();
+        mockT3();
         mockT1WithMultiPartitionColumns();
         mockOrders();
     }
@@ -711,7 +712,11 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     }
 
     public static void mockT2() {
-        mockSimpleTable(MOCKED_PARTITIONED_DB_NAME_UPPER_CASE, "T2");
+        mockSimpleTable(MOCKED_PARTITIONED_DB_NAME2, "t2");
+    }
+
+    public static void mockT3() {
+        mockSimpleTable(MOCKED_PARTITIONED_DB_NAME, "t3");
     }
 
     public static void mockT1WithMultiPartitionColumns() {

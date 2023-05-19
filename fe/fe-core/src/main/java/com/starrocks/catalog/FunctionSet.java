@@ -300,6 +300,8 @@ public class FunctionSet {
     public static final String ARRAY_FILTER = "array_filter";
     public static final String ARRAY_SORTBY = "array_sortby";
 
+    public static final String ELEMENT_AT = "element_at";
+    public static final String CARDINALITY = "cardinality";
     // Bit functions:
     public static final String BITAND = "bitand";
     public static final String BITNOT = "bitnot";

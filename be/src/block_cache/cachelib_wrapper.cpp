@@ -47,8 +47,10 @@ Status CacheLibWrapper::init(const CacheOptions& options) {
         config.enableNvmCache(nvmConfig);
     }
 
+    Cache::MMConfig mm_config;
+    mm_config.lruInsertionPointSpec = options.lru_insertion_point;
     _cache = std::make_unique<Cache>(config);
-    _default_pool = _cache->addPool("default pool", _cache->getCacheMemoryStats().cacheSize);
+    _default_pool = _cache->addPool("default pool", _cache->getCacheMemoryStats().cacheSize, {}, mm_config);
     _meta_path = options.meta_path;
     return Status::OK();
 }
@@ -104,11 +106,6 @@ std::unordered_map<std::string, double> CacheLibWrapper::cache_stats() {
 Status CacheLibWrapper::shutdown() {
     if (_cache) {
         _dump_cache_stats();
-        auto res = _cache->shutDown();
-        if (res != Cache::ShutDownStatus::kSuccess) {
-            LOG(WARNING) << "block cache shutdown failed";
-            return Status::InternalError("block cache shutdown failed");
-        }
     }
     return Status::OK();
 }

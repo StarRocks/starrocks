@@ -202,6 +202,7 @@ import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1803,6 +1804,7 @@ public class ShowExecutor {
                 } else if (showStmt.hasLimit()) {
                     sizeLimit = showStmt.getLimit();
                 }
+
                 boolean stop = false;
                 Collection<Partition> partitions = new ArrayList<>();
                 if (showStmt.hasPartition()) {
@@ -1844,16 +1846,12 @@ public class ShowExecutor {
                             tabletInfos.addAll(procDir.fetchComparableResult(
                                     showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState()));
                         }
-                        if (sizeLimit > -1 && tabletInfos.size() >= sizeLimit) {
+                        if (sizeLimit > -1 && CollectionUtils.isEmpty(showStmt.getOrderByPairs())
+                                && tabletInfos.size() >= sizeLimit) {
                             stop = true;
                             break;
                         }
                     }
-                }
-                if (sizeLimit > -1 && tabletInfos.size() < sizeLimit) {
-                    tabletInfos.clear();
-                } else if (sizeLimit > -1) {
-                    tabletInfos = tabletInfos.subList((int) showStmt.getOffset(), (int) sizeLimit);
                 }
 
                 // order by
@@ -1867,6 +1865,10 @@ public class ShowExecutor {
                     comparator = new ListComparator<>(0, 1);
                 }
                 tabletInfos.sort(comparator);
+
+                if (sizeLimit > -1 && tabletInfos.size() >= sizeLimit) {
+                    tabletInfos = tabletInfos.subList((int) showStmt.getOffset(), (int) sizeLimit);
+                }
 
                 for (List<Comparable> tabletInfo : tabletInfos) {
                     List<String> oneTablet = new ArrayList<>(tabletInfo.size());

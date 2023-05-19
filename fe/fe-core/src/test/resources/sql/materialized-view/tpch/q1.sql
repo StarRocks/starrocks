@@ -23,7 +23,7 @@ order by
 [result]
 TOP-N (order by [[10: l_returnflag ASC NULLS FIRST, 11: l_linestatus ASC NULLS FIRST]])
     TOP-N (order by [[10: l_returnflag ASC NULLS FIRST, 11: l_linestatus ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{118: count=sum(106: count_qty), 119: sum=sum(105: sum_qty), 120: count=sum(108: count_base_price), 121: sum=sum(107: sum_base_price), 122: sum=sum(109: sum_discount), 123: sum=sum(111: sum_disc_price), 124: count=sum(110: count_discount), 125: sum=sum(112: sum_charge), 126: count=sum(113: count_order)}] group by [[103: l_returnflag, 104: l_linestatus]] having [null]
-            SCAN (mv[lineitem_agg_mv1] columns[102: l_shipdate, 103: l_returnflag, 104: l_linestatus, 105: sum_qty, 106: count_qty, 107: sum_base_price, 108: count_base_price, 109: sum_discount, 110: count_discount, 111: sum_disc_price, 112: sum_charge, 113: count_order] predicate[102: l_shipdate <= 1998-12-01])
+        AGGREGATE ([GLOBAL] aggregate [{118: count=sum(32: count_qty), 119: sum=sum(31: sum_qty), 120: count=sum(34: count_base_price), 121: sum=sum(33: sum_base_price), 122: sum=sum(35: sum_discount), 123: sum=sum(37: sum_disc_price), 124: count=sum(36: count_discount), 125: sum=sum(38: sum_charge), 126: count=sum(39: count_order)}] group by [[29: l_returnflag, 30: l_linestatus]] having [null]
+            SCAN (mv[lineitem_agg_mv1] columns[28: l_shipdate, 29: l_returnflag, 30: l_linestatus, 31: sum_qty, 32: count_qty, 33: sum_base_price, 34: count_base_price, 35: sum_discount, 36: count_discount, 37: sum_disc_price, 38: sum_charge, 39: count_order] predicate[28: l_shipdate <= 1998-12-01])
 [end]
 

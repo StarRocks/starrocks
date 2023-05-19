@@ -301,13 +301,6 @@ protected:
     int64_t _version;
 };
 
-TEST_F(SizeTieredCompactionPolicyTest, test_init_succeeded) {
-    TabletMetaSharedPtr tablet_meta(new TabletMeta());
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
-    init_compaction_context(tablet);
-    ASSERT_FALSE(compact(tablet).ok());
-}
-
 TEST_F(SizeTieredCompactionPolicyTest, test_candidate_rowsets_empty) {
     TabletSchemaPB schema_pb;
     schema_pb.set_keys_type(KeysType::DUP_KEYS);
@@ -836,7 +829,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_two_delete_missed_version) {
 
 TEST_F(SizeTieredCompactionPolicyTest, test_write_descending_order_level_size) {
     LOG(INFO) << "test_write_descending_order_level_size";
-    create_tablet_schema(DUP_KEYS);
+    create_tablet_schema(UNIQUE_KEYS);
 
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
@@ -871,7 +864,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_write_descending_order_level_size) {
 
 TEST_F(SizeTieredCompactionPolicyTest, test_write_order_level_size) {
     LOG(INFO) << "test_write_order_level_size";
-    create_tablet_schema(DUP_KEYS);
+    create_tablet_schema(UNIQUE_KEYS);
 
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
@@ -902,7 +895,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_write_order_level_size) {
 
 TEST_F(SizeTieredCompactionPolicyTest, test_write_multi_descending_order_level_size) {
     LOG(INFO) << "test_write_multi_descending_order_level_size";
-    create_tablet_schema(DUP_KEYS);
+    create_tablet_schema(UNIQUE_KEYS);
 
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
@@ -972,7 +965,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_write_multi_descending_order_level_s
 
 TEST_F(SizeTieredCompactionPolicyTest, test_backtrace_base_compaction) {
     LOG(INFO) << "test_backtrace_base_compaction";
-    create_tablet_schema(DUP_KEYS);
+    create_tablet_schema(UNIQUE_KEYS);
 
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
@@ -1003,7 +996,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_backtrace_base_compaction) {
 
 TEST_F(SizeTieredCompactionPolicyTest, test_base_and_backtrace_compaction) {
     LOG(INFO) << "test_base_and_backtrace_compaction";
-    create_tablet_schema(DUP_KEYS);
+    create_tablet_schema(UNIQUE_KEYS);
 
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
@@ -1058,7 +1051,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_base_and_backtrace_compaction) {
 
 TEST_F(SizeTieredCompactionPolicyTest, test_backtrace_delete_compaction) {
     LOG(INFO) << "test_backtrace_delete_compaction";
-    create_tablet_schema(DUP_KEYS);
+    create_tablet_schema(UNIQUE_KEYS);
 
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
@@ -1091,7 +1084,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_backtrace_delete_compaction) {
 
 TEST_F(SizeTieredCompactionPolicyTest, test_no_backtrace_compaction) {
     LOG(INFO) << "test_no_backtrace_compaction";
-    create_tablet_schema(DUP_KEYS);
+    create_tablet_schema(UNIQUE_KEYS);
 
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
@@ -1120,7 +1113,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_no_backtrace_compaction) {
 
 TEST_F(SizeTieredCompactionPolicyTest, test_force_base_compaction) {
     LOG(INFO) << "test_force_base_compaction";
-    create_tablet_schema(DUP_KEYS);
+    create_tablet_schema(UNIQUE_KEYS);
 
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
@@ -1171,7 +1164,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_force_base_compaction) {
 
 TEST_F(SizeTieredCompactionPolicyTest, test_manual_force_base_compaction) {
     LOG(INFO) << "test_manual_force_base_compaction";
-    create_tablet_schema(DUP_KEYS);
+    create_tablet_schema(UNIQUE_KEYS);
 
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
@@ -1220,7 +1213,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_manual_force_base_compaction) {
 
 TEST_F(SizeTieredCompactionPolicyTest, test_manual_force_base_compaction_less_min) {
     LOG(INFO) << "test_manual_force_base_compaction_less_min";
-    create_tablet_schema(DUP_KEYS);
+    create_tablet_schema(UNIQUE_KEYS);
 
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
@@ -1269,7 +1262,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_manual_force_base_compaction_less_mi
 
 TEST_F(SizeTieredCompactionPolicyTest, test_backtrace_base_compaction_multi_delete) {
     LOG(INFO) << "test_backtrace_base_compaction_multi_delete";
-    create_tablet_schema(DUP_KEYS);
+    create_tablet_schema(UNIQUE_KEYS);
 
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
@@ -1307,7 +1300,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_backtrace_base_compaction_multi_dele
 
 TEST_F(SizeTieredCompactionPolicyTest, test_backtrace_base_compaction_continous_delete) {
     LOG(INFO) << "test_backtrace_base_compaction_continous_delete";
-    create_tablet_schema(DUP_KEYS);
+    create_tablet_schema(UNIQUE_KEYS);
 
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
@@ -1344,7 +1337,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_backtrace_base_compaction_continous_
 
 TEST_F(SizeTieredCompactionPolicyTest, test_delete_limit) {
     LOG(INFO) << "test_delete_limit";
-    create_tablet_schema(DUP_KEYS);
+    create_tablet_schema(UNIQUE_KEYS);
 
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
@@ -1376,6 +1369,59 @@ TEST_F(SizeTieredCompactionPolicyTest, test_delete_limit) {
         ASSERT_EQ(1, versions.size());
         ASSERT_EQ(0, versions[0].first);
         ASSERT_EQ(6, versions[0].second);
+    }
+}
+
+TEST_F(SizeTieredCompactionPolicyTest, test_large_dup_base_rowset) {
+    LOG(INFO) << "test_large_dup_base_rowset";
+    create_tablet_schema(DUP_KEYS);
+
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+
+    write_new_version(tablet_meta, 2);
+    write_new_version(tablet_meta, 1);
+    write_new_version(tablet_meta, 1);
+    write_new_version(tablet_meta, 1);
+
+    TabletSharedPtr tablet =
+            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    tablet->init();
+    init_compaction_context(tablet);
+
+    ASSERT_EQ(4, tablet->version_count());
+
+    config::max_segment_file_size = 1024 * 128;
+    DeferOp defer([&]() { config::max_segment_file_size = 1073741824; });
+
+    {
+        auto res = compact(tablet);
+        ASSERT_TRUE(res.ok());
+
+        ASSERT_EQ(2, tablet->version_count());
+        std::vector<Version> versions;
+        tablet->list_versions(&versions);
+        ASSERT_EQ(2, versions.size());
+        ASSERT_EQ(0, versions[0].first);
+        ASSERT_EQ(0, versions[0].second);
+        ASSERT_EQ(1, versions[1].first);
+        ASSERT_EQ(3, versions[1].second);
+    }
+
+    {
+        auto res = compact(tablet);
+        ASSERT_FALSE(res.ok());
+
+        ASSERT_EQ(2, tablet->version_count());
+    }
+
+    config::max_segment_file_size = 1073741824;
+
+    {
+        auto res = compact(tablet);
+        ASSERT_TRUE(res.ok());
+
+        ASSERT_EQ(1, tablet->version_count());
     }
 }
 

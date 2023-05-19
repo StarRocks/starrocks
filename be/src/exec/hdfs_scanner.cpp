@@ -19,6 +19,9 @@
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "util/compression/stream_compression.h"
+
+static constexpr int64_t ROW_FORMAT_ESTIMATED_MEMORY_USAGE = 32LL * 1024 * 1024;
+
 namespace starrocks {
 
 class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
@@ -131,6 +134,7 @@ Status HdfsScanner::_build_scanner_context() {
 }
 
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
+    SCOPED_RAW_TIMER(&_total_running_time);
     RETURN_IF_CANCELLED(_runtime_state);
     Status status = do_get_next(runtime_state, chunk);
     if (status.ok()) {
@@ -148,6 +152,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
 }
 
 Status HdfsScanner::open(RuntimeState* runtime_state) {
+    SCOPED_RAW_TIMER(&_total_running_time);
     if (_opened) {
         return Status::OK();
     }
@@ -237,6 +242,14 @@ Status HdfsScanner::open_random_access_file() {
     _file = std::make_unique<RandomAccessFile>(input_stream, filename);
     _file->set_size(_scanner_params.file_size);
     return Status::OK();
+}
+
+int64_t HdfsScanner::estimated_mem_usage() const {
+    if (_shared_buffered_input_stream == nullptr) {
+        // don't read data in columnar format(such as CSV format), usually in a fixed size.
+        return ROW_FORMAT_ESTIMATED_MEMORY_USAGE;
+    }
+    return _shared_buffered_input_stream->estimated_mem_usage();
 }
 
 void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {

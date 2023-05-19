@@ -26,7 +26,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(BE_TEST)
 namespace starrocks {
 KillPoint* KillPoint::GetInstance() {
     static KillPoint kp;

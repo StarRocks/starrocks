@@ -72,6 +72,8 @@ public:
     ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs) : ExecNode(pool, tnode, descs) {}
     ~ScanNode() override = default;
 
+    Status init(const TPlanNode& tnode, RuntimeState* state) override;
+
     // Set up counters
     Status prepare(RuntimeState* state) override;
 
@@ -136,6 +138,7 @@ protected:
     RuntimeProfile::Counter* _num_scanner_threads_started_counter = nullptr;
     std::string _name;
     bool _enable_shared_scan = false;
+    int64_t _mem_limit = 0;
     int32_t _io_tasks_per_scan_operator = config::io_tasks_per_scan_operator;
 };
 
