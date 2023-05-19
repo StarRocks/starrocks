@@ -68,9 +68,17 @@ public class InformationSchemaDataSource {
     private static final long DEFAULT_EMPTY_NUM = -1L;
     private static final String UTF8_GENERAL_CI = "utf8_general_ci";
 
-    private static List<String> getAuthorizedDbs(TAuthInfo authInfo) throws TException {
 
-        List<String> dbs = Lists.newArrayList();
+    // tables_config
+    public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request)
+            throws TException {
+
+        TGetTablesConfigResponse resp = new TGetTablesConfigResponse();
+        List<TTableConfigInfo> tList = new ArrayList<>();
+
+        TAuthInfo authInfo = request.getAuth_info();
+
+        List<String> authorizedDbs = Lists.newArrayList();
         PatternMatcher matcher = null;
         if (authInfo.isSetPattern()) {
             try {
@@ -85,7 +93,7 @@ public class InformationSchemaDataSource {
         List<String> dbNames = globalStateMgr.getDbNames();
         LOG.debug("get db names: {}", dbNames);
 
-        UserIdentity currentUser = null;
+        UserIdentity currentUser;
         if (authInfo.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(authInfo.current_user_ident);
         } else {
@@ -102,30 +110,31 @@ public class InformationSchemaDataSource {
                 }
             }
 
-            final String db = ClusterNamespace.getNameFromFullName(fullName);
-            if (matcher != null && !matcher.match(db)) {
+            final String db1 = ClusterNamespace.getNameFromFullName(fullName);
+            if (matcher != null && !matcher.match(db1)) {
                 continue;
             }
-            dbs.add(fullName);
+            authorizedDbs.add(fullName);
         }
-        return dbs;
-    }
 
-    // tables_config
-    public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request)
-            throws TException {
-
-        TGetTablesConfigResponse resp = new TGetTablesConfigResponse();
-        List<TTableConfigInfo> tList = new ArrayList<>();
-
-        List<String> authorizedDbs = getAuthorizedDbs(request.getAuth_info());
-        authorizedDbs.forEach(dbName -> {
+        for (String dbName : authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
                 db.readLock();
                 try {
                     List<Table> allTables = db.getTables();
-                    allTables.forEach(table -> {
+                    for (Table table : allTables) {
+
+                        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                            // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
+                            if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, dbName, table)) {
+                                continue;
+                            }
+                        } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
+                                table.getName(), PrivPredicate.SHOW)) {
+                            continue;
+                        }
+
                         TTableConfigInfo tableConfigInfo = new TTableConfigInfo();
                         tableConfigInfo.setTable_schema(dbName);
                         tableConfigInfo.setTable_name(table.getName());
@@ -140,12 +149,12 @@ public class InformationSchemaDataSource {
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         tList.add(tableConfigInfo);
-                    });
+                    }
                 } finally {
                     db.readUnlock();
                 }
             }
-        });
+        }
         resp.tables_config_infos = tList;
         return resp;
     }
@@ -278,14 +287,65 @@ public class InformationSchemaDataSource {
 
         TGetTablesInfoResponse response = new TGetTablesInfoResponse();
         List<TTableInfo> infos = new ArrayList<>();
-        List<String> authorizedDbs = getAuthorizedDbs(request.getAuth_info());
-        authorizedDbs.forEach(dbName -> {
+        TAuthInfo authInfo = request.getAuth_info();
+
+        List<String> authorizedDbs = Lists.newArrayList();
+        PatternMatcher matcher = null;
+        if (authInfo.isSetPattern()) {
+            try {
+                matcher = PatternMatcher.createMysqlPattern(authInfo.getPattern(),
+                        CaseSensibility.DATABASE.getCaseSensibility());
+            } catch (SemanticException e) {
+                throw new TException("Pattern is in bad format: " + authInfo.getPattern());
+            }
+        }
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        List<String> dbNames = globalStateMgr.getDbNames();
+        LOG.debug("get db names: {}", dbNames);
+
+        UserIdentity currentUser = null;
+        if (authInfo.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(authInfo.current_user_ident);
+        } else {
+            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
+        }
+        for (String fullName : dbNames) {
+            if (globalStateMgr.isUsingNewPrivilege()) {
+                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
+                    continue;
+                }
+            } else {
+                if (!globalStateMgr.getAuth().checkDbPriv(currentUser, fullName, PrivPredicate.SHOW)) {
+                    continue;
+                }
+            }
+
+            final String db1 = ClusterNamespace.getNameFromFullName(fullName);
+            if (matcher != null && !matcher.match(db1)) {
+                continue;
+            }
+            authorizedDbs.add(fullName);
+        }
+
+        for (String dbName : authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
                 db.readLock();
                 try {
                     List<Table> allTables = db.getTables();
-                    allTables.forEach(table -> {
+                    for (Table table : allTables) {
+
+                        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                            // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
+                            if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, dbName, table)) {
+                                continue;
+                            }
+                        } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
+                                table.getName(), PrivPredicate.SHOW)) {
+                            continue;
+                        }
+
                         TTableInfo info = new TTableInfo();
 
                         info.setTable_catalog(DEF);
@@ -319,17 +379,17 @@ public class InformationSchemaDataSource {
                             // SCHEMA (use default)
                             // INLINE_VIEW (use default)
                             // VIEW (use default)
-                            // BROKER (use default)                           
+                            // BROKER (use default)
                             genDefaultConfigInfo(info);
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         infos.add(info);
-                    });
+                    }
                 } finally {
                     db.readUnlock();
                 }
             }
-        });
+        }
         response.setTables_infos(infos);
         return response;
     }
