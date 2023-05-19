@@ -13,7 +13,6 @@ SHOW LOAD [ FROM db_name ]
 [
    WHERE [ LABEL { = "label_name" | LIKE "label_matcher" } ]
          [ [AND] STATE = { "PENDING" | "ETL" | "LOADING" | "FINISHED" | "CANCELLED" } ]
-         [ [AND] TYPE = { "BROKER" | "SPARK" | "INSERT" } ]
 ]
 [ ORDER BY field_name [ ASC | DESC ] ]
 [ LIMIT { [offset, ] limit | limit OFFSET offset } ]
@@ -32,7 +31,6 @@ SHOW LOAD [ FROM db_name ]
 | LABEL LIKE "label_matcher"        | 否       | 查看标签中包含 `label_matcher` 的导入作业。                  |
 | AND                               | 否       | <ul><li>如果只使用其中一个过滤条件，则不需要指定该关键字。例如 `WHERE STATE = "PENDING"`。</li><li>如使用其中任意两个或三个过滤条件，则需要指定该关键字。例如 `WHERE LABEL = "label_name" AND STATE = "PENDING"`。</li></ul> |
 | STATE                             | 否       | 导入作业的状态。不同的导入方式有不同的导入作业状态，具体如下：<ul><li>Broker Load<ul><li>`PENDING`：导入作业已创建。</li><li>`QUEUEING`：导入作业正在等待执行中。</li><li>`LOADING`：导入作业正在执行中。</li><li>`PREPARED`：事务已提交。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul></li><li>Spark Load<ul><li>`PENDING`：准备 ETL 任务的相关配置并提交 ETL 任务到 Apache Spark™ 集群。</li><li>`ETL`：Spark 集群执行 ETL 任务，并将结果数据写入 Spark 的 HDFS 中。</li><li>`LOADING`：正在将 HDFS 源数据导入到 StarRocks 的目标表中。</li><li>`PREPARED`：事务已提交。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul></li><li>INSERT<ul><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul></li></ul>如不指定 `STATE` 参数，则默认显示所有状态的导入作业；如指定，则显示指定状态的导入作业。例如 `STATE = "PENDING"` 会显示状态为 `PENDING` 的导入作业。|
-| TYPE                              | 否       | 导入方式，包括：<ul><li>`BROKER`：表示 Broker Load。</li><li>`SPARK`：表示 Spark Load。</li><li>`INSERT`：表示 INSERT。</li></ul> |
 | ORDER BY field_name [ASC \| DESC] | 否       | 将返回结果按照指定字段升序或降序排列，当前支持的排序字段（field_name）包括 `JobId`、`Label`、`State`、`Progress`、`Type`、`EtlInfo`、`TaskInfo`、`ErrorMsg`、`CreateTime`、`EtlStartTime`、`EtlFinishTime`、`LoadStartTime`、`LoadFinishTime`、`URL` 和 `JobDetails`。<ul><li>如要升序排列，指定 `ORDER BY field_name ASC`。</li><li>如要降序排列，指定 `ORDER BY field_name DESC`。</li></ul>如既不指定排序字段也不指定排列顺序，则默认按照 `JobId` 升序排列。 |
 | LIMIT limit                       | 否       | 查看指定数量的作业。如不指定该参数，则默认显示所有符合筛选条件的作业；如指定，则显示指定数量的作业。例如 `LIMIT 10` 会显示 10 个符合筛选条件的作业。 |
 | OFFSET offset                     | 否       | `offset` 定义了返回结果中跳过的导入作业的数量，其默认值为 0。例如 `OFFSET 5` 表示跳过前 5 个导入作业，返回剩下的结果。 |
