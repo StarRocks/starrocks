@@ -75,6 +75,10 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.SwapTableOperationLog;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.scheduler.Constants;
@@ -118,22 +122,24 @@ import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Arrays;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.catalog.TableProperty.INVALID;
 
-public class Alter {
-    private static final Logger LOG = LogManager.getLogger(Alter.class);
+public class AlterJobMgr {
+    private static final Logger LOG = LogManager.getLogger(AlterJobMgr.class);
 
-    private AlterHandler schemaChangeHandler;
-    private AlterHandler materializedViewHandler;
-    private SystemHandler clusterHandler;
-
+    private final SchemaChangeHandler schemaChangeHandler;
+    private final MaterializedViewHandler materializedViewHandler;
+    private final SystemHandler clusterHandler;
     private CompactionHandler compactionHandler;
 
-    public Alter() {
+    public AlterJobMgr() {
         schemaChangeHandler = new SchemaChangeHandler();
         materializedViewHandler = new MaterializedViewHandler();
         clusterHandler = new SystemHandler();
@@ -184,8 +190,7 @@ public class Alter {
             }
             olapTable.checkStableAndNormal();
 
-            ((MaterializedViewHandler) materializedViewHandler).processCreateMaterializedView(stmt, db,
-                    olapTable);
+            materializedViewHandler.processCreateMaterializedView(stmt, db, olapTable);
         } finally {
             db.writeUnlock();
         }
@@ -239,7 +244,7 @@ public class Alter {
                         + "Do not allow doing DROP ops");
             }
             // drop materialized view
-            ((MaterializedViewHandler) materializedViewHandler).processDropMaterializedView(stmt, db, olapTable);
+            materializedViewHandler.processDropMaterializedView(stmt, db, olapTable);
 
         } catch (MetaNotFoundException e) {
             if (stmt.isSetIfExists()) {
@@ -438,7 +443,6 @@ public class Alter {
         }
 
         TaskBuilder.updateTaskInfo(task, refreshSchemeDesc, materializedView);
-
 
         taskManager.createTask(task, false);
         // for event triggered type, run task
@@ -703,7 +707,7 @@ public class Alter {
                     throw new DdlException("Lake table not support alter in_memory");
                 }
 
-                ((SchemaChangeHandler) schemaChangeHandler).updatePartitionsInMemoryMeta(
+                schemaChangeHandler.updatePartitionsInMemoryMeta(
                         db, tableName, partitionNames, properties);
 
                 db.writeLock();
@@ -730,28 +734,28 @@ public class Alter {
                 }
 
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
-                    ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName,
+                    schemaChangeHandler.updateTableMeta(db, tableName,
                             properties, TTabletMetaType.INMEMORY);
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
-                    ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties,
+                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.ENABLE_PERSISTENT_INDEX);
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
-                    ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties,
+                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.WRITE_QUORUM);
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
-                    ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties,
+                    schemaChangeHandler.updateTableMeta(db, tableName, properties,
                             TTabletMetaType.REPLICATED_STORAGE);
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
-                    boolean isSuccess = ((SchemaChangeHandler) schemaChangeHandler).updateBinlogConfigMeta(db, olapTable.getId(),
+                    boolean isSuccess = schemaChangeHandler.updateBinlogConfigMeta(db, olapTable.getId(),
                             properties, TTabletMetaType.BINLOG_CONFIG);
                     if (!isSuccess) {
                         throw new DdlException("modify binlog config of FEMeta failed or table has been droped");
                     }
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                         || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
-                    ((SchemaChangeHandler) schemaChangeHandler).updateTableConstraint(db, olapTable.getName(), properties);
+                    schemaChangeHandler.updateTableConstraint(db, olapTable.getName(), properties);
                 } else {
                     throw new DdlException("Invalid alter operation: " + alterClause.getOpType());
                 }
@@ -917,7 +921,7 @@ public class Alter {
     }
 
     public ShowResultSet processAlterCluster(AlterSystemStmt stmt) throws UserException {
-        return clusterHandler.process(Arrays.asList(stmt.getAlterClause()), null, null);
+        return clusterHandler.process(Collections.singletonList(stmt.getAlterClause()), null, null);
     }
 
     private void processAlterComment(Database db, OlapTable table, List<AlterClause> alterClauses) throws DdlException {
@@ -1071,5 +1075,62 @@ public class Alter {
 
     public AlterHandler getClusterHandler() {
         return this.clusterHandler;
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        Map<Long, AlterJobV2> schemaChangeAlterJobs = schemaChangeHandler.getAlterJobsV2();
+        Map<Long, AlterJobV2> materializedViewAlterJobs = materializedViewHandler.getAlterJobsV2();
+
+        int cnt = 1 + schemaChangeAlterJobs.size() + 1 + materializedViewAlterJobs.size();
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, AlterJobMgr.class.getName(), cnt);
+
+        writer.writeJson(schemaChangeAlterJobs.size());
+        for (AlterJobV2 alterJobV2 : schemaChangeAlterJobs.values()) {
+            writer.writeJson(alterJobV2);
+        }
+
+        writer.writeJson(materializedViewAlterJobs.size());
+        for (AlterJobV2 alterJobV2 : materializedViewAlterJobs.values()) {
+            writer.writeJson(alterJobV2);
+        }
+
+        writer.close();
+    }
+
+    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, AlterJobMgr.class.getName());
+        try {
+            int schemaChangeJobSize = (int) reader.readJson(int.class);
+            for (int i = 0; i != schemaChangeJobSize; ++i) {
+                // 2 json for each user(kv)
+                AlterJobV2 alterJobV2 = (AlterJobV2) reader.readJson(AlterJobV2.class);
+                schemaChangeHandler.addAlterJobV2(alterJobV2);
+
+                // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
+                // to prevent TabletInvertedIndex data loss,
+                // So just use AlterJob.replay() instead of AlterHandler.replay().
+                if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
+                    alterJobV2.replay(alterJobV2);
+                    LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
+                }
+            }
+
+            int materializedViewJobSize = (int) reader.readJson(int.class);
+            for (int i = 0; i != materializedViewJobSize; ++i) {
+                // 2 json for each user(kv)
+                AlterJobV2 alterJobV2 = (AlterJobV2) reader.readJson(AlterJobV2.class);
+                materializedViewHandler.addAlterJobV2(alterJobV2);
+
+                // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
+                // to prevent TabletInvertedIndex data loss,
+                // So just use AlterJob.replay() instead of AlterHandler.replay().
+                if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
+                    alterJobV2.replay(alterJobV2);
+                    LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
+                }
+            }
+        } finally {
+            reader.close();
+        }
     }
 }
