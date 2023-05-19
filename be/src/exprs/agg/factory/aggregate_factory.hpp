@@ -11,6 +11,7 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/any_value.h"
 #include "exprs/agg/avg.h"
+#include "exprs/agg/bitmap_agg.h"
 #include "exprs/agg/bitmap_intersect.h"
 #include "exprs/agg/bitmap_union.h"
 #include "exprs/agg/bitmap_union_count.h"
@@ -61,6 +62,9 @@ public:
     }
 
     static AggregateFunctionPtr MakeBitmapUnionAggregateFunction();
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeBitmapAggAggregateFunction();
 
     static AggregateFunctionPtr MakeBitmapIntersectAggregateFunction();
 
@@ -311,4 +315,26 @@ AggregateFunctionPtr AggregateFactory::MakePercentileDiscAggregateFunction() {
     return std::make_shared<PercentileDiscAggregateFunction<PT>>();
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::vectorized
+=======
+template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeBitmapAggAggregateFunction() {
+    return std::make_shared<BitmapAggAggregateFunction<LT>>();
+}
+
+// Stream MV Retractable Aggregate Functions
+template <LogicalType LT>
+auto AggregateFactory::MakeRetractMinAggregateFunction() {
+    return std::make_shared<MaxMinAggregateFunctionRetractable<LT, MinAggregateDataRetractable<LT>,
+                                                               MinElement<LT, MinAggregateDataRetractable<LT>>>>();
+}
+
+template <LogicalType LT>
+auto AggregateFactory::MakeRetractMaxAggregateFunction() {
+    return std::make_shared<MaxMinAggregateFunctionRetractable<LT, MaxAggregateDataRetractable<LT>,
+                                                               MaxElement<LT, MaxAggregateDataRetractable<LT>>>>();
+}
+
+} // namespace starrocks
+>>>>>>> 38cc37fc5 ([Enhancement] Add agg func bitmap_agg (#23641))

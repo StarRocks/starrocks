@@ -258,6 +258,7 @@ public class FunctionSet {
     public static final String BITMAP_TO_STRING = "bitmap_to_string";
     public static final String BITMAP_TO_ARRAY = "bitmap_to_array";
     public static final String BITMAP_UNION = "bitmap_union";
+    public static final String BITMAP_AGG = "bitmap_agg";
     public static final String BITMAP_XOR = "bitmap_xor";
     public static final String TO_BITMAP = "to_bitmap";
     public static final String BITMAP_COUNT = "bitmap_count";
@@ -390,7 +391,7 @@ public class FunctionSet {
 
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
-            new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
+            new FunctionName(JSON_QUERY), new Type[]{Type.JSON, Type.VARCHAR}, Type.JSON, false);
 
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
@@ -922,6 +923,11 @@ public class FunctionSet {
                 Type.BITMAP,
                 Type.BITMAP,
                 true, false, true));
+
+        for (Type t : Type.getIntegerTypes()) {
+            addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(t),
+                    Type.BITMAP, Type.BITMAP, true, false, true));
+        }
 
         addBuiltin(AggregateFunction.createBuiltin(BITMAP_UNION_COUNT, Lists.newArrayList(Type.BITMAP),
                 Type.BIGINT,
