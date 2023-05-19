@@ -279,7 +279,8 @@ Status Tablet::load_rowset(const RowsetSharedPtr& rowset) {
 }
 
 Status Tablet::finish_load_rowsets() {
-    // Compatible with tables created in older versions
+    // Compatible with tablets created in older versions
+    // re-assign rowset_seg_id here
     if (keys_type() != PRIMARY_KEYS && next_rowset_id() == 0) {
         std::unique_lock wrlock(_meta_lock);
         uint32_t next_rowset_id = 0;
@@ -566,6 +567,16 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     rowset->make_visible(rowset_version, next_rowset_id);
     next_rowset_id += std::max(1U, (uint32_t)rowset->num_segments());
     set_next_rowset_id(next_rowset_id);
+
+    TabletMetaPB tablet_meta_pb;
+    _tablet_meta->to_meta_pb(&tablet_meta_pb);
+    WriteBatch wb;
+    RETURN_IF_ERROR(TabletMetaManager::put_tablet_meta(data_dir(), &wb, tablet_meta_pb));
+    if (auto st = data_dir()->get_meta()->write_batch(&wb); !st.ok()) {
+        std::stringstream ss;
+        ss << "Fail to save tablet meta";
+        return Status::InternalError(ss.str());
+    }
 
     // Status::OK() means the full data set does not contain the version
     Status contain_status = _contains_version(rowset_version);
