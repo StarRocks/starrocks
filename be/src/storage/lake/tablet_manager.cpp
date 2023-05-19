@@ -150,11 +150,9 @@ TabletMetadataPtr TabletManager::lookup_tablet_latest_metadata(std::string_view 
 }
 
 void TabletManager::cache_tablet_latest_metadata(TabletMetadataPtr metadata) {
-    if (is_primary_key(metadata.get())) {
-        auto value_ptr = std::make_unique<CacheValue>(metadata);
-        fill_metacache(tablet_latest_metadata_key(metadata->id()), value_ptr.release(),
-                       static_cast<int>(metadata->SpaceUsedLong()));
-    }
+    auto value_ptr = std::make_unique<CacheValue>(metadata);
+    fill_metacache(tablet_latest_metadata_key(metadata->id()), value_ptr.release(),
+                   static_cast<int>(metadata->SpaceUsedLong()));
 }
 
 TabletSchemaPtr TabletManager::lookup_tablet_schema(std::string_view key) {
@@ -273,7 +271,11 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
 }
 
 StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
-    return Tablet(this, tablet_id);
+    Tablet tablet(this, tablet_id);
+    if (auto metadata = get_latest_cached_tablet_metadata(tablet_id); metadata != nullptr) {
+        tablet.set_version_hint(metadata->version());
+    }
+    return tablet;
 }
 
 Status TabletManager::delete_tablet(int64_t tablet_id) {
@@ -489,20 +491,40 @@ StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_
     return TxnLogIter{this, std::move(objects)};
 }
 
-StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id) {
+StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, int64_t* version_hint) {
+    // Check in-memory cache first
     auto cache_key = tablet_schema_cache_key(tablet_id);
     auto ptr = lookup_tablet_schema(cache_key);
     RETURN_IF(ptr != nullptr, ptr);
-    // TODO: limit the list size
-    ASSIGN_OR_RETURN(TabletMetadataIter metadata_iter, list_tablet_metadata(tablet_id, true));
-    if (!metadata_iter.has_next()) {
-        return Status::NotFound(fmt::format("tablet {} metadata not found", tablet_id));
+
+    TabletMetadataPtr metadata;
+
+    // Cache miss, load tablet metadata from remote storage use the hint version
+    if (version_hint != nullptr && *version_hint > 0) {
+        if (auto res = get_tablet_metadata(tablet_id, *version_hint); res.ok()) {
+            metadata = std::move(res).value();
+        }
     }
-    ASSIGN_OR_RETURN(auto metadata, metadata_iter.next());
+
+    // version hint not works, get tablet metadata by list directory
+    if (metadata == nullptr) {
+        // TODO: limit the list size
+        ASSIGN_OR_RETURN(TabletMetadataIter metadata_iter, list_tablet_metadata(tablet_id, true));
+        if (!metadata_iter.has_next()) {
+            return Status::NotFound(fmt::format("tablet {} metadata not found", tablet_id));
+        }
+        ASSIGN_OR_RETURN(metadata, metadata_iter.next());
+        if (version_hint != nullptr) {
+            *version_hint = metadata->version();
+        }
+    }
+
     auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(metadata->schema());
     if (UNLIKELY(schema == nullptr)) {
         return Status::InternalError(fmt::format("tablet schema {} failed to emplace in TabletSchemaMap", tablet_id));
     }
+
+    // Save the schema into the in-memory cache
     auto cache_value = std::make_unique<CacheValue>(schema);
     auto cache_size = inserted ? (int)schema->mem_usage() : 0;
     (void)fill_metacache(cache_key, cache_value.release(), cache_size);
@@ -643,6 +665,7 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
 StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t version, int64_t txn_id) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
+    tablet_ptr->set_version_hint(version);
     ASSIGN_OR_RETURN(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets(version));
     ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));

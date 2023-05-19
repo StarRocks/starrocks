@@ -100,7 +100,7 @@ StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, Sche
 }
 
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
-    return _mgr->get_tablet_schema(_id);
+    return _mgr->get_tablet_schema(_id, &_version_hint);
 }
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
