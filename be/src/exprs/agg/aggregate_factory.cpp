@@ -11,6 +11,7 @@
 #include "exprs/agg/any_value.h"
 #include "exprs/agg/array_agg.h"
 #include "exprs/agg/avg.h"
+#include "exprs/agg/bitmap_agg.h"
 #include "exprs/agg/bitmap_intersect.h"
 #include "exprs/agg/bitmap_union.h"
 #include "exprs/agg/bitmap_union_count.h"
@@ -48,6 +49,9 @@ public:
 
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeBitmapUnionIntAggregateFunction();
+
+    template <PrimitiveType LT>
+    static AggregateFunctionPtr MakeBitmapAggAggregateFunction();
 
     static AggregateFunctionPtr MakeBitmapUnionAggregateFunction();
 
@@ -166,6 +170,11 @@ auto AggregateFactory::MakeAvgAggregateFunction() {
 template <PrimitiveType PT>
 auto AggregateFactory::MakeDecimalAvgAggregateFunction() {
     return std::make_shared<DecimalAvgAggregateFunction<PT>>();
+}
+
+template <PrimitiveType LT>
+AggregateFunctionPtr AggregateFactory::MakeBitmapAggAggregateFunction() {
+    return std::make_shared<BitmapAggAggregateFunction<LT>>();
 }
 
 template <PrimitiveType PT>
@@ -412,6 +421,14 @@ public:
         }
     }
 
+    template <PrimitiveType arg_type, PrimitiveType return_type>
+    void add_bitmap_mapping(std::string&& name) {
+        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false),
+                               create_bitmap_function<arg_type, return_type, false>(name));
+        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, true),
+                               create_bitmap_function<arg_type, return_type, true>(name));
+    }
+
     template <PrimitiveType ArgPT, PrimitiveType ResultPT, bool AddWindowVersion = false>
     void add_object_mapping(std::string&& name) {
         _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, false),
@@ -446,6 +463,21 @@ public:
             _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, true, true),
                                    create_decimal_function<ArgPT, ResultPT, true, true>(name));
         }
+    }
+
+    template <PrimitiveType arg_type, PrimitiveType return_type, bool is_null>
+    AggregateFunctionPtr create_bitmap_function(std::string& name) {
+        if constexpr (is_null) {
+            if (name == "bitmap_agg") {
+                auto bitmap = AggregateFactory::MakeBitmapAggAggregateFunction<arg_type>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<BitmapValue>(bitmap);
+            }
+        } else {
+            if (name == "bitmap_agg") {
+                return AggregateFactory::MakeBitmapAggAggregateFunction<arg_type>();
+            }
+        }
+        return nullptr;
     }
 
     template <PrimitiveType ArgPT, PrimitiveType ResultPT, bool IsWindowFunc, bool IsNull>
@@ -1078,6 +1110,14 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_object_mapping<TYPE_HLL, TYPE_BIGINT>("hll_union_agg");
 
     add_object_mapping<TYPE_OBJECT, TYPE_OBJECT>("bitmap_union");
+
+    add_bitmap_mapping<TYPE_BOOLEAN, TYPE_OBJECT>("bitmap_agg");
+    add_bitmap_mapping<TYPE_TINYINT, TYPE_OBJECT>("bitmap_agg");
+    add_bitmap_mapping<TYPE_SMALLINT, TYPE_OBJECT>("bitmap_agg");
+    add_bitmap_mapping<TYPE_INT, TYPE_OBJECT>("bitmap_agg");
+    add_bitmap_mapping<TYPE_BIGINT, TYPE_OBJECT>("bitmap_agg");
+    add_bitmap_mapping<TYPE_LARGEINT, TYPE_OBJECT>("bitmap_agg");
+
     add_object_mapping<TYPE_OBJECT, TYPE_BIGINT, true>("bitmap_union_count");
 
     // This first type is the second type input of intersect_count.
