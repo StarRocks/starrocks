@@ -13,7 +13,6 @@ SHOW LOAD [ FROM db_name ]
 [
    WHERE [ LABEL { = "label_name" | LIKE "label_matcher" } ]
          [ [AND] STATE = { "PENDING" | "ETL" | "LOADING" | "FINISHED" | "CANCELLED" } ]
-         [ [AND] TYPE = { "BROKER" | "SPARK" | "INSERT" } ]
 ]
 [ ORDER BY field_name [ ASC | DESC ] ]
 [ LIMIT { [offset, ] limit | limit OFFSET offset } ]
