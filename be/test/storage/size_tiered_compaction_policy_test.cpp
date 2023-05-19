@@ -1410,4 +1410,57 @@ TEST_F(SizeTieredCompactionPolicyTest, test_large_dup_base_rowset) {
     }
 }
 
+TEST_F(SizeTieredCompactionPolicyTest, test_large_dup_base_rowset_force_compact) {
+    LOG(INFO) << "test_large_dup_base_rowset_force_compact";
+    create_tablet_schema(DUP_KEYS);
+
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+
+    write_new_version(tablet_meta, 2);
+    write_new_version(tablet_meta, 1);
+    write_new_version(tablet_meta, 1);
+    write_new_version(tablet_meta, 1);
+
+    TabletSharedPtr tablet =
+            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    tablet->init();
+    init_compaction_context(tablet);
+
+    ASSERT_EQ(4, tablet->version_count());
+
+    config::max_segment_file_size = 1024 * 128;
+    DeferOp defer([&]() {
+        config::max_segment_file_size = 1073741824;
+    });
+
+    {
+        auto res = compact(tablet);
+        ASSERT_TRUE(res.ok());
+
+        ASSERT_EQ(2, tablet->version_count());
+        std::vector<Version> versions;
+        tablet->list_versions(&versions);
+        ASSERT_EQ(2, versions.size());
+        ASSERT_EQ(0, versions[0].first);
+        ASSERT_EQ(0, versions[0].second);
+        ASSERT_EQ(1, versions[1].first);
+        ASSERT_EQ(3, versions[1].second);
+    }
+
+    {
+        auto res = compact(tablet);
+        ASSERT_FALSE(res.ok());
+
+        ASSERT_EQ(2, tablet->version_count());
+    }
+
+    {
+        auto res = base_compact(tablet);
+        ASSERT_TRUE(res.ok());
+
+        ASSERT_EQ(1, tablet->version_count());
+    }
+}
+
 } // namespace starrocks
