@@ -64,14 +64,12 @@ struct SelectIfOP {
     }
 };
 
-#define DEFINE_CLASS_CONSTRUCT_FN(NAME)                    \
-    NAME(const TExprNode& node) : Expr(node) {}            \
-                                                           \
-    ~NAME() {}                                             \
-                                                           \
-    virtual Expr* clone(ObjectPool* pool) const override { \
-        return pool->add(new NAME(*this));                 \
-    }
+#define DEFINE_CLASS_CONSTRUCT_FN(NAME)         \
+    NAME(const TExprNode& node) : Expr(node) {} \
+                                                \
+    ~NAME() {}                                  \
+                                                \
+   virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new NAME(*this)); }
 
 template <LogicalType Type>
 class VectorizedIfNullExpr : public Expr {
