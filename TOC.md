@@ -390,6 +390,7 @@
       + [uuid_numeric](/sql-reference/sql-functions/utility-functions/uuid_numeric.md)
       + [version](/sql-reference/sql-functions/utility-functions/version.md)
     + 聚合函数
+      + [array_agg](./sql-reference/sql-functions/array-functions/array_agg.md)
       + [avg](/sql-reference/sql-functions/aggregate-functions/avg.md)
       + [any_value](/sql-reference/sql-functions/aggregate-functions/any_value.md)
       + [approx_count_distinct](/sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
