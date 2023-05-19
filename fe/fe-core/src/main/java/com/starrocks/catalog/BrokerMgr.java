@@ -38,6 +38,7 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -68,11 +69,13 @@ public class BrokerMgr {
             .add("LastStartTime").add("LastUpdateTime").add("ErrMsg")
             .build();
 
+    // { BrokerName -> { list of FsBroker }
+    @SerializedName(value = "bm")
+    private final Map<String, List<FsBroker>> brokerListMap = Maps.newHashMap();
+
     // we need IP to find the co-location broker.
     // { BrokerName -> { IP -> [FsBroker] } }
     private final Map<String, ArrayListMultimap<String, FsBroker>> brokersMap = Maps.newHashMap();
-    // { BrokerName -> { list of FsBroker }
-    private final Map<String, List<FsBroker>> brokerListMap = Maps.newHashMap();
     private final ReentrantLock lock = new ReentrantLock();
     private BrokerProcNode procNode = null;
 
