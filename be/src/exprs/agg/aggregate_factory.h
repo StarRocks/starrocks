@@ -20,6 +20,9 @@ public:
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeBitmapUnionIntAggregateFunction();
 
+    template <PrimitiveType LT>
+    static AggregateFunctionPtr MakeBitmapAggAggregateFunction();
+
     static AggregateFunctionPtr MakeBitmapUnionAggregateFunction();
 
     static AggregateFunctionPtr MakeBitmapIntersectAggregateFunction();
