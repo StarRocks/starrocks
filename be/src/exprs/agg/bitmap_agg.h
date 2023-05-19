@@ -69,6 +69,6 @@ public:
         col->append(std::move(bitmap));
     }
 
-    std::string get_name() const override { return "bitmap_union"; }
+    std::string get_name() const override { return "bitmap_agg"; }
 };
 } // namespace starrocks
