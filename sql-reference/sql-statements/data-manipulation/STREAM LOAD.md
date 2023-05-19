@@ -30,15 +30,15 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 
 ## 参数说明
 
-### `username` 和 `password`
+### username 和 password
 
 用于指定 StarRocks 集群账号的用户名和密码。必选参数。如果使用 `root` 账号、并且没有设置密码，这里只需要传入 `root:`。
 
-### `XPUT`
+### XPUT
 
 用于指定 HTTP 请求方法。必选参数。Stream Load 当前只支持 PUT 方法。
 
-### `url`
+### url
 
 用于指定 StarRocks 表的 URL 地址。必选参数。语法如下：
 
@@ -55,7 +55,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | database_name | 是       | 指定目标 StarRocks 表所在的数据库的名称。                    |
 | table_name    | 是       | 指定目标 StarRocks 表的名称。                                |
 
-### `data_desc`
+### data_desc
 
 用于描述源数据文件，包括源数据文件的名称、格式、列分隔符、行分隔符、目标分区、以及与 StarRocks 表之间的列对应关系等。语法如下：
 
@@ -114,7 +114,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 另外，导入 JSON 格式的数据时，需要注意单个 JSON 对象的大小不能超过 4 GB。如果 JSON 文件中单个 JSON 对象的大小超过 4 GB，会提示 "This parser can't support a document that big." 错误。
 
-### `opt_properties`
+### opt_properties
 
 用于指定一些导入相关的可选参数。指定的参数设置作用于整个导入作业。语法如下：
 

@@ -80,22 +80,22 @@ PROPERTIES
 
 ### 参数说明
 
-#### `catalog_name`
+#### catalog_name
 
 Hive Catalog 的名称。命名规则如下：
 
 - 可以包含字母、数字 0 到 9 和下划线 (_)，并且必须以字母开头。
 - 长度不能超过 64 个字符。
 
-#### `comment`
+#### comment
 
 Hive Catalog 的描述。此参数为可选。
 
-#### `type`
+#### type
 
 数据源的类型。设置为 `hive`。
 
-#### `MetastoreParams`
+#### MetastoreParams
 
 StarRocks 访问 Hive 集群元数据服务的相关参数配置。
 
@@ -160,7 +160,7 @@ StarRocks 访问 Hive 集群元数据服务的相关参数配置。
 
 有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
 
-#### `StorageCredentialParams`
+#### StorageCredentialParams
 
 StarRocks 访问 Hive 集群文件存储的相关参数配置。
 
@@ -414,7 +414,7 @@ StarRocks 访问 Hive 集群文件存储的相关参数配置。
     | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key。 |
     | gcp.gcs.impersonation_service_account  | ""         | "hello"                                                      | 需要模拟的目标 Data Service Account。 |
 
-#### `MetadataUpdateParams`
+#### MetadataUpdateParams
 
 指定缓存元数据更新策略的一组参数。StarRocks 根据该策略更新缓存的 Hive 元数据。此组参数为可选。
 
@@ -430,7 +430,7 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
 | remote_file_cache_refresh_interval_sec | 否       | StarRocks 异步更新缓存的 Hive 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`60`。 |
 | metastore_cache_ttl_sec                | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
 | remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
-| enable_cache_list_names                | 否       | 指定 StarRocks 是否缓存 Hive Partition Names。取值范围：`true` 和 `false`。默认值：`false`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
+| enable_cache_list_names                | 否       | 指定 StarRocks 是否缓存 Hive Partition Names。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
 
 参见本文[附录：理解自动异步更新策略](../../data_source/catalog/hive_catalog.md#附录理解自动异步更新策略)小节。
 
@@ -797,7 +797,7 @@ DROP Catalog hive_catalog_glue;
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hive_table
 ```
 
-## 手动或自动更新元数据
+## 手动或自动更新元数据缓存
 
 ### 手动更新
 
@@ -815,7 +815,7 @@ REFRESH EXTERNAL TABLE <table_name>
 - 创建 Hive Catalog 时在 `PROPERTIES` 中指定了 `"enable_cache_list_names" = "true"`。在 Hive 侧新增分区后，需要查询新增分区。
   > **说明**
   >
-  > 自 2.5.5 版本起，StarRocks 支持周期性刷新 Hive 元数据缓存。参见本文下面”周期性刷新 Hive 元数据缓存“小节。开启 Hive 元数据缓存周期性刷新功能以后，默认情况下 StarRocks 每 10 分钟刷新一次 Hive 元数据缓存。因此，一般情况下，无需执行手动更新。您只有在新增分区后，需要立即查询新增分区的数据时，才需要执行手动更新。
+  > 自 2.5.5 版本起，StarRocks 支持周期性刷新 Hive 元数据缓存。参见本文下面”[周期性刷新元数据缓存](#周期性刷新元数据缓存)“小节。开启 Hive 元数据缓存周期性刷新功能以后，默认情况下 StarRocks 每 10 分钟刷新一次 Hive 元数据缓存。因此，一般情况下，无需执行手动更新。您只有在新增分区后，需要立即查询新增分区的数据时，才需要执行手动更新。
 
 注意 REFRESH EXTERNAL TABLE 只会更新 FE 中已缓存的表和分区。
 
@@ -897,7 +897,7 @@ HMS 2.x 和 3.x 版本均支持配置事件侦听器。这里以配套 HMS 3.1.2
 
 | 配置名称                                                      | 默认值                        | 说明                                  |
 | ------------------------------------------------------------ | ---------------------------- | ------------------------------------ |
-| enable_background_refresh_connector_metadata                 | v3.0 为 true，v2.5 为 false   | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) 命令设置。 |
+| enable_background_refresh_connector_metadata                 | v3.0 为 true，v2.5 为 false   | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) 命令设置。 |
 | background_refresh_metadata_interval_millis                  | 600000（10 分钟）             | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) 命令设置。 |
 | background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）              | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) 命令设置。 |
 
