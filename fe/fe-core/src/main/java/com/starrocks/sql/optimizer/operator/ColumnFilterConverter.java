@@ -111,7 +111,7 @@ public class ColumnFilterConverter {
             return;
         }
 
-        if (table.isExprPartitionTable()) {
+        if (table != null && table.isExprPartitionTable()) {
             OlapTable olapTable = (OlapTable) table;
             predicate = convertPredicate(predicate, (ExpressionRangePartitionInfoV2) olapTable.getPartitionInfo());
         }
