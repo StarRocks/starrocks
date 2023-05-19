@@ -208,6 +208,21 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
         scheme = "hdfs://";
         localconf[fslib::kSysRoot] = info.path_info.full_path();
         break;
+    case staros::FileStoreType::AZBLOB:
+        scheme = "azblob://";
+        {
+            localconf[fslib::kSysRoot] = info.path_info.full_path();
+            localconf[fslib::kAzBlobEndpoint] = info.path_info.fs_info().azblob_fs_info().endpoint();
+            auto& credential = info.path_info.fs_info().azblob_fs_info().credential();
+            localconf[fslib::kAzBlobSharedKey] = credential.shared_key();
+            localconf[fslib::kAzBlobSASToken] = credential.sas_token();
+            localconf[fslib::kAzBlobTenantId] = credential.tenant_id();
+            localconf[fslib::kAzBlobClientId] = credential.client_id();
+            localconf[fslib::kAzBlobClientSecret] = credential.client_secret();
+            localconf[fslib::kAzBlobClientCertificatePath] = credential.client_certificate_path();
+            localconf[fslib::kAzBlobAuthorityHost] = credential.authority_host();
+        }
+        break;
     default:
         return absl::InvalidArgumentError("Unknown shard storage scheme!");
     }
