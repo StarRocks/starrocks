@@ -3,3 +3,4 @@ CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_create type = s3 LOCATIONS = 
 SHOW STORAGE VOLUMES like 'storage_volume_create';
 DESC STORAGE VOLUME 'storage_volume_create';
 DROP STORAGE VOLUME IF EXISTS storage_volume_create;
+SHOW STORAGE VOLUMES like 'storage_volume_create';

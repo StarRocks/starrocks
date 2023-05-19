@@ -548,7 +548,13 @@ vectorized_functions = [
     [80041, 'hll_deserialize', 'HLL', ['VARCHAR'], 'HyperloglogFunctions::hll_deserialize'],
 
     # bitmap function
-    [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap', False],
+    [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap<TYPE_VARCHAR>', False],
+    [90011, 'to_bitmap', 'BITMAP', ['BOOLEAN'], 'BitmapFunctions::to_bitmap<TYPE_BOOLEAN>', False],
+    [90012, 'to_bitmap', 'BITMAP', ['TINYINT'], 'BitmapFunctions::to_bitmap<TYPE_TINYINT>', False],
+    [90013, 'to_bitmap', 'BITMAP', ['SMALLINT'], 'BitmapFunctions::to_bitmap<TYPE_SMALLINT>', False],
+    [90014, 'to_bitmap', 'BITMAP', ['INT'], 'BitmapFunctions::to_bitmap<TYPE_INT>', False],
+    [90015, 'to_bitmap', 'BITMAP', ['BIGINT'], 'BitmapFunctions::to_bitmap<TYPE_BIGINT>', False],
+    [90016, 'to_bitmap', 'BITMAP', ['LARGEINT'], 'BitmapFunctions::to_bitmap<TYPE_LARGEINT>', False],
     [90020, 'bitmap_hash', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::bitmap_hash', False],
     [90030, 'bitmap_count', 'BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_count'],
     [90040, 'bitmap_empty', 'BITMAP', [], 'BitmapFunctions::bitmap_empty', False],

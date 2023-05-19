@@ -78,22 +78,22 @@ For more information, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-stat
 
 ### Parameters
 
-#### `catalog_name`
+#### catalog_name
 
 The name of the Delta Lake catalog. The naming conventions are as follows:
 
 - The name can contain letters, digits 0 through 9, and underscores (_) and must start with a letter.
 - The name cannot exceed 64 characters in length.
 
-#### `comment`
+#### comment
 
 The description of the Delta Lake catalog. This parameter is optional.
 
-#### `type`
+#### type
 
 The type of your data source. Set the value to `deltalake`.
 
-#### `MetastoreParams`
+#### MetastoreParams
 
 A set of parameters about how StarRocks integrates with the metastore of your data source.
 
@@ -158,7 +158,7 @@ The following table describes the parameters you need to configure in `Metastore
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
-#### `StorageCredentialParams`
+#### StorageCredentialParams
 
 A set of parameters about how StarRocks integrates with your storage system. This parameter set is optional.
 
@@ -412,7 +412,7 @@ If you choose Google GCS as storage for your Delta Lake cluster, take one of the
     | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | The data service account that you want to impersonate.       |
 
-#### `MetadataUpdateParams`
+#### MetadataUpdateParams
 
 A set of parameters about how StarRocks updates the cached metadata of Delta Lake. This parameter set is optional.
 
@@ -547,10 +547,10 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
 Use MinIO as an example. Run a command like below:
 
 ```SQL
-CREATE EXTERNAL CATALOG hive_catalog_hms
+CREATE EXTERNAL CATALOG deltalake_catalog_hms
 PROPERTIES
 (
-    "type" = "hive", 
+    "type" = "deltalake", 
     "hive.metastore.uris" = "thrift://34.132.15.127:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
@@ -567,10 +567,10 @@ PROPERTIES
 - If you choose the Shared Key authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "deltalake", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
@@ -580,10 +580,10 @@ PROPERTIES
 - If you choose the SAS Token authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "deltalake", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.blob.account_name" = "<blob_storage_account_name>",
       "azure.blob.container_name" = "<blob_container_name>",
@@ -596,10 +596,10 @@ PROPERTIES
 - If you choose the Managed Service Identity authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "deltalake", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls1.use_managed_service_identity" = "true"    
   );
@@ -608,10 +608,10 @@ PROPERTIES
 - If you choose the Service Principal authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "deltalake", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls1.oauth2_client_id" = "<application_client_id>",
       "azure.adls1.oauth2_credential" = "<application_client_credential>",
@@ -624,10 +624,10 @@ PROPERTIES
 - If you choose the Managed Identity authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "deltalake", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_use_managed_identity" = "true",
       "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
@@ -638,10 +638,10 @@ PROPERTIES
 - If you choose the Shared Key authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "deltalake", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.storage_account" = "<storage_account_name>",
       "azure.adls2.shared_key" = "<shared_key>"     
@@ -651,10 +651,10 @@ PROPERTIES
 - If you choose the Service Principal authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "deltalake", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
@@ -667,10 +667,10 @@ PROPERTIES
 - If you choose the VM-based authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "deltalake", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.use_compute_engine_service_account" = "true"    
   );
@@ -679,11 +679,11 @@ PROPERTIES
 - If you choose the service account-based authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG deltalake_catalog_hms
   PROPERTIES
   (
-      "type"="hive", 
-      "hive.metastore.uris"="thrift://34.132.15.127:9083",
+      "type" = "deltalake", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
       "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
@@ -695,11 +695,11 @@ PROPERTIES
   - If you make a VM instance impersonate a service account, run a command like below:
 
     ```SQL
-    CREATE EXTERNAL CATALOG hive_catalog_hms
+    CREATE EXTERNAL CATALOG deltalake_catalog_hms
     PROPERTIES
     (
-        "type"="hive", 
-        "hive.metastore.uris"="thrift://34.132.15.127:9083",
+        "type" = "deltalake", 
+        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
         "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
     );
@@ -708,11 +708,11 @@ PROPERTIES
   - If you make a service account impersonate another service account, run a command like below:
 
     ```SQL
-    CREATE EXTERNAL CATALOG hive_catalog_hms
+    CREATE EXTERNAL CATALOG deltalake_catalog_hms
     PROPERTIES
     (
-        "type"="hive", 
-        "hive.metastore.uris"="thrift://34.132.15.127:9083",
+        "type" = "deltalake", 
+        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
         "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
@@ -800,11 +800,11 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
 ```
 
-## Synchronize metadata updates
+## Manually or automatically update metadata cache
 
 ### Manual update
 
-By default, StarRocks caches the metadata of Delta Lake and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Delta Lake table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
+By default, StarRocks caches the metadata of Delta Lake and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Delta Lake table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to manually update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name>
@@ -882,7 +882,7 @@ You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file o
 | enable_hms_parallel_process_evens | Specifies whether StarRocks processes events in parallel as it reads the events. Valid values: `true` and `false`. Default value: `true`. The value `true` enables parallelism, and the value `false` disables parallelism. |
 | hms_process_events_parallel_num   | The maximum number of events that StarRocks can process in parallel. Default value: `4`. |
 
-## Appendix: Understand automatic asynchronous update
+## Appendix: Understand metadata automatic asynchronous update
 
 Automatic asynchronous update is the default policy that StarRocks uses to update the metadata in Delta Lake catalogs.
 

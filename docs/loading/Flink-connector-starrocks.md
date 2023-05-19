@@ -4,7 +4,7 @@ This topic describes how to load data from Apache Flink® to StarRocks.
 
 ## Overview
 
-The flink-connector-jdbc tool provided by Apache Flink® may not meet your performance requirements in certain scenarios. Therefore we provide a new connector named flink-connector-starrocks, which can cache data and then load data at a time by using Stream Load.
+The flink-connector-jdbc tool provided by Apache Flink® may not meet your performance requirements in certain scenarios. Therefore we provide a new connector named flink-connector-starrocks, which can cache data and then load data at a time by using [Stream Load](./StreamLoad.md).
 
 ## Procedure
 

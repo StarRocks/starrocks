@@ -337,7 +337,7 @@ Status FileWriterBase::write(Chunk* chunk) {
     _chunk_writer->write(chunk);
 
     if (_chunk_writer->estimated_buffered_bytes() > _max_row_group_size && !is_last_row_group()) {
-        _flush_row_group();
+        RETURN_IF_ERROR(_flush_row_group());
     }
 
     return Status::OK();
@@ -371,11 +371,25 @@ Status FileWriterBase::split_offsets(std::vector<int64_t>& splitOffsets) const {
     return Status::OK();
 }
 
-void SyncFileWriter::_flush_row_group() {
+Status SyncFileWriter::_flush_row_group() {
     if (_chunk_writer != nullptr) {
-        _chunk_writer->close();
-        _chunk_writer = nullptr;
+        try {
+            _chunk_writer->close();
+        } catch (const ::parquet::ParquetStatusException& e) {
+            _chunk_writer.reset();
+
+            // this is to avoid calling ParquetFileWriter.Close which incurs segfault
+            _closed = true;
+            _writer.release();
+
+            auto st = Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what()));
+            LOG(WARNING) << st;
+            return st;
+        }
     }
+
+    _chunk_writer.reset();
+    return Status::OK();
 }
 
 Status SyncFileWriter::close() {
@@ -383,12 +397,14 @@ Status SyncFileWriter::close() {
         return Status::OK();
     }
 
-    _flush_row_group();
+    RETURN_IF_ERROR(_flush_row_group());
     _writer->Close();
 
-    auto st = _outstream->Close();
-    if (!st.ok()) {
-        return Status::InternalError("Close file failed!");
+    auto arrow_st = _outstream->Close();
+    if (!arrow_st.ok()) {
+        auto st = Status::IOError(fmt::format("{}: {}", "close file error", arrow_st.message()));
+        LOG(WARNING) << st;
+        return st;
     }
 
     _closed = true;
@@ -410,12 +426,13 @@ AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, st
     _io_timer = ADD_TIMER(_parent_profile, "FileWriterIoTimer");
 }
 
-void AsyncFileWriter::_flush_row_group() {
+Status AsyncFileWriter::_flush_row_group() {
     {
         auto lock = std::unique_lock(_m);
         _rg_writer_closing = true;
     }
-    bool ret = _executor_pool->try_offer([&]() {
+
+    bool ok = _executor_pool->try_offer([&]() {
         SCOPED_TIMER(_io_timer);
         if (_chunk_writer != nullptr) {
             _chunk_writer->close();
@@ -424,18 +441,22 @@ void AsyncFileWriter::_flush_row_group() {
         {
             auto lock = std::unique_lock(_m);
             _rg_writer_closing = false;
-            lock.unlock();
-            _cv.notify_one();
         }
+        _cv.notify_one();
     });
-    if (!ret) {
+
+    if (!ok) {
         {
             auto lock = std::unique_lock(_m);
             _rg_writer_closing = false;
-            lock.unlock();
-            _cv.notify_one();
         }
+        _cv.notify_one();
+        auto st = Status::ResourceBusy("submit flush row group task fails");
+        LOG(WARNING) << st;
+        return st;
     }
+
+    return Status::OK();
 }
 
 Status AsyncFileWriter::close(RuntimeState* state,

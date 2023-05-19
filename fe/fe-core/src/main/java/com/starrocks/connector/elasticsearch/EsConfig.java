@@ -17,43 +17,43 @@ package com.starrocks.connector.elasticsearch;
 import com.starrocks.connector.config.Config;
 import com.starrocks.connector.config.ConnectorConfig;
 
-import static com.starrocks.catalog.EsTable.DOC_VALUE_SCAN;
-import static com.starrocks.catalog.EsTable.ES_NET_SSL;
-import static com.starrocks.catalog.EsTable.HOSTS;
-import static com.starrocks.catalog.EsTable.KEYWORD_SNIFF;
-import static com.starrocks.catalog.EsTable.PASSWORD;
-import static com.starrocks.catalog.EsTable.USER;
-import static com.starrocks.catalog.EsTable.WAN_ONLY;
+import static com.starrocks.catalog.EsTable.KEY_DOC_VALUE_SCAN;
+import static com.starrocks.catalog.EsTable.KEY_ES_NET_SSL;
+import static com.starrocks.catalog.EsTable.KEY_HOSTS;
+import static com.starrocks.catalog.EsTable.KEY_KEYWORD_SNIFF;
+import static com.starrocks.catalog.EsTable.KEY_PASSWORD;
+import static com.starrocks.catalog.EsTable.KEY_USER;
+import static com.starrocks.catalog.EsTable.KEY_WAN_ONLY;
 
 public class EsConfig extends ConnectorConfig {
 
-    @Config(key = HOSTS, desc = "user when connecting es cluster", defaultValue = "", nullable = false)
+    @Config(key = KEY_HOSTS, desc = "user when connecting es cluster", defaultValue = "", nullable = false)
     private String[] nodes;
 
-    @Config(key = USER, desc = "user when connecting es cluster", defaultValue = "")
+    @Config(key = KEY_USER, desc = "user when connecting es cluster", defaultValue = "")
     private String userName = null;
 
-    @Config(key = PASSWORD, desc = "password when connecting es cluster", defaultValue = "")
+    @Config(key = KEY_PASSWORD, desc = "password when connecting es cluster", defaultValue = "")
     private String password = null;
 
-    @Config(key = ES_NET_SSL,
+    @Config(key = KEY_ES_NET_SSL,
             desc = " Whether the HTTPS protocol can be used to access your Elasticsearch cluster",
             defaultValue = "false")
     private boolean enableSsl;
 
-    @Config(key = WAN_ONLY,
+    @Config(key = KEY_WAN_ONLY,
             desc = "indicates whether StarRocks only uses the addresses specified by hosts to access the " +
                     "Elasticsearch cluster and fetch data",
             defaultValue = "true")
     private boolean enableWanOnly;
 
-    @Config(key = DOC_VALUE_SCAN,
+    @Config(key = KEY_DOC_VALUE_SCAN,
             desc = "Whether to enable docvalues scan optimization for fetching fields more fast",
             defaultValue = "true")
     private boolean enableDocValueScan;
     
-    @Config(key = KEYWORD_SNIFF,
-            desc = " Whether to enable sniffing keyword for filtering more reasonable",
+    @Config(key = KEY_KEYWORD_SNIFF,
+            desc = "Whether to enable sniffing keyword for filtering more reasonable",
             defaultValue = "true")
     private boolean enableKeywordSniff;
 

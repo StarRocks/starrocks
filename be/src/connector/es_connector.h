@@ -79,6 +79,7 @@ private:
     std::map<std::string, std::string> _docvalue_context;
     std::map<std::string, std::string> _fields_context;
     std::vector<std::string> _column_names;
+    std::string _timezone;
 
     // predicate index in the conjuncts
     std::vector<int> _predicate_idx;
