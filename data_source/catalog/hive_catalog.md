@@ -247,9 +247,11 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
 
 以下示例创建了一个名为 `hive_catalog_hms` 或 `hive_catalog_glue` 的 Hive Catalog，用于查询 Hive 集群里的数据。
 
-#### 如果基于 Instance Profile 进行鉴权和认证
+#### AWS S3
 
-- 如果 Hive 集群使用 HMS 作为元数据服务，您可以这样创建 Hive Catalog：
+##### 如果基于 Instance Profile 进行鉴权和认证
+
+- 如果 Hive 集群使用 HMS 作为元数据服务，可以按如下创建 Hive Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG hive_catalog_hms
@@ -262,7 +264,7 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   );
   ```
 
-- 如果 Amazon EMR Hive 集群使用 AWS Glue 作为元数据服务，您可以这样创建 Hive Catalog：
+- 如果 Amazon EMR Hive 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Hive Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG hive_catalog_glue
@@ -277,9 +279,9 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   );
   ```
 
-#### 如果基于 Assumed Role 进行鉴权和认证
+##### 如果基于 Assumed Role 进行鉴权和认证
 
-- 如果 Hive 集群使用 HMS 作为元数据服务，您可以这样创建 Hive Catalog：
+- 如果 Hive 集群使用 HMS 作为元数据服务，可以按如下创建 Hive Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG hive_catalog_hms
@@ -293,7 +295,7 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   );
   ```
 
-- 如果 Amazon EMR Hive 集群使用 AWS Glue 作为元数据服务，您可以这样创建 Hive Catalog：
+- 如果 Amazon EMR Hive 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Hive Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG hive_catalog_glue
@@ -310,9 +312,9 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   );
   ```
 
-#### 如果基于 IAM User 进行鉴权和认证
+##### 如果基于 IAM User 进行鉴权和认证
 
-- 如果 Hive 集群使用 HMS 作为元数据服务，您可以这样创建 Hive Catalog：
+- 如果 Hive 集群使用 HMS 作为元数据服务，可以按如下创建 Hive Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG hive_catalog_hms
@@ -327,7 +329,7 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   );
   ```
 
-- 如果 Amazon EMR Hive 集群使用 AWS Glue 作为元数据服务，您可以这样创建 Hive Catalog：
+- 如果 Amazon EMR Hive 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Hive Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG hive_catalog_glue
@@ -345,6 +347,24 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
       "aws.glue.region" = "us-west-2"
   );
   ```
+
+#### 兼容 S3 协议的对象存储
+
+以 MinIO 为例，可以按如下创建 Hive Catalog：
+
+```SQL
+CREATE EXTERNAL CATALOG hive_catalog_hms
+PROPERTIES
+(
+    "type" = "hive", 
+    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "aws.s3.enable_ssl" = "true",
+    "aws.s3.enable_path_style_access" = "true",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
 
 ## 查看 Hive 表结构
 

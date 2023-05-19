@@ -106,7 +106,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 
 | 参数                                 | 是否必须 | 说明                                                         |
 | ----------------------------------- | -------- | ------------------------------------------------------------ |
-| hive.metastore.uris                 | 是       | HMS 的 URI。格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。<br>如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
+| iceberg.catalog.hive.metastore.uris                 | 是       | HMS 的 URI。格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。<br>如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
 
 ##### AWS Glue
 
@@ -237,9 +237,11 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
 
 以下示例创建了一个名为 `iceberg_catalog_hms` 或 `iceberg_catalog_glue` 的 Iceberg Catalog，用于查询 Iceberg 集群里的数据。
 
-#### 如果基于 Instance Profile 进行鉴权和认证
+#### AWS S3
 
-- 如果 Iceberg 集群使用 HMS 作为元数据服务，您可以这样创建 Iceberg Catalog：
+##### 如果基于 Instance Profile 进行鉴权和认证
+
+- 如果 Iceberg 集群使用 HMS 作为元数据服务，可以按如下创建 Iceberg Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -252,7 +254,7 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
   );
   ```
 
-- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，您可以这样创建 Iceberg Catalog：
+- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Iceberg Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_glue
@@ -267,9 +269,9 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
   );
   ```
 
-#### 如果基于 Assumed Role 进行鉴权和认证
+##### 如果基于 Assumed Role 进行鉴权和认证
 
-- 如果 Iceberg 集群使用 HMS 作为元数据服务，您可以这样创建 Iceberg Catalog：
+- 如果 Iceberg 集群使用 HMS 作为元数据服务，可以按如下创建 Iceberg Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -283,7 +285,7 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
   );
   ```
 
-- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，您可以这样创建 Iceberg Catalog：
+- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Iceberg Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_glue
@@ -300,9 +302,9 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
   );
   ```
 
-#### 如果基于 IAM User 进行鉴权和认证
+##### 如果基于 IAM User 进行鉴权和认证
 
-- 如果 Iceberg 集群使用 HMS 作为元数据服务，您可以这样创建 Iceberg Catalog：
+- 如果 Iceberg 集群使用 HMS 作为元数据服务，可以按如下创建 Iceberg Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -317,7 +319,7 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
   );
   ```
 
-- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，您可以这样创建 Iceberg Catalog：
+- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Iceberg Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_glue
@@ -335,6 +337,24 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
       "aws.glue.region" = "us-west-2"
   );
   ```
+
+#### 兼容 S3 协议的对象存储
+
+以 MinIO 为例，可以按如下创建 Iceberg Catalog：
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog_hms
+PROPERTIES
+(
+    "type" = "iceberg", 
+    "iceberg.catalog.hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "aws.s3.enable_ssl" = "true",
+    "aws.s3.enable_path_style_access" = "true",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
 
 ## 查看 Iceberg 表结构
 
