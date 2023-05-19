@@ -1611,7 +1611,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
 
         mvContext = processor.getMvContext();
         Assert.assertEquals("2022-03-01", mvContext.getNextPartitionStart());
-        Assert.assertEquals("2022-05-02", mvContext.getNextPartitionEnd());
+        Assert.assertEquals("2022-05-01", mvContext.getNextPartitionEnd());
 
         taskRun.executeTaskRun();
 

@@ -25,7 +25,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.BaseTableInfo;
@@ -255,8 +254,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         if (partitionNameIter.hasNext()) {
             String startPartitionName = partitionNameIter.next();
             Range<PartitionKey> partitionKeyRange = mappedPartitionsToRefresh.get(startPartitionName);
-            LiteralExpr lowerExpr = partitionKeyRange.lowerEndpoint().getKeys().get(0);
-            nextPartitionStart = AnalyzerUtils.parseLiteralExprToDateString(lowerExpr, 0);
+            nextPartitionStart = AnalyzerUtils.parseLiteralExprToDateString(partitionKeyRange.lowerEndpoint(), 0);
             endPartitionName = startPartitionName;
             partitionsToRefresh.remove(endPartitionName);
         }
@@ -268,8 +266,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         mvContext.setNextPartitionStart(nextPartitionStart);
 
         if (endPartitionName != null) {
-            LiteralExpr upperExpr = mappedPartitionsToRefresh.get(endPartitionName).upperEndpoint().getKeys().get(0);
-            mvContext.setNextPartitionEnd(AnalyzerUtils.parseLiteralExprToDateString(upperExpr, 1));
+            PartitionKey upperEndpoint = mappedPartitionsToRefresh.get(endPartitionName).upperEndpoint();
+            mvContext.setNextPartitionEnd(AnalyzerUtils.parseLiteralExprToDateString(upperEndpoint, 0));
         } else {
             // partitionNameIter has just been traversed, and endPartitionName is not updated
             // will cause endPartitionName == null
