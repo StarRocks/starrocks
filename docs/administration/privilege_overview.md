@@ -15,20 +15,20 @@ Therefore, the maximum privilege scope of each user identity is the union of its
 
 - **Object**: An entity to which access can be granted. Unless allowed by a grant, access is denied. Examples of objects include CATALOG, DATABASE, TABLE, and VIEW. For more information, see [Privileges supported in StarRocks](privilege_item.md).
 - **Privilege**: A defined level of access to an object. Multiple privileges can be used to control the granularity of access granted on an object. Privileges are object-specific. Different objects may have different privileges. Examples of privileges include SELECT, ALTER, and DROP.
-- **User identity**: the unique identity of a user and also the entity to which privileges can be granted. User identity is represented as `username@'userhost'`, consisting of user name and the IP from which the user logs in.
+- **User identity**: the unique identity of a user and also the entity to which privileges can be granted. User identity is represented as `username@'userhost'`, consisting of username and the IP from which the user logs in. Use identity simplifies attribute configuration. User identities that share the same user name share the same attribute. If you configure an attribute for a username, this attribute takes effect on all user identities that share this username.
 - **Role**: An entity to which privileges can be granted. Roles are an abstract collection of privileges. Roles can in turn assigned to users. Roles can also be assigned to other roles, creating a role hierarchy. To facilitate data management, StarRocks provides system-defined roles. To allow for more flexibility, you can also create custom roles according to business requirements.
 
 The following figure shows an example of privilege management under the RBAC and IBAC privilege models.
 
 In the models, access to objects is allowed through privileges assigned to roles and users. Roles are in turn assigned to other roles or users.
 
-![privilege management](../assets/privilege-manage.jpg)
+![privilege management](../assets/privilege-manage.png)
 
 ## Objects and privileges
 
 Objects have a logical hierarchy, which is related to the concept they represent. For example, Database is contained in Catalog, and Table, View, Materialized View, and Function are contained in Database. The following figure shows the object hierarchy in the StarRocks system.
 
-![privilege objects](../assets/privilege-object.jpg)
+![privilege objects](../assets/privilege-object.png)
 
 Each object has a set of privilege items that can be granted. These privileges define which operations can be performed on these objects. You can grant and revoke privileges from roles or users through the [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) commands.
 
@@ -58,7 +58,7 @@ After a role is activated, users can perform operations that are authorized by t
 
 StarRocks provides several types of system-defined roles.
 
-![roles](../assets/privilege-role.jpg)
+![roles](../assets/privilege-role.png)
 
 - `root`: has global privileges. By default, the `root` user has the `root` role.
    After a StarRocks cluster is created, the system automatically generates a root user with root privileges. Because the root user and role have all privileges of the system, we recommend that you create new users and roles for subsequent operations to prevent any risky operations. Keep the password of the root user properly.
@@ -83,7 +83,7 @@ The following figure shows an example of privilege inheritance.
 
 > Note: The maximum number of inheritance levels for a role is 16. The inheritance relationship cannot be bidirectional.
 
-![role inheritance](../assets/privilege-role-inheri.jpg)
+![role inheritance](../assets/privilege-role-inheri.png)
 
 As shown in the figure:
 
