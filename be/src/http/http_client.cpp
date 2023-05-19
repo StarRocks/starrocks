@@ -102,6 +102,13 @@ Status HttpClient::init(const std::string& url) {
         return Status::InternalError("fail to set CURLOPT_URL");
     }
 
+    // set NoProxy, otherwise elasticsearch may hang when the host enables HTTP_PROXY/HTTPS_PROXY
+    code = curl_easy_setopt(_curl, CURLOPT_NOPROXY, "*");
+    if (code != CURLE_OK) {
+        LOG(WARNING) << "failed to set CURLOPT_NOPROXY, errmsg=" << _to_errmsg(code);
+        return Status::InternalError("fail to set CURLOPT_NOPROXY");
+    }
+
     return Status::OK();
 }
 

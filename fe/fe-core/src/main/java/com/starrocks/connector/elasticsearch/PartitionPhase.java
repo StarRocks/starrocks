@@ -54,7 +54,7 @@ public class PartitionPhase implements SearchPhase {
     @Override
     public void postProcess(SearchContext context) throws StarRocksConnectorException {
         context.partitions(shardPartitions);
-        if (EsTable.TRANSPORT_HTTP.equals(context.esTable().getTransport())) {
+        if (EsTable.KEY_TRANSPORT_HTTP.equals(context.esTable().getTransport())) {
             context.partitions().addHttpAddress(nodesInfo);
         }
     }

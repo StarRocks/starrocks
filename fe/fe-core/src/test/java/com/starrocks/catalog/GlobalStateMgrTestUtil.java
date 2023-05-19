@@ -246,13 +246,13 @@ public class GlobalStateMgrTestUtil {
 
         RangePartitionInfo partitionInfo = new RangePartitionInfo(partitionColumns);
         Map<String, String> properties = Maps.newHashMap();
-        properties.put(EsTable.HOSTS, "xxx");
-        properties.put(EsTable.INDEX, "doe");
-        properties.put(EsTable.TYPE, "doc");
-        properties.put(EsTable.PASSWORD, "");
-        properties.put(EsTable.USER, "root");
-        properties.put(EsTable.DOC_VALUE_SCAN, "true");
-        properties.put(EsTable.KEYWORD_SNIFF, "true");
+        properties.put(EsTable.KEY_HOSTS, "xxx");
+        properties.put(EsTable.KEY_INDEX, "doe");
+        properties.put(EsTable.KEY_TYPE, "doc");
+        properties.put(EsTable.KEY_PASSWORD, "");
+        properties.put(EsTable.KEY_USER, "root");
+        properties.put(EsTable.KEY_DOC_VALUE_SCAN, "true");
+        properties.put(EsTable.KEY_KEYWORD_SNIFF, "true");
         EsTable esTable = new EsTable(testEsTableId1, testEsTable1,
                 columns, properties, partitionInfo);
         db.createTable(esTable);

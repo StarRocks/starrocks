@@ -21,7 +21,7 @@ import org.apache.logging.log4j.Logger;
 import java.lang.reflect.Constructor;
 
 public class ConnectorFactory {
-    private static Logger LOG = LogManager.getLogger(ConnectorFactory.class);
+    private static final Logger LOG = LogManager.getLogger(ConnectorFactory.class);
 
     /**
      * create a connector instance

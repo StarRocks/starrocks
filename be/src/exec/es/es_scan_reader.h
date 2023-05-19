@@ -57,6 +57,7 @@ public:
     static constexpr const char* KEY_TERMINATE_AFTER = "limit";
     static constexpr const char* KEY_DOC_VALUES_MODE = "doc_values_mode";
     static constexpr const char* KEY_ES_NET_SSL = "es.net.ssl";
+    static constexpr const char* KEY_TIME_ZONE = "time_zone";
     ESScanReader(const std::string& target, const std::map<std::string, std::string>& props, bool doc_value_mode);
     ~ESScanReader();
 
