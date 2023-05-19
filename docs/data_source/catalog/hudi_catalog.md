@@ -546,7 +546,7 @@ The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_c
 Use MinIO as an example. Run a command like below:
 
 ```SQL
-CREATE EXTERNAL CATALOG hive_catalog_hms
+CREATE EXTERNAL CATALOG hudi_catalog_hms
 PROPERTIES
 (
     "type" = "hudi", 
@@ -566,7 +566,7 @@ PROPERTIES
 - If you choose the Shared Key authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
       "type" = "hudi", 
@@ -579,7 +579,7 @@ PROPERTIES
 - If you choose the SAS Token authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
       "type" = "hudi", 
@@ -595,7 +595,7 @@ PROPERTIES
 - If you choose the Managed Service Identity authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
       "type" = "hudi", 
@@ -607,7 +607,7 @@ PROPERTIES
 - If you choose the Service Principal authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
       "type" = "hudi", 
@@ -623,7 +623,7 @@ PROPERTIES
 - If you choose the Managed Identity authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
       "type" = "hudi", 
@@ -637,7 +637,7 @@ PROPERTIES
 - If you choose the Shared Key authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
       "type" = "hudi", 
@@ -650,7 +650,7 @@ PROPERTIES
 - If you choose the Service Principal authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
       "type" = "hudi", 
@@ -666,7 +666,7 @@ PROPERTIES
 - If you choose the VM-based authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
       "type" = "hudi", 
@@ -678,7 +678,7 @@ PROPERTIES
 - If you choose the service account-based authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
   PROPERTIES
   (
       "type" = "hudi", 
@@ -694,7 +694,7 @@ PROPERTIES
   - If you make a VM instance impersonate a service account, run a command like below:
 
     ```SQL
-    CREATE EXTERNAL CATALOG hive_catalog_hms
+    CREATE EXTERNAL CATALOG hudi_catalog_hms
     PROPERTIES
     (
         "type" = "hudi", 
@@ -707,7 +707,7 @@ PROPERTIES
   - If you make a service account impersonate another service account, run a command like below:
 
     ```SQL
-    CREATE EXTERNAL CATALOG hive_catalog_hms
+    CREATE EXTERNAL CATALOG hudi_catalog_hms
     PROPERTIES
     (
         "type" = "hudi", 
