@@ -1,0 +1,40 @@
+-- name: testExternalMysqlJoin
+
+CREATE TABLE `allstring` (
+  `v1` varchar(20) NOT NULL COMMENT "",
+  `v2` varchar(20) NOT NULL COMMENT "",
+  `v3` varchar(20) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+
+
+insert into allstring values ('"key"',"1", "2");
+insert into allstring values ("'key'","1", "2");
+
+CREATE EXTERNAL TABLE external_allstring
+(
+  `v1` varchar(20) NOT NULL COMMENT "",
+  `v2` varchar(20) NOT NULL COMMENT "",
+  `v3` varchar(20) NOT NULL COMMENT ""
+)
+ENGINE=mysql
+PROPERTIES
+(
+    "host" = "{sr_lib.mysql_host}",
+    "port" = "{sr_lib.mysql_port}",
+    "user" = "{sr_lib.mysql_user}",
+    "password" = "{sr_lib.mysql_password}",
+    "database" = "{default_db}",
+    "table" = "allstring"
+);
+
+select count(*) from external_allstring l join [broadcast] allstring r on l.v1=r.v1;
