@@ -185,7 +185,7 @@ Status StorageEngine::start_bg_threads() {
 
     for (uint32_t i = 0; i < config::manual_compaction_threads; i++) {
         _manual_compaction_threads.emplace_back([this] { _manual_compaction_thread_callback(nullptr); });
-        Thread::set_thread_name(_update_compaction_threads.back(), "manual_compact");
+        Thread::set_thread_name(_manual_compaction_threads.back(), "manual_compact");
     }
 
     // tablet checkpoint thread
