@@ -160,7 +160,7 @@ private:
     static std::string tablet_latest_metadata_key(int64_t tablet_id);
     static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
 
-    StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id);
+    StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
 
     StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_cache);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
