@@ -188,8 +188,14 @@ public class ShowLoadStmtAnalyzer {
             if (!valid) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Where clause should looks like: LABEL = \"your_load_label\","
+<<<<<<< HEAD
                         + " or LABEL LIKE \"matcher\", " + " or STATE = \"PENDING|ETL|LOADING|FINISHED|CANCELLED\", "
                         + " or compound predicate with operator AND");
+=======
+                                + " or LABEL LIKE \"matcher\", "
+                                + " or STATE = \"PENDING|ETL|LOADING|FINISHED|CANCELLED|QUEUEING\", "
+                                + " or compound predicate with operator AND");
+>>>>>>> fe6f4d754 ([BugFix] Fix show load where state=QUEUEING (#23558))
             }
         }
     }
