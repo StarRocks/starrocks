@@ -69,7 +69,7 @@ struct SelectIfOP {
                                                 \
     ~NAME() {}                                  \
                                                 \
-   virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new NAME(*this)); }
+    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new NAME(*this)); }
 
 template <LogicalType Type>
 class VectorizedIfNullExpr : public Expr {
