@@ -52,7 +52,11 @@ TEST_F(VecBitmapFunctionsTest, toBitmapTest) {
 
         columns.push_back(s);
 
+<<<<<<< HEAD:be/test/exprs/vectorized/bitmap_functions_test.cpp
         auto column = BitmapFunctions::to_bitmap(ctx, columns);
+=======
+        auto column = BitmapFunctions::to_bitmap<TYPE_VARCHAR>(ctx, columns).value();
+>>>>>>> 1691899f8 ([Enhancement] to_bitmap supports int types (#23681)):be/test/exprs/bitmap_functions_test.cpp
 
         ASSERT_TRUE(column->is_object());
 
@@ -74,7 +78,11 @@ TEST_F(VecBitmapFunctionsTest, toBitmapTest) {
 
         columns.push_back(s);
 
+<<<<<<< HEAD:be/test/exprs/vectorized/bitmap_functions_test.cpp
         auto v = BitmapFunctions::to_bitmap(ctx, columns);
+=======
+        auto v = BitmapFunctions::to_bitmap<TYPE_VARCHAR>(ctx, columns).value();
+>>>>>>> 1691899f8 ([Enhancement] to_bitmap supports int types (#23681)):be/test/exprs/bitmap_functions_test.cpp
 
         ASSERT_TRUE(v->is_nullable());
 
@@ -83,6 +91,84 @@ TEST_F(VecBitmapFunctionsTest, toBitmapTest) {
         ASSERT_TRUE(v->is_null(0));
         ASSERT_EQ(5, p->get_object(1)->serialize_size());
         ASSERT_EQ(5, p->get_object(2)->serialize_size());
+    }
+}
+
+TEST_F(VecBitmapFunctionsTest, toBitmapTest_Int) {
+    // to_bitmap(int32)
+    {
+        Columns columns;
+
+        auto s = Int32Column::create();
+
+        s->append(-1);
+        s->append(1);
+        s->append(0);
+
+        columns.push_back(s);
+
+        auto v = BitmapFunctions::to_bitmap<TYPE_INT>(ctx, columns).value();
+
+        ASSERT_TRUE(v->is_nullable());
+
+        auto p = ColumnHelper::cast_to<TYPE_OBJECT>(ColumnHelper::as_column<NullableColumn>(v)->data_column());
+
+        ASSERT_TRUE(v->is_null(0));
+        ASSERT_EQ(5, p->get_object(1)->serialize_size());
+        ASSERT_EQ(5, p->get_object(2)->serialize_size());
+    }
+
+    // to_bitmap(int64)
+    {
+        Columns columns;
+
+        auto s = Int64Column::create();
+
+        s->append(12312313);
+        s->append(1);
+        s->append(0);
+
+        columns.push_back(s);
+
+        auto column = BitmapFunctions::to_bitmap<TYPE_BIGINT>(ctx, columns).value();
+
+        ASSERT_TRUE(column->is_object());
+
+        auto p = ColumnHelper::cast_to<TYPE_OBJECT>(column);
+
+        ASSERT_EQ(5, p->get_object(0)->serialize_size());
+        ASSERT_EQ(5, p->get_object(1)->serialize_size());
+        ASSERT_EQ(5, p->get_object(2)->serialize_size());
+    }
+
+    // to_bitmap(largeint)
+    {
+        Columns columns;
+
+        auto s = Int128Column::create();
+
+        int128_t inputs[] = {-1, 1, 0, int128_t(std::numeric_limits<uint64_t>::max()),
+                             int128_t(std::numeric_limits<uint64_t>::max()) + 1};
+        for (int128_t input : inputs) {
+            s->append(input);
+        }
+        columns.push_back(s);
+
+        auto v = BitmapFunctions::to_bitmap<TYPE_LARGEINT>(ctx, columns).value();
+
+        ASSERT_TRUE(v->is_nullable());
+
+        auto p = ColumnHelper::cast_to<TYPE_OBJECT>(ColumnHelper::as_column<NullableColumn>(v)->data_column());
+
+        ASSERT_TRUE(v->is_null(0));
+        ASSERT_FALSE(v->is_null(1));
+        ASSERT_FALSE(v->is_null(2));
+        ASSERT_FALSE(v->is_null(3));
+        ASSERT_TRUE(v->is_null(4));
+
+        ASSERT_EQ(5, p->get_object(1)->serialize_size());
+        ASSERT_EQ(5, p->get_object(2)->serialize_size());
+        ASSERT_EQ(9, p->get_object(3)->serialize_size());
     }
 }
 
