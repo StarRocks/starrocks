@@ -15,7 +15,6 @@
 #pragma once
 
 #include "column/object_column.h"
-#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
