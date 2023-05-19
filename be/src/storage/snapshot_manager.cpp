@@ -268,6 +268,7 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
         LOG(WARNING) << "Fail to load new rowset: " << st;
         return st;
     }
+    (*new_rowset)->rowset_meta()->set_rowset_seg_id(rs_meta_pb.rowset_seg_id());
     (*new_rowset)->rowset_meta()->to_rowset_pb(new_rs_meta_pb);
     org_rowset->remove();
     return Status::OK();

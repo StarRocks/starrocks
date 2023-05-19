@@ -158,6 +158,7 @@ public:
     std::shared_ptr<const TabletSchema>& tablet_schema_ptr() { return _schema; }
 
     const std::vector<RowsetMetaSharedPtr>& all_rs_metas() const;
+    std::vector<RowsetMetaSharedPtr>& mutable_all_rs_metas();
     void add_rs_meta(const RowsetMetaSharedPtr& rs_meta);
     void delete_rs_meta_by_version(const Version& version, std::vector<RowsetMetaSharedPtr>* deleted_rs_metas);
     void modify_rs_metas(const std::vector<RowsetMetaSharedPtr>& to_add,
@@ -210,6 +211,10 @@ public:
     void set_enable_shortcut_compaction(bool enable_shortcut_compaction) {
         _enable_shortcut_compaction = enable_shortcut_compaction;
     }
+
+    void set_next_rowset_id(uint32_t next_rowset_id) { _next_rowset_id = next_rowset_id; }
+
+    uint32_t next_rowset_id() { return _next_rowset_id; }
 
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }
@@ -270,6 +275,9 @@ private:
     bool _enable_shortcut_compaction = true;
 
     std::shared_mutex _meta_lock;
+
+    // only used to build rowset_seg_id for non-PrimaryKey tablet
+    uint32_t _next_rowset_id = 0;
 };
 
 inline TabletUid TabletMeta::tablet_uid() const {
@@ -353,6 +361,10 @@ inline const TabletSchema& TabletMeta::tablet_schema() const {
 }
 
 inline const std::vector<RowsetMetaSharedPtr>& TabletMeta::all_rs_metas() const {
+    return _rs_metas;
+}
+
+inline std::vector<RowsetMetaSharedPtr>& TabletMeta::mutable_all_rs_metas() {
     return _rs_metas;
 }
 

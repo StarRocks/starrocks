@@ -97,7 +97,8 @@ Status Rowset::load() {
     return Status::OK();
 }
 
-void Rowset::make_visible(Version version) {
+void Rowset::make_visible(Version version, uint32_t rowset_seg_id) {
+    _rowset_meta->set_rowset_seg_id(rowset_seg_id);
     _rowset_meta->set_version(version);
     _rowset_meta->set_rowset_state(VISIBLE);
     // update create time to the visible time,

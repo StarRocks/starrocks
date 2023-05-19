@@ -1182,6 +1182,10 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
                 LOG(WARNING) << "failed to add rowset for tablet " << tablet->full_name() << ": " << st;
                 break;
             }
+            uint32_t next_rowset_id = tablet->next_rowset_id();
+            new_rowset->rowset_meta()->set_rowset_seg_id(next_rowset_id);
+            next_rowset_id += std::max(1U, (uint32_t)new_rowset->num_segments());
+            tablet->set_next_rowset_id(next_rowset_id);
         } while (false);
 
         // Unregister index and delete files(index and data) if failed

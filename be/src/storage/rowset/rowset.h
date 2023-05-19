@@ -194,7 +194,7 @@ public:
                                                                       OlapReaderStatistics* stats);
 
     // publish rowset to make it visible to read
-    void make_visible(Version version);
+    void make_visible(Version version, uint32_t rowset_seg_id);
 
     // like make_visible but updatable tablet has different mechanism
     // NOTE: only used for updatable tablet's rowset

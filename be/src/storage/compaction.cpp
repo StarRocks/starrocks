@@ -347,7 +347,15 @@ Status Compaction::modify_rowsets() {
 
     std::vector<RowsetSharedPtr> to_replace;
     std::unique_lock wrlock(_tablet->get_header_lock());
+
+    uint32_t next_rowset_id = _tablet->next_rowset_id();
+    _output_rowset->rowset_meta()->set_rowset_seg_id(next_rowset_id);
+    next_rowset_id += std::max(1U, (uint32_t)_output_rowset->num_segments());
+
     _tablet->modify_rowsets({_output_rowset}, _input_rowsets, &to_replace);
+
+    _tablet->set_next_rowset_id(next_rowset_id);
+
     _tablet->save_meta();
     Rowset::close_rowsets(_input_rowsets);
     for (auto& rs : to_replace) {

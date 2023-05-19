@@ -286,6 +286,10 @@ public:
 
     void get_basic_info(TabletBasicInfo& info);
 
+    void set_next_rowset_id(uint32_t next_rowset_id) { _tablet_meta->set_next_rowset_id(next_rowset_id); }
+
+    uint32_t next_rowset_id() { return _tablet_meta->next_rowset_id(); }
+
 protected:
     void on_shutdown() override;
 

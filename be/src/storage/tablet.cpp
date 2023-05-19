@@ -187,9 +187,19 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
                       << ", version=" << version << "]";
         }
 
-        for (const auto& rs_meta : rowsets_to_clone) {
-            new_tablet_meta->add_rs_meta(rs_meta);
+        uint32_t next_rowset_id = 0;
+
+        for (const auto& rs_meta : new_tablet_meta->all_rs_metas()) {
+            next_rowset_id = std::max((uint32_t)(rs_meta->get_rowset_seg_id() + rs_meta->num_segments()),
+                                      next_rowset_id);
         }
+
+        for (auto& rs_meta : rowsets_to_clone) {
+            rs_meta->set_rowset_seg_id(next_rowset_id);
+            new_tablet_meta->add_rs_meta(rs_meta);
+            next_rowset_id += std::max(1U, (uint32_t)rs_meta->num_segments());
+        }
+        new_tablet_meta->set_next_rowset_id(next_rowset_id);
         VLOG(3) << "load rowsets successfully when clone. tablet=" << full_name()
                 << ", added rowset size=" << rowsets_to_clone.size();
         // save and reload tablet_meta
@@ -269,6 +279,18 @@ Status Tablet::load_rowset(const RowsetSharedPtr& rowset) {
 }
 
 Status Tablet::finish_load_rowsets() {
+    // Compatible with tables created in older versions
+    if (keys_type() != PRIMARY_KEYS && next_rowset_id() == 0) {
+        std::unique_lock wrlock(_meta_lock);
+        uint32_t next_rowset_id = 0;
+        for (auto& rowset_meta : _tablet_meta->mutable_all_rs_metas()) {
+            rowset_meta->set_rowset_seg_id(next_rowset_id);
+            next_rowset_id += std::max(1U, (uint32_t)rowset_meta->num_segments());
+        }
+        set_next_rowset_id(next_rowset_id);
+        save_meta();
+    }
+
     if (keys_type() != DUP_KEYS) {
         return Status::OK();
     }
@@ -536,11 +558,14 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     DCHECK(rowset != nullptr);
     std::unique_lock wrlock(_meta_lock);
 
+    uint32_t next_rowset_id = this->next_rowset_id();
     Version rowset_version(version, version);
     // rowset is already set version here, memory is changed, if save failed it maybe a fatal error
     // Note make rowset visible before generate binlog to update create time to the visible time
     // which will be used by binlog
-    rowset->make_visible(rowset_version);
+    rowset->make_visible(rowset_version, next_rowset_id);
+    next_rowset_id += std::max(1U, (uint32_t)rowset->num_segments());
+    set_next_rowset_id(next_rowset_id);
 
     // Status::OK() means the full data set does not contain the version
     Status contain_status = _contains_version(rowset_version);

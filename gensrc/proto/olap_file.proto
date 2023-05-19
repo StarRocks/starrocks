@@ -282,6 +282,7 @@ message TabletMetaPB {
     optional BinlogConfigPB binlog_config = 52;
     optional BinlogLsnPB binlog_min_lsn = 53;
     optional bool enable_shortcut_compaction = 60 [default = true];
+    optional uint32 next_rowset_id = 61; // used for non Primary Key tablet
 }
 
 message OLAPIndexHeaderMessage {

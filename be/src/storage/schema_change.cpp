@@ -812,6 +812,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         return Status::InternalError("failed to malloc SchemaChange");
     }
 
+    uint32_t next_rowset_id = 0;
     Status status;
 
     for (int i = 0; i < sc_params.rowset_readers.size(); ++i) {
@@ -880,9 +881,14 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
                     << ", version=" << sc_params.version.first << "-" << sc_params.version.second;
         }
 
+        (*new_rowset)->rowset_meta()->set_rowset_seg_id(next_rowset_id);
+        next_rowset_id += std::max(1U, (uint32_t)sc_params.rowsets_to_change[i]->num_segments());
+
         VLOG(10) << "succeed to convert a history version."
                  << " version=" << sc_params.version.first << "-" << sc_params.version.second;
     }
+
+    sc_params.new_tablet->set_next_rowset_id(next_rowset_id);
 
     if (status.ok()) {
         status = sc_params.new_tablet->check_version_integrity(sc_params.version);

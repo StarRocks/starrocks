@@ -291,6 +291,8 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb, const TabletSchemaP
     }
 
     _enable_shortcut_compaction = tablet_meta_pb.enable_shortcut_compaction();
+
+    _next_rowset_id = tablet_meta_pb.next_rowset_id();
 }
 
 void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
@@ -349,6 +351,8 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
     }
 
     tablet_meta_pb->set_enable_shortcut_compaction(_enable_shortcut_compaction);
+
+    tablet_meta_pb->set_next_rowset_id(_next_rowset_id);
 }
 
 void TabletMeta::to_json(string* json_string, json2pb::Pb2JsonOptions& options) {
