@@ -195,7 +195,6 @@ public class InsertLoadJob extends LoadJob {
         return Sets.newHashSet(table.getName());
     }
 
-    // TODO [meta-format-change] remove
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);

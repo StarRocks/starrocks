@@ -1166,11 +1166,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         Text.writeString(out, timezone);
     }
 
-    // TODO [meta-format-change] change to write(DataOutput out)
-    public void writeV2(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
     public void readFields(DataInput in) throws IOException {
         if (!isJobTypeRead) {
             jobType = EtlJobType.valueOf(Text.readString(in));
