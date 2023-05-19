@@ -383,6 +383,16 @@ inline string SimpleItoa(uint64 i) {
     return string(buf, FastUInt64ToBufferLeft(i, buf));
 }
 
+inline std::string SimpleItoa(__int128 i) {
+    char buf[64];  // Longest is -170141183460469231731687303715884105728
+    return {buf, FastInt128ToBufferLeft(i, buf)};
+}
+
+inline std::string SimpleItoa(unsigned __int128 i) {
+    char buf[64];  // Longest is 340282366920938463463374607431768211455
+    return {buf, FastUInt128ToBufferLeft(i, buf)};
+}
+
 // SimpleAtoi converts a string to an integer.
 // Uses safe_strto?() for actual parsing, so strict checking is
 // applied, which is to say, the string must be a base-10 integer, optionally

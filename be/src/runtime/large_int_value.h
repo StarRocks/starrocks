@@ -44,6 +44,7 @@
 #include <sstream>
 #include <string>
 
+#include "gutil/strings/numbers.h"
 #include "util/hash_util.hpp"
 #include "util/integer_util.h"
 
@@ -51,24 +52,9 @@ namespace starrocks {
 
 class LargeIntValue {
 public:
-    static char* to_string(__int128 value, char* buffer, int* len) {
-        DCHECK(*len >= 40);
-        unsigned __int128 tmp = value < 0 ? -value : value;
-        char* d = buffer + *len;
-        do {
-            --d;
-            *d = "0123456789"[tmp % 10];
-            tmp /= 10;
-        } while (tmp != 0);
-        if (value < 0) {
-            --d;
-            *d = '-';
-        }
-        *len = (buffer + *len) - d;
-        return d;
+    static std::string to_string(__int128 value) {
+        return SimpleItoa(value);
     }
-
-    static std::string to_string(__int128 value) { return integer_to_string<__int128>(value); }
 };
 
 std::ostream& operator<<(std::ostream& os, __int128 const& value);
