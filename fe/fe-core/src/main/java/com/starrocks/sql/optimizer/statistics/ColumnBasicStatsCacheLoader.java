@@ -140,12 +140,10 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                 }
             } else if (column.getPrimitiveType().equals(PrimitiveType.DATETIME)) {
                 if (statisticData.isSetMin() && !statisticData.getMin().isEmpty()) {
-                    minValue = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                            statisticData.min, DateUtils.DATE_TIME_FORMATTER_UNIX));
+                    minValue = (double) getLongFromDateTime(DateUtils.parseDatTimeString(statisticData.min));
                 }
                 if (statisticData.isSetMax() && !statisticData.getMax().isEmpty()) {
-                    maxValue = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                            statisticData.max, DateUtils.DATE_TIME_FORMATTER_UNIX));
+                    maxValue = (double) getLongFromDateTime(DateUtils.parseDatTimeString(statisticData.max));
                 }
             } else {
                 if (statisticData.isSetMin() && !statisticData.getMin().isEmpty()) {
