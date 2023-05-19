@@ -660,7 +660,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_CTE_MAX_LIMIT, flag = VariableMgr.INVISIBLE)
     private int cboCTEMaxLimit = 10;
 
-    @VarAttr(name = CBO_PRUNE_Subfield, flag = VariableMgr.INVISIBLE)
+    @VarAttr(name = CBO_PRUNE_SUBFIELD, flag = VariableMgr.INVISIBLE)
     private boolean cboPruneSubfield = true;
 
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
