@@ -679,8 +679,8 @@ PROPERTIES
   CREATE EXTERNAL CATALOG hive_catalog_hms
   PROPERTIES
   (
-      "type"="hive", 
-      "hive.metastore.uris"="thrift://34.132.15.127:9083",
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
       "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
@@ -695,8 +695,8 @@ PROPERTIES
     CREATE EXTERNAL CATALOG hive_catalog_hms
     PROPERTIES
     (
-        "type"="hive", 
-        "hive.metastore.uris"="thrift://34.132.15.127:9083",
+        "type" = "hive", 
+        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
         "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
     );
@@ -708,8 +708,8 @@ PROPERTIES
     CREATE EXTERNAL CATALOG hive_catalog_hms
     PROPERTIES
     (
-        "type"="hive", 
-        "hive.metastore.uris"="thrift://34.132.15.127:9083",
+        "type" = "hive", 
+        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
         "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
