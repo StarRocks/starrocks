@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.StructType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -83,8 +84,9 @@ public class PruneSubfieldRule implements TreeRewriteRule {
         public Void visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
             if (predicate.getChild(0).getType().isComplexType()) {
                 complexExpressions.add(predicate);
+                return null;
             }
-            return null;
+            return visit(predicate, context);
         }
 
         @Override
@@ -349,6 +351,21 @@ public class PruneSubfieldRule implements TreeRewriteRule {
                 call.getChild(0).accept(this, context);
                 if (currentPath != null) {
                     currentPath.appendPath(AccessPath.PATH_OFFSET, TAccessPathType.OFFSET);
+                }
+            }
+
+            return null;
+        }
+
+        @Override
+        public Void visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
+            predicate.getChild(0).accept(this, context);
+            if (currentPath != null) {
+                if (predicate.getChild(0).getType().isMapType()) {
+                    currentPath.appendPath(AccessPath.PATH_OFFSET, TAccessPathType.OFFSET);
+                } else if (predicate.getChild(0).getType().isStructType()) {
+                    StructType type = (StructType) predicate.getChild(0).getType();
+                    currentPath.appendPath(type.getFields().get(0).getName(), TAccessPathType.FIELD);
                 }
             }
 
