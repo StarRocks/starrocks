@@ -200,6 +200,11 @@ struct TQueryOptions {
   93: optional i32 connector_io_tasks_slow_io_latency_ms = 50;
   94: optional double scan_use_query_mem_ratio = 0.25;
   95: optional double connector_scan_use_query_mem_ratio = 0.3;
+
+  96: optional bool enable_hash_join_spill = true;
+  97: optional bool enable_agg_spill = true;
+  98: optional bool enable_agg_distinct_spill = true;
+  99: optional bool enable_sort_spill = true;
 }
 
 

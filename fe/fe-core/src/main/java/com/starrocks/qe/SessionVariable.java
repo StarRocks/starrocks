@@ -144,6 +144,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_PARALLEL_SCAN_INSTANCE_NUM = "max_parallel_scan_instance_num";
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
     public static final String ENABLE_SPILL = "enable_spill";
+    public static final String ENABLE_HASH_JOIN_SPILL = "enable_hash_join_spill";
+    public static final String ENABLE_AGG_SPILL = "enable_agg_spill";
+    public static final String ENABLE_AGG_DISTINCT_SPILL = "enable_agg_distinct_spill";
+    public static final String ENABLE_SORT_SPILL = "enable_sort_spill";
     // spill mode: auto, force
     public static final String SPILL_MODE = "spill_mode";
     // if set to true, some of stmt will be forwarded to leader FE to get result
@@ -703,6 +707,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_SPILL)
     private boolean enableSpill = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_HASH_JOIN_SPILL, flag = VariableMgr.INVISIBLE)
+    private boolean enableHashJoinSpill = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_AGG_SPILL, flag = VariableMgr.INVISIBLE)
+    private boolean enableAggSpill = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_AGG_DISTINCT_SPILL, flag = VariableMgr.INVISIBLE)
+    private boolean enableAggDistinctSpill = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_SORT_SPILL, flag = VariableMgr.INVISIBLE)
+    private boolean enableSortSpill = true;
 
     @VariableMgr.VarAttr(name = SPILL_MODE)
     private String spillMode = "auto";
@@ -2135,6 +2151,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setSpill_operator_min_bytes(spillOperatorMinBytes);
             tResult.setSpill_operator_max_bytes(spillOperatorMaxBytes);
             tResult.setSpill_encode_level(spillEncodeLevel);
+            tResult.setEnable_hash_join_spill(enableHashJoinSpill);
+            tResult.setEnable_agg_spill(enableAggSpill);
+            tResult.setEnable_agg_distinct_spill(enableAggDistinctSpill);
+            tResult.setEnable_sort_spill(enableSortSpill);
         }
 
         // Compression Type

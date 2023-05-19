@@ -307,6 +307,12 @@ public:
 
     bool enable_spill() const { return _query_options.enable_spill; }
 
+    bool enable_hash_join_spill() const { return _query_options.enable_hash_join_spill; }
+
+    bool enable_agg_spill() const { return _query_options.enable_agg_spill; }
+    bool enable_agg_distinct_spill() const { return _query_options.enable_agg_distinct_spill; }
+    bool enable_sort_spill() const { return _query_options.enable_sort_spill; }
+
     int32_t spill_mem_table_size() const { return _query_options.spill_mem_table_size; }
 
     int32_t spill_mem_table_num() const { return _query_options.spill_mem_table_num; }
