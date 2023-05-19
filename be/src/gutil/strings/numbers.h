@@ -384,12 +384,12 @@ inline string SimpleItoa(uint64 i) {
 }
 
 inline std::string SimpleItoa(__int128 i) {
-    char buf[64];  // Longest is -170141183460469231731687303715884105728
+    char buf[64]; // Longest is -170141183460469231731687303715884105728
     return {buf, FastInt128ToBufferLeft(i, buf)};
 }
 
 inline std::string SimpleItoa(unsigned __int128 i) {
-    char buf[64];  // Longest is 340282366920938463463374607431768211455
+    char buf[64]; // Longest is 340282366920938463463374607431768211455
     return {buf, FastUInt128ToBufferLeft(i, buf)};
 }
 
