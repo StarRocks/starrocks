@@ -2,7 +2,6 @@
 Checks: >
     -*,
     cppcoreguidelines-virtual-class-destructor,
-    modernize-avoid-bind,
     modernize-concat-nested-namespaces,
     modernize-deprecated-headers,
     modernize-deprecated-ios-base-aliases,
@@ -40,3 +39,4 @@ Checks: >
     performance-type-promotion-in-math-fn,
     performance-unnecessary-copy-initialization,
     performance-unnecessary-value-param,
+WarningsAsErrors: '*'

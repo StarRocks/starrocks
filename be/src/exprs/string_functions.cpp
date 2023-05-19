@@ -2032,7 +2032,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
         return {};
     }
 
-    int result_len = str.size / 2;
+    size_t result_len = str.size / 2;
     std::vector<char> result;
     result.resize(result_len);
     int res_index = 0;
@@ -2068,7 +2068,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
         ++res_index;
         s_index += 2;
     }
-    return std::string(result.data(), result_len);
+    return {result.data(), result_len};
 }
 
 StatusOr<ColumnPtr> StringFunctions::unhex(FunctionContext* context, const starrocks::Columns& columns) {

@@ -299,7 +299,7 @@ template <typename Op, LogicalType Type>
 struct ArithmeticBinaryOperator<Op, Type, DecimalOpGuard<Op>, DecimalLTGuard<Type>> {
     template <bool check_overflow, typename LType, typename RType, typename ResultType>
     static inline bool apply(const LType& l, const RType& r, ResultType* result) {
-        [[maybe_unused]] static constexpr ResultType zero = ResultType(0);
+        [[maybe_unused]] static constexpr auto zero = ResultType(0);
         using DecimalV3Operators = DecimalV3Arithmetics<ResultType, check_overflow>;
         [[maybe_unused]] bool overflow = false;
         if constexpr (is_add_op<Op>) {
