@@ -21,9 +21,9 @@
 #include "gutil/casts.h"
 #include "types/bitmap_value.h"
 
-namespace starrocks {
+namespace starrocks::vectorized {
 
-template <LogicalType LT>
+template <PrimitiveType LT>
 class BitmapAggAggregateFunction final
         : public AggregateFunctionBatchHelper<BitmapValue, BitmapAggAggregateFunction<LT>> {
 public:
