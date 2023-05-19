@@ -24,6 +24,7 @@
 #include "exprs/agg/any_value.h"
 #include "exprs/agg/array_agg.h"
 #include "exprs/agg/avg.h"
+#include "exprs/agg/bitmap_agg.h"
 #include "exprs/agg/bitmap_intersect.h"
 #include "exprs/agg/bitmap_union.h"
 #include "exprs/agg/bitmap_union_count.h"
@@ -75,6 +76,9 @@ public:
     }
 
     static AggregateFunctionPtr MakeBitmapUnionAggregateFunction();
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeBitmapAggAggregateFunction();
 
     static AggregateFunctionPtr MakeBitmapIntersectAggregateFunction();
 
@@ -326,6 +330,11 @@ AggregateFunctionPtr AggregateFactory::MakeHllRawAggregateFunction() {
 template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakePercentileContAggregateFunction() {
     return std::make_shared<PercentileContAggregateFunction<LT>>();
+}
+
+template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeBitmapAggAggregateFunction() {
+    return std::make_shared<BitmapAggAggregateFunction<LT>>();
 }
 
 // Stream MV Retractable Aggregate Functions
