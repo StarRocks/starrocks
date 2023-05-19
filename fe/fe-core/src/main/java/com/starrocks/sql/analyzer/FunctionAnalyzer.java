@@ -237,10 +237,30 @@ public class FunctionAnalyzer {
             return;
         }
 
+<<<<<<< HEAD
         if (fnName.getFunction().equalsIgnoreCase(FunctionSet.BITMAP_COUNT)
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.BITMAP_UNION)
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.BITMAP_UNION_COUNT)
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.BITMAP_INTERSECT)) {
+=======
+        if (fnName.getFunction().equals(FunctionSet.BITMAP_AGG)) {
+            if (functionCallExpr.getChildren().size() != 1) {
+                throw new SemanticException(fnName + " function could only have one child", functionCallExpr.getPos());
+            }
+            Type inputType = functionCallExpr.getChild(0).getType();
+            if (!inputType.isIntegerType() && !inputType.isBoolean() && !inputType.isLargeIntType()) {
+                throw new SemanticException(
+                        fnName + " function's argument should be of int type or bool type, but was " + inputType,
+                        functionCallExpr.getChild(0).getPos());
+            }
+            return;
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.BITMAP_COUNT)
+                || fnName.getFunction().equals(FunctionSet.BITMAP_UNION)
+                || fnName.getFunction().equals(FunctionSet.BITMAP_UNION_COUNT)
+                || fnName.getFunction().equals(FunctionSet.BITMAP_INTERSECT)) {
+>>>>>>> 38cc37fc5 ([Enhancement] Add agg func bitmap_agg (#23641))
             if (functionCallExpr.getChildren().size() != 1) {
                 throw new SemanticException(fnName + " function could only have one child");
             }

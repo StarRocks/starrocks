@@ -78,6 +78,13 @@ public class FunctionSet {
     public static final String PERCENTILE_UNION = "percentile_union";
     public static final String PERCENTILE_CONT = "percentile_cont";
     public static final String BITMAP_UNION = "bitmap_union";
+<<<<<<< HEAD
+=======
+    public static final String BITMAP_AGG = "bitmap_agg";
+    public static final String BITMAP_XOR = "bitmap_xor";
+    public static final String TO_BITMAP = "to_bitmap";
+    public static final String BITMAP_COUNT = "bitmap_count";
+>>>>>>> 38cc37fc5 ([Enhancement] Add agg func bitmap_agg (#23641))
     public static final String BITMAP_UNION_COUNT = "bitmap_union_count";
     public static final String BITMAP_UNION_INT = "bitmap_union_int";
     public static final String INTERSECT_COUNT = "intersect_count";
@@ -212,7 +219,7 @@ public class FunctionSet {
     public static final String JSON_ARRAY = "json_array";
     public static final String JSON_OBJECT = "json_object";
     public static final Function JSON_QUERY_FUNC = new Function(
-            new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
+            new FunctionName(JSON_QUERY), new Type[]{Type.JSON, Type.VARCHAR}, Type.JSON, false);
 
     // Array functions
     public static final String ARRAY_DIFFERENCE = "array_difference";
@@ -684,6 +691,11 @@ public class FunctionSet {
                 Type.BITMAP,
                 Type.BITMAP,
                 true, false, true));
+
+        for (Type t : Type.getIntegerTypes()) {
+            addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(t),
+                    Type.BITMAP, Type.BITMAP, true, false, true));
+        }
 
         addBuiltin(AggregateFunction.createBuiltin(BITMAP_UNION_COUNT, Lists.newArrayList(Type.BITMAP),
                 Type.BIGINT,
