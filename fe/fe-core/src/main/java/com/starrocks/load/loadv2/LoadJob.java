@@ -222,6 +222,18 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         return state;
     }
 
+    public JobState getAcutalState() {
+        if (state == JobState.LOADING) {
+            if (startLoad) {
+                return JobState.LOADING;
+            } else {
+                return JobState.QUEUEING;
+            }
+        } else {
+            return state;
+        }
+    }
+
     public EtlJobType getJobType() {
         return jobType;
     }

@@ -500,7 +500,7 @@ public class LoadManager implements Writable {
         // check state
         for (LoadJob loadJob : loadJobList) {
             try {
-                if (!states.contains(loadJob.getState())) {
+                if (!states.contains(loadJob.getAcutalState())) {
                     continue;
                 }
                 // add load job info

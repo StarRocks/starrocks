@@ -201,7 +201,8 @@ public class ShowLoadStmtAnalyzer {
             if (!valid) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Where clause should looks like: LABEL = \"your_load_label\","
-                                + " or LABEL LIKE \"matcher\", " + " or STATE = \"PENDING|ETL|LOADING|FINISHED|CANCELLED\", "
+                                + " or LABEL LIKE \"matcher\", "
+                                + " or STATE = \"PENDING|ETL|LOADING|FINISHED|CANCELLED|QUEUEING\", "
                                 + " or compound predicate with operator AND");
             }
         }
