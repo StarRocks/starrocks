@@ -14,7 +14,8 @@ public:
      * @paramType columns: [TYPE_VARCHAR]
      * @return TYPE_OBJECT
      */
-    DEFINE_VECTORIZED_FN(to_bitmap);
+    template <LogicalType LT>
+    static StatusOr<ColumnPtr> to_bitmap(FunctionContext* context, const starrocks::Columns& columns);
 
     /**
      * @param: 
