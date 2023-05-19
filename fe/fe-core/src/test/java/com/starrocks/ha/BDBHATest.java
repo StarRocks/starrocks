@@ -30,6 +30,7 @@ public class BDBHATest {
     @BeforeClass
     public static void beforeClass() {
         UtFrameUtils.createMinStarRocksCluster(true);
+        UtFrameUtils.PseudoImage.setUpImageVersion();
     }
 
     @Test
@@ -81,5 +82,10 @@ public class BDBHATest {
 
         Assert.assertEquals(0,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
+
+        UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getNodeMgr().save(image1.getDataOutputStream());
+        GlobalStateMgr.getCurrentState().getNodeMgr().load(image1.getDataInputStream());
+        Assert.assertEquals(GlobalStateMgr.getCurrentState().getRemovedFrontendNames().size(), 1);
     }
 }

@@ -206,6 +206,8 @@ import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.privilege.AuthorizationManager;
@@ -329,10 +331,11 @@ public class GlobalStateMgr {
     private static final long REPLAYER_MAX_MS_PER_LOOP = 1000L;
     private static final long REPLAYER_MAX_LOGS_PER_LOOP = 100000L;
 
-    private String metaDir;
+    /**
+     * Meta and Image context
+     */
     private String imageDir;
-
-    private MetaContext metaContext;
+    private final MetaContext metaContext;
     private long epoch = 0;
 
     // Lock to perform atomic modification on map like 'idToDb' and 'fullNameToDb'.
@@ -341,7 +344,13 @@ public class GlobalStateMgr {
     // We use fair ReentrantLock to avoid starvation. Do not use this lock in critical code pass
     // because fair lock has poor performance.
     // Using QueryableReentrantLock to print owner thread in debug mode.
-    private QueryableReentrantLock lock;
+    private final QueryableReentrantLock lock;
+
+    /**
+     * System Manager
+     */
+    private final NodeMgr nodeMgr;
+    private final HeartbeatMgr heartbeatMgr;
 
     private Load load;
     private LoadManager loadManager;
@@ -487,7 +496,6 @@ public class GlobalStateMgr {
     private InsertOverwriteJobManager insertOverwriteJobManager;
 
     private LocalMetastore localMetastore;
-    private NodeMgr nodeMgr;
     private GlobalFunctionMgr globalFunctionMgr;
 
     @Deprecated
@@ -507,6 +515,10 @@ public class GlobalStateMgr {
     private ConfigRefreshDaemon configRefreshDaemon;
 
     private StorageVolumeMgr storageVolumeMgr;
+
+    public NodeMgr getNodeMgr() {
+        return nodeMgr;
+    }
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
@@ -551,7 +563,7 @@ public class GlobalStateMgr {
     }
 
     private HeartbeatMgr getHeartbeatMgr() {
-        return nodeMgr.getHeartbeatMgr();
+        return heartbeatMgr;
     }
 
     public TabletInvertedIndex getTabletInvertedIndex() {
@@ -614,6 +626,10 @@ public class GlobalStateMgr {
             this.starOSAgent = new StarOSAgent();
         }
 
+        // System Manager
+        this.nodeMgr = new NodeMgr();
+        this.heartbeatMgr = new HeartbeatMgr(!isCkptGlobalState);
+
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
@@ -663,7 +679,7 @@ public class GlobalStateMgr {
         this.metaContext.setThreadLocalInfo();
 
         this.stat = new TabletSchedulerStat();
-        this.nodeMgr = new NodeMgr(isCkptGlobalState, this);
+
         this.globalFunctionMgr = new GlobalFunctionMgr();
         this.tabletScheduler = new TabletScheduler(this, nodeMgr.getClusterInfo(), tabletInvertedIndex, stat);
         this.tabletChecker = new TabletChecker(this, nodeMgr.getClusterInfo(), tabletScheduler, stat);
@@ -986,8 +1002,7 @@ public class GlobalStateMgr {
     }
 
     private void setMetaDir() {
-        this.metaDir = Config.meta_dir;
-        this.imageDir = this.metaDir + IMAGE_DIR;
+        this.imageDir = Config.meta_dir + IMAGE_DIR;
         nodeMgr.setImageDir(imageDir);
     }
 
@@ -1198,7 +1213,7 @@ public class GlobalStateMgr {
             // start other daemon threads that should run on all FEs
             startAllNodeTypeDaemonThreads();
             insertOverwriteJobManager.cancelRunningJobs();
-            
+
             if (!isDefaultWarehouseCreated) {
                 initDefaultWarehouse();
             }
@@ -1254,7 +1269,8 @@ public class GlobalStateMgr {
         LOG.info("checkpointer thread started. thread id is {}", checkpointThreadId);
 
         // heartbeat mgr
-        nodeMgr.startHearbeat(epoch);
+        heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), epoch);
+        heartbeatMgr.start();
         // New load scheduler
         pendingLoadTaskScheduler.start();
         loadingLoadTaskScheduler.start();
@@ -1383,65 +1399,129 @@ public class GlobalStateMgr {
         try {
             // ** NOTICE **: always add new code at the end
             checksum = loadVersion(dis, checksum);
-            checksum = loadHeader(dis, checksum);
-            checksum = nodeMgr.loadLeaderInfo(dis, checksum);
-            checksum = nodeMgr.loadFrontends(dis, checksum);
-            checksum = nodeMgr.loadBackends(dis, checksum);
-            checksum = localMetastore.loadDb(dis, checksum);
-            // ATTN: this should be done after load Db, and before loadAlterJob
-            localMetastore.recreateTabletInvertIndex();
-            // rebuild es state state
-            esRepository.loadTableFromCatalog();
-            starRocksRepository.loadTableFromCatalog();
+            if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
+                try {
+                    checksum = loadHeaderV2(dis, checksum);
+                    nodeMgr.load(dis);
+                } catch (SRMetaBlockException | SRMetaBlockEOFException e) {
+                    LOG.error(e.getMessage());
+                }
 
-            checksum = load.loadLoadJob(dis, checksum);
-            checksum = loadAlterJob(dis, checksum);
-            checksum = recycleBin.loadRecycleBin(dis, checksum);
-            checksum = VariableMgr.loadGlobalVariable(dis, checksum);
-            checksum = localMetastore.loadCluster(dis, checksum);
-            checksum = nodeMgr.loadBrokers(dis, checksum);
-            checksum = loadResources(dis, checksum);
-            checksum = exportMgr.loadExportJob(dis, checksum);
-            checksum = backupHandler.loadBackupHandler(dis, checksum, this);
-            checksum = auth.loadAuth(dis, checksum);
-            // global transaction must be replayed before load jobs v2
-            checksum = globalTransactionMgr.loadTransactionState(dis, checksum);
-            checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
-            checksum = routineLoadManager.loadRoutineLoadJobs(dis, checksum);
-            checksum = loadManager.loadLoadJobsV2(dis, checksum);
-            checksum = smallFileMgr.loadSmallFiles(dis, checksum);
-            checksum = pluginMgr.loadPlugins(dis, checksum);
-            checksum = loadDeleteHandler(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = analyzeManager.loadAnalyze(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = resourceGroupMgr.loadResourceGroups(dis, checksum);
-            checksum = auth.readAsGson(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = taskManager.loadTasks(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = catalogMgr.loadCatalogs(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = loadInsertOverwriteJobs(dis, checksum);
-            checksum = nodeMgr.loadComputeNodes(dis, checksum);
-            remoteChecksum = dis.readLong();
-            // ShardManager DEPRECATED, keep it for backward compatible
-            checksum = loadShardManager(dis, checksum);
-            remoteChecksum = dis.readLong();
+                //TODO: The following parts have not been refactored, and they are added for the convenience of testing
+                checksum = localMetastore.loadDb(dis, checksum);
+                // ATTN: this should be done after load Db, and before loadAlterJob
+                localMetastore.recreateTabletInvertIndex();
+                // rebuild es state state
+                esRepository.loadTableFromCatalog();
+                starRocksRepository.loadTableFromCatalog();
 
-            checksum = loadCompactionManager(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = loadStreamLoadManager(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = MVManager.getInstance().reload(dis, checksum);
-            remoteChecksum = dis.readLong();
-            globalFunctionMgr.loadGlobalFunctions(dis, checksum);
-            loadRBACPrivilege(dis);
-            checksum = warehouseMgr.loadWarehouses(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = localMetastore.loadAutoIncrementId(dis, checksum);
-            remoteChecksum = dis.readLong();
-            // ** NOTICE **: always add new code at the end
+                checksum = load.loadLoadJob(dis, checksum);
+                checksum = loadAlterJob(dis, checksum);
+                checksum = recycleBin.loadRecycleBin(dis, checksum);
+                checksum = VariableMgr.loadGlobalVariable(dis, checksum);
+                checksum = localMetastore.loadCluster(dis, checksum);
+                checksum = loadResources(dis, checksum);
+                checksum = exportMgr.loadExportJob(dis, checksum);
+                checksum = backupHandler.loadBackupHandler(dis, checksum, this);
+                checksum = auth.loadAuth(dis, checksum);
+                // global transaction must be replayed before load jobs v2
+                checksum = globalTransactionMgr.loadTransactionState(dis, checksum);
+                checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
+                checksum = routineLoadManager.loadRoutineLoadJobs(dis, checksum);
+                checksum = loadManager.loadLoadJobsV2(dis, checksum);
+                checksum = smallFileMgr.loadSmallFiles(dis, checksum);
+                checksum = pluginMgr.loadPlugins(dis, checksum);
+                checksum = loadDeleteHandler(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = analyzeManager.loadAnalyze(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = resourceGroupMgr.loadResourceGroups(dis, checksum);
+                checksum = auth.readAsGson(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = taskManager.loadTasks(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = catalogMgr.loadCatalogs(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = loadInsertOverwriteJobs(dis, checksum);
+                remoteChecksum = dis.readLong();
+                // ShardManager DEPRECATED, keep it for backward compatible
+                checksum = loadShardManager(dis, checksum);
+                remoteChecksum = dis.readLong();
+
+                checksum = loadCompactionManager(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = loadStreamLoadManager(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = MVManager.getInstance().reload(dis, checksum);
+                remoteChecksum = dis.readLong();
+                globalFunctionMgr.loadGlobalFunctions(dis, checksum);
+                loadRBACPrivilege(dis);
+                checksum = warehouseMgr.loadWarehouses(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = localMetastore.loadAutoIncrementId(dis, checksum);
+                remoteChecksum = dis.readLong();
+                // ** NOTICE **: always add new code at the end
+            } else {
+                checksum = loadHeaderV1(dis, checksum);
+                checksum = nodeMgr.loadLeaderInfo(dis, checksum);
+                checksum = nodeMgr.loadFrontends(dis, checksum);
+                checksum = nodeMgr.loadBackends(dis, checksum);
+                checksum = localMetastore.loadDb(dis, checksum);
+                // ATTN: this should be done after load Db, and before loadAlterJob
+                localMetastore.recreateTabletInvertIndex();
+                // rebuild es state state
+                esRepository.loadTableFromCatalog();
+                starRocksRepository.loadTableFromCatalog();
+
+                checksum = load.loadLoadJob(dis, checksum);
+                checksum = loadAlterJob(dis, checksum);
+                checksum = recycleBin.loadRecycleBin(dis, checksum);
+                checksum = VariableMgr.loadGlobalVariable(dis, checksum);
+                checksum = localMetastore.loadCluster(dis, checksum);
+                checksum = nodeMgr.loadBrokers(dis, checksum);
+                checksum = loadResources(dis, checksum);
+                checksum = exportMgr.loadExportJob(dis, checksum);
+                checksum = backupHandler.loadBackupHandler(dis, checksum, this);
+                checksum = auth.loadAuth(dis, checksum);
+                // global transaction must be replayed before load jobs v2
+                checksum = globalTransactionMgr.loadTransactionState(dis, checksum);
+                checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
+                checksum = routineLoadManager.loadRoutineLoadJobs(dis, checksum);
+                checksum = loadManager.loadLoadJobsV2(dis, checksum);
+                checksum = smallFileMgr.loadSmallFiles(dis, checksum);
+                checksum = pluginMgr.loadPlugins(dis, checksum);
+                checksum = loadDeleteHandler(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = analyzeManager.loadAnalyze(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = resourceGroupMgr.loadResourceGroups(dis, checksum);
+                checksum = auth.readAsGson(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = taskManager.loadTasks(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = catalogMgr.loadCatalogs(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = loadInsertOverwriteJobs(dis, checksum);
+                checksum = nodeMgr.loadComputeNodes(dis, checksum);
+                remoteChecksum = dis.readLong();
+                // ShardManager DEPRECATED, keep it for backward compatible
+                checksum = loadShardManager(dis, checksum);
+                remoteChecksum = dis.readLong();
+
+                checksum = loadCompactionManager(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = loadStreamLoadManager(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = MVManager.getInstance().reload(dis, checksum);
+                remoteChecksum = dis.readLong();
+                globalFunctionMgr.loadGlobalFunctions(dis, checksum);
+                loadRBACPrivilege(dis);
+                checksum = warehouseMgr.loadWarehouses(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = localMetastore.loadAutoIncrementId(dis, checksum);
+                remoteChecksum = dis.readLong();
+                // ** NOTICE **: always add new code at the end
+            }
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1713,58 +1793,115 @@ public class GlobalStateMgr {
         long saveImageStartTime = System.currentTimeMillis();
         try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(curFile))) {
             // ** NOTICE **: always add new code at the end
-            checksum = saveVersion(dos, checksum);
-            checksum = saveHeader(dos, replayedJournalId, checksum);
-            checksum = nodeMgr.saveLeaderInfo(dos, checksum);
-            checksum = nodeMgr.saveFrontends(dos, checksum);
-            checksum = nodeMgr.saveBackends(dos, checksum);
-            checksum = localMetastore.saveDb(dos, checksum);
-            checksum = load.saveLoadJob(dos, checksum);
-            checksum = saveAlterJob(dos, checksum);
-            checksum = recycleBin.saveRecycleBin(dos, checksum);
-            checksum = VariableMgr.saveGlobalVariable(dos, checksum);
-            checksum = localMetastore.saveCluster(dos, checksum);
-            checksum = nodeMgr.saveBrokers(dos, checksum);
-            checksum = resourceMgr.saveResources(dos, checksum);
-            checksum = exportMgr.saveExportJob(dos, checksum);
-            checksum = backupHandler.saveBackupHandler(dos, checksum);
-            checksum = auth.saveAuth(dos, checksum);
-            checksum = globalTransactionMgr.saveTransactionState(dos, checksum);
-            checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
-            checksum = routineLoadManager.saveRoutineLoadJobs(dos, checksum);
-            checksum = loadManager.saveLoadJobsV2(dos, checksum);
-            checksum = smallFileMgr.saveSmallFiles(dos, checksum);
-            checksum = pluginMgr.savePlugins(dos, checksum);
-            checksum = deleteHandler.saveDeleteHandler(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = analyzeManager.saveAnalyze(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = resourceGroupMgr.saveResourceGroups(dos, checksum);
-            checksum = auth.writeAsGson(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = taskManager.saveTasks(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = catalogMgr.saveCatalogs(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = saveInsertOverwriteJobs(dos, checksum);
-            checksum = nodeMgr.saveComputeNodes(dos, checksum);
-            dos.writeLong(checksum);
-            // ShardManager Deprecated, keep it for backward compatible
-            checksum = shardManager.saveShardManager(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = compactionManager.saveCompactionManager(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = MVManager.getInstance().store(dos, checksum);
-            dos.writeLong(checksum);
-            globalFunctionMgr.saveGlobalFunctions(dos, checksum);
-            saveRBACPrivilege(dos);
-            checksum = warehouseMgr.saveWarehouses(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = localMetastore.saveAutoIncrementId(dos, checksum);
-            dos.writeLong(checksum);
-            // ** NOTICE **: always add new code at the end
+            if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+                checksum = saveVersionV2(dos, checksum);
+                try {
+                    checksum = saveHeaderV2(dos, checksum);
+                    nodeMgr.save(dos);
+                } catch (SRMetaBlockException e) {
+                    LOG.error(e.getMessage());
+                }
+
+                //TODO: The following parts have not been refactored, and they are added for the convenience of testing
+                checksum = localMetastore.saveDb(dos, checksum);
+                checksum = load.saveLoadJob(dos, checksum);
+                checksum = saveAlterJob(dos, checksum);
+                checksum = recycleBin.saveRecycleBin(dos, checksum);
+                checksum = VariableMgr.saveGlobalVariable(dos, checksum);
+                checksum = localMetastore.saveCluster(dos, checksum);
+                checksum = resourceMgr.saveResources(dos, checksum);
+                checksum = exportMgr.saveExportJob(dos, checksum);
+                checksum = backupHandler.saveBackupHandler(dos, checksum);
+                checksum = auth.saveAuth(dos, checksum);
+                checksum = globalTransactionMgr.saveTransactionState(dos, checksum);
+                checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
+                checksum = routineLoadManager.saveRoutineLoadJobs(dos, checksum);
+                checksum = loadManager.saveLoadJobsV2(dos, checksum);
+                checksum = smallFileMgr.saveSmallFiles(dos, checksum);
+                checksum = pluginMgr.savePlugins(dos, checksum);
+                checksum = deleteHandler.saveDeleteHandler(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = analyzeManager.saveAnalyze(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = resourceGroupMgr.saveResourceGroups(dos, checksum);
+                checksum = auth.writeAsGson(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = taskManager.saveTasks(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = catalogMgr.saveCatalogs(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = saveInsertOverwriteJobs(dos, checksum);
+                dos.writeLong(checksum);
+                // ShardManager Deprecated, keep it for backward compatible
+                checksum = shardManager.saveShardManager(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = compactionManager.saveCompactionManager(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = MVManager.getInstance().store(dos, checksum);
+                dos.writeLong(checksum);
+                globalFunctionMgr.saveGlobalFunctions(dos, checksum);
+                saveRBACPrivilege(dos);
+                checksum = warehouseMgr.saveWarehouses(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = localMetastore.saveAutoIncrementId(dos, checksum);
+                dos.writeLong(checksum);
+                // ** NOTICE **: always add new code at the end
+            } else {
+                checksum = saveVersion(dos, checksum);
+                checksum = saveHeader(dos, replayedJournalId, checksum);
+                checksum = nodeMgr.saveLeaderInfo(dos, checksum);
+                checksum = nodeMgr.saveFrontends(dos, checksum);
+                checksum = nodeMgr.saveBackends(dos, checksum);
+                checksum = localMetastore.saveDb(dos, checksum);
+                checksum = load.saveLoadJob(dos, checksum);
+                checksum = saveAlterJob(dos, checksum);
+                checksum = recycleBin.saveRecycleBin(dos, checksum);
+                checksum = VariableMgr.saveGlobalVariable(dos, checksum);
+                checksum = localMetastore.saveCluster(dos, checksum);
+                checksum = nodeMgr.saveBrokers(dos, checksum);
+                checksum = resourceMgr.saveResources(dos, checksum);
+                checksum = exportMgr.saveExportJob(dos, checksum);
+                checksum = backupHandler.saveBackupHandler(dos, checksum);
+                checksum = auth.saveAuth(dos, checksum);
+                checksum = globalTransactionMgr.saveTransactionState(dos, checksum);
+                checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
+                checksum = routineLoadManager.saveRoutineLoadJobs(dos, checksum);
+                checksum = loadManager.saveLoadJobsV2(dos, checksum);
+                checksum = smallFileMgr.saveSmallFiles(dos, checksum);
+                checksum = pluginMgr.savePlugins(dos, checksum);
+                checksum = deleteHandler.saveDeleteHandler(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = analyzeManager.saveAnalyze(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = resourceGroupMgr.saveResourceGroups(dos, checksum);
+                checksum = auth.writeAsGson(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = taskManager.saveTasks(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = catalogMgr.saveCatalogs(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = saveInsertOverwriteJobs(dos, checksum);
+                checksum = nodeMgr.saveComputeNodes(dos, checksum);
+                dos.writeLong(checksum);
+                // ShardManager Deprecated, keep it for backward compatible
+                checksum = shardManager.saveShardManager(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = compactionManager.saveCompactionManager(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = MVManager.getInstance().store(dos, checksum);
+                dos.writeLong(checksum);
+                globalFunctionMgr.saveGlobalFunctions(dos, checksum);
+                saveRBACPrivilege(dos);
+                checksum = warehouseMgr.saveWarehouses(dos, checksum);
+                dos.writeLong(checksum);
+                checksum = localMetastore.saveAutoIncrementId(dos, checksum);
+                dos.writeLong(checksum);
+                // ** NOTICE **: always add new code at the end
+            }
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -2319,7 +2456,7 @@ public class GlobalStateMgr {
 
         sb.append("\n) ENGINE=");
         sb.append(table.getType() == TableType.CLOUD_NATIVE ? "OLAP" : table.getType().name()).append(" ");
-        
+
         if (table.isOlapOrCloudNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
 
