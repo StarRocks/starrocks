@@ -67,6 +67,7 @@ public class FunctionSet {
     public static final String PERCENTILE_UNION = "percentile_union";
     public static final String PERCENTILE_CONT = "percentile_cont";
     public static final String BITMAP_UNION = "bitmap_union";
+    public static final String BITMAP_AGG = "bitmap_agg";
     public static final String BITMAP_UNION_COUNT = "bitmap_union_count";
     public static final String BITMAP_UNION_INT = "bitmap_union_int";
     public static final String INTERSECT_COUNT = "intersect_count";
@@ -636,6 +637,11 @@ public class FunctionSet {
                 Type.BITMAP,
                 Type.BITMAP,
                 true, false, true));
+
+        for (Type t : Type.getIntegerTypes()) {
+            addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(t),
+                    Type.BITMAP, Type.BITMAP, true, false, true));
+        }
 
         addBuiltin(AggregateFunction.createBuiltin(BITMAP_UNION_COUNT, Lists.newArrayList(Type.BITMAP),
                 Type.BIGINT,
