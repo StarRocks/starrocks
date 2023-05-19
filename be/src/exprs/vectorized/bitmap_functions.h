@@ -14,8 +14,7 @@ public:
      * @paramType columns: [TYPE_VARCHAR]
      * @return TYPE_OBJECT
      */
-    template <PrimitiveType LT>
-    ColumnPtr to_bitmap(FunctionContext* context, const starrocks::vectorized::Columns& columns);
+    DEFINE_VECTORIZED_FN_TEMPLATE(to_bitmap);
 
     /**
      * @param: 
