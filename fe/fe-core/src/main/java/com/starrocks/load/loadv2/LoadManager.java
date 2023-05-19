@@ -735,7 +735,6 @@ public class LoadManager implements Writable {
             SRMetaBlockException, SRMetaBlockEOFException {
         SRMetaBlockReader reader = new SRMetaBlockReader(in, LoadManager.class.getName());
         try {
-            reader.readJson(LoadManager.class);
             int size = reader.readInt();
             long now = System.currentTimeMillis();
             while (size-- > 0) {
@@ -769,14 +768,12 @@ public class LoadManager implements Writable {
     }
 
     public void saveLoadJobsV2JsonFormat(DataOutputStream out) throws IOException, SRMetaBlockException {
-        // 1 json for mysql, 1 json for number of jobs, idToLoadJob.size() for jobs
-        final int cnt = 1 + 1 + idToLoadJob.size();
+        List<LoadJob> loadJobs = idToLoadJob.values().stream().filter(this::needSave).collect(Collectors.toList());
+        // 1 json for number of jobs, size of idToLoadJob for jobs
+        final int cnt = 1 + loadJobs.size();
         SRMetaBlockWriter writer = new SRMetaBlockWriter(out, LoadManager.class.getName(), cnt);
-        // even though there is no properties for LoadManager to persist,
-        // we still write a empty json object for future extension.
-        writer.writeJson(this);
-        writer.writeJson(idToLoadJob.size());
-        for (LoadJob loadJob : idToLoadJob.values()) {
+        writer.writeJson(loadJobs.size());
+        for (LoadJob loadJob : loadJobs) {
             writer.writeJson(loadJob);
         }
         writer.close();
