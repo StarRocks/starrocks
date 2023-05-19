@@ -52,9 +52,7 @@ namespace starrocks {
 
 class LargeIntValue {
 public:
-    static std::string to_string(__int128 value) {
-        return SimpleItoa(value);
-    }
+    static std::string to_string(__int128 value) { return SimpleItoa(value); }
 };
 
 std::ostream& operator<<(std::ostream& os, __int128 const& value);
