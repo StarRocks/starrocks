@@ -230,6 +230,7 @@
     + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
     + [Window functions](./sql-reference/sql-functions/Window_function.md)
     + Aggregate Functions
+      + [array_agg](./sql-reference/sql-functions/array-functions/array_agg.md)
       + [avg](./sql-reference/sql-functions/aggregate-functions/avg.md)
       + [any_value](./sql-reference/sql-functions/aggregate-functions/any_value.md)
       + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
