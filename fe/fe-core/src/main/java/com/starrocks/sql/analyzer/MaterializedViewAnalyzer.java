@@ -754,7 +754,7 @@ public class MaterializedViewAnalyzer {
                 }
             } else if (statement.getStatus() != null) {
                 String status = statement.getStatus();
-                if (!"active".equalsIgnoreCase(status)) {
+                if (!AlterMaterializedViewStmt.SUPPORTED_MV_STATUS.contains(status)) {
                     throw new SemanticException("Unsupported modification for materialized view status:" + status);
                 }
             } else {

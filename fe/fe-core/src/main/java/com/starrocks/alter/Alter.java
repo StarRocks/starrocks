@@ -313,10 +313,25 @@ public class Alter {
                     throw new DdlException(ae.getMessage());
                 }
             } else if (status != null) {
-                if ("active".equalsIgnoreCase(status) && materializedView.isActive()) {
-                    throw new DdlException("Materialized view [" + materializedView.getName() + "] is already active");
+                if (AlterMaterializedViewStmt.ACTIVE.equalsIgnoreCase(status)) {
+                    if (materializedView.isActive()) {
+                        return;
+                    }
+                    processChangeMaterializedViewStatus(materializedView, status);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .refreshMaterializedView(dbName, materializedView.getName(), true, null,
+                                    Constants.TaskRunPriority.NORMAL.value(), true, false);
+                } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
+                    if (!materializedView.isActive()) {
+                        return;
+                    }
+                    LOG.warn("Setting the materialized view {}({}) to inactive because " +
+                                    "user alter materialized view status to inactive",
+                            materializedView.getName(), materializedView.getId());
+                    processChangeMaterializedViewStatus(materializedView, status);
+                } else {
+                    throw new DdlException("Unsupported modification materialized view status:" + status);
                 }
-                processChangeMaterializedViewStatus(materializedView, status);
                 AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
                         materializedView.getId(), status);
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
@@ -506,7 +521,7 @@ public class Alter {
     }
 
     private void processChangeMaterializedViewStatus(MaterializedView materializedView, String status) {
-        if ("active".equalsIgnoreCase(status)) {
+        if (AlterMaterializedViewStmt.ACTIVE.equalsIgnoreCase(status)) {
             String viewDefineSql = materializedView.getViewDefineSql();
             ConnectContext context = new ConnectContext();
             context.setQualifiedUser(AuthenticationManager.ROOT_USER);
@@ -530,6 +545,8 @@ public class Alter {
             GlobalStateMgr.getCurrentState().updateBaseTableRelatedMv(materializedView.getDbId(),
                     materializedView, baseTableInfos);
             materializedView.setActive(true);
+        } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
+            materializedView.setActive(false);
         }
     }
 
