@@ -185,7 +185,7 @@ public class AggregateFunctionRewriter {
             CallOperator toBitmapOp = new CallOperator(FunctionSet.TO_BITMAP,
                     Type.BITMAP,
                     aggFunc.getChildren(),
-                    Expr.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] { Type.VARCHAR },
+                    Expr.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] { aggChild.get(0).getType() },
                             IS_IDENTICAL));
             toBitmapOp = (CallOperator) scalarRewriter.rewrite(toBitmapOp,
                     Lists.newArrayList(new ImplicitCastRule()));
