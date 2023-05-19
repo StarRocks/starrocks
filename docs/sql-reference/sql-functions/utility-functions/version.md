@@ -29,3 +29,7 @@ mysql> select version();
 +-----------+
 1 row in set (0.00 sec)
 ```
+
+## References
+
+[current_version](../utility-functions/current_version.md)

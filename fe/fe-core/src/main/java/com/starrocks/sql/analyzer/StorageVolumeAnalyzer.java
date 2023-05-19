@@ -93,7 +93,7 @@ public class StorageVolumeAnalyzer {
 
             StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
             if (!storageVolumeMgr.exists(svName)) {
-                throw new SemanticException(String.format("storage volume '%s' not exists", svName));
+                throw new SemanticException("Unknown storage volume: %s", svName);
             }
 
             return null;

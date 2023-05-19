@@ -44,6 +44,7 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
@@ -708,10 +709,23 @@ public class AnalyzerUtils {
         }
     }
 
-    public static String parseLiteralExprToDateString(LiteralExpr expr, int offset) {
+    public static String parseLiteralExprToDateString(PartitionKey partitionKey, int offset) {
+        LiteralExpr expr = partitionKey.getKeys().get(0);
+        PrimitiveType type = partitionKey.getTypes().get(0);
+        return parseLiteralExprToDateString(expr, type, offset);
+    }
+
+    public static String parseLiteralExprToDateString(LiteralExpr expr, PrimitiveType type, int offset) {
         if (expr instanceof DateLiteral) {
             DateLiteral lowerDate = (DateLiteral) expr;
-            return DateUtils.DATE_FORMATTER.format(lowerDate.toLocalDateTime().plusDays(offset));
+            switch (type) {
+                case DATE:
+                    return DateUtils.DATE_FORMATTER_UNIX.format(lowerDate.toLocalDateTime().plusDays(offset));
+                case DATETIME:
+                    return DateUtils.DATE_TIME_FORMATTER_UNIX.format(lowerDate.toLocalDateTime().plusDays(offset));
+                default:
+                    return null;
+            }
         } else if (expr instanceof IntLiteral) {
             IntLiteral intLiteral = (IntLiteral) expr;
             return String.valueOf(intLiteral.getLongValue() + offset);

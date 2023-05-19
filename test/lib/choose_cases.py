@@ -47,9 +47,10 @@ CASE_DIR = "sql"
 
 class ChooseCase(object):
     class CaseTR(object):
-        def __init__(self, name, file, sql, result, info):
+        def __init__(self, ctx, name, file, sql, result, info):
             """ init """
             super().__init__()
+            self.ctx = ctx
             self.info = info
             self.name = name
             self.file = file
@@ -109,11 +110,18 @@ class ChooseCase(object):
                         log.info("no resource of create external resource \"\", %s" % e)
 
             # if no db is confirmed, init one
+            default_db = None
             if len(self.db) == 0:
                 db_name = "test_db_%s" % uuid.uuid4().hex
+                default_db = db_name
                 self.db.add(db_name)
                 self.init_cmd.append("CREATE DATABASE %s;" % db_name)
                 self.init_cmd.append("USE %s;" % db_name)
+
+            # format sql with ctx.
+            for sql_id, each_sql in enumerate(sql):
+                res = each_sql.format(sr_lib = ctx.sr_lib_obj, default_db = default_db)
+                sql[sql_id] = res
 
         def __lt__(self, other):
             """less than"""
@@ -244,7 +252,7 @@ class ChooseCase(object):
                         pass
                     else:
                         self.case_list.append(
-                            ChooseCase.CaseTR(name, file, copy.deepcopy(tmp_sql), copy.deepcopy(tmp_res), info)
+                            ChooseCase.CaseTR(self, name, file, copy.deepcopy(tmp_sql), copy.deepcopy(tmp_res), info)
                         )
 
                 info = line_content
@@ -310,7 +318,7 @@ class ChooseCase(object):
                 pass
             else:
                 self.case_list.append(
-                    ChooseCase.CaseTR(name, file, copy.deepcopy(tmp_sql), copy.deepcopy(tmp_res), info)
+                    ChooseCase.CaseTR(self, name, file, copy.deepcopy(tmp_sql), copy.deepcopy(tmp_res), info)
                 )
 
 

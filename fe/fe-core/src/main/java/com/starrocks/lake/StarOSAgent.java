@@ -53,11 +53,14 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
+import javax.validation.constraints.NotNull;
 
 /**
  * StarOSAgent is responsible for
@@ -323,11 +326,17 @@ public class StarOSAgent {
 
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
         throws DdlException {
-        return createShards(numShards, pathInfo, cacheInfo, groupId, null);
+        return createShards(numShards, pathInfo, cacheInfo, groupId, null, Collections.EMPTY_MAP);
     }
 
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
-            List<Long> matchShardIds)
+                                   @NotNull Map<String, String> properties)
+            throws DdlException {
+        return createShards(numShards, pathInfo, cacheInfo, groupId, null, properties);
+    }
+
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
+                                   @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties)
         throws DdlException {
         if (matchShardIds != null) {
             Preconditions.checkState(numShards == matchShardIds.size());
@@ -341,7 +350,8 @@ public class StarOSAgent {
             builder.setReplicaCount(1)
                     .addGroupIds(groupId)
                     .setPathInfo(pathInfo)
-                    .setCacheInfo(cacheInfo);
+                    .setCacheInfo(cacheInfo)
+                    .putAllShardProperties(properties);
 
             for (int i = 0; i < numShards; ++i) {
                 builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
