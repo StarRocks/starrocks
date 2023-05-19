@@ -152,27 +152,8 @@ public class StarMgrServer {
             com.staros.util.Config.SIMPLE_CREDENTIAL_ACCESS_KEY_SECRET = Config.aws_s3_secret_key;
             com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_ARN = Config.aws_s3_iam_role_arn;
             com.staros.util.Config.ASSUME_ROLE_CREDENTIAL_EXTERNAL_ID = Config.aws_s3_external_id;
-        } else if (com.staros.util.Config.DEFAULT_FS_TYPE.equalsIgnoreCase("AZBLOB")) {
-            com.staros.util.Config.AZURE_BLOB_ENDPOINT = Config.azure_blob_endpoint;
-            com.staros.util.Config.AZURE_BLOB_PATH = Config.azure_blob_path;
-            com.staros.util.Config.AZURE_BLOB_SHARED_KEY = Config.azure_blob_shared_key;
-            com.staros.util.Config.AZURE_BLOB_SAS_TOKEN = Config.azure_blob_sas_token;
-            com.staros.util.Config.AZURE_BLOB_TENANT_ID = Config.azure_blob_tenant_id;
-            com.staros.util.Config.AZURE_BLOB_CLIENT_ID = Config.azure_blob_client_id;
-            com.staros.util.Config.AZURE_BLOB_CLIENT_SECRET = Config.azure_blob_client_secret;
-            com.staros.util.Config.AZURE_BLOB_CLIENT_CERTIFICATE_PATH = Config.azure_blob_client_certificate_path;
-            com.staros.util.Config.AZURE_BLOB_AUTHORITY_HOST = Config.azure_blob_authority_host;
-            if (com.staros.util.Config.AZURE_BLOB_ENDPOINT.isEmpty()) {
-                LOG.error("The configuration item \"azure_blob_endpoint\" is empty.");
-                System.exit(-1);
-            }
-            if (com.staros.util.Config.AZURE_BLOB_PATH.isEmpty()) {
-                LOG.error("The configuration item \"azure_blob_path\" is empty.");
-                System.exit(-1);
-            }
         } else {
-            LOG.error(
-                    "The configuration item \"cloud_native_storage_type = {}\" is invalid, must be HDFS or S3 or AZBLOB.",
+            LOG.error("The configuration item \"cloud_native_storage_type = {}\" is invalid, must be HDFS or S3.", 
                     Config.cloud_native_storage_type);
             System.exit(-1);
         }
