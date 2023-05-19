@@ -83,36 +83,6 @@ BitmapValue::BitmapValue(const std::vector<uint64_t>& bits) {
     }
 }
 
-void BitmapValue::add(uint64_t value) {
-    switch (_type) {
-    case EMPTY:
-        _sv = value;
-        _type = SINGLE;
-        break;
-    case SINGLE:
-        //there is no need to convert the type if two variables are equal
-        if (_sv == value) {
-            break;
-        }
-
-        _set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
-        _set->insert(_sv);
-        _set->insert(value);
-        _type = SET;
-        break;
-    case BITMAP:
-        _bitmap->add(value);
-        break;
-    case SET:
-        if (_set->size() < 32) {
-            _set->insert(value);
-        } else {
-            _from_set_to_bitmap();
-            _bitmap->add(value);
-        }
-    }
-}
-
 void BitmapValue::_from_set_to_bitmap() {
     _bitmap = std::make_shared<detail::Roaring64Map>();
     for (auto x : *_set) {
