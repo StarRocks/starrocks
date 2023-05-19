@@ -15,6 +15,8 @@ class ScanNode;
 
 namespace pipeline {
 
+class ConnectorScanOperatorIOTasksMemLimiter;
+
 class ConnectorScanOperatorFactory final : public ScanOperatorFactory {
 public:
     using ActiveInputKey = std::pair<int32_t, int32_t>;
@@ -22,7 +24,8 @@ public:
             ActiveInputKey, typename phmap::Hash<ActiveInputKey>, typename phmap::EqualTo<ActiveInputKey>,
             typename std::allocator<ActiveInputKey>, NUM_LOCK_SHARD_LOG, std::mutex, true>;
 
-    ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop, ChunkBufferLimiterPtr buffer_limiter);
+    ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, RuntimeState* state, size_t dop,
+                                 ChunkBufferLimiterPtr buffer_limiter);
 
     ~ConnectorScanOperatorFactory() override = default;
 
@@ -33,11 +36,16 @@ public:
     ActiveInputSet& get_active_inputs() { return _active_inputs; }
 
     TPartitionType::type partition_type() const override { return TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED; }
+    void set_estimated_mem_usage_per_chunk_source(int64_t mem_usage);
+    void set_scan_mem_limit(int64_t mem_limit);
 
 private:
     // TODO: refactor the OlapScanContext, move them into the context
     BalancedChunkBuffer _chunk_buffer;
     ActiveInputSet _active_inputs;
+
+public:
+    ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter;
 };
 
 class ConnectorScanOperatorAdaptiveProcessor;
@@ -67,9 +75,7 @@ public:
     void set_buffer_finished() override;
 
     int available_pickup_morsel_count() override;
-    void begin_pull_chunk(ChunkPtr res) override;
     void begin_driver_process() override;
-    void end_pull_chunk(int64_t time) override;
     void end_driver_process(PipelineDriver* driver) override;
     bool is_running_all_io_tasks() const override;
 
@@ -95,6 +101,8 @@ private:
 
     connector::DataSourcePtr _data_source;
     [[maybe_unused]] vectorized::ConnectorScanNode* _scan_node;
+    ConnectorScanOperatorIOTasksMemLimiter* _get_io_tasks_mem_limiter() const;
+
     const int64_t _limit; // -1: no limit
     const std::vector<ExprContext*>& _runtime_in_filters;
     const vectorized::RuntimeFilterProbeCollector* _runtime_bloom_filters;

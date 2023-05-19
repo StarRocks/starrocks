@@ -166,4 +166,15 @@ void SharedBufferedInputStream::release_to_offset(int64_t offset) {
     _map.erase(_map.begin(), it);
 }
 
+int64_t SharedBufferedInputStream::estimated_mem_usage() const {
+    int64_t mem_usage = 0;
+    for (const auto& [_, sb] : _map) {
+        mem_usage += sb.size;
+    }
+    // in most cases, those data are compressed.
+    // to read it, we need to decompress it, and let's say to add 50% overhead.
+    mem_usage += mem_usage / 2;
+    return mem_usage;
+}
+
 } // namespace starrocks

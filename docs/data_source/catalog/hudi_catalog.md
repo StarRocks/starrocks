@@ -70,22 +70,22 @@ PROPERTIES
 
 ### Parameters
 
-#### `catalog_name`
+#### catalog_name
 
 The name of the Hudi catalog. The naming conventions are as follows:
 
 - The name can contain letters, digits 0 through 9, and underscores (_) and must start with a letter.
 - The name cannot exceed 64 characters in length.
 
-#### `comment`
+#### comment
 
 The description of the Hudi catalog. This parameter is optional.
 
-#### `type`
+#### type
 
 The type of your data source. Set the value to `hudi`.
 
-#### `MetastoreParams`
+#### MetastoreParams
 
 A set of parameters about how StarRocks integrates with the metastore of your data source.
 
@@ -150,7 +150,7 @@ The following table describes the parameters you need to configure in `Metastore
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
-#### `StorageCredentialParams`
+#### StorageCredentialParams
 
 A set of parameters about how StarRocks integrates with your storage system. This parameter set is optional.
 
@@ -220,7 +220,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key                | Yes      | The access key of your IAM user. |
 | aws.s3.secret_key                | Yes      | The secret key of your IAM user. |
 
-#### `MetadataUpdateParams`
+#### MetadataUpdateParams
 
 A set of parameters about how StarRocks updates the cached metadata of Hudi. This parameter set is optional.
 
@@ -392,7 +392,7 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hudi_table
 ```
 
-## Manually or automatically update metadata
+## Manually or automatically update metadata cache
 
 ### Manual update
 
