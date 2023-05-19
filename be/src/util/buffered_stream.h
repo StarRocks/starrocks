@@ -99,6 +99,8 @@ public:
     void release();
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
 
+    int64_t estimated_mem_usage() const;
+
 private:
     struct SharedBuffer {
     public:

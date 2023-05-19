@@ -7,6 +7,8 @@
 #include "io/compressed_input_stream.h"
 #include "util/compression/stream_compression.h"
 
+static constexpr int64_t ROW_FORMAT_ESTIMATED_MEMORY_USAGE = 32LL * 1024 * 1024;
+
 namespace starrocks::vectorized {
 
 class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
@@ -214,6 +216,10 @@ Status HdfsScanner::open_random_access_file() {
     _file = std::make_unique<RandomAccessFile>(input_stream, _raw_file->filename());
     _file->set_size(_scanner_params.file_size);
     return Status::OK();
+}
+
+int64_t HdfsScanner::estimated_mem_usage() const {
+    return 0;
 }
 
 void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
