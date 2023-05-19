@@ -46,7 +46,6 @@
 
 #include "gutil/strings/numbers.h"
 #include "util/hash_util.hpp"
-#include "util/integer_util.h"
 
 namespace starrocks {
 
