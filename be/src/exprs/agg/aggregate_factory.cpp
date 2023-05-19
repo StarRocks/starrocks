@@ -10,6 +10,7 @@
 #include "exprs/agg/any_value.h"
 #include "exprs/agg/array_agg.h"
 #include "exprs/agg/avg.h"
+#include "exprs/agg/bitmap_agg.h"
 #include "exprs/agg/bitmap_intersect.h"
 #include "exprs/agg/bitmap_union.h"
 #include "exprs/agg/bitmap_union_count.h"
@@ -35,7 +36,6 @@
 #include "udf/java/java_function_fwd.h"
 
 namespace starrocks::vectorized {
-
 // The function should be placed by alphabetical order
 
 template <PrimitiveType PT>
@@ -45,6 +45,11 @@ AggregateFunctionPtr AggregateFactory::MakeAvgAggregateFunction() {
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeDecimalAvgAggregateFunction() {
     return std::make_shared<DecimalAvgAggregateFunction<PT>>();
+}
+
+template <PrimitiveType LT>
+AggregateFunctionPtr AggregateFactory::MakeBitmapAggAggregateFunction() {
+    return std::make_shared<BitmapAggAggregateFunction<LT>>();
 }
 
 template <PrimitiveType PT>
@@ -267,6 +272,14 @@ public:
     }
 
     template <PrimitiveType arg_type, PrimitiveType return_type>
+    void add_bitmap_mapping(std::string&& name) {
+        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false),
+                               create_bitmap_function<arg_type, return_type, false>(name));
+        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, true),
+                               create_bitmap_function<arg_type, return_type, true>(name));
+    }
+
+    template <PrimitiveType arg_type, PrimitiveType return_type>
     void add_object_mapping(std::string&& name) {
         _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false),
                                create_object_function<arg_type, return_type, false>(name));
@@ -288,6 +301,21 @@ public:
                                create_decimal_function<arg_type, return_type, false>(name));
         _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, true),
                                create_decimal_function<arg_type, return_type, true>(name));
+    }
+
+    template <PrimitiveType arg_type, PrimitiveType return_type, bool is_null>
+    AggregateFunctionPtr create_bitmap_function(std::string& name) {
+        if constexpr (is_null) {
+            if (name == "bitmap_agg") {
+                auto bitmap = AggregateFactory::MakeBitmapAggAggregateFunction<arg_type>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<BitmapValue>(bitmap);
+            }
+        } else {
+            if (name == "bitmap_agg") {
+                return AggregateFactory::MakeBitmapAggAggregateFunction<arg_type>();
+            }
+        }
+        return nullptr;
     }
 
     template <PrimitiveType arg_type, PrimitiveType return_type, bool is_null>
@@ -889,6 +917,13 @@ AggregateFuncResolver::AggregateFuncResolver() {
 
     add_object_mapping<TYPE_OBJECT, TYPE_OBJECT>("bitmap_union");
     add_object_mapping<TYPE_OBJECT, TYPE_BIGINT>("bitmap_union_count");
+
+    add_bitmap_mapping<TYPE_BOOLEAN, TYPE_OBJECT>("bitmap_agg");
+    add_bitmap_mapping<TYPE_TINYINT, TYPE_OBJECT>("bitmap_agg");
+    add_bitmap_mapping<TYPE_SMALLINT, TYPE_OBJECT>("bitmap_agg");
+    add_bitmap_mapping<TYPE_INT, TYPE_OBJECT>("bitmap_agg");
+    add_bitmap_mapping<TYPE_BIGINT, TYPE_OBJECT>("bitmap_agg");
+    add_bitmap_mapping<TYPE_LARGEINT, TYPE_OBJECT>("bitmap_agg");
 
     // This first type is the second type input of intersect_count.
     // And the first type is Bitmap.
