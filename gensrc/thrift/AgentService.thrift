@@ -135,6 +135,7 @@ struct TAlterTabletReqV2 {
     8: optional TTabletType tablet_type
     9: optional i64 txn_id
     10: optional TAlterTabletMaterializedColumnReq materialized_column_req
+    11: optional i64 job_id
 }
 
 struct TAlterMaterializedViewParam {

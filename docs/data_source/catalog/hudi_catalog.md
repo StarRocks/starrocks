@@ -77,22 +77,22 @@ For more information, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-stat
 
 ### Parameters
 
-#### `catalog_name`
+#### catalog_name
 
 The name of the Hudi catalog. The naming conventions are as follows:
 
 - The name can contain letters, digits 0 through 9, and underscores (_) and must start with a letter.
 - The name cannot exceed 64 characters in length.
 
-#### `comment`
+#### comment
 
 The description of the Hudi catalog. This parameter is optional.
 
-#### `type`
+#### type
 
 The type of your data source. Set the value to `hudi`.
 
-#### `MetastoreParams`
+#### MetastoreParams
 
 A set of parameters about how StarRocks integrates with the metastore of your data source.
 
@@ -157,7 +157,7 @@ The following table describes the parameters you need to configure in `Metastore
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
-#### `StorageCredentialParams`
+#### StorageCredentialParams
 
 A set of parameters about how StarRocks integrates with your storage system. This parameter set is optional.
 
@@ -411,7 +411,7 @@ If you choose Google GCS as storage for your Hudi cluster, take one of the follo
     | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | The data service account that you want to impersonate.       |
 
-#### `MetadataUpdateParams`
+#### MetadataUpdateParams
 
 A set of parameters about how StarRocks updates the cached metadata of Hudi. This parameter set is optional.
 
@@ -799,7 +799,7 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hudi_table
 ```
 
-## Manually/Automatically update metadata
+## Manually or automatically update metadata cache
 
 ### Manual update
 
@@ -881,7 +881,7 @@ You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file o
 | enable_hms_parallel_process_evens | Specifies whether StarRocks processes events in parallel as it reads the events. Valid values: `true` and `false`. Default value: `true`. The value `true` enables parallelism, and the value `false` disables parallelism. |
 | hms_process_events_parallel_num   | The maximum number of events that StarRocks can process in parallel. Default value: `4`. |
 
-## Appendix: Understand automatic asynchronous update
+## Appendix: Understand metadata automatic asynchronous update
 
 Automatic asynchronous update is the default policy that StarRocks uses to update the metadata in Hudi catalogs.
 
