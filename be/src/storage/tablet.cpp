@@ -283,8 +283,20 @@ Status Tablet::finish_load_rowsets() {
     // re-assign rowset_seg_id here
     if (keys_type() != PRIMARY_KEYS && next_rowset_id() == 0) {
         std::unique_lock wrlock(_meta_lock);
-        uint32_t next_rowset_id = 0;
+
+        std::map<Version, RowsetMetaSharedPtr> rs_metas;
         for (auto& rowset_meta : _tablet_meta->mutable_all_rs_metas()) {
+            rs_metas.insert({rowset_meta->version(), rowset_meta});
+        }
+
+        for (auto& rowset_meta : _tablet_meta->mutable_all_inc_rs_metas()) {
+            rs_metas.insert({rowset_meta->version(), rowset_meta});
+        }
+
+        uint32_t next_rowset_id = 0;
+        // iterate by Version order
+        for (auto& iter : rs_metas) {
+            auto& rowset_meta = iter.second;
             rowset_meta->set_rowset_seg_id(next_rowset_id);
             next_rowset_id += std::max(1U, (uint32_t)rowset_meta->num_segments());
         }

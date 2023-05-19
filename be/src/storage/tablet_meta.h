@@ -167,6 +167,7 @@ public:
 
     void revise_inc_rs_metas(std::vector<RowsetMetaSharedPtr> rs_metas);
     const std::vector<RowsetMetaSharedPtr>& all_inc_rs_metas() const;
+    std::vector<RowsetMetaSharedPtr>& mutable_all_inc_rs_metas();
     const std::vector<RowsetMetaSharedPtr>& all_stale_rs_metas() const;
     void add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta);
     void delete_inc_rs_meta_by_version(const Version& version);
@@ -369,6 +370,10 @@ inline std::vector<RowsetMetaSharedPtr>& TabletMeta::mutable_all_rs_metas() {
 }
 
 inline const std::vector<RowsetMetaSharedPtr>& TabletMeta::all_inc_rs_metas() const {
+    return _inc_rs_metas;
+}
+
+inline std::vector<RowsetMetaSharedPtr>& TabletMeta::mutable_all_inc_rs_metas() {
     return _inc_rs_metas;
 }
 
