@@ -236,10 +236,6 @@ public:
         }
 
         // sync previous records from detail state table
-        InputColumnType* column;
-        if constexpr (!lt_is_string<LT>) {
-            column = down_cast<InputColumnType*>(columns[0].get());
-        }
         DCHECK((*columns[1]).is_numeric());
         for (size_t i = 0; i < chunk_size; i++) {
             T value = get_row_value(columns[0].get(), i);
