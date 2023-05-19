@@ -45,6 +45,7 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
+import com.starrocks.thrift.TSpillableOperatorType;
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -2151,10 +2152,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setSpill_operator_min_bytes(spillOperatorMinBytes);
             tResult.setSpill_operator_max_bytes(spillOperatorMaxBytes);
             tResult.setSpill_encode_level(spillEncodeLevel);
-            tResult.setEnable_hash_join_spill(enableHashJoinSpill);
-            tResult.setEnable_agg_spill(enableAggSpill);
-            tResult.setEnable_agg_distinct_spill(enableAggDistinctSpill);
-            tResult.setEnable_sort_spill(enableSortSpill);
+            long spillableOperatorMask = 0;
+            spillableOperatorMask |= enableHashJoinSpill ? (1L << TSpillableOperatorType.HASH_JOIN.getValue()) : 0;
+            spillableOperatorMask |= enableAggSpill ? (1L << TSpillableOperatorType.AGG.getValue()) : 0;
+            spillableOperatorMask |= enableAggDistinctSpill ? (1L << TSpillableOperatorType.AGG_DISTINCT.getValue()) : 0;
+            spillableOperatorMask |= enableSortSpill ? (1 << TSpillableOperatorType.SORT.getValue()) : 0;
+            tResult.setSpillable_operator_mask(spillableOperatorMask);
         }
 
         // Compression Type
