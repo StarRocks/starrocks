@@ -342,6 +342,14 @@ public class TabletChecker extends LeaderDaemon {
                                                 replicaNum,
                                                 aliveBeIdsInCluster);
 
+                                if (Config.tablet_sched_ignore_dead_backend &&
+                                        statusWithPrio.first == TabletStatus.REPLICA_MISSING &&
+                                        !localTablet.checkReplicaMissingIgnoreDeadBackend(infoService)) {
+                                    // Deem this tablet healthy in this situation, see comments for
+                                    // `Config.tablet_sched_ignore_dead_backend` for more details.
+                                    statusWithPrio.first = TabletStatus.HEALTHY;
+                                }
+
                                 if (statusWithPrio.first == TabletStatus.HEALTHY) {
                                     // Only set last status check time when status is healthy.
                                     localTablet.setLastStatusCheckTime(System.currentTimeMillis());
