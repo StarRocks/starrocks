@@ -1,5 +1,26 @@
 # StarRocks version 2.5
 
+## 2.5.6
+
+发布日期：2023 年 5 月 19 日
+
+### 功能优化
+
+- 优化了因 `thrift_server_max_worker_threads` 过小导致 INSERT INTO SELECT 超时场景下的报错信息。 [#21964](https://github.com/StarRocks/starrocks/pull/21964)
+- CTAS 创建的表与普通表一致，默认为 3 副本。 [#22854](https://github.com/StarRocks/starrocks/pull/22854)
+
+### 问题修复
+
+- Truncate 操作对分区名大小写敏感导致 Truncate Partition 失败。 [#21809](https://github.com/StarRocks/starrocks/pull/21809)
+- 物化视图创建临时分区失败导致 BE 下线卡住。 [#22745](https://github.com/StarRocks/starrocks/pull/22745)
+- 动态修改 FE 参数时，不支持设置空 array。 [#22225](https://github.com/StarRocks/starrocks/pull/22225)
+- 设置了 `partition_refresh_number` property 的物化视图可能无法完全刷新完成。[#21619](https://github.com/StarRocks/starrocks/pull/21619)
+- SHOW CREATE TABLE 导致内存中鉴权信息错误。[#21311](https://github.com/StarRocks/starrocks/pull/21311)
+- 在外表查询中，对于部分 ORC 文件，谓词会失效。[#21901](https://github.com/StarRocks/starrocks/pull/21901)
+- 过滤条件无法正确处理列名大小写问题。[#22626](https://github.com/StarRocks/starrocks/pull/22626)
+- 延迟物化导致查询复杂数据类型（STRUCT 或 MAP）错误。[#22862](https://github.com/StarRocks/starrocks/pull/22862)
+- 主键模型表在备份恢复中出现的问题。[#23384](https://github.com/StarRocks/starrocks/pull/23384)
+
 ## 2.5.5
 
 发布日期：2023 年 4 月 28 日

@@ -426,6 +426,7 @@
       + [unhex](/sql-reference/sql-functions/string-functions/unhex.md)
       + [upper](/sql-reference/sql-functions/string-functions/upper.md)
     + 聚合函数
+      + [array_agg](./sql-reference/sql-functions/array-functions/array_agg.md)
       + [avg](/sql-reference/sql-functions/aggregate-functions/avg.md)
       + [approx_count_distinct](/sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [any_value](/sql-reference/sql-functions/aggregate-functions/any_value.md)
