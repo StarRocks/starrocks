@@ -31,6 +31,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -70,10 +71,14 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 // TODO: It is not good enough to create shards into the same group id, schema change PR needs to
                 //  revise the code again.
                 List<Long> originTabletIds = originTablets.stream().map(Tablet::getId).collect(Collectors.toList());
+                Map<String, String> properties = new HashMap<>();
+                properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
+                properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(partitionId));
+                properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(shadowIndexId));
                 List<Long> shadowTabletIds =
                         createShards(originTablets.size(), table.getPartitionFilePathInfo(),
                                      table.getPartitionFileCacheInfo(partitionId), shardGroupId,
-                                     originTabletIds);
+                                     originTabletIds, properties);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
@@ -98,9 +103,10 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
 
     @VisibleForTesting
     public static List<Long> createShards(int shardCount, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
-                                          long groupId, List<Long> matchShardIds)
+                                          long groupId, List<Long> matchShardIds, Map<String, String> properties)
         throws DdlException {
-        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds);
+        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds,
+                properties);
     }
 
 }

@@ -42,6 +42,10 @@ import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
  * Tablet id is same as StarOS Shard id.
  */
 public class LakeTablet extends Tablet {
+    public static final String PROPERTY_KEY_TABLE_ID = "tableId";
+    public static final String PROPERTY_KEY_INDEX_ID = "indexId";
+    public static final String PROPERTY_KEY_PARTITION_ID = "partitionId";
+
     private static final Logger LOG = LogManager.getLogger(LakeTablet.class);
 
     private static final String JSON_KEY_DATA_SIZE = "dataSize";
