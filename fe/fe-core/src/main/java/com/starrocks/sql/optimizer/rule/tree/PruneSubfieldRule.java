@@ -24,11 +24,14 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
@@ -77,6 +80,14 @@ public class PruneSubfieldRule implements TreeRewriteRule {
         }
 
         @Override
+        public Void visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
+            if (predicate.getChild(0).getType().isComplexType()) {
+                complexExpressions.add(predicate);
+            }
+            return null;
+        }
+
+        @Override
         public Void visitCollectionElement(CollectionElementOperator collectionElementOp, Void context) {
             complexExpressions.add(collectionElementOp);
             return null;
@@ -117,38 +128,24 @@ public class PruneSubfieldRule implements TreeRewriteRule {
             }
         }
 
-        @Override
-        public OptExpression visit(OptExpression optExpression, Void context) {
-            visitPredicate(optExpression);
-
-            for (int i = 0; i < optExpression.getInputs().size(); i++) {
+        private OptExpression visitChildren(OptExpression optExpression, Void context) {
+            for (int i = optExpression.getInputs().size() - 1; i >= 0; i--) {
                 OptExpression child = optExpression.inputAt(i);
                 optExpression.setChild(i, child.getOp().accept(this, child, context));
             }
-
             return optExpression;
+        }
+
+        @Override
+        public OptExpression visit(OptExpression optExpression, Void context) {
+            visitPredicate(optExpression);
+            return visitChildren(optExpression, context);
         }
 
         @Override
         public OptExpression visitLogicalProject(OptExpression optExpression, Void context) {
             LogicalProjectOperator lpo = optExpression.getOp().cast();
-
-            // check & rewrite nest expression
-            Set<ColumnRefOperator> keys = lpo.getColumnRefMap().keySet();
-
-            // avoid concurrent modify
-            List<ScalarOperator> complexColumns = Lists.newArrayList(allComplexColumns.keySet());
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(lpo.getColumnRefMap(), true);
-            for (ScalarOperator expr : complexColumns) {
-                ColumnRefSet usedColumns = allComplexColumns.get(expr);
-
-                // need rewrite
-                if (usedColumns.containsAny(keys)) {
-                    allComplexColumns.remove(expr);
-                    expr = rewriter.rewrite(expr);
-                    allComplexColumns.put(expr, expr.getUsedColumns());
-                }
-            }
+            rewriteColumnsInPaths(lpo.getColumnRefMap(), true);
 
             // collect complex column
             ComplexExpressionCollector collector = new ComplexExpressionCollector();
@@ -156,16 +153,47 @@ public class PruneSubfieldRule implements TreeRewriteRule {
                 value.accept(collector, null);
             }
 
+            ColumnRefSet allRefs = new ColumnRefSet();
+            allComplexColumns.values().forEach(allRefs::union);
+
             for (ScalarOperator expr : collector.complexExpressions) {
+                // check repeat put complex column, like that
+                //      project( columnB: structA.b.c.d )
+                //         |
+                //      project( structA: structA ) -- structA use for `structA.b.c.d`, so we don't need put it again
+                //         |
+                //       .....
+                if (expr.isColumnRef() && allRefs.contains((ColumnRefOperator) expr)) {
+                    continue;
+                }
                 allComplexColumns.put(expr, expr.getUsedColumns());
             }
 
-            return visit(optExpression, context);
+            return visitChildren(optExpression, context);
+        }
+
+        private void rewriteColumnsInPaths(Map<ColumnRefOperator, ScalarOperator> mappingRefs, boolean deleteOrigin) {
+            // check & rewrite nest expression
+            Set<ColumnRefOperator> keys = mappingRefs.keySet();
+            List<ScalarOperator> complexColumns = Lists.newArrayList(allComplexColumns.keySet());
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(mappingRefs, true);
+            for (ScalarOperator expr : complexColumns) {
+                ColumnRefSet usedColumns = allComplexColumns.get(expr);
+
+                // need rewrite
+                if (usedColumns.containsAny(keys)) {
+                    if (deleteOrigin) {
+                        allComplexColumns.remove(expr);
+                    }
+                    expr = rewriter.rewrite(expr);
+                    allComplexColumns.put(expr, expr.getUsedColumns());
+                }
+            }
         }
 
         @Override
         public OptExpression visitLogicalTableScan(OptExpression optExpression, Void context) {
-            visit(optExpression, context);
+            visitPredicate(optExpression);
 
             // normalize access path
             LogicalScanOperator scan = optExpression.getOp().cast();
@@ -200,6 +228,34 @@ public class PruneSubfieldRule implements TreeRewriteRule {
             LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scan);
             Operator newScan = builder.withOperator(scan).setColumnAccessPaths(accessPaths).build();
             return OptExpression.create(newScan, optExpression.getInputs());
+        }
+
+        @Override
+        public OptExpression visitLogicalCTEConsume(OptExpression optExpression, Void context) {
+            LogicalCTEConsumeOperator cte = optExpression.getOp().cast();
+            visitPredicate(optExpression);
+            Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
+            projectMap.putAll(cte.getCteOutputColumnRefMap());
+
+            rewriteColumnsInPaths(projectMap, false);
+
+            return visitChildren(optExpression, context);
+        }
+
+        @Override
+        public OptExpression visitLogicalUnion(OptExpression optExpression, Void context) {
+            visitPredicate(optExpression);
+
+            LogicalUnionOperator union = optExpression.getOp().cast();
+            for (List<ColumnRefOperator> childOutputColumn : union.getChildOutputColumns()) {
+                Map<ColumnRefOperator, ScalarOperator> project = Maps.newHashMap();
+                for (int i = 0; i < union.getOutputColumnRefOp().size(); i++) {
+                    project.put(union.getOutputColumnRefOp().get(i), childOutputColumn.get(i));
+                }
+
+                rewriteColumnsInPaths(project, false);
+            }
+            return visitChildren(optExpression, context);
         }
     }
 

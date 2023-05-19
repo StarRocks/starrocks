@@ -60,6 +60,18 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
+                "  `v1` bigint NULL, \n" +
+                "  `v2` bigint NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
     }
 
     @Before
@@ -67,13 +79,45 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setCboPruneSubfield(true);
         connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
     }
 
     @After
     public void tearDown() {
+        connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setCboPruneSubfield(false);
         connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
+        connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
+    }
+
+    @Test
+    public void testJoinPruneColumn() throws Exception {
+        String sql = "select sc0.st1.s1, st1.s2 from t0 join sc0 on sc0.v1 = t0.v1";
+        String plan = getVerboseExplain(sql);
+        System.out.println(plan);
+        assertContains(plan, "ColumnAccessPath: [/st1/s2, /st1/s1]");
+    }
+
+    // @todo: Fix UNION Struct type deriver
+    // @Test
+    // public void testUnionAllPruneColumn() throws Exception {
+    //     String sql = "select st1.s1 from (" +
+    //             " select v1, st1, st2, st3 from sc0 x1 " +
+    //             " union all " +
+    //             " select v1, st1, st2, st3 from sc0 x2) x3";
+    //     System.out.println(sql);
+    //     String plan = getVerboseExplain(sql);
+    //     System.out.println(plan);
+    // }
+
+    @Test
+    public void testCTEPruneColumn() throws Exception {
+        String sql =
+                "with t1 as (select * from sc0) select x1.st1.s1, x2.st2.s2 from t1 x1 join t1 x2 on x1.v1 = x2.v1";
+        String plan = getVerboseExplain(sql);
+        assertContains("ColumnAccessPath: [/st1/s1, /st2/s2]");
     }
 
     @Test
