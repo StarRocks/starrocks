@@ -409,12 +409,6 @@ if ("${USE_STAROS}" STREQUAL "ON")
     message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
     include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
 
-    find_package(azure-identity-cpp CONFIG REQUIRED)
-    find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
-    find_package(azure-core-cpp CONFIG REQUIRED)
-    find_package(azure-storage-common-cpp CONFIG REQUIRED)
-    set(AZURE_SDK_LIB Azure::azure-identity Azure::azure-storage-blobs Azure::azure-core Azure::azure-storage-common)
-
     add_library(starlet_fslib_all STATIC IMPORTED GLOBAL)
     set_target_properties(starlet_fslib_all PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet_fslib_all.a)
 
@@ -425,7 +419,6 @@ if ("${USE_STAROS}" STREQUAL "ON")
        gRPC::grpc++
        starlet_fslib_all
        prometheus-cpp::core
-       ${AZURE_SDK_LIB}
        )
 endif()
 
