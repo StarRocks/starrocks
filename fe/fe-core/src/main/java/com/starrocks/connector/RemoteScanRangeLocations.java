@@ -179,8 +179,14 @@ public class RemoteScanRangeLocations {
             partitionInfos.add(new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey));
         }
         String catalogName = hiveMetaStoreTable.getCatalogName();
-        List<RemoteFileInfo> partitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getRemoteFileInfos(catalogName, table, partitionKeys);
+        List<RemoteFileInfo> partitions;
+
+        try {
+            partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(catalogName, table, partitionKeys);
+        } catch (Exception e) {
+            LOG.error("Failed to get remote files", e);
+            throw e;
+        }
 
         if (table instanceof HiveTable) {
             Preconditions.checkState(partitions.size() == partitionKeys.size());
