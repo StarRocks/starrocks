@@ -488,6 +488,27 @@ public class LoadManager implements Writable {
             }
         }
 
+<<<<<<< HEAD
+=======
+        List<LoadJob> loadJobList = getLoadJobsByDb(dbId, labelValue, accurateMatch);
+        // check state
+        for (LoadJob loadJob : loadJobList) {
+            try {
+                if (!states.contains(loadJob.getAcutalState())) {
+                    continue;
+                }
+                // add load job info
+                loadJobInfos.add(loadJob.getShowInfo());
+            } catch (DdlException ignored) {
+                // ignored
+            }
+        }
+        return loadJobInfos;
+    }
+
+    public List<LoadJob> getLoadJobs(String labelValue) {
+        List<LoadJob> loadJobList = Lists.newArrayList();
+>>>>>>> fe6f4d754 ([BugFix] Fix show load where state=QUEUEING (#23558))
         readLock();
         try {
             Map<String, List<LoadJob>> labelToLoadJobs = dbIdToLabelToLoadJobs.get(dbId);
