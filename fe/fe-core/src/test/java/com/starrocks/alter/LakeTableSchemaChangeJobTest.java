@@ -69,6 +69,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
@@ -93,8 +94,13 @@ public class LakeTableSchemaChangeJobTest {
         new MockUp<StarOSAgent>() {
             @Mock
             public List<Long> createShards(int shardCount, FilePathInfo path, FileCacheInfo cache, long groupId,
+<<<<<<< HEAD
                     List<Long> matchShardIds)
                 throws DdlException {
+=======
+                                           List<Long> matchShardIds, Map<String, String> properties)
+                    throws DdlException {
+>>>>>>> cf6f19195 ([Enhancement] Save some tablet properties in StarMgr (#23690))
                 for (int i = 0; i < shardCount; i++) {
                     shadowTabletIds.add(GlobalStateMgr.getCurrentState().getNextId());
                 }
