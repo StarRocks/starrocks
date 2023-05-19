@@ -475,21 +475,6 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return Pair.create(status, prio);
     }
 
-    private boolean isReplicaBackendDead(Backend backend) {
-        return backend != null && !backend.isAlive();
-    }
-
-    private boolean isReplicaBackendDropped(Backend backend) {
-        return backend == null;
-    }
-
-    private boolean isReplicaStateAbnormal(Replica replica, Backend backend, Set<String> replicaHostSet) {
-        return replica.getState() == ReplicaState.CLONE
-                || replica.getState() == ReplicaState.DECOMMISSION
-                || replica.isBad()
-                || !replicaHostSet.add(backend.getHost());
-    }
-
     /**
      * For certain deployment, like k8s pods + pvc, the replica is not lost even the
      * corresponding backend is detected as dead, because the replica data is persisted
@@ -502,23 +487,27 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
      * to delete the redundant healthy replica which cause resource waste and may also affect
      * the loading process.
      *
-     * <p> This method checks the necessity of a {@link TabletStatus#REPLICA_MISSING} task without
-     * considering the corresponding backends of tablet replicas are alive or not.
-     *
-     * @param systemInfoService {@link SystemInfoService}
-     * @return {@code true} means that we still need to schedule a {@link TabletStatus#REPLICA_MISSING} task
-     * even though we have ignored the aliveness of corresponding backend
+     * <p>This method checks whether the corresponding backend of tablet replica is dead or not.
+     * Only when the backend has been dead for {@link Config#tablet_sched_be_down_tolerate_time_s}
+     * seconds, will this method returns true.
      */
-    public boolean checkReplicaMissingIgnoreDeadBackend(SystemInfoService systemInfoService) {
-        Set<String> hosts = Sets.newHashSet();
-        for (Replica replica : replicas) {
-            Backend backend = systemInfoService.getBackend(replica.getBackendId());
-            if (isReplicaBackendDropped(backend) || isReplicaStateAbnormal(replica, backend, hosts)) {
-                return true;
-            }
-        }
+    private boolean isReplicaBackendDead(Backend backend) {
+        long currentTimeMs = System.currentTimeMillis();
+        assert backend != null;
+        return !backend.isAlive() &&
+                (currentTimeMs - backend.getLastUpdateMs() > Config.tablet_sched_be_down_tolerate_time_s * 1000);
+    }
 
-        return false;
+    private boolean isReplicaBackendDropped(Backend backend) {
+        return backend == null;
+    }
+
+    private boolean isReplicaStateAbnormal(Replica replica, Backend backend, Set<String> replicaHostSet) {
+        assert backend != null && replica != null;
+        return replica.getState() == ReplicaState.CLONE
+                || replica.getState() == ReplicaState.DECOMMISSION
+                || replica.isBad()
+                || !replicaHostSet.add(backend.getHost());
     }
 
     /**
@@ -564,7 +553,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             }
             aliveAndVersionComplete++;
 
-            if (!backend.isAvailable()) {
+            if (backend.isDecommissioned()) {
                 // this replica is alive, version complete, but backend is not available
                 continue;
             }
