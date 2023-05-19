@@ -1,0 +1,9 @@
+[mysql-client]
+host =
+port =
+user =
+password =
+http_port =
+
+[replace]
+url = http://${mysql-client:host}:${mysql-client:http_port}
