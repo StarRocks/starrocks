@@ -71,4 +71,4 @@ public:
 
     std::string get_name() const override { return "bitmap_agg"; }
 };
-} // namespace starrocks
+} // namespace starrocks::vectorized
