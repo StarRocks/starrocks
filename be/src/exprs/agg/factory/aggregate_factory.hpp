@@ -63,7 +63,7 @@ public:
 
     static AggregateFunctionPtr MakeBitmapUnionAggregateFunction();
 
-    template <LogicalType LT>
+    template <PrimitiveType LT>
     static AggregateFunctionPtr MakeBitmapAggAggregateFunction();
 
     static AggregateFunctionPtr MakeBitmapIntersectAggregateFunction();
@@ -315,7 +315,7 @@ AggregateFunctionPtr AggregateFactory::MakePercentileDiscAggregateFunction() {
     return std::make_shared<PercentileDiscAggregateFunction<PT>>();
 }
 
-template <LogicalType LT>
+template <PrimitiveType LT>
 AggregateFunctionPtr AggregateFactory::MakeBitmapAggAggregateFunction() {
     return std::make_shared<BitmapAggAggregateFunction<LT>>();
 }
