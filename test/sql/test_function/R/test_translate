@@ -1,0 +1,27 @@
+-- name: test translate
+select translate('abcdefg', 'abcdefg', '');
+-- result:
+-- !result
+select translate('abcdefg', 'abcdefg', 'abcdef');
+-- result:
+abcdef
+-- !result
+select translate('abcdefg', '***abcdefg', '');
+-- result:
+-- !result
+select translate('**abcdefg', '*', '');
+-- result:
+abcdefg
+-- !result
+select translate('abcdefg', 'abcdefg', 'abcdefg');
+-- result:
+abcdefg
+-- !result
+select translate('gfedcba', 'gfedcba', 'abcdefg');
+-- result:
+abcdefg
+-- !result
+select translate(NULL, 'a', 'a');
+-- result:
+None
+-- !result

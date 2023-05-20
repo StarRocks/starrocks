@@ -3230,37 +3230,32 @@ PARALLEL_TEST(VecStringFunctionsTest, translateTest) {
 
     Columns columns;
 
-    auto str = BinaryColumn::create();
-    auto from_str = BinaryColumn::create();
-    auto to_str = BinaryColumn::create();
+    auto input_str = BinaryColumn::create();
+    auto from_str = ColumnHelper::create_const_column<TYPE_VARCHAR>("mf1", 1);
+    auto to_str = ColumnHelper::create_const_column<TYPE_VARCHAR>("to", 1);
 
-    const std::string strs[] = {"abcdefg", "s1m1a1rrfcks", "s1m1a1rrfcks", "aaaaa"};
-    const std::string from_strs[] = {"", "mf1", "s1m1a1rrfcks", "b"};
-    const std::string to_strs[] = {"", "to", "", "1"};
-
-    const std::string res[] = {"abcdefg", "starrocks", "", "aaaaa"};
+    const std::string strs[] = {"s1m1a1rrfcks", "abcd", "mf1"};
+    const std::string res[] = {"starrocks", "abcd", "to"};
 
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
-        str->append(strs[i]);
-        from_str->append(from_strs[i]);
-        to_str->append(to_strs[i]);
+        input_str->append(strs[i]);
     }
-    columns.emplace_back(str);
+    columns.emplace_back(input_str);
     columns.emplace_back(from_str);
     columns.emplace_back(to_str);
 
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::translate_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::translate_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::translate(context, columns).value();
-    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
         ASSERT_EQ(res[i], v->get_data()[i].to_string());
     }
-    ASSERT_TRUE(StringFunctions::translate_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(StringFunctions::translate_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 }
 
 } // namespace starrocks

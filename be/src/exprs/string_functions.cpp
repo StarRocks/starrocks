@@ -2186,10 +2186,9 @@ Status StringFunctions::translate_close(FunctionContext* context, FunctionContex
         auto* state = reinterpret_cast<TranslateState*>(context->get_function_state(scope));
         delete state;
     }
-    
+
     return Status::OK();
 }
-
 
 StatusOr<ColumnPtr> StringFunctions::translate(FunctionContext* context, const Columns& columns) {
     const ColumnPtr& arg0 = columns[0];
@@ -2230,7 +2229,7 @@ StatusOr<ColumnPtr> StringFunctions::translate(FunctionContext* context, const C
                 ++iter;
             }
         }
-	result.append(Slice(str.data(), str.size()));
+        result.append(Slice(str.data(), str.size()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }
