@@ -878,7 +878,7 @@ public class ShowExecutor {
                         catalogName, dbName, tableName)) {
                     continue;
                 }
-                tableMap.put(tableName, "VIEW");
+                tableMap.put(tableName, table.getMysqlType());
             }
         }
 
