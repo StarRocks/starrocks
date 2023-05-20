@@ -14,8 +14,9 @@
 
 namespace starrocks::vectorized {
 
+template <PrimitiveType LT>
 ColumnPtr BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
-    ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
+    ColumnViewer<LT> viewer(columns[0]);
 
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
@@ -25,20 +26,34 @@ ColumnPtr BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::
             continue;
         }
 
-        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        uint64_t value;
+        if constexpr (pt_is_integer<LT> || pt_is_boolean<LT>) {
+            auto raw_value = viewer.value(row);
+            // To be compatible with varchar type, set it null if raw value is less than 0 and less than uint64::max.
+            if (UNLIKELY(raw_value < 0 || raw_value > std::numeric_limits<uint64_t>::max())) {
+                context->set_error(strings::Substitute("The input: {0} is not valid, to_bitmap only "
+                                                       "support bigint value from 0 to "
+                                                       "18446744073709551615 currently",
+                                                       raw_value)
+                                           .c_str());
 
-        auto slice = viewer.value(row);
-        uint64_t value = StringParser::string_to_unsigned_int<uint64_t>(slice.data, slice.size, &parse_result);
-
-        if (parse_result != StringParser::PARSE_SUCCESS) {
-            context->set_error(strings::Substitute("The input: {0} is not valid, to_bitmap only "
-                                                   "support bigint value from 0 to "
-                                                   "18446744073709551615 currently",
-                                                   slice.to_string())
-                                       .c_str());
-
-            builder.append_null();
-            continue;
+                builder.append_null();
+                continue;
+            }
+            value = static_cast<uint64_t>(raw_value);
+        } else {
+            StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+            auto slice = viewer.value(row);
+            value = StringParser::string_to_unsigned_int<uint64_t>(slice.data, slice.size, &parse_result);
+            if (parse_result != StringParser::PARSE_SUCCESS) {
+                context->set_error(strings::Substitute("The input: {0} is not valid, to_bitmap only "
+                                                       "support bigint value from 0 to "
+                                                       "18446744073709551615 currently",
+                                                       slice.to_string())
+                                           .c_str());
+                builder.append_null();
+                continue;
+            }
         }
 
         BitmapValue bitmap;
@@ -49,6 +64,20 @@ ColumnPtr BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::
 
     return builder.build(ColumnHelper::is_all_const(columns));
 }
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_BOOLEAN>(FunctionContext* context,
+                                                            const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_TINYINT>(FunctionContext* context,
+                                                            const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_SMALLINT>(FunctionContext* context,
+                                                             const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_INT>(FunctionContext* context,
+                                                        const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_BIGINT>(FunctionContext* context,
+                                                           const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_LARGEINT>(FunctionContext* context,
+                                                             const starrocks::vectorized::Columns& columns);
+template ColumnPtr BitmapFunctions::to_bitmap<TYPE_VARCHAR>(FunctionContext* context,
+                                                            const starrocks::vectorized::Columns& columns);
 
 ColumnPtr BitmapFunctions::bitmap_hash(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
