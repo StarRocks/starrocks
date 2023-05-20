@@ -21,7 +21,6 @@ public class TableFunctionTest extends PlanTestBase {
     public void testSql0() throws Exception {
         String sql = "SELECT * FROM TABLE(unnest(ARRAY<INT>[1, 2, 3]))";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:2: unnest\n" +
                 "  PARTITION: UNPARTITIONED\n" +
@@ -45,7 +44,6 @@ public class TableFunctionTest extends PlanTestBase {
     public void testSql1() throws Exception {
         String sql = "SELECT x FROM TABLE(unnest(ARRAY<INT>[1, 2, 3])) t(x)";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:2: x\n" +
                 "  PARTITION: UNPARTITIONED\n" +
@@ -69,7 +67,6 @@ public class TableFunctionTest extends PlanTestBase {
     public void testSql2() throws Exception {
         String sql = "SELECT * FROM TABLE(unnest(ARRAY<INT>[1])) t0(x), TABLE(unnest(ARRAY<INT>[1, 2, 3])) t1(x)";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:2: x | 5: x\n" +
                 "  PARTITION: UNPARTITIONED\n" +
@@ -120,7 +117,6 @@ public class TableFunctionTest extends PlanTestBase {
         String sql = "SELECT * FROM TABLE(unnest(ARRAY<INT>[1])) t0(x) JOIN TABLE(unnest(ARRAY<INT>[1, 2, 3])) t1(x)" +
                 " ON t0.x=t1 .x";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:2: x | 5: x\n" +
                 "  PARTITION: UNPARTITIONED\n" +
@@ -178,7 +174,6 @@ public class TableFunctionTest extends PlanTestBase {
         String sql = "SELECT * FROM TABLE(unnest(ARRAY<INT>[1])) t0(x) LEFT JOIN TABLE(unnest(ARRAY<INT>[1, 2, 3])) t1(x)" +
                 " ON t0.x=t1 .x";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:2: x | 5: x\n" +
                 "  PARTITION: UNPARTITIONED\n" +
@@ -223,5 +218,46 @@ public class TableFunctionTest extends PlanTestBase {
                 "  3:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
+    }
+
+    @Test
+    public void testUnnestColumnPrune() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `t0_array` (\n" +
+                "  `v1` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v2` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v3` ARRAY<bigint(20)>  NULL ,\n" +
+                "  `v4` ARRAY<bigint(20)>  NULL ,\n" +
+                "  `v5` ARRAY<bigint(20)>  NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        // first arg column
+        String sql = "select count(t1.v7) from t0_array, " +
+                "unnest(t0_array.v3, t0_array.v4, t0_array.v5) as t1(v7, v8, v9);";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "  1:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [BIGINT]");
+
+        // second arg column
+        sql = "select count(t1.v8) from t0_array, " +
+                "unnest(t0_array.v3, t0_array.v4, t0_array.v5) as t1(v7, v8, v9);";
+        plan = getCostExplain(sql);
+        assertContains(plan, "  1:TableValueFunction\n" +
+                "  |  tableFunctionName: unnest\n" +
+                "  |  columns: [unnest]\n" +
+                "  |  returnTypes: [BIGINT]");
+
+        sql = "select t0_array.v3 from t0_array, " +
+                "unnest(t0_array.v3, t0_array.v4, t0_array.v5) as t1(v7, v8, v9);";
+        plan = getCostExplain(sql);
+        assertNotContains(plan, "  |  tableFunctionName: unnest\n");
+
     }
 }

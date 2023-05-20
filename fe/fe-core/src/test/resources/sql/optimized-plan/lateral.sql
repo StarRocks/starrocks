@@ -8,8 +8,7 @@ TABLE FUNCTION (unnest)
 [sql]
 select v1 from tarray, lateral unnest(v3)
 [result]
-TABLE FUNCTION (unnest)
-    SCAN (columns[1: v1, 3: v3] predicate[null])
+SCAN (columns[1: v1] predicate[null])
 [end]
 
 [sql]
@@ -36,8 +35,7 @@ TABLE FUNCTION (unnest)
 [sql]
 select v1 from tarray, unnest(array_append(v3,1)) where v2 = 2
 [result]
-TABLE FUNCTION (unnest)
-    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 2])
+SCAN (columns[1: v1, 2: v2] predicate[2: v2 = 2])
 [end]
 
 [sql]
@@ -52,8 +50,7 @@ PREDICATE 4: unnest = 1
 select v1 from tarray, unnest(v3) limit 5
 [result]
 EXCHANGE GATHER
-    TABLE FUNCTION (unnest) LIMIT 5
-        SCAN (columns[1: v1, 3: v3] predicate[null])
+    SCAN (columns[1: v1] predicate[null]) Limit 5
 [end]
 
 [sql]

@@ -39,7 +39,6 @@ import com.starrocks.sql.optimizer.rule.transformation.LimitPruneTabletsRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
-import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitRankingWindowRule;
@@ -259,17 +258,17 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         deriveLogicalProperty(tree);
 
-        ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_EMPTY);
         // @todo: resolve recursive optimization question:
         //  MergeAgg -> PruneColumn -> PruneEmptyWindow -> MergeAgg/Project -> PruneColumn...
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoAggRule());
         rootTaskContext.setRequiredColumns(requiredColumns.clone());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
 
-        ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_EMPTY);
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         //Limit push must be after the column prune,
-        //otherwise the Node containing limit may be prune
+        //otherwise the Node containing limit may be pruned
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MERGE_LIMIT);
         ruleRewriteIterative(tree, rootTaskContext, new PushDownProjectLimitRule());
 
@@ -323,7 +322,7 @@ public class Optimizer {
             CTEUtils.collectCteOperators(tree, context);
         }
 
-        ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_EMPTY);
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new RewriteSimpleAggToMetaScanRule());
 

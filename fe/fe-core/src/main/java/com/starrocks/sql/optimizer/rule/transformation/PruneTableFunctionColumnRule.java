@@ -15,6 +15,8 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.TableFunction;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -40,21 +42,59 @@ public class PruneTableFunctionColumnRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalTableFunctionOperator logicalTableFunctionOperator = (LogicalTableFunctionOperator) input.getOp();
         ColumnRefSet requiredOutputColumns = context.getTaskContext().getRequiredColumns();
-
         List<ColumnRefOperator> newOuterCols = Lists.newArrayList();
+
         for (ColumnRefOperator col : logicalTableFunctionOperator.getOuterColRefs()) {
             if (requiredOutputColumns.contains(col.getId())) {
                 newOuterCols.add(col);
             }
         }
 
-        for (Pair<ColumnRefOperator, ScalarOperator> pair : logicalTableFunctionOperator.getFnParamColumnProject()) {
-            requiredOutputColumns.union(pair.first);
+        // Check whether we need to prune table function args
+        List<ColumnRefOperator> fnResultColRefs = logicalTableFunctionOperator.getFnResultColRefs();
+        List<Integer> prunedIndexes = Lists.newArrayList();
+        for (int i = 0; i < fnResultColRefs.size(); ++i) {
+            if (requiredOutputColumns.contains(fnResultColRefs.get(i))) {
+                prunedIndexes.add(i);
+            }
         }
 
-        LogicalTableFunctionOperator newOperator = (new LogicalTableFunctionOperator.Builder())
-                .withOperator(logicalTableFunctionOperator)
-                .setOuterColRefs(newOuterCols).build();
+        LogicalTableFunctionOperator newOperator;
+        // prune table function args
+        if (prunedIndexes.size() < fnResultColRefs.size()) {
+            List<ColumnRefOperator> newFnResultColRefs = Lists.newArrayList();
+            List<Pair<ColumnRefOperator, ScalarOperator>> newFnParamColumnProject = Lists.newArrayList();
+            List<Type> tableFnReturnTypes = Lists.newArrayList();
+            List<Type> tableFnArgTypes = Lists.newArrayList();
+            TableFunction function = logicalTableFunctionOperator.getFn();
+            for (Integer i : prunedIndexes) {
+                newFnResultColRefs.add(fnResultColRefs.get(i));
+                newFnParamColumnProject.add(logicalTableFunctionOperator.getFnParamColumnProject().get(i));
+
+                tableFnReturnTypes.add(function.getTableFnReturnTypes().get(i));
+                tableFnArgTypes.add(function.getArgs()[i]);
+            }
+
+            function = new TableFunction(function.getFunctionName(), function.getDefaultColumnNames(), tableFnArgTypes,
+                    tableFnReturnTypes);
+
+            newOperator = (new LogicalTableFunctionOperator.Builder())
+                    .withOperator(logicalTableFunctionOperator)
+                    .setOuterColRefs(newOuterCols)
+                    .setFnResultColRefs(newFnResultColRefs)
+                    .setFnParamColumnProject(newFnParamColumnProject)
+                    .setFn(function)
+                    .build();
+        } else {
+            newOperator = (new LogicalTableFunctionOperator.Builder())
+                    .withOperator(logicalTableFunctionOperator)
+                    .setOuterColRefs(newOuterCols)
+                    .build();
+        }
+
+        for (Pair<ColumnRefOperator, ScalarOperator> pair : newOperator.getFnParamColumnProject()) {
+            requiredOutputColumns.union(pair.first);
+        }
 
         if (logicalTableFunctionOperator.equals(newOperator)) {
             return Collections.emptyList();
