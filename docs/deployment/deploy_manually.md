@@ -52,7 +52,7 @@ The following procedures are performed on the FE instances.
       JAVA_HOME = <path_to_JDK>
       ```
 
-   f.  For information about advanced configuration items, see [Parameter Configuration - FE configuration items](../administration/Configuration.md#fe-configuration-items).
+   e. For information about advanced configuration items, see [Parameter Configuration - FE configuration items](../administration/Configuration.md#fe-configuration-items).
 
 3. Start the FE node.
 
