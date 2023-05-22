@@ -229,6 +229,102 @@ public class CreateTableTest {
                         () -> createTable("create table test.atbl8\n" + "(key1 int, key2 varchar(10))\n"
                                 + "distributed by hash(key1) buckets 1\n"
                                 + "properties('replication_num' = '1', 'compression' = 'xxx');"));
+<<<<<<< HEAD
+=======
+
+        ExceptionChecker
+                .expectThrowsWithMsg(AnalysisException.class, "Getting analyzing error from line 1, " +
+                                "column 24 to line 1, column 33. Detail message: The AUTO_INCREMENT column must be BIGINT.",
+                        () -> createTable("create table test.atbl9(col1 int AUTO_INCREMENT, col2 varchar(10)) \n"
+                                + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                                + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
+
+        ExceptionChecker
+                .expectThrowsWithMsg(AnalysisException.class, "Getting syntax error at line 1, column 25. " +
+                                "Detail message: AUTO_INCREMENT column col1 must be NOT NULL.",
+                        () -> createTable("create table test.atbl10(col1 bigint NULL AUTO_INCREMENT, col2 varchar(10)) \n"
+                                + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                                + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
+
+        ExceptionChecker
+                .expectThrowsWithMsg(AnalysisException.class,
+                        "Getting analyzing error from line 1, column 53 to line 1, column 65. Detail message: " +
+                                "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.",
+                        () -> createTable("create table test.atbl11(col1 bigint AUTO_INCREMENT, col2 bigint AUTO_INCREMENT) \n"
+                                + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                                + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
+
+        ExceptionChecker
+                .expectThrowsWithMsg(DdlException.class, "Table with AUTO_INCREMENT column must use Replicated Storage",
+                        () -> createTable("create table test.atbl12(col1 bigint AUTO_INCREMENT, col2 varchar(10)) \n"
+                                + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                                + "properties('replication_num' = '1', 'replicated_storage' = 'FALSE');"));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Unknown properties: {wrong_key=value}",
+                () -> createTable("create table test.atbl13 (k1 int, k2 int) duplicate key(k1)\n"
+                        + "distributed by hash(k2) buckets 1\n"
+                        + "properties('replication_num' = '1', 'wrong_key' = 'value'); "));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Unknown properties: {wrong_key=value}",
+                () -> createTable("create table test.atbl14 (k1 int, k2 int, k3 float) duplicate key(k1)\n"
+                        + "partition by range(k1) (partition p1 values less than(\"10\") ('wrong_key' = 'value'))\n"
+                        + "distributed by hash(k2) buckets 1 properties('replication_num' = '1'); "));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illege expression type for Materialized Column "
+                        + "Column Type: INT, Expression Type: DOUBLE",
+                () -> createTable("CREATE TABLE test.atbl15 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                        + "mc INT AS (array_avg(array_data)) ) Primary KEY (id) \n"
+                        + "DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized Column must be nullable column.",
+                () -> createTable("CREATE TABLE test.atbl16 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                        + "mc DOUBLE NOT NULL AS (array_avg(array_data)) ) \n"
+                        + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
+                        + " ('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Input 'AS' is not "
+                        + "valid at this position.",
+                () -> createTable("CREATE TABLE test.atbl17 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                        + "mc DOUBLE AUTO_INCREMENT AS (array_avg(array_data)) ) \n"
+                        + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
+                        + "('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Input 'AS' is not "
+                        + "valid at this position.",
+                () -> createTable("CREATE TABLE test.atbl18 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                        + "mc DOUBLE DEFAULT '1.0' AS (array_avg(array_data)) ) \n"
+                        + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
+                        + "('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Expression can not refers to AUTO_INCREMENT columns",
+                () -> createTable("CREATE TABLE test.atbl19 ( id BIGINT NOT NULL,  incr BIGINT AUTO_INCREMENT, \n"
+                        + "array_data ARRAY<int> NOT NULL, mc BIGINT AS (incr) )\n"
+                        + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
+                        + "('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Expression can not refers to other materialized columns",
+                () -> createTable("CREATE TABLE test.atbl20 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                        + "mc DOUBLE AS (array_avg(array_data)), \n"
+                        + "mc_1 DOUBLE AS (mc) ) Primary KEY (id) \n"
+                        + "DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized Column don't support aggregation function",
+                () -> createTable("CREATE TABLE test.atbl21 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                        + "mc BIGINT AS (sum(id)) ) \n"
+                        + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES \n"
+                        + "('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Unknown properties: {asd=true, enable_storage_cache=true, storage_cache_ttl=86400}",
+                () -> createTable("CREATE TABLE test.demo (k0 tinyint NOT NULL, k1 date NOT NULL, k2 int NOT NULL," +
+                        " k3 datetime not NULL, k4 bigint not NULL, k5 largeint not NULL) \n" +
+                        "ENGINE = OLAP \n" +
+                        "PRIMARY KEY( k0, k1, k2) \n" +
+                        "PARTITION BY RANGE (k1) (START (\"1970-01-01\") END (\"2022-09-30\") " +
+                        "EVERY (INTERVAL 60 day)) DISTRIBUTED BY HASH(k0) BUCKETS 1 " +
+                        "PROPERTIES (\"replication_num\"=\"1\",\"enable_persistent_index\" = \"false\"," +
+                        "\"enable_storage_cache\" = \"true\",\"storage_cache_ttl\" = \"86400\",\"asd\" = \"true\");"));
+>>>>>>> 343f4edf3 ([BugFix] Fix bug NPE when encounter unknown properties (#23859))
     }
 
     @Test
