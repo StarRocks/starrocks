@@ -1067,7 +1067,8 @@ public class ShowExecutorTest {
             @Mock
             public Table getTable(String catalogName, String dbName, String tblName) {
                 List<Column> fullSchema = new ArrayList<>();
-                Column columnId = new Column("id", Type.INT);
+                Column columnId = new Column("id", Type.INT, true);
+                columnId.setComment("id");
                 Column columnName = new Column("name", Type.VARCHAR);
                 Column columnYear = new Column("year", Type.INT);
                 Column columnDt = new Column("dt", Type.INT);
@@ -1100,15 +1101,13 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = executor.execute();
         Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE TABLE `test_table` (\n" +
-                "  `id` int(11) DEFAULT NULL,\n" +
+                "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
                 "  `name` varchar(1048576) DEFAULT NULL,\n" +
                 "  `year` int(11) DEFAULT NULL,\n" +
                 "  `dt` int(11) DEFAULT NULL\n" +
                 ")\n" +
-                "WITH (\n" +
-                " partitioned_by = ARRAY [ year, dt ]\n" +
-                ")\n" +
-                "LOCATION 'hdfs://hadoop/hive/warehouse/test.db/test'", resultSet.getResultRows().get(0).get(1));
+                "PARTITION BY ( year, dt )\n" +
+                "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");", resultSet.getResultRows().get(0).get(1));
     }
 
 

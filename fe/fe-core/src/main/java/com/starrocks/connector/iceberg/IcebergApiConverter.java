@@ -187,6 +187,7 @@ public class IcebergApiConverter {
                 srType = Type.UNKNOWN_TYPE;
             }
             Column column = new Column(field.name(), srType, true);
+            column.setComment(field.doc());
             fullSchema.add(column);
         }
         return fullSchema;
