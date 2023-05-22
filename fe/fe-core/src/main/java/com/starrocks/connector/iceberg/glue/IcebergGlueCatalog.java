@@ -13,9 +13,8 @@
 // limitations under the License.
 
 
-package com.starrocks.connector.iceberg.rest;
+package com.starrocks.connector.iceberg.glue;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -33,9 +32,10 @@ import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.aws.AwsProperties;
+import org.apache.iceberg.aws.glue.GlueCatalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
-import org.apache.iceberg.rest.RESTCatalog;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -48,27 +48,27 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
-public class IcebergRESTCatalog implements IcebergCatalog {
-
-    private static final Logger LOG = LogManager.getLogger(IcebergRESTCatalog.class);
+public class IcebergGlueCatalog implements IcebergCatalog {
+    private static final Logger LOG = LogManager.getLogger(IcebergGlueCatalog.class);
     public static final String LOCATION_PROPERTY = "location";
 
     private final Configuration conf;
-    private final RESTCatalog delegate;
+    private final GlueCatalog delegate;
 
-    public IcebergRESTCatalog(String name, Configuration conf, Map<String, String> properties) {
+    public IcebergGlueCatalog(String name, Configuration conf, Map<String, String> properties) {
         this.conf = conf;
         Map<String, String> copiedProperties = Maps.newHashMap(properties);
 
         copiedProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
-
-        delegate = (RESTCatalog) CatalogUtil.loadCatalog(RESTCatalog.class.getName(), name, copiedProperties, conf);
+        copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
+        copiedProperties.put(AwsProperties.GLUE_CATALOG_SKIP_NAME_VALIDATION, "true");
+        delegate = (GlueCatalog) CatalogUtil.loadCatalog(GlueCatalog.class.getName(), name, copiedProperties, conf);
     }
 
     @Override
     public IcebergCatalogType getIcebergCatalogType() {
-        return IcebergCatalogType.REST_CATALOG;
+        return IcebergCatalogType.GLUE_CATALOG;
     }
 
     @Override
@@ -131,8 +131,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     @Override
     public Database getDB(String dbName) {
         Map<String, String> dbMeta = delegate.loadNamespaceMetadata(Namespace.of(dbName));
-        Preconditions.checkNotNull(dbMeta.get(LOCATION_PROPERTY), "Database " + dbName + " doesn't exist location");
-        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.get(LOCATION_PROPERTY));
+        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, dbMeta.getOrDefault(LOCATION_PROPERTY, ""));
     }
 
     @Override
