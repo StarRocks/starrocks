@@ -319,3 +319,5 @@ template <PrimitiveType LT>
 AggregateFunctionPtr AggregateFactory::MakeBitmapAggAggregateFunction() {
     return std::make_shared<BitmapAggAggregateFunction<LT>>();
 }
+
+} // namespace starrocks::vectorized
