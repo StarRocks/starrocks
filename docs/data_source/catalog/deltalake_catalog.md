@@ -250,7 +250,9 @@ For more information, see the "[Understand automatic asynchronous update](../cat
 
 The following examples create a Delta Lake catalog named `deltalake_catalog_hms` or `deltalake_catalog_glue`, depending on the type of metastore you use, to query data from your Delta Lake cluster.
 
-#### If you choose instance profile-based credential
+#### AWS S3
+
+##### If you choose instance profile-based credential
 
 - If you use Hive metastore in your Delta Lake cluster, run a command like below:
 
@@ -280,7 +282,7 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   );
   ```
 
-#### If you choose assumed role-based credential
+##### If you choose assumed role-based credential
 
 - If you use Hive metastore in your Delta Lake cluster, run a command like below:
 
@@ -313,7 +315,7 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   );
   ```
 
-#### If you choose IAM user-based credential
+##### If you choose IAM user-based credential
 
 - If you use Hive metastore in your Delta Lake cluster, run a command like below:
 
@@ -348,6 +350,24 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
       "aws.glue.region" = "us-west-2"
   );
   ```
+
+#### S3-compatible storage system
+
+Use MinIO as an example. Run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG deltalake_catalog_hms
+PROPERTIES
+(
+    "type" = "deltalake", 
+    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "aws.s3.enable_ssl" = "true",
+    "aws.s3.enable_path_style_access" = "true",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
 
 ## View the schema of a Delta Lake table
 

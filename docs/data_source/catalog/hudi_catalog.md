@@ -249,7 +249,9 @@ For more information, see the "[Understand automatic asynchronous update](../cat
 
 The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_catalog_glue`, depending on the type of metastore you use, to query data from your Hudi cluster.
 
-#### If you choose instance profile-based credential
+#### AWS S3
+
+##### If you choose instance profile-based credential
 
 - If you use Hive metastore in your Hudi cluster, run a command like below:
 
@@ -279,7 +281,7 @@ The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_c
   );
   ```
 
-#### If you choose assumed role-based credential
+##### If you choose assumed role-based credential
 
 - If you use Hive metastore in your Hudi cluster, run a command like below:
 
@@ -312,7 +314,7 @@ The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_c
   );
   ```
 
-#### If you choose IAM user-based credential
+##### If you choose IAM user-based credential
 
 - If you use Hive metastore in your Hudi cluster, run a command like below:
 
@@ -347,6 +349,24 @@ The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_c
       "aws.glue.region" = "us-west-2"
   );
   ```
+
+#### S3-compatible storage system
+
+Use MinIO as an example. Run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG hudi_catalog_hms
+PROPERTIES
+(
+    "type" = "hudi", 
+    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "aws.s3.enable_ssl" = "true",
+    "aws.s3.enable_path_style_access" = "true",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
 
 ## View the schema of a Hudi table
 

@@ -109,7 +109,7 @@ The following table describes the parameter you need to configure in `MetastoreP
 
 | Parameter                           | Required | Description                                                  |
 | ----------------------------------- | -------- | ------------------------------------------------------------ |
-| hive.metastore.uris                 | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+| iceberg.catalog.hive.metastore.uris                 | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 
 ##### AWS Glue
 
@@ -240,7 +240,9 @@ The following table describes the parameters you need to configure in `StorageCr
 
 The following examples create an Iceberg catalog named `iceberg_catalog_hms` or `iceberg_catalog_glue`, depending on the type of metastore you use, to query data from your Iceberg cluster.
 
-#### If you choose instance profile-based credential
+#### AWS S3
+
+##### If you choose instance profile-based credential
 
 - If you use Hive metastore in your Iceberg cluster, run a command like below:
 
@@ -270,7 +272,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   );
   ```
 
-#### If you choose assumed role-based credential
+##### If you choose assumed role-based credential
 
 - If you use Hive metastore in your HIceberg cluster, run a command like below:
 
@@ -303,7 +305,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   );
   ```
 
-#### If you choose IAM user-based credential
+##### If you choose IAM user-based credential
 
 - If you use Hive metastore in your Iceberg cluster, run a command like below:
 
@@ -338,6 +340,24 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
       "aws.glue.region" = "us-west-2"
   );
   ```
+
+#### S3-compatible storage system
+
+Use MinIO as an example. Run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog_hms
+PROPERTIES
+(
+    "type" = "iceberg", 
+    "iceberg.catalog.hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "aws.s3.enable_ssl" = "true",
+    "aws.s3.enable_path_style_access" = "true",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
 
 ## View the schema of an Iceberg table
 
