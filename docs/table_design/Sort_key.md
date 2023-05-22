@@ -64,7 +64,7 @@ CREATE TABLE site_access_aggregate
 (
     site_id INT DEFAULT '10',
     city_code SMALLINT,
-    user_id INT MAX,
+    user_id BITMAP BITMAP_UNION,
     pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(site_id, city_code)
