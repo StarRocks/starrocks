@@ -33,6 +33,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
 #include "exec/spill/executor.h"
@@ -178,6 +179,8 @@ public:
         dummy_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id);
         dummy_block_mgr->set_dir_manager(dummy_dir_mgr.get());
 
+        dummy_query_ctx = std::make_shared<pipeline::QueryContext>();
+        dummy_rt_st.set_query_ctx(dummy_query_ctx.get());
         dummy_rt_st.set_chunk_size(config::vector_chunk_size);
 
         metrics = SpillProcessMetrics(&dummy_profile);
@@ -185,6 +188,7 @@ public:
     void TearDown() override {}
     std::unique_ptr<spill::DirManager> dummy_dir_mgr;
     std::unique_ptr<spill::LogBlockManager> dummy_block_mgr;
+    pipeline::QueryContextPtr dummy_query_ctx;
     RuntimeState dummy_rt_st;
     RuntimeProfile dummy_profile{"dummy"};
     std::vector<std::string> clean_up;
