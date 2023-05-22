@@ -175,7 +175,7 @@ public class AnalyzeInsertTest {
                 "Expected: p1, but actual: p2");
 
         analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=1, p2=\"aaffsssaa\") values (1)",
-                "Type[ARRAY<date>] not supported.");
+                "Type[array<date>] not supported.");
 
         new Expectations() {
             {

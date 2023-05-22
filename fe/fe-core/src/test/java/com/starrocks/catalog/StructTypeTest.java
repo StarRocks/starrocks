@@ -30,7 +30,7 @@ public class StructTypeTest {
     @Test
     public void testUnnamedStruct() {
         StructType type = new StructType(Lists.newArrayList(Type.INT, Type.DATETIME));
-        Assert.assertEquals("STRUCT<col0 int(11), col1 datetime>", type.toSql());
+        Assert.assertEquals("struct<col0 int(11), col1 datetime>", type.toSql());
     }
 
     @Test

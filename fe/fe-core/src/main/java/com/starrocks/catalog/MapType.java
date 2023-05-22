@@ -135,9 +135,9 @@ public class MapType extends Type {
     @Override
     public String toSql(int depth) {
         if (depth >= MAX_NESTING_DEPTH) {
-            return "MAP<...>";
+            return "map<...>";
         }
-        return String.format("MAP<%s,%s>",
+        return String.format("map<%s,%s>",
                 keyType.toSql(depth + 1), valueType.toSql(depth + 1));
     }
 

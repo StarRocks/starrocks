@@ -341,7 +341,7 @@ public class DeleteTest {
         try {
             deleteHandler.process(deleteStmt);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("Type[ARRAY<bigint(20)>] not supported"));
+            Assert.assertTrue(e.getMessage().contains("Type[array<bigint(20)>] not supported"));
         }
     }
 }

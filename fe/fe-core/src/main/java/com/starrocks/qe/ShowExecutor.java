@@ -1040,41 +1040,7 @@ public class ShowExecutor {
     private String toMysqlDDL(Column column) {
         StringBuilder sb = new StringBuilder();
         sb.append("  `").append(column.getName()).append("` ");
-        switch (column.getType().getPrimitiveType()) {
-            case TINYINT:
-                sb.append("tinyint(4)");
-                break;
-            case SMALLINT:
-                sb.append("smallint(6)");
-                break;
-            case INT:
-                sb.append("int(11)");
-                break;
-            case BIGINT:
-                sb.append("bigint(20)");
-                break;
-            case FLOAT:
-                sb.append("float");
-                break;
-            case DOUBLE:
-                sb.append("double");
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-            case DECIMALV2:
-                sb.append("decimal");
-                break;
-            case DATE:
-            case DATETIME:
-                sb.append("datetime");
-                break;
-            case CHAR:
-            case VARCHAR:
-                sb.append("varchar(1048576)");
-                break;
-            default:
-                sb.append("binary(1048576)");
-        }
+        sb.append(column.getType().toSql());
         sb.append(" DEFAULT NULL");
 
         if (!Strings.isNullOrEmpty(column.getComment())) {
