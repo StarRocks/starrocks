@@ -130,7 +130,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
                         break;
                     }
 
-                    if (++i % 60000 == 0) {
+                    if (++i % 3000 == 0) {
                         LOG(INFO) << "LoadChannel txn_id: " << request.txn_id()
                                   << " load_id: " << print_id(request.id())
                                   << " wait other sender finish write already "
