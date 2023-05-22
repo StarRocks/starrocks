@@ -66,6 +66,8 @@ import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
@@ -73,6 +75,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -397,6 +400,21 @@ public class AnalyzerUtils {
         return tableRelations;
     }
 
+<<<<<<< HEAD
+=======
+    public static List<TableRelation> collectTableRelations(StatementBase statementBase) {
+        List<TableRelation> tableRelations = Lists.newArrayList();
+        new AnalyzerUtils.TableRelationsCollector(tableRelations).visit(statementBase);
+        return tableRelations;
+    }
+
+    public static List<ViewRelation> collectViewRelations(StatementBase statementBase) {
+        List<ViewRelation> viewRelations = Lists.newArrayList();
+        new AnalyzerUtils.ViewRelationsCollector(viewRelations).visit(statementBase);
+        return viewRelations;
+    }
+
+>>>>>>> ec7722fb1 ([Feature] support view in materialized view (#23476))
     public static boolean isOnlyHasOlapTables(StatementBase statementBase) {
         Map<TableName, Table> nonOlapTables = Maps.newHashMap();
         new AnalyzerUtils.NonOlapTableCollector(nonOlapTables).visit(statementBase);
@@ -548,6 +566,40 @@ public class AnalyzerUtils {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private static class ViewRelationsCollector extends AstTraverser<Void, Void> {
+
+        private final List<ViewRelation> viewRelations;
+
+        public ViewRelationsCollector(List<ViewRelation> viewRelations) {
+            this.viewRelations = viewRelations;
+        }
+
+        @Override
+        public Void visitView(ViewRelation node, Void context) {
+            viewRelations.add(node);
+            return null;
+        }
+    }
+
+    private static class TableRelationsCollector extends TableCollector {
+
+        private final List<TableRelation> tableRelations;
+
+        public TableRelationsCollector(List<TableRelation> tableRelations) {
+            super(null);
+            this.tableRelations = tableRelations;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            tableRelations.add(node);
+            return null;
+        }
+    }
+
+>>>>>>> ec7722fb1 ([Feature] support view in materialized view (#23476))
     private static class SubQueryRelationCollector extends TableCollector {
         Map<TableName, SubqueryRelation> subQueryRelations;
 
@@ -771,4 +823,109 @@ public class AnalyzerUtils {
         }
         return null;
     }
+<<<<<<< HEAD
+=======
+
+    public static SlotRef getSlotRefFromCast(Expr expr) {
+        if (expr instanceof CastExpr) {
+            CastExpr castExpr = (CastExpr) expr;
+            ArrayList<Expr> children = castExpr.getChildren();
+            for (Expr child : children) {
+                SlotRef slotRef = null;
+                if (child instanceof SlotRef) {
+                    slotRef = (SlotRef) child;
+                } else if (child instanceof CastExpr) {
+                    slotRef = getSlotRefFromCast(child);
+                } else if (child instanceof FunctionCallExpr) {
+                    slotRef = getSlotRefFromFunctionCall(child);
+                }
+                if (slotRef != null) {
+                    return slotRef;
+                }
+            }
+        }
+        return null;
+    }
+
+    public static Type replaceNullType2Boolean(Type type) {
+        if (type.isNull()) {
+            return Type.BOOLEAN;
+        } else if (type.isArrayType()) {
+            Type childType = ((ArrayType) type).getItemType();
+            Type newType = replaceNullType2Boolean(childType);
+            if (!childType.equals(newType)) {
+                return new ArrayType(newType);
+            }
+        } else if (type.isMapType()) {
+            Type keyType = ((MapType) type).getKeyType();
+            Type valueType = ((MapType) type).getValueType();
+            Type nkt = replaceNullType2Boolean(keyType);
+            Type nvt = replaceNullType2Boolean(valueType);
+            if (!keyType.equals(nkt) || !valueType.equals(nvt)) {
+                return new MapType(nkt, nvt);
+            }
+        } else if (type.isStructType()) {
+            ArrayList<StructField> newFields = Lists.newArrayList();
+            for (StructField sf : ((StructType) type).getFields()) {
+                newFields.add(new StructField(sf.getName(), replaceNullType2Boolean(sf.getType()), sf.getComment()));
+            }
+            return new StructType(newFields);
+        }
+        return type;
+    }
+
+    public static void checkNondeterministicFunction(ParseNode node) {
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
+                if (expr.isNondeterministicBuiltinFnName()) {
+                    throw new SemanticException("Materialized view query statement select item " +
+                            expr.toSql() + " not supported nondeterministic function", expr.getPos());
+                }
+                return null;
+            }
+        }.visit(node);
+    }
+
+    public static Expr resolveSlotRef(SlotRef slotRef, QueryStatement queryStatement) {
+        AstVisitor<Expr, Void> slotRefResolver = new AstVisitor<Expr, Void>() {
+            @Override
+            public Expr visitSelect(SelectRelation node, Void context) {
+                for (SelectListItem selectListItem : node.getSelectList().getItems()) {
+                    if (selectListItem.getAlias() == null) {
+                        if (selectListItem.getExpr() instanceof SlotRef) {
+                            SlotRef slot = (SlotRef) selectListItem.getExpr();
+                            if (slot.getColumnName().equalsIgnoreCase(slotRef.getColumnName())) {
+                                return slot;
+                            }
+                        }
+                    } else {
+                        if (selectListItem.getAlias().equalsIgnoreCase(slotRef.getColumnName())) {
+                            return selectListItem.getExpr();
+                        }
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public Expr visitSetOp(SetOperationRelation node, Void context) {
+                for (Relation relation : node.getRelations()) {
+                    Expr resolved = relation.accept(this, null);
+                    if (resolved != null) {
+                        return resolved;
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public SlotRef visitValues(ValuesRelation node, Void context) {
+                return null;
+            }
+        };
+        return queryStatement.getQueryRelation().accept(slotRefResolver, null);
+    }
+
+>>>>>>> ec7722fb1 ([Feature] support view in materialized view (#23476))
 }
