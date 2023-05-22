@@ -21,11 +21,18 @@
 #include "common/compiler_util.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
+#include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::spill {
+struct TraceInfo {
+    TraceInfo(RuntimeState* state) : query_id(state->query_id()), fragment_id(state->fragment_instance_id()) {}
+    TUniqueId query_id;
+    TUniqueId fragment_id;
+};
+
 struct EmptyMemGuard {
     bool scoped_begin() const { return true; }
     void scoped_end() const {}
