@@ -98,7 +98,7 @@ public class ColumnFilterConverter {
         // rewrite invalid date cast expr to NullLiteral
         ScalarOperator rewritePredicate = rewriteInvalidDateCast(predicate);
 
-        if (rewritePredicate.getChildren().stream().skip(1).anyMatch(d -> !OperatorType.CONSTANT.equals(d.getOpType()))) {
+        if (!rewritePredicate.isConstant()) {
             return;
         }
 
