@@ -45,6 +45,7 @@
 #include "roaring/containers/containers.h"
 #include "roaring/roaring.h"
 #include "roaring/roaring_array.h"
+#include "util/coding.h"
 
 namespace starrocks {
 
@@ -160,24 +161,35 @@ public:
      * Add value x
      *
      */
-    void add(uint32_t x) { roarings[0].add(x); }
-
-    void add(uint64_t x) { roarings[highBytes(x)].add(lowBytes(x)); }
+    template <typename T>
+    void add(T x) {
+        if constexpr (sizeof(T) <= 4) {
+            roarings[0].add(x);
+        } else {
+            roarings[highBytes(x)].add(lowBytes(x));
+        }
+    }
 
     /**
      * Add value n_args from pointer vals
      *
      */
-    void addMany(size_t n_args, const uint32_t* vals) {
-        for (size_t lcv = 0; lcv < n_args; lcv++) {
-            roarings[0].add(vals[lcv]);
+    template <typename T>
+    void addMany(size_t n_args, const T* vals) {
+        if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t>) {
+            roarings[0].addMany(n_args, reinterpret_cast<const uint32_t*>(vals));
             roarings[0].setCopyOnWrite(copyOnWrite);
-        }
-    }
-    void addMany(size_t n_args, const uint64_t* vals) {
-        for (size_t lcv = 0; lcv < n_args; lcv++) {
-            roarings[highBytes(vals[lcv])].add(lowBytes(vals[lcv]));
-            roarings[highBytes(vals[lcv])].setCopyOnWrite(copyOnWrite);
+        } else if (sizeof(T) <= 4) {
+            for (size_t lcv = 0; lcv < n_args; lcv++) {
+                roarings[0].add(vals[lcv]);
+                roarings[0].setCopyOnWrite(copyOnWrite);
+            }
+        } else {
+            // TODO: optimize uint64_t*
+            for (size_t lcv = 0; lcv < n_args; lcv++) {
+                roarings[highBytes(vals[lcv])].add(lowBytes(vals[lcv]));
+                roarings[highBytes(vals[lcv])].setCopyOnWrite(copyOnWrite);
+            }
         }
     }
 
