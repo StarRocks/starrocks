@@ -505,11 +505,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
 // TODO: Eliminate the explicit dependency on staros worker
 #ifdef USE_STAROS
     auto shard_info_or = g_worker->get_shard_info(tablet_id);
-    if (!shard_info_or.ok()) {
-#ifndef BE_TEST
-        return to_status(shard_info_or.status());
-#endif // BE_TEST
-    } else {
+    if (shard_info_or.ok()) {
         const auto& shard_info = shard_info_or.value();
         const auto& properties = shard_info.properties;
         auto index_id_iter = properties.find("indexId");
