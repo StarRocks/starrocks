@@ -106,10 +106,10 @@ TEST_F(LakeTabletManagerTest, create_and_delete_tablet) {
     req.tablet_id = 65535;
     req.__set_version(1);
     req.__set_version_hash(0);
-    req.tablet_schema.schema_hash = 270068375;
-    req.tablet_schema.short_key_column_count = 2;
-    req.tablet_schema.keys_type = TKeysType::DUP_KEYS;
-    req.tablet_schema.id = next_id();
+    req.tablet_schema.__set_id(next_id());
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
     EXPECT_OK(_tablet_manager->create_tablet(req));
     auto res = _tablet_manager->get_tablet(65535);
     EXPECT_TRUE(res.ok());
@@ -132,10 +132,10 @@ TEST_F(LakeTabletManagerTest, create_and_delete_pk_tablet) {
     req.tablet_id = 65535;
     req.__set_version(1);
     req.__set_version_hash(0);
-    req.tablet_schema.schema_hash = 270068375;
-    req.tablet_schema.short_key_column_count = 2;
-    req.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
-    req.tablet_schema.id = next_id();
+    req.tablet_schema.__set_id(next_id());
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::PRIMARY_KEYS);
     EXPECT_OK(_tablet_manager->create_tablet(req));
     auto res = _tablet_manager->get_tablet(65535);
     EXPECT_TRUE(res.ok());
@@ -369,11 +369,10 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         TCreateTabletReq req;
         req.tablet_id = 65535;
         req.__set_version(1);
-        req.tablet_schema.__set_id(1);
+        req.tablet_schema.__set_id(next_id());
         req.tablet_schema.__set_schema_hash(0);
         req.tablet_schema.__set_short_key_column_count(1);
-        req.tablet_schema.keys_type = TKeysType::DUP_KEYS;
-        req.tablet_schema.id = next_id();
+        req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
 
         auto& c0 = req.tablet_schema.columns.emplace_back();
         c0.column_name = "c0";
@@ -408,11 +407,10 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         req.tablet_id = 65536;
         req.__set_version(1);
         req.__set_base_tablet_id(65535);
-        req.tablet_schema.__set_id(2);
+        req.tablet_schema.__set_id(next_id());
         req.tablet_schema.__set_schema_hash(0);
         req.tablet_schema.__set_short_key_column_count(1);
-        req.tablet_schema.keys_type = TKeysType::DUP_KEYS;
-        req.tablet_schema.id = next_id();
+        req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
 
         auto& c0 = req.tablet_schema.columns.emplace_back();
         c0.column_name = "c0";
@@ -459,11 +457,10 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         req.tablet_id = 65537;
         req.__set_version(1);
         req.__set_base_tablet_id(65536);
-        req.tablet_schema.__set_id(3);
+        req.tablet_schema.__set_id(next_id());
         req.tablet_schema.__set_schema_hash(0);
         req.tablet_schema.__set_short_key_column_count(1);
-        req.tablet_schema.keys_type = TKeysType::DUP_KEYS;
-        req.tablet_schema.id = next_id();
+        req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
 
         auto& c0 = req.tablet_schema.columns.emplace_back();
         c0.column_name = "c0";
