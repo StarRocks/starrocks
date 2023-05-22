@@ -22,10 +22,18 @@ CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day,
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv1;
 -- result:
-05511e19-da7e-11ed-a137-9671fef9d69f
+731a4857-f869-11ed-9144-2235224db8f4
 -- !result
 SELECT * FROM mv1;
 -- result:
+-- !result
+CREATE MATERIALIZED VIEW mv2 DISTRIBUTED BY hash(event_day) ORDER BY (event_day, sum_pv) AS SELECT event_day, sum(pv) as sum_pv FROM ss GROUP BY event_day;
+-- result:
+-- !result
+DESC mv2;
+-- result:
+event_day	date	YES	true	None	
+sum_pv	bigint	YES	true	None	
 -- !result
 SELECT is_active, inactive_reason FROM information_schema.materialized_views WHERE table_name='mv1' and table_schema='db_${uuid0}';
 -- result:

@@ -9,8 +9,14 @@ CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day,
 [UC]REFRESH MATERIALIZED VIEW mv1;
 SELECT * FROM mv1;
 
+-- TEST ORDER BY
+CREATE MATERIALIZED VIEW mv2 DISTRIBUTED BY hash(event_day) ORDER BY (event_day, sum_pv) AS SELECT event_day, sum(pv) as sum_pv FROM ss GROUP BY event_day;
+DESC mv2;
+
+-- TEST DROP TABLE 
 SELECT is_active, inactive_reason FROM information_schema.materialized_views WHERE table_name='mv1' and table_schema='db_${uuid0}';
 DROP TABLE ss;
 SELECT is_active, inactive_reason FROM information_schema.materialized_views WHERE table_name='mv1' and table_schema='db_${uuid0}';
 
 REFRESH MATERIALIZED VIEW mv1;
+
