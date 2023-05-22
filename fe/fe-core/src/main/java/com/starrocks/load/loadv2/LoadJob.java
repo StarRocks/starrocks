@@ -107,43 +107,64 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     private static final int TASK_SUBMIT_RETRY_NUM = 2;
 
+    @SerializedName("id")
     protected long id;
     // input params
+    @SerializedName("dbId")
     protected long dbId;
+    @SerializedName("label")
     protected String label;
+    @SerializedName("state")
     protected JobState state = JobState.PENDING;
+    @SerializedName("jobType")
     protected EtlJobType jobType;
     // the auth info could be null when load job is created before commit named 'Persist auth info in load job'
+    @SerializedName("authorizationInfo")
     protected AuthorizationInfo authorizationInfo;
 
     // optional properties
     // timeout second need to be reset in constructor of subclass
+    @SerializedName("timeout")
     protected long timeoutSecond = Config.broker_load_default_timeout_second;
+    @SerializedName("loadMemLimit")
     protected long loadMemLimit = 0;      // default no limit for load memory
+    @SerializedName("maxFilterRatio")
     protected double maxFilterRatio = 0;
+    @SerializedName("strictMode")
     protected boolean strictMode = false; // default is false
+    @SerializedName("timezone")
     protected String timezone = TimeUtils.DEFAULT_TIME_ZONE;
+    @SerializedName("partialUpdate")
     protected boolean partialUpdate = false;
     protected String partialUpdateMode = "row";
+    @SerializedName("priority")
     protected int priority = LoadPriority.NORMAL_VALUE;
+    @SerializedName("logRejectedRecordNum")
     protected long logRejectedRecordNum = 0;
     // reuse deleteFlag as partialUpdate
     // @Deprecated
     // protected boolean deleteFlag = false;
 
+    @SerializedName("createTime")
     protected long createTimestamp = -1;
+    @SerializedName("loadStartTime")
     protected long loadStartTimestamp = -1;
+    @SerializedName("finishTime")
     protected long finishTimestamp = -1;
 
+    @SerializedName("transactionId")
     protected long transactionId;
+    @SerializedName("failMsg")
     protected FailMsg failMsg;
     protected Map<Long, LoadTask> idToTasks = Maps.newConcurrentMap();
     protected Set<Long> finishedTaskIds = Sets.newHashSet();
+    @SerializedName("loadingStatus")
     protected EtlStatus loadingStatus = new EtlStatus();
     // 0: the job status is pending
     // n/100: n is the number of task which has been finished
     // 99: all of tasks have been finished
     // 100: txn status is visible and load has been finished
+    @SerializedName("progress")
     protected int progress;
 
     public int getProgress() {

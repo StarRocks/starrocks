@@ -15,6 +15,7 @@
 
 package com.starrocks.load.loadv2;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
@@ -25,11 +26,14 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
+    @SerializedName("loadedRows")
     private long loadedRows;
+    @SerializedName("filteredRows")
     private long filteredRows;
     private long receivedBytes;
     private long loadedBytes;
     // optional
+    @SerializedName("errorLogUrl")
     private String errorLogUrl;
 
     public ManualLoadTxnCommitAttachment() {

@@ -104,10 +104,10 @@ public class SRMetaBlockTest {
         SRMetaBlockReader reader = new SRMetaBlockReader(dis, name);
 
         // 1. String
-        String retStr = (String) reader.readJson(String.class);
+        String retStr = reader.readJson(String.class);
         Assert.assertEquals(simpleStruct.str, retStr);
         // 2. int
-        Integer retInt = (Integer) reader.readJson(Integer.class);
+        Integer retInt = reader.readJson(Integer.class);
         Assert.assertEquals(simpleStruct.num, retInt.intValue());
         // 3. list
         List<String> retList = (List<String>) reader.readJson(SimpleStruct.LIST_TYPE);
@@ -122,7 +122,7 @@ public class SRMetaBlockTest {
             Assert.assertEquals(simpleStruct.map.get(k), retMap.get(k));
         }
         // 5. all
-        SimpleStruct ret = (SimpleStruct) reader.readJson(SimpleStruct.class);
+        SimpleStruct ret = reader.readJson(SimpleStruct.class);
         Assert.assertEquals(simpleStruct.str, ret.str);
         Assert.assertEquals(simpleStruct.num, ret.num);
         Assert.assertEquals(simpleStruct.list.size(), ret.list.size());
@@ -184,10 +184,10 @@ public class SRMetaBlockTest {
         // first block, 4 json
         SRMetaBlockReader reader = new SRMetaBlockReader(dis, block1);
         // 1. String
-        String retStr = (String) reader.readJson(String.class);
+        String retStr = reader.readJson(String.class);
         Assert.assertEquals(simpleStruct.str, retStr);
         // 2. int
-        Integer retInt = (Integer) reader.readJson(Integer.class);
+        Integer retInt = reader.readJson(Integer.class);
         Assert.assertEquals(simpleStruct.num, retInt.intValue());
         // 3. list
         List<String> retList = (List<String>) reader.readJson(SimpleStruct.LIST_TYPE);
@@ -205,7 +205,7 @@ public class SRMetaBlockTest {
 
         // second block, 1 json
         reader = new SRMetaBlockReader(dis, block2);
-        SimpleStruct ret = (SimpleStruct) reader.readJson(SimpleStruct.class);
+        SimpleStruct ret = reader.readJson(SimpleStruct.class);
         Assert.assertEquals(simpleStruct.str, ret.str);
         Assert.assertEquals(simpleStruct.num, ret.num);
         Assert.assertEquals(simpleStruct.list.size(), ret.list.size());
@@ -228,14 +228,14 @@ public class SRMetaBlockTest {
         // first block, only read 1 string
         reader = new SRMetaBlockReader(dis, block1);
         // 1. String
-        retStr = (String) reader.readJson(String.class);
+        retStr = reader.readJson(String.class);
         Assert.assertEquals(simpleStruct.str, retStr);
         // skip the rest
         reader.close();
 
         // second block, 1 json
         reader = new SRMetaBlockReader(dis, block2);
-        ret = (SimpleStruct) reader.readJson(SimpleStruct.class);
+        ret = reader.readJson(SimpleStruct.class);
         Assert.assertEquals(simpleStruct.str, ret.str);
         Assert.assertEquals(simpleStruct.num, ret.num);
         Assert.assertEquals(simpleStruct.list.size(), ret.list.size());

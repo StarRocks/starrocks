@@ -586,16 +586,15 @@ public class AuthenticationManager {
             AuthenticationManager ret = null;
             try {
                 // 1 json for myself
-                ret = (AuthenticationManager) reader.readJson(AuthenticationManager.class);
+                ret = reader.readJson(AuthenticationManager.class);
                 ret.userToAuthenticationInfo = new UserAuthInfoTreeMap();
                 // 1 json for num user
-                int numUser = (int) reader.readJson(int.class);
+                int numUser = reader.readJson(int.class);
                 LOG.info("loading {} users", numUser);
                 for (int i = 0; i != numUser; ++i) {
                     // 2 json for each user(kv)
-                    UserIdentity userIdentity = (UserIdentity) reader.readJson(UserIdentity.class);
-                    UserAuthenticationInfo userAuthenticationInfo =
-                            (UserAuthenticationInfo) reader.readJson(UserAuthenticationInfo.class);
+                    UserIdentity userIdentity = reader.readJson(UserIdentity.class);
+                    UserAuthenticationInfo userAuthenticationInfo = reader.readJson(UserAuthenticationInfo.class);
                     userAuthenticationInfo.analyze();
                     ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
                 }

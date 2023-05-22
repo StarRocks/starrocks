@@ -1403,8 +1403,10 @@ public class GlobalStateMgr {
                 try {
                     checksum = loadHeaderV2(dis, checksum);
                     nodeMgr.load(dis);
+                    loadManager.loadLoadJobsV2JsonFormat(dis);
                 } catch (SRMetaBlockException | SRMetaBlockEOFException e) {
-                    LOG.error(e.getMessage());
+                    LOG.error("load image failed", e);
+                    throw new IOException("load image failed", e);
                 }
 
                 //TODO: The following parts have not been refactored, and they are added for the convenience of testing
@@ -1415,7 +1417,6 @@ public class GlobalStateMgr {
                 esRepository.loadTableFromCatalog();
                 starRocksRepository.loadTableFromCatalog();
 
-                checksum = load.loadLoadJob(dis, checksum);
                 checksum = loadAlterJob(dis, checksum);
                 checksum = recycleBin.loadRecycleBin(dis, checksum);
                 checksum = VariableMgr.loadGlobalVariable(dis, checksum);
@@ -1428,7 +1429,6 @@ public class GlobalStateMgr {
                 checksum = globalTransactionMgr.loadTransactionState(dis, checksum);
                 checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
                 checksum = routineLoadManager.loadRoutineLoadJobs(dis, checksum);
-                checksum = loadManager.loadLoadJobsV2(dis, checksum);
                 checksum = smallFileMgr.loadSmallFiles(dis, checksum);
                 checksum = pluginMgr.loadPlugins(dis, checksum);
                 checksum = loadDeleteHandler(dis, checksum);
@@ -1798,13 +1798,14 @@ public class GlobalStateMgr {
                 try {
                     checksum = saveHeaderV2(dos, checksum);
                     nodeMgr.save(dos);
+                    loadManager.saveLoadJobsV2JsonFormat(dos);
                 } catch (SRMetaBlockException e) {
-                    LOG.error(e.getMessage());
+                    LOG.error("save image failed", e);
+                    throw new IOException("save image failed", e);
                 }
 
                 //TODO: The following parts have not been refactored, and they are added for the convenience of testing
                 checksum = localMetastore.saveDb(dos, checksum);
-                checksum = load.saveLoadJob(dos, checksum);
                 checksum = saveAlterJob(dos, checksum);
                 checksum = recycleBin.saveRecycleBin(dos, checksum);
                 checksum = VariableMgr.saveGlobalVariable(dos, checksum);
@@ -1816,7 +1817,6 @@ public class GlobalStateMgr {
                 checksum = globalTransactionMgr.saveTransactionState(dos, checksum);
                 checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
                 checksum = routineLoadManager.saveRoutineLoadJobs(dos, checksum);
-                checksum = loadManager.saveLoadJobsV2(dos, checksum);
                 checksum = smallFileMgr.saveSmallFiles(dos, checksum);
                 checksum = pluginMgr.savePlugins(dos, checksum);
                 checksum = deleteHandler.saveDeleteHandler(dos, checksum);
