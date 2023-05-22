@@ -5,8 +5,7 @@
 #include "exprs/agg/aggregate.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 const AggregateFunction* get_aggregate_function(const std::string& name, PrimitiveType arg_type,
                                                 PrimitiveType return_type, bool is_null,
@@ -18,5 +17,4 @@ const AggregateFunction* get_window_function(const std::string& name, PrimitiveT
                                              TFunctionBinaryType::type binary_type = TFunctionBinaryType::BUILTIN,
                                              int func_version = 1);
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
