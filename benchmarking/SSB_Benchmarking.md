@@ -28,7 +28,7 @@ StarRocks，ClickHouse 和 Apache Druid 部署在相同配置的机器上分别�
 
 - StarRocks 部署 1 个 FE 和 3 个 BE。
 - ClickHouse 部署三个节点后建立分布式表。
-- Apache Druid 使用一个节点部署 Master Servers（Coordinator/Overlord），另一个节点部署 Query Servers（ Broker/Router），三个节点都混合部署 Data Servers（Historical/MiddleManager）。
+- Apache Druid 三个节点都部署 Data Servers，同时选择一个节点混合部署 Master Servers，另一个节点混合部署 Query Servers。
 
 内核版本：Linux 3.10.0-1160.59.1.el7.x86_64
 
