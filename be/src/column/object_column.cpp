@@ -56,6 +56,12 @@ void ObjectColumn<T>::append(T&& object) {
 }
 
 template <typename T>
+void ObjectColumn<T>::append(const T& object) {
+    _pool.emplace_back(object);
+    _cache_ok = false;
+}
+
+template <typename T>
 void ObjectColumn<T>::remove_first_n_values(size_t count) {
     size_t remain_size = _pool.size() - count;
     for (size_t i = 0; i < remain_size; ++i) {
