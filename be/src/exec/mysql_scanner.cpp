@@ -195,6 +195,14 @@ Status MysqlScanner::query(const std::string& table, const std::vector<std::stri
     return query(_sql_str);
 }
 
+Slice MysqlScanner::escape(const std::string& value) {
+    _escape_buffer.resize(value.size() * 2 + 1 + 2);
+    _escape_buffer[0] = '\'';
+    auto sz = mysql_real_escape_string(_my_conn, _escape_buffer.data() + 1, value.data(), value.size());
+    _escape_buffer[sz + 1] = '\'';
+    return {_escape_buffer.data(), sz + 2};
+}
+
 Status MysqlScanner::get_next_row(char*** buf, unsigned long** lengths, bool* eos) {
     if (!_opened) {
         return Status::InternalError("GetNextRow before open.");

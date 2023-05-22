@@ -11,6 +11,7 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/any_value.h"
 #include "exprs/agg/avg.h"
+#include "exprs/agg/bitmap_agg.h"
 #include "exprs/agg/bitmap_intersect.h"
 #include "exprs/agg/bitmap_union.h"
 #include "exprs/agg/bitmap_union_count.h"
@@ -61,6 +62,9 @@ public:
     }
 
     static AggregateFunctionPtr MakeBitmapUnionAggregateFunction();
+
+    template <PrimitiveType LT>
+    static AggregateFunctionPtr MakeBitmapAggAggregateFunction();
 
     static AggregateFunctionPtr MakeBitmapIntersectAggregateFunction();
 
@@ -309,6 +313,11 @@ AggregateFunctionPtr AggregateFactory::MakePercentileContAggregateFunction() {
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakePercentileDiscAggregateFunction() {
     return std::make_shared<PercentileDiscAggregateFunction<PT>>();
+}
+
+template <PrimitiveType LT>
+AggregateFunctionPtr AggregateFactory::MakeBitmapAggAggregateFunction() {
+    return std::make_shared<BitmapAggAggregateFunction<LT>>();
 }
 
 } // namespace starrocks::vectorized
