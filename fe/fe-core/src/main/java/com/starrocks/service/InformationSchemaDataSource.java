@@ -50,6 +50,7 @@ import com.starrocks.thrift.TTableInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -68,15 +69,9 @@ public class InformationSchemaDataSource {
     private static final long DEFAULT_EMPTY_NUM = -1L;
     private static final String UTF8_GENERAL_CI = "utf8_general_ci";
 
+    @NotNull
+    private static AuthDbRequestResult getAuthDbRequestResult(TAuthInfo authInfo) throws TException {
 
-    // tables_config
-    public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request)
-            throws TException {
-
-        TGetTablesConfigResponse resp = new TGetTablesConfigResponse();
-        List<TTableConfigInfo> tList = new ArrayList<>();
-
-        TAuthInfo authInfo = request.getAuth_info();
 
         List<String> authorizedDbs = Lists.newArrayList();
         PatternMatcher matcher = null;
@@ -116,8 +111,31 @@ public class InformationSchemaDataSource {
             }
             authorizedDbs.add(fullName);
         }
+        AuthDbRequestResult result = new AuthDbRequestResult(authorizedDbs, currentUser);
+        return result;
+    }
 
-        for (String dbName : authorizedDbs) {
+    private static class AuthDbRequestResult {
+        public final List<String> authorizedDbs;
+        public final UserIdentity currentUser;
+
+        public AuthDbRequestResult(List<String> authorizedDbs, UserIdentity currentUser) {
+            this.authorizedDbs = authorizedDbs;
+            this.currentUser = currentUser;
+        }
+    }
+
+
+    // tables_config
+    public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request)
+            throws TException {
+
+        TGetTablesConfigResponse resp = new TGetTablesConfigResponse();
+        List<TTableConfigInfo> tList = new ArrayList<>();
+
+        AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
+
+        for (String dbName : result.authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
                 db.readLock();
@@ -127,10 +145,10 @@ public class InformationSchemaDataSource {
 
                         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                             // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
-                            if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, dbName, table)) {
+                            if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
                                 continue;
                             }
-                        } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
+                        } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(result.currentUser, dbName,
                                 table.getName(), PrivPredicate.SHOW)) {
                             continue;
                         }
@@ -158,6 +176,8 @@ public class InformationSchemaDataSource {
         resp.tables_config_infos = tList;
         return resp;
     }
+
+
 
     private static Map<String, String> genProps(Table table) {
         if (table.isMaterializedView()) {
@@ -287,48 +307,10 @@ public class InformationSchemaDataSource {
 
         TGetTablesInfoResponse response = new TGetTablesInfoResponse();
         List<TTableInfo> infos = new ArrayList<>();
-        TAuthInfo authInfo = request.getAuth_info();
 
-        List<String> authorizedDbs = Lists.newArrayList();
-        PatternMatcher matcher = null;
-        if (authInfo.isSetPattern()) {
-            try {
-                matcher = PatternMatcher.createMysqlPattern(authInfo.getPattern(),
-                        CaseSensibility.DATABASE.getCaseSensibility());
-            } catch (SemanticException e) {
-                throw new TException("Pattern is in bad format: " + authInfo.getPattern());
-            }
-        }
+        AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getDbNames();
-        LOG.debug("get db names: {}", dbNames);
-
-        UserIdentity currentUser = null;
-        if (authInfo.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(authInfo.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
-        }
-        for (String fullName : dbNames) {
-            if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
-                    continue;
-                }
-            } else {
-                if (!globalStateMgr.getAuth().checkDbPriv(currentUser, fullName, PrivPredicate.SHOW)) {
-                    continue;
-                }
-            }
-
-            final String db1 = ClusterNamespace.getNameFromFullName(fullName);
-            if (matcher != null && !matcher.match(db1)) {
-                continue;
-            }
-            authorizedDbs.add(fullName);
-        }
-
-        for (String dbName : authorizedDbs) {
+        for (String dbName : result.authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
                 db.readLock();
@@ -338,10 +320,10 @@ public class InformationSchemaDataSource {
 
                         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                             // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
-                            if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, dbName, table)) {
+                            if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
                                 continue;
                             }
-                        } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
+                        } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(result.currentUser, dbName,
                                 table.getName(), PrivPredicate.SHOW)) {
                             continue;
                         }
