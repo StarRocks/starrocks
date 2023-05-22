@@ -29,6 +29,7 @@
 #include "storage/options.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
+#include "testutil/id_generator.h"
 #include "util/filesystem_util.h"
 #include "util/lru_cache.h"
 
@@ -108,6 +109,7 @@ TEST_F(LakeTabletManagerTest, create_and_delete_tablet) {
     req.tablet_schema.schema_hash = 270068375;
     req.tablet_schema.short_key_column_count = 2;
     req.tablet_schema.keys_type = TKeysType::DUP_KEYS;
+    req.tablet_schema.id = next_id();
     EXPECT_OK(_tablet_manager->create_tablet(req));
     auto res = _tablet_manager->get_tablet(65535);
     EXPECT_TRUE(res.ok());
@@ -133,6 +135,7 @@ TEST_F(LakeTabletManagerTest, create_and_delete_pk_tablet) {
     req.tablet_schema.schema_hash = 270068375;
     req.tablet_schema.short_key_column_count = 2;
     req.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+    req.tablet_schema.id = next_id();
     EXPECT_OK(_tablet_manager->create_tablet(req));
     auto res = _tablet_manager->get_tablet(65535);
     EXPECT_TRUE(res.ok());
@@ -370,6 +373,7 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         req.tablet_schema.__set_schema_hash(0);
         req.tablet_schema.__set_short_key_column_count(1);
         req.tablet_schema.keys_type = TKeysType::DUP_KEYS;
+        req.tablet_schema.id = next_id();
 
         auto& c0 = req.tablet_schema.columns.emplace_back();
         c0.column_name = "c0";
@@ -408,6 +412,7 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         req.tablet_schema.__set_schema_hash(0);
         req.tablet_schema.__set_short_key_column_count(1);
         req.tablet_schema.keys_type = TKeysType::DUP_KEYS;
+        req.tablet_schema.id = next_id();
 
         auto& c0 = req.tablet_schema.columns.emplace_back();
         c0.column_name = "c0";
@@ -458,6 +463,7 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         req.tablet_schema.__set_schema_hash(0);
         req.tablet_schema.__set_short_key_column_count(1);
         req.tablet_schema.keys_type = TKeysType::DUP_KEYS;
+        req.tablet_schema.id = next_id();
 
         auto& c0 = req.tablet_schema.columns.emplace_back();
         c0.column_name = "c0";
