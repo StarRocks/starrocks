@@ -114,16 +114,15 @@ std::string TabletManager::tablet_metadata_lock_location(int64_t tablet_id, int6
 }
 
 std::string TabletManager::global_schema_cache_key(int64_t schema_id) {
-    return fmt::format("A{}", schema_id);
-    //                  ^ The prefix has no meaning, it is only used to distinguish from other cache keys
+    return fmt::format("GS{}", schema_id);
 }
 
 std::string TabletManager::tablet_schema_cache_key(int64_t tablet_id) {
-    return fmt::format("B{}", tablet_id);
+    return fmt::format("TS{}", tablet_id);
 }
 
 std::string TabletManager::tablet_latest_metadata_cache_key(int64_t tablet_id) {
-    return fmt::format("C{}", tablet_id);
+    return fmt::format("TL{}", tablet_id);
 }
 
 bool TabletManager::fill_metacache(std::string_view key, CacheValue* ptr, int size) {
