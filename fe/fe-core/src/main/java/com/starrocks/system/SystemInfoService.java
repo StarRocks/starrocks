@@ -731,20 +731,20 @@ public class SystemInfoService {
         final List<Backend> backends =
                 getBackends().stream().filter(v -> !v.diskExceedLimitByStorageMedium(storageMedium))
                         .collect(Collectors.toList());
-        return seqChooseNodeIds(backendNum, needAvailable, isCreate, backends);
+        return seqChooseBackendIds(backendNum, needAvailable, isCreate, backends);
     }
 
     public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate) {
         final List<Backend> backends =
                 getBackends().stream().filter(v -> !v.diskExceedLimit()).collect(Collectors.toList());
-        return seqChooseNodeIds(backendNum, needAvailable, isCreate, backends);
+        return seqChooseBackendIds(backendNum, needAvailable, isCreate, backends);
     }
 
     // choose backends by round-robin
     // return null if not enough backend
     // use synchronized to run serially
-    public synchronized List<Long> seqChooseNodeIds(int backendNum, boolean needAvailable, boolean isCreate,
-                                                    final List<Backend> srcBackends) {
+    public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate,
+                                                       final List<Backend> srcBackends) {
         long lastBackendId;
 
         if (isCreate) {

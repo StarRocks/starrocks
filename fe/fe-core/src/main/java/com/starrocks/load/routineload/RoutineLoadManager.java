@@ -63,6 +63,7 @@ import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -170,23 +171,25 @@ public class RoutineLoadManager implements Writable {
     public void updateBeTaskSlot() {
         slotLock.lock();
         try {
-            Set<Long> aliveBeIds = Sets.newHashSet();
+            List<Long> aliveNodeIds = new ArrayList<>();
 
             // TODO: need to refactor after be split into cn + dn
-            aliveBeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true));
+            aliveNodeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true));
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                aliveBeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(true));
+                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+                aliveNodeIds = warehouse.getAnyAvailableCluster().getComputeNodeIds();
             }
 
-            // add new be
-            for (Long beId : aliveBeIds) {
-                if (!beTasksNum.containsKey(beId)) {
-                    beTasksNum.put(beId, 0);
+            // add new nodes
+            for (Long nodeId : aliveNodeIds) {
+                if (!beTasksNum.containsKey(nodeId)) {
+                    beTasksNum.put(nodeId, 0);
                 }
             }
 
             // remove not alive be
-            beTasksNum.keySet().removeIf(beId -> !aliveBeIds.contains(beId));
+            List<Long> finalAliveNodeIds = aliveNodeIds;
+            beTasksNum.keySet().removeIf(nodeId -> !finalAliveNodeIds.contains(nodeId));
         } finally {
             slotLock.unlock();
         }

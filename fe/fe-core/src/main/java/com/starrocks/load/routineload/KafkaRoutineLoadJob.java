@@ -72,6 +72,7 @@ import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -228,9 +229,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     public int calculateCurrentConcurrentTaskNum() throws MetaNotFoundException {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         // TODO: need to refactor after be split into cn + dn
-        int aliveBeNum = systemInfoService.getAliveBackendNumber();
+        int aliveNodeNum = systemInfoService.getAliveBackendNumber();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            aliveBeNum += systemInfoService.getAliveComputeNodeNumber();
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            aliveNodeNum = warehouse.getAnyAvailableCluster().getComputeNodeIds().size();
         }
         int partitionNum = currentKafkaPartitions.size();
         if (desireTaskConcurrentNum == 0) {
@@ -239,8 +241,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
         LOG.debug("current concurrent task number is min"
                         + "(partition num: {}, desire task concurrent num: {}, alive be num: {}, config: {})",
-                partitionNum, desireTaskConcurrentNum, aliveBeNum, Config.max_routine_load_task_concurrent_num);
-        currentTaskConcurrentNum = Math.min(Math.min(partitionNum, Math.min(desireTaskConcurrentNum, aliveBeNum)),
+                partitionNum, desireTaskConcurrentNum, aliveNodeNum, Config.max_routine_load_task_concurrent_num);
+        currentTaskConcurrentNum = Math.min(Math.min(partitionNum, Math.min(desireTaskConcurrentNum, aliveNodeNum)),
                 Config.max_routine_load_task_concurrent_num);
         return currentTaskConcurrentNum;
     }

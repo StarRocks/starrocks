@@ -54,9 +54,11 @@ import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -178,18 +180,24 @@ public class KafkaUtil {
         private PProxyResult sendProxyRequest(PProxyRequest request) throws UserException {
             TNetworkAddress address = new TNetworkAddress();
             try {
-                List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
                 // TODO: need to refactor after be split into cn + dn
+                List<Long> nodeIds = new ArrayList<>();
                 if ((RunMode.getCurrentRunMode() == RunMode.SHARED_DATA)) {
-                    backendIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(true));
+                    Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+                    nodeIds = warehouse.getAnyAvailableCluster().getComputeNodeIds();
+                    if (nodeIds.isEmpty()) {
+                        throw new LoadException("Failed to send proxy request. No alive backends or computeNodes");
+                    }
+                } else {
+                    nodeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+                    if (nodeIds.isEmpty()) {
+                        throw new LoadException("Failed to send proxy request. No alive backends");
+                    }
                 }
 
-                if (backendIds.isEmpty()) {
-                    throw new LoadException("Failed to send proxy request. No alive backends");
-                }
-                Collections.shuffle(backendIds);
-                // TODO: need to refactor after be split into cn + dn
-                ComputeNode be = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(backendIds.get(0));
+                Collections.shuffle(nodeIds);
+
+                ComputeNode be = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
                 address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info
