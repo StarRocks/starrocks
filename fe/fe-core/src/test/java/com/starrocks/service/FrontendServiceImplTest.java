@@ -23,18 +23,23 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
+import com.starrocks.thrift.TGetTablesInfoRequest;
+import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUserIdentity;
@@ -543,5 +548,59 @@ public class FrontendServiceImplTest {
                         "    \"partition_live_number\" = \"3\",\n" +
                         "    \"replication_num\" = \"1\"\n" +
                         ");");
+    }
+
+    @Test
+    public void testGetTablesInfo() throws Exception {
+        starRocksAssert.withDatabase("test_table").useDatabase("test_table")
+                .withTable("CREATE TABLE `t1` (\n" +
+                        "  `k1` date NULL COMMENT \"\",\n" +
+                        "  `v1` int(11) NULL COMMENT \"\",\n" +
+                        "  `v2` int(11) NULL COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`k1`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"compression\" = \"LZ4\"\n" +
+                        ")")
+                .withTable("CREATE TABLE `t2` (\n" +
+                        "  `k1` date NULL COMMENT \"\",\n" +
+                        "  `v1` int(11) NULL COMMENT \"\",\n" +
+                        "  `v2` int(11) NULL COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`k1`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"compression\" = \"LZ4\"\n" +
+                        ")");
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createUserSql = "create user test1";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx), ctx);
+        String grantSql = "GRANT SELECT ON TABLE test_table.t1 TO USER `test1`@`%`;";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesInfoRequest request = new TGetTablesInfoRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("test1");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        authInfo.setCurrent_user_ident(userIdentity);
+        authInfo.setPattern("test_table");
+        request.setAuth_info(authInfo);
+        TGetTablesInfoResponse response = impl.getTablesInfo(request);
+        List<TTableInfo> tablesInfos = response.getTables_infos();
+        Assert.assertEquals(1, tablesInfos.size());
+        Assert.assertEquals("t1", tablesInfos.get(0).getTable_name());
     }
 }
