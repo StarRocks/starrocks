@@ -298,6 +298,7 @@ Status HashJoiner::create_runtime_filters(RuntimeState* state) {
 void HashJoiner::reference_hash_table(HashJoiner* src_join_builder) {
     auto& hash_table = _hash_join_builder->hash_table();
 
+    _hash_table_param = src_join_builder->hash_table_param();
     hash_table = src_join_builder->_hash_join_builder->hash_table().clone_readable_table();
     hash_table.set_probe_profile(probe_metrics().search_ht_timer, probe_metrics().output_probe_column_timer,
                                  probe_metrics().output_tuple_column_timer);
