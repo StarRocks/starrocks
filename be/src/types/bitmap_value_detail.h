@@ -26,6 +26,7 @@
 // So other files should not include this file except bitmap_value.cpp.
 #include <cstdint>
 #include <optional>
+
 #include "util/coding.h"
 
 namespace starrocks {
