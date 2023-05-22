@@ -158,6 +158,19 @@ public class TransactionLoadAction extends RestBaseAction {
                 resp.addResultEntry("Label", label);
                 sendResult(request, response, resp);
                 return;
+            } else if (txnStatus == TransactionStatus.COMMITTED || txnStatus == TransactionStatus.VISIBLE
+                      || txnStatus == TransactionStatus.ABORTED) {
+                String okMsg;
+                Long txnID = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelTxnID(db.getId(), label);
+                if (txnID == -1) {
+                    okMsg = "label " + label + " txn already expired";
+                } else {
+                    okMsg = "transaction " + txnID + " is completed, status " + txnStatus.toString();
+                }
+                resp.addResultEntry("Label", label);
+                resp.setOKMsg(okMsg);
+                sendResult(request, response, resp);
+                return;
             }
         }
 
