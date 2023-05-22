@@ -423,9 +423,9 @@ public:
 
     template <PrimitiveType arg_type, PrimitiveType return_type>
     void add_bitmap_mapping(std::string&& name) {
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false),
+        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false, false),
                                create_bitmap_function<arg_type, return_type, false>(name));
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, true),
+        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false, true),
                                create_bitmap_function<arg_type, return_type, true>(name));
     }
 
@@ -470,7 +470,7 @@ public:
         if constexpr (is_null) {
             if (name == "bitmap_agg") {
                 auto bitmap = AggregateFactory::MakeBitmapAggAggregateFunction<arg_type>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<BitmapValue>(bitmap);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<BitmapValue, false>(bitmap);
             }
         } else {
             if (name == "bitmap_agg") {
