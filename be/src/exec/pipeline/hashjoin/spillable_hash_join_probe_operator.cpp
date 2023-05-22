@@ -277,7 +277,7 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
     for (size_t i = 0; i < _processing_partitions.size(); ++i) {
         std::shared_ptr<spill::SpillerReader> reader = std::move(spill_readers[i]);
         auto task = [this, state, reader, i, query_ctx]() {
-            if (query_ctx.lock()) {
+            if (auto acquired = query_ctx.lock()) {
                 _update_status(_load_partition_build_side(state, reader, i));
             }
             _latch.count_down();
@@ -480,7 +480,9 @@ bool SpillableHashJoinProbeOperator::_all_loaded_partition_data_ready() {
 }
 
 bool SpillableHashJoinProbeOperator::_all_partition_finished() const {
-    return _processed_partitions.size() == _build_partitions.size();
+    // In some cases has_output may be skipped.
+    // So we call build_partitions.empty() first to make sure the parition loads
+    return !_build_partitions.empty() && _processed_partitions.size() == _build_partitions.size();
 }
 
 Status SpillableHashJoinProbeOperatorFactory::prepare(RuntimeState* state) {
