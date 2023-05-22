@@ -119,8 +119,10 @@ struct HashJoinerParam {
     const TJoinDistributionMode::type _distribution_mode;
 };
 
-inline bool is_left_semi_join_or_inner_join(TJoinOp::type join_type) {
-    return join_type == TJoinOp::LEFT_SEMI_JOIN || join_type == TJoinOp::INNER_JOIN;
+inline bool could_short_circuit(TJoinOp::type join_type) {
+    return join_type == TJoinOp::INNER_JOIN || join_type == TJoinOp::LEFT_SEMI_JOIN ||
+           join_type == TJoinOp::RIGHT_SEMI_JOIN || join_type == TJoinOp::RIGHT_ANTI_JOIN ||
+           join_type == TJoinOp::RIGHT_OUTER_JOIN;
 }
 
 inline bool has_post_probe(TJoinOp::type join_type) {

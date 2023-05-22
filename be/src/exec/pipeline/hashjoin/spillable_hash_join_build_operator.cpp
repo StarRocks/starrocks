@@ -99,23 +99,13 @@ Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* sta
     // It usually involves re-reading all the data that has been spilled
     // which cannot be streamed process in the spill scenario when build phase is finished
     // (unless FE can give an estimate of the hash table size), so we currently empty all the hash tables first
+    // we could build global runtime filter for this case later.
+    auto merged = _partial_rf_merger->set_always_true();
 
-    size_t merger_index = _driver_sequence;
-    // make sure ht_row_count exceed max runtime filters
-    auto ht_row_count = _partial_rf_merger->limit() + 1;
-    RuntimeInFilters partial_in_filters;
-    RuntimeBloomFilters partial_bloom_filters;
-    auto& partial_bloom_filter_build_params = _join_builder->get_runtime_bloom_filter_build_params();
-
-    ASSIGN_OR_RETURN(auto merged,
-                     _partial_rf_merger->add_partial_filters(merger_index, ht_row_count, std::move(partial_in_filters),
-                                                             std::move(partial_bloom_filter_build_params),
-                                                             std::move(partial_bloom_filters)));
     if (merged) {
         RuntimeInFilterList in_filters;
         RuntimeBloomFilterList bloom_filters;
-
-        // publish runtime bloom-filters
+        // publish empty runtime bloom-filters
         state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
         // move runtime filters into RuntimeFilterHub.
         runtime_filter_hub()->set_collector(_plan_node_id, std::make_unique<RuntimeFilterCollector>(
