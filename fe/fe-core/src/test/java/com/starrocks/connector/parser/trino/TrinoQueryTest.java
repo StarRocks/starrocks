@@ -885,4 +885,25 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select trim(trailing from '  abcd');";
         assertPlanContains(sql, "<slot 2> : rtrim('  abcd')");
     }
+
+    @Test
+    public void testTry() throws Exception {
+        String sql = "select try_cast('aa' as int)";
+        assertPlanContains(sql, "<slot 2> : CAST('aa' AS INT)");
+
+        sql = "select try_cast(ta as bigint) + 1 from tall";
+        assertPlanContains(sql, "CAST(1: ta AS BIGINT) + 1");
+
+        sql = "select try(cast ('aa' as int))";
+        assertPlanContains(sql, "<slot 2> : CAST('aa' AS INT)");
+
+        sql = "select try(2 / 0)";
+        assertPlanContains(sql, "<slot 2> : NULL");
+
+        sql = "select try(100 / v1) from t0 where v1 = 0";
+        assertPlanContains(sql, "100.0 / CAST(1: v1 AS DOUBLE)");
+
+        sql = "select coalesce(try(100 / v1), 1) from t0 where v1 = 0";
+        assertPlanContains(sql, "coalesce(100.0 / CAST(1: v1 AS DOUBLE), 1.0)");
+    }
 }
