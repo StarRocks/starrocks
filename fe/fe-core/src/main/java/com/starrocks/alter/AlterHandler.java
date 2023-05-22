@@ -63,8 +63,6 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public abstract class AlterHandler extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(AlterHandler.class);
-
-    // queue of alter job v2
     protected ConcurrentMap<Long, AlterJobV2> alterJobsV2 = Maps.newConcurrentMap();
 
     /**

@@ -2466,7 +2466,7 @@ public class AlterTest {
         PartitionNames partitionNames = new PartitionNames(true, Arrays.asList("p1"));
         TruncatePartitionClause clause = new TruncatePartitionClause(partitionNames);
         cList.add(clause);
-        Alter alter = new Alter();
+        AlterJobMgr alter = new AlterJobMgr();
         TableName tableName = new TableName("test_db", "test_table");
         AlterTableStmt stmt = new AlterTableStmt(tableName, cList);
         alter.processAlterTable(stmt);
