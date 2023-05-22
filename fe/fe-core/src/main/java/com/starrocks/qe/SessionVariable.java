@@ -45,7 +45,6 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
-import com.starrocks.thrift.TSpillableOperatorType;
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -145,10 +144,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_PARALLEL_SCAN_INSTANCE_NUM = "max_parallel_scan_instance_num";
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
     public static final String ENABLE_SPILL = "enable_spill";
-    public static final String ENABLE_HASH_JOIN_SPILL = "enable_hash_join_spill";
-    public static final String ENABLE_AGG_SPILL = "enable_agg_spill";
-    public static final String ENABLE_AGG_DISTINCT_SPILL = "enable_agg_distinct_spill";
-    public static final String ENABLE_SORT_SPILL = "enable_sort_spill";
+    public static final String SPILLABLE_OPERATOR_MASK = "spillable_operator_mask";
     // spill mode: auto, force
     public static final String SPILL_MODE = "spill_mode";
     // if set to true, some of stmt will be forwarded to leader FE to get result
@@ -709,17 +705,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_SPILL)
     private boolean enableSpill = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_HASH_JOIN_SPILL, flag = VariableMgr.INVISIBLE)
-    private boolean enableHashJoinSpill = true;
-
-    @VariableMgr.VarAttr(name = ENABLE_AGG_SPILL, flag = VariableMgr.INVISIBLE)
-    private boolean enableAggSpill = true;
-
-    @VariableMgr.VarAttr(name = ENABLE_AGG_DISTINCT_SPILL, flag = VariableMgr.INVISIBLE)
-    private boolean enableAggDistinctSpill = true;
-
-    @VariableMgr.VarAttr(name = ENABLE_SORT_SPILL, flag = VariableMgr.INVISIBLE)
-    private boolean enableSortSpill = true;
+    // this is used to control which operators can spill, only meaningful when enable_spill=true
+    // it uses a bit to identify whether the spill of each operator is in effect, 0 means no, 1 means yes
+    // at present, only the lowest 4 bits are meaningful, corresponding to the four operators
+    // HASH_JOIN, AGG, AGG_DISTINCT and SORT respectively (see TSpillableOperatorType in InternalService.thrift)
+    // e.g.
+    // if spillable_operator_mask & 1 != 0, hash join operator can spill
+    // if spillable_operator_mask & 2 != 0, agg operator can spill
+    // if spillable_operator_mask & 2 != 0, agg operator can spill
+    // ...
+    // default value is 15, means all operators can spill
+    @VariableMgr.VarAttr(name = SPILLABLE_OPERATOR_MASK, flag = VariableMgr.INVISIBLE)
+    private long spillableOperatorMask = 15;
 
     @VariableMgr.VarAttr(name = SPILL_MODE)
     private String spillMode = "auto";
@@ -2152,11 +2149,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setSpill_operator_min_bytes(spillOperatorMinBytes);
             tResult.setSpill_operator_max_bytes(spillOperatorMaxBytes);
             tResult.setSpill_encode_level(spillEncodeLevel);
-            long spillableOperatorMask = 0;
-            spillableOperatorMask |= enableHashJoinSpill ? (1L << TSpillableOperatorType.HASH_JOIN.getValue()) : 0;
-            spillableOperatorMask |= enableAggSpill ? (1L << TSpillableOperatorType.AGG.getValue()) : 0;
-            spillableOperatorMask |= enableAggDistinctSpill ? (1L << TSpillableOperatorType.AGG_DISTINCT.getValue()) : 0;
-            spillableOperatorMask |= enableSortSpill ? (1 << TSpillableOperatorType.SORT.getValue()) : 0;
             tResult.setSpillable_operator_mask(spillableOperatorMask);
         }
 
