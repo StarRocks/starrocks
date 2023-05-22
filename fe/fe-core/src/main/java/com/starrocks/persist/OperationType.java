@@ -318,4 +318,11 @@ public class OperationType {
 
     //Database and Table DDL
     public static final short OP_CREATE_DB_V2 = 12001;
+
+    //Load Job json format log
+    public static final short OP_CREATE_LOAD_JOB_V2 = 12100;
+    public static final short OP_END_LOAD_JOB_V2 = 12101;
+    public static final short OP_CREATE_ROUTINE_LOAD_JOB_V2 = 12102;
+    public static final short OP_CHANGE_ROUTINE_LOAD_JOB_V2 = 12103;
+    public static final short OP_REMOVE_ROUTINE_LOAD_JOB_V2 = 12104;
 }
