@@ -39,6 +39,19 @@ bool SpillableAggregateBlockingSinkOperator::is_finished() const {
 }
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
+<<<<<<< HEAD
+=======
+    if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
+        _is_finished = true;
+        RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
+        _aggregator->spill_channel()->set_finishing();
+        return Status::OK();
+    }
+
+    if (state->is_cancelled()) {
+        _aggregator->spiller()->cancel();
+    }
+>>>>>>> 81a1b70c5 ([BugFix] Fix right outer/anti join got wrong result when probe side empty (#23720))
     // ugly code
     // TODO: fixme
     auto io_executor = _aggregator->spill_channel()->io_executor();
