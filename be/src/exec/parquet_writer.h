@@ -47,7 +47,7 @@ struct TableInfo {
 
 class RollingAsyncParquetWriter {
 public:
-    RollingAsyncParquetWriter(const TableInfo& tableInfo, const std::vector<ExprContext*>& output_expr_ctxs,
+    RollingAsyncParquetWriter(TableInfo tableInfo, const std::vector<ExprContext*>& output_expr_ctxs,
                               RuntimeProfile* parent_profile,
                               std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> _commit_func,
                               RuntimeState* state, int32_t driver_id);
@@ -55,7 +55,7 @@ public:
     ~RollingAsyncParquetWriter() = default;
 
     Status append_chunk(Chunk* chunk, RuntimeState* state);
-    Status init_rolling_writer(const TableInfo& tableInfo);
+    Status init_rolling_writer();
     Status close(RuntimeState* state);
     bool writable() const { return _writer == nullptr || _writer->writable(); }
     bool closed();
@@ -72,6 +72,7 @@ private:
     std::shared_ptr<::parquet::WriterProperties> _properties;
     std::shared_ptr<::parquet::schema::GroupNode> _schema;
     std::string _partition_location;
+    TableInfo _table_info;
     int32_t _file_cnt = 0;
     std::string _outfile_location;
     std::vector<std::shared_ptr<starrocks::parquet::AsyncFileWriter>> _pending_commits;
