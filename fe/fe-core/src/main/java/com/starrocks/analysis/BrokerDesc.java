@@ -18,6 +18,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
@@ -37,7 +38,9 @@ import java.util.Map;
 //   "password" = "password0"
 // )
 public class BrokerDesc implements Writable {
+    @SerializedName("name")
     private String name;
+    @SerializedName("properties")
     private Map<String, String> properties;
     private boolean hasBroker;
 

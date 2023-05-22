@@ -659,12 +659,14 @@ public class EditLog {
                     globalStateMgr.getStreamLoadManager().replayCreateLoadTask(streamLoadTask);
                     break;
                 }
+                case OperationType.OP_CREATE_LOAD_JOB_V2:
                 case OperationType.OP_CREATE_LOAD_JOB: {
                     com.starrocks.load.loadv2.LoadJob loadJob =
                             (com.starrocks.load.loadv2.LoadJob) journal.getData();
                     globalStateMgr.getLoadManager().replayCreateLoadJob(loadJob);
                     break;
                 }
+                case OperationType.OP_END_LOAD_JOB_V2:
                 case OperationType.OP_END_LOAD_JOB: {
                     LoadJobFinalOperation operation = (LoadJobFinalOperation) journal.getData();
                     globalStateMgr.getLoadManager().replayEndLoadJob(operation);
@@ -1449,10 +1451,6 @@ public class EditLog {
 
     public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
         logEdit(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB, routineLoadOperation);
-    }
-
-    public void logRemoveRoutineLoadJob(RoutineLoadOperation operation) {
-        logEdit(OperationType.OP_REMOVE_ROUTINE_LOAD_JOB, operation);
     }
 
     public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask) {
