@@ -99,7 +99,6 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.PrivilegeCheckerV2;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
@@ -392,7 +391,7 @@ public class StmtExecutor {
                     context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
                     if (parsedStmt instanceof ShowStmt) {
                         com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
-                        PrivilegeChecker.check(parsedStmt, context);
+                        PrivilegeCheckerV2.check(parsedStmt, context);
 
                         QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
                         if (selectStmt != null) {
