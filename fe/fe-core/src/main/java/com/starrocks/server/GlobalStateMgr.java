@@ -42,11 +42,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.alter.Alter;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationManager;
@@ -349,12 +348,17 @@ public class GlobalStateMgr {
     private final NodeMgr nodeMgr;
     private final HeartbeatMgr heartbeatMgr;
 
+    /**
+     * Alter Job Manager
+     */
+    private final AlterJobMgr alterJobMgr;
+
     private Load load;
     private LoadManager loadManager;
     private RoutineLoadManager routineLoadManager;
     private StreamLoadManager streamLoadManager;
     private ExportMgr exportMgr;
-    private Alter alter;
+
     private ConsistencyChecker consistencyChecker;
     private BackupHandler backupHandler;
     private PublishVersionDaemon publishVersionDaemon;
@@ -608,11 +612,14 @@ public class GlobalStateMgr {
         this.nodeMgr = new NodeMgr();
         this.heartbeatMgr = new HeartbeatMgr(!isCkptGlobalState);
 
+        // Alter Job Manager
+        this.alterJobMgr = new AlterJobMgr();
+
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
         this.exportMgr = new ExportMgr();
-        this.alter = new Alter();
+
         this.consistencyChecker = new ConsistencyChecker();
         this.lock = new QueryableReentrantLock(true);
         this.backupHandler = new BackupHandler(this);
@@ -1262,7 +1269,7 @@ public class GlobalStateMgr {
         // Start txn timeout checker
         txnTimeoutChecker.start();
         // Alter
-        getAlterInstance().start();
+        getAlterJobMgr().start();
         // Consistency checker
         getConsistencyChecker().start();
         // Backup handler
@@ -2868,20 +2875,16 @@ public class GlobalStateMgr {
         return this.consistencyChecker;
     }
 
-    public Alter getAlterInstance() {
-        return this.alter;
+    public AlterJobMgr getAlterJobMgr() {
+        return this.alterJobMgr;
     }
 
     public SchemaChangeHandler getSchemaChangeHandler() {
-        return (SchemaChangeHandler) this.alter.getSchemaChangeHandler();
+        return (SchemaChangeHandler) this.alterJobMgr.getSchemaChangeHandler();
     }
 
     public MaterializedViewHandler getRollupHandler() {
-        return (MaterializedViewHandler) this.alter.getMaterializedViewHandler();
-    }
-
-    public SystemHandler getClusterHandler() {
-        return (SystemHandler) this.alter.getClusterHandler();
+        return (MaterializedViewHandler) this.alterJobMgr.getMaterializedViewHandler();
     }
 
     public BackupHandler getBackupHandler() {
@@ -3146,15 +3149,15 @@ public class GlobalStateMgr {
     }
 
     public void replayRenameMaterializedView(RenameMaterializedViewLog log) {
-        this.alter.replayRenameMaterializedView(log);
+        this.alterJobMgr.replayRenameMaterializedView(log);
     }
 
     public void replayChangeMaterializedViewRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
-        this.alter.replayChangeMaterializedViewRefreshScheme(log);
+        this.alterJobMgr.replayChangeMaterializedViewRefreshScheme(log);
     }
 
     public void replayAlterMaterializedViewProperties(short opCode, ModifyTablePropertyOperationLog log) {
-        this.alter.replayAlterMaterializedViewProperties(opCode, log);
+        this.alterJobMgr.replayAlterMaterializedViewProperties(opCode, log);
     }
 
 
@@ -3277,11 +3280,11 @@ public class GlobalStateMgr {
      * (for client is the ALTER CLUSTER command).
      */
     public ShowResultSet alterCluster(AlterSystemStmt stmt) throws UserException {
-        return this.alter.processAlterCluster(stmt);
+        return this.alterJobMgr.processAlterCluster(stmt);
     }
 
     public void cancelAlterCluster(CancelAlterSystemStmt stmt) throws DdlException {
-        this.alter.getClusterHandler().cancel(stmt);
+        this.alterJobMgr.getClusterHandler().cancel(stmt);
     }
 
     // Change current warehouse of this session.

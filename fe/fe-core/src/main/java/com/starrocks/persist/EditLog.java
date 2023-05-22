@@ -278,13 +278,13 @@ public class EditLog {
                     ModifyPartitionInfo info = (ModifyPartitionInfo) journal.getData();
                     LOG.info("Begin to unprotect modify partition. db = " + info.getDbId()
                             + " table = " + info.getTableId() + " partitionId = " + info.getPartitionId());
-                    globalStateMgr.getAlterInstance().replayModifyPartition(info);
+                    globalStateMgr.getAlterJobMgr().replayModifyPartition(info);
                     break;
                 }
                 case OperationType.OP_BATCH_MODIFY_PARTITION: {
                     BatchModifyPartitionsInfo info = (BatchModifyPartitionsInfo) journal.getData();
                     for (ModifyPartitionInfo modifyPartitionInfo : info.getModifyPartitionInfos()) {
-                        globalStateMgr.getAlterInstance().replayModifyPartition(modifyPartitionInfo);
+                        globalStateMgr.getAlterJobMgr().replayModifyPartition(modifyPartitionInfo);
                     }
                     break;
                 }
@@ -343,7 +343,7 @@ public class EditLog {
                 }
                 case OperationType.OP_MODIFY_VIEW_DEF: {
                     AlterViewInfo info = (AlterViewInfo) journal.getData();
-                    globalStateMgr.getAlterInstance().replayModifyViewDef(info);
+                    globalStateMgr.getAlterJobMgr().replayModifyViewDef(info);
                     break;
                 }
                 case OperationType.OP_RENAME_PARTITION: {
@@ -853,7 +853,7 @@ public class EditLog {
                 }
                 case OperationType.OP_SWAP_TABLE: {
                     SwapTableOperationLog log = (SwapTableOperationLog) journal.getData();
-                    globalStateMgr.getAlterInstance().replaySwapTable(log);
+                    globalStateMgr.getAlterJobMgr().replaySwapTable(log);
                     break;
                 }
                 case OperationType.OP_ADD_ANALYZER_JOB: {
