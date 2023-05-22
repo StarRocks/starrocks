@@ -74,8 +74,7 @@ StatusOr<ColumnPtr> BitmapFunctions::to_bitmap(FunctionContext* context, const s
             }
         }
 
-        BitmapValue bitmap;
-        bitmap.add(value);
+        BitmapValue bitmap(value);
 
         builder.append(&bitmap);
     }
