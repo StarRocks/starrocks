@@ -12,14 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.connector.iceberg.hive;
 
-package com.starrocks.connector.iceberg.rest;
-
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.util.Util;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
@@ -28,6 +30,7 @@ import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.PartitionSpec;
@@ -35,7 +38,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
-import org.apache.iceberg.rest.RESTCatalog;
+import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -47,28 +50,46 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
+import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
+import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_METASTORE_URIS;
+import static org.apache.hadoop.hive.conf.HiveConf.ConfVars.METASTOREWAREHOUSE;
+import static org.apache.iceberg.hive.HiveCatalog.LIST_ALL_TABLES;
 
-public class IcebergRESTCatalog implements IcebergCatalog {
-
-    private static final Logger LOG = LogManager.getLogger(IcebergRESTCatalog.class);
+public class IcebergHiveCatalog implements IcebergCatalog {
+    private static final Logger LOG = LogManager.getLogger(IcebergHiveCatalog.class);
     public static final String LOCATION_PROPERTY = "location";
 
     private final Configuration conf;
-    private final RESTCatalog delegate;
+    private final HiveCatalog delegate;
 
-    public IcebergRESTCatalog(String name, Configuration conf, Map<String, String> properties) {
+    @VisibleForTesting
+    public IcebergHiveCatalog(String name, Configuration conf, Map<String, String> properties) {
         this.conf = conf;
+        this.conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
+                String.valueOf(Config.hive_meta_store_timeout_s));
+        if (conf.get(METASTOREWAREHOUSE.varname) == null) {
+            this.conf.set(METASTOREWAREHOUSE.varname, METASTOREWAREHOUSE.getDefaultValue());
+        }
+
         Map<String, String> copiedProperties = Maps.newHashMap(properties);
 
+        String metastoreURI = properties.get(HIVE_METASTORE_URIS);
+        if (metastoreURI == null) {
+            metastoreURI = properties.get(ICEBERG_METASTORE_URIS);
+        }
+        Util.validateMetastoreUris(metastoreURI);
+
+        copiedProperties.put(CatalogProperties.URI, metastoreURI);
         copiedProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
+        copiedProperties.put(LIST_ALL_TABLES, "true");
 
-        delegate = (RESTCatalog) CatalogUtil.loadCatalog(RESTCatalog.class.getName(), name, copiedProperties, conf);
+        delegate = (HiveCatalog) CatalogUtil.loadCatalog(HiveCatalog.class.getName(), name, copiedProperties, conf);
     }
 
     @Override
     public IcebergCatalogType getIcebergCatalogType() {
-        return IcebergCatalogType.REST_CATALOG;
+        return IcebergCatalogType.HIVE_CATALOG;
     }
 
     @Override
@@ -102,6 +123,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                 throw new IllegalArgumentException("Unrecognized property: " + key);
             }
         }
+
         Namespace ns = Namespace.of(dbName);
         delegate.createNamespace(ns, properties);
     }
@@ -149,7 +171,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             PartitionSpec partitionSpec,
             String location,
             Map<String, String> properties) {
-        Table nativeTable = delegate.buildTable(TableIdentifier.of(dbName, tableName), schema)
+        Table nativeTable =  delegate.buildTable(TableIdentifier.of(dbName, tableName), schema)
                 .withLocation(location)
                 .withPartitionSpec(partitionSpec)
                 .withProperties(properties)
