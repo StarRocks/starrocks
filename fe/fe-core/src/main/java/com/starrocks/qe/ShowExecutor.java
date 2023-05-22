@@ -1013,8 +1013,9 @@ public class ShowExecutor {
 
         // Partition column names
         if (table.getType() != JDBC && !table.isUnPartitioned()) {
-            createTableSql.append("\nWITH (\n partitioned_by = ARRAY [ ");
-            createTableSql.append(String.join(", ", table.getPartitionColumnNames())).append(" ]\n)");
+            createTableSql.append("\nPARTITION BY ( ")
+                    .append(String.join(", ", table.getPartitionColumnNames()))
+                    .append(" )");
         }
 
         // Location
@@ -1028,7 +1029,7 @@ public class ShowExecutor {
         }
 
         if (!Strings.isNullOrEmpty(location)) {
-            createTableSql.append("\nLOCATION ").append("'").append(location).append("'");
+            createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
         }
 
         List<List<String>> rows = Lists.newArrayList();
@@ -1075,6 +1076,11 @@ public class ShowExecutor {
                 sb.append("binary(1048576)");
         }
         sb.append(" DEFAULT NULL");
+
+        if (!Strings.isNullOrEmpty(column.getComment())) {
+            sb.append(" COMMENT \"").append(column.getComment()).append("\"");
+        }
+
         return sb.toString();
     }
 
