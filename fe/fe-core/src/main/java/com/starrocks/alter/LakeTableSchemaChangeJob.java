@@ -66,6 +66,7 @@ import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import io.opentelemetry.api.trace.StatusCode;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -590,9 +591,10 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             for (Column mvColumn : mv.getColumns()) {
                 if (modifiedColumns.contains(mvColumn.getName())) {
                     LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                            "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
+                                    "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
                             mvColumn.getName(), tbl.getName());
-                    mv.setActive(false);
+                    mv.setInactiveAndReason(
+                            "base-table schema changed for columns: " + StringUtils.join(modifiedColumns, ","));
                     return;
                 }
             }

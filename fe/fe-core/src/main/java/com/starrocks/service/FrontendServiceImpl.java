@@ -492,24 +492,32 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setName(rowSet.get(2));
             status.setRefresh_type(rowSet.get(3));
             status.setIs_active(rowSet.get(4));
-            status.setPartition_type(rowSet.get(5));
+            status.setInactive_reason(rowSet.get(5));
+            status.setPartition_type(rowSet.get(6));
 
-            status.setTask_id(rowSet.get(6));
-            status.setTask_name(rowSet.get(7));
-            status.setLast_refresh_start_time(rowSet.get(8));
-            status.setLast_refresh_finished_time(rowSet.get(9));
-            status.setLast_refresh_duration(rowSet.get(10));
-            status.setLast_refresh_state(rowSet.get(11));
-            status.setLast_refresh_force_refresh(rowSet.get(12));
-            status.setLast_refresh_start_partition(rowSet.get(13));
-            status.setLast_refresh_end_partition(rowSet.get(14));
-            status.setLast_refresh_base_refresh_partitions(rowSet.get(15));
-            status.setLast_refresh_mv_refresh_partitions(rowSet.get(16));
+            status.setTask_id(rowSet.get(7));
+            status.setTask_name(rowSet.get(8));
+            status.setLast_refresh_start_time(rowSet.get(9));
+            status.setLast_refresh_finished_time(rowSet.get(10));
+            status.setLast_refresh_duration(rowSet.get(11));
+            status.setLast_refresh_state(rowSet.get(12));
+            status.setLast_refresh_force_refresh(rowSet.get(13));
+            status.setLast_refresh_start_partition(rowSet.get(14));
+            status.setLast_refresh_end_partition(rowSet.get(15));
+            status.setLast_refresh_base_refresh_partitions(rowSet.get(16));
+            status.setLast_refresh_mv_refresh_partitions(rowSet.get(17));
 
+<<<<<<< HEAD
             status.setLast_refresh_error_code(rowSet.get(17));
             status.setLast_refresh_error_message(rowSet.get(18));
             status.setText(rowSet.get(19));
             status.setRows(rowSet.get(20));
+=======
+            status.setLast_refresh_error_code(rowSet.get(18));
+            status.setLast_refresh_error_message(rowSet.get(19));
+            status.setText(rowSet.get(20));
+            status.setRows(rowSet.get(21));
+>>>>>>> 79495022d ([Enhancement] Display inactive reason for materialized view (#21591))
             tablesResult.add(status);
         }
         return result;

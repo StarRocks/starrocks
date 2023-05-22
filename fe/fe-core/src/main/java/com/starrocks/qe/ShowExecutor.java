@@ -524,6 +524,7 @@ public class ShowExecutor {
             resultRow.add(String.valueOf(mvTable.getRefreshScheme().getType()));
             // is_active
             resultRow.add(String.valueOf(mvTable.isActive()));
+            resultRow.add(String.valueOf(mvTable.getInactiveReason()));
             // partition info
             if (mvTable.getPartitionInfo() != null && mvTable.getPartitionInfo().getType() != null) {
                 resultRow.add(mvTable.getPartitionInfo().getType().toString());
@@ -550,6 +551,8 @@ public class ShowExecutor {
             resultRow.add("ROLLUP");
             // is_active
             resultRow.add(String.valueOf(true));
+            // inactive reason
+            resultRow.add("");
             // partition type
             if (olapTable.getPartitionInfo() != null && olapTable.getPartitionInfo().getType() != null) {
                 resultRow.add(olapTable.getPartitionInfo().getType().toString());

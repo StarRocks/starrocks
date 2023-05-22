@@ -28,6 +28,7 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"REFRESH_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"IS_ACTIVE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"INACTIVE_REASON", TYPE_VARCHAR, sizeof(StringValue), false},
         {"PARTITION_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TASK_ID", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
@@ -136,6 +137,14 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 6: {
+            // inactive_reason
+            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            const std::string* str = &tbl_status.inactive_reason;
+            Slice value(str->c_str(), str->length());
+            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            break;
+        }
+        case 7: {
             // partition_type
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
@@ -145,7 +154,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 7: {
+        case 8: {
             // task_id
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
@@ -155,7 +164,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 8: {
+        case 9: {
             // task_name
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
@@ -165,7 +174,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 9: {
+        case 10: {
             // last_refresh_start_time
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
@@ -175,7 +184,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 10: {
+        case 11: {
             // last_refresh_finished_time
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
@@ -185,7 +194,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 11: {
+        case 12: {
             // last_refresh_duration
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(11);
@@ -195,7 +204,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 12: {
+        case 13: {
             // last_refresh_state
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(12);
@@ -205,7 +214,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 13: {
+        case 14: {
             // last_refresh_force_refresh
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(13);
@@ -215,17 +224,21 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 14: {
+        case 15: {
             // last_refresh_start_partition
             {
+<<<<<<< HEAD
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(14);
+=======
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+>>>>>>> 79495022d ([Enhancement] Display inactive reason for materialized view (#21591))
                 const std::string* str = &tbl_status.last_refresh_start_partition;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
-        case 15: {
+        case 16: {
             // last_refresh_end_partition
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(15);
@@ -235,7 +248,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 16: {
+        case 17: {
             // last_refresh_base_refresh_partitions
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(16);
@@ -245,7 +258,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 17: {
+        case 18: {
             // last_refresh_mv_refresh_partitions
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(17);
@@ -255,7 +268,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 18: {
+        case 19: {
             // last_refresh_error_code
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(18);
@@ -265,7 +278,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 19: {
+        case 20: {
             // last_refresh_error_message
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(19);
@@ -275,7 +288,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 20: {
+        case 21: {
             // table_rows
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(21);
@@ -285,7 +298,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 21: {
+        case 22: {
             // view_definition
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(20);

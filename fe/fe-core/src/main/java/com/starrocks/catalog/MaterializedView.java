@@ -290,6 +290,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "active")
     private boolean active;
 
+    @SerializedName(value = "inactiveReason")
+    private String inactiveReason;
+
     // TODO: now it is original definition sql
     // for show create mv, constructing refresh job(insert into select)
     @SerializedName(value = "viewDefineSql")
@@ -393,6 +396,15 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setActive(boolean active) {
         this.active = active;
+    }
+
+    public void setInactiveAndReason(String reason) {
+        this.active = false;
+        this.inactiveReason = reason;
+    }
+
+    public String getInactiveReason() {
+        return inactiveReason;
     }
 
     public String getViewDefineSql() {
@@ -589,7 +601,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
-            active = false;
+            setInactiveAndReason("db not exists: " + dbId);
             return;
         }
         if (baseTableInfos == null) {
@@ -612,7 +624,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 if (table.isMaterializedView() && !((MaterializedView) table).isActive()) {
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
-                    active = false;
+                    setInactiveAndReason("base mv is not active: " + baseTableInfo.getTableName());
                     continue;
                 }
                 MvId mvId = new MvId(db.getId(), id);
@@ -963,8 +975,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Pair<Table, Column> partitionInfo = getPartitionTableAndColumn();
         // if non-partition-by table has changed, should refresh all mv partitions
         if (partitionInfo == null) {
-            // mark it inactive
-            setActive(false);
+            setInactiveAndReason("partition configuration changed");
             LOG.warn("mark mv:{} inactive for get partition info failed", name);
             throw new RuntimeException(String.format("getting partition info failed for mv: %s", name));
         }

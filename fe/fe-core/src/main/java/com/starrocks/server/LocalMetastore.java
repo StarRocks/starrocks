@@ -3921,8 +3921,13 @@ public class LocalMetastore implements ConnectorMetadata {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
             if (mv != null) {
                 LOG.warn("Setting the materialized view {}({}) to invalid because " +
+<<<<<<< HEAD
                                 "the table {} was renamed.", mv.getName(), mv.getId(), olapTable.getName());
                 mv.setActive(false);
+=======
+                        "the table {} was renamed.", mv.getName(), mv.getId(), olapTable.getName());
+                mv.setInactiveAndReason("base table renamed: " + olapTable.getName());
+>>>>>>> 79495022d ([Enhancement] Display inactive reason for materialized view (#21591))
             } else {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
             }
