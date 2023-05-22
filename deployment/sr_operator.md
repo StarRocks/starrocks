@@ -209,7 +209,7 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 执行如下命令，扩容 BE 集群至 9 个节点。
 
 ```Bash
-kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"replicas":"9"}}}'
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"replicas":9}}}'
 ```
 
 **扩容 FE 集群**
@@ -217,7 +217,7 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 执行如下命令，扩容 FE 集群至 4 个节点。
 
 ```Bash
-kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksFeSpec":{"replicas":"4"}}}'
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksFeSpec":{"replicas":4}}}'
 ```
 
 扩容过程会持续一段时间，您可以通过 `kubectl -n starrocks get pods` 命令观察扩容进度。
