@@ -79,16 +79,19 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         LogicalJoinOperator topJoin = (LogicalJoinOperator) input.getOp();
         LogicalJoinOperator bottomJoin = (LogicalJoinOperator) bottomJoinExpr.getOp();
 
+        ColumnRefSet newTopJoinChildOutCols = deriveTopJoinChildOutputCols(input);
+
+        List<ScalarOperator> topPredicate = Lists.newArrayList();
+        List<ScalarOperator> bottomPredicates = Lists.newArrayList();
+
+        splitPredicate(topJoin.getPredicate(), newTopJoinChildOutCols, topPredicate, bottomPredicates);
+        splitPredicate(bottomJoin.getPredicate(), newTopJoinChildOutCols, topPredicate, bottomPredicates);
+        ScalarOperator newTopPredicate = Utils.compoundAnd(topPredicate);
+
         List<ScalarOperator> top = Lists.newArrayList();
         List<ScalarOperator> bottom = Lists.newArrayList();
 
-        // pull up bottom join predicate
-        ScalarOperator topPredicate = topJoin.getPredicate();
-        ScalarOperator newTopPredicate = Utils.compoundAnd(bottomJoin.getPredicate(), topPredicate);
-
-        ColumnRefSet newTopJoinChildOutCols = deriveTopJoinChildOutputCols(input);
-
-        splitCondition(topJoin.getOnPredicate(), newTopJoinChildOutCols, top, bottom);
+        splitPredicate(topJoin.getOnPredicate(), newTopJoinChildOutCols, top, bottom);
         // bottom join on condition doesn't need to split, it can be pulled up to the top directly.
         top.addAll(Utils.extractConjuncts(bottomJoin.getOnPredicate()));
 
@@ -146,6 +149,7 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
 
         LogicalJoinOperator newBotJoin = newBottomJoinBuilder.setJoinType(newBotJoinType)
                 .setRowOutputInfo(newBotJoinRowInfo)
+                .setPredicate(Utils.compoundAnd(bottomPredicates))
                 .setOnPredicate(newBotOnCondition)
                 .setProjection(newBotJoinProjection)
                 .build();
@@ -243,9 +247,9 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         return !outputRowCols.equals(inputRowCols);
     }
 
-    protected void splitCondition(ScalarOperator onCondition, ColumnRefSet columnRefSet,
+    protected void splitPredicate(ScalarOperator predicate, ColumnRefSet columnRefSet,
                                   List<ScalarOperator> intersect, List<ScalarOperator> nonIntersect) {
-        List<ScalarOperator> conjuncts = Utils.extractConjuncts(onCondition);
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         for (ScalarOperator conjunct : conjuncts) {
             if (columnRefSet.isIntersect(conjunct.getUsedColumns())) {
                 intersect.add(conjunct);
