@@ -40,6 +40,7 @@ bool SpillableAggregateBlockingSinkOperator::is_finished() const {
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
     if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
+        _is_finished = true;
         RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
         _aggregator->spill_channel()->set_finishing();
         return Status::OK();
