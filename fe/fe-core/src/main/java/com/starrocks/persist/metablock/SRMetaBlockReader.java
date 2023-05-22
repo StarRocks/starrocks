@@ -79,8 +79,12 @@ public class SRMetaBlockReader {
         return s;
     }
 
-    public Object readJson(Class<?> returnClass) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+    public <T> T readJson(Class<T> returnClass) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         return GsonUtils.GSON.fromJson(readJsonText(), returnClass);
+    }
+
+    public int readInt() throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        return readJson(int.class);
     }
 
     public Object readJson(Type returnType) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
