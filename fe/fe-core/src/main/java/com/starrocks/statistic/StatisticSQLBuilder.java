@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.starrocks.statistic.StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION;
@@ -131,6 +132,10 @@ public class StatisticSQLBuilder {
         }
 
         return "DELETE FROM " + tableName + " WHERE TABLE_ID = " + tableId;
+    }
+
+    public static String buildDropExternalStatSQL(String tableUUID) {
+        return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME + " WHERE TABLE_UUID = '" + tableUUID + "'";
     }
 
     public static String buildDropPartitionSQL(List<Long> pids) {

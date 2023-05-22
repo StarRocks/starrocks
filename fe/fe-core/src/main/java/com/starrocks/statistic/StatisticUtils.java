@@ -21,6 +21,7 @@ import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
@@ -150,29 +151,38 @@ public class StatisticUtils {
     }
 
     public static boolean isEmptyTable(Table table) {
-        return table.getPartitions().stream().noneMatch(Partition::hasData);
+        if (table instanceof IcebergTable) {
+            //TODO, shall we check empty for external table?
+            return false;
+        } else {
+            return table.getPartitions().stream().noneMatch(Partition::hasData);
+        }
     }
 
     public static List<ColumnDef> buildStatsColumnDef(String tableName) {
         ScalarType columnNameType = ScalarType.createVarcharType(65530);
         ScalarType tableNameType = ScalarType.createVarcharType(65530);
+        ScalarType tableUUIDType = ScalarType.createVarcharType(65530);
         ScalarType partitionNameType = ScalarType.createVarcharType(65530);
         ScalarType dbNameType = ScalarType.createVarcharType(65530);
         ScalarType maxType = ScalarType.createMaxVarcharType();
         ScalarType minType = ScalarType.createMaxVarcharType();
         ScalarType bucketsType = ScalarType.createMaxVarcharType();
         ScalarType mostCommonValueType = ScalarType.createMaxVarcharType();
+        ScalarType catalogNameType = ScalarType.createVarcharType(65530);
 
         // varchar type column need call setAssignedStrLenInColDefinition here,
         // otherwise it will be set length to 1 at analyze
         columnNameType.setAssignedStrLenInColDefinition();
         tableNameType.setAssignedStrLenInColDefinition();
+        tableUUIDType.setAssignedStrLenInColDefinition();
         partitionNameType.setAssignedStrLenInColDefinition();
         dbNameType.setAssignedStrLenInColDefinition();
         maxType.setAssignedStrLenInColDefinition();
         minType.setAssignedStrLenInColDefinition();
         bucketsType.setAssignedStrLenInColDefinition();
         mostCommonValueType.setAssignedStrLenInColDefinition();
+        catalogNameType.setAssignedStrLenInColDefinition();
 
         if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
@@ -197,6 +207,22 @@ public class StatisticUtils {
                     new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
                     new ColumnDef("partition_name", new TypeDef(partitionNameType)),
+                    new ColumnDef("row_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("data_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("ndv", new TypeDef(ScalarType.createType(PrimitiveType.HLL))),
+                    new ColumnDef("null_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("max", new TypeDef(maxType)),
+                    new ColumnDef("min", new TypeDef(minType)),
+                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+            );
+        } else if (tableName.equals(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME)) {
+            return ImmutableList.of(
+                    new ColumnDef("table_uuid", new TypeDef(tableUUIDType)),
+                    new ColumnDef("partition_name", new TypeDef(partitionNameType)),
+                    new ColumnDef("column_name", new TypeDef(columnNameType)),
+                    new ColumnDef("catalog_name", new TypeDef(catalogNameType)),
+                    new ColumnDef("db_name", new TypeDef(dbNameType)),
+                    new ColumnDef("table_name", new TypeDef(tableNameType)),
                     new ColumnDef("row_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("data_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("ndv", new TypeDef(ScalarType.createType(PrimitiveType.HLL))),

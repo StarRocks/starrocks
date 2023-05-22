@@ -110,6 +110,16 @@ public class StatisticExecutor {
         }
     }
 
+    public void dropTableStatistics(ConnectContext statsConnectCtx, String tableUUID) {
+        String sql = StatisticSQLBuilder.buildDropExternalStatSQL(tableUUID);
+        LOG.debug("Expire statistic SQL: {}", sql);
+
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute statistic table expire fail.");
+        }
+    }
+
     public boolean dropPartitionStatistics(ConnectContext statsConnectCtx, List<Long> pids) {
         String sql = StatisticSQLBuilder.buildDropPartitionSQL(pids);
         LOG.debug("Expire partition statistic SQL: {}", sql);
@@ -203,7 +213,8 @@ public class StatisticExecutor {
                 || version == StatsConstants.STATISTIC_DICT_VERSION
                 || version == StatsConstants.STATISTIC_HISTOGRAM_VERSION
                 || version == StatsConstants.STATISTIC_TABLE_VERSION
-                || version == StatsConstants.STATISTIC_BATCH_VERSION) {
+                || version == StatsConstants.STATISTIC_BATCH_VERSION
+                || version == StatsConstants.STATISTIC_EXTERNAL_VERSION) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {
