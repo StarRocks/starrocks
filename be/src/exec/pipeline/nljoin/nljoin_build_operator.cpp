@@ -23,7 +23,7 @@ namespace starrocks::pipeline {
 
 Status NLJoinBuildOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    _cross_join_context->incr_builder();
+    _cross_join_context->incr_builder(state);
     return Status::OK();
 }
 
@@ -45,7 +45,7 @@ StatusOr<ChunkPtr> NLJoinBuildOperator::pull_chunk(RuntimeState* state) {
 Status NLJoinBuildOperator::set_finishing(RuntimeState* state) {
     DeferOp op([this]() { _is_finished = true; });
     // Used to notify cross_join_left_operator.
-    RETURN_IF_ERROR(_cross_join_context->finish_one_right_sinker(state));
+    RETURN_IF_ERROR(_cross_join_context->finish_one_right_sinker(_driver_sequence, state));
     return Status::OK();
 }
 

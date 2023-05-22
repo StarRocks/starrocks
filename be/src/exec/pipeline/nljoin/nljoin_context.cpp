@@ -15,6 +15,7 @@
 #include "exec/pipeline/nljoin/nljoin_context.h"
 
 #include <algorithm>
+#include <memory>
 #include <numeric>
 
 #include "exec/cross_join_node.h"
@@ -26,13 +27,54 @@
 
 namespace starrocks::pipeline {
 
+void NJJoinBuildInputChannel::add_chunk(ChunkPtr build_chunk) {
+    if (build_chunk == nullptr || build_chunk->is_empty()) {
+        return;
+    }
+    _num_rows += build_chunk->num_rows();
+    _accumulator.push(std::move(build_chunk));
+}
+
+void NJJoinBuildInputChannel::finalize() {
+    _accumulator.finalize();
+    while (ChunkPtr output = _accumulator.pull()) {
+        _input_chunks.emplace_back(std::move(output));
+    }
+}
+
+Status NLJoinBuildChunkStreamBuilder::init(RuntimeState* state,
+                                           std::vector<std::unique_ptr<NJJoinBuildInputChannel>>& channels) {
+    ChunkAccumulator accumulator(state->chunk_size());
+    for (auto& sink : channels) {
+        if (auto chunk = sink->incomplete_chunk()) {
+            RETURN_IF_ERROR(accumulator.push(std::move(chunk)));
+        }
+    }
+    accumulator.finalize();
+
+    // collect all complete chunks
+    for (auto& sink : channels) {
+        sink->for_each_complete_chunk([&](auto&& chunk) { _build_chunks.emplace_back(std::move(chunk)); });
+    }
+
+    while (ChunkPtr output = accumulator.pull()) {
+        _build_chunks.emplace_back(std::move(output));
+    }
+
+    return Status::OK();
+}
+
+std::vector<ChunkPtr> NLJoinBuildChunkStreamBuilder::build() {
+    return std::move(_build_chunks);
+}
+
 void NLJoinContext::close(RuntimeState* state) {
     _build_chunks.clear();
 }
 
-void NLJoinContext::incr_builder() {
+void NLJoinContext::incr_builder(RuntimeState* state) {
     ++_num_right_sinkers;
-    _input_chunks.emplace_back();
+    _input_channel.emplace_back(std::make_unique<NJJoinBuildInputChannel>(state->chunk_size()));
 }
 void NLJoinContext::incr_prober() {
     ++_num_left_probers;
@@ -101,27 +143,21 @@ const std::vector<uint8_t> NLJoinContext::get_shared_build_match_flag() const {
 }
 
 void NLJoinContext::append_build_chunk(int32_t sinker_id, const ChunkPtr& chunk) {
-    _input_chunks[sinker_id].push_back(chunk);
+    _input_channel[sinker_id]->add_chunk(chunk);
 }
 
-Status NLJoinContext::finish_one_right_sinker(RuntimeState* state) {
+Status NLJoinContext::finish_one_right_sinker(int32_t sinker_id, RuntimeState* state) {
+    _input_channel[sinker_id]->finalize();
+
     if (_num_right_sinkers - 1 == _num_finished_right_sinkers.fetch_add(1)) {
-        // Accumulate chunks
-        ChunkAccumulator accumulator(state->chunk_size());
-        for (auto& sink_chunks : _input_chunks) {
-            for (auto& tmp_chunk : sink_chunks) {
-                if (tmp_chunk && !tmp_chunk->is_empty()) {
-                    _num_build_rows += tmp_chunk->num_rows();
-                    RETURN_IF_ERROR(accumulator.push(std::move(tmp_chunk)));
-                }
-            }
+        for (auto& channel : _input_channel) {
+            _num_build_rows += channel->num_rows();
         }
-        accumulator.finalize();
-        while (ChunkPtr output = accumulator.pull()) {
-            _build_chunks.emplace_back(std::move(output));
-        }
-        _input_chunks.clear();
-        _input_chunks.shrink_to_fit();
+
+        RETURN_IF_ERROR(_build_stream_builder.init(state, _input_channel));
+
+        _build_chunks = _build_stream_builder.build();
+        _input_channel.clear();
 
         RETURN_IF_ERROR(_init_runtime_filter(state));
         _build_chunk_desired_size = state->chunk_size();
