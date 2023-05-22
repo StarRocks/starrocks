@@ -512,7 +512,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
             for (const auto& child : path->children()) {
                 if (child->is_key()) {
                     key_path = child.get();
-                } 
+                }
                 child_paths.emplace_back(child.get());
             }
         }
