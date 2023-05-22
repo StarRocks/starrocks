@@ -964,7 +964,7 @@ int64_t BitmapValue::bitmap_subset_limit_internal(const int64_t& range_start, co
         detail::Roaring64Map::const_iterator end = _bitmap->begin();
 
         int64_t offset = 0;
-        for (; end != _bitmap->end() && offset < abs_limit && * end <= range_start;) {
+        for (; end != _bitmap->end() && offset < abs_limit && *end <= range_start;) {
             ++end;
             ++offset;
         }
