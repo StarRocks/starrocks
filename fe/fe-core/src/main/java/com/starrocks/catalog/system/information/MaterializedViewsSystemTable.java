@@ -33,6 +33,7 @@ public class MaterializedViewsSystemTable {
                         .column("TABLE_NAME", ScalarType.createVarchar(50))
                         .column("REFRESH_TYPE", ScalarType.createVarchar(20))
                         .column("IS_ACTIVE", ScalarType.createVarchar(10))
+                        .column("INACTIVE_REASON", ScalarType.createVarcharType(1024))
                         .column("PARTITION_TYPE", ScalarType.createVarchar(16))
                         .column("TASK_ID", ScalarType.createVarchar(20))
                         .column("TASK_NAME", ScalarType.createVarchar(50))

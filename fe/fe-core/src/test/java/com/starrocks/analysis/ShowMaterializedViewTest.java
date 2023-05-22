@@ -89,6 +89,7 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.TABLE_NAME AS name, " +
                         "information_schema.materialized_views.refresh_type AS refresh_type, " +
                         "information_schema.materialized_views.is_active AS is_active, " +
+                        "information_schema.materialized_views.inactive_reason AS inactive_reason, " +
                         "information_schema.materialized_views.partition_type AS partition_type, " +
                         "information_schema.materialized_views.task_id AS task_id, " +
                         "information_schema.materialized_views.task_name AS task_name, " +
