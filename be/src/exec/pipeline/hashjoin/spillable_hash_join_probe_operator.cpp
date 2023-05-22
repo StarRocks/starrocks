@@ -265,11 +265,13 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(RuntimeState* 
 Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeState* state) {
     auto spill_readers = _join_builder->spiller()->get_partition_spill_readers(_processing_partitions);
     _latch.reset(_processing_partitions.size());
+    int32_t driver_id = CurrentThread::current().get_driver_id();
     auto query_ctx = state->query_ctx()->weak_from_this();
     for (size_t i = 0; i < _processing_partitions.size(); ++i) {
         std::shared_ptr<spill::SpillerReader> reader = std::move(spill_readers[i]);
-        auto task = [this, state, reader, i, query_ctx]() {
+        auto task = [this, state, reader, i, query_ctx, driver_id]() {
             if (auto acquired = query_ctx.lock()) {
+                SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
                 _update_status(_load_partition_build_side(state, reader, i));
                 _latch.count_down();
             }
