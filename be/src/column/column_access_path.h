@@ -36,9 +36,9 @@ public:
 
     const std::vector<std::unique_ptr<ColumnAccessPath>>& children() { return _children; }
 
-    bool is_root() { return _type == TAccessPathType::type::ROOT; }
+    bool is_key() { return _type == TAccessPathType::type::KEY; }
 
-    bool is_filed() { return _type == TAccessPathType::type::FIELD; }
+    bool is_offset() { return _type == TAccessPathType::type::OFFSET; }
 
     // copy and set index
     std::unique_ptr<ColumnAccessPath> convert_by_index(const Field* filed, uint32_t index);

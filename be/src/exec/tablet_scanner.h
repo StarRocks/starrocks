@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/column_access_path.h"
 #include "common/status.h"
 #include "exec/olap_utils.h"
 #include "exprs/expr.h"
@@ -28,7 +29,6 @@
 #include "storage/conjunctive_predicates.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
-#include "column/column_access_path.h"
 
 namespace starrocks {
 

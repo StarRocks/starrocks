@@ -74,9 +74,7 @@ Status StructColumnIterator::init(const ColumnIteratorOptions& opts) {
     }
 
     for (int i = 0; i < _field_iters.size(); ++i) {
-        if (_access_flags[i]) {
-            RETURN_IF_ERROR(_field_iters[i]->init(opts));
-        }
+        RETURN_IF_ERROR(_field_iters[i]->init(opts));
     }
     return Status::OK();
 }
@@ -102,10 +100,18 @@ Status StructColumnIterator::next_batch(size_t* n, Column* dst) {
     // Read all fields
     // TODO(Alvin): _field_iters may have different order with struct_column
     // FIXME:
+    auto fields = struct_column->fields();
     for (int i = 0; i < _field_iters.size(); ++i) {
         if (_access_flags[i]) {
             auto num_to_read = *n;
-            RETURN_IF_ERROR(_field_iters[i]->next_batch(&num_to_read, struct_column->fields()[i].get()));
+            RETURN_IF_ERROR(_field_iters[i]->next_batch(&num_to_read, fields[i].get()));
+        }
+    }
+
+    // todo: unpack struct in scan, and don't need append default values
+    for (int i = 0; i < _field_iters.size(); ++i) {
+        if (!_access_flags[i]) {
+            fields[i]->append_default(*n);
         }
     }
 
@@ -129,9 +135,18 @@ Status StructColumnIterator::next_batch(const SparseRange& range, Column* dst) {
         down_cast<NullableColumn*>(dst)->update_has_null();
     }
     // Read all fields
+    size_t row_count = 0;
+    auto fields = struct_column->fields();
     for (int i = 0; i < _field_iters.size(); ++i) {
         if (_access_flags[i]) {
-            RETURN_IF_ERROR(_field_iters[i]->next_batch(range, struct_column->fields()[i].get()));
+            RETURN_IF_ERROR(_field_iters[i]->next_batch(range, fields[i].get()));
+            row_count = fields[i]->size();
+        }
+    }
+
+    for (int i = 0; i < _field_iters.size(); ++i) {
+        if (!_access_flags[i]) {
+            fields[i]->append_default(row_count);
         }
     }
     return Status::OK();
@@ -150,15 +165,18 @@ Status StructColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t
     } else {
         struct_column = down_cast<StructColumn*>(values);
     }
-    if (_null_iter != nullptr) {
-        RETURN_IF_ERROR(_null_iter->fetch_values_by_rowid(rowids, size, null_column));
-    }
 
     // read all fields
+    auto fields = struct_column->fields();
     for (int i = 0; i < _field_iters.size(); ++i) {
         if (_access_flags[i]) {
-            auto& col = struct_column->fields()[i];
-            RETURN_IF_ERROR(_field_iters[i]->fetch_values_by_rowid(rowids, size, col.get()));
+            RETURN_IF_ERROR(_field_iters[i]->fetch_values_by_rowid(rowids, size, fields[i].get()));
+        }
+    }
+
+    for (int i = 0; i < _field_iters.size(); ++i) {
+        if (!_access_flags[i]) {
+            fields[i]->append_default(size);
         }
     }
     return Status::OK();
@@ -169,9 +187,7 @@ Status StructColumnIterator::seek_to_first() {
         RETURN_IF_ERROR(_null_iter->seek_to_first());
     }
     for (int i = 0; i < _field_iters.size(); ++i) {
-        if (_access_flags[i]) {
-            RETURN_IF_ERROR(_field_iters[i]->seek_to_first());
-        }
+        RETURN_IF_ERROR(_field_iters[i]->seek_to_first());
     }
     return Status::OK();
 }
@@ -181,9 +197,7 @@ Status StructColumnIterator::seek_to_ordinal(ordinal_t ord) {
         RETURN_IF_ERROR(_null_iter->seek_to_ordinal(ord));
     }
     for (int i = 0; i < _field_iters.size(); ++i) {
-        if (_access_flags[i]) {
-            RETURN_IF_ERROR(_field_iters[i]->seek_to_ordinal(ord));
-        }
+        RETURN_IF_ERROR(_field_iters[i]->seek_to_ordinal(ord));
     }
     return Status::OK();
 }

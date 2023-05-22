@@ -40,8 +40,8 @@
 
 #include <memory>
 
-#include "column/schema.h"
 #include "column/column_access_path.h"
+#include "column/schema.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
 #include "segment_chunk_iterator_adapter.h"

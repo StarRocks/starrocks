@@ -246,7 +246,8 @@ private:
     // search delta column group by column uniqueid, if this column exist in delta column group,
     // then return column iterator and delta column's fillname.
     // Or just return null
-    StatusOr<std::unique_ptr<ColumnIterator>> _new_dcg_column_iterator(uint32_t ucid, std::string* filename);
+    StatusOr<std::unique_ptr<ColumnIterator>> _new_dcg_column_iterator(uint32_t ucid, std::string* filename,
+                                                                       ColumnAccessPath* path);
 
     // This function is a unified entry for creating column iterators.
     // `ucid` means unique column id, use it for searching delta column group.
@@ -468,9 +469,10 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     iter_opts.reader_type = _opts.reader_type;
 
     ColumnAccessPath* access_path = nullptr;
-    if (_opts.column_access_paths != nullptr &&
-        _opts.column_access_paths->find(cid) != _opts.column_access_paths->end()) {
-        access_path = (*_opts.column_access_paths)[cid].get();
+    if (_opts.column_access_paths != nullptr && !_opts.column_access_paths->empty()) {
+        if (_opts.column_access_paths->find(cid) != _opts.column_access_paths->end()) {
+            access_path = (*_opts.column_access_paths)[cid].get();
+        }
     }
 
     std::string dcg_filename;

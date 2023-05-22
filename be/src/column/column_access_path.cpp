@@ -65,6 +65,14 @@ ColumnAccessPathPtr ColumnAccessPath::convert_by_index(const Field* filed, uint3
     path->_path = this->_path;
     path->_column_index = index;
 
+    if (!filed->has_sub_fields()) {
+        if (!this->_children.empty()) {
+            LOG(WARNING) << "impossable bad storage schema for access path, filed: " << filed
+                         << ", path: " << this->_path;
+        }
+        return path;
+    }
+
     auto all_filed = filed->sub_fields();
 
     std::unordered_map<std::string_view, uint32_t> name_index;

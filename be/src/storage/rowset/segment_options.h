@@ -17,8 +17,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "column/datum.h"
 #include "column/column_access_path.h"
+#include "column/datum.h"
 #include "fs/fs.h"
 #include "runtime/global_dict/types.h"
 #include "storage/del_vector.h"
@@ -88,6 +88,7 @@ public:
     const std::atomic<bool>* is_cancelled = nullptr;
 
     std::unordered_map<uint32_t, ColumnAccessPathPtr>* column_access_paths = nullptr;
+
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;
 

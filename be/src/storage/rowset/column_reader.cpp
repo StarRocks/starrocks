@@ -505,7 +505,19 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
                                                      std::move(element_iterator));
     } else if (_column_type == LogicalType::TYPE_MAP) {
         size_t col = 0;
-        ASSIGN_OR_RETURN(auto keys, (*_sub_readers)[col++]->new_iterator());
+
+        ColumnAccessPath* key_path = nullptr;
+        std::vector<ColumnAccessPath*> child_paths;
+        if (path != nullptr && !path->children().empty()) {
+            for (const auto& child : path->children()) {
+                if (child->is_key()) {
+                    key_path = child.get();
+                } 
+                child_paths.emplace_back(child.get());
+            }
+        }
+
+        ASSIGN_OR_RETURN(auto keys, (*_sub_readers)[col++]->new_iterator(key_path));
         ASSIGN_OR_RETURN(auto values, (*_sub_readers)[col++]->new_iterator());
         std::unique_ptr<ColumnIterator> nulls;
         if (is_nullable()) {
@@ -513,7 +525,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
         }
         ASSIGN_OR_RETURN(auto offsets, (*_sub_readers)[col++]->new_iterator());
         return std::make_unique<MapColumnIterator>(std::move(nulls), std::move(offsets), std::move(keys),
-                                                   std::move(values));
+                                                   std::move(values), std::move(child_paths));
     } else if (_column_type == LogicalType::TYPE_STRUCT) {
         auto num_fields = _sub_readers->size();
 
@@ -540,7 +552,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
             ASSIGN_OR_RETURN(auto iter, (*_sub_readers)[i]->new_iterator(child_paths[i]));
             field_iters.emplace_back(std::move(iter));
         }
-        return create_struct_iter(std::move(null_iter), std::move(field_iters), access_flags);
+        return create_struct_iter(std::move(null_iter), std::move(field_iters), std::move(access_flags));
     } else {
         return Status::NotSupported("unsupported type to create iterator: " + std::to_string(_column_type));
     }
