@@ -495,8 +495,11 @@ public class OlapTableFactory implements AbstractTableFactory {
                         }
                         DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
                                 DataProperty.getInferredDefaultDataProperty());
-                        DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(table, properties);
-                        if (table.dynamicPartitionExists() && table.getColocateGroup() != null) {
+                        boolean dynamicPartitionExists = table.dynamicPartitionExists();
+                        if (dynamicPartitionExists) {
+                            DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(table, properties);
+                        }
+                        if (dynamicPartitionExists && table.getColocateGroup() != null) {
                             HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
                             if (info.getBucketNum() !=
                                     table.getTableProperty().getDynamicPartitionProperty().getBuckets()) {
