@@ -67,8 +67,12 @@ private:
         Finished,      // Finish all job
     };
 
+    bool _is_build_side_empty() const;
     int _num_build_chunks() const;
-    Chunk* _move_build_chunk_index(int index);
+    void _move_build_chunk_index(int index);
+    void _reset_build_chunk_index();
+    void _next_build_chunk_index();
+
     ChunkPtr _init_output_chunk(RuntimeState* state) const;
     Status _probe(RuntimeState* state, ChunkPtr chunk);
     void _advance_join_stage(JoinStage stage) const;
