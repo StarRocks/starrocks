@@ -728,26 +728,23 @@ public class SystemInfoService {
 
     public List<Long> seqChooseBackendIdsByStorageMedium(int backendNum, boolean needAvailable, boolean isCreate,
                                                          TStorageMedium storageMedium) {
-        final List<ComputeNode> backends =
+        final List<Backend> backends =
                 getBackends().stream().filter(v -> !v.diskExceedLimitByStorageMedium(storageMedium))
                         .collect(Collectors.toList());
-        return seqChooseBackendIds(backendNum, needAvailable, isCreate, backends);
+        return seqChooseNodeIds(backendNum, needAvailable, isCreate, backends);
     }
 
     public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate) {
-        final List<ComputeNode> backends =
+        final List<Backend> backends =
                 getBackends().stream().filter(v -> !v.diskExceedLimit()).collect(Collectors.toList());
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            backends.addAll(getComputeNodes().asList());
-        }
-        return seqChooseBackendIds(backendNum, needAvailable, isCreate, backends);
+        return seqChooseNodeIds(backendNum, needAvailable, isCreate, backends);
     }
 
     // choose backends by round-robin
     // return null if not enough backend
     // use synchronized to run serially
-    public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate,
-                                                       final List<ComputeNode> srcBackends) {
+    public synchronized List<Long> seqChooseNodeIds(int backendNum, boolean needAvailable, boolean isCreate,
+                                                    final List<Backend> srcBackends) {
         long lastBackendId;
 
         if (isCreate) {
@@ -757,8 +754,8 @@ public class SystemInfoService {
         }
 
         // host -> BE list
-        Map<String, List<ComputeNode>> backendMaps = Maps.newHashMap();
-        for (ComputeNode backend : srcBackends) {
+        Map<String, List<Backend>> backendMaps = Maps.newHashMap();
+        for (Backend backend : srcBackends) {
             // If needAvailable is true, unavailable backend won't go into the pick list
             if (needAvailable && !backend.isAvailable()) {
                 continue;
@@ -767,15 +764,15 @@ public class SystemInfoService {
             if (backendMaps.containsKey(backend.getHost())) {
                 backendMaps.get(backend.getHost()).add(backend);
             } else {
-                List<ComputeNode> list = Lists.newArrayList();
+                List<Backend> list = Lists.newArrayList();
                 list.add(backend);
                 backendMaps.put(backend.getHost(), list);
             }
         }
 
         // if more than one backend exists in same host, select a backend at random
-        List<ComputeNode> backends = Lists.newArrayList();
-        for (List<ComputeNode> list : backendMaps.values()) {
+        List<Backend> backends = Lists.newArrayList();
+        for (List<Backend> list : backendMaps.values()) {
             Collections.shuffle(list);
             backends.add(list.get(0));
         }
@@ -784,20 +781,20 @@ public class SystemInfoService {
         // get last backend index
         int lastBackendIndex = -1;
         int index = -1;
-        for (ComputeNode backend : backends) {
+        for (Backend backend : backends) {
             index++;
             if (backend.getId() == lastBackendId) {
                 lastBackendIndex = index;
                 break;
             }
         }
-        Iterator<ComputeNode> iterator = Iterators.cycle(backends);
+        Iterator<Backend> iterator = Iterators.cycle(backends);
         index = -1;
         boolean failed = false;
         // 2 cycle at most
         int maxIndex = 2 * backends.size();
         while (iterator.hasNext() && backendIds.size() < backendNum) {
-            ComputeNode backend = iterator.next();
+            Backend backend = iterator.next();
             index++;
             if (index <= lastBackendIndex) {
                 continue;
@@ -832,7 +829,7 @@ public class SystemInfoService {
         }
 
         // debug
-        for (ComputeNode backend : backends) {
+        for (Backend backend : backends) {
             LOG.debug("random select: {}", backend);
         }
 
