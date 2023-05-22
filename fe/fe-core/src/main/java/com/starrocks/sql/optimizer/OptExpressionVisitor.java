@@ -266,7 +266,7 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
-    public R visitPhysicalTempExtTableScan(OptExpression optExpression, C context) {
+    public R visitPhysicalTableFunctionTableScan(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 }

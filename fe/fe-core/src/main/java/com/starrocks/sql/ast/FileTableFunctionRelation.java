@@ -19,9 +19,9 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
-public class TempExternalTableFunctionRelation extends TableRelation {
+public class FileTableFunctionRelation extends TableRelation {
     private Map<String, String> properties;
-    public TempExternalTableFunctionRelation(Map<String, String> properties, NodePosition pos) {
+    public FileTableFunctionRelation(Map<String, String> properties, NodePosition pos) {
         super(new TableName("", "temp_external_table"));
         this.properties = properties;
     }

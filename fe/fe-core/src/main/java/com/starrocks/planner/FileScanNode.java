@@ -43,7 +43,7 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.catalog.TempExternalTable;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
@@ -193,14 +193,14 @@ public class FileScanNode extends LoadScanNode {
                     throw new UserException(e.getMessage());
                 }
                 brokerDesc = new BrokerDesc(brokerTable.getBrokerName(), brokerTable.getBrokerProperties());
-            } else if (tbl instanceof TempExternalTable) {
-                TempExternalTable tempTable = (TempExternalTable) tbl;
+            } else if (tbl instanceof TableFunctionTable) {
+                TableFunctionTable funcTable = (TableFunctionTable) tbl;
                 try {
-                    fileGroups = Lists.newArrayList(new BrokerFileGroup(tempTable));
+                    fileGroups = Lists.newArrayList(new BrokerFileGroup(funcTable));
                 } catch (AnalysisException e) {
                     throw new UserException(e.getMessage());
                 }
-                brokerDesc = new BrokerDesc(tempTable.getProperties());
+                brokerDesc = new BrokerDesc(funcTable.getProperties());
             }
             targetTable = tbl;
         }

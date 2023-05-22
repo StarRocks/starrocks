@@ -978,7 +978,7 @@ public abstract class AstVisitor<R, C> {
         return visitRelation(node, context);
     }
 
-    public R visitExternalTableFunction(TempExternalTableFunctionRelation node, C context) {
+    public R visitExternalTableFunction(FileTableFunctionRelation node, C context) {
         return visitRelation(node, context);
     }
 

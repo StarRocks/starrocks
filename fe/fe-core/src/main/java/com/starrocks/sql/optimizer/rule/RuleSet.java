@@ -46,7 +46,7 @@ import com.starrocks.sql.optimizer.rule.implementation.ProjectImplementationRule
 import com.starrocks.sql.optimizer.rule.implementation.RepeatImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.SchemaScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.TableFunctionImplementationRule;
-import com.starrocks.sql.optimizer.rule.implementation.TmpExtTableScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.TableFunctionTableScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.TopNImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.UnionImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ValuesImplementationRule;
@@ -163,7 +163,7 @@ public class RuleSet {
             new EsScanImplementationRule(),
             new MetaScanImplementationRule(),
             new JDBCScanImplementationRule(),
-            new TmpExtTableScanImplementationRule(),
+            new TableFunctionTableScanImplementationRule(),
             new HashAggImplementationRule(),
             new ProjectImplementationRule(),
             new TopNImplementationRule(),

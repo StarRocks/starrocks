@@ -29,10 +29,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
 
-public class PhysicalTempExtTableScanOperator extends PhysicalScanOperator {
+public class PhysicalTableFunctionTableScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
 
-    public PhysicalTempExtTableScanOperator(Table table,
+    public PhysicalTableFunctionTableScanOperator(Table table,
                                             Map<ColumnRefOperator, Column> columnRefMap,
                                             ScanOperatorPredicates predicates,
                                             long limit,
@@ -54,12 +54,12 @@ public class PhysicalTempExtTableScanOperator extends PhysicalScanOperator {
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitPhysicalTempExtTableScan(this, context);
+        return visitor.visitPhysicalTableFunctionTableScan(this, context);
     }
 
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
-        return visitor.visitPhysicalTempExtTableScan(optExpression, context);
+        return visitor.visitPhysicalTableFunctionTableScan(optExpression, context);
     }
 
     @Override

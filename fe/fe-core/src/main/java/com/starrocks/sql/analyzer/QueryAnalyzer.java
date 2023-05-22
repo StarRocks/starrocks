@@ -37,7 +37,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
-import com.starrocks.catalog.TempExternalTable;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
@@ -66,7 +67,6 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
-import com.starrocks.sql.ast.TempExternalTableFunctionRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
@@ -231,9 +231,9 @@ public class QueryAnalyzer {
                     join.setLateral(true);
                 }
                 return join;
-            } else if (relation instanceof TempExternalTableFunctionRelation) {
-                TempExternalTableFunctionRelation tableFunctionRelation = (TempExternalTableFunctionRelation) relation;
-                Table table = resolveTempExternalTable(tableFunctionRelation.getProperties());
+            } else if (relation instanceof FileTableFunctionRelation) {
+                FileTableFunctionRelation tableFunctionRelation = (FileTableFunctionRelation) relation;
+                Table table = resolveTableFunctionTable(tableFunctionRelation.getProperties());
                 tableFunctionRelation.setTable(table);
                 return relation;
             } else if (relation instanceof TableRelation) {
@@ -400,7 +400,7 @@ public class QueryAnalyzer {
         }
 
         @Override
-        public Scope visitExternalTableFunction(TempExternalTableFunctionRelation node, Scope outerScope) {
+        public Scope visitExternalTableFunction(FileTableFunctionRelation node, Scope outerScope) {
             TableName tableName = node.getResolveTableName();
             Table table = node.getTable();
 
@@ -941,9 +941,9 @@ public class QueryAnalyzer {
         }
     }
 
-    private Table resolveTempExternalTable(Map<String, String> properties) {
+    private Table resolveTableFunctionTable(Map<String, String> properties) {
         try {
-            return new TempExternalTable(properties);
+            return new TableFunctionTable(properties);
         } catch (DdlException e) {
             throw new SemanticException(e.getMessage());
         }

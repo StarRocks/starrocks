@@ -20,15 +20,15 @@ import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalTempExtTableScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionTableScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalTempExtTableScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionTableScanOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
-public class TmpExtTableScanImplementationRule extends ImplementationRule {
-    public TmpExtTableScanImplementationRule() {
+public class TableFunctionTableScanImplementationRule extends ImplementationRule {
+    public TableFunctionTableScanImplementationRule() {
         super(RuleType.IMP_TEMP_EXT_TABLE_LSCAN_TO_PSCAN,
                 Pattern.create(OperatorType.LOGICAL_TEMP_EXT_TABLE_SCAN));
     }
@@ -36,9 +36,9 @@ public class TmpExtTableScanImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         OptExpression result = null;
-        LogicalTempExtTableScanOperator logicalScanOperator = (LogicalTempExtTableScanOperator) input.getOp();
-        if (logicalScanOperator.getTable().getType() == Table.TableType.TEMPORARY_EXTERNAL_TABLE) {
-            PhysicalTempExtTableScanOperator physicalScanOperator = new PhysicalTempExtTableScanOperator(
+        LogicalTableFunctionTableScanOperator logicalScanOperator = (LogicalTableFunctionTableScanOperator) input.getOp();
+        if (logicalScanOperator.getTable().getType() == Table.TableType.TABLE_FUNCTION) {
+            PhysicalTableFunctionTableScanOperator physicalScanOperator = new PhysicalTableFunctionTableScanOperator(
                     logicalScanOperator.getTable(),
                     logicalScanOperator.getColRefToColumnMetaMap(),
                     logicalScanOperator.getScanOperatorPredicates(),

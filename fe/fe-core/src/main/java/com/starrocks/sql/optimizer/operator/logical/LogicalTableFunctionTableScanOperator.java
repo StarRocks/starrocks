@@ -18,7 +18,7 @@ package com.starrocks.sql.optimizer.operator.logical;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TempExternalTable;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
@@ -27,9 +27,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
 
-public class LogicalTempExtTableScanOperator extends LogicalScanOperator {
+public class LogicalTableFunctionTableScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
-    public LogicalTempExtTableScanOperator(Table table,
+    public LogicalTableFunctionTableScanOperator(Table table,
                                            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                            long limit,
@@ -41,10 +41,10 @@ public class LogicalTempExtTableScanOperator extends LogicalScanOperator {
                 limit,
                 predicate, null);
 
-        Preconditions.checkState(table instanceof TempExternalTable);
+        Preconditions.checkState(table instanceof TableFunctionTable);
     }
 
-    private LogicalTempExtTableScanOperator() {
+    private LogicalTableFunctionTableScanOperator() {
         super(OperatorType.LOGICAL_TEMP_EXT_TABLE_SCAN);
     }
 
@@ -60,19 +60,20 @@ public class LogicalTempExtTableScanOperator extends LogicalScanOperator {
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitLogicalTempExtTableScan(this, context);
+        return visitor.visitLogicalTableFunctionTableScan(this, context);
     }
 
     public static class Builder
-            extends LogicalScanOperator.Builder<LogicalTempExtTableScanOperator, LogicalTempExtTableScanOperator.Builder> {
+            extends LogicalScanOperator.Builder<LogicalTableFunctionTableScanOperator,
+            LogicalTableFunctionTableScanOperator.Builder> {
 
         @Override
-        protected LogicalTempExtTableScanOperator newInstance() {
-            return new LogicalTempExtTableScanOperator();
+        protected LogicalTableFunctionTableScanOperator newInstance() {
+            return new LogicalTableFunctionTableScanOperator();
         }
 
         @Override
-        public LogicalTempExtTableScanOperator.Builder withOperator(LogicalTempExtTableScanOperator scanOperator) {
+        public LogicalTableFunctionTableScanOperator.Builder withOperator(LogicalTableFunctionTableScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
             builder.predicates = scanOperator.predicates.clone();

@@ -44,8 +44,8 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
-import com.starrocks.thrift.TTempExtTable;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
@@ -54,7 +54,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
 
-public class TempExternalTable extends Table {
+public class TableFunctionTable extends Table {
 
     private static final String PROPERTY_PATH = "path";
     private static final String PROPERTY_FORMAT = "format";
@@ -65,10 +65,10 @@ public class TempExternalTable extends Table {
 
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
-    public TempExternalTable(Map<String, String> properties) throws DdlException {
-        super(TableType.TEMPORARY_EXTERNAL_TABLE);
+    public TableFunctionTable(Map<String, String> properties) throws DdlException {
+        super(TableType.TABLE_FUNCTION);
         super.setId(-1);
-        super.setName("temp_external_table");
+        super.setName("table_function_table");
         this.properties = properties;
         parseProperties();
 
@@ -88,7 +88,7 @@ public class TempExternalTable extends Table {
 
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
-        TTempExtTable tTbl = new TTempExtTable();
+        TTableFunctionTable tTbl = new TTableFunctionTable();
         tTbl.setLocation(path);
 
         List<TColumn> tColumns = Lists.newArrayList();
@@ -100,7 +100,7 @@ public class TempExternalTable extends Table {
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.FILE_TABLE, fullSchema.size(),
                 0, "", "");
-        tTableDescriptor.setTempExtTable(tTbl);
+        tTableDescriptor.setTableFunctionTable(tTbl);
         return tTableDescriptor;
     }
 
@@ -114,7 +114,7 @@ public class TempExternalTable extends Table {
 
     private void parseProperties() throws DdlException {
         if (properties == null) {
-            throw new DdlException("Please set properties of external table");
+            throw new DdlException("Please set properties of table function");
         }
 
         path = properties.get(PROPERTY_PATH);
