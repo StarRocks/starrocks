@@ -50,14 +50,12 @@ Status NLJoinBuildOperator::set_finishing(RuntimeState* state) {
 }
 
 Status NLJoinBuildOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    _num_rows += chunk->num_rows();
     _cross_join_context->append_build_chunk(_driver_sequence, chunk);
-
     return Status::OK();
 }
 
 size_t NLJoinBuildOperator::output_amplification_factor() const {
-    return _num_rows;
+    return _cross_join_context->channel_num_rows(_driver_sequence);
 }
 
 Operator::OutputAmplificationType NLJoinBuildOperator::intra_pipeline_amplification_type() const {

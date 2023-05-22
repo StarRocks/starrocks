@@ -51,7 +51,8 @@ public:
 
 private:
     std::atomic<bool> _is_finished = false;
-    size_t _num_rows = 0;
+
+protected:
     const std::shared_ptr<NLJoinContext>& _cross_join_context;
 };
 

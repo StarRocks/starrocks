@@ -74,7 +74,7 @@ private:
     void _next_build_chunk_index();
 
     ChunkPtr _init_output_chunk(RuntimeState* state) const;
-    Status _probe(RuntimeState* state, ChunkPtr chunk);
+    Status _probe(RuntimeState* state, const ChunkPtr& chunk);
     void _advance_join_stage(JoinStage stage) const;
     bool _skip_probe() const;
     void _check_post_probe() const;

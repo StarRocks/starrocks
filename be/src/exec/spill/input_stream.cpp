@@ -35,6 +35,8 @@ public:
         _streams.emplace_back(std::move(right));
     }
 
+    UnionAllSpilledInputStream(std::vector<InputStreamPtr> streams) : _streams(std::move(streams)) {}
+
     ~UnionAllSpilledInputStream() override = default;
 
     StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) override;
@@ -77,14 +79,14 @@ Status UnionAllSpilledInputStream::prefetch(SerdeContext& ctx) {
 }
 
 StatusOr<ChunkUniquePtr> UnionAllSpilledInputStream::get_next(SerdeContext& context) {
-    if (_current_process_idx < _streams.size()) {
+    while (_current_process_idx < _streams.size()) {
         auto chunk_st = _streams[_current_process_idx]->get_next(context);
         if (chunk_st.ok()) {
             return std::move(chunk_st.value());
         }
         if (chunk_st.status().is_end_of_file()) {
             _current_process_idx++;
-            return std::make_unique<Chunk>();
+            continue;
         } else {
             return chunk_st.status();
         }
@@ -92,8 +94,49 @@ StatusOr<ChunkUniquePtr> UnionAllSpilledInputStream::get_next(SerdeContext& cont
     return Status::EndOfFile("eos");
 }
 
+// The raw chunk input stream. all chunks are in memory.
+class RawChunkInputStream final : public SpillInputStream {
+public:
+    RawChunkInputStream(std::vector<ChunkPtr> chunks) : _chunks(std::move(chunks)) {}
+    StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) override;
+
+    bool is_ready() override { return true; };
+    void close() override{};
+
+    bool enable_prefetch() const override { return true; }
+
+    Status prefetch(SerdeContext& ctx) override {
+        mark_is_eof();
+        return Status::EndOfFile("eos");
+    }
+
+private:
+    size_t read_idx{};
+    std::vector<ChunkPtr> _chunks;
+};
+
+StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(SerdeContext& context) {
+    if (read_idx >= _chunks.size()) {
+        return Status::EndOfFile("eos");
+    }
+    // TODO: make ChunkPtr could convert to ChunkUniquePtr to avoid unused memory copy
+    auto res = std::move(_chunks[read_idx++])->clone_unique();
+    _chunks[read_idx - 1].reset();
+
+    return res;
+}
+
+// method for create input stream
 InputStreamPtr SpillInputStream::union_all(const InputStreamPtr& left, const InputStreamPtr& right) {
     return std::make_shared<UnionAllSpilledInputStream>(left, right);
+}
+
+InputStreamPtr SpillInputStream::union_all(std::vector<InputStreamPtr>& _streams) {
+    return std::make_shared<UnionAllSpilledInputStream>(_streams);
+}
+
+InputStreamPtr SpillInputStream::as_stream(std::vector<ChunkPtr> chunks) {
+    return std::make_shared<RawChunkInputStream>(chunks);
 }
 
 class BufferedInputStream : public SpillInputStream {

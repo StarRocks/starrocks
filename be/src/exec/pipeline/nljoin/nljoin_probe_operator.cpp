@@ -251,7 +251,7 @@ void NLJoinProbeOperator::iterate_enumerate_chunk(const ChunkPtr& chunk,
     }
 }
 
-Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
+Status NLJoinProbeOperator::_probe(RuntimeState* state, const ChunkPtr& chunk) {
     FilterPtr filter;
 
     // directly return all probe chunk when it's left anti join and right input is empty
