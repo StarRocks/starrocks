@@ -85,9 +85,9 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
     }
 
     public enum Type {
-        SYNC,
+        STREAM_LOAD,
         ROUTINE_LOAD,
-        PARALLEL     // default
+        PARALLEL_STREAM_LOAD     // default
     }
 
     @SerializedName(value = "id")
@@ -141,7 +141,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
     // used for sync stream load and routine load
     private boolean isSyncStreamLoad = false;
 
-    private Type type = Type.PARALLEL;
+    private Type type = Type.PARALLEL_STREAM_LOAD;
 
     private List<State> channels;
     private StreamLoadParam streamLoadParam;
@@ -178,7 +178,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         if (isRoutineLoad) {
             type = Type.ROUTINE_LOAD;
         } else {
-            type = Type.SYNC;
+            type = Type.STREAM_LOAD;
         }
     }
     public StreamLoadTask(long id, Database db, OlapTable table, String label,
@@ -1300,12 +1300,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         switch (this.type) {
             case ROUTINE_LOAD:
                 return "ROUTINE_LOAD";
-            case SYNC:
-                return "SYNC";
-            case PARALLEL:
-                return "PARALLEL";
+            case STREAM_LOAD:
+                return "STREAM_LOAD";
+            case PARALLEL_STREAM_LOAD:
+                return "PARALLEL_STREAM_LOAD";
             default:
-                return "UNKOWN TYPE";
+                return "UNKOWN";
         }
     }
 
@@ -1385,7 +1385,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         task.setTUniqueId(loadId);
         // Only task which type is PARALLEL will be persisted
         // just set type to PARALLEL
-        task.setType(Type.PARALLEL);
+        task.setType(Type.PARALLEL_STREAM_LOAD);
         return task;
     }
 }
