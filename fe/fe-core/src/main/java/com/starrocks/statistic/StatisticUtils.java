@@ -52,6 +52,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.StringJoiner;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
@@ -82,6 +85,57 @@ public class StatisticUtils {
         context.setStartTime();
 
         return context;
+    }
+
+    public static void triggerCollectionOnFirstLoad(Database db, Table table, boolean sync, CountedListener listener) {
+        if (FeConstants.runningUnitTest) {
+            listener.run();
+            return;
+        }
+        if (GlobalStateMgr.getCurrentState().getAnalyzeManager().hasBasicStatsMeta(table.getId())) {
+            listener.run();
+            return;
+        }
+        if (statisticDatabaseBlackListCheck(db.getFullName())) {
+            listener.run();
+            return;
+        }
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), table.getId(), null, StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, null, LocalDateTime.now());
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+
+        Future<?> future;
+        try {
+            future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
+                    .submit(() -> {
+                        try {
+                            StatisticExecutor statisticExecutor = new StatisticExecutor();
+                            ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                            statsConnectCtx.setThreadLocalInfo();
+
+                            statisticExecutor.collectStatistics(statsConnectCtx,
+                                    StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null, null,
+                                            StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, null),
+                                    analyzeStatus,
+                                    false);
+                        } finally {
+                            listener.run();
+                        }
+                    });
+        } catch (Throwable e) {
+            listener.run();
+            return;
+        }
+
+        if (sync) {
+            try {
+                future.get();
+            } catch (InterruptedException | ExecutionException e) {
+                LOG.error(e);
+            }
+        }
     }
 
     // check database in black list
@@ -334,5 +388,28 @@ public class StatisticUtils {
 
     public static String quoting(String identifier) {
         return "`" + identifier + "`";
+    }
+
+    public static CountedListener createCounteredListener(int count, Runnable listener) {
+        return new CountedListener(count, listener);
+    }
+
+    public static final class CountedListener implements Runnable {
+        private final AtomicInteger count;
+        private final Runnable listener;
+
+        private CountedListener(int count, Runnable listener) {
+            this.count = new AtomicInteger(count);
+            this.listener = listener;
+        }
+
+        @Override
+        public void run() {
+            if (count.decrementAndGet() == 0) {
+                if (listener != null) {
+                    listener.run();
+                }
+            }
+        }
     }
 }
