@@ -12,7 +12,7 @@ Different branches of StarRocks correspond to different development environment 
 
 - For Ubuntu 22.04:
 
-  | **Branch name** | **Ima****ge na****me**              |
+  | **Branch name** | **Image name**              |
   | --------------- | ----------------------------------- |
   | main            | starrocks/dev-env-ubuntu:latest     |
   | branch-3.0      | starrocks/dev-env-ubuntu:3.0-latest |
