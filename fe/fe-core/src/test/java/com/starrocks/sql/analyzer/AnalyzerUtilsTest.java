@@ -21,6 +21,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.utframe.StarRocksAssert;
@@ -63,7 +64,7 @@ public class AnalyzerUtilsTest {
         Expr expr = queryStatement.getQueryRelation().getOutputExpression().get(0);
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, Type.VARCHAR, "bill_code", false);
         ConstantOperator constantOperator = new ConstantOperator("JT2921712368984", Type.VARCHAR);
-        boolean success = AnalyzerUtils.rewritePredicate(expr, columnRefOperator, constantOperator);
+        boolean success = ColumnFilterConverter.rewritePredicate(expr, columnRefOperator, constantOperator);
         Assert.assertTrue(success);
         Expr shouldReplaceExpr = expr.getChild(0).getChild(0);
         Assert.assertTrue(shouldReplaceExpr instanceof StringLiteral);

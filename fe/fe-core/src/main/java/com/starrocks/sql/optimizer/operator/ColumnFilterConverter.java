@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
@@ -40,6 +41,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -57,6 +59,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -71,6 +74,54 @@ public class ColumnFilterConverter {
 
     private static final ColumnFilterVisitor COLUMN_FILTER_VISITOR = new ColumnFilterVisitor();
 
+    // replaces a field in an expression with a constant
+    private static class ExprRewriter extends AstVisitor<Boolean, Void> {
+
+        private final ColumnRefOperator columnRef;
+        private final ConstantOperator constant;
+
+        public ExprRewriter(ColumnRefOperator columnRef, ConstantOperator constant) {
+            this.columnRef = columnRef;
+            this.constant = constant;
+        }
+
+        @Override
+        public Boolean visitCastExpr(CastExpr node, Void context) {
+            ArrayList<Expr> children = node.getChildren();
+            boolean success = false;
+            for (Expr child : children) {
+                if (visit(child)) {
+                    success = true;
+                }
+            }
+            return success;
+        }
+
+        @Override
+        public Boolean visitFunctionCall(FunctionCallExpr node, Void context) {
+            if (FunctionSet.SUBSTRING.equalsIgnoreCase(node.getFnName().getFunction()) ||
+                    FunctionSet.SUBSTR.equalsIgnoreCase(node.getFnName().getFunction())) {
+                Expr firstExpr = node.getChild(0);
+                if (firstExpr instanceof SlotRef) {
+                    SlotRef slotRef = (SlotRef) node.getChild(0);
+                    if (columnRef.getName().equals(slotRef.getColumnName())) {
+                        node.setChild(0, new StringLiteral(constant.getVarchar()));
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+    }
+
+    public static boolean rewritePredicate(Expr expr, ColumnRefOperator columnRef, ConstantOperator constant) {
+        Boolean success = new ExprRewriter(columnRef, constant).visit(expr);
+        if (success == null) {
+            return false;
+        } else {
+            return success;
+        }
+    }
 
     public static Map<String, PartitionColumnFilter> convertColumnFilter(List<ScalarOperator> predicates) {
         return convertColumnFilter(predicates, null);
@@ -146,7 +197,7 @@ public class ColumnFilterConverter {
             List<ScalarOperator> argument = predicate.getChildren();
             ColumnRefOperator columnRef = (ColumnRefOperator) argument.get(0);
             ConstantOperator constant = (ConstantOperator) argument.get(1);
-            boolean success = AnalyzerUtils.rewritePredicate(predicateExpr, columnRef, constant);
+            boolean success = rewritePredicate(predicateExpr, columnRef, constant);
             if (!success) {
                 return predicate;
             }
