@@ -56,4 +56,121 @@ public class AnalyzeInsertTest {
         analyzeSuccess("insert into t0 with label `l1` select * from t0");
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testInsertIcebergUnpartitionedTable(@Mocked IcebergTable icebergTable) {
+        analyzeFail("insert into err_catalog.db.tbl values(1)",
+                "Unknown catalog 'err_catalog'");
+
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadata) {
+            {
+                metadata.getDb("iceberg_catalog", "err_db");
+                result = null;
+                minTimes = 0;
+            }
+        };
+        analyzeFail("insert into iceberg_catalog.err_db.tbl values (1)",
+                "Database err_db is not found");
+
+        new Expectations(metadata) {
+            {
+                metadata.getDb(anyString, anyString);
+                result = new Database();
+                minTimes = 0;
+
+                metadata.getTable(anyString, anyString, anyString);
+                result = null;
+                minTimes = 0;
+            }
+        };
+        analyzeFail("insert into iceberg_catalog.db.err_tbl values (1)",
+                "Table err_tbl is not found");
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable(anyString, anyString, anyString);
+                result = new HiveTable();
+                minTimes = 0;
+            }
+        };
+        analyzeFail("insert into iceberg_catalog.db.hive_tbl values (1)",
+                "Only support insert into olap table or mysql table or iceberg table");
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable(anyString, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+
+                icebergTable.supportInsert();
+                result = true;
+                minTimes = 0;
+            }
+        };
+        analyzeFail("insert into iceberg_catalog.db.tbl values (1)",
+                "Column count doesn't match value count");
+
+        new Expectations(metadata) {
+            {
+                icebergTable.getBaseSchema();
+                result = ImmutableList.of(new Column("c1", Type.INT));
+                minTimes = 0;
+            }
+        };
+        analyzeSuccess("insert into iceberg_catalog.db.iceberg_tbl values (1)");
+    }
+
+    @Test
+    public void testPartitionedIcebergTable(@Mocked IcebergTable icebergTable) {
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadata) {
+            {
+                metadata.getDb(anyString, anyString);
+                result = new Database();
+                minTimes = 0;
+
+                metadata.getTable(anyString, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+
+                icebergTable.supportInsert();
+                result = true;
+                minTimes = 0;
+
+                icebergTable.getPartitionColumnNames();
+                result = ImmutableList.of("p1", "p2");
+                minTimes = 0;
+
+                icebergTable.getColumn(anyString);
+                result = ImmutableList.of(new Column("p1", Type.ARRAY_DATE));
+                minTimes = 0;
+            }
+        };
+
+        analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=1) values (1)",
+                "Must include all partition column names");
+
+        analyzeFail("insert into iceberg_catalog.db.tbl partition(p2=1, p1=1) values (1)",
+                "Expected: p1, but actual: p2");
+
+        analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=1, p2=\"aaffsssaa\") values (1)",
+                "Type[array<date>] not supported.");
+
+        new Expectations() {
+            {
+                icebergTable.getBaseSchema();
+                result = ImmutableList.of(new Column("c1", Type.INT), new Column("p1", Type.INT), new Column("p2", Type.INT));
+                minTimes = 0;
+
+                icebergTable.getColumn(anyString);
+                result = ImmutableList.of(new Column("p1", Type.INT), new Column("p2", Type.INT));
+                minTimes = 0;
+            }
+        };
+
+        analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111, p2=222) values (1)");
+    }
+>>>>>>> fe58f13709 ([BugFix] Fix the type output of show create table statement (#23688))
 }

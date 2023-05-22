@@ -70,7 +70,11 @@ public class StructTypePlanTest extends PlanTestBase {
         sql = "select c2 from test1 union all select c2_0 from test1";
         plan = getFragmentPlan(sql);
         assertContains(plan, "2:Project\n" +
+<<<<<<< HEAD
                 "  |  <slot 6> : CAST(3: c2 AS STRUCT<int(11), varchar(10)>)\n" +
+=======
+                "  |  <slot 6> : CAST(3: c2 AS struct<col0 int(11), col1 varchar(10)>)\n" +
+>>>>>>> fe58f13709 ([BugFix] Fix the type output of show create table statement (#23688))
                 "  |  \n" +
                 "  1:OlapScanNode", "0:UNION\n" +
                 "  |  \n" +

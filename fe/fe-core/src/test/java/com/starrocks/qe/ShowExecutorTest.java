@@ -1069,8 +1069,13 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = executor.execute();
         Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE TABLE `test_table` (\n" +
+<<<<<<< HEAD
                 "  `id` int(11) DEFAULT NULL,\n" +
                 "  `name` varchar(1048576) DEFAULT NULL,\n" +
+=======
+                "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
+                "  `name` varchar DEFAULT NULL,\n" +
+>>>>>>> fe58f13709 ([BugFix] Fix the type output of show create table statement (#23688))
                 "  `year` int(11) DEFAULT NULL,\n" +
                 "  `dt` int(11) DEFAULT NULL\n" +
                 ")\n" +

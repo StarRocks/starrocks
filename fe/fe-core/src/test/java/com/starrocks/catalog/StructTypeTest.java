@@ -30,7 +30,11 @@ public class StructTypeTest {
     @Test
     public void testUnnamedStruct() {
         StructType type = new StructType(Lists.newArrayList(Type.INT, Type.DATETIME));
+<<<<<<< HEAD
         Assert.assertEquals("STRUCT<int(11), datetime>", type.toSql());
+=======
+        Assert.assertEquals("struct<col0 int(11), col1 datetime>", type.toSql());
+>>>>>>> fe58f13709 ([BugFix] Fix the type output of show create table statement (#23688))
     }
 
     @Test

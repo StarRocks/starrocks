@@ -56,13 +56,17 @@ public class ArrayType extends Type {
     @Override
     public String toSql(int depth) {
         if (depth >= MAX_NESTING_DEPTH) {
-            return "ARRAY<...>";
+            return "array<...>";
         }
+<<<<<<< HEAD
         if (itemType.isDecimalOfAnyVersion()) {
             return String.format("ARRAY<%s>", itemType);
         } else {
             return String.format("ARRAY<%s>", itemType.toSql(depth + 1));
         }
+=======
+        return String.format("array<%s>", itemType.toSql(depth + 1));
+>>>>>>> fe58f13709 ([BugFix] Fix the type output of show create table statement (#23688))
     }
 
     @Override

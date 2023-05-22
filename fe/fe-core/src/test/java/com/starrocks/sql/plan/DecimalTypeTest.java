@@ -194,10 +194,17 @@ public class DecimalTypeTest extends PlanTestBase {
         try {
             String sql = "select array_agg(c_0_0) from tab0";
             String plan = getVerboseExplain(sql);
+<<<<<<< HEAD
             assertContains(plan, "array_agg[([16: array_agg, STRUCT<ARRAY<DECIMAL128(26,2)>>, true]); " +
                     "args: DECIMAL128; result: ARRAY<DECIMAL128(26,2)>;");
             assertContains(plan, "array_agg[([1: c_0_0, DECIMAL128(26,2), false]); " +
                     "args: DECIMAL128; result: STRUCT<ARRAY<DECIMAL128(26,2)>>;");
+=======
+            assertContains(plan, "array_agg[([16: array_agg, struct<col0 array<decimal128(26, 2)>>, true]); " +
+                    "args: DECIMAL128; result: ARRAY<DECIMAL128(26,2)>;");
+            assertContains(plan, "array_agg[([1: c_0_0, DECIMAL128(26,2), false]); " +
+                    "args: DECIMAL128; result: struct<col0 array<decimal128(26, 2)>>;");
+>>>>>>> fe58f13709 ([BugFix] Fix the type output of show create table statement (#23688))
         } finally {
             connectContext.getSessionVariable().setNewPlanerAggStage(stage);
         }

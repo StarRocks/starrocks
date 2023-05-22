@@ -342,6 +342,7 @@ public class DeleteTest {
         try {
             deleteHandler.process(deleteStmt);
         } catch (DdlException e) {
+<<<<<<< HEAD
             Assert.assertTrue(e.getMessage().contains("unsupported delete condition on Array/Map/Struct type column"));
         }
 
@@ -355,6 +356,9 @@ public class DeleteTest {
             deleteHandler.process(deleteStmt);
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("unsupported delete condition on Array/Map/Struct type"));
+=======
+            Assert.assertTrue(e.getMessage().contains("Type[array<bigint(20)>] not supported"));
+>>>>>>> fe58f13709 ([BugFix] Fix the type output of show create table statement (#23688))
         }
     }
 }
