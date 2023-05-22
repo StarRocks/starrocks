@@ -47,9 +47,10 @@ CASE_DIR = "sql"
 
 class ChooseCase(object):
     class CaseTR(object):
-        def __init__(self, name, file, sql, result, info):
+        def __init__(self, ctx, name, file, sql, result, info):
             """ init """
             super().__init__()
+            self.ctx = ctx
             self.info = info
             self.name = name
             self.file = file
@@ -244,7 +245,7 @@ class ChooseCase(object):
                         pass
                     else:
                         self.case_list.append(
-                            ChooseCase.CaseTR(name, file, copy.deepcopy(tmp_sql), copy.deepcopy(tmp_res), info)
+                            ChooseCase.CaseTR(self, name, file, copy.deepcopy(tmp_sql), copy.deepcopy(tmp_res), info)
                         )
 
                 info = line_content
@@ -310,7 +311,7 @@ class ChooseCase(object):
                 pass
             else:
                 self.case_list.append(
-                    ChooseCase.CaseTR(name, file, copy.deepcopy(tmp_sql), copy.deepcopy(tmp_res), info)
+                    ChooseCase.CaseTR(self, name, file, copy.deepcopy(tmp_sql), copy.deepcopy(tmp_res), info)
                 )
 
 

@@ -13,3 +13,6 @@ storage_volume_create	S3	false	s3://xxx	{"aws.s3.region":"us-west-2","aws.s3.use
 DROP STORAGE VOLUME IF EXISTS storage_volume_create;
 -- result:
 -- !result
+SHOW STORAGE VOLUMES like 'storage_volume_create';
+-- result:
+-- !result

@@ -1100,10 +1100,9 @@ public class AlterJobMgr {
     public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         SRMetaBlockReader reader = new SRMetaBlockReader(dis, AlterJobMgr.class.getName());
         try {
-            int schemaChangeJobSize = (int) reader.readJson(int.class);
+            int schemaChangeJobSize = reader.readJson(int.class);
             for (int i = 0; i != schemaChangeJobSize; ++i) {
-                // 2 json for each user(kv)
-                AlterJobV2 alterJobV2 = (AlterJobV2) reader.readJson(AlterJobV2.class);
+                AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
                 schemaChangeHandler.addAlterJobV2(alterJobV2);
 
                 // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
@@ -1115,10 +1114,9 @@ public class AlterJobMgr {
                 }
             }
 
-            int materializedViewJobSize = (int) reader.readJson(int.class);
+            int materializedViewJobSize = reader.readJson(int.class);
             for (int i = 0; i != materializedViewJobSize; ++i) {
-                // 2 json for each user(kv)
-                AlterJobV2 alterJobV2 = (AlterJobV2) reader.readJson(AlterJobV2.class);
+                AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
                 materializedViewHandler.addAlterJobV2(alterJobV2);
 
                 // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint

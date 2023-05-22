@@ -1,8 +1,29 @@
 # StarRocks version 2.5
 
-Release date: April 28, 2023
+## 2.5.6
+
+Release date: May 19, 2023
+
+### Improvements
+
+- Optimized the error message reported when INSERT INTO ... SELECT expires due to a small `thrift_server_max_worker_thread` value. [#21964](https://github.com/StarRocks/starrocks/pull/21964)
+- Tables created using CTAS have three replicas by default, which is consistent with the default replica number for common tables. [#22854](https://github.com/StarRocks/starrocks/pull/22854)
+
+### Bug Fixes
+
+- Truncating partitions fails because the TRUNCATE operation is case-sensitive to partition names. [#21809](https://github.com/StarRocks/starrocks/pull/21809)
+- Decommissioning BE fails due to the failure in creating temporary partitions for materialized views. [#22745](https://github.com/StarRocks/starrocks/pull/22745)
+- Dynamic FE parameters that require an ARRAY value cannot be set to an empty array. [#22225](https://github.com/StarRocks/starrocks/pull/22225)
+- Materialized views with the `partition_refresh_number` property specified may fail to completely refresh. [#21619](https://github.com/StarRocks/starrocks/pull/21619)
+- SHOW CREATE TABLE masks cloud credential information, which causes incorrect credential information in memory. [#21311](https://github.com/StarRocks/starrocks/pull/21311)
+- Predicates cannot take effect on some ORC files that are queried via external tables. [#21901](https://github.com/StarRocks/starrocks/pull/21901)
+- The min-max filter cannot properly handle lower- and upper-case letters in column names. [#22626](https://github.com/StarRocks/starrocks/pull/22626)
+- Late materialization causes errors in querying complex data types (STRUCT or MAP).  [#22862](https://github.com/StarRocks/starrocks/pull/22862)
+- The issue that occurs when restoring a Primary Key table. [#23384](https://github.com/StarRocks/starrocks/pull/23384)
 
 ## 2.5.5
+
+Release date: April 28, 2023
 
 ### New features
 
