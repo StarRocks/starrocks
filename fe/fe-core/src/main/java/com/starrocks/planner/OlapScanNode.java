@@ -77,6 +77,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TLakeScanNode;
@@ -485,7 +486,9 @@ public class OlapScanNode extends ScanNode {
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                // TODO: need to refactor after be split into cn + dn
+                ComputeNode backend =  GlobalStateMgr.getCurrentSystemInfo().
+                        getBackendOrComputeNode(replica.getBackendId());
                 if (backend == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;

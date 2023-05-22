@@ -74,7 +74,7 @@
     + [Query external data](./data_source/catalog/query_external_data.md)
   + [External table](./data_source/External_table.md)
   + [File external table](./data_source/file_external_table.md)
-  + [Local Cache](./data_source/Block_cache.md)
+  + [Data Cache](./data_source/data_cache.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
   + [Synchronous materialized view](./using_starrocks/Materialized_view-single_table.md)
@@ -320,6 +320,7 @@
       + [any_value](./sql-reference/sql-functions/aggregate-functions/any_value.md)
       + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
+      + [bitmap_agg](./sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
       + [grouping](./sql-reference/sql-functions/aggregate-functions/grouping.md)
       + [grouping_id](./sql-reference/sql-functions/aggregate-functions/grouping_id.md)
@@ -382,6 +383,7 @@
       + [bit_shift_right_logical](./sql-reference/sql-functions/bit-functions/bit_shift_right_logical.md)
     + Bitmap Functions
       + [base64_to_bitmap](./sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
+      + [bitmap_agg](./sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](./sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
       + [bitmap_contains](./sql-reference/sql-functions/bitmap-functions/bitmap_contains.md)

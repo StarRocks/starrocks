@@ -10,7 +10,7 @@ This topic describes privileges provided by StarRocks on different objects and t
 
 This section describes privileges that are available on different objects.
 
-### System
+### SYSTEM
 
 | Privilege               | Description                                                  |
 | ----------------------- | ------------------------------------------------------------ |
@@ -26,7 +26,7 @@ This section describes privileges that are available on different objects.
 | OPERATE                 | Manages replicas, configuration items, variables, and transactions. |
 | CREATE GLOBAL FUNCTION  | Creates a global UDF.                                        |
 
-### Resource group
+### RESOURCE GROUP
 
 | Privilege | Description                                       |
 | --------- | ------------------------------------------------- |
@@ -34,7 +34,7 @@ This section describes privileges that are available on different objects.
 | DROP      | Deletes a resource group.                         |
 | ALL       | Has all the above privileges on a resource grup.  |
 
-### Resource
+### RESOURCE
 
 | Privilege | Description                                |
 | --------- | ------------------------------------------ |
@@ -43,13 +43,13 @@ This section describes privileges that are available on different objects.
 | DROP      | Deletes a resource.                        |
 | ALL       | Has all the above privileges on a resoure. |
 
-### User
+### USER
 
 | Privilege   | Description                                    |
 | ----------- | ---------------------------------------------- |
 | IMPERSONATE | Allows user A to perform operations as user B. |
 
-### Global UDFs
+### GLOBAL FUNCTION (Global UDFs)
 
 | Privilege | Description                                 |
 | --------- | ------------------------------------------- |
@@ -57,7 +57,7 @@ This section describes privileges that are available on different objects.
 | DROP      | Deletes a function.                         |
 | ALL       | Has all the above privileges on a function. |
 
-### Catalog
+### CATALOG
 
 | Object                      | Privilege                                             | Description                                    |
 | --------------------------- | ----------------------------------------------------- | ---------------------------------------------- |
@@ -70,7 +70,7 @@ This section describes privileges that are available on different objects.
 
 > Notes: StarRocks internal catalog cannot be deleted.
 
-### Database
+### DATABASE
 
 | Privilege                | Description                                                  |
 | ------------------------ | ------------------------------------------------------------ |
@@ -82,7 +82,7 @@ This section describes privileges that are available on different objects.
 | CREATE MATERIALIZED VIEW | Creates a materialized view.                                 |
 | ALL                      | Has all the above privileges on a database.                  |
 
-### Table
+### TABLE
 
 | Privilege | Description                                                  |
 | --------- | ------------------------------------------------------------ |
@@ -95,7 +95,7 @@ This section describes privileges that are available on different objects.
 | DELETE    | Deletes data from a table based on the specified condition or deletes all the data from a table. |
 | ALL       | Has all the above privileges on a table.                     |
 
-### View
+### VIEW
 
 | Privilege | Description                             |
 | --------- | --------------------------------------- |
@@ -104,7 +104,7 @@ This section describes privileges that are available on different objects.
 | DROP      | Deletes a logical view.                 |
 | ALL       | Has all the above privileges on a view. |
 
-### Materialized view
+### MATERIALIZED VIEW
 
 | Privilege | Description                                          |
 | --------- | ---------------------------------------------------- |
@@ -114,7 +114,7 @@ This section describes privileges that are available on different objects.
 | DROP      | Deletes a materialized view.                         |
 | ALL       | Has all the above privileges on a materialized view. |
 
-### Database-level UDFs
+### FUNCTION (Database-level UDFs)
 
 | USAGE | Uses a function.                            |
 | ----- | ------------------------------------------- |

@@ -81,22 +81,22 @@ For more information, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-stat
 
 ### Parameters
 
-#### `catalog_name`
+#### catalog_name
 
 The name of the Iceberg catalog. The naming conventions are as follows:
 
 - The name can contain letters, digits 0 through 9, and underscores (_) and must start with a letter.
 - The name cannot exceed 64 characters in length.
 
-#### `comment`
+#### comment
 
 The description of the Iceberg catalog. This parameter is optional.
 
-#### `type`
+#### type
 
 The type of your data source. Set the value to `iceberg`.
 
-#### `MetastoreParams`
+#### MetastoreParams
 
 A set of parameters about how StarRocks integrates with the metastore of your data source.
 
@@ -537,10 +537,10 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
 Use MinIO as an example. Run a command like below:
 
 ```SQL
-CREATE EXTERNAL CATALOG hive_catalog_hms
+CREATE EXTERNAL CATALOG iceberg_catalog_hms
 PROPERTIES
 (
-    "type" = "hive", 
+    "type" = "iceberg", 
     "hive.metastore.uris" = "thrift://34.132.15.127:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
@@ -557,10 +557,10 @@ PROPERTIES
 - If you choose the Shared Key authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "iceberg", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
@@ -570,10 +570,10 @@ PROPERTIES
 - If you choose the SAS Token authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "iceberg", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.blob.account_name" = "<blob_storage_account_name>",
       "azure.blob.container_name" = "<blob_container_name>",
@@ -586,10 +586,10 @@ PROPERTIES
 - If you choose the Managed Service Identity authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "iceberg", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls1.use_managed_service_identity" = "true"    
   );
@@ -598,10 +598,10 @@ PROPERTIES
 - If you choose the Service Principal authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "iceberg", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls1.oauth2_client_id" = "<application_client_id>",
       "azure.adls1.oauth2_credential" = "<application_client_credential>",
@@ -614,10 +614,10 @@ PROPERTIES
 - If you choose the Managed Identity authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "iceberg", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_use_managed_identity" = "true",
       "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
@@ -628,10 +628,10 @@ PROPERTIES
 - If you choose the Shared Key authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "iceberg", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.storage_account" = "<storage_account_name>",
       "azure.adls2.shared_key" = "<shared_key>"     
@@ -641,10 +641,10 @@ PROPERTIES
 - If you choose the Service Principal authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "iceberg", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
@@ -657,10 +657,10 @@ PROPERTIES
 - If you choose the VM-based authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type" = "hive", 
+      "type" = "iceberg", 
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.use_compute_engine_service_account" = "true"    
   );
@@ -669,11 +669,11 @@ PROPERTIES
 - If you choose the service account-based authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
   PROPERTIES
   (
-      "type"="hive", 
-      "hive.metastore.uris"="thrift://34.132.15.127:9083",
+      "type" = "iceberg", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
       "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
@@ -685,11 +685,11 @@ PROPERTIES
   - If you make a VM instance impersonate a service account, run a command like below:
 
     ```SQL
-    CREATE EXTERNAL CATALOG hive_catalog_hms
+    CREATE EXTERNAL CATALOG iceberg_catalog_hms
     PROPERTIES
     (
-        "type"="hive", 
-        "hive.metastore.uris"="thrift://34.132.15.127:9083",
+        "type" = "iceberg", 
+        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
         "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
     );
@@ -698,11 +698,11 @@ PROPERTIES
   - If you make a service account impersonate another service account, run a command like below:
 
     ```SQL
-    CREATE EXTERNAL CATALOG hive_catalog_hms
+    CREATE EXTERNAL CATALOG iceberg_catalog_hms
     PROPERTIES
     (
-        "type"="hive", 
-        "hive.metastore.uris"="thrift://34.132.15.127:9083",
+        "type" = "iceberg", 
+        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
         "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",

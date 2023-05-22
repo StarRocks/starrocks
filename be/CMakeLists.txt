@@ -79,6 +79,12 @@ option(WITH_BENCH "Build binary with bench" OFF)
 
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
+option(USE_SSE4_2 "Build with SSE4.2 instruction" ON)
+
+option(USE_AVX2 "Build with AVX2 instruction" ON)
+
+option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
+
 # Check gcc
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8.2")
@@ -403,6 +409,12 @@ if ("${USE_STAROS}" STREQUAL "ON")
     message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
     include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
 
+    find_package(azure-identity-cpp CONFIG REQUIRED)
+    find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
+    find_package(azure-core-cpp CONFIG REQUIRED)
+    find_package(azure-storage-common-cpp CONFIG REQUIRED)
+    set(AZURE_SDK_LIB Azure::azure-identity Azure::azure-storage-blobs Azure::azure-core Azure::azure-storage-common)
+
     add_library(starlet_fslib_all STATIC IMPORTED GLOBAL)
     set_target_properties(starlet_fslib_all PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet_fslib_all.a)
 
@@ -413,6 +425,7 @@ if ("${USE_STAROS}" STREQUAL "ON")
        gRPC::grpc++
        starlet_fslib_all
        prometheus-cpp::core
+       ${AZURE_SDK_LIB}
        )
 endif()
 
@@ -481,14 +494,17 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 endif()
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    if (USE_SSE4_2)
+    if (${USE_SSE4_2})
+        # the compiler will define __SSE4_2__
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -msse4.2")
     endif()
-    if (USE_AVX2)
+    if (${USE_AVX2})
+        # the compiler will define __AVX2__
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx2")
     endif()
-    if (USE_AVX512)
-        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f")
+    if (${USE_AVX512})
+        # the compiler will define __AVX512F__ __AVX512BW__
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f -mavx512bw")
     endif()
 elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a+crc")

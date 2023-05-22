@@ -47,17 +47,20 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
+import javax.validation.constraints.NotNull;
 
 /**
  * StarOSAgent is responsible for
@@ -323,11 +326,17 @@ public class StarOSAgent {
 
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
         throws DdlException {
-        return createShards(numShards, pathInfo, cacheInfo, groupId, null);
+        return createShards(numShards, pathInfo, cacheInfo, groupId, null, Collections.EMPTY_MAP);
     }
 
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
-            List<Long> matchShardIds)
+                                   @NotNull Map<String, String> properties)
+            throws DdlException {
+        return createShards(numShards, pathInfo, cacheInfo, groupId, null, properties);
+    }
+
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
+                                   @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties)
         throws DdlException {
         if (matchShardIds != null) {
             Preconditions.checkState(numShards == matchShardIds.size());
@@ -341,7 +350,8 @@ public class StarOSAgent {
             builder.setReplicaCount(1)
                     .addGroupIds(groupId)
                     .setPathInfo(pathInfo)
-                    .setCacheInfo(cacheInfo);
+                    .setCacheInfo(cacheInfo)
+                    .putAllShardProperties(properties);
 
             for (int i = 0; i < numShards; ++i) {
                 builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
@@ -449,8 +459,8 @@ public class StarOSAgent {
         throw new UserException("Failed to get primary backend. shard id: " + shardId);
     }
 
-    public Set<Long> getBackendIdsByShard(long shardId) throws UserException {
-        List<ReplicaInfo> replicas = getShardReplicas(shardId);
+    public Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
+        List<ReplicaInfo> replicas = getShardReplicas(shardId, workerGroupId);
 
         Set<Long> backendIds = Sets.newHashSet();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
@@ -470,12 +480,18 @@ public class StarOSAgent {
                         //  saveImage(). Refer to: https://starrocks.atlassian.net/browse/SR-16340
                         if (workerInfo.getWorkerPropertiesMap().containsKey("be_port")) {
                             int bePort = Integer.parseInt(workerInfo.getWorkerPropertiesMap().get("be_port"));
-                            Backend be = GlobalStateMgr.getCurrentSystemInfo()
+                            ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo()
                                     .getBackendWithBePort(pair[0], bePort);
-                            if (be == null) {
-                                LOG.warn("can't find backendId with bePort:{} for {}.", bePort, workerAddr);
+                            if (cn == null) {
+                                cn = GlobalStateMgr.getCurrentSystemInfo()
+                                        .getComputeNodeWithBePort(pair[0], bePort);
+                                if (cn == null) {
+                                    LOG.warn("can't find backendId with bePort:{} for {}.", bePort, workerAddr);
+                                } else {
+                                    backendId = cn.getId();
+                                }
                             } else {
-                                backendId = be.getId();
+                                backendId = cn.getId();
                             }
                         }
                         // Can't find the backendId, give up

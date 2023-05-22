@@ -46,6 +46,7 @@
 #include "common/config.h"
 #include "common/minidump.h"
 #include "exec/workgroup/work_group.h"
+#include "gutil/cpu.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
@@ -245,14 +246,15 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     StarRocksMetrics::instance()->initialize(paths, init_system_metrics, disk_devices, network_interfaces);
 }
 
-void sigterm_handler(int signo) {
+void sigterm_handler(int signo, siginfo_t* info, void* context) {
+    LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << ", is going to exit";
     k_starrocks_exit.store(true);
 }
 
-int install_signal(int signo, void (*handler)(int)) {
+int install_signal(int signo, void (*handler)(int sig, siginfo_t* info, void* context)) {
     struct sigaction sa;
     memset(&sa, 0, sizeof(struct sigaction));
-    sa.sa_handler = handler;
+    sa.sa_sigaction = handler;
     sigemptyset(&sa.sa_mask);
     auto ret = sigaction(signo, &sa, nullptr);
     if (ret != 0) {
@@ -304,6 +306,7 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
     LOG(INFO) << CpuInfo::debug_string();
     LOG(INFO) << DiskInfo::debug_string();
     LOG(INFO) << MemInfo::debug_string();
+    LOG(INFO) << base::CPU::instance()->debug_string();
 
     UserFunctionCache::instance()->init(config::user_function_dir);
 

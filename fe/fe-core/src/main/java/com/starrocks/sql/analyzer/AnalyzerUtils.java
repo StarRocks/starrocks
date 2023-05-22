@@ -44,6 +44,7 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
@@ -73,6 +74,8 @@ import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
@@ -80,6 +83,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -410,6 +414,12 @@ public class AnalyzerUtils {
         return tableRelations;
     }
 
+    public static List<ViewRelation> collectViewRelations(StatementBase statementBase) {
+        List<ViewRelation> viewRelations = Lists.newArrayList();
+        new AnalyzerUtils.ViewRelationsCollector(viewRelations).visit(statementBase);
+        return viewRelations;
+    }
+
     public static boolean isOnlyHasOlapTables(StatementBase statementBase) {
         Map<TableName, Table> nonOlapTables = Maps.newHashMap();
         new AnalyzerUtils.NonOlapTableCollector(nonOlapTables).visit(statementBase);
@@ -584,6 +594,21 @@ public class AnalyzerUtils {
         }
     }
 
+    private static class ViewRelationsCollector extends AstTraverser<Void, Void> {
+
+        private final List<ViewRelation> viewRelations;
+
+        public ViewRelationsCollector(List<ViewRelation> viewRelations) {
+            this.viewRelations = viewRelations;
+        }
+
+        @Override
+        public Void visitView(ViewRelation node, Void context) {
+            viewRelations.add(node);
+            return null;
+        }
+    }
+
     private static class TableRelationsCollector extends TableCollector {
 
         private final List<TableRelation> tableRelations;
@@ -708,10 +733,23 @@ public class AnalyzerUtils {
         }
     }
 
-    public static String parseLiteralExprToDateString(LiteralExpr expr, int offset) {
+    public static String parseLiteralExprToDateString(PartitionKey partitionKey, int offset) {
+        LiteralExpr expr = partitionKey.getKeys().get(0);
+        PrimitiveType type = partitionKey.getTypes().get(0);
+        return parseLiteralExprToDateString(expr, type, offset);
+    }
+
+    public static String parseLiteralExprToDateString(LiteralExpr expr, PrimitiveType type, int offset) {
         if (expr instanceof DateLiteral) {
             DateLiteral lowerDate = (DateLiteral) expr;
-            return DateUtils.DATE_FORMATTER.format(lowerDate.toLocalDateTime().plusDays(offset));
+            switch (type) {
+                case DATE:
+                    return DateUtils.DATE_FORMATTER_UNIX.format(lowerDate.toLocalDateTime().plusDays(offset));
+                case DATETIME:
+                    return DateUtils.DATE_TIME_FORMATTER_UNIX.format(lowerDate.toLocalDateTime().plusDays(offset));
+                default:
+                    return null;
+            }
         } else if (expr instanceof IntLiteral) {
             IntLiteral intLiteral = (IntLiteral) expr;
             return String.valueOf(intLiteral.getLongValue() + offset);
@@ -886,6 +924,46 @@ public class AnalyzerUtils {
                 return null;
             }
         }.visit(node);
+    }
+
+    public static Expr resolveSlotRef(SlotRef slotRef, QueryStatement queryStatement) {
+        AstVisitor<Expr, Void> slotRefResolver = new AstVisitor<Expr, Void>() {
+            @Override
+            public Expr visitSelect(SelectRelation node, Void context) {
+                for (SelectListItem selectListItem : node.getSelectList().getItems()) {
+                    if (selectListItem.getAlias() == null) {
+                        if (selectListItem.getExpr() instanceof SlotRef) {
+                            SlotRef slot = (SlotRef) selectListItem.getExpr();
+                            if (slot.getColumnName().equalsIgnoreCase(slotRef.getColumnName())) {
+                                return slot;
+                            }
+                        }
+                    } else {
+                        if (selectListItem.getAlias().equalsIgnoreCase(slotRef.getColumnName())) {
+                            return selectListItem.getExpr();
+                        }
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public Expr visitSetOp(SetOperationRelation node, Void context) {
+                for (Relation relation : node.getRelations()) {
+                    Expr resolved = relation.accept(this, null);
+                    if (resolved != null) {
+                        return resolved;
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public SlotRef visitValues(ValuesRelation node, Void context) {
+                return null;
+            }
+        };
+        return queryStatement.getQueryRelation().accept(slotRefResolver, null);
     }
 
 }

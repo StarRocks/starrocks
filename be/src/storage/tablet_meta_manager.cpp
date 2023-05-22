@@ -1179,6 +1179,13 @@ Status TabletMetaManager::delete_delta_column_group(KVStore* meta, TTabletId tab
     return meta->write_batch(&batch);
 }
 
+Status TabletMetaManager::delete_delta_column_group(KVStore* meta, WriteBatch* batch, TabletSegmentId tsid,
+                                                    int64_t version) {
+    std::string key = encode_delta_column_group_key(tsid.tablet_id, tsid.segment_id, version);
+    auto h = meta->handle(META_COLUMN_FAMILY_INDEX);
+    return to_status(batch->Delete(h, key));
+}
+
 Status TabletMetaManager::put_rowset_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id,
                                           const RowsetMetaPB& rowset_meta) {
     auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);

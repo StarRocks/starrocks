@@ -22,11 +22,11 @@ ARG predownload_thirdparty=false
 ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20230317.tar
 ARG commit_id
 # check thirdparty/starlet-artifacts-version.sh, to get the right tag
-ARG starlet_tag=v1.0.1
+ARG starlet_tag=v3.1-rc0
 # build for which linux distro: centos7|ubuntu
 ARG distro=ubuntu
 
-FROM starrocks/toolchains-${distro}:20230324 as base
+FROM starrocks/toolchains-${distro}:main-20230517 as base
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
 WORKDIR /root
