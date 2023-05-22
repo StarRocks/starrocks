@@ -104,4 +104,16 @@ Status NLJoinContext::finish_one_right_sinker(RuntimeState* state) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::pipeline
+=======
+Status NLJoinContext::finish_one_left_prober(RuntimeState* state) {
+    if (_num_left_probers == _num_finished_left_probers.fetch_add(1) + 1) {
+        // All the probers have finished, so the builders can be short-circuited.
+        set_finished();
+    }
+    return Status::OK();
+}
+
+} // namespace starrocks::pipeline
+>>>>>>> f51917f1a ([BugFix] Fix short-circuited logic of nljoin (#23877))
