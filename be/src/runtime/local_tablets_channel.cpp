@@ -687,17 +687,20 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
     }
-    _s_tablet_writer_count += incremental_tablet_num;
 
-    auto it = _tablet_id_to_sorted_indexes.begin();
-    while (it != _tablet_id_to_sorted_indexes.end()) {
-        tablet_ids.emplace_back(it->first);
-        it++;
-    }
-    DCHECK_EQ(_delta_writers.size(), tablet_ids.size());
-    std::sort(tablet_ids.begin(), tablet_ids.end());
-    for (size_t i = 0; i < tablet_ids.size(); ++i) {
-        _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
+    if (incremental_tablet_num > 0) {
+        _s_tablet_writer_count += incremental_tablet_num;
+
+        auto it = _tablet_id_to_sorted_indexes.begin();
+        while (it != _tablet_id_to_sorted_indexes.end()) {
+            tablet_ids.emplace_back(it->first);
+            it++;
+        }
+        DCHECK_EQ(_delta_writers.size(), tablet_ids.size());
+        std::sort(tablet_ids.begin(), tablet_ids.end());
+        for (size_t i = 0; i < tablet_ids.size(); ++i) {
+            _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
+        }
     }
 
     if (_is_incremental_channel && !_senders[params.sender_id()].has_incremental_open) {
