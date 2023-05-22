@@ -22,6 +22,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/spill/common.h"
+#include "exec/spill/executor.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
 #include "util/defer_op.h"
@@ -132,7 +133,8 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
     RETURN_IF_ERROR(captured_mem_table->done());
     _running_flush_tasks++;
     // TODO: handle spill queue
-    auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table)]() {
+    auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table), trace = TraceInfo(state)]() {
+        SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
         RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
         SCOPED_TIMER(_spiller->metrics().flush_timer);
         DCHECK_GT(_running_flush_tasks, 0);
@@ -176,7 +178,8 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
     // if all is well and input stream enable prefetch and not eof
     if (!_stream->eof()) {
         _running_restore_tasks++;
-        auto restore_task = [this, state, guard]() {
+        auto restore_task = [this, state, guard, trace = TraceInfo(state)]() {
+            SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
             RETURN_IF(!guard.scoped_begin(), Status::OK());
             auto defer = DeferOp([&]() { _running_restore_tasks--; });
             {
@@ -307,7 +310,8 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, TaskExecutor&& execu
     _running_flush_tasks++;
 
     auto task = [this, state, guard = guard, splitting_partitions = std::move(splitting_partitions),
-                 spilling_partitions = std::move(spilling_partitions)]() {
+                 spilling_partitions = std::move(spilling_partitions), trace = TraceInfo(state)]() {
+        SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
         RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
         DCHECK_EQ(_running_flush_tasks, 1);
         auto defer = DeferOp([&]() {
