@@ -367,7 +367,7 @@ public class SelectStmtTest {
             Assert.fail("Must throw an exception");
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage(),
-                    e.getMessage().contains("NOT support scalar correlated sub-query of type ARRAY<varchar(32)>"));
+                    e.getMessage().contains("NOT support scalar correlated sub-query of type array<varchar(32)>"));
         }
 
         try {

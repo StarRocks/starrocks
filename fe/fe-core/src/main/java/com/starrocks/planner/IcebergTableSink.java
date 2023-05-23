@@ -16,10 +16,8 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.Connector;
-import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -27,7 +25,6 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TIcebergTableSink;
 import org.apache.iceberg.Table;
 

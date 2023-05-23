@@ -2661,7 +2661,7 @@ public class LocalMetastore implements ConnectorMetadata {
      */
     @Override
     public void alterTable(AlterTableStmt stmt) throws UserException {
-        stateMgr.getAlterInstance().processAlterTable(stmt);
+        stateMgr.getAlterJobMgr().processAlterTable(stmt);
     }
 
     /**
@@ -2669,13 +2669,13 @@ public class LocalMetastore implements ConnectorMetadata {
      */
     @Override
     public void alterView(AlterViewStmt stmt) throws UserException {
-        stateMgr.getAlterInstance().processAlterView(stmt, ConnectContext.get());
+        stateMgr.getAlterJobMgr().processAlterView(stmt, ConnectContext.get());
     }
 
     @Override
     public void createMaterializedView(CreateMaterializedViewStmt stmt)
             throws AnalysisException, DdlException {
-        stateMgr.getAlterInstance().processCreateMaterializedView(stmt);
+        stateMgr.getAlterJobMgr().processCreateMaterializedView(stmt);
     }
 
     // TODO(murphy) refactor it into MVManager
@@ -3110,13 +3110,13 @@ public class LocalMetastore implements ConnectorMetadata {
                 taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
             }
         } else {
-            stateMgr.getAlterInstance().processDropMaterializedView(stmt);
+            stateMgr.getAlterJobMgr().processDropMaterializedView(stmt);
         }
     }
 
     @Override
     public void alterMaterializedView(AlterMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
-        stateMgr.getAlterInstance().processAlterMaterializedView(stmt);
+        stateMgr.getAlterJobMgr().processAlterMaterializedView(stmt);
     }
 
     private String executeRefreshMvTask(String dbName, MaterializedView materializedView, ExecuteOption executeOption)
@@ -3261,7 +3261,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (mv != null) {
                 LOG.warn("Setting the materialized view {}({}) to invalid because " +
                         "the table {} was renamed.", mv.getName(), mv.getId(), olapTable.getName());
-                mv.setActive(false);
+                mv.setInactiveAndReason("base table renamed: " + olapTable.getName());
             } else {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
             }

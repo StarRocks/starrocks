@@ -34,6 +34,7 @@
 
 package com.starrocks.load.routineload;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.thrift.TRLTaskTxnCommitAttachment;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
@@ -49,11 +50,17 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
 
     private long jobId;
     private TUniqueId taskId;
+    @SerializedName("filteredRows")
     private long filteredRows;
+    @SerializedName("loadedRows")
     private long loadedRows;
+    @SerializedName("unselectedRows")
     private long unselectedRows;
+    @SerializedName("receivedBytes")
     private long receivedBytes;
+    @SerializedName("taskExecutionTimeMs")
     private long taskExecutionTimeMs;
+    @SerializedName("progress")
     private RoutineLoadProgress progress;
     private String errorLogUrl;
 

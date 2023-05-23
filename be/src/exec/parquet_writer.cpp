@@ -25,31 +25,32 @@
 namespace starrocks {
 
 RollingAsyncParquetWriter::RollingAsyncParquetWriter(
-        const TableInfo& tableInfo, const std::vector<ExprContext*>& output_expr_ctxs, RuntimeProfile* parent_profile,
+        TableInfo tableInfo, const std::vector<ExprContext*>& output_expr_ctxs, RuntimeProfile* parent_profile,
         std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> commit_func, RuntimeState* state,
         int32_t driver_id)
-        : _output_expr_ctxs(output_expr_ctxs),
+        : _table_info(std::move(tableInfo)),
+          _output_expr_ctxs(output_expr_ctxs),
           _parent_profile(parent_profile),
           _commit_func(std::move(commit_func)),
           _state(state),
           _driver_id(driver_id) {
-    init_rolling_writer(tableInfo);
+    init_rolling_writer();
 }
 
-Status RollingAsyncParquetWriter::init_rolling_writer(const TableInfo& tableInfo) {
-    ASSIGN_OR_RETURN(_fs,
-                     FileSystem::CreateUniqueFromString(tableInfo.partition_location, FSOptions(&tableInfo.cloud_conf)))
-    _schema = tableInfo.schema;
-    _partition_location = tableInfo.partition_location;
+Status RollingAsyncParquetWriter::init_rolling_writer() {
+    ASSIGN_OR_RETURN(
+            _fs, FileSystem::CreateUniqueFromString(_table_info.partition_location, FSOptions(&_table_info.cloud_conf)))
+    _schema = _table_info.schema;
+    _partition_location = _table_info.partition_location;
 
     ::parquet::WriterProperties::Builder builder;
-    if (tableInfo.enable_dictionary) {
+    if (_table_info.enable_dictionary) {
         builder.enable_dictionary();
     } else {
         builder.disable_dictionary();
     }
     builder.version(::parquet::ParquetVersion::PARQUET_2_0);
-    starrocks::parquet::ParquetBuildHelper::build_compression_type(builder, tableInfo.compress_type);
+    starrocks::parquet::ParquetBuildHelper::build_compression_type(builder, _table_info.compress_type);
     _properties = builder.build();
 
     return Status::OK();

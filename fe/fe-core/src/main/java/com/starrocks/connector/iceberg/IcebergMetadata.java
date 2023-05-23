@@ -59,7 +59,6 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
-import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
@@ -68,26 +67,23 @@ import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.thrift.TException;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
-import static com.starrocks.connector.iceberg.IcebergApiConverter.getTableLocation;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.parsePartitionFields;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSchema;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.HIVE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.REST_CATALOG;
+import static com.starrocks.connector.iceberg.hive.IcebergHiveCatalog.LOCATION_PROPERTY;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
@@ -97,11 +93,13 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
 
     private final Map<TableIdentifier, Table> tables = new ConcurrentHashMap<>();
+    private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<IcebergFilter, List<FileScanTask>> tasks = new ConcurrentHashMap<>();
 
     public IcebergMetadata(String catalogName, IcebergCatalog icebergCatalog) {
         this.catalogName = catalogName;
         this.icebergCatalog = icebergCatalog;
+        new IcebergMetricsReporter().setThreadLocalReporter();
     }
 
     @Override
@@ -125,25 +123,22 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         icebergCatalog.dropDb(dbName);
+        databases.remove(dbName);
     }
 
     @Override
     public Database getDb(String dbName) {
-        try {
-            return icebergCatalog.getDB(dbName);
-        } catch (InterruptedException | TException e) {
-            LOG.error("Failed to get iceberg database " + dbName, e);
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
-            return null;
+        if (databases.containsKey(dbName)) {
+            return databases.get(dbName);
         }
+        Database db = icebergCatalog.getDB(dbName);
+        databases.put(dbName, db);
+        return db;
     }
 
     @Override
     public List<String> listTableNames(String dbName) {
-        List<TableIdentifier> tableIdentifiers = icebergCatalog.listTables(Namespace.of(dbName));
-        return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
+        return icebergCatalog.listTables(dbName);
     }
 
     @Override
@@ -157,21 +152,16 @@ public class IcebergMetadata implements ConnectorMetadata {
                 ((ListPartitionDesc) partitionDesc).getPartitionColNames();
         PartitionSpec partitionSpec = parsePartitionFields(schema, partitionColNames);
         Map<String, String> properties = stmt.getProperties() == null ? new HashMap<>() : stmt.getProperties();
-        String tableLocation = getTableLocation(properties)
-                .orElseGet(() -> icebergCatalog.defaultTableLocation(dbName, tableName));
+        String tableLocation = properties.get(LOCATION_PROPERTY);
         Map<String, String> createTableProperties = IcebergApiConverter.rebuildCreateTableProperties(properties);
 
-        Transaction transaction = icebergCatalog.newCreateTableTransaction(
-                dbName, tableName, schema, partitionSpec, tableLocation, createTableProperties);
-
-        transaction.commitTransaction();
-        return true;
+        return icebergCatalog.createTable(dbName, tableName, schema, partitionSpec, tableLocation, createTableProperties);
     }
 
     @Override
     public void dropTable(DropTableStmt stmt) {
-        TableIdentifier identifier = TableIdentifier.of(stmt.getDbName(), stmt.getTableName());
-        icebergCatalog.dropTable(identifier, true);
+        icebergCatalog.dropTable(stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
+        tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
     }
 
     @Override
@@ -183,11 +173,8 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         try {
             IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
-            Optional<IcebergMetricsReporter> metricsReporter = catalogType == HIVE_CATALOG || catalogType == GLUE_CATALOG ?
-                    Optional.of(new IcebergMetricsReporter()) : Optional.empty();
-            org.apache.iceberg.Table icebergTable = icebergCatalog.loadTable(identifier, metricsReporter);
-            Table table = IcebergApiConverter.toIcebergTable(
-                    icebergTable, catalogName, dbName, tblName, catalogType.name(), metricsReporter);
+            org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
+            Table table = IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
             tables.put(identifier, table);
             return table;
 
@@ -199,8 +186,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listPartitionNames(String dbName, String tblName) {
-        org.apache.iceberg.Table icebergTable
-                = icebergCatalog.loadTable(TableIdentifier.of(dbName, tblName));
+        org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
         IcebergCatalogType nativeType = icebergCatalog.getIcebergCatalogType();
 
         if (nativeType != HIVE_CATALOG && nativeType != REST_CATALOG && nativeType != GLUE_CATALOG) {
@@ -268,7 +254,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             } catch (IOException e) {
                 // Ignored
             }
-            table.reportScanMetrics().ifPresent(scanReportWithCounter -> {
+
+            IcebergMetricsReporter.lastReport().ifPresent(scanReportWithCounter -> {
                 PlannerProfile.addCustomProperties("Iceberg.Metadata.ScanMetrics." +
                                 scanReportWithCounter.getScanReport().tableName() + " / No_" + scanReportWithCounter.getCount(),
                         scanReportWithCounter.getScanReport().scanMetrics().toString());
@@ -409,6 +396,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     public void clear() {
         tasks.clear();
         tables.clear();
+        IcebergMetricsReporter.remove();
     }
 
     interface BatchWrite {

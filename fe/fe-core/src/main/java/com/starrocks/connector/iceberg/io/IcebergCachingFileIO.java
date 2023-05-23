@@ -52,12 +52,15 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.Config;
+import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.iceberg.aws.s3.S3FileIO;
 import org.apache.iceberg.exceptions.NotFoundException;
+import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
 import org.apache.iceberg.hadoop.Util;
@@ -82,10 +85,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
+import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
+
 /**
  * Implementation of FileIO that adds metadata content caching features.
  */
-public class IcebergCachingFileIO implements FileIO {
+public class IcebergCachingFileIO implements FileIO, Configurable {
     private static final Logger LOG = LogManager.getLogger(IcebergCachingFileIO.class);
     private static final int BUFFER_CHUNK_SIZE = 4 * 1024 * 1024; // 4MB
     private static final long CACHE_MAX_ENTRY_SIZE = Config.iceberg_metadata_cache_max_entry_size;
@@ -99,7 +104,11 @@ public class IcebergCachingFileIO implements FileIO {
     public static final long DISK_CACHE_EXPIRATION_SECONDS = Config.iceberg_metadata_disk_cache_expiration_seconds;
 
     private ContentCache fileContentCache;
-    private final FileIO wrappedIO;
+    private FileIO wrappedIO;
+    private Configuration conf;
+
+    public IcebergCachingFileIO() {
+    }
 
     public IcebergCachingFileIO(FileIO io) {
         this.wrappedIO = io;
@@ -107,11 +116,34 @@ public class IcebergCachingFileIO implements FileIO {
 
     @Override
     public void initialize(Map<String, String> properties) {
+        if (wrappedIO == null) {
+            switch (properties.get(ICEBERG_CATALOG_TYPE)) {
+                case "hive":
+                    wrappedIO = new HadoopFileIO(conf);
+                    break;
+                case "glue":
+                    wrappedIO = new S3FileIO();
+                    break;
+            }
+
+            wrappedIO.initialize(properties);
+        }
+
         if (ENABLE_DISK_CACHE) {
             this.fileContentCache = TwoLevelCacheHolder.INSTANCE;
         } else {
             this.fileContentCache = MemoryCacheHolder.INSTANCE;
         }
+    }
+
+    @Override
+    public Configuration getConf() {
+        return conf;
+    }
+
+    @Override
+    public void setConf(Configuration conf) {
+        this.conf = conf;
     }
 
     @Override

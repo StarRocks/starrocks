@@ -44,8 +44,10 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.commons.collections.CollectionUtils;
@@ -94,18 +96,25 @@ public class LoadAction extends RestBaseAction {
             checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), dbName, tableName, PrivPredicate.LOAD);
         }
 
-        // Choose a backend sequentially.
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-        if (CollectionUtils.isEmpty(backendIds)) {
-            throw new DdlException("No backend alive.");
+        // Choose a backend sequentially, or choose a cn in shared_data mode
+        List<Long> nodeIds;
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            nodeIds = warehouse.getAnyAvailableCluster().getComputeNodeIds();
+        } else {
+            nodeIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
+            if (CollectionUtils.isEmpty(nodeIds)) {
+                throw new DdlException("No backend alive.");
+            }
         }
 
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
-        if (backend == null) {
-            throw new DdlException("No backend alive.");
+        // TODO: need to refactor after be split into cn + dn
+        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
+        if (node == null) {
+            throw new DdlException("No backend or compute node alive.");
         }
 
-        TNetworkAddress redirectAddr = new TNetworkAddress(backend.getHost(), backend.getHttpPort());
+        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
 
         LOG.info("redirect load action to destination={}, db: {}, tbl: {}, label: {}",
                 redirectAddr.toString(), dbName, tableName, label);

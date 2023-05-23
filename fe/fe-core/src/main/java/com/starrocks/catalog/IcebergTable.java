@@ -29,7 +29,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
-import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
@@ -49,7 +48,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
@@ -71,7 +69,6 @@ public class IcebergTable extends Table {
     private String remoteDbName;
     private String remoteTableName;
     private String resourceName;
-    private Optional<IcebergMetricsReporter> metricsReporter = Optional.empty();
 
     private Map<String, String> icebergProperties = Maps.newHashMap();
     private List<Column> partitionColumns;
@@ -83,13 +80,6 @@ public class IcebergTable extends Table {
     public IcebergTable(long id, String srTableName, String catalogName, String resourceName, String remoteDbName,
                         String remoteTableName, List<Column> schema, org.apache.iceberg.Table nativeTable,
                         Map<String, String> icebergProperties) {
-        this(id, srTableName, catalogName, resourceName, remoteDbName, remoteTableName, schema, nativeTable,
-                icebergProperties, Optional.empty());
-    }
-
-    public IcebergTable(long id, String srTableName, String catalogName, String resourceName, String remoteDbName,
-                        String remoteTableName, List<Column> schema, org.apache.iceberg.Table nativeTable,
-                        Map<String, String> icebergProperties, Optional<IcebergMetricsReporter> metricsReporter) {
         super(id, srTableName, TableType.ICEBERG, schema);
         this.catalogName = catalogName;
         this.resourceName = resourceName;
@@ -97,7 +87,6 @@ public class IcebergTable extends Table {
         this.remoteTableName = remoteTableName;
         this.nativeTable = nativeTable;
         this.icebergProperties = icebergProperties;
-        this.metricsReporter = metricsReporter;
     }
 
     public String getCatalogName() {
@@ -167,10 +156,6 @@ public class IcebergTable extends Table {
     public List<String> getPartitionColumnNames() {
         return getPartitionColumns().stream().filter(java.util.Objects::nonNull).map(Column::getName)
                 .collect(Collectors.toList());
-    }
-
-    public Optional<IcebergMetricsReporter.IcebergScanReportWithCounter> reportScanMetrics() {
-        return metricsReporter.map(IcebergMetricsReporter::lastReport);
     }
 
     @Override
@@ -304,7 +289,6 @@ public class IcebergTable extends Table {
         private List<Column> fullSchema;
         private Map<String, String> icebergProperties;
         private org.apache.iceberg.Table nativeTable;
-        private Optional<IcebergMetricsReporter> metricsReporter = Optional.empty();
 
         public Builder() {
         }
@@ -354,14 +338,9 @@ public class IcebergTable extends Table {
             return this;
         }
 
-        public Builder setMetricsReporter(Optional<IcebergMetricsReporter> metricsReporter) {
-            this.metricsReporter = metricsReporter;
-            return this;
-        }
-
         public IcebergTable build() {
             return new IcebergTable(id, srTableName, catalogName, resourceName, remoteDbName, remoteTableName,
-                    fullSchema, nativeTable, icebergProperties, metricsReporter);
+                    fullSchema, nativeTable, icebergProperties);
         }
     }
 }

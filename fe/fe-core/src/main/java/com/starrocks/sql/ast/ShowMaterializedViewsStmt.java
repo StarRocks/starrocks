@@ -45,6 +45,7 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
                     .column("name", ScalarType.createVarchar(50))
                     .column("refresh_type", ScalarType.createVarchar(10))
                     .column("is_active", ScalarType.createVarchar(10))
+                    .column("inactive_reason", ScalarType.createVarcharType(64))
                     .column("partition_type", ScalarType.createVarchar(16))
                     .column("task_id", ScalarType.createVarchar(20))
                     .column("task_name", ScalarType.createVarchar(50))

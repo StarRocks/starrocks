@@ -55,6 +55,7 @@ import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -77,6 +78,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollection;
@@ -273,13 +275,13 @@ public class EditLog {
                     ModifyPartitionInfo info = (ModifyPartitionInfo) journal.getData();
                     LOG.info("Begin to unprotect modify partition. db = " + info.getDbId()
                             + " table = " + info.getTableId() + " partitionId = " + info.getPartitionId());
-                    globalStateMgr.getAlterInstance().replayModifyPartition(info);
+                    globalStateMgr.getAlterJobMgr().replayModifyPartition(info);
                     break;
                 }
                 case OperationType.OP_BATCH_MODIFY_PARTITION: {
                     BatchModifyPartitionsInfo info = (BatchModifyPartitionsInfo) journal.getData();
                     for (ModifyPartitionInfo modifyPartitionInfo : info.getModifyPartitionInfos()) {
-                        globalStateMgr.getAlterInstance().replayModifyPartition(modifyPartitionInfo);
+                        globalStateMgr.getAlterJobMgr().replayModifyPartition(modifyPartitionInfo);
                     }
                     break;
                 }
@@ -332,7 +334,7 @@ public class EditLog {
                 }
                 case OperationType.OP_MODIFY_VIEW_DEF: {
                     AlterViewInfo info = (AlterViewInfo) journal.getData();
-                    globalStateMgr.getAlterInstance().replayModifyViewDef(info);
+                    globalStateMgr.getAlterJobMgr().replayModifyViewDef(info);
                     break;
                 }
                 case OperationType.OP_RENAME_PARTITION: {
@@ -645,12 +647,14 @@ public class EditLog {
                     globalStateMgr.getStreamLoadManager().replayCreateLoadTask(streamLoadTask);
                     break;
                 }
+                case OperationType.OP_CREATE_LOAD_JOB_V2:
                 case OperationType.OP_CREATE_LOAD_JOB: {
                     com.starrocks.load.loadv2.LoadJob loadJob =
                             (com.starrocks.load.loadv2.LoadJob) journal.getData();
                     globalStateMgr.getLoadManager().replayCreateLoadJob(loadJob);
                     break;
                 }
+                case OperationType.OP_END_LOAD_JOB_V2:
                 case OperationType.OP_END_LOAD_JOB: {
                     LoadJobFinalOperation operation = (LoadJobFinalOperation) journal.getData();
                     globalStateMgr.getLoadManager().replayEndLoadJob(operation);
@@ -811,7 +815,7 @@ public class EditLog {
                 }
                 case OperationType.OP_SWAP_TABLE: {
                     SwapTableOperationLog log = (SwapTableOperationLog) journal.getData();
-                    globalStateMgr.getAlterInstance().replaySwapTable(log);
+                    globalStateMgr.getAlterJobMgr().replaySwapTable(log);
                     break;
                 }
                 case OperationType.OP_ADD_ANALYZER_JOB: {
@@ -1447,20 +1451,26 @@ public class EditLog {
         logEdit(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB, routineLoadOperation);
     }
 
-    public void logRemoveRoutineLoadJob(RoutineLoadOperation operation) {
-        logEdit(OperationType.OP_REMOVE_ROUTINE_LOAD_JOB, operation);
-    }
-
     public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask) {
         logEdit(OperationType.OP_CREATE_STREAM_LOAD_TASK, streamLoadTask);
     }
 
     public void logCreateLoadJob(com.starrocks.load.loadv2.LoadJob loadJob) {
-        logEdit(OperationType.OP_CREATE_LOAD_JOB, loadJob);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logEdit(OperationType.OP_CREATE_LOAD_JOB_V2,
+                    out -> Text.writeString(out, GsonUtils.GSON.toJson(loadJob)));
+        } else {
+            logEdit(OperationType.OP_CREATE_LOAD_JOB, loadJob);
+        }
     }
 
     public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation) {
-        logEdit(OperationType.OP_END_LOAD_JOB, loadJobFinalOperation);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logEdit(OperationType.OP_END_LOAD_JOB_V2,
+                    out -> Text.writeString(out, GsonUtils.GSON.toJson(loadJobFinalOperation)));
+        } else {
+            logEdit(OperationType.OP_END_LOAD_JOB, loadJobFinalOperation);
+        }
     }
 
     public void logUpdateLoadJob(LoadJobStateUpdateInfo info) {

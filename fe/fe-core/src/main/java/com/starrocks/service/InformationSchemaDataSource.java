@@ -50,6 +50,7 @@ import com.starrocks.thrift.TTableInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -68,9 +69,11 @@ public class InformationSchemaDataSource {
     private static final long DEFAULT_EMPTY_NUM = -1L;
     private static final String UTF8_GENERAL_CI = "utf8_general_ci";
 
-    private static List<String> getAuthorizedDbs(TAuthInfo authInfo) throws TException {
+    @NotNull
+    private static AuthDbRequestResult getAuthDbRequestResult(TAuthInfo authInfo) throws TException {
 
-        List<String> dbs = Lists.newArrayList();
+
+        List<String> authorizedDbs = Lists.newArrayList();
         PatternMatcher matcher = null;
         if (authInfo.isSetPattern()) {
             try {
@@ -85,7 +88,7 @@ public class InformationSchemaDataSource {
         List<String> dbNames = globalStateMgr.getDbNames();
         LOG.debug("get db names: {}", dbNames);
 
-        UserIdentity currentUser = null;
+        UserIdentity currentUser;
         if (authInfo.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(authInfo.current_user_ident);
         } else {
@@ -102,14 +105,26 @@ public class InformationSchemaDataSource {
                 }
             }
 
-            final String db = ClusterNamespace.getNameFromFullName(fullName);
-            if (matcher != null && !matcher.match(db)) {
+            final String db1 = ClusterNamespace.getNameFromFullName(fullName);
+            if (matcher != null && !matcher.match(db1)) {
                 continue;
             }
-            dbs.add(fullName);
+            authorizedDbs.add(fullName);
         }
-        return dbs;
+        AuthDbRequestResult result = new AuthDbRequestResult(authorizedDbs, currentUser);
+        return result;
     }
+
+    private static class AuthDbRequestResult {
+        public final List<String> authorizedDbs;
+        public final UserIdentity currentUser;
+
+        public AuthDbRequestResult(List<String> authorizedDbs, UserIdentity currentUser) {
+            this.authorizedDbs = authorizedDbs;
+            this.currentUser = currentUser;
+        }
+    }
+
 
     // tables_config
     public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request)
@@ -118,14 +133,26 @@ public class InformationSchemaDataSource {
         TGetTablesConfigResponse resp = new TGetTablesConfigResponse();
         List<TTableConfigInfo> tList = new ArrayList<>();
 
-        List<String> authorizedDbs = getAuthorizedDbs(request.getAuth_info());
-        authorizedDbs.forEach(dbName -> {
+        AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
+
+        for (String dbName : result.authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
                 db.readLock();
                 try {
                     List<Table> allTables = db.getTables();
-                    allTables.forEach(table -> {
+                    for (Table table : allTables) {
+
+                        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                            // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
+                            if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
+                                continue;
+                            }
+                        } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(result.currentUser, dbName,
+                                table.getName(), PrivPredicate.SHOW)) {
+                            continue;
+                        }
+
                         TTableConfigInfo tableConfigInfo = new TTableConfigInfo();
                         tableConfigInfo.setTable_schema(dbName);
                         tableConfigInfo.setTable_name(table.getName());
@@ -140,15 +167,17 @@ public class InformationSchemaDataSource {
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         tList.add(tableConfigInfo);
-                    });
+                    }
                 } finally {
                     db.readUnlock();
                 }
             }
-        });
+        }
         resp.tables_config_infos = tList;
         return resp;
     }
+
+
 
     private static Map<String, String> genProps(Table table) {
         if (table.isMaterializedView()) {
@@ -278,14 +307,27 @@ public class InformationSchemaDataSource {
 
         TGetTablesInfoResponse response = new TGetTablesInfoResponse();
         List<TTableInfo> infos = new ArrayList<>();
-        List<String> authorizedDbs = getAuthorizedDbs(request.getAuth_info());
-        authorizedDbs.forEach(dbName -> {
+
+        AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
+
+        for (String dbName : result.authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
                 db.readLock();
                 try {
                     List<Table> allTables = db.getTables();
-                    allTables.forEach(table -> {
+                    for (Table table : allTables) {
+
+                        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                            // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
+                            if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
+                                continue;
+                            }
+                        } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(result.currentUser, dbName,
+                                table.getName(), PrivPredicate.SHOW)) {
+                            continue;
+                        }
+
                         TTableInfo info = new TTableInfo();
 
                         info.setTable_catalog(DEF);
@@ -319,17 +361,17 @@ public class InformationSchemaDataSource {
                             // SCHEMA (use default)
                             // INLINE_VIEW (use default)
                             // VIEW (use default)
-                            // BROKER (use default)                           
+                            // BROKER (use default)
                             genDefaultConfigInfo(info);
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         infos.add(info);
-                    });
+                    }
                 } finally {
                     db.readUnlock();
                 }
             }
-        });
+        }
         response.setTables_infos(infos);
         return response;
     }

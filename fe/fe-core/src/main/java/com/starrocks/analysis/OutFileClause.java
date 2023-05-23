@@ -263,14 +263,19 @@ public class OutFileClause implements ParseNode {
             if (!isParquetFormat()) {
                 throw new SemanticException(PARQUET_USE_DICT + " is only for PARQUET format");
             }
-            useDict = Boolean.getBoolean(properties.get(PARQUET_USE_DICT));
+            useDict = Boolean.parseBoolean(properties.get(PARQUET_USE_DICT));
         }
 
         if (properties.containsKey(PARQUET_MAX_ROW_GROUP_SIZE)) {
             if (!isParquetFormat()) {
                 throw new SemanticException(PARQUET_MAX_ROW_GROUP_SIZE + " is only for PARQUET format");
             }
-            maxParquetRowGroupBytes = Long.getLong(properties.get(PARQUET_MAX_ROW_GROUP_SIZE));
+            try {
+                maxParquetRowGroupBytes = Long.parseLong(properties.get(PARQUET_MAX_ROW_GROUP_SIZE));
+            } catch (NumberFormatException e) {
+                throw new SemanticException(
+                        PARQUET_MAX_ROW_GROUP_SIZE + " should be a number of bytes (e.g. 134217728)");
+            }
         }
 
         if (properties.containsKey(PROP_MAX_FILE_SIZE)) {

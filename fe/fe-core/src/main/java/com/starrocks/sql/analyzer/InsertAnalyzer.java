@@ -32,6 +32,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -98,6 +99,11 @@ public class InsertAnalyzer {
                 throw unsupportedException("Only support insert into iceberg table with parquet file format");
             }
             throw unsupportedException("Only support insert into olap table or mysql table or iceberg table");
+        }
+
+        if (table instanceof IcebergTable && CatalogMgr.isInternalCatalog(catalogName)) {
+            throw unsupportedException("Doesn't support iceberg table sink in the internal catalog. " +
+                    "You need to use iceberg catalog.");
         }
 
         List<Long> targetPartitionIds = Lists.newArrayList();
