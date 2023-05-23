@@ -29,7 +29,7 @@ public:
     SpillableAggregateBlockingSourceOperator(const AggregatorPtr& aggregator,
                                              SortedStreamingAggregatorPtr stream_aggregator, Args&&... args)
             : AggregateBlockingSourceOperator(aggregator, std::forward<Args>(args)...,
-                                              "spillable_aggregate_source_operator"),
+                                              "spillable_aggregate_blocking_source"),
               _stream_aggregator(std::move(stream_aggregator)) {}
 
     ~SpillableAggregateBlockingSourceOperator() override = default;
