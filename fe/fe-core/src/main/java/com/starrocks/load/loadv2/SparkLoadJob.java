@@ -88,6 +88,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ResourceDesc;
+import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -513,7 +514,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                         long replicaId = replica.getId();
                                         tabletAllReplicas.add(replicaId);
                                         long backendId = replica.getBackendId();
-                                        ComputeNode backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo()
+                                        Backend backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo()
                                                 .getBackend(backendId);
 
                                         pushTask(backendId, tableId, partitionId, indexId, tabletId,
