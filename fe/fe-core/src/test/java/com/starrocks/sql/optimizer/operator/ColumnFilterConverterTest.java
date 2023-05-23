@@ -25,14 +25,20 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.planner.PartitionColumnFilter;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -41,6 +47,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
@@ -52,6 +62,35 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 public class ColumnFilterConverterTest {
+
+    private static ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        FeConstants.runningUnitTest = true;
+        Config.dynamic_partition_enable = false;
+        UtFrameUtils.createMinStarRocksCluster();
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE `bill_detail` (\n" +
+                        "  `bill_code` varchar(200) NOT NULL DEFAULT \"\" COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "PRIMARY KEY(`bill_code`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "PARTITION BY RANGE(CAST(substring(bill_code, 3, 13) AS BIGINT))\n" +
+                        "(PARTITION p1 VALUES [(\"0\"), (\"5000000\")),\n" +
+                        "PARTITION p2 VALUES [(\"5000000\"), (\"10000000\")),\n" +
+                        "PARTITION p3 VALUES [(\"10000000\"), (\"15000000\")),\n" +
+                        "PARTITION p4 VALUES [(\"15000000\"), (\"20000000\")))\n" +
+                        "DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");");
+    }
 
     @Test
     public void convertColumnFilterNormal() {
@@ -212,6 +251,21 @@ public class ColumnFilterConverterTest {
 
         return new OlapTable(1L, "table1", new ArrayList<>(), KeysType.AGG_KEYS, expressionRangePartitionInfo,
                 new RandomDistributionInfo(10));
+    }
+
+    @Test
+    public void testConvertPredicate() {
+        List<ScalarOperator> argument = Lists.newArrayList();
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, Type.VARCHAR, "bill_code", false);
+        ConstantOperator constantOperator = new ConstantOperator("JT2921712368984", Type.VARCHAR);
+        argument.add(columnRefOperator);
+        argument.add(constantOperator);
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, argument);
+
+        Table table = GlobalStateMgr.getCurrentState().getDb("test").getTable("bill_detail");
+        ExpressionRangePartitionInfoV2 partitionInfo = (ExpressionRangePartitionInfoV2) ((OlapTable) table).getPartitionInfo();
+        ScalarOperator afterConvert = ColumnFilterConverter.convertPredicate(predicate, partitionInfo);
+        Assert.assertEquals(2921712368984L, ((ConstantOperator) afterConvert.getChild(1)).getValue());
     }
 
 }
