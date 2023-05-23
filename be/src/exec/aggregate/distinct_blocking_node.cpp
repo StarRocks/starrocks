@@ -206,7 +206,7 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
                 _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
                                        SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context);
     } else {
-        if (runtime_state()->enable_spill()) {
+        if (runtime_state()->enable_spill() && runtime_state()->enable_agg_distinct_spill()) {
             ops_with_source =
                     _decompose_to_pipeline<AggregatorFactory, SpillableAggregateDistinctBlockingSourceOperatorFactory,
                                            SpillableAggregateDistinctBlockingSinkOperatorFactory>(ops_with_sink,
