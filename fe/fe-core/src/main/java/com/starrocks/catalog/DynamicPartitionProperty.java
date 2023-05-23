@@ -70,7 +70,7 @@ public class DynamicPartitionProperty {
             this.start = Integer.parseInt(properties.getOrDefault(START, String.valueOf(MIN_START_OFFSET)));
             this.end = Integer.parseInt(properties.get(END));
             this.prefix = properties.get(PREFIX);
-            this.buckets = Integer.parseInt(properties.get(BUCKETS));
+            this.buckets = Integer.parseInt(properties.getOrDefault(BUCKETS, "0"));
             this.replicationNum =
                     Integer.parseInt(properties.getOrDefault(REPLICATION_NUM, String.valueOf(NOT_SET_REPLICATION_NUM)));
             this.historyPartitionNum = Integer.parseInt(properties.getOrDefault(
