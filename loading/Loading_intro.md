@@ -218,4 +218,4 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
 
 ## 常见问题
 
-请参见[导入常见问题](../faq/Exporting_faq.md)。
+请参见[导入常见问题](../faq/loading/Loading_faq.md)。
