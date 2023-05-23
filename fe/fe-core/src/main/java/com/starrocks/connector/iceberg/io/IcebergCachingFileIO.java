@@ -119,12 +119,11 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
         if (wrappedIO == null) {
             switch (properties.get(ICEBERG_CATALOG_TYPE)) {
                 case "hive":
+                case "rest":
                     wrappedIO = new HadoopFileIO(conf);
                     break;
                 case "glue":
                     wrappedIO = new S3FileIO();
-                case "rest":
-                    wrappedIO = new HadoopFileIO(conf);
                     break;
             }
 
