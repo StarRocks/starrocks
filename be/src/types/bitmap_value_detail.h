@@ -26,6 +26,9 @@
 // So other files should not include this file except bitmap_value.cpp.
 #include <cstdint>
 #include <optional>
+
+#include "util/coding.h"
+
 namespace starrocks {
 
 // serialized bitmap := TypeCode(1), Payload
@@ -142,11 +145,10 @@ public:
      *
      */
     void addMany(size_t n_args, const uint32_t* vals) {
-        for (size_t lcv = 0; lcv < n_args; lcv++) {
-            roarings[0].add(vals[lcv]);
-            roarings[0].setCopyOnWrite(copyOnWrite);
-        }
+        roarings[0].addMany(n_args, vals);
+        roarings[0].setCopyOnWrite(copyOnWrite);
     }
+
     void addMany(size_t n_args, const uint64_t* vals) {
         for (size_t lcv = 0; lcv < n_args; lcv++) {
             roarings[highBytes(vals[lcv])].add(lowBytes(vals[lcv]));
