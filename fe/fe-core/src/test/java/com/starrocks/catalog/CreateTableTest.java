@@ -227,6 +227,24 @@ public class CreateTableTest {
                         + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
                         + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
 
+        ExceptionChecker
+                .expectThrowsNoException(() -> createTable("CREATE TABLE test.full_width_space (\n" +
+                        "    datekey DATE,\n" +
+                        "    site_id INT,\n" +
+                        "    city_code SMALLINT,\n" +
+                        "    user_name VARCHAR(32),\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "ENGINE=olap\n" +
+                        "DUPLICATE KEY(datekey, site_id, city_code, user_name)\n" +
+                        "PARTITION BY RANGE (datekey) (\n" +
+                        "　START (\"2019-01-01\") END (\"2021-01-01\") EVERY (INTERVAL 1 YEAR)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(site_id) BUCKETS 10\n" +
+                        "PROPERTIES (\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"));
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl6 = (OlapTable) db.getTable("tbl6");
         Assert.assertTrue(tbl6.getColumn("k1").isKey());
