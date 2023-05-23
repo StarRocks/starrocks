@@ -295,7 +295,8 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, in
 // To developers: |tablet_metadatas| must be a sorted container to use STLSetDifference
 static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tablet_mgr, std::string_view root_location,
                                                              std::set<std::string>* tablet_metadatas,
-                                                             const std::vector<std::string>& txn_logs) {
+                                                             const std::vector<std::string>& txn_logs,
+                                                             int64_t min_active_txn_id) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
     const auto now = std::time(nullptr);
 #ifndef BE_TEST
@@ -309,7 +310,6 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
 
     std::set<std::string> datafiles;
 
-    bool need_check_modify_time = false;
     int64_t total_files = 0;
     // List segment
     auto st = ignore_not_found(fs->iterate_dir2(segment_root_location, [&](DirEntry entry) {
@@ -318,12 +318,32 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
             LOG_EVERY_N(WARNING, 100) << "Unrecognized data file " << entry.name;
             return true;
         }
-        if (!entry.mtime.has_value()) {
-            // Need to check modify time again as long as there is a entry that does not have modify time.
-            need_check_modify_time = true;
-        }
-        if (!(entry.mtime.has_value() && now < entry.mtime.value() + expire_seconds)) {
-            datafiles.emplace(entry.name);
+        std::optional<int64_t> opt_txn_id = extract_txn_id_prefix(entry.name);
+        if (opt_txn_id.has_value()) {
+            // Using the transaction ID as the logical creation timestamp for the file, if the logical
+            // creation time (txn_id) is smaller than the |min_active_txn_id|, it indicates that the
+            // transaction that created this file has completed, and if the file is not referenced by
+            // any metadata, it's safe to delete it.
+            if (opt_txn_id.value() < min_active_txn_id) {
+                datafiles.emplace(entry.name);
+            } else {
+                return true; // this file has not expired yet and cannot be deleted
+            }
+        } else if (entry.mtime.has_value()) {
+            if (now >= entry.mtime.value() + expire_seconds) {
+                datafiles.emplace(entry.name);
+            } else {
+                return true; // this file has not expired yet and cannot be deleted
+            }
+        } else {
+            auto path = join_path(segment_root_location, entry.name);
+            auto res = fs->get_file_modified_time(path);
+            if (res.ok() && now >= *res + expire_seconds) {
+                datafiles.emplace(entry.name);
+            } else {
+                auto st = ignore_not_found(res.status());
+                LOG_IF(WARNING, !st.ok()) << "Fail to get modified time of " << path << ": " << st;
+            }
         }
         return true;
     }));
@@ -430,27 +450,11 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
         }
     }
 
-    if (need_check_modify_time && !datafiles.empty()) {
-        LOG(INFO) << "Checking modify time of " << datafiles.size() << " data files";
-        for (auto it = datafiles.begin(); it != datafiles.end(); /**/) {
-            auto location = join_path(segment_root_location, *it);
-            auto res = fs->get_file_modified_time(location);
-            if (!res.ok()) {
-                LOG_IF(WARNING, !res.status().is_not_found())
-                        << "Fail to get modified time of " << location << ": " << res.status();
-                it = datafiles.erase(it);
-            } else if (now < *res + expire_seconds) {
-                it = datafiles.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
     VLOG(4) << "Found " << datafiles.size() << " orphan files";
     return datafiles;
 }
 
-Status datafile_gc(std::string_view root_location, TabletManager* tablet_mgr) {
+Status datafile_gc(std::string_view root_location, TabletManager* tablet_mgr, int64_t min_active_txn_id) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
 
     const auto owned_tablets = tablet_mgr->owned_tablets();
@@ -491,7 +495,7 @@ Status datafile_gc(std::string_view root_location, TabletManager* tablet_mgr) {
 
     // Find orphan data files, include segment, del, and delvec
     ASSIGN_OR_RETURN(auto orphan_datafiles,
-                     find_orphan_datafiles(tablet_mgr, root_location, &tablet_metadatas, txn_logs));
+                     find_orphan_datafiles(tablet_mgr, root_location, &tablet_metadatas, txn_logs, min_active_txn_id));
 
     // Write orphan segment list file
     WritableFileOptions opts{

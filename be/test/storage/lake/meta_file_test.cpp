@@ -52,6 +52,8 @@ public:
         s_location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
         s_tablet_manager = std::make_unique<lake::TabletManager>(s_location_provider.get(), nullptr, 16384);
         s_update_manager = std::make_unique<lake::UpdateManager>(s_location_provider.get());
+        s_tablet_manager =
+                std::make_unique<lake::TabletManager>(s_location_provider.get(), s_update_manager.get(), 16384);
     }
 
     static void TearDownTestCase() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
@@ -71,8 +73,8 @@ TEST_F(MetaFileTest, test_meta_rw) {
     metadata->set_version(10);
     metadata->set_next_rowset_id(110);
     // 2. write to pk meta file
-    MetaFileBuilder builder(metadata, s_update_manager.get());
-    Status st = builder.finalize(s_location_provider.get());
+    MetaFileBuilder builder(*tablet, metadata);
+    Status st = builder.finalize(next_id());
     EXPECT_TRUE(st.ok());
     // 3. read meta from meta file
     MetaFileReader reader(s_tablet_manager->tablet_metadata_location(tablet_id, 10), false);
@@ -104,7 +106,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     EXPECT_FALSE(ndv->empty());
     std::string before_delvec = ndv->save();
     builder.append_delvec(ndv, segment_id);
-    Status st = builder.finalize(s_location_provider.get());
+    Status st = builder.finalize(next_id());
     EXPECT_TRUE(st.ok());
     // 3. read delvec
     MetaFileReader reader(s_tablet_manager->tablet_metadata_location(tablet_id, version), false);
@@ -131,16 +133,58 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     std::vector<uint32_t> dels2 = {1, 3, 5, 9, 90000};
     dv2.add_dels_as_new_version(dels2, version2, &ndv2);
     builder2.append_delvec(ndv2, segment_id);
-    st = builder2.finalize(s_location_provider.get());
+    st = builder2.finalize(next_id());
     EXPECT_TRUE(st.ok());
     // 6. read again
     MetaFileReader reader3(s_tablet_manager->tablet_metadata_location(tablet_id, version2), false);
     EXPECT_TRUE(reader3.load().ok());
     meta_st = reader3.get_meta();
     EXPECT_TRUE(meta_st.ok());
-    delvecpb = (*meta_st)->delvec_meta().delvecs(0);
-    EXPECT_EQ(delvecpb.segment_id(), segment_id);
-    EXPECT_EQ(delvecpb.page().version(), version2);
+
+    iter = (*meta_st)->delvec_meta().delvecs().find(segment_id);
+    EXPECT_TRUE(iter != (*meta_st)->delvec_meta().delvecs().end());
+    auto delvecpb = iter->second;
+    EXPECT_EQ(delvecpb.version(), version2);
+
+    // 7. test reclaim delvec version to file name record
+    MetaFileReader reader4(s_tablet_manager->tablet_metadata_location(tablet_id, version2), false);
+    EXPECT_TRUE(reader4.load().ok());
+    meta_st = reader4.get_meta();
+    EXPECT_TRUE(meta_st.ok());
+
+    // clear all delvec meta element so that all element in
+    // version_to_delvec map will also be removed
+    // in this case, delvecs meta map has only one element [key=(segment=1234, value=(version=12, offset=0, size=35)]
+    // delvec_to_file has also one element [key=(version=12), value=(delvec_file=xxx)]
+    // after clearing,  delvecs meta map will have nothing, and element in delvec_to_file will also be useless
+    (*meta_st)->mutable_delvec_meta()->mutable_delvecs()->clear();
+
+    // insert a new delvec record into delvecs meta map with new version 13
+    // we expect the old element in delvec_to_file map (version 12) will be removed
+    auto new_version = version2 + 1;
+    MetaFileBuilder builder3(*tablet, *meta_st);
+    (*meta_st)->set_version(new_version);
+    DelVector dv3;
+    dv3.set_empty();
+    EXPECT_TRUE(dv3.empty());
+    std::shared_ptr<DelVector> ndv3;
+    std::vector<uint32_t> dels3 = {1, 3, 5, 9, 90000};
+    dv3.add_dels_as_new_version(dels3, new_version, &ndv3);
+    builder3.append_delvec(ndv3, segment_id + 1);
+    st = builder3.finalize(next_id());
+    EXPECT_TRUE(st.ok());
+
+    // validate delvec file record with version 12 been removed
+    MetaFileReader reader5(s_tablet_manager->tablet_metadata_location(tablet_id, new_version), false);
+    EXPECT_TRUE(reader5.load().ok());
+    auto version_to_delvec_map = (*meta_st)->delvec_meta().version_to_delvec();
+    EXPECT_EQ(version_to_delvec_map.size(), 1);
+
+    auto iter2 = version_to_delvec_map.find(version2);
+    EXPECT_TRUE(iter2 == version_to_delvec_map.end());
+
+    iter2 = version_to_delvec_map.find(new_version);
+    EXPECT_TRUE(iter2 != version_to_delvec_map.end());
 }
 
 } // namespace starrocks::lake

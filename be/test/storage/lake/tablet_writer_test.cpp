@@ -127,7 +127,7 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
     ASSERT_OK(writer->open());
 
     // segment #1
@@ -210,7 +210,7 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
     const int segment_rows = c0_chunk.num_rows() + c2_chunk.num_rows();
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kVertical, segment_rows + 1));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kVertical, next_id(), segment_rows + 1));
 
     // generate 2 segments automatically
     ASSERT_OK(writer->open());
@@ -282,7 +282,7 @@ TEST_P(LakeTabletWriterTest, test_write_fail) {
     VChunk chunk0({c0, c1}, _schema);
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
     ASSERT_OK(writer->open());
     ASSERT_OK(fs::remove_all(kTestGroupPath));
     ASSERT_ERROR(writer->write(chunk0));
@@ -301,7 +301,7 @@ TEST_P(LakeTabletWriterTest, test_close_without_finish) {
     VChunk chunk0({c0, c1}, _schema);
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
     ASSERT_OK(writer->open());
 
     ASSERT_OK(writer->write(chunk0));

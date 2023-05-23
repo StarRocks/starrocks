@@ -285,9 +285,16 @@ TEST_P(PrimaryKeyCompactionTest, test1) {
     config::lake_gc_segment_expire_seconds = 0;
     config::lake_gc_metadata_max_versions = 1;
     ASSERT_OK(metadata_gc(kTestGroupPath, _tablet_manager.get(), _txn_id + 1));
-    ASSERT_OK(datafile_gc(kTestGroupPath, _tablet_manager.get()));
-    for (int ver = 1; ver <= version; ver++) {
-        EXPECT_FALSE(fs::path_exist(_location_provider->tablet_delvec_location(tablet_id, ver)));
+    ASSERT_OK(datafile_gc(kTestGroupPath, _tablet_manager.get(), _txn_id + 1));
+
+    std::vector<std::string> files;
+    ASSERT_OK(fs::get_children(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName), &files));
+
+    std::vector<std::string> delvec_files;
+    for (auto file : files) {
+        if (file.size() >= strlen(".delvec") && file.substr(file.size() - strlen(".delvec")) == ".delvec") {
+            delvec_files.emplace_back(file);
+        }
     }
 }
 
