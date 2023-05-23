@@ -67,7 +67,8 @@ const ParquetField* ParquetMetaHelper::get_parquet_field(const std::string& col_
 
 void IcebergMetaHelper::_init_field_mapping() {
     for (const auto& each : _t_iceberg_schema->fields) {
-        const std::string& formatted_field_name = _case_sensitive ? each.name : boost::algorithm::to_lower_copy(each.name);
+        const std::string& formatted_field_name =
+                _case_sensitive ? each.name : boost::algorithm::to_lower_copy(each.name);
         _field_name_2_iceberg_field.emplace(formatted_field_name, &each);
     }
 }
@@ -130,9 +131,7 @@ void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
 }
 
 const ParquetField* IcebergMetaHelper::get_parquet_field(const std::string& col_name) const {
-    const std::string& formatted_col_name = _case_sensitive
-                                                 ? col_name
-                                                 : boost::algorithm::to_lower_copy(col_name);
+    const std::string& formatted_col_name = _case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
     auto it = _field_name_2_iceberg_field.find(formatted_col_name);
     if (it == _field_name_2_iceberg_field.end()) {
         return nullptr;

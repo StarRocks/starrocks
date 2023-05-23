@@ -119,6 +119,7 @@ public:
                               std::vector<GroupReaderParam::Column>& read_cols,
                               bool& _is_only_partition_scan) const override;
     const ParquetField* get_parquet_field(const std::string& col_name) const override;
+
 private:
     void _init_field_mapping();
     const TIcebergSchema* _t_iceberg_schema = nullptr;
