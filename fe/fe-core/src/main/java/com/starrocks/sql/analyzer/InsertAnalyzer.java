@@ -86,7 +86,7 @@ public class InsertAnalyzer {
             if (!table.isOlapTable() && !table.isIcebergTable()) {
                 throw unsupportedException("Only support insert overwrite olap table and iceberg table");
             }
-            if (((OlapTable) table).getState() != NORMAL) {
+            if (table instanceof OlapTable && ((OlapTable) table).getState() != NORMAL) {
                 String msg =
                         String.format("table state is %s, please wait to insert overwrite util table state is normal",
                                 ((OlapTable) table).getState());
