@@ -36,7 +36,7 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
     if (columns[2]->is_constant()) {
         // if part_number is a negative int, return NULL.
         int32_t part_number = ColumnHelper::get_const_value<TYPE_INT>(columns[2]);
-        if (part_number <= 0) {
+        if (part_number == 0) {
             return ColumnHelper::create_const_null_column(columns[0]->size());
         }
     }
@@ -54,11 +54,6 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
         }
 
         int32_t part_number = part_number_viewer.value(i);
-        if (part_number <= 0) {
-            res.append_null();
-            continue;
-        }
-
         Slice haystack = haystack_viewer.value(i);
         Slice delimiter = delimiter_viewer.value(i);
         if (delimiter.size == 0) {
@@ -78,55 +73,88 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
                     res.append(Slice(haystack.data + h, char_size));
                 }
             }
-        } else if (delimiter.size == 1) {
-            // if delimiter is a char, use memchr to split
-            // Record the two adjacent offsets when matching delimiter.
-            // If no matching, return NULL.
-            // Else return the string between two adjacent offsets.
-            int32_t pre_offset = -1;
-            int32_t offset = -1;
-            int32_t num = 0;
-            while (num < part_number) {
-                pre_offset = offset;
-                size_t n = haystack.size - offset - 1;
-                char* pos = reinterpret_cast<char*>(memchr(haystack.data + offset + 1, delimiter.data[0], n));
-                if (pos != nullptr) {
-                    offset = pos - haystack.data;
-                    num++;
-                } else {
-                    offset = haystack.size;
-                    num = (num == 0) ? 0 : num + 1;
-                    break;
-                }
-            }
+        }
+        if (part_number > 0) {
+           if (delimiter.size == 1) {
+              // if delimiter is a char, use memchr to split
+              // Record the two adjacent offsets when matching delimiter.
+              // If no matching, return NULL.
+              // Else return the string between two adjacent offsets.
+              int32_t pre_offset = -1;
+              int32_t offset = -1;
+              int32_t num = 0;
+              while (num < part_number) {
+                  pre_offset = offset;
+                  size_t n = haystack.size - offset - 1;
+                  char* pos = reinterpret_cast<char*>(memchr(haystack.data + offset + 1, delimiter.data[0], n));
+                  if (pos != nullptr) {
+                      offset = pos - haystack.data;
+                      num++;
+                  } else {
+                      offset = haystack.size;
+                      num = (num == 0) ? 0 : num + 1;
+                      break;
+                  }
+              }
 
-            if (num == part_number) {
-                res.append(Slice(haystack.data + pre_offset + 1, offset - pre_offset - 1));
-            } else {
-                res.append_null();
-            }
+              if (num == part_number) {
+                  res.append(Slice(haystack.data + pre_offset + 1, offset - pre_offset - 1));
+              } else {
+                  res.append_null();
+              }
+           } else {
+               // if delimiter is a string, use memmem to split
+               int32_t pre_offset = -static_cast<int32_t>(delimiter.size);
+               int32_t offset = -static_cast<int32_t>(delimiter.size);
+               int32_t num = 0;
+               while (num < part_number) {
+                   pre_offset = offset;
+                   size_t n = haystack.size - offset - delimiter.size;
+                   char* pos = reinterpret_cast<char*>(
+                           memmem(haystack.data + offset + delimiter.size, n, delimiter.data, delimiter.size));
+                   if (pos != nullptr) {
+                       offset = pos - haystack.data;
+                       num++;
+                   } else {
+                       offset = haystack.size;
+                       num = (num == 0) ? 0 : num + 1;
+                       break;
+                   }
+               }
+
+               if (num == part_number) {
+                    res.append(Slice(haystack.data + pre_offset + delimiter.size, offset - pre_offset - delimiter.size));
+               } else {
+                   res.append_null();
+               }
+           }
         } else {
-            // if delimiter is a string, use memmem to split
-            int32_t pre_offset = -static_cast<int32_t>(delimiter.size);
-            int32_t offset = -static_cast<int32_t>(delimiter.size);
+            part_number = -part_number;
+            auto haystack_str = haystack.to_string();
+            int32_t offset = haystack.size;
+            int32_t pre_offset = offset;
             int32_t num = 0;
-            while (num < part_number) {
-                pre_offset = offset;
-                size_t n = haystack.size - offset - delimiter.size;
-                char* pos = reinterpret_cast<char*>(
-                        memmem(haystack.data + offset + delimiter.size, n, delimiter.data, delimiter.size));
-                if (pos != nullptr) {
-                    offset = pos - haystack.data;
-                    num++;
+            auto substr = haystack_str;
+            while (num <= part_number && offset >= 0) {
+                offset = (int)substr.rfind(delimiter, offset);
+                if (offset != -1) {
+                    if (++num == part_number) {
+                        break;
+                    }
+                    pre_offset = offset;
+                    offset = offset - 1;
+                    substr = haystack_str.substr(0, pre_offset);
                 } else {
-                    offset = haystack.size;
-                    num = (num == 0) ? 0 : num + 1;
                     break;
                 }
             }
-
+            num = (offset == -1 && num != 0) ? num + 1 : num;
             if (num == part_number) {
-                res.append(Slice(haystack.data + pre_offset + delimiter.size, offset - pre_offset - delimiter.size));
+                if (offset == -1) {
+                    res.append(Slice(haystack.data, pre_offset));
+                } else {
+                    res.append(Slice(haystack.data + offset + delimiter.size, pre_offset - offset - delimiter.size));
+                }
             } else {
                 res.append_null();
             }
