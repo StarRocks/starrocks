@@ -133,9 +133,12 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
     RETURN_IF_ERROR(captured_mem_table->done());
     _running_flush_tasks++;
     // TODO: handle spill queue
-    auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table), trace = TraceInfo(state)]() {
+    auto query_ctx = state->query_ctx()->weak_from_this();
+    auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table), query_ctx,
+                 trace = TraceInfo(state)]() {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
-        RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
+        auto lcked = query_ctx.lock();
+        RETURN_IF(!lcked || !guard.scoped_begin(), Status::Cancelled("cancelled"));
         SCOPED_TIMER(_spiller->metrics().flush_timer);
         DCHECK_GT(_running_flush_tasks, 0);
         DCHECK(has_pending_data());
@@ -178,9 +181,11 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
     // if all is well and input stream enable prefetch and not eof
     if (!_stream->eof()) {
         _running_restore_tasks++;
-        auto restore_task = [this, state, guard, trace = TraceInfo(state)]() {
+        auto query_ctx = state->query_ctx()->weak_from_this();
+        auto restore_task = [this, state, guard, query_ctx, trace = TraceInfo(state)]() {
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
-            RETURN_IF(!guard.scoped_begin(), Status::OK());
+            auto lcked = query_ctx.lock();
+            RETURN_IF(!lcked || !guard.scoped_begin(), Status::OK());
             auto defer = DeferOp([&]() { _running_restore_tasks--; });
             {
                 Status res;
@@ -308,11 +313,13 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, TaskExecutor&& execu
     }
 
     _running_flush_tasks++;
+    auto query_ctx = state->query_ctx()->weak_from_this();
 
     auto task = [this, state, guard = guard, splitting_partitions = std::move(splitting_partitions),
-                 spilling_partitions = std::move(spilling_partitions), trace = TraceInfo(state)]() {
+                 spilling_partitions = std::move(spilling_partitions), query_ctx, trace = TraceInfo(state)]() {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
-        RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
+        auto lcked = query_ctx.lock();
+        RETURN_IF(!lcked || !guard.scoped_begin(), Status::Cancelled("cancelled"));
         DCHECK_EQ(_running_flush_tasks, 1);
         auto defer = DeferOp([&]() {
             _spiller->update_spilled_task_status(_decrease_running_flush_tasks());

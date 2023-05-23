@@ -146,6 +146,7 @@ import io.trino.sql.tree.Table;
 import io.trino.sql.tree.TableSubquery;
 import io.trino.sql.tree.TimestampLiteral;
 import io.trino.sql.tree.Trim;
+import io.trino.sql.tree.TryExpression;
 import io.trino.sql.tree.Union;
 import io.trino.sql.tree.WhenClause;
 import io.trino.sql.tree.Window;
@@ -690,6 +691,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         }  else {
             return new SubfieldExpr(base, ImmutableList.of(fieldName));
         }
+    }
+
+    @Override
+    protected ParseNode visitTryExpression(TryExpression node, ParseTreeContext context) {
+        return visit(node.getInnerExpression(), context);
     }
 
     private static final BigInteger LONG_MAX = new BigInteger("9223372036854775807");

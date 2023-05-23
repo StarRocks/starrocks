@@ -119,8 +119,10 @@ struct HashJoinerParam {
     const TJoinDistributionMode::type _distribution_mode;
 };
 
-inline bool is_left_semi_join_or_inner_join(TJoinOp::type join_type) {
-    return join_type == TJoinOp::LEFT_SEMI_JOIN || join_type == TJoinOp::INNER_JOIN;
+inline bool could_short_circuit(TJoinOp::type join_type) {
+    return join_type == TJoinOp::INNER_JOIN || join_type == TJoinOp::LEFT_SEMI_JOIN ||
+           join_type == TJoinOp::RIGHT_SEMI_JOIN || join_type == TJoinOp::RIGHT_ANTI_JOIN ||
+           join_type == TJoinOp::RIGHT_OUTER_JOIN;
 }
 
 inline bool has_post_probe(TJoinOp::type join_type) {
@@ -246,6 +248,7 @@ public:
     }
 
     // hash table param.
+    // this function only valid in hash_joiner_builder
     const HashTableParam& hash_table_param() const { return _hash_table_param; }
 
     void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
@@ -297,6 +300,8 @@ public:
         }
         return Status::OK();
     }
+
+    const TJoinOp::type& join_type() const { return _join_type; }
 
 private:
     static bool _has_null(const ColumnPtr& column);
