@@ -1263,11 +1263,6 @@ public class ExpressionAnalyzer {
                 end--;
             }
 
-            // check is scalar type
-            if (node.getChildren().stream().anyMatch(d -> !d.getType().isScalarType())) {
-                throw new SemanticException("case-when only support scalar type", node.getPos());
-            }
-
             // check when type
             List<Type> whenTypes = Lists.newArrayList();
 
