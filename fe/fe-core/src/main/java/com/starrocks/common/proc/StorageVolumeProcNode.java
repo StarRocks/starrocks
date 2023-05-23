@@ -15,6 +15,7 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.storagevolume.StorageVolume;
@@ -37,12 +38,15 @@ public class StorageVolumeProcNode implements ProcNodeInterface {
     }
 
     @Override
-    public ProcResult fetchResult() {
+    public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult result = new BaseProcResult();
         result.setNames(STORAGE_VOLUME_PROC_NODE_TITLE_NAMES);
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         StorageVolumeMgr storageVolumeMgr = globalStateMgr.getStorageVolumeMgr();
         StorageVolume sv = storageVolumeMgr.getStorageVolume(storageVolumeName);
+        if (sv == null) {
+            return result;
+        }
         sv.getProcNodeData(result);
         return result;
     }

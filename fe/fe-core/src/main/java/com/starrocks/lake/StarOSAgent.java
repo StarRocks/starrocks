@@ -28,6 +28,7 @@ import com.staros.proto.CreateShardGroupInfo;
 import com.staros.proto.CreateShardInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.JoinMetaGroupInfo;
 import com.staros.proto.PlacementPolicy;
@@ -113,6 +114,50 @@ public class StarOSAgent {
         LOG.info("get serviceId {} from starMgr", serviceId);
     }
 
+    public String addFileStore(FileStoreInfo fsInfo) throws DdlException {
+        try {
+            return client.addFileStore(fsInfo, serviceId);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to add file store", e);
+        }
+    }
+
+    public void removeFileStoreByName(String fsName) throws DdlException {
+        try {
+            client.removeFileStoreByName(fsName, serviceId);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to remove file store", e);
+        }
+    }
+
+    public void updateFileStore(FileStoreInfo fsInfo) throws DdlException {
+        try {
+            client.updateFileStore(fsInfo, serviceId);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to update file store", e);
+        }
+    }
+
+    public FileStoreInfo getFileStoreByName(String fsName) throws DdlException {
+        try {
+            return client.getFileStore(fsName, serviceId);
+        } catch (StarClientException e) {
+            if (e.getCode() == StatusCode.NOT_EXIST) {
+                return null;
+            }
+            throw new DdlException("Failed to get file store", e);
+        }
+    }
+
+    public List<FileStoreInfo> listFileStore() throws DdlException {
+        try {
+            client.listFileStore(serviceId);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to list file store", e);
+        }
+        return new ArrayList<>();
+    }
+
     public FilePathInfo allocateFilePath(long tableId) throws DdlException {
         try {
             EnumDescriptor enumDescriptor = FileStoreType.getDescriptor();
@@ -125,7 +170,6 @@ public class StarOSAgent {
             throw new DdlException("Failed to allocate file path from StarMgr", e);
         }
     }
-
 
     public boolean registerAndBootstrapService() {
         try {

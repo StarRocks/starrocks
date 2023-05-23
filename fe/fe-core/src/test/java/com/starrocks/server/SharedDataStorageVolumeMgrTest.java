@@ -14,11 +14,17 @@
 
 package com.starrocks.server;
 
+import com.staros.proto.FileStoreInfo;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.storagevolume.StorageVolume;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -33,13 +39,59 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOI
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_REGION;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 
-public class StorageVolumeMgrTest {
+public class SharedDataStorageVolumeMgrTest {
+    @Mocked
+    private StarOSAgent starOSAgent;
+
     @Test
-    public void testStorageVolumeCRUD() throws AnalysisException, AlreadyExistsException {
+    public void testStorageVolumeCRUD() throws AnalysisException, AlreadyExistsException, DdlException {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            Map<String, FileStoreInfo> fileStores = new HashMap<>();
+            private long id = 1;
+            @Mock
+            public String addFileStore(FileStoreInfo fsInfo) {
+                fsInfo = fsInfo.toBuilder().setFsKey(String.valueOf(id++)).build();
+                fileStores.put(fsInfo.getFsKey(), fsInfo);
+                return fsInfo.getFsKey();
+            }
+
+            @Mock
+            public void removeFileStoreByName(String fsName) throws DdlException {
+                FileStoreInfo fsInfo = getFileStoreByName(fsName);
+                if (fsInfo == null) {
+                    throw new DdlException("Failed to remove file store");
+                }
+                fileStores.remove(fsInfo.getFsKey());
+            }
+
+            @Mock
+            public FileStoreInfo getFileStoreByName(String fsName) {
+                for (FileStoreInfo fsInfo : fileStores.values()) {
+                    if (fsInfo.getFsName().equals(fsName)) {
+                        return fsInfo;
+                    }
+                }
+                return null;
+            }
+
+            @Mock
+            public void updateFileStore(FileStoreInfo fsInfo) {
+                FileStoreInfo fileStoreInfo = fileStores.get(fsInfo.getFsKey());
+                fileStores.put(fsInfo.getFsKey(), fileStoreInfo.toBuilder().mergeFrom(fsInfo).build());
+            }
+        };
+
         String svKey = "test";
         String svKey1 = "test1";
         // create
-        StorageVolumeMgr svm = new StorageVolumeMgr();
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
         List<String> locations = Arrays.asList("s3://abc");
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AWS_S3_REGION, "region");
@@ -56,7 +108,7 @@ public class StorageVolumeMgrTest {
         try {
             svm.createStorageVolume(svKey, "S3", locations, storageParams, Optional.empty(), "");
         } catch (AlreadyExistsException e) {
-            Assert.assertTrue(e.getMessage().contains("Storage Volume 'test' already exists"));
+            Assert.assertTrue(e.getMessage().contains("Storage volume 'test' already exists"));
         }
 
         // update
@@ -68,9 +120,10 @@ public class StorageVolumeMgrTest {
             svm.updateStorageVolume(svKey1, storageParams, Optional.of(false), "test update");
             Assert.fail();
         } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("Storage Volume 'test1' does not exist"));
+            Assert.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
         }
         svm.updateStorageVolume(svKey, storageParams, Optional.of(true), "test update");
+        sv = svm.getStorageVolume(svKey);
         cloudConfiguration = sv.getCloudConfiguration();
         Assert.assertEquals("region1", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
                 .getRegion());
@@ -84,7 +137,7 @@ public class StorageVolumeMgrTest {
             svm.setDefaultStorageVolume(svKey1);
             Assert.fail();
         } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("Storage Volume 'test1' does not exist"));
+            Assert.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
         }
         svm.setDefaultStorageVolume(svKey);
         Assert.assertEquals(svKey, svm.getDefaultSV());
@@ -93,6 +146,22 @@ public class StorageVolumeMgrTest {
             Assert.fail();
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("Default volume can not be disabled"));
+        }
+
+        // bind/unbind db and table to storage volume
+        svm.bindDBToStorageVolume(sv.getId(), 1L);
+        svm.bindTableToStorageVolume(sv.getId(), 1L);
+        try {
+            svm.unbindDBToStorageVolume(-1L, 1L);
+            Assert.fail();
+        } catch (IllegalStateException e) {
+            Assert.assertTrue(e.getMessage().contains("Storage volume does not exist"));
+        }
+        try {
+            svm.unbindTableToStorageVolume(-1L, 1L);
+            Assert.fail();
+        } catch (IllegalStateException e) {
+            Assert.assertTrue(e.getMessage().contains("Storage volume does not exist"));
         }
 
         // remove
@@ -106,12 +175,23 @@ public class StorageVolumeMgrTest {
             svm.removeStorageVolume(svKey1);
             Assert.fail();
         } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("Storage Volume 'test1' does not exist"));
+            Assert.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
         }
 
         svm.createStorageVolume(svKey1, "S3", locations, storageParams, Optional.empty(), "");
         svm.updateStorageVolume(svKey1, storageParams, Optional.empty(), "test update");
         svm.setDefaultStorageVolume(svKey1);
+
+        sv = svm.getStorageVolume(svKey);
+
+        try {
+            svm.removeStorageVolume(svKey);
+            Assert.fail();
+        } catch (IllegalStateException e) {
+            Assert.assertTrue(e.getMessage().contains("Storage volume 'test' is referenced by db or table"));
+        }
+        svm.unbindDBToStorageVolume(sv.getId(), 1L);
+        svm.unbindTableToStorageVolume(sv.getId(), 1L);
         svm.removeStorageVolume(svKey);
         Assert.assertFalse(svm.exists(svKey));
     }

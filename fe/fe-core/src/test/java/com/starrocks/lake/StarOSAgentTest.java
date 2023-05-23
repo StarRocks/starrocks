@@ -24,9 +24,11 @@ import com.staros.proto.CreateShardGroupInfo;
 import com.staros.proto.CreateShardInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
+import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
@@ -476,4 +478,21 @@ public class StarOSAgentTest {
         Assert.assertEquals(2, nodes.size());
     }
 
+    @Test
+    public void testAddFileStore() throws StarClientException, DdlException {
+        S3FileStoreInfo s3FsInfo = S3FileStoreInfo.newBuilder()
+                .setRegion("region").setEndpoint("endpoint").build();
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsKey("test-fskey")
+                .setFsName("test-fsname").setFsType(FileStoreType.S3).setS3FsInfo(s3FsInfo).build();
+        new Expectations() {
+            {
+                client.addFileStore(fsInfo, "1");
+                result = fsInfo.getFsKey();
+                minTimes = 0;
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assert.assertEquals("test-fskey", starosAgent.addFileStore(fsInfo));
+    }
 }

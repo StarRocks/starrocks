@@ -16,13 +16,19 @@ package com.starrocks.storagevolume;
 
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
+import com.staros.proto.AwsCredentialInfo;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import org.apache.parquet.Strings;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,8 +56,6 @@ public class StorageVolume {
 
     private String comment;
 
-    private int refCount;
-
     private boolean enabled;
 
     private boolean isDefault;
@@ -63,7 +67,6 @@ public class StorageVolume {
         this.svt = toStorageVolumeType(svt);
         this.locations = locations;
         this.comment = comment;
-        this.refCount = 0;
         this.enabled = enabled;
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
         if (!isValidCloudConfiguration()) {
@@ -106,12 +109,8 @@ public class StorageVolume {
         return comment;
     }
 
-    public int getRefCount() {
-        return refCount;
-    }
-
-    public void setIsDefault() {
-        isDefault = true;
+    public void setIsDefault(boolean isDefault) {
+        this.isDefault = isDefault;
     }
 
     public boolean isDefault() {
@@ -149,5 +148,102 @@ public class StorageVolume {
                 String.valueOf(gson.toJson(params)),
                 String.valueOf(enabled),
                 String.valueOf(comment)));
+    }
+
+    public FileStoreInfo toFileStoreInfo() {
+        FileStoreInfo fsInfo = cloudConfiguration.toFileStoreInfo();
+        FileStoreInfo.Builder builder = fsInfo.toBuilder();
+        builder.setFsName(this.name).setComment(this.comment).setEnabled(this.enabled).setIsDefault(isDefault);
+        switch (svt) {
+            case S3:
+                S3FileStoreInfo s3FileStoreInfo = fsInfo.getS3FsInfo();
+                String[] bucketAndPrefix = getBucketAndPrefix();
+                s3FileStoreInfo = s3FileStoreInfo.toBuilder()
+                        .setBucket(bucketAndPrefix[0]).setPathPrefix(bucketAndPrefix[1]).build();
+                builder.setS3FsInfo(s3FileStoreInfo);
+                break;
+            case HDFS:
+                // TODO
+                break;
+            case UNKNOWN:
+                break;
+        }
+        if (this.id > 0) {
+            builder.setFsKey(String.valueOf(this.id));
+        }
+        return builder.build();
+    }
+
+    public static StorageVolume fromFileStoreInfo(FileStoreInfo fsInfo) throws AnalysisException {
+        String svt = fsInfo.getFsType().toString();
+        Map<String, String> params = getParamsFromFileStoreInfo(fsInfo);
+        List<String> locations = getLocationsFromFileStoreInfo(fsInfo);
+        StorageVolume sv = new StorageVolume(Long.valueOf(fsInfo.getFsKey()), fsInfo.getFsName(), svt,
+                locations, params, fsInfo.getEnabled(), fsInfo.getComment());
+        sv.setIsDefault(fsInfo.getIsDefault());
+        return sv;
+    }
+
+    public static List<String> getLocationsFromFileStoreInfo(FileStoreInfo fsInfo) {
+        switch (fsInfo.getFsType()) {
+            case S3:
+                return new ArrayList<>(Arrays.asList(
+                        "S3://" + fsInfo.getS3FsInfo().getBucket() + "/" + fsInfo.getS3FsInfo().getPathPrefix()));
+            case HDFS:
+                // TODO
+            case AZBLOB:
+                // TODO
+            default:
+                return new ArrayList<>();
+        }
+    }
+
+    public static Map<String, String> getParamsFromFileStoreInfo(FileStoreInfo fsInfo) {
+        Map<String, String> params = new HashMap<>();
+        switch (fsInfo.getFsType()) {
+            case S3:
+                S3FileStoreInfo s3FileStoreInfo = fsInfo.getS3FsInfo();
+                params.put(CloudConfigurationConstants.AWS_S3_REGION, s3FileStoreInfo.getRegion());
+                params.put(CloudConfigurationConstants.AWS_S3_ENDPOINT, s3FileStoreInfo.getEndpoint());
+                AwsCredentialInfo credentialInfo = s3FileStoreInfo.getCredential();
+                if (credentialInfo.hasSimpleCredential()) {
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "false");
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
+                    params.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY,
+                            credentialInfo.getSimpleCredential().getAccessKey());
+                    params.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY,
+                            credentialInfo.getSimpleCredential().getAccessKeySecret());
+                } else if (credentialInfo.hasAssumeRoleCredential()) {
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "true");
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
+                    params.put(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN,
+                            credentialInfo.getAssumeRoleCredential().getIamRoleArn());
+                    params.put(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID,
+                            credentialInfo.getAssumeRoleCredential().getExternalId());
+                } else if (credentialInfo.hasProfileCredential()) {
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "true");
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
+                } else if (credentialInfo.hasDefaultCredential()) {
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+                }
+                return params;
+            case HDFS:
+                // TODO
+            case AZBLOB:
+                // TODO
+            default:
+                return params;
+        }
+    }
+
+    private String[] getBucketAndPrefix() {
+        // path pattern: s3://default-bucket/1/12003/
+        String path = locations.get(0).substring(4);
+        int index = path.indexOf('/');
+        if (index < 0) {
+            return new String[] {path, ""};
+        }
+
+        return new String[] {path.substring(0, index), path.substring(index + 1)};
     }
 }
