@@ -265,8 +265,8 @@ public class IcebergTable extends Table {
 
     @Override
     public boolean supportInsert() {
-        // for now, only support writing iceberg table with parquet file formats
-        return nativeTable.properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
+        // for now, only support writing iceberg table with parquet file format
+        return getNativeTable().properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
                 .equalsIgnoreCase(PARQUET_FORMAT);
     }
 
