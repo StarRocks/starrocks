@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
@@ -35,7 +34,6 @@ import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -44,6 +42,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -171,10 +170,10 @@ public class MvRewritePreprocessor {
 
     /**
      * Make a LogicalOlapScanOperator by using MV's schema which includes:
-     *  - partition infos.
-     *  - distribution infos.
-     *  - original MV's predicates which can be deduced from MV opt expression and be used
-     *       for partition/distribution pruning.
+     * - partition infos.
+     * - distribution infos.
+     * - original MV's predicates which can be deduced from MV opt expression and be used
+     * for partition/distribution pruning.
      */
     private LogicalOlapScanOperator createScanMvOperator(MaterializationContext mvContext,
                                                          Set<String> excludedPartitions) {
@@ -223,17 +222,17 @@ public class MvRewritePreprocessor {
         }
         final PartitionNames partitionNames = new PartitionNames(false, selectedPartitionNames);
 
-        return new LogicalOlapScanOperator(mv,
-                colRefToColumnMetaMapBuilder.build(),
-                columnMetaToColRefMap,
-                DistributionSpec.createHashDistributionSpec(hashDistributionDesc),
-                Operator.DEFAULT_LIMIT,
-                null,
-                mv.getBaseIndexId(),
-                selectPartitionIds,
-                partitionNames,
-                false,
-                selectTabletIds,
-                Lists.newArrayList());
+        return LogicalOlapScanOperator.builder()
+                .setTable(mv)
+                .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
+                .setColumnMetaToColRefMap(columnMetaToColRefMap)
+                .setDistributionSpec(DistributionSpec.createHashDistributionSpec(hashDistributionDesc))
+                .setSelectedIndexId(mv.getBaseIndexId())
+                .setSelectedPartitionId(selectPartitionIds)
+                .setPartitionNames(partitionNames)
+                .setSelectedTabletId(selectTabletIds)
+                .setHintsTabletIds(Collections.emptyList())
+                .setHasTableHints(false)
+                .build();
     }
 }

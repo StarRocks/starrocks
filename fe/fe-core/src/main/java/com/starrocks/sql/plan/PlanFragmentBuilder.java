@@ -344,7 +344,8 @@ public class PlanFragmentBuilder {
 
     private static void maybeClearOlapScanNodePartitions(PlanFragment fragment) {
         List<OlapScanNode> olapScanNodes = fragment.collectOlapScanNodes();
-        long numNodesWithBucketColumns = olapScanNodes.stream().filter(node -> !node.getBucketColumns().isEmpty()).count();
+        long numNodesWithBucketColumns =
+                olapScanNodes.stream().filter(node -> !node.getBucketColumns().isEmpty()).count();
         // Either all OlapScanNode use bucketColumns for local shuffle, or none of them do.
         // Therefore, clear bucketColumns if only some of them contain bucketColumns.
         boolean needClear = numNodesWithBucketColumns > 0 && numNodesWithBucketColumns < olapScanNodes.size();
@@ -737,6 +738,9 @@ public class PlanFragmentBuilder {
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
 
+            // set column access path
+            scanNode.setColumnAccessPaths(node.getColumnAccessPaths());
+
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
             ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1069,7 +1073,7 @@ public class PlanFragmentBuilder {
 
                 icebergScanNode.preProcessIcebergPredicate(node.getPredicate());
                 icebergScanNode.setupScanRangeLocations();
-                //set slot for equality delete file
+                // set slot for equality delete file
                 icebergScanNode.appendEqualityColumns(node, columnRefFactory, context);
 
                 HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
@@ -1127,7 +1131,8 @@ public class PlanFragmentBuilder {
                 // if user set table_schema or table_name in where condition and is
                 // binary predicate operator, we can set table_schema and table_name
                 // into scan-node, which can reduce time from be to fe
-                if (!(predicate.getChildren().size() == 2 && predicate.getChildren().get(0) instanceof ColumnRefOperator &&
+                if (!(predicate.getChildren().size() == 2 &&
+                        predicate.getChildren().get(0) instanceof ColumnRefOperator &&
                         predicate.getChildren().get(1) instanceof ConstantOperator)) {
                     continue;
                 }
@@ -1206,7 +1211,8 @@ public class PlanFragmentBuilder {
                         if (like.getLikeType() == LikePredicateOperator.LikeType.REGEXP) {
                             scanNode.setLogPattern(((ConstantOperator) like.getChildren().get(1)).getVarchar());
                         } else {
-                            throw UnsupportedException.unsupportedException("only support `regexp` or `rlike` for log grep");
+                            throw UnsupportedException.unsupportedException(
+                                    "only support `regexp` or `rlike` for log grep");
                         }
                     }
                 }
@@ -2212,7 +2218,7 @@ public class PlanFragmentBuilder {
                 throw new StarRocksPlannerException("unknown join operator: " + node, INTERNAL_ERROR);
             }
 
-            //Build outputColumns
+            // Build outputColumns
             fillSlotsInfo(node.getProjection(), joinNode, optExpr, joinExpr.requiredColsForFilter);
 
             joinNode.setDistributionMode(distributionMode);
@@ -2528,7 +2534,7 @@ public class PlanFragmentBuilder {
             }
             outputGroupingTuple.computeMemLayout();
 
-            //RepeatSlotIdList
+            // RepeatSlotIdList
             List<Set<Integer>> repeatSlotIdList = new ArrayList<>();
             for (List<ColumnRefOperator> repeat : repeatOperator.getRepeatColumnRef()) {
                 repeatSlotIdList.add(
@@ -3021,7 +3027,6 @@ public class PlanFragmentBuilder {
             context.getFragments().add(fragment);
             return fragment;
         }
-
 
         private void fillSlotsInfo(Projection projection, JoinNode joinNode, OptExpression optExpr,
                                    ColumnRefSet requiredColsForFilter) {

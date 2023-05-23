@@ -91,6 +91,7 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -501,7 +502,7 @@ public class OlapScanNode extends ScanNode {
                 internalRange.addToHosts(new TNetworkAddress(ip, port));
                 tabletIsNull = false;
 
-                //for CBO
+                // for CBO
                 if (!collectedStat && replica.getRowCount() != -1) {
                     actualRows += replica.getRowCount();
                     collectedStat = true;
@@ -731,6 +732,7 @@ public class OlapScanNode extends ScanNode {
                     output.append(prefix).append("- ").append(col.toString()).append("\n");
                 }
             }
+            output.append(explainColumnAccessPath(prefix));
         }
 
         return output.toString();
@@ -791,6 +793,10 @@ public class OlapScanNode extends ScanNode {
             if (!bucketExprs.isEmpty()) {
                 msg.lake_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
             }
+
+            if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
+                msg.lake_scan_node.setColumn_access_paths(columnAccessPathToThrift());
+            }
         } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
@@ -818,6 +824,10 @@ public class OlapScanNode extends ScanNode {
 
             if (!bucketExprs.isEmpty()) {
                 msg.olap_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
+            }
+
+            if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
+                msg.olap_scan_node.setColumn_access_paths(columnAccessPathToThrift());
             }
         }
     }

@@ -29,7 +29,7 @@ public abstract class Operator {
 
     protected final OperatorType opType;
     protected long limit = DEFAULT_LIMIT;
-    protected ScalarOperator predicate;
+    protected ScalarOperator predicate = null;
     /**
      * Before entering the Cascades search framework,
      * we need to merge LogicalProject and child children into one node

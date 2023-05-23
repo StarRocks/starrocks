@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.operator.physical;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -42,6 +43,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
      * The ColumnRefMap contains Scan output columns and predicate used columns
      */
     protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
+    protected ImmutableList<ColumnAccessPath> columnAccessPaths;
 
     public PhysicalScanOperator(OperatorType type, Table table,
                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -54,6 +56,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         this.limit = limit;
         this.predicate = predicate;
         this.projection = projection;
+        this.columnAccessPaths = ImmutableList.of();
 
         if (this.projection != null) {
             ColumnRefSet usedColumns = new ColumnRefSet();
@@ -102,6 +105,14 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
     public void setScanOperatorPredicates(ScanOperatorPredicates predicates) throws AnalysisException {
         throw new AnalysisException("Operation setScanOperatorPredicates(...) is not supported by this ScanOperator.");
+    }
+
+    public void setColumnAccessPaths(List<ColumnAccessPath> columnAccessPaths) {
+        this.columnAccessPaths = ImmutableList.copyOf(columnAccessPaths);
+    }
+
+    public List<ColumnAccessPath> getColumnAccessPaths() {
+        return columnAccessPaths;
     }
 
     @Override
