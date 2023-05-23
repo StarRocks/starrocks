@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -93,6 +94,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     private LogicalOlapScanOperator() {
         super(OperatorType.LOGICAL_OLAP_SCAN);
+        this.prunedPartitionPredicates = ImmutableList.of();
     }
 
     public DistributionSpec getDistributionSpec() {
@@ -157,6 +159,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 selectedTabletId, hintsTabletIds);
     }
 
+    public static Builder builder() {
+        return new Builder();
+    }
+
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalOlapScanOperator, LogicalOlapScanOperator.Builder> {
         @Override
@@ -185,17 +191,17 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         }
 
         public Builder setSelectedTabletId(List<Long> selectedTabletId) {
-            builder.selectedTabletId = selectedTabletId;
+            builder.selectedTabletId = ImmutableList.copyOf(selectedTabletId);
             return this;
         }
 
         public Builder setSelectedPartitionId(List<Long> selectedPartitionId) {
-            builder.selectedPartitionId = selectedPartitionId;
+            builder.selectedPartitionId = ImmutableList.copyOf(selectedPartitionId);
             return this;
         }
 
         public Builder setPrunedPartitionPredicates(List<ScalarOperator> prunedPartitionPredicates) {
-            builder.prunedPartitionPredicates = prunedPartitionPredicates;
+            builder.prunedPartitionPredicates = ImmutableList.copyOf(prunedPartitionPredicates);
             return this;
         }
 
@@ -203,5 +209,21 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             builder.distributionSpec = distributionSpec;
             return this;
         }
+
+        public Builder setPartitionNames(PartitionNames partitionNames) {
+            builder.partitionNames = partitionNames;
+            return this;
+        }
+
+        public Builder setHintsTabletIds(List<Long> hintsTabletIds) {
+            builder.hintsTabletIds = ImmutableList.copyOf(hintsTabletIds);
+            return this;
+        }
+
+        public Builder setHasTableHints(boolean hasTableHints) {
+            builder.hasTableHints = hasTableHints;
+            return this;
+        }
+
     }
 }

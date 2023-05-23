@@ -47,6 +47,7 @@ public class StructTypePlanTest extends PlanTestBase {
     @Before
     public void setup() throws Exception {
         connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
+        connectContext.getSessionVariable().setCboPruneSubfield(true);
     }
 
     @Test
@@ -73,7 +74,7 @@ public class StructTypePlanTest extends PlanTestBase {
     @Test
     public void testSubfield() throws Exception {
         String sql = "select c1.a from test";
-        assertVerbosePlanContains(sql, "Pruned type: 2 <-> [STRUCT<a int(11)>]");
+        assertVerbosePlanContains(sql, "[/c1/a]");
 
         connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
         assertVerbosePlanContains(sql, "Pruned type: 2 <-> [STRUCT<a int(11), b ARRAY<STRUCT<a int(11), b int(11)>>>]");
@@ -88,48 +89,43 @@ public class StructTypePlanTest extends PlanTestBase {
     @Test
     public void testSubfieldWindow() throws Exception {
         String sql = "select c3.a, row_number() over (partition by c0 order by c2.a) from test";
-        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]");
-        assertVerbosePlanContains(sql, "Pruned type: 4 <-> [STRUCT<a int(11)>]");
+        assertVerbosePlanContains(sql, "[/c2/a, /c3/a]");
     }
 
     @Test
     public void testSelectArrayStruct() throws Exception {
         String sql = "select c1.b[10].a from test";
-        assertVerbosePlanContains(sql, "Pruned type: 2 <-> [STRUCT<b ARRAY<STRUCT<a int(11)>>>]");
+        assertVerbosePlanContains(sql, "[/c1/b]");
     }
 
     @Test
     public void testJoinOn() throws Exception {
         String sql = "select t1.c0 from test as t1 join test as t2 on t1.c2.a=t2.c2.a";
-        assertVerbosePlanContains(sql, "Pruned type: 7 <-> [STRUCT<a int(11)>]");
+        assertVerbosePlanContains(sql, "[/c2/a]");
     }
 
     @Test
     public void testAggregate() throws Exception {
         String sql = "select sum(c2.a) as t from test";
-        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]");
+        assertVerbosePlanContains(sql, "[/c2/a]");
 
         sql = "select sum(c2.b) as t from test group by c2.a";
         assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11), b int(11)>]");
 
         sql = "select count(c1.b[10].a) from test";
-        assertVerbosePlanContains(sql, "Pruned type: 2 <-> [STRUCT<b ARRAY<STRUCT<a int(11)>>>]");
+        assertVerbosePlanContains(sql, "[/c1/b]");
 
         sql = "select count(c3.c.b) from test group by c1.a, c2.b";
-        assertVerbosePlanContains(sql, " Pruned type: 2 <-> [STRUCT<a int(11)>]\n" +
-                "     Pruned type: 3 <-> [STRUCT<b int(11)>]\n" +
-                "     Pruned type: 4 <-> [STRUCT<c STRUCT<b int(11)>>]");
+        assertVerbosePlanContains(sql, "[/c1/a, /c2/b, /c3/c/b]");
 
         sql = "select sum(c3.c.b + c2.a) as t from test group by c1.a, c2.b";
-        assertVerbosePlanContains(sql, "Pruned type: 2 <-> [STRUCT<a int(11)>]\n" +
-                "     Pruned type: 3 <-> [STRUCT<a int(11), b int(11)>]\n" +
-                "     Pruned type: 4 <-> [STRUCT<c STRUCT<b int(11)>>]");
+        assertVerbosePlanContains(sql, "[/c1/a, /c2/a, /c2/b, /c3/c/b]");
     }
 
     @Test
     public void testSelectPredicate() throws Exception {
         String sql = "select c0 from test where (c0+c2.a)>5";
-        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]");
+        assertVerbosePlanContains(sql, "[/c2/a]");
     }
 
     @Test
@@ -144,10 +140,9 @@ public class StructTypePlanTest extends PlanTestBase {
     @Test
     public void testSubQuery() throws Exception {
         String sql = "select c2.a from (select c1, c2 from test) t";
-        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]");
+        assertVerbosePlanContains(sql, "[/c2/a]");
         sql = "select t1.a, rn from (select c3.c as t1, row_number() over (partition by c0 order by c2.a) as rn from test) as t";
-        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]\n" +
-                "     Pruned type: 4 <-> [STRUCT<c STRUCT<a int(11)>>]");
+        assertVerbosePlanContains(sql, "[/c2/a, /c3/c/a]");
     }
 
     @Test
@@ -177,15 +172,15 @@ public class StructTypePlanTest extends PlanTestBase {
     @Test
     public void testExcept() throws Exception {
         String sql = "select c2.a + 1 from test except select c3.a from test";
-        assertVerbosePlanContains(sql, "Pruned type: 9 <-> [STRUCT<a int(11)>]");
-        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]");
+        assertVerbosePlanContains(sql, "[/c3/a]");
+        assertVerbosePlanContains(sql, "[/c2/a]");
     }
 
     @Test
     public void testIntersect() throws Exception {
         String sql = "select c2.a + 1 from test intersect select c3.a from test";
-        assertVerbosePlanContains(sql, "Pruned type: 9 <-> [STRUCT<a int(11)>]");
-        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]");
+        assertVerbosePlanContains(sql, "[/c3/a]");
+        assertVerbosePlanContains(sql, "[/c2/a]");
     }
 
     @Test
@@ -193,11 +188,11 @@ public class StructTypePlanTest extends PlanTestBase {
         String sql = "select array_map(x->x, [])";
         assertVerbosePlanContains(sql, "[]");
         sql = "select array_map(x->x+1, c3.d) from test";
-        assertVerbosePlanContains(sql, "[STRUCT<d ARRAY<int(11)>>]");
+        assertVerbosePlanContains(sql, "[/c3/d]");
         sql = "select array_sortby(x->x+1, c3.d) from test";
-        assertVerbosePlanContains(sql, "[STRUCT<d ARRAY<int(11)>>]");
+        assertVerbosePlanContains(sql, "[/c3/d]");
         sql = "select array_filter((x,y) -> x<y, c3.d, c3.d) from test";
-        assertVerbosePlanContains(sql, "[STRUCT<d ARRAY<int(11)>>]");
+        assertVerbosePlanContains(sql, "[/c3/d]");
         sql = "select map_values(col_map), map_keys(col_map) from (select map_from_arrays([],[]) as col_map)A";
         assertPlanContains(sql, "[], []");
     }
