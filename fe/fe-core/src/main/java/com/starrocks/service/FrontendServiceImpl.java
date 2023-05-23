@@ -1882,9 +1882,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
+<<<<<<< HEAD
     public TGetTablesInfoResponse getTablesInfo(TGetTablesInfoRequest request) throws
             TException {
 
+=======
+    public TGetTablesInfoResponse getTablesInfo(TGetTablesInfoRequest request) throws TException {
+>>>>>>> 5e7f81393 ([BugFix] Fix & support external table authentication (#23975))
         return InformationSchemaDataSource.generateTablesInfoResponse(request);
     }
 
