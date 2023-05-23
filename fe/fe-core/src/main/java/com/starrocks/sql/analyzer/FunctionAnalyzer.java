@@ -99,6 +99,7 @@ public class FunctionAnalyzer {
                     "map_apply's lambda function can not be null");
             functionCallExpr.setType(functionCallExpr.getChild(0).getChild(0).getType());
         }
+
     }
 
     private static void analyzeBuiltinAggFunction(FunctionCallExpr functionCallExpr) {
@@ -315,6 +316,19 @@ public class FunctionAnalyzer {
             return;
         }
 
+        if (fnName.getFunction().equals(FunctionSet.BITMAP_AGG)) {
+            if (functionCallExpr.getChildren().size() != 1) {
+                throw new SemanticException(fnName + " function could only have one child", functionCallExpr.getPos());
+            }
+            Type inputType = functionCallExpr.getChild(0).getType();
+            if (!inputType.isIntegerType() && !inputType.isBoolean() && !inputType.isLargeIntType()) {
+                throw new SemanticException(
+                        fnName + " function's argument should be of int type or bool type, but was " + inputType,
+                        functionCallExpr.getChild(0).getPos());
+            }
+            return;
+        }
+
         if (fnName.getFunction().equals(FunctionSet.BITMAP_COUNT)
                 || fnName.getFunction().equals(FunctionSet.BITMAP_UNION)
                 || fnName.getFunction().equals(FunctionSet.BITMAP_UNION_COUNT)
@@ -357,15 +371,9 @@ public class FunctionAnalyzer {
                         "percentile_approx requires the first parameter's type is numeric type");
             }
             if (!functionCallExpr.getChild(1).getType().isNumericType() ||
-                    !functionCallExpr.getChild(1).isLiteral()) {
+                    !functionCallExpr.getChild(1).isConstant()) {
                 throw new SemanticException(
                         "percentile_approx requires the second parameter's type is numeric constant type");
-            }
-
-            double rate = ((LiteralExpr) functionCallExpr.getChild(1)).getDoubleValue();
-            if (rate < 0 || rate > 1) {
-                throw new SemanticException(
-                        fnName + " second parameter'value must be between 0 and 1");
             }
 
             if (functionCallExpr.getChildren().size() == 3) {

@@ -16,7 +16,6 @@
 package com.starrocks.sql.optimizer.rule.mv;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateType;
@@ -119,7 +118,7 @@ public class MVProjectAggProjectScanRewrite {
 
         LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
         LogicalOlapScanOperator newScanOperator = builder.withOperator(olapScanOperator)
-                .setColRefToColumnMetaMap(ImmutableMap.copyOf(columnRefOperatorColumnMap)).build();
+                .setColRefToColumnMetaMap(columnRefOperatorColumnMap).build();
         optExpression.setChild(0, OptExpression.create(newScanOperator));
     }
 

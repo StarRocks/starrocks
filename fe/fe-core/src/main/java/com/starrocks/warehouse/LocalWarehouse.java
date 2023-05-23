@@ -26,7 +26,6 @@ import java.util.Map;
 
 // on-premise
 public class LocalWarehouse extends Warehouse {
-
     @SerializedName(value = "cluster")
     Cluster cluster;
 

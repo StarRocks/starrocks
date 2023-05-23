@@ -99,8 +99,20 @@ import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.backup.LakeTableSnapshotInfo;
+import com.starrocks.load.loadv2.BrokerLoadJob;
+import com.starrocks.load.loadv2.InsertLoadJob;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
+import com.starrocks.load.loadv2.LoadJobFinalOperation;
+import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
+import com.starrocks.load.loadv2.MiniLoadTxnCommitAttachment;
+import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
+import com.starrocks.load.routineload.KafkaProgress;
+import com.starrocks.load.routineload.PulsarProgress;
+import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.load.routineload.RoutineLoadProgress;
+import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
@@ -126,6 +138,8 @@ import com.starrocks.system.BackendHbResponse;
 import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.system.HeartbeatResponse;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.LocalWarehouse;
 import com.starrocks.warehouse.Warehouse;
 
@@ -266,6 +280,25 @@ public class GsonUtils {
             .of(Warehouse.class, "clazz")
             .registerSubtype(LocalWarehouse.class, LocalWarehouse.class.getSimpleName());
 
+    public static final RuntimeTypeAdapterFactory<LoadJob> LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(LoadJob.class, "clazz")
+                    .registerSubtype(InsertLoadJob.class, InsertLoadJob.class.getSimpleName())
+                    .registerSubtype(SparkLoadJob.class, SparkLoadJob.class.getSimpleName())
+                    .registerSubtype(BrokerLoadJob.class, BrokerLoadJob.class.getSimpleName());
+
+    public static final RuntimeTypeAdapterFactory<TxnCommitAttachment> TXN_COMMIT_ATTACHMENT_TYPE_RUNTIME_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(TxnCommitAttachment.class, "clazz")
+                    .registerSubtype(InsertTxnCommitAttachment.class, InsertTxnCommitAttachment.class.getSimpleName(), true)
+                    .registerSubtype(LoadJobFinalOperation.class, LoadJobFinalOperation.class.getSimpleName())
+                    .registerSubtype(ManualLoadTxnCommitAttachment.class, ManualLoadTxnCommitAttachment.class.getSimpleName())
+                    .registerSubtype(MiniLoadTxnCommitAttachment.class, MiniLoadTxnCommitAttachment.class.getSimpleName())
+                    .registerSubtype(RLTaskTxnCommitAttachment.class, RLTaskTxnCommitAttachment.class.getSimpleName())
+                    .registerSubtype(StreamLoadTxnCommitAttachment.class, StreamLoadTxnCommitAttachment.class.getSimpleName());
+
+    public static final RuntimeTypeAdapterFactory<RoutineLoadProgress> ROUTINE_LOAD_PROGRESS_TYPE_RUNTIME_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(RoutineLoadProgress.class, "clazz")
+                    .registerSubtype(KafkaProgress.class, KafkaProgress.class.getSimpleName())
+                    .registerSubtype(PulsarProgress.class, PulsarProgress.class.getSimpleName());
 
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
@@ -324,6 +357,9 @@ public class GsonUtils {
             .registerTypeAdapterFactory(P_ENTRY_OBJECT_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(WAREHOUSE_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(TXN_COMMIT_ATTACHMENT_TYPE_RUNTIME_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(ROUTINE_LOAD_PROGRESS_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)

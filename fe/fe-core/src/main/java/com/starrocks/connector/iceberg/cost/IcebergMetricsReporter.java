@@ -22,22 +22,45 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Optional;
 
 public class IcebergMetricsReporter implements MetricsReporter {
-    private final List<MetricsReport> reports = Lists.newArrayList();
     private static final Logger LOG = LogManager.getLogger(IcebergMetricsReporter.class);
+
+    protected static ThreadLocal<IcebergMetricsReporter> threadLocalReporter = new ThreadLocal<>();
+    private final List<MetricsReport> reports = Lists.newArrayList();
+
+    public static IcebergMetricsReporter get() {
+        return threadLocalReporter.get();
+    }
+
+    public static void remove() {
+        threadLocalReporter.remove();
+    }
+
+    public void setThreadLocalReporter() {
+        threadLocalReporter.set(this);
+    }
 
     @Override
     public void report(MetricsReport report) {
-        reports.add(report);
+        IcebergMetricsReporter reporter = get();
+        if (reporter == null) {
+            return;
+        }
+
+        reporter.reports.add(report);
         LOG.debug(String.format("Received metrics report: %s", report));
     }
 
-    public IcebergScanReportWithCounter lastReport() {
-        if (reports.isEmpty()) {
-            return null;
+    public static Optional<IcebergScanReportWithCounter> lastReport() {
+        IcebergMetricsReporter reporter = get();
+        if (reporter == null || reporter.reports.isEmpty()) {
+            return Optional.empty();
         }
-        return new IcebergScanReportWithCounter(reports.size(), (ScanReport) reports.get(reports.size() - 1));
+
+        int reportCount = reporter.reports.size();
+        return Optional.of(new IcebergScanReportWithCounter(reportCount, (ScanReport) reporter.reports.get(reportCount - 1)));
     }
 
     public static class IcebergScanReportWithCounter {

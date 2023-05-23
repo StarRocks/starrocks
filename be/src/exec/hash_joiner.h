@@ -248,6 +248,7 @@ public:
     }
 
     // hash table param.
+    // this function only valid in hash_joiner_builder
     const HashTableParam& hash_table_param() const { return _hash_table_param; }
 
     void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
@@ -273,13 +274,13 @@ public:
     HashJoinProber* new_prober(ObjectPool* pool) { return _hash_join_prober->clone_empty(pool); }
     HashJoinBuilder* new_builder(ObjectPool* pool) { return _hash_join_builder->clone_empty(pool); }
 
-    Status filter_probe_output_chunk(ChunkPtr& chunk) {
+    Status filter_probe_output_chunk(ChunkPtr& chunk, JoinHashTable& hash_table) {
         // Probe in JoinHashMap is divided into probe with other_conjuncts and without other_conjuncts.
         // Probe without other_conjuncts directly labels the hash table as hit, while _process_other_conjunct()
         // only remains the rows which are not hit the hash table before. Therefore, _process_other_conjunct can
         // not be called when other_conjuncts is empty.
         if (chunk && !chunk->is_empty() && !_other_join_conjunct_ctxs.empty()) {
-            RETURN_IF_ERROR(_process_other_conjunct(&chunk));
+            RETURN_IF_ERROR(_process_other_conjunct(&chunk, hash_table));
         }
 
         // TODO(satanson): _conjunct_ctxs shouldn't include local runtime in-filters.
@@ -299,6 +300,8 @@ public:
         }
         return Status::OK();
     }
+
+    const TJoinOp::type& join_type() const { return _join_type; }
 
 private:
     static bool _has_null(const ColumnPtr& column);
@@ -365,10 +368,11 @@ private:
     static void _process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
                                                 bool filter_all, bool hit_all, const Filter& filter);
 
-    Status _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count);
-    Status _process_semi_join_with_other_conjunct(ChunkPtr* chunk);
-    Status _process_right_anti_join_with_other_conjunct(ChunkPtr* chunk);
-    Status _process_other_conjunct(ChunkPtr* chunk);
+    Status _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
+                                                   JoinHashTable& hash_table);
+    Status _process_semi_join_with_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table);
+    Status _process_right_anti_join_with_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table);
+    Status _process_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_table);
     Status _process_where_conjunct(ChunkPtr* chunk);
 
     Status _create_runtime_in_filters(RuntimeState* state);

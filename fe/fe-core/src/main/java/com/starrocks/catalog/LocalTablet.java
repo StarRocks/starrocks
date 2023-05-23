@@ -403,11 +403,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             }
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= 6) {
-            checkedVersion = in.readLong();
-            in.readLong(); // read a version_hash for compatibility
-            isConsistent = in.readBoolean();
-        }
+        checkedVersion = in.readLong();
+        in.readLong(); // read a version_hash for compatibility
+        isConsistent = in.readBoolean();
     }
 
     public static LocalTablet read(DataInput in) throws IOException {
@@ -494,6 +492,41 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     /**
+     * For certain deployment, like k8s pods + pvc, the replica is not lost even the
+     * corresponding backend is detected as dead, because the replica data is persisted
+     * on a pvc which is backed by a remote storage service, such as AWS EBS. And later,
+     * k8s control place will schedule a new pod and attach the pvc to it which will
+     * restore the replica to a {@link ReplicaState#NORMAL} state immediately. But normally
+     * the {@link com.starrocks.clone.TabletScheduler} of Starrocks will start to schedule
+     * {@link TabletStatus#REPLICA_MISSING} tasks and create new replicas in a short time.
+     * After new pod scheduling is completed, {@link com.starrocks.clone.TabletScheduler} has
+     * to delete the redundant healthy replica which cause resource waste and may also affect
+     * the loading process.
+     *
+     * <p>This method checks whether the corresponding backend of tablet replica is dead or not.
+     * Only when the backend has been dead for {@link Config#tablet_sched_be_down_tolerate_time_s}
+     * seconds, will this method returns true.
+     */
+    private boolean isReplicaBackendDead(Backend backend) {
+        long currentTimeMs = System.currentTimeMillis();
+        assert backend != null;
+        return !backend.isAlive() &&
+                (currentTimeMs - backend.getLastUpdateMs() > Config.tablet_sched_be_down_tolerate_time_s * 1000);
+    }
+
+    private boolean isReplicaBackendDropped(Backend backend) {
+        return backend == null;
+    }
+
+    private boolean isReplicaStateAbnormal(Replica replica, Backend backend, Set<String> replicaHostSet) {
+        assert backend != null && replica != null;
+        return replica.getState() == ReplicaState.CLONE
+                || replica.getState() == ReplicaState.DECOMMISSION
+                || replica.isBad()
+                || !replicaHostSet.add(backend.getHost());
+    }
+
+    /**
      * A replica is healthy only if
      * 1. the backend is available
      * 2. replica version is caught up, and last failed version is -1
@@ -510,15 +543,14 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         int alive = 0;
         int aliveAndVersionComplete = 0;
         int stable = 0;
-        int availableInCluster = 0;
 
         Replica needFurtherRepairReplica = null;
         Set<String> hosts = Sets.newHashSet();
         for (Replica replica : replicas) {
             Backend backend = systemInfoService.getBackend(replica.getBackendId());
-            if (backend == null || !backend.isAlive() || replica.getState() == ReplicaState.CLONE
-                    || replica.getState() == ReplicaState.DECOMMISSION
-                    || replica.isBad() || !hosts.add(backend.getHost())) {
+            if (isReplicaBackendDropped(backend)
+                    || isReplicaBackendDead(backend)
+                    || isReplicaStateAbnormal(replica, backend, hosts)) {
                 // this replica is not alive,
                 // or if this replica is on same host with another replica, we also treat it as 'dead',
                 // so that Tablet Scheduler will create a new replica on different host.
@@ -537,13 +569,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             }
             aliveAndVersionComplete++;
 
-            if (!backend.isAvailable()) {
+            if (backend.isDecommissioned()) {
                 // this replica is alive, version complete, but backend is not available
                 continue;
             }
             stable++;
-
-            availableInCluster++;
         }
 
         // 1. alive replicas are not enough

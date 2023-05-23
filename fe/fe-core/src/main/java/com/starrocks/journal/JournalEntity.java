@@ -59,6 +59,7 @@ import com.starrocks.load.DeleteInfo;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.LoadErrorHub;
 import com.starrocks.load.MultiDeleteInfo;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
@@ -78,6 +79,7 @@ import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
+import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.CreateUserInfo;
@@ -116,6 +118,7 @@ import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
@@ -129,9 +132,9 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.AnalyzeJob;
-import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -206,6 +209,11 @@ public class JournalEntity implements Writable {
             case OperationType.OP_CREATE_DB: {
                 data = new Database();
                 ((Database) data).readFields(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_DB_V2: {
+                data = CreateDbInfo.read(in);
                 isRead = true;
                 break;
             }
@@ -538,8 +546,18 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_CREATE_LOAD_JOB_V2: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), LoadJob.class);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_END_LOAD_JOB: {
                 data = LoadJobFinalOperation.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_END_LOAD_JOB_V2: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), LoadJobFinalOperation.class);
                 isRead = true;
                 break;
             }
@@ -680,12 +698,12 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_ADD_ANALYZE_STATUS: {
-                data = AnalyzeStatus.read(in);
+                data = NativeAnalyzeStatus.read(in);
                 isRead = true;
                 break;
             }
             case OperationType.OP_REMOVE_ANALYZE_STATUS: {
-                data = AnalyzeStatus.read(in);
+                data = NativeAnalyzeStatus.read(in);
                 isRead = true;
                 break;
             }

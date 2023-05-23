@@ -119,6 +119,12 @@ public:
     size_t field_index(const string& field_name) const;
     std::string schema_debug_string() const;
     std::string debug_string() const;
+    bool enable_shortcut_compaction() const;
+
+    // Load incremental rowsets to the tablet in DataDir#load.
+    Status load_rowset(const RowsetSharedPtr& rowset);
+    // finish loading rowsets
+    Status finish_load_rowsets();
 
     // operation in rowsets
     Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
@@ -270,7 +276,9 @@ public:
 
     Status support_binlog();
 
-    void set_binlog_config(TBinlogConfig binlog_config) { _tablet_meta->set_binlog_config(binlog_config); }
+    // This will modify the TabletMeta, and save_meta() will be called outside
+    // to persist it. See run_update_meta_info_task() in agent_task.cpp
+    void update_binlog_config(const BinlogConfig& binlog_config);
 
     BinlogManager* binlog_manager() { return _binlog_manager == nullptr ? nullptr : _binlog_manager.get(); }
 
@@ -312,7 +320,9 @@ private:
     StatusOr<bool> _prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version);
     void _commit_binlog(int64_t version);
     void _abort_binlog(const RowsetSharedPtr& rowset, int64_t version);
-    void _delete_unused_binlog();
+    // check whether there is useless binlog, and update the in-memory TabletMeta to the state after
+    // those binlog is deleted. Return true the meta has been changed, and needs to be persisted
+    bool _check_useless_binlog_and_update_meta(int64_t current_second);
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
@@ -425,6 +435,11 @@ inline size_t Tablet::next_unique_id() const {
 
 inline size_t Tablet::field_index(const string& field_name) const {
     return _tablet_meta->tablet_schema().field_index(field_name);
+}
+
+inline bool Tablet::enable_shortcut_compaction() const {
+    std::shared_lock rdlock(_meta_lock);
+    return _tablet_meta->enable_shortcut_compaction();
 }
 
 } // namespace starrocks

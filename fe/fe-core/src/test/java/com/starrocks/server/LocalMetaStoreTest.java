@@ -24,6 +24,9 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.system.SystemId;
+import com.starrocks.catalog.system.information.InfoSchemaDb;
+import com.starrocks.catalog.system.starrocks.StarRocksDb;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -64,6 +67,8 @@ public class LocalMetaStoreTest {
                 .withTable(
                         "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
                                 " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+
+        UtFrameUtils.PseudoImage.setUpImageVersion();
     }
 
     @Test
@@ -127,5 +132,21 @@ public class LocalMetaStoreTest {
 
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         localMetastore.getPartitionIdToStorageMediumMap();
+    }
+
+    @Test
+    public void testLoadClusterV2() throws Exception {
+        LocalMetastore localMetaStore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
+                GlobalStateMgr.getCurrentRecycleBin(),
+                GlobalStateMgr.getCurrentColocateIndex(),
+                GlobalStateMgr.getCurrentSystemInfo());
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+
+        localMetaStore.loadClusterV2(image.getDataInputStream(), 0);
+        Assert.assertNotNull(localMetaStore.getDb(SystemId.INFORMATION_SCHEMA_DB_ID));
+        Assert.assertNotNull(localMetaStore.getDb(InfoSchemaDb.DATABASE_NAME));
+        Assert.assertNotNull(localMetaStore.getDb(SystemId.STARROCKS_DB_ID));
+        Assert.assertNotNull(localMetaStore.getDb(StarRocksDb.DATABASE_NAME));
     }
 }

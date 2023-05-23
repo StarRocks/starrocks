@@ -50,12 +50,15 @@ import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PStringPair;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -177,25 +180,44 @@ public class KafkaUtil {
         private PProxyResult sendProxyRequest(PProxyRequest request) throws UserException {
             TNetworkAddress address = new TNetworkAddress();
             try {
-                List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
-                if (backendIds.isEmpty()) {
-                    throw new LoadException("Failed to send proxy request. No alive backends");
+                // TODO: need to refactor after be split into cn + dn
+                List<Long> nodeIds = new ArrayList<>();
+                if ((RunMode.getCurrentRunMode() == RunMode.SHARED_DATA)) {
+                    Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+                    nodeIds = warehouse.getAnyAvailableCluster().getComputeNodeIds();
+                    if (nodeIds.isEmpty()) {
+                        throw new LoadException("Failed to send proxy request. No alive backends or computeNodes");
+                    }
+                } else {
+                    nodeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+                    if (nodeIds.isEmpty()) {
+                        throw new LoadException("Failed to send proxy request. No alive backends");
+                    }
                 }
-                Collections.shuffle(backendIds);
-                Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
+
+                Collections.shuffle(nodeIds);
+
+                ComputeNode be = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
                 address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info
-                request.timeout = Config.routine_load_kafka_timeout_second;
-                Future<PProxyResult> future = BackendServiceClient.getInstance().getInfo(address, request);
-                PProxyResult result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
-                TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
-                if (code != TStatusCode.OK) {
-                    LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
-                    throw new UserException(
-                            "failed to send proxy request to " + address + " err " + result.status.errorMsgs);
-                } else {
-                    return result;
+                int retryTimes = 0;
+                while (true) {
+                    request.timeout = Config.routine_load_kafka_timeout_second;
+                    Future<PProxyResult> future = BackendServiceClient.getInstance().getInfo(address, request);
+                    PProxyResult result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
+                    TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
+                    if (code != TStatusCode.OK) {
+                        LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
+                        // When getting kafka info timed out, we tried again three times.
+                        if (++retryTimes > 3 || (retryTimes + 1) * Config.routine_load_kafka_timeout_second >
+                                                                        Config.routine_load_task_timeout_second) {
+                            throw new UserException(
+                                    "failed to send proxy request to " + address + " err " + result.status.errorMsgs);
+                        }
+                    } else {
+                        return result;
+                    }
                 }
             } catch (InterruptedException ie) {
                 LOG.warn("got interrupted exception when sending proxy request to " + address);

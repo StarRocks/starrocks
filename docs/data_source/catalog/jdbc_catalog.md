@@ -10,7 +10,8 @@ JDBC catalogs currently support MySQL and PostgreSQL.
 
 ## Prerequisites
 
-The FEs and BEs in your StarRocks cluster can download the JDBC driver from the download URL specified by the `driver_url` parameter.
+- The FEs and BEs in your StarRocks cluster can download the JDBC driver from the download URL specified by the `driver_url` parameter.
+- `JAVA_HOME` in the **$BE_HOME/bin/start_be.sh** file on each BE node is properly configured as a path in the JDK environment instead of a path in the JRE environment. For example, you can configure `export JAVA_HOME = <JDK_absolute_path>`.
 
 ## Create a JDBC catalog
 
@@ -137,3 +138,9 @@ DROP Catalog jdbc0;
    ```SQL
    SELECT * FROM <table_name>;
    ```
+
+## FAQ
+
+What do I do if an error suggesting "Malformed database URL, failed to parse the main URL sections" is thrown?
+
+If you encounter such an error, the URI that you passed in `jdbc_uri` is invalid. Check the URI that you pass and make sure it is valid. For more information, see the parameter descriptions in the "[PROPERTIES](#properties)" section of this topic.

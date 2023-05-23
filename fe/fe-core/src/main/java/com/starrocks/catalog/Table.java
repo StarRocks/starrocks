@@ -42,7 +42,6 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.catalog.system.SystemTable;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeMaterializedView;
@@ -321,6 +320,17 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return isOlapTable() || isCloudNativeTable();
     }
 
+    public boolean isExprPartitionTable() {
+        if (this instanceof OlapTable) {
+            OlapTable olapTable = (OlapTable) this;
+            if (olapTable.getPartitionInfo().getType() == PartitionType.EXPR_RANGE_V2) {
+                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+                return partitionInfo instanceof ExpressionRangePartitionInfoV2;
+            }
+        }
+        return false;
+    }
+
     public List<Column> getFullSchema() {
         return fullSchema;
     }
@@ -447,18 +457,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             this.nameToColumn.put(column.getName(), column);
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_63) {
-            comment = Text.readString(in);
-        } else {
-            comment = "";
-        }
+        comment = Text.readString(in);
 
         // read create time
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_64) {
-            this.createTime = in.readLong();
-        } else {
-            this.createTime = -1L;
-        }
+        this.createTime = in.readLong();
     }
 
     @Override

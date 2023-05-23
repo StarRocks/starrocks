@@ -17,6 +17,7 @@
 #include "column/schema.h"
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/pk_tablet_writer.h"
@@ -78,8 +79,12 @@ Status Tablet::delete_tablet_metadata_lock(int64_t version, int64_t expire_time)
 StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, uint32_t max_rows_per_segment) {
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        // TODO: support vertical primary key writer
-        return std::make_unique<PkTabletWriter>(*this, tablet_schema);
+        if (type == kHorizontal) {
+            return std::make_unique<HorizontalPkTabletWriter>(*this, tablet_schema);
+        } else {
+            DCHECK(type == kVertical);
+            return std::make_unique<VerticalPkTabletWriter>(*this, tablet_schema, max_rows_per_segment);
+        }
     } else {
         if (type == kHorizontal) {
             return std::make_unique<HorizontalGeneralTabletWriter>(*this, tablet_schema);
@@ -95,7 +100,7 @@ StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, Sche
 }
 
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
-    return _mgr->get_tablet_schema(_id);
+    return _mgr->get_tablet_schema(_id, &_version_hint);
 }
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
@@ -162,8 +167,8 @@ std::string Tablet::del_location(std::string_view del_name) const {
     return _mgr->del_location(_id, del_name);
 }
 
-std::string Tablet::delvec_location(int64_t version) const {
-    return _mgr->delvec_location(_id, version);
+std::string Tablet::delvec_location(std::string_view delvec_name) const {
+    return _mgr->delvec_location(_id, delvec_name);
 }
 
 std::string Tablet::root_location() const {

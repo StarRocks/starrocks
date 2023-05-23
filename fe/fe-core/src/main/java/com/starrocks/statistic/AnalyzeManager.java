@@ -133,6 +133,10 @@ public class AnalyzeManager implements Writable {
         analyzeStatusMap.put(status.getId(), status);
     }
 
+    public void addOrUpdateAnalyzeStatus(AnalyzeStatus status) {
+        analyzeStatusMap.put(status.getId(), status);
+    }
+
     public void replayRemoveAnalyzeStatus(AnalyzeStatus status) {
         analyzeStatusMap.remove(status.getId());
     }
@@ -158,7 +162,8 @@ public class AnalyzeManager implements Writable {
     public void dropAnalyzeStatus(Long tableId) {
         List<AnalyzeStatus> expireList = Lists.newArrayList();
         for (AnalyzeStatus analyzeStatus : analyzeStatusMap.values()) {
-            if (analyzeStatus.getTableId() == tableId) {
+            if (analyzeStatus.isNative() &&
+                    ((NativeAnalyzeStatus) analyzeStatus).getTableId() == tableId) {
                 expireList.add(analyzeStatus);
             }
         }
@@ -166,6 +171,17 @@ public class AnalyzeManager implements Writable {
         for (AnalyzeStatus status : expireList) {
             GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeStatus(status);
         }
+    }
+
+    public void dropExternalStats(String tableUUID) {
+        List<AnalyzeStatus> expireList = analyzeStatusMap.values().stream().
+                filter(status -> status instanceof ExternalAnalyzeStatus).
+                filter(status -> ((ExternalAnalyzeStatus) status).getTableUUID().equals(tableUUID)).
+                collect(Collectors.toList());
+
+        expireList.forEach(status -> analyzeStatusMap.remove(status.getId()));
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.dropTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
     }
 
     public void addBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
@@ -497,8 +513,8 @@ public class AnalyzeManager implements Writable {
                 }
             }
 
-            if (null != data.status) {
-                for (AnalyzeStatus status : data.status) {
+            if (null != data.nativeStatus) {
+                for (AnalyzeStatus status : data.nativeStatus) {
                     replayAddAnalyzeStatus(status);
                 }
             }
@@ -522,7 +538,9 @@ public class AnalyzeManager implements Writable {
         // save history
         SerializeData data = new SerializeData();
         data.jobs = getAllAnalyzeJobList();
-        data.status = new ArrayList<>(getAnalyzeStatusMap().values());
+        data.nativeStatus = new ArrayList<>(getAnalyzeStatusMap().values().stream().
+                filter(AnalyzeStatus::isNative).
+                map(status -> (NativeAnalyzeStatus) status).collect(Collectors.toSet()));
         data.basicStatsMeta = new ArrayList<>(getBasicStatsMetaMap().values());
         data.histogramStatsMeta = new ArrayList<>(getHistogramStatsMetaMap().values());
 
@@ -550,7 +568,7 @@ public class AnalyzeManager implements Writable {
         public List<AnalyzeJob> jobs;
 
         @SerializedName("analyzeStatus")
-        public List<AnalyzeStatus> status;
+        public List<NativeAnalyzeStatus> nativeStatus;
 
         @SerializedName("basicStatsMeta")
         public List<BasicStatsMeta> basicStatsMeta;

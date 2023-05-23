@@ -39,7 +39,7 @@
 namespace starrocks::pipeline {
 Status SpillableHashJoinProbeOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(HashJoinProbeOperator::prepare(state));
-    _need_post_probe = has_post_probe(_join_prober->hash_table_param().join_type);
+    _need_post_probe = has_post_probe(_join_prober->join_type());
     _probe_spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get()));
     metrics.hash_partitions = ADD_COUNTER(_unique_metrics.get(), "SpillPartitions", TUnit::UNIT);
     RETURN_IF_ERROR(_probe_spiller->prepare(state));
@@ -197,7 +197,7 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
                                                                    const std::vector<uint32_t>& selection, int32_t from,
                                                                    int32_t size) {
         // nothing to do for empty partition
-        if (could_short_circuit(_join_prober->hash_table_param().join_type)) {
+        if (could_short_circuit(_join_prober->join_type())) {
             // For left semi join and inner join we can just skip the empty partition
             auto build_partition_iter = _pid_to_build_partition.find(probe_partition->partition_id);
             if (build_partition_iter != _pid_to_build_partition.end()) {
@@ -265,11 +265,13 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(RuntimeState* 
 Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeState* state) {
     auto spill_readers = _join_builder->spiller()->get_partition_spill_readers(_processing_partitions);
     _latch.reset(_processing_partitions.size());
+    int32_t driver_id = CurrentThread::current().get_driver_id();
     auto query_ctx = state->query_ctx()->weak_from_this();
     for (size_t i = 0; i < _processing_partitions.size(); ++i) {
         std::shared_ptr<spill::SpillerReader> reader = std::move(spill_readers[i]);
-        auto task = [this, state, reader, i, query_ctx]() {
-            if (query_ctx.lock()) {
+        auto task = [this, state, reader, i, query_ctx, driver_id]() {
+            if (auto acquired = query_ctx.lock()) {
+                SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
                 _update_status(_load_partition_build_side(state, reader, i));
                 _latch.count_down();
             }
@@ -472,7 +474,9 @@ bool SpillableHashJoinProbeOperator::_all_loaded_partition_data_ready() {
 }
 
 bool SpillableHashJoinProbeOperator::_all_partition_finished() const {
-    return _processed_partitions.size() == _build_partitions.size();
+    // In some cases has_output may be skipped.
+    // So we call build_partitions.empty() first to make sure the parition loads
+    return !_build_partitions.empty() && _processed_partitions.size() == _build_partitions.size();
 }
 
 Status SpillableHashJoinProbeOperatorFactory::prepare(RuntimeState* state) {

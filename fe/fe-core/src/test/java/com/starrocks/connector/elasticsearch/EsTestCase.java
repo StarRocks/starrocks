@@ -40,8 +40,6 @@ import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.BeforeClass;
 
@@ -69,9 +67,6 @@ public class EsTestCase {
         fakeEditLog = new FakeEditLog();
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
         masterGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_40);
-        metaContext.setThreadLocalInfo();
         // masterGlobalStateMgr.setJournalVersion(FeMetaVersion.VERSION_40);
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
     }
@@ -92,10 +87,10 @@ public class EsTestCase {
 
     public EsTable fakeEsTable(String table, String index, String type, List<Column> columns) throws DdlException {
         Map<String, String> props = new HashMap<>();
-        props.put(EsTable.HOSTS, "127.0.0.1:8200");
-        props.put(EsTable.INDEX, index);
-        props.put(EsTable.TYPE, type);
-        props.put(EsTable.VERSION, "6.5.3");
+        props.put(EsTable.KEY_HOSTS, "127.0.0.1:8200");
+        props.put(EsTable.KEY_INDEX, index);
+        props.put(EsTable.KEY_TYPE, type);
+        props.put(EsTable.KEY_VERSION, "6.5.3");
         return new EsTable(new Random().nextLong(), table, columns, props, null);
 
     }

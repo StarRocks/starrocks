@@ -35,9 +35,7 @@
 package com.starrocks.persist;
 
 import com.google.common.base.Objects;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
-import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -350,21 +348,16 @@ public class ReplicaPersistInfo implements Writable {
         in.readLong(); // read a version_hash for compatibility
         dataSize = in.readLong();
         rowCount = in.readLong();
-        opType = ReplicaOperationType.DEFAULT_OP;
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
-            opType = ReplicaOperationType.findByValue(in.readInt());
-            if (opType == null) {
-                throw new IOException("could not parse operation type from replica info");
-            }
-            lastFailedVersion = in.readLong();
-            minReadableVersion = in.readLong(); // originally used as version_hash, now reused as minReadableVersion
-            lastSuccessVersion = in.readLong();
-            in.readLong(); // read a version_hash for compatibility
+        opType = ReplicaOperationType.findByValue(in.readInt());
+        if (opType == null) {
+            throw new IOException("could not parse operation type from replica info");
         }
+        lastFailedVersion = in.readLong();
+        minReadableVersion = in.readLong(); // originally used as version_hash, now reused as minReadableVersion
+        lastSuccessVersion = in.readLong();
+        in.readLong(); // read a version_hash for compatibility
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_48) {
-            schemaHash = in.readInt();
-        }
+        schemaHash = in.readInt();
     }
 
     @Override

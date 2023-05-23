@@ -178,7 +178,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.getDefaultCatalog;
-import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.prependCatalogToDbName;
 
 /**
  * Modified from apache hive  org.apache.hadoop.hive.metastore.HiveMetaStoreClient.java
@@ -951,7 +950,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         }
         boolean success = false;
         try {
-            drop_table_with_environment_context(catName, dbname, name, deleteData, envContext);
+            drop_table_with_environment_context(dbname, name, deleteData, envContext);
             if (hook != null) {
                 hook.commitDropTable(tbl, deleteData || (envContext != null && "TRUE".equals(envContext.getProperties().get("ifPurge"))));
             }
@@ -1336,9 +1335,9 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         client.create_table_with_environment_context(tbl, envContext);
     }
 
-    protected void drop_table_with_environment_context(String catName, String dbname, String name,
+    protected void drop_table_with_environment_context(String dbname, String name,
                                                        boolean deleteData, EnvironmentContext envContext) throws TException {
-        client.drop_table_with_environment_context(prependCatalogToDbName(catName, dbname, conf),
+        client.drop_table_with_environment_context(dbname,
                 name, deleteData, envContext);
     }
 
@@ -1377,8 +1376,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
             hook.preAlterTable(table, environmentContext);
         }
 
-        client.alter_table_with_environment_context(prependCatalogToDbName(databaseName, conf),
-                tblName, table, environmentContext);
+        client.alter_table_with_environment_context(databaseName, tblName, table, environmentContext);
     }
 
     @Override
@@ -1449,7 +1447,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                 }
             }
         }
-        client.drop_database(prependCatalogToDbName(catalogName, dbName, conf), deleteData, cascade);
+        client.drop_database(dbName, deleteData, cascade);
     }
 
     @Override

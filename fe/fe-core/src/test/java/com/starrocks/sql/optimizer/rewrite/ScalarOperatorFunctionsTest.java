@@ -1128,6 +1128,57 @@ public class ScalarOperatorFunctionsTest {
                 ConstantOperator.createInt(0), ConstantOperator.createInt(2)).getVarchar());
         assertEquals("", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
                 ConstantOperator.createInt(5), ConstantOperator.createInt(2)).getVarchar());
+
+        assertEquals("starrocks", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrockscluster", Type.VARCHAR),
+                new ConstantOperator(1, Type.INT),
+                new ConstantOperator(9, Type.INT)).getVarchar());
+
+        assertEquals("rocks", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(-5, Type.INT),
+                new ConstantOperator(5, Type.INT)).getVarchar());
+
+        assertEquals("s", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(-1, Type.INT),
+                new ConstantOperator(8, Type.INT)).getVarchar());
+
+        assertEquals("", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(-100, Type.INT),
+                new ConstantOperator(5, Type.INT)).getVarchar());
+
+        assertEquals("", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(0, Type.INT),
+                new ConstantOperator(5, Type.INT)).getVarchar());
+
+        assertEquals("", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(-1, Type.INT),
+                new ConstantOperator(0, Type.INT)).getVarchar());
+
+        assertEquals("apple", ScalarOperatorFunctions.substring(
+                new ConstantOperator("apple", Type.VARCHAR),
+                new ConstantOperator(-5, Type.INT),
+                new ConstantOperator(5, Type.INT)).getVarchar());
+
+        assertEquals("", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(0, Type.INT)).getVarchar());
+
+        assertEquals("starrocks", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(1, Type.INT)).getVarchar());
+
+        assertEquals("s", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(9, Type.INT)).getVarchar());
+
+        assertEquals("", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(10, Type.INT)).getVarchar());
     }
 
 }

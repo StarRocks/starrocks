@@ -220,6 +220,10 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/compaction/submit_repair", submit_repair_action);
     _http_handlers.emplace_back(submit_repair_action);
 
+    auto* show_running_action = new CompactionAction(CompactionActionType::SHOW_RUNNING_TASK);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/compaction/running", show_running_action);
+    _http_handlers.emplace_back(show_running_action);
+
     auto* update_config_action = new UpdateConfigAction(_env);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/update_config", update_config_action);
     _http_handlers.emplace_back(update_config_action);

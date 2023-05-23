@@ -43,4 +43,90 @@ TEST(TestDeltaColumnGroup, testGet) {
     ASSERT_TRUE(-1 == dcg.get_column_idx(1000));
 };
 
+TEST(TestDeltaColumnGroup, testGC) {
+    // test1
+    {
+        // 1 -> {1, 2, 3}
+        // 2 -> {2, 3, 4}
+        // 3 -> {3, 4, 5}
+        // ...
+        std::vector<std::pair<TabletSegmentId, int64_t>> garbage_dcgs;
+        DeltaColumnGroupList dcgs;
+        for (uint32_t i = 1; i <= 20; i++) {
+            DeltaColumnGroup dcg;
+            dcg.init((int64_t)i, {i, i + 1, i + 2}, "abc.cols");
+            dcgs.push_back(std::make_shared<DeltaColumnGroup>(dcg));
+        }
+        DeltaColumnGroupListHelper::garbage_collection(dcgs, TabletSegmentId(100, 100), 10, garbage_dcgs);
+        ASSERT_TRUE(dcgs.size() == 20);
+        ASSERT_TRUE(garbage_dcgs.size() == 0);
+        DeltaColumnGroupListHelper::garbage_collection(dcgs, TabletSegmentId(100, 100), 20, garbage_dcgs);
+        ASSERT_TRUE(dcgs.size() == 20);
+        ASSERT_TRUE(garbage_dcgs.size() == 0);
+    };
+    // test2
+    {
+        // 1 -> {1, 2, 3}
+        // 2 -> {1, 2, 3}
+        // 3 -> {1, 2, 3}
+        // ...
+        std::vector<std::pair<TabletSegmentId, int64_t>> garbage_dcgs;
+        DeltaColumnGroupList dcgs;
+        for (uint32_t i = 1; i <= 20; i++) {
+            DeltaColumnGroup dcg;
+            dcg.init((int64_t)i, {1, 2, 3}, "abc.cols");
+            dcgs.push_back(std::make_shared<DeltaColumnGroup>(dcg));
+        }
+        DeltaColumnGroupListHelper::garbage_collection(dcgs, TabletSegmentId(100, 100), 10, garbage_dcgs);
+        ASSERT_TRUE(dcgs.size() == 11);
+        ASSERT_TRUE(garbage_dcgs.size() == 9);
+        DeltaColumnGroupListHelper::garbage_collection(dcgs, TabletSegmentId(100, 100), 20, garbage_dcgs);
+        ASSERT_TRUE(dcgs.size() == 1);
+        ASSERT_TRUE(garbage_dcgs.size() == 19);
+    };
+    // test3
+    {
+        // 1 -> {2, 3, 4}
+        // 2 -> {1, 2, 3}
+        // 3 -> {2, 3, 4}
+        // ...
+        std::vector<std::pair<TabletSegmentId, int64_t>> garbage_dcgs;
+        DeltaColumnGroupList dcgs;
+        for (uint32_t i = 1; i <= 20; i++) {
+            DeltaColumnGroup dcg;
+            uint32_t shift = i % 2;
+            dcg.init((int64_t)i, {1 + shift, 2 + shift, 3 + shift}, "abc.cols");
+            dcgs.push_back(std::make_shared<DeltaColumnGroup>(dcg));
+        }
+        DeltaColumnGroupListHelper::garbage_collection(dcgs, TabletSegmentId(100, 100), 10, garbage_dcgs);
+        ASSERT_TRUE(dcgs.size() == 12);
+        ASSERT_TRUE(garbage_dcgs.size() == 8);
+        DeltaColumnGroupListHelper::garbage_collection(dcgs, TabletSegmentId(100, 100), 20, garbage_dcgs);
+        ASSERT_TRUE(dcgs.size() == 2);
+        ASSERT_TRUE(garbage_dcgs.size() == 18);
+    };
+    // test4
+    {
+        // 1 -> {2, 3, 4}
+        // 2 -> {3, 4, 5}
+        // 3 -> {1, 2, 3}
+        // 4 -> {2, 3, 4}
+        // ...
+        std::vector<std::pair<TabletSegmentId, int64_t>> garbage_dcgs;
+        DeltaColumnGroupList dcgs;
+        for (uint32_t i = 1; i <= 20; i++) {
+            DeltaColumnGroup dcg;
+            uint32_t shift = i % 3;
+            dcg.init((int64_t)i, {1 + shift, 2 + shift, 3 + shift}, "abc.cols");
+            dcgs.push_back(std::make_shared<DeltaColumnGroup>(dcg));
+        }
+        DeltaColumnGroupListHelper::garbage_collection(dcgs, TabletSegmentId(100, 100), 10, garbage_dcgs);
+        ASSERT_TRUE(dcgs.size() == 13);
+        ASSERT_TRUE(garbage_dcgs.size() == 7);
+        DeltaColumnGroupListHelper::garbage_collection(dcgs, TabletSegmentId(100, 100), 20, garbage_dcgs);
+        ASSERT_TRUE(dcgs.size() == 3);
+        ASSERT_TRUE(garbage_dcgs.size() == 17);
+    };
+};
+
 } // namespace starrocks

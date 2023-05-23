@@ -8,17 +8,34 @@
   + [Architecture](./introduction/Architecture.md)
   + [Features](./introduction/Features.md)
 + Quick Start
-  + Deploy
-    + [Deploy StarRocks in Linux](./quick_start/Deploy.md)
-    + [Deploy StarRocks with Docker](./quick_start/deploy_with_docker.md)
+  + [Deploy StarRocks with Docker](./quick_start/deploy_with_docker.md)
   + [Create a table](./quick_start/Create_table.md)
   + [Load and query data](./quick_start/Import_and_query.md)
++ Deployment
+  + [Deployment overview](./deployment/deployment_overview.md)
+  + Prepare
+    + [Deployment prerequisites](./deployment/deployment_prerequisites.md)
+    + [Plan StarRocks cluster](./deployment/plan_cluster.md)
+    + [Check environment configurations](./deployment/environment_configurations.md)
+    + [Prepare deployment files](./deployment/prepare_deployment_files.md)
+  + Deploy
+    + Deploy classic StarRocks
+      + [Deploy StarRocks manually](./deployment/deploy_manually.md)
+      + Deploy on Kubernetes
+        + [Deploy StarRocks with Operator](./deployment/sr_operator.md)
+        + [Deploy StarRocks with Helm](./deployment/helm.md)
+      + [Deploy StarRocks on AWS](./deployment/starrocks_on_aws.md)
+    + [Deploy and use shared-data StarRocks](./deployment/deploy_shared_data.md)
+  + Manage
+    + [Post-deployment setup](./deployment/post_deployment_setup.md)
+    + [Upgrade StarRocks](./deployment/upgrade.md)
+    + [Downgrade StarRocks](./deployment/downgrade.md)
 + Table Design
   + [Understand StarRocks table design](./table_design/StarRocks_table_design.md)
   + Table types
     + [Overview of table types](./table_design/table_types/table_types.md)
     + [Duplicate Key table](./table_design/table_types/duplicate_key_table.md)
-    + [Aggragete table](./table_design/table_types/aggregate_table.md)
+    + [Aggregate table](./table_design/table_types/aggregate_table.md)
     + [Unique Key table](./table_design/table_types/unique_key_table.md)
     + [Primary Key table](./table_design/table_types/primary_key_table.md)
   + Data distribution
@@ -57,7 +74,7 @@
     + [Query external data](./data_source/catalog/query_external_data.md)
   + [External table](./data_source/External_table.md)
   + [File external table](./data_source/file_external_table.md)
-  + [Local Cache](./data_source/Block_cache.md)
+  + [Data Cache](./data_source/data_cache.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
   + [Synchronous materialized view](./using_starrocks/Materialized_view-single_table.md)
@@ -86,21 +103,12 @@
     + [DBeaver](./integrations/IDE_integrations/DBeaver.md)
   + [Other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
-  + Deployment
-    + [Deploy a shared-data StarRocks cluster](./administration/deploy_shared_data.md)
-    + [Deploy StarRocks with StarGo](./administration/stargo.md)
-    + Deploy StarRocks on Kubernetes
-      + [Deploy StarRocks with Operator](./administration/sr_operator.md)
-      + [Deploy StarRocks with Helm](./administration/helm.md)
-    + [Deploy CN](./administration/deploy_cn.md)
-    + [Deploy FE cluster with high availability](./administration/Deployment.md)
   + Management
     + [Scale in and out](./administration/Scale_up_down.md)
     + [Backup and restore](./administration/Backup_and_restore.md)
     + [Configuration](./administration/Configuration.md)
     + [Monitor and alert](./administration/Monitor_and_Alert.md)
     + [Manage audit logs within StarRocks via Audit Loader](./administration/audit_loader.md)
-    + [Manage a cluster](./administration/Cluster_administration.md)
     + [Enable FQDN access](./administration/enable_fqdn.md)
     + [Configure a time zone](./administration/timezone.md)
     + [Information Schema](./administration/information_schema.md)
@@ -296,9 +304,11 @@
         + [DATETIME](./sql-reference/sql-statements/data-types/DATETIME.md)
       + Others
         + [ARRAY](./sql-reference/sql-statements/data-types/Array.md)
-        + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
+        + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
+        + [MAP](./sql-reference/sql-statements/data-types/Map.md)
+
     + [Keywords](./sql-reference/sql-statements/keywords.md)
     + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
   + Function Reference
@@ -310,6 +320,7 @@
       + [any_value](./sql-reference/sql-functions/aggregate-functions/any_value.md)
       + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
+      + [bitmap_agg](./sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
       + [grouping](./sql-reference/sql-functions/aggregate-functions/grouping.md)
       + [grouping_id](./sql-reference/sql-functions/aggregate-functions/grouping_id.md)
@@ -334,6 +345,8 @@
       + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
     + Array Functions
+      + [cardinality](./sql-reference/sql-functions/array-functions/cardinality.md)
+      + [element_at](./sql-reference/sql-functions/array-functions/element_at.md)
       + [array_agg](./sql-reference/sql-functions/array-functions/array_agg.md)
       + [array_append](./sql-reference/sql-functions/array-functions/array_append.md)
       + [array_avg](./sql-reference/sql-functions/array-functions/array_avg.md)
@@ -370,6 +383,7 @@
       + [bit_shift_right_logical](./sql-reference/sql-functions/bit-functions/bit_shift_right_logical.md)
     + Bitmap Functions
       + [base64_to_bitmap](./sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
+      + [bitmap_agg](./sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](./sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
       + [bitmap_contains](./sql-reference/sql-functions/bitmap-functions/bitmap_contains.md)
@@ -413,7 +427,11 @@
         + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
     + Map Functions
+      + [cardinality](./sql-reference/sql-functions/map-functions/cardinality.md)
+      + [distinct_map_keys](./sql-reference/sql-functions/map-functions/distinct_map_keys.md)
+      + [element_at](./sql-reference/sql-functions/map-functions/element_at.md)
       + [map_apply](./sql-reference/sql-functions/map-functions/map_apply.md)
+      + [map_concat](./sql-reference/sql-functions/map-functions/map_concat.md)
       + [map_filter](./sql-reference/sql-functions/map-functions/map_filter.md)
       + [map_from_arrays](./sql-reference/sql-functions/map-functions/map_from_arrays.md)
       + [map_keys](./sql-reference/sql-functions/map-functions/map_keys.md)
@@ -601,6 +619,7 @@
       + [starts_with](./sql-reference/sql-functions/string-functions/starts_with.md)
       + [strleft](./sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](./sql-reference/sql-functions/string-functions/strright.md)
+      + [str_to_map](./sql-reference/sql-functions/string-functions/str_to_map.md)
       + [substring](./sql-reference/sql-functions/string-functions/substring.md)
       + [trim](./sql-reference/sql-functions/string-functions/trim.md)
       + [ucase](./sql-reference/sql-functions/string-functions/ucase.md)
@@ -650,7 +669,7 @@
       + [DataX](./faq/loading/DataX_faq.md)
     + [Data Unloading](./faq/Exporting_faq.md)
   + [SQL](./faq/Sql_faq.md)
-  + [Query Dump](./faq/Dump_query.md)
+  + [query_dump](./faq/Dump_query.md)
   + [Other FAQs](./faq/Others.md)
 + Benchmark
   + [SSB Benchmark](./benchmarking/SSB_Benchmarking.md)

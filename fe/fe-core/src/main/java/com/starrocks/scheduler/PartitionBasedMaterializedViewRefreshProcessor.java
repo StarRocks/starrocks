@@ -26,7 +26,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.BaseTableInfo;
@@ -256,8 +255,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         if (partitionNameIter.hasNext()) {
             String startPartitionName = partitionNameIter.next();
             Range<PartitionKey> partitionKeyRange = mappedPartitionsToRefresh.get(startPartitionName);
-            LiteralExpr lowerExpr = partitionKeyRange.lowerEndpoint().getKeys().get(0);
-            nextPartitionStart = AnalyzerUtils.parseLiteralExprToDateString(lowerExpr, 0);
+            nextPartitionStart = AnalyzerUtils.parseLiteralExprToDateString(partitionKeyRange.lowerEndpoint(), 0);
             endPartitionName = startPartitionName;
             partitionsToRefresh.remove(endPartitionName);
         }
@@ -269,8 +267,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         mvContext.setNextPartitionStart(nextPartitionStart);
 
         if (endPartitionName != null) {
-            LiteralExpr upperExpr = mappedPartitionsToRefresh.get(endPartitionName).upperEndpoint().getKeys().get(0);
-            mvContext.setNextPartitionEnd(AnalyzerUtils.parseLiteralExprToDateString(upperExpr, 1));
+            PartitionKey upperEndpoint = mappedPartitionsToRefresh.get(endPartitionName).upperEndpoint();
+            mvContext.setNextPartitionEnd(AnalyzerUtils.parseLiteralExprToDateString(upperEndpoint, 0));
         } else {
             // partitionNameIter has just been traversed, and endPartitionName is not updated
             // will cause endPartitionName == null
@@ -369,6 +367,16 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
                     new ChangeMaterializedViewRefreshSchemeLog(materializedView);
             GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
+
+            // TODO: To be simple, MV's refresh time is defined by max(baseTables' refresh time) which
+            // is not very correct, because it may be not monotonically increasing.
+            long maxChangedTableRefreshTime = changedTablePartitionInfos.values().stream()
+                    .map(x -> x.values().stream().map(
+                            MaterializedView.BasePartitionInfo::getLastRefreshTime).max(Long::compareTo))
+                    .map(x -> x.orElse(null))
+                    .max(Long::compareTo)
+                    .orElse(System.currentTimeMillis());
+            materializedView.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
         }
     }
 
@@ -1083,17 +1091,13 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
     private Map<String, MaterializedView.BasePartitionInfo> getSelectedPartitionInfos(OlapScanNode olapScanNode) {
         Map<String, MaterializedView.BasePartitionInfo> partitionInfos = Maps.newHashMap();
-        Collection<Long> selectedPartitionIds = olapScanNode.getSelectedPartitionIds();
-        Collection<String> selectedPartitionNames = olapScanNode.getSelectedPartitionNames();
-        Collection<Long> selectedPartitionVersions = olapScanNode.getSelectedPartitionVersions();
-        Iterator<Long> selectPartitionIdIterator = selectedPartitionIds.iterator();
-        Iterator<String> selectPartitionNameIterator = selectedPartitionNames.iterator();
-        Iterator<Long> selectPartitionVersionIterator = selectedPartitionVersions.iterator();
-        while (selectPartitionIdIterator.hasNext()) {
-            long partitionId = selectPartitionIdIterator.next();
-            String partitionName = selectPartitionNameIterator.next();
-            long partitionVersion = selectPartitionVersionIterator.next();
-            partitionInfos.put(partitionName, new MaterializedView.BasePartitionInfo(partitionId, partitionVersion));
+        List<Long> selectedPartitionIds = olapScanNode.getSelectedPartitionIds();
+        OlapTable olapTable = olapScanNode.getOlapTable();
+        for (long partitionId : selectedPartitionIds) {
+            Partition partition = olapTable.getPartition(partitionId);
+            MaterializedView.BasePartitionInfo basePartitionInfo = new MaterializedView.BasePartitionInfo(
+                    partitionId, partition.getVisibleVersion(), partition.getVisibleVersionTime());
+            partitionInfos.put(partition.getName(), basePartitionInfo);
         }
         return partitionInfos;
     }
@@ -1124,8 +1128,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 selectedPartitionNames);
 
         for (int index = 0; index < selectedPartitionNames.size(); ++index) {
+            long modifiedTime = hivePartitions.get(index).getModifiedTime();
             partitionInfos.put(selectedPartitionNames.get(index),
-                    new MaterializedView.BasePartitionInfo(-1, hivePartitions.get(index).getModifiedTime()));
+                    new MaterializedView.BasePartitionInfo(-1, modifiedTime, modifiedTime));
         }
         return partitionInfos;
     }

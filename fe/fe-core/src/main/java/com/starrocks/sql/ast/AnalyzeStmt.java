@@ -27,6 +27,7 @@ public class AnalyzeStmt extends StatementBase {
     private List<String> columnNames;
     private final boolean isSample;
     private final boolean isAsync;
+    private boolean isExternal = false;
     private Map<String, String> properties;
     private final AnalyzeTypeDesc analyzeTypeDesc;
 
@@ -78,6 +79,14 @@ public class AnalyzeStmt extends StatementBase {
 
     public AnalyzeTypeDesc getAnalyzeTypeDesc() {
         return analyzeTypeDesc;
+    }
+
+    public boolean isExternal() {
+        return isExternal;
+    }
+
+    public void setExternal(boolean isExternal) {
+        this.isExternal = isExternal;
     }
 
     @Override

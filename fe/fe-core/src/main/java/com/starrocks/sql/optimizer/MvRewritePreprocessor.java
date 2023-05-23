@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
@@ -35,7 +34,6 @@ import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -44,6 +42,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -74,6 +73,9 @@ public class MvRewritePreprocessor {
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
                 MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), queryTables);
+        if (relatedMvs.isEmpty()) {
+            return;
+        }
 
         Set<ColumnRefOperator> originQueryColumns = Sets.newHashSet(queryColumnRefFactory.getColumnRefs());
         for (MaterializedView mv : relatedMvs) {
@@ -98,14 +100,14 @@ public class MvRewritePreprocessor {
             return;
         }
 
-        MaterializedView.MvRewriteContext mvRewriteContext = mv.getPlanContext();
-        if (mvRewriteContext == null) {
+        MaterializedView.MVRewriteContextCache mvRewriteContextCache = mv.getPlanContext();
+        if (mvRewriteContextCache == null) {
             // build mv query logical plan
             MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-            mvRewriteContext = mvOptimizer.optimize(mv, connectContext);
-            mv.setPlanContext(mvRewriteContext);
+            mvRewriteContextCache = mvOptimizer.optimize(mv, connectContext);
+            mv.setPlanContext(mvRewriteContextCache);
         }
-        if (!mvRewriteContext.isValidMvPlan()) {
+        if (!mvRewriteContextCache.isValidMvPlan()) {
             return;
         }
 
@@ -122,7 +124,7 @@ public class MvRewritePreprocessor {
             return;
         }
 
-        OptExpression mvPlan = mvRewriteContext.getLogicalPlan();
+        OptExpression mvPlan = mvRewriteContextCache.getLogicalPlan();
         ScalarOperator mvPartialPartitionPredicates = null;
         if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
             // when mv is partitioned and there are some refreshed partitions,
@@ -141,7 +143,7 @@ public class MvRewritePreprocessor {
                         baseTables, originQueryColumns, intersectingTables, mvPartialPartitionPredicates);
         List<ColumnRefOperator> mvOutputColumns = mv.getPlanContext().getOutputColumns();
         // generate scan mv plan here to reuse it in rule applications
-        LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext);
+        LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext, partitionNamesToRefresh);
         materializationContext.setScanMvOperator(scanMvOp);
         String dbName = connectContext.getGlobalStateMgr().getDb(mv.getDbId()).getFullName();
         connectContext.getDumpInfo().addTable(dbName, mv);
@@ -168,12 +170,13 @@ public class MvRewritePreprocessor {
 
     /**
      * Make a LogicalOlapScanOperator by using MV's schema which includes:
-     *  - partition infos.
-     *  - distribution infos.
-     *  - original MV's predicates which can be deduced from MV opt expression and be used
-     *       for partition/distribution pruning.
+     * - partition infos.
+     * - distribution infos.
+     * - original MV's predicates which can be deduced from MV opt expression and be used
+     * for partition/distribution pruning.
      */
-    private LogicalOlapScanOperator createScanMvOperator(MaterializationContext mvContext) {
+    private LogicalOlapScanOperator createScanMvOperator(MaterializationContext mvContext,
+                                                         Set<String> excludedPartitions) {
         final MaterializedView mv = mvContext.getMv();
 
         final ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
@@ -208,7 +211,6 @@ public class MvRewritePreprocessor {
         // construct partition
         List<Long> selectPartitionIds = Lists.newArrayList();
         List<Long> selectTabletIds = Lists.newArrayList();
-        Set<String> excludedPartitions = mv.getPartitionNamesToRefreshForMv();
         List<String> selectedPartitionNames = Lists.newArrayList();
         for (Partition p : mv.getPartitions()) {
             if (!excludedPartitions.contains(p.getName()) && p.hasData()) {
@@ -220,17 +222,17 @@ public class MvRewritePreprocessor {
         }
         final PartitionNames partitionNames = new PartitionNames(false, selectedPartitionNames);
 
-        return new LogicalOlapScanOperator(mv,
-                colRefToColumnMetaMapBuilder.build(),
-                columnMetaToColRefMap,
-                DistributionSpec.createHashDistributionSpec(hashDistributionDesc),
-                Operator.DEFAULT_LIMIT,
-                null,
-                mv.getBaseIndexId(),
-                selectPartitionIds,
-                partitionNames,
-                false,
-                selectTabletIds,
-                Lists.newArrayList());
+        return LogicalOlapScanOperator.builder()
+                .setTable(mv)
+                .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
+                .setColumnMetaToColRefMap(columnMetaToColRefMap)
+                .setDistributionSpec(DistributionSpec.createHashDistributionSpec(hashDistributionDesc))
+                .setSelectedIndexId(mv.getBaseIndexId())
+                .setSelectedPartitionId(selectPartitionIds)
+                .setPartitionNames(partitionNames)
+                .setSelectedTabletId(selectTabletIds)
+                .setHintsTabletIds(Collections.emptyList())
+                .setHasTableHints(false)
+                .build();
     }
 }

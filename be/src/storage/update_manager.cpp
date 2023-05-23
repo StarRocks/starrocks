@@ -225,6 +225,40 @@ void UpdateManager::clear_cached_del_vec(const std::vector<TabletSegmentId>& tsi
     }
 }
 
+StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore* meta, int64_t tablet_id,
+                                                                        int64_t min_readable_version) {
+    std::vector<std::pair<TabletSegmentId, int64_t>> clear_dcgs;
+    const int64_t begin_ms = UnixMillis();
+    auto is_timeout = [begin_ms]() {
+        if (UnixMillis() > begin_ms + 100) { // only hold cache_clock for 100ms max.
+            return true;
+        } else {
+            return false;
+        }
+    };
+    {
+        std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
+        auto itr = _delta_column_group_cache.lower_bound(TabletSegmentId(tablet_id, 0));
+        while (itr != _delta_column_group_cache.end() && !is_timeout() && itr->first.tablet_id == tablet_id) {
+            // gc not required delta column group
+            DeltaColumnGroupListHelper::garbage_collection(itr->second, itr->first, min_readable_version, clear_dcgs);
+            itr++;
+        }
+    }
+    // delete dcg from rocksdb
+    WriteBatch wb;
+    for (const auto& dcg : clear_dcgs) {
+        auto st = TabletMetaManager::delete_delta_column_group(meta, &wb, dcg.first, dcg.second);
+        if (!st.ok()) {
+            // continue if error
+            LOG(WARNING) << "clear delta column group failed, tablet_id: " << tablet_id
+                         << " st: " << st.get_error_msg();
+        }
+    }
+    RETURN_IF_ERROR(meta->write_batch(&wb));
+    return clear_dcgs.size();
+}
+
 void UpdateManager::clear_cached_delta_column_group(const std::vector<TabletSegmentId>& tsids) {
     std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
     for (const auto& tsid : tsids) {

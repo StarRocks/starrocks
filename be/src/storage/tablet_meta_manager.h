@@ -58,36 +58,37 @@ class TabletMetaPB;
 struct TabletMetaStats {
     TTabletId tablet_id = 0;
     TTableId table_id = 0;
-    size_t meta_bytes = 0;
-    // updatable related
-    size_t log_size = 0;
-    size_t log_bytes = 0;
-    size_t rowset_size = 0;
-    size_t rowset_bytes = 0;
-    size_t pending_rowset_size = 0;
-    size_t pending_rowset_bytes = 0;
-    size_t delvec_size = 0;
-    size_t delvec_bytes = 0;
+    size_t tablet_meta_bytes = 0;
+    // update tablet related
+    size_t log_count = 0;
+    size_t log_meta_bytes = 0;
+    size_t rowset_count = 0;
+    size_t rowset_meta_bytes = 0;
+    size_t pending_rowset_count = 0;
+    size_t pending_rowset_meta_bytes = 0;
+    size_t delvec_count = 0;
+    size_t delvec_meta_bytes = 0;
 };
 
 struct MetaStoreStats {
-    size_t tablet_size = 0;
-    size_t tablet_bytes = 0;
-    size_t rst_size = 0;
-    size_t rst_bytes = 0;
-    size_t update_tablet_size = 0;
-    size_t update_tablet_bytes = 0;
-    size_t log_size = 0;
-    size_t log_bytes = 0;
-    size_t delvec_size = 0;
-    size_t delvec_bytes = 0;
-    size_t rowset_size = 0;
-    size_t rowset_bytes = 0;
-    size_t pending_rowset_size = 0;
-    size_t pending_rowset_bytes = 0;
-    size_t total_size = 0;
-    size_t total_bytes = 0;
-    size_t error_size = 0;
+    size_t tablet_count = 0;
+    size_t tablet_meta_bytes = 0;
+    size_t rowset_count = 0;
+    size_t rowset_meta_bytes = 0;
+    // update tablet related
+    size_t update_tablet_count = 0;
+    size_t update_tablet_meta_bytes = 0;
+    size_t log_count = 0;
+    size_t log_meta_bytes = 0;
+    size_t delvec_count = 0;
+    size_t delvec_meta_bytes = 0;
+    size_t update_rowset_count = 0;
+    size_t update_rowset_meta_bytes = 0;
+    size_t pending_rowset_count = 0;
+    size_t pending_rowset_meta_bytes = 0;
+    size_t total_count = 0;
+    size_t total_meta_bytes = 0;
+    size_t error_count = 0;
     std::map<TTabletId, TabletMetaStats> tablets;
 };
 
@@ -191,6 +192,7 @@ public:
                                           int64_t begin_version, int64_t end_version, DeltaColumnGroupList* dcgs);
 
     static Status delete_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t rowset_id, uint32_t segments);
+    static Status delete_delta_column_group(KVStore* meta, WriteBatch* batch, TabletSegmentId tsid, int64_t version);
 
     // delete all delete vectors of a tablet not useful anymore for query version < `version`, for example
     // suppose we have delete vectors of version 1, 3, 5, 6, 7, 12, 16

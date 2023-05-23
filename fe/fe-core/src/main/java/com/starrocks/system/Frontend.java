@@ -34,8 +34,8 @@
 
 package com.starrocks.system;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.ha.BDBHA;
@@ -48,9 +48,13 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class Frontend implements Writable {
+    @SerializedName(value = "r")
     private FrontendNodeType role;
+    @SerializedName(value = "n")
     private String nodeName;
+    @SerializedName(value = "h")
     private String host;
+    @SerializedName(value = "e")
     private int editLogPort;
 
     private int queryPort;
@@ -196,11 +200,7 @@ public class Frontend implements Writable {
         role = FrontendNodeType.valueOf(Text.readString(in));
         host = Text.readString(in);
         editLogPort = in.readInt();
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_41) {
-            nodeName = Text.readString(in);
-        } else {
-            nodeName = GlobalStateMgr.genFeNodeName(host, editLogPort, true /* old style */);
-        }
+        nodeName = Text.readString(in);
     }
 
     public static Frontend read(DataInput in) throws IOException {

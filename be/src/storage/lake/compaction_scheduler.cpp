@@ -213,17 +213,17 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     // Task failure due to memory limitations allows for retries. more threads allow for more retries.
     if (status.is_mem_limit_exceeded() && context->runs.load(std::memory_order_relaxed) < _task_queue_count + 1) {
         VLOG(3) << "Memory limit exceeded, will retry later. tablet_id=" << tablet_id << " version=" << version
-                << " txn_id=" << txn_id << " cost=" << cost;
+                << " txn_id=" << txn_id << " cost=" << cost << "s";
         context->progress.update(0);
         auto idx = choose_task_queue_by_txn_id(context->txn_id);
         // re-schedule the compaction task
         _task_queues[idx].put(std::move(context));
     } else {
         VLOG_IF(3, status.ok()) << "Compacted tablet " << tablet_id << ". version=" << version << " txn_id=" << txn_id
-                                << " cost=" << cost;
+                                << " cost=" << cost << "s";
 
         LOG_IF(ERROR, !status.ok()) << "Fail to compact tablet " << tablet_id << ". version=" << version
-                                    << " txn_id=" << txn_id << " cost=" << cost << " : " << status;
+                                    << " txn_id=" << txn_id << " cost=" << cost << "s : " << status;
 
         context->status = status;
 

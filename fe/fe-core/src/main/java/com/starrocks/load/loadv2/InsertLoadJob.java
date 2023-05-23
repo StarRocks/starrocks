@@ -36,6 +36,7 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -64,6 +65,7 @@ import java.util.Set;
 public class InsertLoadJob extends LoadJob {
     private static final Logger LOG = LogManager.getLogger(LoadJob.class);
 
+    @SerializedName("tableId")
     private long tableId;
     private long estimateScanRow;
     private TLoadJobType loadType;

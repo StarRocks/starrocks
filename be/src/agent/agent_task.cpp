@@ -72,9 +72,11 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
         status = STARROCKS_SUCCESS;
     }
 
+    std::string alter_msg_head =
+            strings::Substitute("[Alter Job:$0, tablet:$1]: ", agent_task_req.job_id, agent_task_req.base_tablet_id);
     if (status == STARROCKS_SUCCESS) {
         g_report_version.fetch_add(1, std::memory_order_relaxed);
-        LOG(INFO) << "alter finished. signature: " << signature;
+        LOG(INFO) << alter_msg_head << "alter finished. signature: " << signature;
     }
 
     // Return result to fe
@@ -99,7 +101,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
         }
 
         LOG_IF(WARNING, status != STARROCKS_SUCCESS)
-                << "alter success, but get new tablet info failed."
+                << alter_msg_head << "alter success, but get new tablet info failed."
                 << "tablet_id: " << new_tablet_id << ", schema_hash: " << new_schema_hash
                 << ", signature: " << signature;
     }
@@ -107,16 +109,16 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
     if (status == STARROCKS_SUCCESS) {
         swap(finish_tablet_infos, finish_task_request->finish_tablet_infos);
         finish_task_request->__isset.finish_tablet_infos = true;
-        LOG(INFO) << "alter success. signature: " << signature;
+        LOG(INFO) << alter_msg_head << "alter success. signature: " << signature;
         error_msgs.push_back("alter success");
         task_status.__set_status_code(TStatusCode::OK);
     } else if (status == STARROCKS_TASK_REQUEST_ERROR) {
-        LOG(WARNING) << "alter table request task type invalid. "
+        LOG(WARNING) << alter_msg_head << "alter table request task type invalid. "
                      << "signature:" << signature;
         error_msgs.emplace_back("alter table request new tablet id or schema count invalid.");
         task_status.__set_status_code(TStatusCode::ANALYSIS_ERROR);
     } else {
-        LOG(WARNING) << "alter failed. signature: " << signature;
+        LOG(WARNING) << alter_msg_head << "alter failed. signature: " << signature;
         error_msgs.push_back("alter failed");
         error_msgs.push_back("status: " + print_agent_status(status));
         task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
@@ -215,7 +217,9 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
 
 void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     int64_t signatrue = agent_task_req->signature;
-    LOG(INFO) << "get alter table task, signature: " << agent_task_req->signature;
+    std::string alter_msg_head = strings::Substitute("[Alter Job:$0, tablet:$1]: ", agent_task_req->task_req.job_id,
+                                                     agent_task_req->task_req.base_tablet_id);
+    LOG(INFO) << alter_msg_head << "get alter table task, signature: " << agent_task_req->signature;
     bool is_task_timeout = false;
     if (agent_task_req->isset.recv_time) {
         int64_t time_elapsed = time(nullptr) - agent_task_req->recv_time;
@@ -722,7 +726,9 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                     }
                 }
 
-                tablet->set_binlog_config(tablet_meta_info.binlog_config);
+                BinlogConfig binlog_config;
+                binlog_config.update(tablet_meta_info.binlog_config);
+                tablet->update_binlog_config(binlog_config);
                 break;
             case TTabletMetaType::ENABLE_PERSISTENT_INDEX:
                 LOG(INFO) << "update tablet:" << tablet->tablet_id()

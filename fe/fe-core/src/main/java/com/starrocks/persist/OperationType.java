@@ -38,6 +38,8 @@ package com.starrocks.persist;
 public class OperationType {
     public static final short OP_INVALID = -1;
     public static final short OP_SAVE_NEXTID = 0;
+    @Deprecated
+    //Added OP_CREATE_DB_V2 in version 3.1, can be removed in version 3.2
     public static final short OP_CREATE_DB = 1;
     public static final short OP_DROP_DB = 2;
     public static final short OP_ALTER_DB = 3;
@@ -313,4 +315,14 @@ public class OperationType {
 
     // constraint properties
     public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;
+
+    //Database and Table DDL
+    public static final short OP_CREATE_DB_V2 = 12001;
+
+    //Load Job json format log
+    public static final short OP_CREATE_LOAD_JOB_V2 = 12100;
+    public static final short OP_END_LOAD_JOB_V2 = 12101;
+    public static final short OP_CREATE_ROUTINE_LOAD_JOB_V2 = 12102;
+    public static final short OP_CHANGE_ROUTINE_LOAD_JOB_V2 = 12103;
+    public static final short OP_REMOVE_ROUTINE_LOAD_JOB_V2 = 12104;
 }

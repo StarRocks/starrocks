@@ -86,6 +86,7 @@ Status EngineManualCompactionTask::_manual_compaction() {
                 if (compaction_task != nullptr) {
                     compaction_task->set_task_id(
                             StorageEngine::instance()->compaction_manager()->next_compaction_task_id());
+                    compaction_task->set_is_manual_compaction(true);
                     compaction_task->start();
                     if (compaction_task->compaction_task_state() != COMPACTION_SUCCESS) {
                         return Status::InternalError(fmt::format("Failed to base compaction tablet={} task_id={}",
@@ -119,6 +120,7 @@ Status EngineManualCompactionTask::_manual_compaction() {
                 if (compaction_task != nullptr) {
                     compaction_task->set_task_id(
                             StorageEngine::instance()->compaction_manager()->next_compaction_task_id());
+                    compaction_task->set_is_manual_compaction(true);
                     compaction_task->start();
                     if (compaction_task->compaction_task_state() != COMPACTION_SUCCESS) {
                         return Status::InternalError(fmt::format("Failed to cumulative compaction tablet={} err={}",

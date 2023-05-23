@@ -360,6 +360,7 @@ STOP: 'STOP';
 STORAGE: 'STORAGE';
 STREAM: 'STREAM';
 STRING: 'STRING';
+TEXT: 'TEXT';
 SUBMIT: 'SUBMIT';
 SUM: 'SUM';
 SUSPEND: 'SUSPEND';
@@ -535,5 +536,5 @@ SEMICOLON: ';';
 DOTDOTDOT: '...';
 
 WS
-    : [ \r\n\t]+ -> channel(HIDDEN)
+    : [ \r\n\t\u3000]+ -> channel(HIDDEN)
     ;
