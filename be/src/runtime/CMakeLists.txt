@@ -85,6 +85,7 @@ set(RUNTIME_FILES
     profile_report_worker.cpp
     health_checker.cpp
     thread_pool_checker.cpp
+    brpc_thread_checker.cpp
     base_monitor.cpp
     schema_table_sink.cpp
     command_executor.cpp

@@ -170,6 +170,9 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _result_queue_mgr = new ResultQueueMgr();
     _health_checker = new HealthChecker();
     _thread_pool_checker = new ThreadPoolChecker();
+    _brpc_thread_checker = new BrpcThreadChecker();
+    _brpc_thread_checker->start();
+    _health_checker->register_monitor(_brpc_thread_checker->get_name(), _brpc_thread_checker)
     _backend_client_cache = new BackendServiceClientCache(config::max_client_cache_size_per_host);
     _frontend_client_cache = new FrontendServiceClientCache(config::max_client_cache_size_per_host);
     _broker_client_cache = new BrokerServiceClientCache(config::max_client_cache_size_per_host);

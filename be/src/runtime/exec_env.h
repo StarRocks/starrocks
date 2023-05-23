@@ -41,6 +41,7 @@
 #include "common/status.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "runtime/brpc_thread_checker.h"
 #include "runtime/health_checker.h"
 #include "runtime/thread_pool_checker.h"
 #include "storage/options.h"
@@ -363,6 +364,7 @@ private:
 
     HealthChecker* _health_checker = nullptr;
     ThreadPoolChecker* _thread_pool_checker = nullptr;
+    BrpcThreadChecker* _brpc_thread_checker = nullptr;
 
     lake::TabletManager* _lake_tablet_manager = nullptr;
     lake::LocationProvider* _lake_location_provider = nullptr;
