@@ -73,11 +73,35 @@ select count(*), count(l.c0), avg(l.c0), count(l.c1) from empty_t l left semi jo
 -- result:
 0	0	None	0
 -- !result
-select count(*), count(l.c0), avg(l.c0), count(l.c1) from empty_t l left semi join [broadcast] t1 r on l.c0 = r.c0;
+select count(*), count(l.c0), avg(l.c0), count(l.c1) from empty_t l left outer join [broadcast] t1 r on l.c0 = r.c0;
 -- result:
 0	0	None	0
 -- !result
 select count(*), count(l.c0), avg(l.c0), count(l.c1) from empty_t l left anti join [broadcast] t1 r on l.c0 = r.c0;
+-- result:
+0	0	None	0
+-- !result
+select count(*), count(l.c0), avg(l.c0), count(l.c1) from empty_t l left semi join [shuffle] t1 r on l.c0 = r.c0;
+-- result:
+0	0	None	0
+-- !result
+select count(*), count(l.c0), avg(l.c0), count(l.c1) from empty_t l left outer join [shuffle] t1 r on l.c0 = r.c0;
+-- result:
+0	0	None	0
+-- !result
+select count(*), count(l.c0), avg(l.c0), count(l.c1) from empty_t l left anti join [shuffle] t1 r on l.c0 = r.c0;
+-- result:
+0	0	None	0
+-- !result
+select count(*), count(l.c0), avg(l.c0), count(l.c1) from empty_t l left semi join [bucket] t1 r on l.c0 = r.c0;
+-- result:
+0	0	None	0
+-- !result
+select count(*), count(l.c0), avg(l.c0), count(l.c1) from empty_t l left outer join [bucket] t1 r on l.c0 = r.c0;
+-- result:
+0	0	None	0
+-- !result
+select count(*), count(l.c0), avg(l.c0), count(l.c1) from empty_t l left anti join [bucket] t1 r on l.c0 = r.c0;
 -- result:
 0	0	None	0
 -- !result
@@ -101,11 +125,23 @@ select count(*), count(l.c0), avg(l.c0), count(l.c1) from t1 l left semi join [b
 -- result:
 0	0	None	0
 -- !result
-select count(*), count(l.c0), avg(l.c0), count(l.c1) from t1 l left semi join [broadcast] empty_t r on l.c0 = r.c0;
+select count(*), count(l.c0), avg(l.c0), count(l.c1) from t1 l left outer join [broadcast] empty_t r on l.c0 = r.c0;
+-- result:
+4097	4097	6144.0	4097
+-- !result
+select count(*), count(l.c0), avg(l.c0), count(l.c1) from t1 l left anti join [broadcast] empty_t r on l.c0 = r.c0;
+-- result:
+4097	4097	6144.0	4097
+-- !result
+select count(*), count(l.c0), avg(l.c0), count(l.c1) from t1 l left semi join [shuffle] empty_t r on l.c0 = r.c0;
 -- result:
 0	0	None	0
 -- !result
-select count(*), count(l.c0), avg(l.c0), count(l.c1) from t1 l left anti join [broadcast] empty_t r on l.c0 = r.c0;
+select count(*), count(l.c0), avg(l.c0), count(l.c1) from t1 l left outer join [shuffle] empty_t r on l.c0 = r.c0;
+-- result:
+4097	4097	6144.0	4097
+-- !result
+select count(*), count(l.c0), avg(l.c0), count(l.c1) from t1 l left anti join [shuffle] empty_t r on l.c0 = r.c0;
 -- result:
 4097	4097	6144.0	4097
 -- !result
