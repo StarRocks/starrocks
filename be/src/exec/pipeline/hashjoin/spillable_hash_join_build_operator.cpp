@@ -70,7 +70,8 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
                     _join_builder->enter_probe_phase();
                     return Status::OK();
                 },
-                state, *io_executor, spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
+                state, *io_executor,
+                spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
     };
 
     Status ret_status;
