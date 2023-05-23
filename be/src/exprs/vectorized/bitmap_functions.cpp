@@ -56,8 +56,7 @@ ColumnPtr BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::
             }
         }
 
-        BitmapValue bitmap;
-        bitmap.add(value);
+        BitmapValue bitmap(value);
 
         builder.append(&bitmap);
     }
