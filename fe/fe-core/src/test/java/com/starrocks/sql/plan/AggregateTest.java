@@ -2250,4 +2250,32 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: sum(4: expr)");
         connectContext.getSessionVariable().setNewPlanerAggStage(oldValue);
     }
+
+    @Test
+    public void testPercentileFunctionConst() throws Exception {
+        // For compatibility
+        String sql = "select percentile_approx(1, cast(0.4 as DOUBLE));";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "percentile_approx[(1.0, 0.4); args: DOUBLE,DOUBLE");
+
+        sql = "select percentile_approx(1, cast(1.3 as DOUBLE));";
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("percentile_approx second parameter'value must be between 0 and 1");
+        getCostExplain(sql);
+        plan = getCostExplain(sql);
+
+
+        sql = "select percentile_cont(1, cast(0.4 as DOUBLE));";
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("Getting analyzing error. " +
+                "Detail message: percentile_cont 's second parameter's data type is wrong .");
+        getCostExplain(sql);
+
+
+        sql = "select PERCENTILE_DISC(1, cast(0.4 as DOUBLE));";
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("Getting analyzing error. " +
+                "Detail message: percentile_disc 's second parameter's data type is wrong .");
+        getCostExplain(sql);
+    }
 }
