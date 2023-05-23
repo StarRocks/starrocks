@@ -52,14 +52,17 @@ public:
                                    AggDataPtr __restrict state) const override {
         const auto& col = down_cast<const InputColumnType&>(*columns[0]);
         const auto& values = col.get_data();
-        if (check_valid(values, chunk_size)) {
-            this->data(state).add_many(chunk_size, values.data());
-        } else {
-            for (size_t i = 0; i < chunk_size; i++) {
-                auto value = values[i];
-                if (value >= 0 && value <= std::numeric_limits<uint64_t>::max()) {
-                    this->data(state).add(value);
-                }
+        if constexpr (LT == TYPE_INT) {
+            if (check_valid(values, chunk_size)) {
+                // All the values is unsigned, can be safely converted to unsigned int.
+                this->data(state).add_many(chunk_size, reinterpret_cast<const uint32_t*>(values.data()));
+                return;
+            }
+        }
+        for (size_t i = 0; i < chunk_size; i++) {
+            auto value = values[i];
+            if (value >= 0 && value <= std::numeric_limits<uint64_t>::max()) {
+                this->data(state).add(value);
             }
         }
     }
