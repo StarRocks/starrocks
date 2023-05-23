@@ -894,13 +894,13 @@ static void metadata_gc(TabletManager* tablet_mgr, const std::set<std::string>& 
     }
 }
 
-static void data_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots) {
+static void data_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots, int64_t min_active_txn_id) {
     auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
     auto num_running = std::atomic<int>(roots.size());
     for (const auto& root : roots) {
         auto st = thread_pool->submit_func([&, root]() {
             auto t1 = std::chrono::steady_clock::now();
-            auto r = datafile_gc(root, tablet_mgr);
+            auto r = datafile_gc(root, tablet_mgr, min_active_txn_id);
             auto t2 = std::chrono::steady_clock::now();
             auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
             if (r.ok()) {
@@ -941,12 +941,12 @@ void* gc_checker(void* arg) {
         std::set<std::string> roots;
         (void)lp->list_root_locations(&roots);
 
+        auto master_info = get_master_info();
         if (min_gc_time == gc_time[0]) {
-            auto master_info = get_master_info();
             metadata_gc(tablet_mgr, roots, master_info.min_active_txn_id);
             gc_time[0] = butil::gettimeofday_s() + config::lake_gc_metadata_check_interval;
         } else {
-            data_gc(tablet_mgr, roots);
+            data_gc(tablet_mgr, roots, master_info.min_active_txn_id);
             gc_time[1] = butil::gettimeofday_s() + config::lake_gc_segment_check_interval;
         }
     }
