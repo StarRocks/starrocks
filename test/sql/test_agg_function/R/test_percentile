@@ -1,0 +1,53 @@
+-- name: testPercentileParameter
+CREATE TABLE IF NOT EXISTS `lineorder` (
+    `lo_orderkey` int(11) NOT NULL COMMENT "",
+    `lo_shipmode` varchar(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into lineorder values(1,'test');
+-- result:
+-- !result
+SELECT percentile_cont(lo_orderkey, -1) FROM lineorder;
+-- result:
+E: (1064, "percentile_cont/percentile_disc's second parameter should be between 0 and 1")
+-- !result
+SELECT percentile_disc(lo_orderkey, -1) FROM lineorder;
+-- result:
+E: (1064, "percentile_cont/percentile_disc's second parameter should be between 0 and 1")
+-- !result
+SELECT percentile_approx(lo_orderkey, -1) FROM lineorder;
+-- result:
+E: (1064, "agg function percentile_approx's second parameter should be between 0 and 1")
+-- !result
+-- name: testPercentileEmptyTable
+CREATE TABLE IF NOT EXISTS `lineorder` (
+    `lo_orderkey` int(11) NOT NULL COMMENT "",
+    `lo_shipmode` varchar(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+SELECT percentile_cont(lo_orderkey, -1) FROM lineorder;
+-- result:
+None
+-- !result
+SELECT percentile_disc(lo_orderkey, -1) FROM lineorder;
+-- result:
+None
+-- !result
+SELECT percentile_approx(lo_orderkey, -1) FROM lineorder;
+-- result:
+None
+-- !result
