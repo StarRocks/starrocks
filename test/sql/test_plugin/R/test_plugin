@@ -1,9 +1,7 @@
--- name: test_uninstall_plugin
+-- name: test_install_plugin
 [UC] UNINSTALL PLUGIN AuditLoader;
 -- result:
-E: (1064, 'Unexpected exception: Plugin AuditLoader does not exist')
 -- !result
--- name: test_install_plugin
 install plugin from "http://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/plugin/auditloader.zip";
 -- result:
 -- !result

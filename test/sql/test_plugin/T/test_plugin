@@ -1,5 +1,4 @@
--- name: test_uninstall_plugin
+-- name: test_install_plugin
 [UC] UNINSTALL PLUGIN AuditLoader;
 
--- name: test_install_plugin
 install plugin from "http://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/plugin/auditloader.zip";
