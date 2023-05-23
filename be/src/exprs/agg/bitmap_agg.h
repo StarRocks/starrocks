@@ -38,6 +38,35 @@ public:
         }
     }
 
+    bool check_valid(const std::vector<InputCppType>& values, size_t count) const {
+        for (size_t i = 0; i < count; i++) {
+            auto value = values[i];
+            if (!(value >= 0 && value <= std::numeric_limits<uint64_t>::max())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
+        const auto& col = down_cast<const InputColumnType&>(*columns[0]);
+        const auto& values = col.get_data();
+        if constexpr (LT == TYPE_INT) {
+            if (check_valid(values, chunk_size)) {
+                // All the values is unsigned, can be safely converted to unsigned int.
+                this->data(state).add_many(chunk_size, reinterpret_cast<const uint32_t*>(values.data()));
+                return;
+            }
+        }
+        for (size_t i = 0; i < chunk_size; i++) {
+            auto value = values[i];
+            if (value >= 0 && value <= std::numeric_limits<uint64_t>::max()) {
+                this->data(state).add(value);
+            }
+        }
+    }
+
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         const auto& col = down_cast<const BitmapColumn&>(*column);
         this->data(state) |= *(col.get_object(row_num));

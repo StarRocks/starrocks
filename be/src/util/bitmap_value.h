@@ -154,11 +154,10 @@ public:
      *
      */
     void addMany(size_t n_args, const uint32_t* vals) {
-        for (size_t lcv = 0; lcv < n_args; lcv++) {
-            roarings[0].add(vals[lcv]);
-            roarings[0].setCopyOnWrite(copyOnWrite);
-        }
+        roarings[0].addMany(n_args, vals);
+        roarings[0].setCopyOnWrite(copyOnWrite);
     }
+
     void addMany(size_t n_args, const uint64_t* vals) {
         for (size_t lcv = 0; lcv < n_args; lcv++) {
             roarings[highBytes(vals[lcv])].add(lowBytes(vals[lcv]));
@@ -1030,6 +1029,16 @@ public:
                 to_bitmap();
                 _bitmap->add(value);
             }
+        }
+    }
+
+    void add_many(size_t n_args, const uint32_t* vals) {
+        if (_type != BITMAP) {
+            for (size_t i = 0; i < n_args; i++) {
+                add(vals[i]);
+            }
+        } else {
+            _bitmap->addMany(n_args, vals);
         }
     }
 
