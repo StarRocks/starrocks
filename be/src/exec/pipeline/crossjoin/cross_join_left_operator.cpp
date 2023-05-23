@@ -317,7 +317,7 @@ Status CrossJoinLeftOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status NLJoinProbeOperator::set_finished(RuntimeState* state) {
+Status CrossJoinLeftOperator::set_finished(RuntimeState* state) {
     return _cross_join_context->finish_one_left_prober(state);
 }
 
