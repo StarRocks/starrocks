@@ -291,7 +291,7 @@ None
 -- !result
 select array_avg([[1,2,3], [2,3,4]]) from array_test order by pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 35. Detail message: No matching function with signature: array_avg(ARRAY<ARRAY<tinyint(4)>>).')
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 35. Detail message: No matching function with signature: array_avg(array<array<tinyint(4)>>).')
 -- !result
 select array_min(s_1) from array_test order by pk;
 -- result:
