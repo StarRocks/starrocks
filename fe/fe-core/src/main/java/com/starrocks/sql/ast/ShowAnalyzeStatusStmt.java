@@ -70,9 +70,8 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         row.set(2, analyzeStatus.getTableName());
 
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
-        if (context.getGlobalStateMgr().isUsingNewPrivilege() &&
-                !PrivilegeActions.checkAnyActionOnTable(context,
-                        analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName())) {
+        if (!PrivilegeActions.checkAnyActionOnTable(context,
+                analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName())) {
             return null;
         }
 

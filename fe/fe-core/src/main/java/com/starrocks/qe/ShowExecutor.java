@@ -108,7 +108,6 @@ import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.CatalogPEntryObject;
@@ -131,7 +130,6 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
@@ -379,51 +377,33 @@ public class ShowExecutor {
 
     private void handleShowAuthentication() {
         final ShowAuthenticationStmt showAuthenticationStmt = (ShowAuthenticationStmt) stmt;
-        if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-            AuthenticationManager authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationManager();
-            List<List<String>> userAuthInfos = Lists.newArrayList();
+        AuthenticationManager authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationManager();
+        List<List<String>> userAuthInfos = Lists.newArrayList();
 
-            Map<UserIdentity, UserAuthenticationInfo> authenticationInfoMap = new HashMap<>();
-            if (showAuthenticationStmt.isAll()) {
-                authenticationInfoMap.putAll(authenticationManager.getUserToAuthenticationInfo());
-            } else {
-                UserAuthenticationInfo userAuthenticationInfo;
-                if (showAuthenticationStmt.getUserIdent() == null) {
-                    userAuthenticationInfo = authenticationManager
-                            .getUserAuthenticationInfoByUserIdentity(connectContext.getCurrentUserIdentity());
-                } else {
-                    userAuthenticationInfo =
-                            authenticationManager.getUserAuthenticationInfoByUserIdentity(showAuthenticationStmt.getUserIdent());
-                }
-                authenticationInfoMap.put(showAuthenticationStmt.getUserIdent(), userAuthenticationInfo);
-            }
-            for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : authenticationInfoMap.entrySet()) {
-                UserAuthenticationInfo userAuthenticationInfo = entry.getValue();
-                userAuthInfos.add(Lists.newArrayList(
-                        entry.getKey().toString(),
-                        userAuthenticationInfo.getPassword().length == 0 ? "No" : "Yes",
-                        userAuthenticationInfo.getAuthPlugin(),
-                        userAuthenticationInfo.getTextForAuthPlugin()));
-            }
-
-            resultSet = new ShowResultSet(showAuthenticationStmt.getMetaData(), userAuthInfos);
+        Map<UserIdentity, UserAuthenticationInfo> authenticationInfoMap = new HashMap<>();
+        if (showAuthenticationStmt.isAll()) {
+            authenticationInfoMap.putAll(authenticationManager.getUserToAuthenticationInfo());
         } else {
-            List<List<String>> rows;
-            if (showAuthenticationStmt.isAll()) {
-                rows = GlobalStateMgr.getCurrentState().getAuth()
-                        .getAuthenticationInfo(showAuthenticationStmt.getUserIdent());
+            UserAuthenticationInfo userAuthenticationInfo;
+            if (showAuthenticationStmt.getUserIdent() == null) {
+                userAuthenticationInfo = authenticationManager
+                        .getUserAuthenticationInfoByUserIdentity(connectContext.getCurrentUserIdentity());
             } else {
-                if (showAuthenticationStmt.getUserIdent() == null) {
-                    rows = GlobalStateMgr.getCurrentState().getAuth()
-                            .getAuthenticationInfo(connectContext.getCurrentUserIdentity());
-                } else {
-                    rows = GlobalStateMgr.getCurrentState().getAuth()
-                            .getAuthenticationInfo(showAuthenticationStmt.getUserIdent());
-                }
+                userAuthenticationInfo =
+                        authenticationManager.getUserAuthenticationInfoByUserIdentity(showAuthenticationStmt.getUserIdent());
             }
-
-            resultSet = new ShowResultSet(showAuthenticationStmt.getMetaData(), rows);
+            authenticationInfoMap.put(showAuthenticationStmt.getUserIdent(), userAuthenticationInfo);
         }
+        for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : authenticationInfoMap.entrySet()) {
+            UserAuthenticationInfo userAuthenticationInfo = entry.getValue();
+            userAuthInfos.add(Lists.newArrayList(
+                    entry.getKey().toString(),
+                    userAuthenticationInfo.getPassword().length == 0 ? "No" : "Yes",
+                    userAuthenticationInfo.getAuthPlugin(),
+                    userAuthenticationInfo.getTextForAuthPlugin()));
+        }
+
+        resultSet = new ShowResultSet(showAuthenticationStmt.getMetaData(), userAuthInfos);
     }
 
     private void handleShowComputeNodes() {
@@ -455,26 +435,26 @@ public class ShowExecutor {
                         continue;
                     }
 
-                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
-                        mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
-                            Table baseTable = baseTableInfo.getTable();
-                            // TODO: external table should check table action after AuthorizationManager support it.
-                            if (baseTable != null && baseTable.isNativeTableOrMaterializedView() && !PrivilegeActions.
-                                    checkTableAction(connectContext, baseTableInfo.getDbName(),
-                                            baseTableInfo.getTableName(),
-                                            PrivilegeType.SELECT)) {
-                                baseTableHasPrivilege.set(false);
-                            }
-                        });
-                        if (!baseTableHasPrivilege.get()) {
-                            continue;
+
+                    AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
+                    mvTable.getBaseTableInfos().forEach(baseTableInfo -> {
+                        Table baseTable = baseTableInfo.getTable();
+                        // TODO: external table should check table action after AuthorizationManager support it.
+                        if (baseTable != null && baseTable.isNativeTableOrMaterializedView() && !PrivilegeActions.
+                                checkTableAction(connectContext, baseTableInfo.getDbName(),
+                                        baseTableInfo.getTableName(),
+                                        PrivilegeType.SELECT)) {
+                            baseTableHasPrivilege.set(false);
                         }
-                        if (!PrivilegeActions.checkAnyActionOnMaterializedView(connectContext, db.getFullName(),
-                                mvTable.getName())) {
-                            continue;
-                        }
+                    });
+                    if (!baseTableHasPrivilege.get()) {
+                        continue;
                     }
+                    if (!PrivilegeActions.checkAnyActionOnMaterializedView(connectContext, db.getFullName(),
+                            mvTable.getName())) {
+                        continue;
+                    }
+
                     materializedViews.add(mvTable);
                 } else if (Table.TableType.OLAP == table.getType()) {
                     OlapTable olapTable = (OlapTable) table;
@@ -792,15 +772,11 @@ public class ShowExecutor {
                 continue;
             }
 
-            if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnOrInDb(connectContext, catalogName, dbName)) {
-                    continue;
-                }
-            } else {
-                if (!PrivilegeChecker.checkDbPriv(connectContext, catalogName, dbName, PrivPredicate.SHOW)) {
-                    continue;
-                }
+
+            if (!PrivilegeActions.checkAnyActionOnOrInDb(connectContext, catalogName, dbName)) {
+                continue;
             }
+
             dbNameSet.add(dbName);
         }
 
@@ -839,27 +815,21 @@ public class ShowExecutor {
                         continue;
                     }
                     // check tbl privs
-                    if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-                        if (tbl.isView()) {
-                            if (!PrivilegeActions.checkAnyActionOnView(
-                                    connectContext, db.getFullName(), tbl.getName())) {
-                                continue;
-                            }
-                        } else if (tbl.isMaterializedView()) {
-                            if (!PrivilegeActions.checkAnyActionOnMaterializedView(
-                                    connectContext, db.getFullName(), tbl.getName())) {
-                                continue;
-                            }
-                        } else if (!PrivilegeActions.checkAnyActionOnTable(
+                    if (tbl.isView()) {
+                        if (!PrivilegeActions.checkAnyActionOnView(
                                 connectContext, db.getFullName(), tbl.getName())) {
                             continue;
                         }
-                    } else {
-                        if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalogName,
-                                db.getFullName(), tbl.getName(), PrivPredicate.SHOW)) {
+                    } else if (tbl.isMaterializedView()) {
+                        if (!PrivilegeActions.checkAnyActionOnMaterializedView(
+                                connectContext, db.getFullName(), tbl.getName())) {
                             continue;
                         }
+                    } else if (!PrivilegeActions.checkAnyActionOnTable(
+                            connectContext, db.getFullName(), tbl.getName())) {
+                        continue;
                     }
+
                     tableMap.put(tbl.getName(), tbl.getMysqlType());
                 }
             } finally {
@@ -905,14 +875,8 @@ public class ShowExecutor {
                         continue;
                     }
 
-                    // check tbl privs
-                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeActions.checkAnyActionOnTable(connectContext, db.getFullName(), table.getName())) {
-                            continue;
-                        }
-                    } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                            db.getFullName(), table.getName(),
-                            PrivPredicate.SHOW)) {
+
+                    if (!PrivilegeActions.checkAnyActionOnTable(connectContext, db.getFullName(), table.getName())) {
                         continue;
                     }
 
@@ -1332,7 +1296,7 @@ public class ShowExecutor {
             throw new AnalysisException(e.getMessage());
         }
         // In new privilege framework(RBAC), user needs any action on the table to show routine load job on it.
-        if (routineLoadJobList != null && connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
+        if (routineLoadJobList != null) {
             Iterator<RoutineLoadJob> iterator = routineLoadJobList.iterator();
             while (iterator.hasNext()) {
                 RoutineLoadJob routineLoadJob = iterator.next();
@@ -1398,23 +1362,12 @@ public class ShowExecutor {
                     "The table metadata of job has been changed. The job will be cancelled automatically", e);
         }
         // In new privilege framework(RBAC), user needs any action on the table to show routine load job on it.
-        if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-            if (!PrivilegeActions.checkAnyActionOnTable(connectContext, dbFullName, tableName)) {
-                // if we have no privilege, return an empty result set
-                resultSet = new ShowResultSet(showRoutineLoadTaskStmt.getMetaData(), rows);
-                return;
-            }
-        } else {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                    dbFullName,
-                    tableName,
-                    PrivPredicate.LOAD)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
-                        ConnectContext.get().getQualifiedUser(),
-                        ConnectContext.get().getRemoteIP(),
-                        tableName);
-            }
+        if (!PrivilegeActions.checkAnyActionOnTable(connectContext, dbFullName, tableName)) {
+            // if we have no privilege, return an empty result set
+            resultSet = new ShowResultSet(showRoutineLoadTaskStmt.getMetaData(), rows);
+            return;
         }
+
         // get routine load task info
         rows.addAll(routineLoadJob.getTasksShowInfo());
         resultSet = new ShowResultSet(showRoutineLoadTaskStmt.getMetaData(), rows);
@@ -1554,14 +1507,11 @@ public class ShowExecutor {
                 SortedSet<Table> sortedTables = new TreeSet<>(Comparator.comparing(Table::getName));
 
                 for (Table table : tables) {
-                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeActions.checkAnyActionOnTable(connectContext, dbName, table.getName())) {
-                            continue;
-                        }
-                    } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                            dbName, table.getName(), PrivPredicate.SHOW)) {
+
+                    if (!PrivilegeActions.checkAnyActionOnTable(connectContext, dbName, table.getName())) {
                         continue;
                     }
+
                     sortedTables.add(table);
                 }
 
@@ -1610,20 +1560,14 @@ public class ShowExecutor {
                 List<String> leftRow = Arrays.asList("Left", readableLeft, String.valueOf(replicaCountLeft));
                 totalRows.add(leftRow);
             } else {
-                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    if (!PrivilegeActions.checkAnyActionOnTable(connectContext, dbName, tableName)) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW DATA",
-                                connectContext.getQualifiedUser(),
-                                connectContext.getRemoteIP(),
-                                tableName);
-                    }
-                } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                        dbName, tableName, PrivPredicate.SHOW)) {
+
+                if (!PrivilegeActions.checkAnyActionOnTable(connectContext, dbName, tableName)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW DATA",
                             connectContext.getQualifiedUser(),
                             connectContext.getRemoteIP(),
                             tableName);
                 }
+
 
                 Table table = db.getTable(tableName);
                 if (table == null) {
@@ -1983,21 +1927,20 @@ public class ShowExecutor {
 
             BackupJob backupJob = (BackupJob) jobI;
 
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                // check privilege
-                List<TableRef> tableRefs = backupJob.getTableRef();
-                AtomicBoolean privilegeDeny = new AtomicBoolean(false);
-                tableRefs.forEach(tableRef -> {
-                    TableName tableName = tableRef.getName();
-                    if (!PrivilegeActions.checkTableAction(connectContext, tableName.getDb(), tableName.getTbl(),
-                            PrivilegeType.EXPORT)) {
-                        privilegeDeny.set(true);
-                    }
-                });
-                if (privilegeDeny.get()) {
-                    resultSet = new ShowResultSet(showStmt.getMetaData(), EMPTY_SET);
-                    return;
+
+            // check privilege
+            List<TableRef> tableRefs = backupJob.getTableRef();
+            AtomicBoolean privilegeDeny = new AtomicBoolean(false);
+            tableRefs.forEach(tableRef -> {
+                TableName tableName = tableRef.getName();
+                if (!PrivilegeActions.checkTableAction(connectContext, tableName.getDb(), tableName.getTbl(),
+                        PrivilegeType.EXPORT)) {
+                    privilegeDeny.set(true);
                 }
+            });
+            if (privilegeDeny.get()) {
+                resultSet = new ShowResultSet(showStmt.getMetaData(), EMPTY_SET);
+                return;
             }
 
             List<String> info = backupJob.getInfo();
@@ -2118,55 +2061,47 @@ public class ShowExecutor {
 
     private void handleShowGrants() {
         ShowGrantsStmt showStmt = (ShowGrantsStmt) stmt;
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            AuthorizationManager authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
-            try {
-                List<List<String>> infos = new ArrayList<>();
-                if (showStmt.getRole() != null) {
-                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForRole(showStmt.getRole());
-                    if (granteeRole != null) {
-                        infos.add(granteeRole);
-                    }
 
-                    Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
-                            authorizationManager.getTypeToPrivilegeEntryListByRole(showStmt.getRole());
-                    infos.addAll(privilegeToRowString(authorizationManager,
-                            new GrantRevokeClause(null, showStmt.getRole()), typeToPrivilegeEntryList));
-                } else {
-                    List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(showStmt.getUserIdent());
-                    if (granteeRole != null) {
-                        infos.add(granteeRole);
-                    }
-
-                    Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
-                            authorizationManager.getTypeToPrivilegeEntryListByUser(showStmt.getUserIdent());
-                    infos.addAll(privilegeToRowString(authorizationManager,
-                            new GrantRevokeClause(showStmt.getUserIdent(), null), typeToPrivilegeEntryList));
+        AuthorizationManager authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+        try {
+            List<List<String>> infos = new ArrayList<>();
+            if (showStmt.getRole() != null) {
+                List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForRole(showStmt.getRole());
+                if (granteeRole != null) {
+                    infos.add(granteeRole);
                 }
-                resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
-            } catch (PrivilegeException e) {
-                throw new SemanticException(e.getMessage());
+
+                Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
+                        authorizationManager.getTypeToPrivilegeEntryListByRole(showStmt.getRole());
+                infos.addAll(privilegeToRowString(authorizationManager,
+                        new GrantRevokeClause(null, showStmt.getRole()), typeToPrivilegeEntryList));
+            } else {
+                List<String> granteeRole = authorizationManager.getGranteeRoleDetailsForUser(showStmt.getUserIdent());
+                if (granteeRole != null) {
+                    infos.add(granteeRole);
+                }
+
+                Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> typeToPrivilegeEntryList =
+                        authorizationManager.getTypeToPrivilegeEntryListByUser(showStmt.getUserIdent());
+                infos.addAll(privilegeToRowString(authorizationManager,
+                        new GrantRevokeClause(showStmt.getUserIdent(), null), typeToPrivilegeEntryList));
             }
-        } else {
-            List<List<String>> infos = GlobalStateMgr.getCurrentState().getAuth().getGrantsSQLs(showStmt.getUserIdent());
             resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
+        } catch (PrivilegeException e) {
+            throw new SemanticException(e.getMessage());
         }
     }
 
     private void handleShowRoles() {
         ShowRolesStmt showStmt = (ShowRolesStmt) stmt;
 
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            List<List<String>> infos = new ArrayList<>();
-            AuthorizationManager authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
-            List<String> roles = authorizationManager.getAllRoles();
-            roles.forEach(e -> infos.add(Lists.newArrayList(e)));
 
-            resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
-        } else {
-            List<List<String>> infos = GlobalStateMgr.getCurrentState().getAuth().getRoleInfo();
-            resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
-        }
+        List<List<String>> infos = new ArrayList<>();
+        AuthorizationManager authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+        List<String> roles = authorizationManager.getAllRoles();
+        roles.forEach(e -> infos.add(Lists.newArrayList(e)));
+
+        resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }
 
     private void handleShowUser() {
@@ -2256,19 +2191,12 @@ public class ShowExecutor {
                         dynamicPartitionScheduler.removeRuntimeInfo(olapTable.getName());
                         continue;
                     }
-                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeActions.checkAnyActionOnTable(ConnectContext.get(),
-                                db.getFullName(), olapTable.getName())) {
-                            continue;
-                        }
-                    } else {
-                        // check tbl privs
-                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                                db.getFullName(), olapTable.getName(),
-                                PrivPredicate.SHOW)) {
-                            continue;
-                        }
+
+                    if (!PrivilegeActions.checkAnyActionOnTable(ConnectContext.get(),
+                            db.getFullName(), olapTable.getName())) {
+                        continue;
                     }
+
                     DynamicPartitionProperty dynamicPartitionProperty =
                             olapTable.getTableProperty().getDynamicPartitionProperty();
                     String tableName = olapTable.getName();
@@ -2434,8 +2362,7 @@ public class ShowExecutor {
         CatalogMgr catalogMgr = globalStateMgr.getCatalogMgr();
         List<List<String>> rowSet = catalogMgr.getCatalogsInfo().stream()
                 .filter(row -> {
-                            if (globalStateMgr.isUsingNewPrivilege() &&
-                                    !InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(row.get(0))) {
+                            if (!InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equals(row.get(0))) {
                                 return PrivilegeActions.checkAnyActionOnOrInCatalog(
                                         connectContext.getCurrentUserIdentity(),
                                         connectContext.getCurrentRoleIds(), row.get(0));

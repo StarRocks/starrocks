@@ -89,8 +89,7 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
                 // In new privilege framework(RBAC), user needs any action on the table to show analysis job on it,
                 // for jobs on entire instance or entire db, we just show it directly because there isn't a specified
                 // table to check privilege on.
-                if (context.getGlobalStateMgr().isUsingNewPrivilege() &&
-                        !PrivilegeActions.checkAnyActionOnTable(context, db.getOriginName(), table.getName())) {
+                if (!PrivilegeActions.checkAnyActionOnTable(context, db.getOriginName(), table.getName())) {
                     return null;
                 }
 

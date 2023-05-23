@@ -1012,9 +1012,7 @@ public class StmtExecutor {
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) parsedStmt;
         long analyzeId = killAnalyzeStmt.getAnalyzeId();
         AnalyzeManager analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
-        }
+        PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
         // Try to kill the job anyway.
         analyzeManager.killConnection(analyzeId);
     }
@@ -1034,7 +1032,7 @@ public class StmtExecutor {
         }
     }
 
-    private void handleExecAsStmt() throws PrivilegeException, UserException {
+    private void handleExecAsStmt() throws UserException {
         ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
     }
 

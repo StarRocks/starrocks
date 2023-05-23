@@ -15,7 +15,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -160,41 +159,29 @@ public class ResourceGroupMgr implements Writable {
     private List<String> getUnqualifiedRole(ConnectContext ctx) {
         Preconditions.checkArgument(ctx != null);
 
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            try {
-                AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
-                List<String> validRoles = new ArrayList<>();
+        try {
+            AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+            List<String> validRoles = new ArrayList<>();
 
-                Set<Long> activeRoles = ctx.getCurrentRoleIds();
-                if (activeRoles == null) {
-                    activeRoles = manager.getRoleIdsByUser(ctx.getCurrentUserIdentity());
-                }
-
-                for (Long roleId : activeRoles) {
-                    RolePrivilegeCollection rolePrivilegeCollection =
-                            manager.getRolePrivilegeCollectionUnlocked(roleId, false);
-                    if (rolePrivilegeCollection != null) {
-                        validRoles.add(rolePrivilegeCollection.getName());
-                    }
-                }
-
-                return validRoles.stream().filter(r -> !PrivilegeBuiltinConstants.BUILT_IN_ROLE_NAMES.contains(r))
-                        .collect(Collectors.toList());
-            } catch (PrivilegeException e) {
-                LOG.info("getUnqualifiedRole failed for resource group, error message: " + e.getMessage());
-                return null;
+            Set<Long> activeRoles = ctx.getCurrentRoleIds();
+            if (activeRoles == null) {
+                activeRoles = manager.getRoleIdsByUser(ctx.getCurrentUserIdentity());
             }
-        }
 
-        String roleName = null;
-        String qualifiedRoleName = GlobalStateMgr.getCurrentState().getAuth()
-                .getRoleName(ctx.getCurrentUserIdentity());
-        if (qualifiedRoleName != null) {
-            //default_cluster:role
-            String[] roleParts = qualifiedRoleName.split(":");
-            roleName = roleParts[roleParts.length - 1];
+            for (Long roleId : activeRoles) {
+                RolePrivilegeCollection rolePrivilegeCollection =
+                        manager.getRolePrivilegeCollectionUnlocked(roleId, false);
+                if (rolePrivilegeCollection != null) {
+                    validRoles.add(rolePrivilegeCollection.getName());
+                }
+            }
+
+            return validRoles.stream().filter(r -> !PrivilegeBuiltinConstants.BUILT_IN_ROLE_NAMES.contains(r))
+                    .collect(Collectors.toList());
+        } catch (PrivilegeException e) {
+            LOG.info("getUnqualifiedRole failed for resource group, error message: " + e.getMessage());
+            return null;
         }
-        return Lists.newArrayList(roleName);
     }
 
     public List<List<String>> showAllResourceGroups(ConnectContext ctx, Boolean isListAll) {

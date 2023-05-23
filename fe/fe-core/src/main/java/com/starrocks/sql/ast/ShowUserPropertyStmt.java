@@ -67,15 +67,11 @@ public class ShowUserPropertyStmt extends ShowStmt {
 
     public List<List<String>> getRows(ConnectContext connectContext) throws AnalysisException {
         List<List<String>> rows = new ArrayList<>();
-        if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-            AuthenticationManager authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationManager();
+        AuthenticationManager authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationManager();
 
-            // Currently only "max_user_connections" is supported
-            long maxConn = authenticationManager.getMaxConn(user);
-            rows.add(Lists.newArrayList("max_user_connections", String.valueOf(maxConn)));
-        } else {
-            rows.addAll(GlobalStateMgr.getCurrentState().getAuth().getUserProperties(user));
-        }
+        // Currently only "max_user_connections" is supported
+        long maxConn = authenticationManager.getMaxConn(user);
+        rows.add(Lists.newArrayList("max_user_connections", String.valueOf(maxConn)));
 
         if (pattern == null) {
             return rows;
