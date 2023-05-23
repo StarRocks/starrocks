@@ -144,8 +144,7 @@ public class FileScanNode extends LoadScanNode {
     private List<List<TBrokerFileStatus>> fileStatusesList;
     // file num
     private int filesAdded;
-
-    // Only used for external table in select statement
+    
     private List<ComputeNode> nodes;
     private int nextBe = 0;
 
