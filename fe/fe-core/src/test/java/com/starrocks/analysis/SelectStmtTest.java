@@ -412,7 +412,7 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testSubstringConstantFolding() throws Exception {
+    public void testSubstringConstantFolding() {
         try {
             String sql = "select * from db1.t where dt = \"2022-01-02\" or dt = cast(substring(\"2022-01-03\", 1, 10) as date);";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
