@@ -426,6 +426,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_STRICT_TYPE = "enable_strict_type";
 
+    public static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -949,6 +951,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN)
     private boolean enableRewriteSimpleAggToMetaScan = false;
+
+    // support auto|row|column
+    @VariableMgr.VarAttr(name = PARTIAL_UPDATE_MODE)
+    private String partialUpdateMode = "auto";
+
+    public void setPartialUpdateMode(String mode) {
+        this.partialUpdateMode = mode;
+    }
+
+    public String getPartialUpdateMode() {
+        return this.partialUpdateMode;
+    }
 
     public boolean isEnableSortAggregate() {
         return enableSortAggregate;
