@@ -2358,7 +2358,7 @@ TEST_F(FileReaderTest, CheckDictOutofBouds) {
     TypeDescriptor type_original_time = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
     TypeDescriptor type_is_original = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
 
-    Utils::SlotDesc slot_descs[] = {
+    SlotDesc slot_descs[] = {
             {"vin", type_vin},
             {"type_log_domain", type_log_domain},
             {"file_name", type_file_name},
@@ -2379,8 +2379,8 @@ TEST_F(FileReaderTest, CheckDictOutofBouds) {
             {""},
     };
 
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
 
     // --------------finish init context---------------
