@@ -192,8 +192,9 @@ Status CompactionTask::_shortcut_compact(Statistics* statistics) {
             // if rowset has data, we should compact it
             data_rowsets.emplace_back(rowset);
         } else if (rowset->rowset_meta()->has_delete_predicate()) {
-            // if rowset has delete predicate, we should compact it
-            data_rowsets.emplace_back(rowset);
+            // if rowset has delete predicate, can not do shortcut compaction
+            data_rowsets.clear();
+            break;
         }
     }
 

@@ -100,25 +100,55 @@ public:
         ASSERT_TRUE(tablet->add_rowset(src_rowset).ok());
     }
 
-    void write_delete_version(TabletMetaSharedPtr tablet_meta, int64_t version) {
+    void write_empty_version(TabletSharedPtr tablet) {
         RowsetWriterContext rowset_writer_context;
-        create_rowset_writer_context(&rowset_writer_context, version);
+        create_rowset_writer_context(&rowset_writer_context, _version);
+        _version++;
         std::unique_ptr<RowsetWriter> rowset_writer;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
 
-        rowset_writer->flush();
         RowsetSharedPtr src_rowset = *rowset_writer->build();
         ASSERT_TRUE(src_rowset != nullptr);
         ASSERT_EQ(0, src_rowset->num_rows());
 
-        auto* delete_predicate = src_rowset->rowset_meta()->mutable_delete_predicate();
-        delete_predicate->set_version(version);
-        auto* in_pred = delete_predicate->add_in_predicates();
-        in_pred->set_column_name("k1");
-        in_pred->set_is_not_in(false);
-        in_pred->add_values("0");
+        ASSERT_TRUE(tablet->add_rowset(src_rowset).ok());
+    }
 
+    RowsetSharedPtr generate_delete_rowset(int64_t version) {
+        RowsetWriterContext rowset_writer_context;
+        create_rowset_writer_context(&rowset_writer_context, version);
+        std::unique_ptr<RowsetWriter> rowset_writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
+
+        if (rowset_writer == nullptr) {
+            return nullptr;
+        }
+
+        rowset_writer->flush();
+        RowsetSharedPtr src_rowset = *rowset_writer->build();
+        if (src_rowset != nullptr) {
+            EXPECT_EQ(0, src_rowset->num_rows());
+            auto* delete_predicate = src_rowset->rowset_meta()->mutable_delete_predicate();
+            delete_predicate->set_version(version);
+            auto* in_pred = delete_predicate->add_in_predicates();
+            in_pred->set_column_name("k1");
+            in_pred->set_is_not_in(false);
+            in_pred->add_values("0");
+        }
+
+        return src_rowset;
+    }
+
+    void write_delete_version(TabletMetaSharedPtr tablet_meta, int64_t version) {
+        auto src_rowset = generate_delete_rowset(version);
+        ASSERT_NE(nullptr, src_rowset);
         tablet_meta->add_rs_meta(src_rowset->rowset_meta());
+    }
+
+    void write_delete_version(TabletSharedPtr tablet, int64_t version) {
+        auto src_rowset = generate_delete_rowset(version);
+        ASSERT_NE(nullptr, src_rowset);
+        ASSERT_TRUE(tablet->add_rowset(src_rowset).ok());
     }
 
     void create_rowset_writer_context(RowsetWriterContext* rowset_writer_context, int64_t version) {
@@ -200,7 +230,7 @@ public:
         tablet->set_compaction_context(compaction_context);
     }
 
-    Status compact(TabletSharedPtr tablet) {
+    Status compact(const TabletSharedPtr& tablet, bool* is_shortcut_compaction = nullptr) {
         if (!tablet->need_compaction()) {
             LOG(WARNING) << "no need compact";
             return Status::InternalError("no need compact");
@@ -217,11 +247,14 @@ public:
             LOG(WARNING) << "task fail";
             return Status::InternalError("task fail");
         }
+        if (is_shortcut_compaction != nullptr) {
+            *is_shortcut_compaction = task->is_shortcut_compaction();
+        }
 
         return Status::OK();
     }
 
-    Status base_compact(TabletSharedPtr tablet) {
+    Status base_compact(TabletSharedPtr tablet, bool* is_shortcut_compaction = nullptr) {
         if (!tablet->force_base_compaction()) {
             LOG(WARNING) << "no need compact";
             return Status::InternalError("no need compact");
@@ -237,6 +270,9 @@ public:
         if (task->compaction_task_state() == COMPACTION_FAILED) {
             LOG(WARNING) << "task fail";
             return Status::InternalError("task fail");
+        }
+        if (is_shortcut_compaction != nullptr) {
+            *is_shortcut_compaction = task->is_shortcut_compaction();
         }
 
         return Status::OK();
@@ -1477,6 +1513,77 @@ TEST_F(SizeTieredCompactionPolicyTest, test_large_dup_base_rowset_force_compact)
         ASSERT_TRUE(res.ok());
 
         ASSERT_EQ(1, tablet->version_count());
+    }
+}
+
+TEST_F(SizeTieredCompactionPolicyTest, test_one_delete_shortcut_compaction) {
+    LOG(INFO) << "test_one_delete_shortcut_compaction";
+    create_tablet_schema(UNIQUE_KEYS);
+
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+
+    TabletSharedPtr tablet =
+            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    tablet->init();
+    init_compaction_context(tablet);
+
+    write_empty_version(tablet);
+    write_empty_version(tablet);
+
+    ASSERT_EQ(2, tablet->version_count());
+
+    {
+        bool is_shortcut_compaction = true;
+        auto res = compact(tablet, &is_shortcut_compaction);
+        ASSERT_TRUE(res.ok());
+        ASSERT_FALSE(is_shortcut_compaction);
+
+        ASSERT_EQ(1, tablet->version_count());
+        std::vector<Version> versions;
+        tablet->list_versions(&versions);
+        ASSERT_EQ(1, versions.size());
+        ASSERT_EQ(0, versions[0].first);
+        ASSERT_EQ(1, versions[0].second);
+    }
+
+    _version += 1;
+    write_delete_version(tablet, 2);
+    write_empty_version(tablet);
+    write_empty_version(tablet);
+
+    ASSERT_EQ(4, tablet->version_count());
+
+    {
+        auto is_shortcut_compaction = true;
+        auto res = base_compact(tablet, &is_shortcut_compaction);
+        ASSERT_TRUE(res.ok());
+        ASSERT_FALSE(is_shortcut_compaction);
+
+        ASSERT_EQ(1, tablet->version_count());
+        std::vector<Version> versions;
+        tablet->list_versions(&versions);
+        ASSERT_EQ(1, versions.size());
+        ASSERT_EQ(0, versions[0].first);
+        ASSERT_EQ(4, versions[0].second);
+    }
+
+    write_specify_version(tablet, 5);
+    _version += 1;
+    write_empty_version(tablet);
+
+    {
+        auto is_shortcut_compaction = false;
+        auto res = base_compact(tablet, &is_shortcut_compaction);
+        ASSERT_TRUE(res.ok());
+        ASSERT_TRUE(is_shortcut_compaction);
+
+        ASSERT_EQ(1, tablet->version_count());
+        std::vector<Version> versions;
+        tablet->list_versions(&versions);
+        ASSERT_EQ(1, versions.size());
+        ASSERT_EQ(0, versions[0].first);
+        ASSERT_EQ(6, versions[0].second);
     }
 }
 
