@@ -832,7 +832,7 @@ static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tab
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto& cols = full_chunk->columns();
     for (long key : keys) {
-        cols[0]->(Datum((int64_t)key));
+        cols[0]->append_datum(Datum((int64_t)key));
         cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
         auto v = std::to_string((int64_t)(key % 1000 + 2));
         cols[2]->append_datum(Datum(Slice{v}));
