@@ -2,4 +2,4 @@
 [UC] UNINSTALL PLUGIN AuditLoader;
 
 -- name: test_install_plugin
-install plugin from "http://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/auditloader.zip";
+install plugin from "http://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/plugin/auditloader.zip";

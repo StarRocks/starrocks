@@ -1,10 +1,9 @@
--- name: test_install_plugin
-install plugin from "http://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/auditloader.zip";
--- result:
-E: (1064, 'Unexpected exception: http://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/auditloader.zip.md5. you should set md5sum in plugin properties or provide a md5 URI to check plugin file')
--- !result
 -- name: test_uninstall_plugin
 [UC] UNINSTALL PLUGIN AuditLoader;
 -- result:
 E: (1064, 'Unexpected exception: Plugin AuditLoader does not exist')
+-- !result
+-- name: test_install_plugin
+install plugin from "http://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/plugin/auditloader.zip";
+-- result:
 -- !result
