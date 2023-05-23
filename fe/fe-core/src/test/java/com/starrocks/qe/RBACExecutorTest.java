@@ -21,7 +21,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzerV2;
+import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzer;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
@@ -223,7 +223,7 @@ public class RBACExecutorTest {
             }
         };
 
-        new MockUp<PrivilegeStmtAnalyzerV2>() {
+        new MockUp<PrivilegeStmtAnalyzer>() {
             @Mock
             public void analyze(ConnectContext context) throws AnalysisException {
             }

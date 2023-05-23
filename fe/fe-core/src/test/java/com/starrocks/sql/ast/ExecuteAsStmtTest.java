@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -31,7 +31,7 @@ public class ExecuteAsStmtTest {
     @Mocked
     private GlobalStateMgr globalStateMgr;
     @Mocked
-    private Auth auth;
+    private AuthenticationManager auth;
     @Mocked
     private ConnectContext ctx;
 
@@ -40,7 +40,7 @@ public class ExecuteAsStmtTest {
         MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getAuth();
+                GlobalStateMgr.getCurrentState().getAuthenticationManager();
                 minTimes = 0;
                 result = auth;
 
