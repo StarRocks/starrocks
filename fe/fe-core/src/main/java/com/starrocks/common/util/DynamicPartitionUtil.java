@@ -411,9 +411,6 @@ public class DynamicPartitionUtil {
                 tableProperty = new TableProperty(dynamicPartitionProperties);
                 olapTable.setTableProperty(tableProperty);
             }
-            if (!tableProperty.getProperties().containsKey(DynamicPartitionProperty.BUCKETS)) {
-                tableProperty.modifyTableProperties(DynamicPartitionProperty.BUCKETS, "0");
-            }
             tableProperty.buildDynamicProperty();
         }
     }

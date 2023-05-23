@@ -169,7 +169,8 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
     bool skip_dup_large_base_rowset = true;
     for (auto rowset : candidate_rowsets) {
         // when duplicate key's base rowset larger than 0.8 * max_segment_file_size, we don't need compact it
-        if (keys_type == KeysType::DUP_KEYS && skip_dup_large_base_rowset &&
+        // if set force_base_compaction, we will compact it to make sure delete version can be compacted
+        if (keys_type == KeysType::DUP_KEYS && skip_dup_large_base_rowset && !force_base_compaction &&
             !rowset->rowset_meta()->is_segments_overlapping() &&
             rowset->data_disk_size() > config::max_segment_file_size * 0.8) {
             continue;
