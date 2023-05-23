@@ -25,6 +25,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
@@ -81,6 +82,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     static {
         mockTPCHTable();
         mockPartitionTable();
+        mockView();
     }
 
     @Override
@@ -223,6 +225,44 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         } finally {
             writeUnlock();
         }
+    }
+
+    public static void mockView() {
+        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.putIfAbsent(MOCKED_TPCH_DB_NAME, new CaseInsensitiveMap<>());
+        List<FieldSchema> cols = Lists.newArrayList();
+        cols.add(new FieldSchema("c_custkey", "int", null));
+        cols.add(new FieldSchema("c_name", "string", null));
+        cols.add(new FieldSchema("c_address", "string", null));
+        cols.add(new FieldSchema("c_nationkey", "int", null));
+        cols.add(new FieldSchema("c_phone", "string", null));
+        cols.add(new FieldSchema("c_mktsegment", "string", null));
+        cols.add(new FieldSchema("c_comment", "string", null));
+        StorageDescriptor sd = new StorageDescriptor(cols, "", "",  "", false, -1, null, Lists.newArrayList(),
+                Lists.newArrayList(), Maps.newHashMap());
+
+        Table hmsView1 = new Table("customer_view", "tpch", null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null,
+                "select c_custkey,c_name, c_address, c_nationkey, c_phone, c_mktsegment, c_comment from tpch.customer",
+                "VIRTUAL_VIEW");
+        HiveView view1 = HiveMetastoreApiConverter.toHiveView(hmsView1, MOCKED_HIVE_CATALOG_NAME);
+        mockTables.put(hmsView1.getTableName(), new HiveTableInfo(view1));
+
+        cols = Lists.newArrayList();
+        cols.add(new FieldSchema("c_custkey", "int", null));
+        cols.add(new FieldSchema("c_name", "string", null));
+        cols.add(new FieldSchema("c_address", "string", null));
+        cols.add(new FieldSchema("c_nationkey", "int", null));
+        cols.add(new FieldSchema("n_nationkey", "int", null));
+        cols.add(new FieldSchema("n_name", "string", null));
+        cols.add(new FieldSchema("n_regionkey", "int", null));
+        sd = new StorageDescriptor(cols, "", "",  "", false, -1, null, Lists.newArrayList(),
+                Lists.newArrayList(), Maps.newHashMap());
+
+        Table hmsView2 = new Table("customer_view", "tpch", null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null,
+                "select c_custkey,c_name, c_address, c_nationkey, n_nationkey, n_name, n_regionkey from " +
+                        "tpch.customer join tpch.nation on c_nationkey = n_nationkey",
+                "VIRTUAL_VIEW");
+        HiveView view2 = HiveMetastoreApiConverter.toHiveView(hmsView2, MOCKED_HIVE_CATALOG_NAME);
+        mockTables.put(hmsView2.getTableName(), new HiveTableInfo(view2));
     }
 
     public static void mockTPCHTable() {
@@ -810,10 +850,10 @@ public class MockedHiveMetadata implements ConnectorMetadata {
 
     private static class HiveTableInfo {
         public final com.starrocks.catalog.Table table;
-        public final List<String> partitionNames;
-        public final long rowCount;
-        public final Map<String, ColumnStatistic> columnStatsMap;
-        private final List<RemoteFileInfo> remoteFileInfos;
+        public List<String> partitionNames;
+        public long rowCount;
+        public Map<String, ColumnStatistic> columnStatsMap;
+        private List<RemoteFileInfo> remoteFileInfos;
         private Map<String, PartitionInfo> partitionInfoMap = Maps.newHashMap();
 
         public HiveTableInfo(HiveTable table,
@@ -835,6 +875,10 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                         toMap(k -> k, k -> new Partition(ImmutableMap.of(Partition.TRANSIENT_LAST_DDL_TIME,
                                 String.valueOf(System.currentTimeMillis() / 1000)), null, null, null, false)));
             }
+        }
+
+        public HiveTableInfo(HiveView view) {
+            this.table = view;
         }
     }
 

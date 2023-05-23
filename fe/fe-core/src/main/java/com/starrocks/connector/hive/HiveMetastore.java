@@ -39,6 +39,7 @@ import java.util.stream.Collectors;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toHiveCommonStats;
+import static com.starrocks.connector.hive.HiveMetastoreApiConverter.validateHiveTableType;
 
 public class HiveMetastore implements IHiveMetastore {
 
@@ -74,7 +75,12 @@ public class HiveMetastore implements IHiveMetastore {
         }
 
         if (!HiveMetastoreApiConverter.isHudiTable(table.getSd().getInputFormat())) {
-            return HiveMetastoreApiConverter.toHiveTable(table, catalogName);
+            validateHiveTableType(table.getTableType());
+            if (table.getTableType().equalsIgnoreCase("VIRTUAL_VIEW")) {
+                return HiveMetastoreApiConverter.toHiveView(table, catalogName);
+            } else {
+                return HiveMetastoreApiConverter.toHiveTable(table, catalogName);
+            }
         } else {
             return HiveMetastoreApiConverter.toHudiTable(table, catalogName);
         }
