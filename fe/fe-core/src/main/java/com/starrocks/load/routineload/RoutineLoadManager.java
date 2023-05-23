@@ -719,7 +719,6 @@ public class RoutineLoadManager implements Writable {
 
         try {
             int size = reader.readInt();
-            long now = System.currentTimeMillis();
             while (size-- > 0) {
                 RoutineLoadJob routineLoadJob = reader.readJson(RoutineLoadJob.class);
 

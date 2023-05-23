@@ -275,7 +275,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected long receivedBytes = 0;
     @SerializedName("tt")
     protected long totalTaskExcutionTimeMs = 1; // init as 1 to avoid division by zero
-    @SerializedName("ct")
+    @SerializedName("cn")
     protected long committedTaskNum = 0;
     @SerializedName("at")
     protected long abortedTaskNum = 0;
