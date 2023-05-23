@@ -2333,24 +2333,24 @@ TEST_F(FileReaderTest, CheckDictOutofBouds) {
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(type_vin, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_log_domain, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_file_name, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_is_collection, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_is_center, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_is_cloud, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_collection_time, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_center_time, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_cloud_time, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_error_collection_tips, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_error_center_tips, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_error_cloud_tips, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_error_collection_time, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_error_center_time, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_error_cloud_time, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_original_time, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_is_original, true), chunk->num_columns());
+    auto chunk = std::make_shared<vectorized::Chunk>();
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_vin, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_log_domain, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_file_name, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_is_collection, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_is_center, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_is_cloud, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_collection_time, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_center_time, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_cloud_time, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_error_collection_tips, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_error_center_tips, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_error_cloud_tips, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_error_collection_time, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_error_center_time, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_error_cloud_time, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_original_time, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_is_original, true), chunk->num_columns());
 
     size_t total_row_nums = 0;
     while (!status.is_end_of_file()) {
