@@ -123,6 +123,8 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
                     break;
                 case "glue":
                     wrappedIO = new S3FileIO();
+                case "rest":
+                    wrappedIO = new HadoopFileIO(conf);
                     break;
             }
 
