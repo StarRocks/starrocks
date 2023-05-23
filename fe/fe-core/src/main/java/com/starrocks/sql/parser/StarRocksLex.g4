@@ -467,5 +467,5 @@ SEMICOLON: ';';
 DOTDOTDOT: '...';
 
 WS
-    : [ \r\n\t]+ -> channel(HIDDEN)
+    : [ \r\n\t\u3000]+ -> channel(HIDDEN)
     ;
