@@ -1110,6 +1110,25 @@ public class ScalarOperatorFunctionsTest {
 
     @Test
     public void testSubString() {
+        assertEquals("ab", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(1), ConstantOperator.createInt(2)).getVarchar());
+        assertEquals("abcd", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(1)).getVarchar());
+        assertEquals("cd", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(-2)).getVarchar());
+        assertEquals("c", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(-2), ConstantOperator.createInt(1)).getVarchar());
+        assertEquals("abcd", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(1), ConstantOperator.createInt(4)).getVarchar());
+        assertEquals("abcd", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(1), ConstantOperator.createInt(10)).getVarchar());
+        assertEquals("cd", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(3), ConstantOperator.createInt(4)).getVarchar());
+        assertEquals("", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(0), ConstantOperator.createInt(2)).getVarchar());
+        assertEquals("", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(5), ConstantOperator.createInt(2)).getVarchar());
+
         assertEquals("starrocks", ScalarOperatorFunctions.substring(
                 new ConstantOperator("starrockscluster", Type.VARCHAR),
                 new ConstantOperator(1, Type.INT),
