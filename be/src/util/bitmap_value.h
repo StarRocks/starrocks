@@ -1032,16 +1032,6 @@ public:
         }
     }
 
-    void add_many(size_t n_args, const uint32_t* vals) {
-        if (_type != BITMAP) {
-            for (size_t i = 0; i < n_args; i++) {
-                add(vals[i]);
-            }
-        } else {
-            _bitmap->addMany(n_args, vals);
-        }
-    }
-
     void to_bitmap() {
         _bitmap = std::make_shared<detail::Roaring64Map>();
         for (const auto& x : _set) {
