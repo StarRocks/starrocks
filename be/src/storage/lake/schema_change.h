@@ -38,6 +38,7 @@ private:
         Tablet* base_tablet;
         Tablet* new_tablet;
         int64_t version;
+        int64_t txn_id;
         MaterializedViewParamMap materialized_params_map;
         bool sc_sorting = false;
         bool sc_directly = false;

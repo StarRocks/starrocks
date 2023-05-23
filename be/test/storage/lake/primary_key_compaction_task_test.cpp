@@ -284,7 +284,7 @@ TEST_P(PrimaryKeyCompactionTest, test1) {
     config::lake_gc_segment_expire_seconds = 0;
     config::lake_gc_metadata_max_versions = 1;
     ASSERT_OK(metadata_gc(kTestGroupPath, _tablet_manager.get(), _txn_id + 1));
-    ASSERT_OK(datafile_gc(kTestGroupPath, _tablet_manager.get()));
+    ASSERT_OK(datafile_gc(kTestGroupPath, _tablet_manager.get(), _txn_id + 1));
 
     std::vector<std::string> files;
     ASSERT_OK(fs::get_children(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName), &files));

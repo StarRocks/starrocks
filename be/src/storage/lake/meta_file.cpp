@@ -118,7 +118,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
                              op_compaction.output_rowset().ShortDebugString());
 }
 
-Status MetaFileBuilder::_finalize_delvec(int64_t version) {
+Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
     if (!is_primary_key(_tablet_meta.get())) return Status::OK();
 
     // 1. update delvec page in meta
@@ -142,7 +142,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version) {
     if (_buf.size() > 0) {
         MonotonicStopWatch watch;
         watch.start();
-        auto delvec_file_name = random_tablet_delvec_filename();
+        auto delvec_file_name = gen_delvec_filename(txn_id);
         auto delvec_file_path = _tablet.delvec_location(delvec_file_name);
         // keep delete vector file name in tablet meta
         (*_tablet_meta->mutable_delvec_meta()->mutable_version_to_delvec())[version] = delvec_file_name;
@@ -180,13 +180,13 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version) {
     return Status::OK();
 }
 
-Status MetaFileBuilder::finalize() {
+Status MetaFileBuilder::finalize(int64_t txn_id) {
     MonotonicStopWatch watch;
     watch.start();
 
     auto version = _tablet_meta->version();
     // finalize delvec
-    RETURN_IF_ERROR(_finalize_delvec(version));
+    RETURN_IF_ERROR(_finalize_delvec(version, txn_id));
     RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
     if (watch.elapsed_time() > /*100ms=*/100 * 1000 * 1000) {
         LOG(INFO) << "MetaFileBuilder finalize cost(ms): " << watch.elapsed_time() / 1000000;

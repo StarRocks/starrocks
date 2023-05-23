@@ -63,7 +63,8 @@ public:
 
         s_location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
         s_update_manager = std::make_unique<lake::UpdateManager>(s_location_provider.get());
-        s_tablet_manager = std::make_unique<lake::TabletManager>(s_location_provider.get(), s_update_manager.get(), 16384);
+        s_tablet_manager =
+                std::make_unique<lake::TabletManager>(s_location_provider.get(), s_update_manager.get(), 16384);
     }
 
     static void TearDownTestCase() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
@@ -86,7 +87,7 @@ TEST_F(MetaFileTest, test_meta_rw) {
 
     // 2. write to pk meta file
     MetaFileBuilder builder(*tablet, metadata);
-    Status st = builder.finalize();
+    Status st = builder.finalize(next_id());
     EXPECT_TRUE(st.ok());
 
     // 3. read meta from meta file
@@ -123,7 +124,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     EXPECT_FALSE(ndv->empty());
     std::string before_delvec = ndv->save();
     builder.append_delvec(ndv, segment_id);
-    Status st = builder.finalize();
+    Status st = builder.finalize(next_id());
     EXPECT_TRUE(st.ok());
 
     // 3. read delvec
@@ -153,7 +154,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     std::vector<uint32_t> dels2 = {1, 3, 5, 9, 90000};
     dv2.add_dels_as_new_version(dels2, version2, &ndv2);
     builder2.append_delvec(ndv2, segment_id);
-    st = builder2.finalize();
+    st = builder2.finalize(next_id());
     EXPECT_TRUE(st.ok());
 
     // 6. read again
@@ -192,7 +193,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     std::vector<uint32_t> dels3 = {1, 3, 5, 9, 90000};
     dv3.add_dels_as_new_version(dels3, new_version, &ndv3);
     builder3.append_delvec(ndv3, segment_id + 1);
-    st = builder3.finalize();
+    st = builder3.finalize(next_id());
     EXPECT_TRUE(st.ok());
 
     // validate delvec file record with version 12 been removed

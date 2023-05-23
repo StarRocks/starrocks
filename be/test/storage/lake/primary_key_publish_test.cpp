@@ -125,9 +125,6 @@ public:
     void TearDown() override {
         // check primary index cache's ref
         EXPECT_TRUE(_update_manager->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-        tablet.delete_txn_log(_txn_id);
-        _txn_id++;
         (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_backup_location_provider);
         (void)fs::remove_all(kTestGroupPath);
     }
@@ -183,8 +180,7 @@ protected:
     std::unique_ptr<MemTracker> _parent_mem_tracker;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<VSchema> _schema;
-    int64_t _txn_id = 1231;
-    int64_t _partition_id = 4561;
+    int64_t _partition_id = next_id();
 };
 
 TEST_F(PrimaryKeyPublishTest, test_write_read_success) {
@@ -199,9 +195,10 @@ TEST_F(PrimaryKeyPublishTest, test_write_read_success) {
     VChunk chunk0({c0, c1}, _schema);
     auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
 
+    int64_t txn_id = next_id();
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
     std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
     ASSERT_OK(writer->open());
 
     // write segment #1
@@ -210,10 +207,10 @@ TEST_F(PrimaryKeyPublishTest, test_write_read_success) {
 
     // write txnlog
     int64_t logs[1];
-    logs[0] = _txn_id;
+    logs[0] = txn_id;
     auto txn_log = std::make_shared<TxnLog>();
     txn_log->set_tablet_id(_tablet_metadata->id());
-    txn_log->set_txn_id(_txn_id++);
+    txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (auto& f : writer->files()) {
         op_write->mutable_rowset()->add_segments(std::move(f));
@@ -255,15 +252,15 @@ TEST_F(PrimaryKeyPublishTest, test_write_multitime_check_result) {
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
-        _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+        int64_t txn_id = next_id();
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, txn_id, _partition_id, nullptr,
                                                 _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, read(version));
@@ -285,28 +282,28 @@ TEST_F(PrimaryKeyPublishTest, test_write_fail_retry) {
     auto tablet_id = _tablet_metadata->id();
     // write success
     for (int i = 0; i < 3; i++) {
-        _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+        auto txn_id = next_id();
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, txn_id, _partition_id, nullptr,
                                                 _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
     }
     // write failed
     for (int i = 3; i < 5; i++) {
-        _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+        auto txn_id = next_id();
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, txn_id, _partition_id, nullptr,
                                                 _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
-        auto txn_log_st = tablet.get_txn_log(_txn_id);
+        auto txn_log_st = tablet.get_txn_log(txn_id);
         EXPECT_TRUE(txn_log_st.ok());
         auto& txn_log = txn_log_st.value();
         ASSIGN_OR_ABORT(auto base_metadata, tablet.get_metadata(version));
@@ -321,15 +318,15 @@ TEST_F(PrimaryKeyPublishTest, test_write_fail_retry) {
     }
     // write success
     for (int i = 3; i < 5; i++) {
-        _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+        auto txn_id = next_id();
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, txn_id, _partition_id, nullptr,
                                                 _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
     }
     ASSERT_EQ(kChunkSize * 5, read(version));
@@ -344,29 +341,31 @@ TEST_F(PrimaryKeyPublishTest, test_publish_multi_times) {
         indexes[i] = i;
     }
 
+    auto txns = std::vector<int64_t>();
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
-        _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+        int64_t txn_id = next_id();
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, txn_id, _partition_id, nullptr,
                                                 _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
+        txns.push_back(txn_id);
     }
     ASSERT_EQ(kChunkSize, read(version));
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
     // duplicate publish
-    ASSERT_OK(_tablet_manager->publish_version(tablet_id, version - 1, version, &_txn_id, 1).status());
+    ASSERT_OK(_tablet_manager->publish_version(tablet_id, version - 1, version, &txns.back(), 1).status());
     // publish using old version
-    ASSERT_OK(_tablet_manager->publish_version(tablet_id, version - 2, version - 1, &_txn_id, 1).status());
+    ASSERT_OK(_tablet_manager->publish_version(tablet_id, version - 2, version - 1, &txns.back(), 1).status());
     // advince publish should fail, because version + 1 don't exist
-    ASSERT_ERROR(_tablet_manager->publish_version(tablet_id, version + 1, version + 2, &_txn_id, 1).status());
+    ASSERT_ERROR(_tablet_manager->publish_version(tablet_id, version + 1, version + 2, &txns.back(), 1).status());
     ASSERT_EQ(kChunkSize, read(version));
 }
 
@@ -380,8 +379,8 @@ TEST_F(PrimaryKeyPublishTest, test_publish_concurrent) {
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
-        _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+        auto txn_id = next_id();
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, txn_id, _partition_id, nullptr,
                                                 _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -389,9 +388,9 @@ TEST_F(PrimaryKeyPublishTest, test_publish_concurrent) {
         delta_writer->close();
         // start to publish using multi thread
         std::vector<std::thread> workers;
-        for (int i = 0; i < 5; i++) {
+        for (int j = 0; j < 5; j++) {
             workers.emplace_back(
-                    [&]() { (void)_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1); });
+                    [&]() { (void)_tablet_manager->publish_version(tablet_id, version, version + 1, &txn_id, 1); });
         }
         for (auto& t : workers) {
             t.join();
@@ -413,37 +412,37 @@ TEST_F(PrimaryKeyPublishTest, test_resolve_conflict) {
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
-        _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+        auto txn_id = next_id();
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, txn_id, _partition_id, nullptr,
                                                 _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, read(version));
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
 
+    std::vector<int64_t> txn_ids;
     // concurrent write
     for (int i = 0; i < 3; i++) {
-        _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
+        auto txn_id = next_id();
+        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, txn_id, _partition_id, nullptr,
                                                 _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         // will preload update state here.
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
+        txn_ids.push_back(txn_id);
     }
     // publish in order
-    for (int i = _txn_id - 2; i <= _txn_id; i++) {
-        // Publish version
-        const int64_t ctxnid = i;
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &ctxnid, 1).status());
+    for (int64_t txn_id : txn_ids) {
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
     }
     // check result

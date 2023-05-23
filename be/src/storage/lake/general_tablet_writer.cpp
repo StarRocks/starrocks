@@ -25,8 +25,9 @@
 
 namespace starrocks::lake {
 
-HorizontalGeneralTabletWriter::HorizontalGeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> tschema)
-        : TabletWriter(tablet, std::move(tschema)) {}
+HorizontalGeneralTabletWriter::HorizontalGeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
+                                                             int64_t txn_id)
+        : TabletWriter(tablet, std::move(schema), txn_id) {}
 
 HorizontalGeneralTabletWriter::~HorizontalGeneralTabletWriter() = default;
 
@@ -74,7 +75,7 @@ void HorizontalGeneralTabletWriter::close() {
 
 Status HorizontalGeneralTabletWriter::reset_segment_writer() {
     DCHECK(_schema != nullptr);
-    auto name = random_segment_filename();
+    auto name = gen_segment_filename(_txn_id);
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.segment_location(name)));
     SegmentWriterOptions opts;
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema.get(), opts);
@@ -96,9 +97,9 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer() {
     return Status::OK();
 }
 
-VerticalGeneralTabletWriter::VerticalGeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> tschema,
-                                                         uint32_t max_rows_per_segment)
-        : TabletWriter(tablet, std::move(tschema)), _max_rows_per_segment(max_rows_per_segment) {}
+VerticalGeneralTabletWriter::VerticalGeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
+                                                         int64_t txn_id, uint32_t max_rows_per_segment)
+        : TabletWriter(tablet, std::move(schema), txn_id), _max_rows_per_segment(max_rows_per_segment) {}
 
 VerticalGeneralTabletWriter::~VerticalGeneralTabletWriter() = default;
 
@@ -225,7 +226,7 @@ void VerticalGeneralTabletWriter::close() {
 StatusOr<std::unique_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_segment_writer(
         const std::vector<uint32_t>& column_indexes, bool is_key) {
     DCHECK(_schema != nullptr);
-    auto name = random_segment_filename();
+    auto name = gen_segment_filename(_txn_id);
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.segment_location(name)));
     SegmentWriterOptions opts;
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema.get(), opts);

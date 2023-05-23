@@ -32,7 +32,8 @@ namespace starrocks::lake {
 
 class SchemaChange {
 public:
-    explicit SchemaChange(TabletManager* tablet_manager) : _tablet_manager(tablet_manager) {}
+    explicit SchemaChange(TabletManager* tablet_manager, int64_t txn_id)
+            : _tablet_manager(tablet_manager), _txn_id(txn_id) {}
 
     virtual ~SchemaChange() = default;
 
@@ -41,11 +42,12 @@ public:
 
 protected:
     TabletManager* _tablet_manager;
+    int64_t _txn_id;
 };
 
 class LinkedSchemaChange final : public SchemaChange {
 public:
-    LinkedSchemaChange(TabletManager* tablet_manager) : SchemaChange(tablet_manager) {}
+    explicit LinkedSchemaChange(TabletManager* tablet_manager, int64_t txn_id) : SchemaChange(tablet_manager, txn_id) {}
     ~LinkedSchemaChange() override = default;
 
     DISALLOW_COPY_AND_MOVE(LinkedSchemaChange);
@@ -56,9 +58,9 @@ public:
 
 class ConvertedSchemaChange : public SchemaChange {
 public:
-    explicit ConvertedSchemaChange(TabletManager* tablet_manager, Tablet* base_tablet, Tablet* new_tablet,
-                                   int64_t version, ChunkChanger* chunk_changer)
-            : SchemaChange(tablet_manager),
+    explicit ConvertedSchemaChange(TabletManager* tablet_manager, int64_t txn_id, Tablet* base_tablet,
+                                   Tablet* new_tablet, int64_t version, ChunkChanger* chunk_changer)
+            : SchemaChange(tablet_manager, txn_id),
               _base_tablet(base_tablet),
               _new_tablet(new_tablet),
               _version(version),
@@ -91,9 +93,9 @@ protected:
 
 class DirectSchemaChange final : public ConvertedSchemaChange {
 public:
-    explicit DirectSchemaChange(TabletManager* tablet_manager, Tablet* base_tablet, Tablet* new_tablet, int64_t version,
-                                ChunkChanger* chunk_changer)
-            : ConvertedSchemaChange(tablet_manager, base_tablet, new_tablet, version, chunk_changer) {}
+    explicit DirectSchemaChange(TabletManager* tablet_manager, int64_t txn_id, Tablet* base_tablet, Tablet* new_tablet,
+                                int64_t version, ChunkChanger* chunk_changer)
+            : ConvertedSchemaChange(tablet_manager, txn_id, base_tablet, new_tablet, version, chunk_changer) {}
 
     ~DirectSchemaChange() override = default;
 
@@ -104,9 +106,9 @@ public:
 
 class SortedSchemaChange final : public ConvertedSchemaChange {
 public:
-    explicit SortedSchemaChange(TabletManager* tablet_manager, Tablet* base_tablet, Tablet* new_tablet, int64_t version,
-                                ChunkChanger* chunk_changer, size_t memory_limitation)
-            : ConvertedSchemaChange(tablet_manager, base_tablet, new_tablet, version, chunk_changer),
+    explicit SortedSchemaChange(TabletManager* tablet_manager, int64_t txn_id, Tablet* base_tablet, Tablet* new_tablet,
+                                int64_t version, ChunkChanger* chunk_changer, size_t memory_limitation)
+            : ConvertedSchemaChange(tablet_manager, txn_id, base_tablet, new_tablet, version, chunk_changer),
               _memory_limitation(memory_limitation) {}
 
     ~SortedSchemaChange() override = default;
@@ -153,7 +155,7 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     RETURN_IF_ERROR(reader->open(_read_params));
 
     // create writer
-    ASSIGN_OR_RETURN(auto writer, _new_tablet->new_writer(kHorizontal));
+    ASSIGN_OR_RETURN(auto writer, _new_tablet->new_writer(kHorizontal, _txn_id));
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -221,8 +223,8 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     RETURN_IF_ERROR(reader->open(_read_params));
 
     // create writer
-    auto writer =
-            DeltaWriter::create(_tablet_manager, _new_tablet->id(), _max_buffer_size, CurrentThread::mem_tracker());
+    auto writer = DeltaWriter::create(_tablet_manager, _new_tablet->id(), _txn_id, _max_buffer_size,
+                                      CurrentThread::mem_tracker());
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -303,6 +305,7 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
     sc_params.new_tablet = &new_tablet;
     sc_params.chunk_changer = std::make_unique<ChunkChanger>(*new_schema);
     sc_params.version = alter_version;
+    sc_params.txn_id = request.txn_id;
 
     SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map);
     RETURN_IF_ERROR(SchemaChangeUtils::parse_request(*base_schema, *new_schema, sc_params.chunk_changer.get(),
@@ -340,16 +343,16 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
         LOG(INFO) << "doing sorted schema change for base tablet: " << base_tablet->id();
         size_t memory_limitation =
                 static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
-        sc_procedure = std::make_unique<SortedSchemaChange>(_tablet_manager, base_tablet, new_tablet, alter_version,
-                                                            chunk_changer, memory_limitation);
+        sc_procedure = std::make_unique<SortedSchemaChange>(_tablet_manager, sc_params.txn_id, base_tablet, new_tablet,
+                                                            alter_version, chunk_changer, memory_limitation);
         op_schema_change->set_linked_segment(false);
     } else {
         // Note: In current implementation, linked schema change may refer to the segments deleted by gc,
         // so disable linked schema change and will support it in the later version.
         LOG(INFO) << "doing direct schema change for base tablet: " << base_tablet->id()
                   << ", params directly: " << sc_params.sc_directly;
-        sc_procedure = std::make_unique<DirectSchemaChange>(_tablet_manager, base_tablet, new_tablet, alter_version,
-                                                            chunk_changer);
+        sc_procedure = std::make_unique<DirectSchemaChange>(_tablet_manager, sc_params.txn_id, base_tablet, new_tablet,
+                                                            alter_version, chunk_changer);
         op_schema_change->set_linked_segment(false);
     }
     RETURN_IF_ERROR(sc_procedure->init());

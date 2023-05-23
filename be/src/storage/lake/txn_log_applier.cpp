@@ -36,6 +36,7 @@ public:
               _metadata(std::move(metadata)),
               _base_version(_metadata->version()),
               _new_version(new_version),
+              _max_txn_id(0),
               _builder(_tablet, _metadata),
               _inited(false),
               _check_meta_version_succ(false) {
@@ -70,6 +71,7 @@ public:
     }
 
     Status apply(const TxnLogPB& log) override {
+        _max_txn_id = std::max(_max_txn_id, log.txn_id());
         if (log.has_op_write()) {
             RETURN_IF_ERROR(apply_write_log(log.op_write(), log.txn_id()));
         }
@@ -82,7 +84,7 @@ public:
         return Status::OK();
     }
 
-    Status finish() override { return _builder.finalize(); }
+    Status finish() override { return _builder.finalize(_max_txn_id); }
 
 private:
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
@@ -135,6 +137,7 @@ private:
     std::shared_ptr<TabletMetadataPB> _metadata;
     int64_t _base_version;
     int64_t _new_version;
+    int64_t _max_txn_id; // Used as the file name prefix of the delvec file
     MetaFileBuilder _builder;
     bool _inited;
     bool _check_meta_version_succ;
