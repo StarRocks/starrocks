@@ -2747,8 +2747,9 @@ public class Coordinator {
                 Preconditions.checkNotNull(commonMetrics);
                 Counter pullRowNum = commonMetrics.getCounter("PullRowNum");
                 Counter pushRowNum = commonMetrics.getCounter("PushRowNum");
-                Preconditions.checkNotNull(pullRowNum);
-                Preconditions.checkNotNull(pushRowNum);
+                if (pullRowNum == null || pushRowNum == null) {
+                    continue;
+                }
                 if (Objects.equals(pullRowNum.getValue(), pushRowNum.getValue())) {
                     foldNames.add(operatorProfile.getName());
                 }
