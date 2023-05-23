@@ -946,4 +946,43 @@ int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& l
     return count;
 }
 
+void BitmapValue::add_many(size_t n_args, const uint32_t* vals) {
+    if (_type != BITMAP) {
+        for (size_t i = 0; i < n_args; i++) {
+            add(vals[i]);
+        }
+    } else {
+        _bitmap->addMany(n_args, vals);
+    }
+}
+
+void BitmapValue::add(uint64_t value) {
+    switch (_type) {
+    case EMPTY:
+        _sv = value;
+        _type = SINGLE;
+        break;
+    case SINGLE:
+        //there is no need to convert the type if two variables are equal
+        if (_sv == value) {
+            break;
+        }
+
+        _set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
+        _set->insert(_sv);
+        _set->insert(value);
+        _type = SET;
+        break;
+    case BITMAP:
+        _bitmap->add(value);
+        break;
+    case SET:
+        if (_set->size() < 32) {
+            _set->insert(value);
+        } else {
+            _from_set_to_bitmap();
+            _bitmap->add(value);
+        }
+    }
+}
 } // namespace starrocks
