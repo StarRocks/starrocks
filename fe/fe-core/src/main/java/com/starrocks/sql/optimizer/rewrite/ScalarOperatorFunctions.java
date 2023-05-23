@@ -202,38 +202,6 @@ public class ScalarOperatorFunctions {
         }
     }
 
-
-    @ConstantFunction.List(list = {
-            @ConstantFunction(name = "substr", argTypes = {VARCHAR, INT}, returnType = VARCHAR),
-            @ConstantFunction(name = "substring", argTypes = {VARCHAR, INT}, returnType = VARCHAR)
-    })
-    public static ConstantOperator substring(ConstantOperator str, ConstantOperator pos) {
-        String strValue = str.getVarchar();
-        return substring(str, pos, new ConstantOperator(strValue.length(), Type.INT));
-    }
-
-    @ConstantFunction.List(list = {
-            @ConstantFunction(name = "substr", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR),
-            @ConstantFunction(name = "substring", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR)
-    })
-    public static ConstantOperator substring(ConstantOperator str, ConstantOperator pos, ConstantOperator len) {
-        int posInt = pos.getInt();
-        String strValue = str.getVarchar();
-        if (posInt < 0) {
-            posInt += strValue.length();
-        } else {
-            posInt -= 1;
-        }
-        if (posInt < 0) {
-            return ConstantOperator.createVarchar("");
-        }
-        int lenInt = len.getInt();
-        if (posInt + lenInt > strValue.length()) {
-            lenInt = strValue.length() - posInt;
-        }
-        return ConstantOperator.createVarchar(str.getVarchar().substring(posInt, posInt + lenInt));
-    }
-
     @ConstantFunction(name = "str_to_date", argTypes = {VARCHAR, VARCHAR}, returnType = DATETIME)
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
