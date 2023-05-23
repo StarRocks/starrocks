@@ -1,5 +1,26 @@
 name: Auto Comment
-on: [pull_request]
+on:
+  pull_request_target:
+    types:
+      - opened
+
+    branches:
+      - main
+
+permissions:
+  checks: write
+  actions: write
+  contents: write
+  deployments: write
+  discussions: write
+  issues: write
+  packages: write
+  pages: write
+  pull-requests: write
+  repository-projects: write
+  security-events: write
+  statuses: write
+
 jobs:
   run:
     runs-on: ubuntu-latest
