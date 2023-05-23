@@ -205,7 +205,7 @@ This topic takes scaling out the BE and FE clusters as examples.
 Run the following command to scale out the BE cluster to 9 nodes:
 
 ```bash
-kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"replicas":"9"}}}'
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"replicas":9}}}'
 ```
 
 #### Scale out FE cluster
@@ -213,7 +213,7 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 Run the following command to scale out the FE cluster to 4 nodes:
 
 ```bash
-kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksFeSpec":{"replicas":"4"}}}'
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksFeSpec":{"replicas":4}}}'
 ```
 
 The scaling process lasts for a while. You can use the command `kubectl -n starrocks get pods` to view the scaling progress.

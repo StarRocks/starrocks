@@ -37,7 +37,7 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
             StarRocksSink.sink(
                 // the sink options
                 StarRocksSinkOptions.builder()
-                    .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port?xxxxx")
+                    .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port,xxxxx")
                     .withProperty("load-url", "fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port")
                     .withProperty("username", "xxx")
                     .withProperty("password", "xxx")
@@ -75,7 +75,7 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
                     .build(),
                 // the sink options
                 StarRocksSinkOptions.builder()
-                    .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port?xxxxx")
+                    .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port,xxxxx")
                     .withProperty("load-url", "fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port")
                     .withProperty("username", "xxx")
                     .withProperty("password", "xxx")
