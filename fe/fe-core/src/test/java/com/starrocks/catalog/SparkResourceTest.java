@@ -39,7 +39,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
@@ -90,9 +91,7 @@ public class SparkResourceTest {
                 result = brokerMgr;
                 brokerMgr.containsBroker(broker);
                 result = true;
-                globalStateMgr.getAuth();
-                result = auth;
-                auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
+                PrivilegeActions.checkSystemAction(connectContext, PrivilegeType.CREATE_RESOURCE);
                 result = true;
             }
         };
@@ -164,9 +163,7 @@ public class SparkResourceTest {
                                             @Injectable Auth auth) throws UserException {
         new Expectations() {
             {
-                globalStateMgr.getAuth();
-                result = auth;
-                auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
+                PrivilegeActions.checkSystemAction(connectContext, PrivilegeType.CREATE_RESOURCE);
                 result = true;
             }
         };
@@ -196,9 +193,7 @@ public class SparkResourceTest {
                 result = brokerMgr;
                 brokerMgr.containsBroker(broker);
                 result = true;
-                globalStateMgr.getAuth();
-                result = auth;
-                auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
+                PrivilegeActions.checkSystemAction(connectContext, PrivilegeType.CREATE_RESOURCE);
                 result = true;
             }
         };
@@ -235,9 +230,8 @@ public class SparkResourceTest {
                 result = brokerMgr;
                 brokerMgr.containsBroker(broker);
                 result = false;
-                globalStateMgr.getAuth();
-                result = auth;
-                auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
+                PrivilegeActions.checkSystemAction(connectContext, PrivilegeType.CREATE_RESOURCE);
+                result = true;
                 result = true;
             }
         };

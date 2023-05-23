@@ -24,6 +24,6 @@ class TabletManager;
 
 Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, int64_t min_active_txn_log_id);
 
-Status datafile_gc(std::string_view root_location, TabletManager* tablet_mgr);
+Status datafile_gc(std::string_view root_location, TabletManager* tablet_mgr, int64_t min_active_txn_log_id);
 
 } // namespace starrocks::lake

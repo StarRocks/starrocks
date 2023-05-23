@@ -18,8 +18,9 @@ package com.starrocks.catalog;
 import com.google.common.collect.Maps;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
@@ -46,9 +47,7 @@ public class HudiResourceTest {
     public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
         new Expectations() {
             {
-                globalStateMgr.getAuth();
-                result = auth;
-                auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
+                PrivilegeActions.checkSystemAction(connectContext, PrivilegeType.CREATE_RESOURCE);
                 result = true;
             }
         };

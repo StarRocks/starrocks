@@ -52,6 +52,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.Config;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -85,6 +86,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
+import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_LEGACY;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
 
 /**
@@ -116,14 +118,26 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
 
     @Override
     public void initialize(Map<String, String> properties) {
+        String type = properties.get(ICEBERG_CATALOG_TYPE);
+        if (type == null) {
+            type = properties.get(ICEBERG_CATALOG_LEGACY);
+        }
+
+        if (type == null) {
+            throw new StarRocksConnectorException("iceberg catalog type can't be null");
+        }
+
         if (wrappedIO == null) {
-            switch (properties.get(ICEBERG_CATALOG_TYPE)) {
+            switch (type) {
                 case "hive":
+                case "rest":
                     wrappedIO = new HadoopFileIO(conf);
                     break;
                 case "glue":
                     wrappedIO = new S3FileIO();
                     break;
+                default:
+                    throw new StarRocksConnectorException("Unknown type %s", type);
             }
 
             wrappedIO.initialize(properties);

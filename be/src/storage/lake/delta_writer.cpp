@@ -91,11 +91,11 @@ public:
               _schema_initialized(false),
               _merge_condition(std::move(merge_condition)) {}
 
-    explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t max_buffer_size,
+    explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t max_buffer_size,
                              MemTracker* mem_tracker)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
-              _txn_id(-1),
+              _txn_id(txn_id),
               _partition_id(-1),
               _mem_tracker(mem_tracker),
               _slots(nullptr),
@@ -185,7 +185,7 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
         ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
         RETURN_IF_ERROR(handle_partial_update());
-        ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer(kHorizontal));
+        ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer(kHorizontal, _txn_id));
         if (_partial_update_tablet_schema != nullptr) {
             _tablet_writer->set_tablet_schema(_partial_update_tablet_schema);
         }
@@ -337,7 +337,7 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
             }
             // generate rewrite segment names to avoid gc in rewrite operation
             for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
-                op_write->add_rewrite_segments(random_segment_filename());
+                op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
             }
         }
         // handle condition update
@@ -467,9 +467,10 @@ std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, 
             new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition, mem_tracker));
 }
 
-std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id,
+std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
                                                  int64_t max_buffer_size, MemTracker* mem_tracker) {
-    return std::make_unique<DeltaWriter>(new DeltaWriterImpl(tablet_manager, tablet_id, max_buffer_size, mem_tracker));
+    return std::make_unique<DeltaWriter>(
+            new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, max_buffer_size, mem_tracker));
 }
 
 } // namespace starrocks::lake

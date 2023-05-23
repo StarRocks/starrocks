@@ -12,16 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+package com.starrocks.sql.ast;
 
-#include "exprs/expr.h"
+import com.google.common.base.Preconditions;
+import com.google.gson.annotations.SerializedName;
 
-namespace starrocks {
+/*
+ * Represents an HDFS URI in a SQL statement.
+ */
+public class HdfsURI {
+    @SerializedName(value = "location")
+    private final String location;
 
-class VectorizedCaseExprFactory {
-public:
-    static Expr* from_thrift(const TExprNode& node);
-    // for tests
-    static Expr* from_thrift(const starrocks::TExprNode& node, LogicalType resultType, LogicalType whenType);
-};
-} // namespace starrocks
+    public HdfsURI(String location) {
+        Preconditions.checkNotNull(location);
+        this.location = location.trim();
+    }
+
+    public String getLocation() {
+        return location;
+    }
+
+    @Override
+    public String toString() {
+        return location;
+    }
+}

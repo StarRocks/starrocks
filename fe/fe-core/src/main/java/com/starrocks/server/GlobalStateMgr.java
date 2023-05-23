@@ -1411,6 +1411,7 @@ public class GlobalStateMgr {
                     nodeMgr.load(dis);
                     loadManager.loadLoadJobsV2JsonFormat(dis);
                     alterJobMgr.load(dis);
+                    pluginMgr.load(dis);
                 } catch (SRMetaBlockException | SRMetaBlockEOFException e) {
                     LOG.error("load image failed", e);
                     throw new IOException("load image failed", e);
@@ -1435,7 +1436,7 @@ public class GlobalStateMgr {
                 checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
                 checksum = routineLoadManager.loadRoutineLoadJobs(dis, checksum);
                 checksum = smallFileMgr.loadSmallFiles(dis, checksum);
-                checksum = pluginMgr.loadPlugins(dis, checksum);
+
                 checksum = loadDeleteHandler(dis, checksum);
                 remoteChecksum = dis.readLong();
                 checksum = analyzeManager.loadAnalyze(dis, checksum);
@@ -1805,6 +1806,7 @@ public class GlobalStateMgr {
                     nodeMgr.save(dos);
                     loadManager.saveLoadJobsV2JsonFormat(dos);
                     alterJobMgr.save(dos);
+                    pluginMgr.save(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("save image failed", e);
                     throw new IOException("save image failed", e);
@@ -1823,7 +1825,7 @@ public class GlobalStateMgr {
                 checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
                 checksum = routineLoadManager.saveRoutineLoadJobs(dos, checksum);
                 checksum = smallFileMgr.saveSmallFiles(dos, checksum);
-                checksum = pluginMgr.savePlugins(dos, checksum);
+
                 checksum = deleteHandler.saveDeleteHandler(dos, checksum);
                 dos.writeLong(checksum);
                 checksum = analyzeManager.saveAnalyze(dos, checksum);

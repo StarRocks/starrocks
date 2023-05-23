@@ -772,7 +772,6 @@ public class ShowExecutor {
                 continue;
             }
 
-
             if (!PrivilegeActions.checkAnyActionOnOrInDb(connectContext, catalogName, dbName)) {
                 continue;
             }
@@ -814,7 +813,7 @@ public class ShowExecutor {
                     if (matcher != null && !matcher.match(tbl.getName())) {
                         continue;
                     }
-                    // check tbl privs
+
                     if (tbl.isView()) {
                         if (!PrivilegeActions.checkAnyActionOnView(
                                 connectContext, db.getFullName(), tbl.getName())) {
@@ -837,14 +836,23 @@ public class ShowExecutor {
             }
         } else {
             List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
-            PatternMatcher finalMatcher = matcher;
-            final String finalCatalogName = catalogName;
-            tableNames = tableNames.stream()
-                    .filter(tblName -> finalMatcher == null || finalMatcher.match(tblName))
-                    .filter(tblName -> PrivilegeActions.checkAnyActionOnTable(connectContext,
-                            finalCatalogName, dbName, tblName))
-                    .collect(Collectors.toList());
-            tableNames.forEach(name -> tableMap.put(name, "BASE TABLE"));
+
+            for (String tableName : tableNames) {
+                if (matcher != null && !matcher.match(tableName)) {
+                    continue;
+                }
+                Table table = metadataMgr.getTable(catalogName, dbName, tableName);
+                if (table.isView()) {
+                    if (!PrivilegeActions.checkAnyActionOnView(
+                            connectContext, catalogName, db.getFullName(), table.getName())) {
+                        continue;
+                    }
+                } else if (!PrivilegeActions.checkAnyActionOnTable(connectContext,
+                        catalogName, dbName, tableName)) {
+                    continue;
+                }
+                tableMap.put(tableName, table.getMysqlType());
+            }
         }
 
         for (Map.Entry<String, String> entry : tableMap.entrySet()) {

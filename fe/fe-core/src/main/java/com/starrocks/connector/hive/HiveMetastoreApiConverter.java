@@ -23,8 +23,10 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.UserException;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorTableId;
@@ -124,6 +126,17 @@ public class HiveMetastoreApiConverter {
                 .setTableLocation(toTableLocation(table.getSd(), table.getParameters()))
                 .setCreateTime(table.getCreateTime());
         return tableBuilder.build();
+    }
+
+    public static HiveView toHiveView(Table table, String catalogName) {
+        HiveView hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
+                table.getTableName(), toFullSchemasForHiveTable(table), table.getViewExpandedText());
+        try {
+            hiveView.init();
+        } catch (UserException e) {
+            throw new StarRocksConnectorException("failed to parse hive view text", e);
+        }
+        return hiveView;
     }
 
     public static HudiTable toHudiTable(Table table, String catalogName) {
@@ -362,8 +375,7 @@ public class HiveMetastoreApiConverter {
             throw new StarRocksConnectorException("Unknown hive table type.");
         }
         switch (hiveTableType.toUpperCase(Locale.ROOT)) {
-            case "VIRTUAL_VIEW": // hive view table not supported
-                throw new StarRocksConnectorException("Hive view table is not supported.");
+            case "VIRTUAL_VIEW": // hive view supported
             case "EXTERNAL_TABLE": // hive external table supported
             case "MANAGED_TABLE": // basic hive table supported
             case "MATERIALIZED_VIEW": // hive materialized view table supported

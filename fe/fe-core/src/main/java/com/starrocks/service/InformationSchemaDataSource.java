@@ -104,8 +104,7 @@ public class InformationSchemaDataSource {
             }
             authorizedDbs.add(fullName);
         }
-        AuthDbRequestResult result = new AuthDbRequestResult(authorizedDbs, currentUser);
-        return result;
+        return new AuthDbRequestResult(authorizedDbs, currentUser);
     }
 
     private static class AuthDbRequestResult {
