@@ -28,7 +28,9 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class Cluster implements Writable {
     private static final Logger LOG = LogManager.getLogger(Cluster.class);
@@ -74,8 +76,8 @@ public class Cluster implements Writable {
         computeNodeIds.remove(cnId);
     }
 
-    public Set<Long> getComputeNodeIds() {
-        return computeNodeIds;
+    public List<Long> getComputeNodeIds() {
+        return computeNodeIds.stream().collect(Collectors.toList());
     }
 
     @Override
