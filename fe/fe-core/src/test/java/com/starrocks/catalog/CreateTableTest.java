@@ -247,6 +247,17 @@ public class CreateTableTest {
                         () -> createTable("create table test.atbl8\n" + "(key1 int, key2 varchar(10))\n"
                                 + "distributed by hash(key1) buckets 1\n"
                                 + "properties('replication_num' = '1', 'compression' = 'xxx');"));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Unknown properties: {asd=true, enable_storage_cache=true, storage_cache_ttl=86400}",
+                () -> createTable("CREATE TABLE test.demo (k0 tinyint NOT NULL, k1 date NOT NULL, k2 int NOT NULL," +
+                        " k3 datetime not NULL, k4 bigint not NULL, k5 largeint not NULL) \n" +
+                        "ENGINE = OLAP \n" +
+                        "PRIMARY KEY( k0, k1, k2) \n" +
+                        "PARTITION BY RANGE (k1) (START (\"1970-01-01\") END (\"2022-09-30\") " +
+                        "EVERY (INTERVAL 60 day)) DISTRIBUTED BY HASH(k0) BUCKETS 1 " +
+                        "PROPERTIES (\"replication_num\"=\"1\",\"enable_persistent_index\" = \"false\"," +
+                        "\"enable_storage_cache\" = \"true\",\"storage_cache_ttl\" = \"86400\",\"asd\" = \"true\");"));
     }
 
     @Test
