@@ -310,6 +310,17 @@ Status CrossJoinLeftOperator::push_chunk(RuntimeState* state, const vectorized::
     return Status::OK();
 }
 
+Status CrossJoinLeftOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare(state));
+    _cross_join_context->incr_prober();
+
+    return Status::OK();
+}
+
+Status NLJoinProbeOperator::set_finished(RuntimeState* state) {
+    return _cross_join_context->finish_one_left_prober(state);
+}
+
 void CrossJoinLeftOperatorFactory::_init_row_desc() {
     for (auto& tuple_desc : _left_row_desc.tuple_descriptors()) {
         for (auto& slot : tuple_desc->slots()) {
