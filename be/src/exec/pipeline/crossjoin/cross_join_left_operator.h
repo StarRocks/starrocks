@@ -30,6 +30,7 @@ public:
 
     ~CrossJoinLeftOperator() override = default;
 
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override {
         _cross_join_context->unref(state);
         Operator::close(state);
@@ -72,10 +73,7 @@ public:
         return Status::OK();
     }
 
-    Status set_finished(RuntimeState* state) override {
-        _cross_join_context->set_finished();
-        return Status::OK();
-    }
+    Status set_finished(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
