@@ -241,6 +241,11 @@ public class PrivilegeActions {
                 Lists.newArrayList(db, view));
     }
 
+    public static boolean checkAnyActionOnView(ConnectContext context, String catalogName, String db, String view) {
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.VIEW,
+                Lists.newArrayList(catalogName, db, view));
+    }
+
     public static boolean checkAnyActionOnView(UserIdentity currentUser, Set<Long> roleIds, String db, String view) {
         return checkAnyActionOnObject(currentUser, roleIds, ObjectType.VIEW, Arrays.asList(db, view));
     }
