@@ -82,7 +82,7 @@ public:
     }
 
 protected:
-    Status check_dict_index_in_bounds(size_t index, size_t dict_size) {
+    inline Status check_dict_index_in_bounds(size_t index, size_t dict_size) {
         if (LIKELY(0 <= index && index < dict_size)) {
             return Status::OK();
         }
