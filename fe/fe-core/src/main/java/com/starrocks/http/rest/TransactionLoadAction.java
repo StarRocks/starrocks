@@ -139,8 +139,8 @@ public class TransactionLoadAction extends RestBaseAction {
             }
             TransactionStatus txnStatus = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelState(db.getId(),
                     label);
+            Long txnID = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelTxnID(db.getId(), label);
             if (txnStatus == TransactionStatus.PREPARED) {
-                Long txnID = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelTxnID(db.getId(), label);
                 if (txnID == -1) {
                     throw new UserException("label " + label + " txn not exist");
                 }
@@ -158,17 +158,22 @@ public class TransactionLoadAction extends RestBaseAction {
                 resp.addResultEntry("Label", label);
                 sendResult(request, response, resp);
                 return;
-            } else if (txnStatus == TransactionStatus.COMMITTED || txnStatus == TransactionStatus.VISIBLE
-                      || txnStatus == TransactionStatus.ABORTED) {
-                String okMsg;
-                Long txnID = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelTxnID(db.getId(), label);
-                if (txnID == -1) {
-                    okMsg = "label " + label + " txn already expired";
-                } else {
-                    okMsg = "transaction " + txnID + " is completed, status " + txnStatus.toString();
+            } else if (txnStatus == TransactionStatus.COMMITTED || txnStatus == TransactionStatus.VISIBLE) {
+                // whether txnId is valid or not is not important
+                if (op.equalsIgnoreCase(TXN_ROLLBACK)) {
+                    throw new UserException("cannot abort committed transaction " + txnID + " label " + label);
                 }
+                resp.setOKMsg("label " + label + " transaction " + txnID + " has already committed");
                 resp.addResultEntry("Label", label);
-                resp.setOKMsg(okMsg);
+                sendResult(request, response, resp);
+                return;
+            } else if (txnStatus == TransactionStatus.ABORTED) {
+                // whether txnId is valid or not is not important
+                if (op.equalsIgnoreCase(TXN_COMMIT)) {
+                    throw new UserException("cannot commit aborted transaction " + txnID + " label " + label);
+                }
+                resp.setOKMsg("label " + label + " transaction " + txnID + " has already aborted");
+                resp.addResultEntry("Label", label);
                 sendResult(request, response, resp);
                 return;
             }
