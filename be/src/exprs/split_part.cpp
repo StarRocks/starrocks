@@ -123,7 +123,8 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
                 }
 
                 if (num == part_number) {
-                     res.append(Slice(haystack.data + pre_offset + delimiter.size, offset - pre_offset - delimiter.size));
+                    res.append(
+                            Slice(haystack.data + pre_offset + delimiter.size, offset - pre_offset - delimiter.size));
                 } else {
                     res.append_null();
                 }
@@ -153,7 +154,8 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
                 if (offset == -1) {
                     res.append(Slice(haystack.data, pre_offset));
                 } else {
-                    res.append(Slice(haystack.data + offset + delimiter.size, pre_offset - offset - delimiter.size));
+                    res.append(
+                            Slice(haystack.data + offset + delimiter.size, pre_offset - offset - delimiter.size));
                 }
             } else {
                 res.append_null();
