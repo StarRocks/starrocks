@@ -120,6 +120,13 @@ enum TSpillMode {
   FORCE
 }
 
+enum TSpillableOperatorType {
+  HASH_JOIN = 0;
+  AGG = 1;
+  AGG_DISTINCT = 2;
+  SORT = 3;
+}
+
 enum TTabletInternalParallelMode {
   AUTO,
   FORCE_SPLIT
@@ -252,6 +259,8 @@ struct TQueryOptions {
   93: optional i32 connector_io_tasks_slow_io_latency_ms = 50;
   94: optional double scan_use_query_mem_ratio = 0.25;
   95: optional double connector_scan_use_query_mem_ratio = 0.3;
+  // used to identify which operators allow spill, only meaningful when enable_spill=true
+  96: optional i64 spillable_operator_mask;
 }
 
 
