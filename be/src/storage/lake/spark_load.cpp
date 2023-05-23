@@ -49,7 +49,7 @@ Status SparkLoadHandler::_load_convert(Tablet& cur_tablet) {
     VLOG(3) << "start to convert delta file.";
 
     // 1. init writer
-    ASSIGN_OR_RETURN(auto writer, cur_tablet.new_writer(kHorizontal));
+    ASSIGN_OR_RETURN(auto writer, cur_tablet.new_writer(kHorizontal, _request.transaction_id));
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
