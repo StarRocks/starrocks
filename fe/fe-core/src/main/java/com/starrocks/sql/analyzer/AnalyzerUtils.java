@@ -87,6 +87,9 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.parser.ParsingException;
 import org.apache.commons.lang3.StringUtils;
 
@@ -220,6 +223,15 @@ public class AnalyzerUtils {
         Map<String, Database> dbs = Maps.newHashMap();
         new AnalyzerUtils.DBCollector(dbs, context).visit(statementBase);
         return dbs;
+    }
+
+    public static CallOperator getCallOperator(ScalarOperator operator) {
+        if (operator instanceof CastOperator) {
+            return getCallOperator(operator.getChild(0));
+        } else if (operator instanceof CallOperator) {
+            return (CallOperator) operator;
+        }
+        return null;
     }
 
     private static class DBCollector extends AstVisitor<Void, Void> {
