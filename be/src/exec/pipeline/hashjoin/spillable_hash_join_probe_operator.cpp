@@ -39,7 +39,7 @@
 namespace starrocks::pipeline {
 Status SpillableHashJoinProbeOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(HashJoinProbeOperator::prepare(state));
-    _need_post_probe = has_post_probe(_join_prober->hash_table_param().join_type);
+    _need_post_probe = has_post_probe(_join_prober->join_type());
     _probe_spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get()));
     metrics.hash_partitions = ADD_COUNTER(_unique_metrics.get(), "SpillPartitions", TUnit::UNIT);
     RETURN_IF_ERROR(_probe_spiller->prepare(state));
@@ -197,7 +197,7 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
                                                                    const std::vector<uint32_t>& selection, int32_t from,
                                                                    int32_t size) {
         // nothing to do for empty partition
-        if (could_short_circuit(_join_prober->hash_table_param().join_type)) {
+        if (could_short_circuit(_join_prober->join_type())) {
             // For left semi join and inner join we can just skip the empty partition
             auto build_partition_iter = _pid_to_build_partition.find(probe_partition->partition_id);
             if (build_partition_iter != _pid_to_build_partition.end()) {
