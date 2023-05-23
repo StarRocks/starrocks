@@ -295,6 +295,14 @@ public class PrivilegeActions {
         switch (type) {
             case OLAP:
             case CLOUD_NATIVE:
+            case MYSQL:
+            case ELASTICSEARCH:
+            case HIVE:
+            case ICEBERG:
+            case HUDI:
+            case JDBC:
+            case DELTALAKE:
+            case FILE:
                 return checkAnyActionOnTable(currentUser, roleIds, dbName, tbl.getName());
             case MATERIALIZED_VIEW:
             case CLOUD_NATIVE_MATERIALIZED_VIEW:
