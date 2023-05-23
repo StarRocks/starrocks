@@ -49,10 +49,10 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(nameToSV.containsKey(name),
                     "Storage volume '%s' does not exist", name);
-            Preconditions.checkState(!name.equals(defaultSV), "default storage volume can not be removed");
             StorageVolume sv = nameToSV.get(name);
-            Preconditions.checkState(!storageVolumeToDB.containsKey(sv.getId())
-                            && !storageVolumeToTable.containsKey(sv.getId()),
+            Preconditions.checkState(sv.getId() != defaultStorageVolumeId, "default storage volume can not be removed");
+            Preconditions.checkState(!storageVolumeToDbs.containsKey(sv.getId())
+                            && !storageVolumeToTables.containsKey(sv.getId()),
                     "Storage volume '%s' is referenced by db or table", name);
             nameToSV.remove(name);
         }
@@ -73,7 +73,7 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
             if (enabled.isPresent()) {
                 boolean enabledValue = enabled.get();
                 if (!enabledValue) {
-                    Preconditions.checkState(!name.equals(defaultSV), "Default volume can not be disabled");
+                    Preconditions.checkState(sv.getId() != defaultStorageVolumeId, "Default volume can not be disabled");
                 }
                 sv.setEnabled(enabledValue);
             }
@@ -90,8 +90,7 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
             Preconditions.checkState(nameToSV.containsKey(svKey),
                     "Storage volume '%s' does not exist", svKey);
             StorageVolume sv = nameToSV.get(svKey);
-            sv.setIsDefault(true);
-            defaultSV = svKey;
+            defaultStorageVolumeId = sv.getId();
         }
     }
 
@@ -102,11 +101,22 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
         }
     }
 
-    @Override
-    public StorageVolume getStorageVolume(String svKey) {
+    public StorageVolume getStorageVolumeByName(String svKey) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return nameToSV.get(svKey);
         }
+    }
+
+    @Override
+    public StorageVolume getStorageVolume(long storageVolumeId) throws AnalysisException {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            for (StorageVolume sv : nameToSV.values()) {
+                if (sv.getId() == storageVolumeId) {
+                    return sv;
+                }
+            }
+        }
+        return null;
     }
 
     @Override

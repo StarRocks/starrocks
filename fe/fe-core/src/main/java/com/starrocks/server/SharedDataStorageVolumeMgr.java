@@ -41,12 +41,13 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
 
     @Override
     public void removeStorageVolume(String name) throws AnalysisException, DdlException {
-        StorageVolume sv = getStorageVolume(name);
+        StorageVolume sv = getStorageVolumeByName(name);
         Preconditions.checkState(sv != null,
                 "Storage volume '%s' does not exist", name);
-        Preconditions.checkState(!defaultSV.equals(name), "default storage volume can not be removed");
-        Preconditions.checkState(!storageVolumeToDB.containsKey(sv.getId())
-                        && !storageVolumeToTable.containsKey(sv.getId()),
+        Preconditions.checkState(defaultStorageVolumeId != sv.getId(),
+                "default storage volume can not be removed");
+        Preconditions.checkState(!storageVolumeToDbs.containsKey(sv.getId())
+                        && !storageVolumeToTables.containsKey(sv.getId()),
                 "Storage volume '%s' is referenced by db or table", name);
         GlobalStateMgr.getCurrentState().getStarOSAgent().removeFileStoreByName(name);
     }
@@ -54,13 +55,13 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     @Override
     public void updateStorageVolume(String name, Map<String, String> params,
                                     Optional<Boolean> enabled, String comment) throws DdlException, AnalysisException {
-        StorageVolume sv = getStorageVolume(name);
+        StorageVolume sv = getStorageVolumeByName(name);
         Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", name);
 
         if (enabled.isPresent()) {
             boolean enabledValue = enabled.get();
             if (!enabledValue) {
-                Preconditions.checkState(!sv.isDefault(), "Default volume can not be disabled");
+                Preconditions.checkState(sv.getId() != defaultStorageVolumeId, "Default volume can not be disabled");
             }
             sv.setEnabled(enabledValue);
         }
@@ -79,23 +80,16 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     @Override
     public void setDefaultStorageVolume(String svKey) throws AnalysisException, DdlException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            StorageVolume sv = getStorageVolume(svKey);
+            StorageVolume sv = getStorageVolumeByName(svKey);
             Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svKey);
-            sv.setIsDefault(true);
-            GlobalStateMgr.getCurrentState().getStarOSAgent().updateFileStore(sv.toFileStoreInfo());
-            if (!defaultSV.isEmpty()) {
-                StorageVolume defaultStorageVolume = getStorageVolume(defaultSV);
-                defaultStorageVolume.setIsDefault(false);
-                GlobalStateMgr.getCurrentState().getStarOSAgent().updateFileStore(defaultStorageVolume.toFileStoreInfo());
-            }
-            this.defaultSV = svKey;
+            this.defaultStorageVolumeId = sv.getId();
         }
     }
 
     @Override
     public boolean exists(String svKey) throws DdlException {
         try {
-            StorageVolume sv = getStorageVolume(svKey);
+            StorageVolume sv = getStorageVolumeByName(svKey);
             return sv != null;
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
@@ -103,7 +97,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+    public StorageVolume getStorageVolumeByName(String svKey) throws AnalysisException {
         try {
             FileStoreInfo fileStoreInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getFileStoreByName(svKey);
             if (fileStoreInfo == null) {
@@ -113,6 +107,12 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         } catch (DdlException e) {
             throw new AnalysisException(e.getMessage());
         }
+    }
+
+    @Override
+    public StorageVolume getStorageVolume(long storageVolumeId) throws AnalysisException {
+        // TODO: should be supported by staros. We use id for persistence, storage volume needs to be get by id.
+        return null;
     }
 
     @Override

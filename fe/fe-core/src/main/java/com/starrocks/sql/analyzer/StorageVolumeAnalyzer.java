@@ -98,7 +98,7 @@ public class StorageVolumeAnalyzer {
                     throw new SemanticException("Unknown storage volume: %s", svName);
                 }
             } catch (DdlException e) {
-                throw new SemanticException("Unknown storage volume: %s", svName);
+                throw new SemanticException("Failed to get storage volume", e);
             }
 
             return null;

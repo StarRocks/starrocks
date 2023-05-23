@@ -43,7 +43,7 @@ public class StorageVolumeProcNode implements ProcNodeInterface {
         result.setNames(STORAGE_VOLUME_PROC_NODE_TITLE_NAMES);
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         StorageVolumeMgr storageVolumeMgr = globalStateMgr.getStorageVolumeMgr();
-        StorageVolume sv = storageVolumeMgr.getStorageVolume(storageVolumeName);
+        StorageVolume sv = storageVolumeMgr.getStorageVolumeByName(storageVolumeName);
         if (sv == null) {
             return result;
         }

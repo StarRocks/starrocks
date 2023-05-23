@@ -151,11 +151,10 @@ public class StarOSAgent {
 
     public List<FileStoreInfo> listFileStore() throws DdlException {
         try {
-            client.listFileStore(serviceId);
+            return client.listFileStore(serviceId);
         } catch (StarClientException e) {
             throw new DdlException("Failed to list file store", e);
         }
-        return new ArrayList<>();
     }
 
     public FilePathInfo allocateFilePath(long tableId) throws DdlException {

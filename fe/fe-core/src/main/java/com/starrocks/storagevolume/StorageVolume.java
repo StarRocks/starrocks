@@ -25,6 +25,7 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.parquet.Strings;
 
 import java.util.ArrayList;
@@ -57,8 +58,6 @@ public class StorageVolume {
     private String comment;
 
     private boolean enabled;
-
-    private boolean isDefault;
 
     public StorageVolume(long id, String name, String svt, List<String> locations,
                          Map<String, String> params, boolean enabled, String comment) throws AnalysisException {
@@ -109,14 +108,6 @@ public class StorageVolume {
         return comment;
     }
 
-    public void setIsDefault(boolean isDefault) {
-        this.isDefault = isDefault;
-    }
-
-    public boolean isDefault() {
-        return isDefault;
-    }
-
     private StorageVolumeType toStorageVolumeType(String svt) {
         switch (svt.toLowerCase()) {
             case "s3":
@@ -143,7 +134,7 @@ public class StorageVolume {
         Gson gson = new Gson();
         result.addRow(Lists.newArrayList(name,
                 String.valueOf(svt.name()),
-                String.valueOf(isDefault),
+                String.valueOf(GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getDefaultStorageVolumeId() == id),
                 String.valueOf(Strings.join(locations, ", ")),
                 String.valueOf(gson.toJson(params)),
                 String.valueOf(enabled),
@@ -153,7 +144,7 @@ public class StorageVolume {
     public FileStoreInfo toFileStoreInfo() {
         FileStoreInfo fsInfo = cloudConfiguration.toFileStoreInfo();
         FileStoreInfo.Builder builder = fsInfo.toBuilder();
-        builder.setFsName(this.name).setComment(this.comment).setEnabled(this.enabled).setIsDefault(isDefault);
+        builder.setFsName(this.name).setComment(this.comment).setEnabled(this.enabled);
         switch (svt) {
             case S3:
                 S3FileStoreInfo s3FileStoreInfo = fsInfo.getS3FsInfo();
@@ -180,7 +171,6 @@ public class StorageVolume {
         List<String> locations = getLocationsFromFileStoreInfo(fsInfo);
         StorageVolume sv = new StorageVolume(Long.valueOf(fsInfo.getFsKey()), fsInfo.getFsName(), svt,
                 locations, params, fsInfo.getEnabled(), fsInfo.getComment());
-        sv.setIsDefault(fsInfo.getIsDefault());
         return sv;
     }
 
