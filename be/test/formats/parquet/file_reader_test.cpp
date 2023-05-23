@@ -2285,25 +2285,25 @@ TEST_F(FileReaderTest, CheckDictOutofBouds) {
     // --------------init context---------------
     auto ctx = _create_scan_context();
 
-    TypeDescriptor type_vin = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
-    TypeDescriptor type_log_domain = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
-    TypeDescriptor type_file_name = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
-    TypeDescriptor type_is_collection = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-    TypeDescriptor type_is_center = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-    TypeDescriptor type_is_cloud = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-    TypeDescriptor type_collection_time = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
-    TypeDescriptor type_center_time = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
-    TypeDescriptor type_cloud_time = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
-    TypeDescriptor type_error_collection_tips = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
-    TypeDescriptor type_error_center_tips = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
-    TypeDescriptor type_error_cloud_tips = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
-    TypeDescriptor type_error_collection_time = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
-    TypeDescriptor type_error_center_time = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
-    TypeDescriptor type_error_cloud_time = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
-    TypeDescriptor type_original_time = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
-    TypeDescriptor type_is_original = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    TypeDescriptor type_vin = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
+    TypeDescriptor type_log_domain = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
+    TypeDescriptor type_file_name = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
+    TypeDescriptor type_is_collection = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
+    TypeDescriptor type_is_center = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
+    TypeDescriptor type_is_cloud = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
+    TypeDescriptor type_collection_time = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
+    TypeDescriptor type_center_time = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
+    TypeDescriptor type_cloud_time = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
+    TypeDescriptor type_error_collection_tips = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
+    TypeDescriptor type_error_center_tips = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
+    TypeDescriptor type_error_cloud_tips = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
+    TypeDescriptor type_error_collection_time = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
+    TypeDescriptor type_error_center_time = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
+    TypeDescriptor type_error_cloud_time = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
+    TypeDescriptor type_original_time = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
+    TypeDescriptor type_is_original = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
 
-    Utils::SlotDesc slot_descs[] = {
+    SlotDesc slot_descs[] = {
             {"vin", type_vin},
             {"type_log_domain", type_log_domain},
             {"file_name", type_file_name},
@@ -2324,8 +2324,8 @@ TEST_F(FileReaderTest, CheckDictOutofBouds) {
             {""},
     };
 
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
 
     // --------------finish init context---------------
