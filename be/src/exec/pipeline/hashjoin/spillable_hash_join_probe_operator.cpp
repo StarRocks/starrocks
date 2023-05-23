@@ -244,12 +244,9 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(RuntimeState* 
             return Status::Cancelled("cancelled");
         }
 
-        RETURN_IF_ERROR(reader->trigger_restore(
-                state, spill::SyncTaskExecutor{},
-                spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
-        auto chunk_st =
-                reader->restore(state, spill::SyncTaskExecutor{},
-                                spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
+        RETURN_IF_ERROR(
+                reader->trigger_restore(state, spill::SyncTaskExecutor{}, spill::MemTrackerGuard(tls_mem_tracker)));
+        auto chunk_st = reader->restore(state, spill::SyncTaskExecutor{}, spill::MemTrackerGuard(tls_mem_tracker));
         if (chunk_st.ok() && chunk_st.value() != nullptr && !chunk_st.value()->is_empty()) {
             RETURN_IF_ERROR(builder->append_chunk(state, std::move(chunk_st.value())));
         } else if (chunk_st.status().is_end_of_file()) {
