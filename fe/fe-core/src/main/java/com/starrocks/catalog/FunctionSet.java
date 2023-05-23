@@ -880,10 +880,19 @@ public class FunctionSet {
                 Type.BITMAP,
                 true, false, true));
 
-        for (Type t : Type.getIntegerTypes()) {
-            addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(t),
-                    Type.BITMAP, Type.BITMAP, true, false, true));
-        }
+        // Type.VARCHAR must before all other type, so bitmap_agg(varchar) can convert to bitmap_agg(bigint)
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.BIGINT),
+                Type.BITMAP, Type.BITMAP, true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.LARGEINT),
+                Type.BITMAP, Type.BITMAP, true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.INT),
+                Type.BITMAP, Type.BITMAP, true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.SMALLINT),
+                Type.BITMAP, Type.BITMAP, true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.TINYINT),
+                Type.BITMAP, Type.BITMAP, true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.BOOLEAN),
+                Type.BITMAP, Type.BITMAP, true, false, true));
 
         addBuiltin(AggregateFunction.createBuiltin(BITMAP_UNION_COUNT, Lists.newArrayList(Type.BITMAP),
                 Type.BIGINT,
