@@ -23,7 +23,10 @@ BrpcThreadChecker::BrpcThreadChecker() : BaseMonitor("brpc_thread_checker"), _br
 }
 
 Status BrpcThreadChecker::getStatus() {
+    std::lock_guard lg(_brpc_thread_checker_mutex);
+    for (const auto& iter : _bvars_holder) {
 
+    }
     return Status::OK();
 }
 
@@ -48,7 +51,6 @@ void* BrpcThreadChecker::_brpc_thread_checker_callback(void* arg_this) {
             sleep(1);
             --left_seconds;
         }
-        LOG(INFO) << "checker checker --------";
     }
     LOG(INFO) << "BrpcThreadChecker going to exit.";
     return nullptr;
@@ -56,10 +58,7 @@ void* BrpcThreadChecker::_brpc_thread_checker_callback(void* arg_this) {
 
 
 void BrpcThreadChecker::debug(std::stringstream& ss) {
-    ss << "test";
-    LOG(INFO) << "debug";
     std::lock_guard lg(_brpc_thread_checker_mutex);
-    LOG(INFO) << "here";
     for (const auto& iter : _bvars_holder) {
         ss << iter.first << ":" << iter.second;
         LOG(INFO) << ss.str();

@@ -44,6 +44,7 @@ void ThreadPoolChecker::_collect_thread_pool_state() {
     for (const auto& iter : _thread_pool_holder) {
 
         if (iter.second == nullptr) {
+            // it should't happen
             LOG(INFO) << "nullptr _collect_thread_pool_state" << iter.first;
             continue ;
         }
@@ -52,8 +53,6 @@ void ThreadPoolChecker::_collect_thread_pool_state() {
         int num_active_threads = iter.second->num_active_threads();
         LOG(INFO) << iter.first << " num_threads " << num_threads << " num_queued_task " << num_queued_tasks
                   << "num_active_threads " << num_active_threads;
-        //        LOG(INFO) << fmt::format("{}, num_threads {}, num_queued_tasks {}, num_active_threads {}", num_threads,
-        //                                 num_queued_tasks, num_active_threads);
         if (num_queued_tasks >= 10) {
             _thread_pool_busy.emplace(iter);
         }
@@ -77,7 +76,6 @@ void* ThreadPoolChecker::_thread_pool_checker_callback(void* arg_this) {
             sleep(1);
             --left_seconds;
         }
-        LOG(INFO) << "checker checker --------";
     }
     LOG(INFO) << "ThreadPoolChecker going to exit.";
     return nullptr;
@@ -85,18 +83,14 @@ void* ThreadPoolChecker::_thread_pool_checker_callback(void* arg_this) {
 
 
 void ThreadPoolChecker::debug(std::stringstream& ss) {
-    ss << "test";
-    LOG(INFO) << "debug";
     std::lock_guard lg(_thread_pool_checker_mutex);
-    LOG(INFO) << "here";
     for (const auto& iter : _thread_pool_holder) {
-        LOG(INFO) << "there";
         if (iter.second == nullptr) {
-            LOG(INFO) << "nullptr in debug" << iter.first;
+            // it should't happen
+            LOG(INFO) << "nullptr in threadPoolChecker debug" << iter.first;
             continue ;
         }
         int num_threads = iter.second->num_threads();
-        LOG(INFO) << "------";
         int num_queued_tasks = iter.second->num_queued_tasks();
         int num_active_threads = iter.second->num_active_threads();
         ss << iter.first << " num_threads " << num_threads << " num_queued_task " << num_queued_tasks

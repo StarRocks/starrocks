@@ -43,7 +43,7 @@ private:
 class BrpcThreadChecker : public BaseMonitor {
 public:
     BrpcThreadChecker();
-    ~BrpcThreadChecker();
+    ~BrpcThreadChecker() = default;
 
     Status getStatus() override;
 
