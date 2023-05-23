@@ -66,6 +66,8 @@ public class SelectStmtTest {
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         String createBaseAllStmtStr = "create table db1.baseall(k1 int) distributed by hash(k1) "
                 + "buckets 3 properties('replication_num' = '1');";
+        String createDateTblStmtStr = "create table db1.t(k1 int, dt date) "
+                + "DUPLICATE KEY(k1) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         String createPratitionTableStr = "CREATE TABLE db1.partition_table (\n" +
                 "datekey int(11) NULL COMMENT \"datekey\",\n" +
                 "poi_id bigint(20) NULL COMMENT \"poi_id\"\n" +
@@ -85,6 +87,7 @@ public class SelectStmtTest {
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr)
                 .withTable(createBaseAllStmtStr)
+                .withTable(createDateTblStmtStr)
                 .withTable(createPratitionTableStr);
     }
 
@@ -367,6 +370,17 @@ public class SelectStmtTest {
 
         } finally {
             starRocksAssert.getCtx().getSessionVariable().setCboCteReuse(cboCteReuse);
+        }
+    }
+
+    @Test
+    public void testSubstringConstantFolding() throws Exception {
+        try {
+            String sql = "select * from db1.t where dt = \"2022-01-02\" or dt = cast(substring(\"2022-01-03\", 1, 10) as date);";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assert.assertTrue(plan, plan.contains("dt IN ('2022-01-02', '2022-01-03')"));
+        } catch (Exception e) {
+            Assert.fail("Should not throw an exception");
         }
     }
 }

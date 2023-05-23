@@ -894,7 +894,9 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "substring", argTypes = {VARCHAR, INT}, returnType = VARCHAR),
-            @ConstantFunction(name = "substring", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR)
+            @ConstantFunction(name = "substring", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR),
+            @ConstantFunction(name = "substr", argTypes = {VARCHAR, INT}, returnType = VARCHAR),
+            @ConstantFunction(name = "substr", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR)
     })
     public static ConstantOperator substring(ConstantOperator value, ConstantOperator... index) {
         Preconditions.checkArgument(index.length == 1 || index.length == 2);
