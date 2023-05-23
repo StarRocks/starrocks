@@ -130,6 +130,7 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
         if (wrappedIO == null) {
             switch (type) {
                 case "hive":
+                case "rest":
                     wrappedIO = new HadoopFileIO(conf);
                     break;
                 case "glue":
