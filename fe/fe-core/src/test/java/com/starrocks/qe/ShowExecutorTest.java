@@ -1125,6 +1125,11 @@ public class ShowExecutorTest {
                 tableNames.add("hive_test");
                 return tableNames;
             }
+
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tblName) {
+                return new Table(TableType.HIVE);
+            }
         };
 
         ShowTableStmt stmt = new ShowTableStmt("test", true, null, null, "hive_catalog");
