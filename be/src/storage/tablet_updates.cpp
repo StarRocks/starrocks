@@ -2976,7 +2976,6 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         writer_context.rowset_state = VISIBLE;
         writer_context.version = src_rowset->version();
         writer_context.segments_overlap = NONOVERLAPPING;
-        //writer_context.segments_overlap = src_rowset->rowset_meta()->segments_overlap();
 
         std::unique_ptr<RowsetWriter> rowset_writer;
         status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
