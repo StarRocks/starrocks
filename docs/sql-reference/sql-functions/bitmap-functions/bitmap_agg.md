@@ -72,7 +72,7 @@ mysql> select bitmap_to_string(bitmap_agg(c1)) from t1_test;
 +----------------------------------+
 ```
 
-Example 2: Aggregate values in column `c2` into one bitmap (nulls are ignored).
+Example 2: Aggregate values in column `c2` into one bitmap (NULLs are ignored).
 
 ```PlainText
 mysql> SELECT BITMAP_TO_STRING(BITMAP_AGG(c2)) FROM t1_test;
