@@ -24,7 +24,6 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
-#include "testutil/id_generator.h"
 #include "util/defer_op.h"
 
 namespace starrocks::lake {
@@ -50,8 +49,7 @@ Status HorizontalCompactionTask::execute(Progress* progress) {
     reader_params.use_page_cache = false;
     RETURN_IF_ERROR(reader.open(reader_params));
 
-    int64_t txn_id = next_id();
-    ASSIGN_OR_RETURN(auto writer, _tablet->new_writer(kHorizontal, txn_id))
+    ASSIGN_OR_RETURN(auto writer, _tablet->new_writer(kHorizontal, _txn_id))
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
