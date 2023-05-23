@@ -161,7 +161,8 @@ public class TransactionLoadAction extends RestBaseAction {
             } else if (txnStatus == TransactionStatus.COMMITTED || txnStatus == TransactionStatus.VISIBLE) {
                 // whether txnId is valid or not is not important
                 if (op.equalsIgnoreCase(TXN_ROLLBACK)) {
-                    throw new UserException("cannot abort committed transaction " + txnID + " label " + label);
+                    throw new UserException(String.format(
+                        "cannot abort committed transaction %s, label %s ", Long.toString(txnID), label));
                 }
                 resp.setOKMsg("label " + label + " transaction " + txnID + " has already committed");
                 resp.addResultEntry("Label", label);
@@ -170,7 +171,8 @@ public class TransactionLoadAction extends RestBaseAction {
             } else if (txnStatus == TransactionStatus.ABORTED) {
                 // whether txnId is valid or not is not important
                 if (op.equalsIgnoreCase(TXN_COMMIT)) {
-                    throw new UserException("cannot commit aborted transaction " + txnID + " label " + label);
+                    throw new UserException(String.format(
+                        "cannot commit aborted transaction %s, label %s ", Long.toString(txnID), label));
                 }
                 resp.setOKMsg("label " + label + " transaction " + txnID + " has already aborted");
                 resp.addResultEntry("Label", label);
