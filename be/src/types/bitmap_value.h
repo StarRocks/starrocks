@@ -89,6 +89,8 @@ public:
 
     void add(uint64_t value);
 
+    void add_many(size_t n_args, const uint32_t* vals);
+
     // Note: rhs BitmapValue is only readable after this method
     // Compute the union between the current bitmap and the provided bitmap.
     // Possible type transitions are:
@@ -165,5 +167,4 @@ private:
     uint64_t _sv = 0; // store the single value when _type == SINGLE
     BitmapDataType _type{EMPTY};
 };
-
 } // namespace starrocks

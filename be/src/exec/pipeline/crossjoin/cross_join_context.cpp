@@ -17,6 +17,18 @@ void CrossJoinContext::close(RuntimeState* state) {
     _build_chunks.clear();
 }
 
+void CrossJoinContext::incr_prober() {
+    ++_num_left_probers;
+}
+
+Status CrossJoinContext::finish_one_left_prober(RuntimeState* state) {
+    if (_num_left_probers == _num_finished_left_probers.fetch_add(1) + 1) {
+        // All the probers have finished, so the builders can be short-circuited.
+        set_finished();
+    }
+    return Status::OK();
+}
+
 Status CrossJoinContext::_init_runtime_filter(RuntimeState* state) {
     vectorized::ChunkPtr one_row_chunk = nullptr;
     size_t num_rows = 0;

@@ -58,12 +58,15 @@ public:
         }
         return Status::OK();
     }
+    Status finish_one_left_prober(RuntimeState* state);
+    void incr_prober();
 
     bool is_right_finished() const { return _all_right_finished.load(std::memory_order_acquire); }
 
 private:
     Status _init_runtime_filter(RuntimeState* state);
 
+    int32_t _num_left_probers = 0;
     const int32_t _num_right_sinkers;
 
     const int32_t _plan_node_id;
@@ -72,6 +75,7 @@ private:
     // _num_finished_right_sinkers is used to ensure CrossJoinLeftOperator can see all the parts
     // of _build_chunks, when it sees all the CrossJoinRightSinkOperators are finished.
     std::atomic<int32_t> _num_finished_right_sinkers = 0;
+    std::atomic<int32_t> _num_finished_left_probers = 0;
 
     // _build_chunks[i] contains all the rows from i-th CrossJoinRightSinkOperator.
     std::vector<vectorized::ChunkPtr> _build_chunks;
