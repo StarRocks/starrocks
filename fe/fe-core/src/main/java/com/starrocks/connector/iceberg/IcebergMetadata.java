@@ -93,6 +93,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
 
     private final Map<TableIdentifier, Table> tables = new ConcurrentHashMap<>();
+    private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<IcebergFilter, List<FileScanTask>> tasks = new ConcurrentHashMap<>();
 
     public IcebergMetadata(String catalogName, IcebergCatalog icebergCatalog) {
@@ -122,11 +123,17 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         icebergCatalog.dropDb(dbName);
+        databases.remove(dbName);
     }
 
     @Override
     public Database getDb(String dbName) {
-        return icebergCatalog.getDB(dbName);
+        if (databases.containsKey(dbName)) {
+            return databases.get(dbName);
+        }
+        Database db = icebergCatalog.getDB(dbName);
+        databases.put(dbName, db);
+        return db;
     }
 
     @Override
@@ -154,6 +161,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public void dropTable(DropTableStmt stmt) {
         icebergCatalog.dropTable(stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
+        tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
     }
 
     @Override
