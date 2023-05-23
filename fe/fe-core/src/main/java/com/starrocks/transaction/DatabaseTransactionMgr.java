@@ -1714,7 +1714,7 @@ public class DatabaseTransactionMgr {
         StatisticUtils.CountedListener counteredListener =
                 StatisticUtils.createCounteredListener(tables.size(), null);
         for (Table table : tables) {
-            StatisticUtils.triggerCollectionOnFirstLoad(db, table, false, counteredListener);
+            StatisticUtils.triggerCollectionOnFirstLoad(txnState, db, table, false, counteredListener);
         }
     }
 

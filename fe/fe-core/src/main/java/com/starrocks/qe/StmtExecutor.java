@@ -1375,6 +1375,7 @@ public class StmtExecutor {
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
         long transactionId = -1;
+        TransactionState txnState = null;
         if (targetTable instanceof ExternalOlapTable) {
             ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
             TAuthenticateParams authenticateParams = new TAuthenticateParams();
@@ -1407,9 +1408,8 @@ public class StmtExecutor {
                     context.getSessionVariable().getQueryTimeoutS());
 
             // add table indexes to transaction state
-            TransactionState txnState =
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                            .getTransactionState(database.getId(), transactionId);
+            txnState = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                    .getTransactionState(database.getId(), transactionId);
             if (txnState == null) {
                 throw new DdlException("txn does not exist: " + transactionId);
             }
@@ -1700,7 +1700,7 @@ public class StmtExecutor {
                     LOG.warn("errors when cancel insert load job {}", jobId);
                 }
             } else {
-                StatisticUtils.triggerCollectionOnFirstLoad(database, targetTable, true,
+                StatisticUtils.triggerCollectionOnFirstLoad(txnState, database, targetTable, true,
                         StatisticUtils.createCounteredListener(1, null));
             }
         }

@@ -1051,7 +1051,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         StatisticUtils.CountedListener counteredListener =
                 StatisticUtils.createCounteredListener(tables.size(), listener);
         for (Table table : tables) {
-            StatisticUtils.triggerCollectionOnFirstLoad(db, table, false, counteredListener);
+            StatisticUtils.triggerCollectionOnFirstLoad(txnState, db, table, false, counteredListener);
         }
     }
 

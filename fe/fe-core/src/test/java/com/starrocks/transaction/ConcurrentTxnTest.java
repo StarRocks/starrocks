@@ -15,7 +15,6 @@
 package com.starrocks.transaction;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoBackend;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.pseudocluster.Tablet;
@@ -31,13 +30,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ConcurrentTxnTest {
     @BeforeClass
     public static void setUp() throws Exception {
-        FeConstants.runningUnitTest = true;
+        Config.enable_statistic_collect_on_first_load = false;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
     }
 
     @AfterClass
     public static void tearDown() throws Exception {
-        FeConstants.runningUnitTest = false;
+        Config.enable_statistic_collect_on_first_load = true;
     }
 
     int runTime = 2;

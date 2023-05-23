@@ -1537,6 +1537,12 @@ public class Config extends ConfigBase {
     public static boolean enable_statistic_collect = true;
 
     /**
+     * auto statistic collect on first load flag
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_statistic_collect_on_first_load = true;
+
+    /**
      * The start time of day when auto-updates are enabled
      */
     @ConfField(mutable = true)

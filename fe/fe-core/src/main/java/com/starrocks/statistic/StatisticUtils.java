@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
@@ -34,6 +35,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.load.EtlStatus;
+import com.starrocks.load.loadv2.LoadJobFinalOperation;
+import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -42,6 +46,9 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TxnCommitAttachment;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -87,12 +94,26 @@ public class StatisticUtils {
         return context;
     }
 
-    public static void triggerCollectionOnFirstLoad(Database db, Table table, boolean sync, CountedListener listener) {
-        if (FeConstants.runningUnitTest) {
-            listener.run();
-            return;
+    private static StatsConstants.AnalyzeType parseAnalyzeType(TransactionState txnState, Table table) {
+        Long loadRows = null;
+        TxnCommitAttachment attachment = txnState.getTxnCommitAttachment();
+        if (attachment instanceof LoadJobFinalOperation) {
+            EtlStatus loadingStatus = ((LoadJobFinalOperation) attachment).getLoadingStatus();
+            loadRows = loadingStatus.getLoadedRows(table.getId());
+        } else if (attachment instanceof InsertTxnCommitAttachment) {
+            loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
+        } else if (attachment instanceof StreamLoadTxnCommitAttachment) {
+            loadRows = ((StreamLoadTxnCommitAttachment) attachment).getNumRowsNormal();
         }
-        if (GlobalStateMgr.getCurrentState().getAnalyzeManager().hasBasicStatsMeta(table.getId())) {
+        if (loadRows != null && loadRows > Config.statistic_sample_collect_rows) {
+            return StatsConstants.AnalyzeType.SAMPLE;
+        }
+        return StatsConstants.AnalyzeType.FULL;
+    }
+
+    public static void triggerCollectionOnFirstLoad(TransactionState txnState, Database db, Table table,
+                                                    boolean sync, CountedListener listener) {
+        if (!Config.enable_statistic_collect_on_first_load) {
             listener.run();
             return;
         }
@@ -100,9 +121,15 @@ public class StatisticUtils {
             listener.run();
             return;
         }
+        // Check if it's the first load
+        if (GlobalStateMgr.getCurrentState().getAnalyzeManager().hasBasicStatsMeta(table.getId())) {
+            listener.run();
+            return;
+        }
+        StatsConstants.AnalyzeType analyzeType = parseAnalyzeType(txnState, table);
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), table.getId(), null, StatsConstants.AnalyzeType.FULL,
-                StatsConstants.ScheduleType.ONCE, null, LocalDateTime.now());
+                db.getId(), table.getId(), null, analyzeType,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
@@ -117,14 +144,15 @@ public class StatisticUtils {
 
                             statisticExecutor.collectStatistics(statsConnectCtx,
                                     StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null, null,
-                                            StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, null),
-                                    analyzeStatus,
-                                    false);
+                                            analyzeType, StatsConstants.ScheduleType.ONCE,
+                                            analyzeStatus.getProperties()),
+                                    analyzeStatus, false);
                         } finally {
                             listener.run();
                         }
                     });
         } catch (Throwable e) {
+            LOG.error("failed to submit statistic collect job", e);
             listener.run();
             return;
         }
@@ -133,7 +161,7 @@ public class StatisticUtils {
             try {
                 future.get();
             } catch (InterruptedException | ExecutionException e) {
-                LOG.error(e);
+                LOG.error("failed to execute statistic collect job", e);
             }
         }
     }
