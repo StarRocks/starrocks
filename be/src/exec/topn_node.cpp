@@ -380,7 +380,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
                                        LocalPartitionTopnSourceOperatorFactory>(context, is_partition_topn, need_merge,
                                                                                 enable_parallel_merge);
     } else {
-        if (runtime_state()->enable_spill() && _limit < 0) {
+        if (runtime_state()->enable_spill() && runtime_state()->enable_sort_spill() && _limit < 0) {
             if (enable_parallel_merge) {
                 operators_source_with_sort =
                         _decompose_to_pipeline<SortContextFactory, SpillablePartitionSortSinkOperatorFactory,

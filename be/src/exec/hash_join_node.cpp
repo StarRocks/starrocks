@@ -464,7 +464,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     auto build_side_spill_channel_factory =
             std::make_shared<SpillProcessChannelFactory>(num_right_partitions, std::move(executor));
 
-    if (runtime_state()->enable_spill() &&
+    if (runtime_state()->enable_spill() && runtime_state()->enable_hash_join_spill() &&
         std::is_same_v<HashJoinBuilderFactory, SpillableHashJoinBuildOperatorFactory>) {
         context->interpolate_spill_process(id(), build_side_spill_channel_factory, num_right_partitions);
     }
@@ -536,7 +536,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
 pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     // now spill only support INNER_JOIN and LEFT-SEMI JOIN. we could implement LEFT_OUTER_JOIN later
-    if (runtime_state()->enable_spill() && is_spillable(_join_type)) {
+    if (runtime_state()->enable_spill() && runtime_state()->enable_hash_join_spill() && is_spillable(_join_type)) {
         return _decompose_to_pipeline<HashJoinerFactory, SpillableHashJoinBuildOperatorFactory,
                                       SpillableHashJoinProbeOperatorFactory>(context);
     } else {
