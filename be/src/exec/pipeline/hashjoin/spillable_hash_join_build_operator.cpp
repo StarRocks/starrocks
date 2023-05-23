@@ -57,6 +57,9 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
         _join_builder->spill_channel()->set_finishing();
         return HashJoinBuildOperator::set_finishing(state);
     }
+    if (state->is_cancelled()) {
+        _join_builder->spiller()->cancel();
+    }
 
     auto io_executor = _join_builder->spill_channel()->io_executor();
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {

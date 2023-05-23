@@ -31,6 +31,7 @@
 #include "runtime/descriptors.h"
 #include "types/logical_type.h"
 #include "udf/java/utils.h"
+#include "exec/spill/spiller.hpp"
 
 namespace starrocks {
 
@@ -521,7 +522,7 @@ Status Aggregator::spill_aggregate_data(RuntimeState* state, std::function<Statu
         if (chunk_with_st.ok()) {
             if (!chunk_with_st.value()->is_empty()) {
                 RETURN_IF_ERROR(spiller->spill(state, chunk_with_st.value(), *io_executor,
-                                               spill::MemTrackerGuard(tls_mem_tracker)));
+                                               spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
             }
         } else if (chunk_with_st.status().is_end_of_file()) {
             // chunk_provider return eos means provider has output all data from hash_map/hash_set.

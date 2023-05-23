@@ -32,6 +32,7 @@
 #include "simd/simd.h"
 #include "util/debug_util.h"
 #include "util/runtime_profile.h"
+#include "exec/spill/spiller.hpp"
 
 namespace starrocks {
 
@@ -178,7 +179,8 @@ Status HashJoiner::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk
 Status HashJoiner::append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk) {
     update_build_rows(chunk->num_rows());
     auto io_executor = spill_channel()->io_executor();
-    RETURN_IF_ERROR(spiller()->spill(state, chunk, *io_executor, spill::MemTrackerGuard(tls_mem_tracker)));
+    RETURN_IF_ERROR(spiller()->spill(state, chunk, *io_executor, spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
+
     return Status::OK();
 }
 
@@ -188,7 +190,7 @@ Status HashJoiner::append_spill_task(RuntimeState* state, std::function<StatusOr
         auto chunk_st = spill_task();
         if (chunk_st.ok()) {
             RETURN_IF_ERROR(
-                    spiller()->spill(state, chunk_st.value(), io_executor(), spill::MemTrackerGuard(tls_mem_tracker)));
+                    spiller()->spill(state, chunk_st.value(), io_executor(), spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
         } else if (chunk_st.status().is_end_of_file()) {
             return Status::OK();
         } else {
