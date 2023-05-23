@@ -100,6 +100,10 @@ inline std::optional<int64_t> extract_txn_id_prefix(std::string_view file_name) 
     return txn_id;
 }
 
+inline std::string schema_filename(int64_t schema_id) {
+    return fmt::format("SCHEMA_{:016X}", schema_id);
+}
+
 // Return value: <tablet id, tablet version>
 inline std::pair<int64_t, int64_t> parse_tablet_metadata_filename(std::string_view file_name) {
     constexpr static int kBase = 16;
