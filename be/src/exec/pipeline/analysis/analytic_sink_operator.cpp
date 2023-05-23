@@ -68,6 +68,7 @@ Status AnalyticSinkOperator::prepare(RuntimeState* state) {
                         &AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_rows_frame_materializing;
             }
         } else {
+            // ROWS BETWEEN N PRECEDING AND M FOLLOWING or
             // ROWS BETWEEN N PRECEDING AND CURRENT ROW
             _process_by_partition = &AnalyticSinkOperator::_process_by_partition_for_sliding_frame;
         }
@@ -288,9 +289,9 @@ void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_range_f
     if (_analytor->has_cume_function()) {
         _analytor->set_partition_size_for_cume_function();
     }
-    do {
+    while (_analytor->current_row_position() < _analytor->partition_end() &&
+           !_analytor->is_current_chunk_finished_eval(chunk_size)) {
         _analytor->find_peer_group_end();
-        DCHECK(!_analytor->found_partition_end().first);
         _analytor->update_window_batch(_analytor->peer_group_start(), _analytor->peer_group_end(),
                                        _analytor->peer_group_start(), _analytor->peer_group_end());
 
@@ -310,8 +311,7 @@ void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_range_f
 
         _analytor->get_window_function_result(peer_group_start_offset, peer_group_end_offset);
         _analytor->update_current_row_position(peer_group_end_offset - peer_group_start_offset);
-    } while (_analytor->current_row_position() < _analytor->partition_end() &&
-             !_analytor->is_current_chunk_finished_eval(chunk_size));
+    }
 }
 
 void AnalyticSinkOperator::_process_by_partition_for_sliding_frame(size_t chunk_size, bool is_new_partition) {
