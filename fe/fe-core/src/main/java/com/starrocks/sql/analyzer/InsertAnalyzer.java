@@ -83,7 +83,7 @@ public class InsertAnalyzer {
         }
 
         if (insertStmt.isOverwrite()) {
-            if (!table.isOlapTable() && !table.isIcebergTable()) {
+            if (!(table instanceof OlapTable) && !table.isIcebergTable()) {
                 throw unsupportedException("Only support insert overwrite olap table and iceberg table");
             }
             if (table instanceof OlapTable && ((OlapTable) table).getState() != NORMAL) {
