@@ -41,9 +41,12 @@ import com.starrocks.common.proc.ProcResult;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
+import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.PrivilegeCheckerV2;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
@@ -121,7 +124,7 @@ public class ResourceMgrTest {
         mgr.dropResource(stmt);
     }
 
-    @Test
+    @Test(expected = SemanticException.class)
     public void testAlterResource(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr,
                                   @Injectable Auth auth) throws UserException {
         ResourceMgr mgr = new ResourceMgr();
@@ -137,7 +140,7 @@ public class ResourceMgrTest {
         properties.put("hive.metastore.uris", newThriftPath);
         AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
+        PrivilegeCheckerV2.check(stmt, connectContext);
         mgr.alterResource(stmt);
 
         // assert
@@ -148,7 +151,7 @@ public class ResourceMgrTest {
         Assert.assertEquals(newThriftPath, metastoreURIs);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = SemanticException.class)
     public void testAllowAlterHiveResourceOnly(@Injectable BrokerMgr brokerMgr, @Injectable EditLog editLog,
                                                @Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth)
             throws UserException {
@@ -162,11 +165,11 @@ public class ResourceMgrTest {
         properties.put("broker", "broker2");
         AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
+        PrivilegeCheckerV2.check(stmt, connectContext);
         mgr.alterResource(stmt);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = SemanticException.class)
     public void testAlterResourceNotExist(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr,
                                           @Injectable Auth auth) throws UserException {
         ResourceMgr mgr = new ResourceMgr();
@@ -182,11 +185,11 @@ public class ResourceMgrTest {
         String noExistName = "hive1";
         AlterResourceStmt stmt = new AlterResourceStmt(noExistName, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
+        PrivilegeCheckerV2.check(stmt, connectContext);
         mgr.alterResource(stmt);
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = SemanticException.class)
     public void testAlterResourcePropertyNotExist(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr,
                                                   @Injectable Auth auth) throws UserException {
         ResourceMgr mgr = new ResourceMgr();
@@ -201,7 +204,7 @@ public class ResourceMgrTest {
         properties.put("hive.metastore.uris.xxx", "thrift://10.10.44.xxx:9083");
         AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
+        PrivilegeCheckerV2.check(stmt, connectContext);
         mgr.alterResource(stmt);
     }
 
@@ -243,9 +246,7 @@ public class ResourceMgrTest {
             {
                 globalStateMgr.getEditLog();
                 result = editLog;
-                globalStateMgr.getAuth();
-                result = auth;
-                auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
+                PrivilegeActions.checkSystemAction(connectContext, PrivilegeType.CREATE_RESOURCE);
                 result = true;
             }
         };
@@ -255,7 +256,7 @@ public class ResourceMgrTest {
         properties.put("hive.metastore.uris", hiveMetastoreUris);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
+        PrivilegeCheckerV2.check(stmt, connectContext);
         Assert.assertEquals(0, mgr.getResourceNum());
         mgr.createResource(stmt);
         Assert.assertEquals(1, mgr.getResourceNum());
@@ -275,16 +276,14 @@ public class ResourceMgrTest {
                 result = true;
                 globalStateMgr.getEditLog();
                 result = editLog;
-                globalStateMgr.getAuth();
-                result = auth;
-                auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
+                PrivilegeActions.checkSystemAction(connectContext, PrivilegeType.CREATE_RESOURCE);
                 result = true;
             }
         };
 
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
-        PrivilegeChecker.check(stmt, connectContext);
+        PrivilegeCheckerV2.check(stmt, connectContext);
         Assert.assertEquals(0, mgr.getResourceNum());
         mgr.createResource(stmt);
         Assert.assertEquals(1, mgr.getResourceNum());

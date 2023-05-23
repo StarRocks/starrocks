@@ -131,7 +131,6 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
@@ -792,14 +791,8 @@ public class ShowExecutor {
                 continue;
             }
 
-            if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnOrInDb(connectContext, catalogName, dbName)) {
-                    continue;
-                }
-            } else {
-                if (!PrivilegeChecker.checkDbPriv(connectContext, catalogName, dbName, PrivPredicate.SHOW)) {
-                    continue;
-                }
+            if (!PrivilegeActions.checkAnyActionOnOrInDb(connectContext, catalogName, dbName)) {
+                continue;
             }
             dbNameSet.add(dbName);
         }
@@ -838,27 +831,20 @@ public class ShowExecutor {
                     if (matcher != null && !matcher.match(tbl.getName())) {
                         continue;
                     }
-                    // check tbl privs
-                    if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-                        if (tbl.isView()) {
-                            if (!PrivilegeActions.checkAnyActionOnView(
-                                    connectContext, db.getFullName(), tbl.getName())) {
-                                continue;
-                            }
-                        } else if (tbl.isMaterializedView()) {
-                            if (!PrivilegeActions.checkAnyActionOnMaterializedView(
-                                    connectContext, db.getFullName(), tbl.getName())) {
-                                continue;
-                            }
-                        } else if (!PrivilegeActions.checkAnyActionOnTable(
+
+                    if (tbl.isView()) {
+                        if (!PrivilegeActions.checkAnyActionOnView(
                                 connectContext, db.getFullName(), tbl.getName())) {
                             continue;
                         }
-                    } else {
-                        if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalogName,
-                                db.getFullName(), tbl.getName(), PrivPredicate.SHOW)) {
+                    } else if (tbl.isMaterializedView()) {
+                        if (!PrivilegeActions.checkAnyActionOnMaterializedView(
+                                connectContext, db.getFullName(), tbl.getName())) {
                             continue;
                         }
+                    } else if (!PrivilegeActions.checkAnyActionOnTable(
+                            connectContext, db.getFullName(), tbl.getName())) {
+                        continue;
                     }
                     tableMap.put(tbl.getName(), tbl.getMysqlType());
                 }
