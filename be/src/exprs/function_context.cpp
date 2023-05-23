@@ -200,7 +200,7 @@ struct ColumnBuilder {
     ColumnPtr operator()(const FunctionContext::TypeDesc& type_desc) {
         if constexpr (lt_is_decimal<Type>) {
             return RunTimeColumnType<Type>::create(type_desc.precision, type_desc.scale);
-        } else if constexpr (lt_is_conllection<Type>) {
+        } else if constexpr (lt_is_collection<Type>) {
             throw std::runtime_error(fmt::format("Unsupported collection type {}", Type));
             return nullptr;
         } else if constexpr (Type == TYPE_UNKNOWN || Type == TYPE_BINARY || Type == TYPE_DECIMAL) {

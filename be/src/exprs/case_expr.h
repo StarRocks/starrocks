@@ -21,5 +21,7 @@ namespace starrocks {
 class VectorizedCaseExprFactory {
 public:
     static Expr* from_thrift(const TExprNode& node);
+    // for tests
+    static Expr* from_thrift(const starrocks::TExprNode& node, LogicalType resultType, LogicalType whenType);
 };
 } // namespace starrocks

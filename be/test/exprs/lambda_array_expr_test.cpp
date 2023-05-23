@@ -245,15 +245,6 @@ std::vector<Expr*> VectorizedLambdaFunctionExprTest::create_lambda_expr(ObjectPo
     return lambda_funcs;
 }
 
-TypeDescriptor array_type(const LogicalType& child_type) {
-    TypeDescriptor t;
-    t.type = TYPE_ARRAY;
-    t.children.resize(1);
-    t.children[0].type = child_type;
-    t.children[0].len = child_type == TYPE_VARCHAR ? 10 : child_type == TYPE_CHAR ? 10 : -1;
-    return t;
-}
-
 // just consider one level, not nested
 // array_map(lambdaFunction(x<type>, lambdaExpr),array<type>)
 TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {

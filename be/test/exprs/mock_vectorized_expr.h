@@ -26,9 +26,18 @@
 #include "glog/logging.h"
 
 namespace starrocks {
+
+
+TypeDescriptor array_type(const TypeDescriptor& child_type);
+
+TypeDescriptor array_type(const LogicalType& child_type);
+
+TypeDescriptor map_type(LogicalType key, LogicalType value);
+
 class MockExpr : public starrocks::Expr {
 public:
     explicit MockExpr(const TExprNode& dummy, ColumnPtr result) : Expr(dummy), _column(std::move(result)) {}
+    explicit MockExpr(TypeDescriptor type, ColumnPtr col): Expr(std::move(type), false), _column(std::move(col)) {}
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
 

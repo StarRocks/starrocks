@@ -179,11 +179,21 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
-    private static class MapConcatDeduce implements java.util.function.Function<Type[], Type> {
+    private static class CommonDeduce implements java.util.function.Function<Type[], Type> {
         @Override
         public Type apply(Type[] types) {
             Type commonType = TypeManager.getCommonSuperType(Arrays.asList(types));
             Arrays.fill(types, commonType);
+            return commonType;
+        }
+    }
+
+    private static class IfDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            Type commonType = TypeManager.getCommonSuperType(types[1], types[2]);
+            types[1] = commonType;
+            types[2] = commonType;
             return commonType;
         }
     }
@@ -204,7 +214,11 @@ public class PolymorphicFunctionAnalyzer {
             .put("map_apply", new MapApplyDeduce())
             .put("map_filter", new MapFilterDeduce())
             .put("distinct_map_keys", new DistinctMapKeysDeduce())
-            .put("map_concat", new MapConcatDeduce())
+            .put("map_concat", new CommonDeduce())
+            .put("if", new IfDeduce())
+            .put("ifnull", new CommonDeduce())
+            .put("nullif", new CommonDeduce())
+            .put("coalesce", new CommonDeduce())
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {

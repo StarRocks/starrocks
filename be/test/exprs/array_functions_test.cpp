@@ -20,10 +20,10 @@
 #include <unordered_set>
 
 #include "column/const_column.h"
+#include "exprs/mock_vectorized_expr.h"
 
 namespace starrocks {
 
-namespace {
 TypeDescriptor array_type(const TypeDescriptor& child_type) {
     TypeDescriptor t;
     t.type = TYPE_ARRAY;
@@ -39,7 +39,6 @@ TypeDescriptor array_type(const LogicalType& child_type) {
     t.children[0].len = child_type == TYPE_VARCHAR ? 10 : child_type == TYPE_CHAR ? 10 : -1;
     return t;
 }
-} // namespace
 
 class ArrayFunctionsTest : public ::testing::Test {
 protected:
