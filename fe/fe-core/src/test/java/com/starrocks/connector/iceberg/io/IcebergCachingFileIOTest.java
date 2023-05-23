@@ -50,6 +50,7 @@ public class IcebergCachingFileIOTest {
         // create iceberg cachingFileIO
         IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO(hadoopFileIO);
         Map<String, String> icebergProperties = new HashMap<>();
+        icebergProperties.put("iceberg.catalog.type", "hive");
         cachingFileIO.initialize(icebergProperties);
 
         // get input file by hadoopFileIO and cachingFileIO
