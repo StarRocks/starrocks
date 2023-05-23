@@ -39,6 +39,8 @@ public:
                                       std::vector<GroupReaderParam::Column>& read_cols,
                                       bool& _is_only_partition_scan) const = 0;
 
+    virtual const ParquetField* get_parquet_field(const std::string& col_name) const = 0;
+
     const tparquet::ColumnMetaData* get_column_meta(
             const std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
             const tparquet::RowGroup& row_group, const std::string& col_name) const {
@@ -56,15 +58,6 @@ public:
         * Metadata for each column chunk in row group must have the same order as the SchemaElement list in FileMetaData.
         **/
         return &row_group.columns[it->second].meta_data;
-    }
-
-    const ParquetField* get_parquet_field(const std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
-                                          const std::string& col_name) const {
-        auto it = column_name_2_pos_in_meta.find(col_name);
-        if (it == column_name_2_pos_in_meta.end()) {
-            return nullptr;
-        }
-        return _file_metadata->schema().get_stored_column_by_field_idx(it->second);
     }
 
 protected:
@@ -102,7 +95,7 @@ public:
                               std::vector<GroupReaderParam::Column>& read_cols,
                               bool& _is_only_partition_scan) const override;
 
-private:
+    const ParquetField* get_parquet_field(const std::string& col_name) const override;
 };
 
 class IcebergMetaHelper : public MetaHelper {
@@ -113,6 +106,7 @@ public:
         _case_sensitive = case_sensitive;
         _t_iceberg_schema = t_iceberg_schema;
         DCHECK(_t_iceberg_schema != nullptr);
+        _init_field_mapping();
     }
 
     ~IcebergMetaHelper() override = default;
@@ -124,9 +118,12 @@ public:
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
                               std::vector<GroupReaderParam::Column>& read_cols,
                               bool& _is_only_partition_scan) const override;
-
+    const ParquetField* get_parquet_field(const std::string& col_name) const override;
 private:
+    void _init_field_mapping();
     const TIcebergSchema* _t_iceberg_schema = nullptr;
+    // field name has already been formatted
+    std::unordered_map<std::string, const TIcebergSchemaField*> _field_name_2_iceberg_field;
 };
 
 } // namespace starrocks::parquet

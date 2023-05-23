@@ -61,6 +61,17 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
     _is_only_partition_scan = read_cols.empty();
 }
 
+const ParquetField* ParquetMetaHelper::get_parquet_field(const std::string& col_name) const {
+    return _file_metadata->schema().get_stored_column_by_column_name(col_name);
+}
+
+void IcebergMetaHelper::_init_field_mapping() {
+    for (const auto& each : _t_iceberg_schema->fields) {
+        const std::string& formatted_field_name = _case_sensitive ? each.name : boost::algorithm::to_lower_copy(each.name);
+        _field_name_2_iceberg_field.emplace(formatted_field_name, &each);
+    }
+}
+
 void IcebergMetaHelper::set_existed_column_names(std::unordered_set<std::string>* names) const {
     names->clear();
     // build column name set from iceberg schema
@@ -78,43 +89,28 @@ void IcebergMetaHelper::set_existed_column_names(std::unordered_set<std::string>
 void IcebergMetaHelper::build_column_name_2_pos_in_meta(
         std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta, const tparquet::RowGroup& row_group,
         const std::vector<SlotDescriptor*>& slots) const {
-    // Key is field name, value is unique iceberg field id.
-    std::unordered_map<std::string, int32_t> column_name_2_field_id{};
-    for (const auto& each : _t_iceberg_schema->fields) {
-        const std::string& format_field_name = _case_sensitive ? each.name : boost::algorithm::to_lower_copy(each.name);
-        column_name_2_field_id.emplace(format_field_name, each.field_id);
-    }
-
     for (const auto& slot : slots) {
         const std::string& format_column_name =
                 _case_sensitive ? slot->col_name() : boost::algorithm::to_lower_copy(slot->col_name());
-        auto it = column_name_2_field_id.find(format_column_name);
-        if (it == column_name_2_field_id.end()) {
+        auto it = _field_name_2_iceberg_field.find(format_column_name);
+        if (it == _field_name_2_iceberg_field.end()) {
             continue;
         }
         // Put SlotDescriptor's origin column name here!
         column_name_2_pos_in_meta.emplace(slot->col_name(),
-                                          _file_metadata->schema().get_field_idx_by_field_id(it->second));
+                                          _file_metadata->schema().get_field_idx_by_field_id(it->second->field_id));
     }
 }
 
 void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
                                              std::vector<GroupReaderParam::Column>& read_cols,
                                              bool& _is_only_partition_scan) const {
-    // Build iceberg schema mapping if iceberg_schema existed
-    std::unordered_map<std::string, const TIcebergSchemaField*> iceberg_schema_name_2_field{};
-    for (const auto& field : _t_iceberg_schema->fields) {
-        const std::string& format_field_name =
-                _case_sensitive ? field.name : boost::algorithm::to_lower_copy(field.name);
-        iceberg_schema_name_2_field.emplace(format_field_name, &field);
-    }
-
     for (auto& materialized_column : materialized_columns) {
         const std::string& format_col_name = _case_sensitive
                                                      ? materialized_column.col_name
                                                      : boost::algorithm::to_lower_copy(materialized_column.col_name);
-        auto iceberg_it = iceberg_schema_name_2_field.find(format_col_name);
-        if (iceberg_it == iceberg_schema_name_2_field.end()) {
+        auto iceberg_it = _field_name_2_iceberg_field.find(format_col_name);
+        if (iceberg_it == _field_name_2_iceberg_field.end()) {
             continue;
         }
 
@@ -131,6 +127,18 @@ void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
         read_cols.emplace_back(column);
     }
     _is_only_partition_scan = read_cols.empty();
+}
+
+const ParquetField* IcebergMetaHelper::get_parquet_field(const std::string& col_name) const {
+    const std::string& formatted_col_name = _case_sensitive
+                                                 ? col_name
+                                                 : boost::algorithm::to_lower_copy(col_name);
+    auto it = _field_name_2_iceberg_field.find(formatted_col_name);
+    if (it == _field_name_2_iceberg_field.end()) {
+        return nullptr;
+    }
+    int32_t field_id = it->second->field_id;
+    return _file_metadata->schema().get_stored_column_by_field_id(field_id);
 }
 
 } // namespace starrocks::parquet
