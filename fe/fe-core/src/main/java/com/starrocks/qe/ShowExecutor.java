@@ -501,6 +501,30 @@ public class ShowExecutor {
         }
     }
 
+    public static String buildCreateMVSql(OlapTable olapTable, String mv, MaterializedIndexMeta mvMeta) {
+        StringBuilder originStmtBuilder = new StringBuilder(
+                "create materialized view " + mv +
+                        " as select ");
+        String groupByString = "";
+        for (Column column : mvMeta.getSchema()) {
+            if (column.isKey()) {
+                groupByString += column.getName() + ",";
+            }
+        }
+        originStmtBuilder.append(groupByString);
+        for (Column column : mvMeta.getSchema()) {
+            if (!column.isKey()) {
+                originStmtBuilder.append(column.getAggregationType().toString()).append("(")
+                        .append(column.getName()).append(")").append(",");
+            }
+        }
+        originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
+        originStmtBuilder.append(" from ").append(olapTable.getName()).append(" group by ")
+                .append(groupByString);
+        originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
+        return originStmtBuilder.toString();
+    }
+
     public static List<List<String>> listMaterializedViewStatus(
             String dbName,
             List<MaterializedView> materializedViews,
@@ -575,27 +599,8 @@ public class ShowExecutor {
             // rows
             resultRow.add(String.valueOf(mvIdx.getRowCount()));
             if (mvMeta.getOriginStmt() == null) {
-                StringBuilder originStmtBuilder = new StringBuilder(
-                        "create materialized view " + olapTable.getIndexNameById(mvIdx.getId()) +
-                                " as select ");
-                String groupByString = "";
-                for (Column column : mvMeta.getSchema()) {
-                    if (column.isKey()) {
-                        groupByString += column.getName() + ",";
-                    }
-                }
-                originStmtBuilder.append(groupByString);
-                for (Column column : mvMeta.getSchema()) {
-                    if (!column.isKey()) {
-                        originStmtBuilder.append(column.getAggregationType().toString()).append("(")
-                                .append(column.getName()).append(")").append(",");
-                    }
-                }
-                originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
-                originStmtBuilder.append(" from ").append(olapTable.getName()).append(" group by ")
-                        .append(groupByString);
-                originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
-                resultRow.add(originStmtBuilder.toString());
+                String mvName = olapTable.getIndexNameById(mvIdx.getId());
+                resultRow.add(buildCreateMVSql(olapTable, mvName, mvMeta));
             } else {
                 resultRow.add(mvMeta.getOriginStmt().replace("\n", "").replace("\t", "")
                         .replaceAll("[ ]+", " "));
@@ -1053,7 +1058,34 @@ public class ShowExecutor {
         try {
             Table table = db.getTable(showStmt.getTable());
             if (table == null) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
+                if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
+                } else {
+                    // For Sync Materialized View, it is a mv index inside OLAP table,
+                    // so we can not get it from database.
+                    for (Table tbl : db.getTables()) {
+                        if (tbl.getType() == Table.TableType.OLAP) {
+                            OlapTable olapTable = (OlapTable) tbl;
+                            List<MaterializedIndex> visibleMaterializedViews = olapTable.getVisibleIndex();
+                            for (MaterializedIndex mvIdx : visibleMaterializedViews) {
+                                if (olapTable.getIndexNameById(mvIdx.getId()).equals(showStmt.getTable())) {
+                                    MaterializedIndexMeta mvMeta = olapTable.getVisibleIndexIdToMeta().get(mvIdx.getId());
+                                    if (mvMeta.getOriginStmt() == null) {
+                                        String mvName = olapTable.getIndexNameById(mvIdx.getId());
+                                        rows.add(Lists.newArrayList(showStmt.getTable(), buildCreateMVSql(olapTable,
+                                                mvName, mvMeta), "utf8", "utf8_general_ci"));
+                                    } else {
+                                        rows.add(Lists.newArrayList(showStmt.getTable(), mvMeta.getOriginStmt(),
+                                                "utf8", "utf8_general_ci"));
+                                    }
+                                    resultSet = new ShowResultSet(ShowCreateTableStmt.getMaterializedViewMetaData(), rows);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
+                }
             }
 
             List<String> createTableStmt = Lists.newArrayList();
