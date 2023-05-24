@@ -142,7 +142,7 @@ private:
             // construct result column
             ColumnPtr res = then_columns[0];
             bool res_nullable = false;
-            for (const auto col : then_columns) {
+            for (const auto& col : then_columns) {
                 if (col->is_nullable()) {
                     if (!col->only_null()) {
                         res = col;
@@ -171,7 +171,7 @@ private:
 
                 for (auto row = 0; row < size; ++row) {
                     int i = 0;
-                    while ((i < when_num) && (case_nulls != nullptr && case_nulls->get_data()[row] ||
+                    while ((i < when_num) && ((case_nulls != nullptr && case_nulls->get_data()[row]) ||
                                               !when_columns[i]->equals(row, *case_data, row))) {
                         ++i;
                     }
@@ -310,7 +310,7 @@ private:
             // construct nullable result column
             ColumnPtr res = then_columns[0];
             bool res_nullable = false;
-            for (const auto col : then_columns) {
+            for (const auto& col : then_columns) {
                 if (col->is_nullable()) {
                     if (!col->only_null()) {
                         res = col;
