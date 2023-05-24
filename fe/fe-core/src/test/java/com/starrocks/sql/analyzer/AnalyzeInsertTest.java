@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -159,7 +160,7 @@ public class AnalyzeInsertTest {
                 minTimes = 0;
 
                 icebergTable.getPartitionColumnNames();
-                result = ImmutableList.of("p1", "p2");
+                result = Lists.newArrayList("p1", "p2");
                 minTimes = 0;
 
                 icebergTable.getColumn(anyString);
@@ -169,10 +170,8 @@ public class AnalyzeInsertTest {
         };
 
         analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=1) values (1)",
-                "Must include all partition column names");
+                "Must include all 2 partition columns in the partition clause.");
 
-        analyzeFail("insert into iceberg_catalog.db.tbl partition(p2=1, p1=1) values (1)",
-                "Expected: p1, but actual: p2");
 
         analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=1, p2=\"aaffsssaa\") values (1)",
                 "Type[array<date>] not supported.");
@@ -186,6 +185,10 @@ public class AnalyzeInsertTest {
                 icebergTable.getColumn(anyString);
                 result = ImmutableList.of(new Column("p1", Type.INT), new Column("p2", Type.INT));
                 minTimes = 0;
+
+                icebergTable.getPartitionColumnNames();
+                result = Lists.newArrayList("p1", "p2");
+                minTimes = 1;
             }
         };
 

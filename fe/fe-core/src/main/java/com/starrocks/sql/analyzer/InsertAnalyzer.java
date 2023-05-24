@@ -42,7 +42,10 @@ import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.OlapTable.OlapTableState.NORMAL;
@@ -159,17 +162,31 @@ public class InsertAnalyzer {
                         "Partition column names size must be equal to the partition column values size. %d vs %d",
                         partitionColNames.size(), partitionColValues.size());
 
-                if (tablePartitionColumnNames.size() != partitionColNames.size()) {
-                    throw new SemanticException("Must include all partition column names");
+                if (tablePartitionColumnNames.size() > partitionColNames.size()) {
+                    throw new SemanticException("Must include all %d partition columns in the partition clause",
+                            tablePartitionColumnNames.size());
+                }
+
+                if (tablePartitionColumnNames.size() < partitionColNames.size()) {
+                    throw new SemanticException("Only %d partition columns can be included in the partition clause",
+                            tablePartitionColumnNames.size());
+                }
+
+                Map<String, Long> frequencies = partitionColNames.stream()
+                        .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+                Optional<Map.Entry<String, Long>> duplicateKey = frequencies.entrySet().stream()
+                        .filter(entry -> entry.getValue() > 1).findFirst();
+                if (duplicateKey.isPresent()) {
+                    throw new SemanticException("Found duplicate partition column name %s", duplicateKey.get().getKey());
                 }
 
                 for (int i = 0; i < partitionColNames.size(); i++) {
                     String actualName = partitionColNames.get(i);
-                    String expectedName = tablePartitionColumnNames.get(i);
-                    Expr partitionValue = partitionColValues.get(i);
-                    if (!actualName.equalsIgnoreCase(expectedName)) {
-                        throw new SemanticException("Expected: %s, but actual: %s", expectedName, actualName);
+                    if (!tablePartitionColumnNames.contains(actualName)) {
+                        throw new SemanticException("Can't find partition column %s", actualName);
                     }
+
+                    Expr partitionValue = partitionColValues.get(i);
 
                     if (!partitionValue.isLiteral()) {
                         throw new SemanticException("partition value should be literal expression");
