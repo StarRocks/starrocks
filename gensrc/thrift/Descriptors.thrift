@@ -501,7 +501,7 @@ struct TTableDescriptor {
   // File Table
   34: optional TFileTable fileTable
 
-  // Temp External Table
+  // Table Function Table
   35: optional TTableFunctionTable tableFunctionTable
 }
 

@@ -22,7 +22,7 @@ import java.util.Map;
 public class FileTableFunctionRelation extends TableRelation {
     private Map<String, String> properties;
     public FileTableFunctionRelation(Map<String, String> properties, NodePosition pos) {
-        super(new TableName("", "temp_external_table"));
+        super(new TableName("", "table_function_table"));
         this.properties = properties;
     }
 
