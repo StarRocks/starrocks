@@ -293,6 +293,7 @@ CONF_mInt32(update_compaction_check_interval_seconds, "60");
 CONF_mInt32(update_compaction_num_threads_per_disk, "1");
 CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
+CONF_mInt64(update_compaction_size_threshold, "277872640");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 
