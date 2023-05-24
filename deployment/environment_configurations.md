@@ -353,6 +353,6 @@ echo 1024 | sudo tee /proc/sys/net/core/somaxconn
 
 ```Bash
 echo 120000 > /proc/sys/kernel/threads-max
-echo 60000 > /proc/sys/vm/max_map_count
+echo 262144 > /proc/sys/vm/max_map_count
 echo 200000 > /proc/sys/kernel/pid_max
 ```
