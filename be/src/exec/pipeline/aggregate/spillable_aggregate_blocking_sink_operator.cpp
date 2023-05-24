@@ -46,6 +46,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
         return _aggregator->spiller()->flush(state, *io_executor, spill::MemTrackerGuard(tls_mem_tracker));
     };
+
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
         _aggregator->spill_channel()->set_finishing();
         RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
