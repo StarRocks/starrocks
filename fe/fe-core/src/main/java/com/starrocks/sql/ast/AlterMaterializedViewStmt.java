@@ -15,7 +15,10 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
+
+import java.util.Set;
 
 /**
  * 1.Support for modifying the way of refresh and the cycle of asynchronous refresh;
@@ -27,16 +30,27 @@ public class AlterMaterializedViewStmt extends DdlStmt {
     private final TableName mvName;
     private final String newMvName;
     private final RefreshSchemeDesc refreshSchemeDesc;
-
     private final ModifyTablePropertiesClause modifyTablePropertiesClause;
+    private final String status;
+
+    public static final String ACTIVE = "active";
+    public static final String INACTIVE = "inactive";
+    public static final Set<String> SUPPORTED_MV_STATUS = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+
+    static {
+        SUPPORTED_MV_STATUS.add(ACTIVE);
+        SUPPORTED_MV_STATUS.add(INACTIVE);
+    }
 
     public AlterMaterializedViewStmt(TableName mvName, String newMvName,
                                      RefreshSchemeDesc refreshSchemeDesc,
-                                     ModifyTablePropertiesClause modifyTablePropertiesClause) {
+                                     ModifyTablePropertiesClause modifyTablePropertiesClause,
+                                     String status) {
         this.mvName = mvName;
         this.newMvName = newMvName;
         this.refreshSchemeDesc = refreshSchemeDesc;
         this.modifyTablePropertiesClause = modifyTablePropertiesClause;
+        this.status = status;
     }
 
     public TableName getMvName() {
@@ -53,6 +67,10 @@ public class AlterMaterializedViewStmt extends DdlStmt {
 
     public ModifyTablePropertiesClause getModifyTablePropertiesClause() {
         return modifyTablePropertiesClause;
+    }
+
+    public String getStatus() {
+        return status;
     }
 
     @Override
