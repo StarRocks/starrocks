@@ -1089,7 +1089,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             StreamLoadManager streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadManager();
             streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), timeoutSecond, resp, false);
             if (!resp.stateOK()) {
-                LOG.warn("Load label: {} begin transacton failed, reason: {}", request.getLabel(), resp.msg);
+                LOG.warn(resp.msg);
+                throw new UserException(resp.msg);
             }
 
             StreamLoadTask task = streamLoadManager.getTaskByLabel(request.getLabel());
