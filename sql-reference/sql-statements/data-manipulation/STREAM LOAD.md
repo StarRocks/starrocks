@@ -18,13 +18,13 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 
 本文以 curl 工具为例介绍如何使用 Stream Load 导入数据。除了使用 curl 工具，您还可以通过其他支持 HTTP 协议的工具或语言提交导入作业以导入数据。导入相关的参数位于 HTTP 请求的请求头。传入这些导入相关的参数时，需要注意以下几点：
 
-- 当前支持 HTTP **分块上传**和**非分块上传**两种方式。如果使用非分块上传方式，必须使用请求头字段 `Content-Length` 来标示待上传内容的长度，从而保证数据完整性。
+- 推荐使用**分块上传**方式，如本文示例所示。如果使用**非分块上传**方式，则必须使用请求头字段 `Content-Length` 来标示待上传内容的长度，从而保证数据完整性。
 
   > **说明**
   >
   > 使用 curl 工具提交导入作业的时候，会自动添加 `Content-Length` 字段，因此无需手动指定 `Content-Length`。
 
-- 建议在 HTTP 请求的请求头字段 `Expect` 中指定 `100-continue`，即 `"Expect:100-continue"`。这样在服务器拒绝导入作业请求的情况下，可以避免不必要的数据传输，从而减少不必要的资源开销。
+- 必须在 HTTP 请求的请求头字段 `Expect` 中指定 `100-continue`，即 `"Expect:100-continue"`。这样在服务器拒绝导入作业请求的情况下，可以避免不必要的数据传输，从而减少不必要的资源开销。
 
 注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](/sql-reference/sql-statements/keywords.md)。
 
@@ -249,6 +249,7 @@ StarRocks 数据库 `test_db` 里的表 `table1` 包含三列，按顺序依次�
 
 ```Bash
 curl --location-trusted -u root: -H "label:label1" \
+    -H "Expect:100-continue" \
     -H "timeout:100" \
     -H "max_filter_ratio:0.2" \
     -T example1.csv -XPUT \
@@ -265,6 +266,7 @@ StarRocks 数据库 `test_db` 里的表 `table2` 包含三列，按顺序依次�
 
 ```Bash
 curl --location-trusted -u root: -H "label:label2" \
+    -H "Expect:100-continue" \
     -H "max_filter_ratio:0.2" \
     -T example2.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
@@ -280,6 +282,7 @@ StarRocks 数据库 `test_db` 里的表 `table3` 包含三列，按顺序依次�
 
 ```Bash
 curl --location-trusted -u root:  -H "label:label3" \
+    -H "Expect:100-continue" \
     -H "columns: col2, col1, col3" \
     -T example3.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table3/_stream_load
@@ -299,6 +302,7 @@ StarRocks 数据库 `test_db` 里的表 `table4` 包含三列，按顺序依次�
 
 ```Bash
 curl --location-trusted -u root: -H "label:label4" \
+    -H "Expect:100-continue" \
     -H "columns: col1, col2，col3]"\
     -H "where: col1 = 20180601" \
     -T example4.csv -XPUT \
@@ -334,6 +338,7 @@ StarRocks 数据库 `test_db` 里的表 `table6` 包含三列，按顺序依次�
 
 ```Bash
 curl --location-trusted -u root: \
+    -H "Expect:100-continue" \
     -H "strict_mode: true" \
     -H "timezone: Africa/Abidjan" \
     -T example6.csv -XPUT \
@@ -350,6 +355,7 @@ StarRocks 数据库 `test_db` 里的表 `table7` 包含两个 HLL 类型的列�
 
 ```Bash
 curl --location-trusted -u root: \
+    -H "Expect:100-continue" \
     -H "columns: temp1, temp2, col1=hll_hash(temp1), col2=hll_empty()" \
     -T example7.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table7/_stream_load
@@ -375,6 +381,7 @@ StarRocks 数据库 `test_db` 里的表 `table8` 包含两个 BITMAP 类型的�
 
 ```Bash
 curl --location-trusted -u root: \
+    -H "Expect:100-continue" \
     -H "columns: temp1, temp2, col1=to_bitmap(temp1), col2=bitmap_empty()" \
     -T example8.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table8/_stream_load
@@ -415,6 +422,7 @@ StarRocks 数据库 `test_db` 里的表 `tbl1` 拥有如下表结构：
 
 ```Bash
 curl --location-trusted -u root: -H "label:label6" \
+    -H "Expect:100-continue" \
     -H "format: json" \
     -T example1.json -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/tbl1/_stream_load
@@ -468,6 +476,7 @@ StarRocks 按照如下顺序对数据进行匹配和处理：
 
 ```Bash
 curl --location-trusted -u root: -H "label:label7" \
+    -H "Expect:100-continue" \
     -H "format: json" \
     -H "strip_outer_array: true" \
     -H "jsonpaths: [\"$.category\",\"$.price\",\"$.author\"]" \
@@ -500,6 +509,7 @@ curl --location-trusted -u root: -H "label:label7" \
 
 ```Bash
 curl --location-trusted -u root: \
+    -H "Expect:100-continue" \
     -H "format: json" \
     -H "json_root: $.RECORDS" \
     -H "strip_outer_array: true" \
