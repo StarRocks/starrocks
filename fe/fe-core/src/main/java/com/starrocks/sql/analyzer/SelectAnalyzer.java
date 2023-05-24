@@ -435,7 +435,7 @@ public class SelectAnalyzer {
             if (agg.isDistinct() && agg.getChildren().size() > 0) {
                 Type[] args = agg.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
                 if (Arrays.stream(args).anyMatch(t -> t.isComplexType() || t.isJsonType())) {
-                    // count(distinct array) can be rewritten to group by array
+                    // only select single count(distinct array) can be rewritten to group by array
                     if (distinctNum == 1 && args[0].isArrayType()) {
                         continue;
                     }
