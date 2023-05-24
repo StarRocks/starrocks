@@ -63,6 +63,8 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.thrift.TUniqueId;
@@ -1617,12 +1619,23 @@ public class DatabaseTransactionMgr {
     }
 
     public void unprotectWriteAllTransactionStates(DataOutput out) throws IOException {
-        for (Map.Entry<Long, TransactionState> entry : idToRunningTransactionState.entrySet()) {
-            entry.getValue().write(out);
+        for (TransactionState transactionState: idToRunningTransactionState.values()) {
+            transactionState.write(out);
         }
 
         for (TransactionState transactionState : finalStatusTransactionStateDeque) {
             transactionState.write(out);
+        }
+    }
+
+    public void unprotectWriteAllTransactionStatesV2(SRMetaBlockWriter writer)
+            throws IOException, SRMetaBlockException {
+        for (TransactionState transactionState: idToRunningTransactionState.values()) {
+            writer.writeJson(transactionState);
+        }
+
+        for (TransactionState transactionState : finalStatusTransactionStateDeque) {
+            writer.writeJson(transactionState);
         }
     }
 

@@ -1079,7 +1079,11 @@ public class EditLog {
     }
 
     public void logSaveTransactionId(long transactionId) {
-        logEdit(OperationType.OP_SAVE_TRANSACTION_ID, new Text(Long.toString(transactionId)));
+        if (FeConstants.STARROCKS_META_VERSION <= StarRocksFEMetaVersion.VERSION_3) {
+            logEdit(OperationType.OP_SAVE_TRANSACTION_ID, new Text(Long.toString(transactionId)));
+        } else {
+
+        }
     }
 
     public void logSaveAutoIncrementId(AutoIncrementInfo info) {
