@@ -1060,6 +1060,9 @@ public class GlobalStateMgr {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
+
+        //8. fill default warehouse
+        updateDefaultWarehouse();
     }
 
     // set usingNewPrivilege = true in UT
@@ -3635,6 +3638,10 @@ public class GlobalStateMgr {
     public void initDefaultWarehouse() {
         warehouseMgr.initDefaultWarehouse();
         isDefaultWarehouseCreated = true;
+    }
+
+    public void updateDefaultWarehouse() {
+        warehouseMgr.updateDefaultWarehouse();
     }
 
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
