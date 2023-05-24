@@ -19,7 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.ColocateTableIndex;
-import com.starrocks.catalog.SchemaTable;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.AnyDistributionSpec;
 import com.starrocks.sql.optimizer.base.CTEProperty;
@@ -435,7 +435,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
     @Override
     public PhysicalPropertySet visitPhysicalSchemaScan(PhysicalSchemaScanOperator node, ExpressionContext context) {
-        if (SchemaTable.isBeSchemaTable(node.getTable().getName())) {
+        if (SystemTable.isBeSchemaTable(node.getTable().getName())) {
             return createPropertySetByDistribution(new AnyDistributionSpec());
         } else {
             return createGatherPropertySet();
