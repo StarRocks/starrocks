@@ -16,6 +16,8 @@ package com.starrocks.sql.optimizer.cost;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -57,6 +59,7 @@ import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -140,6 +143,30 @@ public class CostModel {
                     // or the cost of mv may be larger than origal query,
                     // which will lead to mismatch of mv
                     usedColumns.except(projection.getColumnRefMap().keySet());
+                }
+
+                Statistics groupStatistics = context.getGroupStatistics();
+                Statistics mvStatistics = context.getStatistics();
+                // only adjust cost for mv scan operator when group statistics is unknown and mv group expression
+                // statistics is not unknown
+                if (groupStatistics != null && groupStatistics.getColumnStatistics().values().stream().
+                        anyMatch(ColumnStatistic::isUnknown) && mvStatistics.getColumnStatistics().values().stream().
+                        noneMatch(ColumnStatistic::isUnknown)) {
+                    Group group = context.getGroupExpression().getGroup();
+                    List<Double> costs = Lists.newArrayList();
+                    // get the costs of all expression in this group
+                    for (Pair<Double, GroupExpression> pair : group.getAllBestExpressionWithCost()) {
+                        if (!(pair.second.getOp() instanceof PhysicalOlapScanOperator)) {
+                            costs.add(pair.first);
+                        }
+                    }
+                    double groupMinCost = Double.MAX_VALUE;
+                    if (costs.size() > 0) {
+                        groupMinCost = Collections.min(costs);
+                    }
+                    // use row count as the adjust cost
+                    double adjustCost = mvStatistics.getOutputRowCount();
+                    return CostEstimate.of(Math.min(Math.max(groupMinCost - 1, 0), adjustCost), 0, 0);
                 }
                 return CostEstimate.of(statistics.getOutputSize(usedColumns), 0, 0);
             }
