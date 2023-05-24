@@ -55,6 +55,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
                 state, *io_executor,
                 spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
     };
+
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
         _aggregator->spill_channel()->set_finishing();
         RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));

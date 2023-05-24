@@ -70,7 +70,8 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
                     _is_finished = true;
                     return Status::OK();
                 },
-                state, *io_executor, spill::MemTrackerGuard(tls_mem_tracker));
+                state, *io_executor,
+                spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
     };
 
     Status ret_status;
