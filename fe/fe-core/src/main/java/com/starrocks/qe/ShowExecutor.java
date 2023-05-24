@@ -99,7 +99,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.credential.CloudCredentialUtil;
-import com.starrocks.load.DeleteHandler;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
@@ -131,7 +131,6 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
@@ -502,6 +501,30 @@ public class ShowExecutor {
         }
     }
 
+    public static String buildCreateMVSql(OlapTable olapTable, String mv, MaterializedIndexMeta mvMeta) {
+        StringBuilder originStmtBuilder = new StringBuilder(
+                "create materialized view " + mv +
+                        " as select ");
+        String groupByString = "";
+        for (Column column : mvMeta.getSchema()) {
+            if (column.isKey()) {
+                groupByString += column.getName() + ",";
+            }
+        }
+        originStmtBuilder.append(groupByString);
+        for (Column column : mvMeta.getSchema()) {
+            if (!column.isKey()) {
+                originStmtBuilder.append(column.getAggregationType().toString()).append("(")
+                        .append(column.getName()).append(")").append(",");
+            }
+        }
+        originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
+        originStmtBuilder.append(" from ").append(olapTable.getName()).append(" group by ")
+                .append(groupByString);
+        originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
+        return originStmtBuilder.toString();
+    }
+
     public static List<List<String>> listMaterializedViewStatus(
             String dbName,
             List<MaterializedView> materializedViews,
@@ -536,6 +559,7 @@ public class ShowExecutor {
             }
             // is_active
             resultRow.add(String.valueOf(mvTable.isActive()));
+            resultRow.add(String.valueOf(mvTable.getInactiveReason()));
             // partition info
             if (mvTable.getPartitionInfo() != null && mvTable.getPartitionInfo().getType() != null) {
                 resultRow.add(mvTable.getPartitionInfo().getType().toString());
@@ -562,6 +586,8 @@ public class ShowExecutor {
             resultRow.add("ROLLUP");
             // is_active
             resultRow.add(String.valueOf(true));
+            // inactive reason
+            resultRow.add("");
             // partition type
             if (olapTable.getPartitionInfo() != null && olapTable.getPartitionInfo().getType() != null) {
                 resultRow.add(olapTable.getPartitionInfo().getType().toString());
@@ -573,27 +599,8 @@ public class ShowExecutor {
             // rows
             resultRow.add(String.valueOf(mvIdx.getRowCount()));
             if (mvMeta.getOriginStmt() == null) {
-                StringBuilder originStmtBuilder = new StringBuilder(
-                        "create materialized view " + olapTable.getIndexNameById(mvIdx.getId()) +
-                                " as select ");
-                String groupByString = "";
-                for (Column column : mvMeta.getSchema()) {
-                    if (column.isKey()) {
-                        groupByString += column.getName() + ",";
-                    }
-                }
-                originStmtBuilder.append(groupByString);
-                for (Column column : mvMeta.getSchema()) {
-                    if (!column.isKey()) {
-                        originStmtBuilder.append(column.getAggregationType().toString()).append("(")
-                                .append(column.getName()).append(")").append(",");
-                    }
-                }
-                originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
-                originStmtBuilder.append(" from ").append(olapTable.getName()).append(" group by ")
-                        .append(groupByString);
-                originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
-                resultRow.add(originStmtBuilder.toString());
+                String mvName = olapTable.getIndexNameById(mvIdx.getId());
+                resultRow.add(buildCreateMVSql(olapTable, mvName, mvMeta));
             } else {
                 resultRow.add(mvMeta.getOriginStmt().replace("\n", "").replace("\t", "")
                         .replaceAll("[ ]+", " "));
@@ -789,14 +796,8 @@ public class ShowExecutor {
                 continue;
             }
 
-            if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnOrInDb(connectContext, catalogName, dbName)) {
-                    continue;
-                }
-            } else {
-                if (!PrivilegeChecker.checkDbPriv(connectContext, catalogName, dbName, PrivPredicate.SHOW)) {
-                    continue;
-                }
+            if (!PrivilegeActions.checkAnyActionOnOrInDb(connectContext, catalogName, dbName)) {
+                continue;
             }
             dbNameSet.add(dbName);
         }
@@ -835,27 +836,20 @@ public class ShowExecutor {
                     if (matcher != null && !matcher.match(tbl.getName())) {
                         continue;
                     }
-                    // check tbl privs
-                    if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
-                        if (tbl.isView()) {
-                            if (!PrivilegeActions.checkAnyActionOnView(
-                                    connectContext, db.getFullName(), tbl.getName())) {
-                                continue;
-                            }
-                        } else if (tbl.isMaterializedView()) {
-                            if (!PrivilegeActions.checkAnyActionOnMaterializedView(
-                                    connectContext, db.getFullName(), tbl.getName())) {
-                                continue;
-                            }
-                        } else if (!PrivilegeActions.checkAnyActionOnTable(
+
+                    if (tbl.isView()) {
+                        if (!PrivilegeActions.checkAnyActionOnView(
                                 connectContext, db.getFullName(), tbl.getName())) {
                             continue;
                         }
-                    } else {
-                        if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalogName,
-                                db.getFullName(), tbl.getName(), PrivPredicate.SHOW)) {
+                    } else if (tbl.isMaterializedView()) {
+                        if (!PrivilegeActions.checkAnyActionOnMaterializedView(
+                                connectContext, db.getFullName(), tbl.getName())) {
                             continue;
                         }
+                    } else if (!PrivilegeActions.checkAnyActionOnTable(
+                            connectContext, db.getFullName(), tbl.getName())) {
+                        continue;
                     }
                     tableMap.put(tbl.getName(), tbl.getMysqlType());
                 }
@@ -864,14 +858,23 @@ public class ShowExecutor {
             }
         } else {
             List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
-            PatternMatcher finalMatcher = matcher;
-            final String finalCatalogName = catalogName;
-            tableNames = tableNames.stream()
-                    .filter(tblName -> finalMatcher == null || finalMatcher.match(tblName))
-                    .filter(tblName -> PrivilegeActions.checkAnyActionOnTable(connectContext,
-                            finalCatalogName, dbName, tblName))
-                    .collect(Collectors.toList());
-            tableNames.forEach(name -> tableMap.put(name, "BASE TABLE"));
+
+            for (String tableName : tableNames) {
+                if (matcher != null && !matcher.match(tableName)) {
+                    continue;
+                }
+                Table table = metadataMgr.getTable(catalogName, dbName, tableName);
+                if (table.isView()) {
+                    if (!PrivilegeActions.checkAnyActionOnView(
+                            connectContext, catalogName, db.getFullName(), table.getName())) {
+                        continue;
+                    }
+                } else if (!PrivilegeActions.checkAnyActionOnTable(connectContext,
+                        catalogName, dbName, tableName)) {
+                    continue;
+                }
+                tableMap.put(tableName, table.getMysqlType());
+            }
         }
 
         for (Map.Entry<String, String> entry : tableMap.entrySet()) {
@@ -1010,8 +1013,9 @@ public class ShowExecutor {
 
         // Partition column names
         if (table.getType() != JDBC && !table.isUnPartitioned()) {
-            createTableSql.append("\nWITH (\n partitioned_by = ARRAY [ ");
-            createTableSql.append(String.join(", ", table.getPartitionColumnNames())).append(" ]\n)");
+            createTableSql.append("\nPARTITION BY ( ")
+                    .append(String.join(", ", table.getPartitionColumnNames()))
+                    .append(" )");
         }
 
         // Location
@@ -1025,7 +1029,7 @@ public class ShowExecutor {
         }
 
         if (!Strings.isNullOrEmpty(location)) {
-            createTableSql.append("\nLOCATION ").append("'").append(location).append("'");
+            createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
         }
 
         List<List<String>> rows = Lists.newArrayList();
@@ -1036,42 +1040,13 @@ public class ShowExecutor {
     private String toMysqlDDL(Column column) {
         StringBuilder sb = new StringBuilder();
         sb.append("  `").append(column.getName()).append("` ");
-        switch (column.getType().getPrimitiveType()) {
-            case TINYINT:
-                sb.append("tinyint(4)");
-                break;
-            case SMALLINT:
-                sb.append("smallint(6)");
-                break;
-            case INT:
-                sb.append("int(11)");
-                break;
-            case BIGINT:
-                sb.append("bigint(20)");
-                break;
-            case FLOAT:
-                sb.append("float");
-                break;
-            case DOUBLE:
-                sb.append("double");
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-            case DECIMALV2:
-                sb.append("decimal");
-                break;
-            case DATE:
-            case DATETIME:
-                sb.append("datetime");
-                break;
-            case CHAR:
-            case VARCHAR:
-                sb.append("varchar(1048576)");
-                break;
-            default:
-                sb.append("binary(1048576)");
-        }
+        sb.append(column.getType().toSql());
         sb.append(" DEFAULT NULL");
+
+        if (!Strings.isNullOrEmpty(column.getComment())) {
+            sb.append(" COMMENT \"").append(column.getComment()).append("\"");
+        }
+
         return sb.toString();
     }
 
@@ -1083,7 +1058,34 @@ public class ShowExecutor {
         try {
             Table table = db.getTable(showStmt.getTable());
             if (table == null) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
+                if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
+                } else {
+                    // For Sync Materialized View, it is a mv index inside OLAP table,
+                    // so we can not get it from database.
+                    for (Table tbl : db.getTables()) {
+                        if (tbl.getType() == Table.TableType.OLAP) {
+                            OlapTable olapTable = (OlapTable) tbl;
+                            List<MaterializedIndex> visibleMaterializedViews = olapTable.getVisibleIndex();
+                            for (MaterializedIndex mvIdx : visibleMaterializedViews) {
+                                if (olapTable.getIndexNameById(mvIdx.getId()).equals(showStmt.getTable())) {
+                                    MaterializedIndexMeta mvMeta = olapTable.getVisibleIndexIdToMeta().get(mvIdx.getId());
+                                    if (mvMeta.getOriginStmt() == null) {
+                                        String mvName = olapTable.getIndexNameById(mvIdx.getId());
+                                        rows.add(Lists.newArrayList(showStmt.getTable(), buildCreateMVSql(olapTable,
+                                                mvName, mvMeta), "utf8", "utf8_general_ci"));
+                                    } else {
+                                        rows.add(Lists.newArrayList(showStmt.getTable(), mvMeta.getOriginStmt(),
+                                                "utf8", "utf8_general_ci"));
+                                    }
+                                    resultSet = new ShowResultSet(ShowCreateTableStmt.getMaterializedViewMetaData(), rows);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTable());
+                }
             }
 
             List<String> createTableStmt = Lists.newArrayList();
@@ -1495,7 +1497,7 @@ public class ShowExecutor {
         MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
         long dbId = db.getId();
 
-        DeleteHandler deleteHandler = globalStateMgr.getDeleteHandler();
+        DeleteMgr deleteHandler = globalStateMgr.getDeleteHandler();
         List<List<Comparable>> deleteInfos = deleteHandler.getDeleteInfosByDb(dbId);
         List<List<String>> rows = Lists.newArrayList();
         for (List<Comparable> deleteInfo : deleteInfos) {

@@ -32,6 +32,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -82,17 +83,27 @@ public class InsertAnalyzer {
         }
 
         if (insertStmt.isOverwrite()) {
-            if (!(table instanceof OlapTable)) {
-                throw unsupportedException("Only support insert overwrite olap table");
+            if (!(table instanceof OlapTable) && !table.isIcebergTable()) {
+                throw unsupportedException("Only support insert overwrite olap table and iceberg table");
             }
-            if (((OlapTable) table).getState() != NORMAL) {
+            if (table instanceof OlapTable && ((OlapTable) table).getState() != NORMAL) {
                 String msg =
                         String.format("table state is %s, please wait to insert overwrite util table state is normal",
                                 ((OlapTable) table).getState());
                 throw unsupportedException(msg);
             }
-        } else if (!table.supportInsert()) {
+        }
+
+        if (!table.supportInsert()) {
+            if (table.isIcebergTable()) {
+                throw unsupportedException("Only support insert into iceberg table with parquet file format");
+            }
             throw unsupportedException("Only support insert into olap table or mysql table or iceberg table");
+        }
+
+        if (table instanceof IcebergTable && CatalogMgr.isInternalCatalog(catalogName)) {
+            throw unsupportedException("Doesn't support iceberg table sink in the internal catalog. " +
+                    "You need to use iceberg catalog.");
         }
 
         List<Long> targetPartitionIds = Lists.newArrayList();
@@ -131,39 +142,47 @@ public class InsertAnalyzer {
             }
         }
 
-        if (table instanceof IcebergTable && insertStmt.isStaticKeyPartitionInsert()) {
+        if (table instanceof IcebergTable) {
             IcebergTable icebergTable = (IcebergTable) table;
-            List<String> partitionColNames = targetPartitionNames.getPartitionColNames();
-            List<Expr> partitionColValues = targetPartitionNames.getPartitionColValues();
             List<String> tablePartitionColumnNames = icebergTable.getPartitionColumnNames();
+            if (insertStmt.getTargetColumnNames() != null) {
+                for (String partitionColName : tablePartitionColumnNames) {
+                    if (!insertStmt.getTargetColumnNames().contains(partitionColName)) {
+                        throw new SemanticException("Must include partition column %s", partitionColName);
+                    }
+                }
+            } else if (insertStmt.isStaticKeyPartitionInsert()) {
+                List<String> partitionColNames = targetPartitionNames.getPartitionColNames();
+                List<Expr> partitionColValues = targetPartitionNames.getPartitionColValues();
 
-            Preconditions.checkState(partitionColNames.size() == partitionColValues.size(),
-                    "Partition column names size must be equal to the partition column values size. %d vs %d",
-                    partitionColNames.size(), partitionColValues.size());
+                Preconditions.checkState(partitionColNames.size() == partitionColValues.size(),
+                        "Partition column names size must be equal to the partition column values size. %d vs %d",
+                        partitionColNames.size(), partitionColValues.size());
 
-            if (tablePartitionColumnNames.size() != partitionColNames.size()) {
-                throw new SemanticException("Must include all partition column names");
-            }
-
-            for (int i = 0; i < partitionColNames.size(); i++) {
-                String actualName = partitionColNames.get(i);
-                String expectedName = tablePartitionColumnNames.get(i);
-                Expr partitionValue = partitionColValues.get(i);
-                if (!actualName.equalsIgnoreCase(expectedName)) {
-                    throw new SemanticException("Expected: %s, but actual: %s", expectedName, actualName);
+                if (tablePartitionColumnNames.size() != partitionColNames.size()) {
+                    throw new SemanticException("Must include all partition column names");
                 }
 
-                if (!partitionValue.isLiteral()) {
-                    throw new SemanticException("partition value should be literal expression");
-                }
+                for (int i = 0; i < partitionColNames.size(); i++) {
+                    String actualName = partitionColNames.get(i);
+                    String expectedName = tablePartitionColumnNames.get(i);
+                    Expr partitionValue = partitionColValues.get(i);
+                    if (!actualName.equalsIgnoreCase(expectedName)) {
+                        throw new SemanticException("Expected: %s, but actual: %s", expectedName, actualName);
+                    }
 
-                LiteralExpr literalExpr = (LiteralExpr) partitionValue;
-                Column column = icebergTable.getColumn(actualName);
-                try {
-                    Expr expr = LiteralExpr.create(literalExpr.getStringValue(), column.getType());
-                    insertStmt.getTargetPartitionNames().getPartitionColValues().set(i, expr);
-                } catch (AnalysisException e) {
-                    throw new SemanticException(e.getMessage());
+                    if (!partitionValue.isLiteral()) {
+                        throw new SemanticException("partition value should be literal expression");
+                    }
+
+                    LiteralExpr literalExpr = (LiteralExpr) partitionValue;
+                    Column column = icebergTable.getColumn(actualName);
+                    try {
+                        Expr expr = LiteralExpr.create(literalExpr.getStringValue(), column.getType());
+                        insertStmt.getTargetPartitionNames().getPartitionColValues().set(i, expr);
+                    } catch (AnalysisException e) {
+                        throw new SemanticException(e.getMessage());
+                    }
                 }
             }
         }

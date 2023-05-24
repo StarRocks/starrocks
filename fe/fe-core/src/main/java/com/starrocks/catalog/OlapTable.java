@@ -47,7 +47,6 @@ import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -1149,11 +1148,10 @@ public class OlapTable extends Table {
             throw new AnalysisException("Unsupported partition type: " + partitionType);
         }
 
-        LiteralExpr startExpr = sortedRange.get(startIndex).lowerEndpoint().
-                getKeys().get(0);
-        LiteralExpr endExpr = sortedRange.get(partitionNum - 1).upperEndpoint().getKeys().get(0);
-        String start = AnalyzerUtils.parseLiteralExprToDateString(startExpr, 0);
-        String end = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 0);
+        PartitionKey lowerEndpoint = sortedRange.get(startIndex).lowerEndpoint();
+        PartitionKey upperEndpoint = sortedRange.get(partitionNum - 1).upperEndpoint();
+        String start = AnalyzerUtils.parseLiteralExprToDateString(lowerEndpoint, 0);
+        String end = AnalyzerUtils.parseLiteralExprToDateString(upperEndpoint, 0);
 
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
         Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
@@ -2308,9 +2306,7 @@ public class OlapTable extends Table {
             Table tmpTable = db.getTable(mvId.getId());
             if (tmpTable != null) {
                 MaterializedView mv = (MaterializedView) tmpTable;
-                mv.setActive(false);
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                        "the table {} was dropped.", mv.getName(), mv.getId(), getName());
+                mv.setInactiveAndReason("base-table dropped: " + getName());
             } else {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
             }

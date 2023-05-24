@@ -174,6 +174,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         req.setMaterialized_column_req(materializedColumnReq);
         req.setTablet_type(tabletType);
         req.setTxn_id(txnId);
+        req.setJob_id(jobId);
         return req;
     }
 

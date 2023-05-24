@@ -18,17 +18,17 @@
 
 #include "column/column_helper.h"
 #include "column/map_column.h"
+#include "exprs/mock_vectorized_expr.h"
 #include "testutil/parallel_test.h"
 
 namespace starrocks {
 
-TypeDescriptor create_array_type(const LogicalType& child_type) {
-    TypeDescriptor t;
-    t.type = TYPE_ARRAY;
-    t.children.resize(1);
-    t.children[0].type = child_type;
-    t.children[0].len = child_type == TYPE_VARCHAR ? 10 : child_type == TYPE_CHAR ? 10 : -1;
-    return t;
+TypeDescriptor map_type(LogicalType key, LogicalType value) {
+    TypeDescriptor type_creator;
+    type_creator.type = LogicalType::TYPE_MAP;
+    type_creator.children.emplace_back(TypeDescriptor(key));
+    type_creator.children.emplace_back(TypeDescriptor(value));
+    return type_creator;
 }
 
 PARALLEL_TEST(MapFunctionsTest, test_map) {
@@ -189,10 +189,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_mismatch2) {
 }
 
 PARALLEL_TEST(MapFunctionsTest, test_map_function) {
-    TypeDescriptor type_map_int_int;
-    type_map_int_int.type = LogicalType::TYPE_MAP;
-    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
-    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+    TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
 
     auto column = ColumnHelper::create_column(type_map_int_int, true);
 
@@ -329,10 +326,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_function) {
 }
 
 PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
-    TypeDescriptor type_map_int_int;
-    type_map_int_int.type = LogicalType::TYPE_MAP;
-    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
-    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+    TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
 
     auto map_column_nullable = ColumnHelper::create_column(type_map_int_int, true);
     {
@@ -389,7 +383,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
         map_column_not_nullable->append_datum(DatumMap());
     }
 
-    TypeDescriptor TYPE_ARRAY_BOOLEAN = create_array_type(TYPE_BOOLEAN);
+    TypeDescriptor TYPE_ARRAY_BOOLEAN = array_type(TYPE_BOOLEAN);
 
     // [null, true, false]
     // []
@@ -565,10 +559,7 @@ PARALLEL_TEST(MapFunctionsTest, test_distinct_map_keys) {
 }
 
 PARALLEL_TEST(MapFunctionsTest, test_map_concat) {
-    TypeDescriptor type_map_int_int;
-    type_map_int_int.type = LogicalType::TYPE_MAP;
-    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
-    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+    TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
 
     auto map_column_nullable = ColumnHelper::create_column(type_map_int_int, true);
     {

@@ -1026,7 +1026,7 @@ public class AlterTest {
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L, 20006L),
                         Lists.newArrayList(20007L, 20008L, 20009L));
@@ -1113,7 +1113,7 @@ public class AlterTest {
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L),
                         Lists.newArrayList(30007L, 30008L, 30009L),
@@ -2063,7 +2063,7 @@ public class AlterTest {
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L));
                 agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
@@ -2466,7 +2466,7 @@ public class AlterTest {
         PartitionNames partitionNames = new PartitionNames(true, Arrays.asList("p1"));
         TruncatePartitionClause clause = new TruncatePartitionClause(partitionNames);
         cList.add(clause);
-        Alter alter = new Alter();
+        AlterJobMgr alter = new AlterJobMgr();
         TableName tableName = new TableName("test_db", "test_table");
         AlterTableStmt stmt = new AlterTableStmt(tableName, cList);
         alter.processAlterTable(stmt);

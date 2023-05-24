@@ -54,7 +54,12 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
                                           Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
         List<ColumnRefOperator> columnRefOperators = Lists.newArrayList();
         Column partitionColumn = rangePartitionInfo.getPartitionColumns().get(0);
-        columnRefOperators.add(columnMetaToColRefMap.get(partitionColumn));
+        for (ColumnRefOperator columnRefOperator : columnMetaToColRefMap.values()) {
+            if (partitionColumn.getName().equals(columnRefOperator.getName())) {
+                columnRefOperators.add(columnRefOperator);
+            }
+        }
+
         partitionColumnSet = new ColumnRefSet(columnRefOperators);
     }
 

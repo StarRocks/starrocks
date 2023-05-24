@@ -320,6 +320,7 @@
       + [any_value](./sql-reference/sql-functions/aggregate-functions/any_value.md)
       + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
+      + [bitmap_agg](./sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
       + [grouping](./sql-reference/sql-functions/aggregate-functions/grouping.md)
       + [grouping_id](./sql-reference/sql-functions/aggregate-functions/grouping_id.md)
@@ -382,6 +383,7 @@
       + [bit_shift_right_logical](./sql-reference/sql-functions/bit-functions/bit_shift_right_logical.md)
     + Bitmap Functions
       + [base64_to_bitmap](./sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
+      + [bitmap_agg](./sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](./sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
       + [bitmap_contains](./sql-reference/sql-functions/bitmap-functions/bitmap_contains.md)
@@ -441,6 +443,7 @@
       + [to_binary](/sql-reference/sql-functions/binary-functions/to_binary.md)
       + [from_binary](/sql-reference/sql-functions/binary-functions/from_binary.md)
     + Conditional Functions
+      + [case_when](./sql-reference/sql-functions/condition-functions/case_when.md)
       + [coalesce](./sql-reference/sql-functions/condition-functions/coalesce.md)
       + [if](./sql-reference/sql-functions/condition-functions/if.md)
       + [ifnull](./sql-reference/sql-functions/condition-functions/ifnull.md)
@@ -642,6 +645,7 @@
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
       + [host_name](./sql-reference/sql-functions/utility-functions/host_name.md)
       + [isnull](./sql-reference/sql-functions/utility-functions/isnull.md)
+      + [isnotnull](./sql-reference/sql-functions/utility-functions/isnotnull.md)
       + [last_query_id](./sql-reference/sql-functions/utility-functions/last_query_id.md)
       + [sleep](./sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)

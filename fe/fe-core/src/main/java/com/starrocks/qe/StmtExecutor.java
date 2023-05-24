@@ -99,7 +99,6 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.PrivilegeCheckerV2;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
@@ -138,8 +137,9 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.statistic.AnalyzeManager;
+import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticExecutor;
@@ -391,7 +391,7 @@ public class StmtExecutor {
                     context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
                     if (parsedStmt instanceof ShowStmt) {
                         com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
-                        PrivilegeChecker.check(parsedStmt, context);
+                        PrivilegeCheckerV2.check(parsedStmt, context);
 
                         QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
                         if (selectStmt != null) {
@@ -874,18 +874,26 @@ public class StmtExecutor {
             }
         }
 
+        AnalyzeStatus analyzeStatus;
         if (analyzeStmt.isExternal()) {
-            // deal later
-            return;
+            String catalogName = analyzeStmt.getTableName().getCatalog();
+            analyzeStatus = new ExternalAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                    catalogName, db.getOriginName(), table.getName(),
+                    table.getUUID(),
+                    analyzeStmt.getColumnNames(),
+                    analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+            GlobalStateMgr.getCurrentAnalyzeMgr().addOrUpdateAnalyzeStatus(analyzeStatus);
+        } else {
+            //Only for send sync command to client
+            analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                    db.getId(), table.getId(), analyzeStmt.getColumnNames(),
+                    analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+            GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
         }
-        //Only for send sync command to client
-        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), table.getId(), analyzeStmt.getColumnNames(),
-                analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
-        GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
         try {
             Future<?> future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
@@ -897,11 +905,19 @@ public class StmtExecutor {
         } catch (RejectedExecutionException e) {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
-            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            if (analyzeStmt.isExternal()) {
+                GlobalStateMgr.getCurrentAnalyzeMgr().addOrUpdateAnalyzeStatus(analyzeStatus);
+            } else {
+                GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            }
         } catch (ExecutionException | InterruptedException e) {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setReason("The statistics tasks running failed");
-            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            if (analyzeStmt.isExternal()) {
+                GlobalStateMgr.getCurrentAnalyzeMgr().addOrUpdateAnalyzeStatus(analyzeStatus);
+            } else {
+                GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            }
         }
 
         ShowResultSet resultSet = analyzeStatus.toShowResult();
@@ -927,7 +943,18 @@ public class StmtExecutor {
                                 Database db, Table table) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         if (analyzeStmt.isExternal()) {
-            // deal later
+            StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
+                    StatsConstants.AnalyzeType.FULL;
+            // TODO: we should check old statistic and confirm paritionlist
+            statisticExecutor.collectStatistics(statsConnectCtx,
+                    StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
+                            analyzeStmt.getTableName().getCatalog(),
+                            db, table,
+                            analyzeStmt.getColumnNames(),
+                            analyzeType,
+                            StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
+                    analyzeStatus,
+                    false);
         } else {
             if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
                 statisticExecutor.collectStatistics(statsConnectCtx,
@@ -956,7 +983,7 @@ public class StmtExecutor {
         DropStatsStmt dropStatsStmt = (DropStatsStmt) parsedStmt;
         Table table = MetaUtils.getTable(context, dropStatsStmt.getTableName());
         if (dropStatsStmt.isExternal()) {
-            // deal later
+            GlobalStateMgr.getCurrentAnalyzeMgr().dropExternalStats(table.getUUID());
         } else {
             List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                     .collect(Collectors.toList());
@@ -983,7 +1010,7 @@ public class StmtExecutor {
     private void handleKillAnalyzeStmt() {
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) parsedStmt;
         long analyzeId = killAnalyzeStmt.getAnalyzeId();
-        AnalyzeManager analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
+        AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
         }

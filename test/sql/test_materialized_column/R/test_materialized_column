@@ -48,7 +48,7 @@ SHOW CREATE TABLE t;
 -- result:
 t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
-  `array_data` ARRAY<int(11)> NOT NULL COMMENT "",
+  `array_data` array<int(11)> NOT NULL COMMENT "",
   `mc` double NULL AS array_avg(array_data) COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`id`)
@@ -157,7 +157,7 @@ None
 -- !result
 REFRESH MATERIALIZED VIEW mv1;
 -- result:
-E: (1064, 'Getting analyzing error at line 1, column 26. Detail message: Refresh materialized view failed because mv1 is not active.')
+E: (1064, 'Getting analyzing error at line 1, column 26. Detail message: Refresh materialized view failed because [mv1] is not active. You can try to active it with ALTER MATERIALIZED VIEW mv1 ACTIVE; .')
 -- !result
 select sleep(5);
 -- result:

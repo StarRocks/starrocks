@@ -241,6 +241,11 @@ public class PrivilegeActions {
                 Lists.newArrayList(db, view));
     }
 
+    public static boolean checkAnyActionOnView(ConnectContext context, String catalogName, String db, String view) {
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectType.VIEW,
+                Lists.newArrayList(catalogName, db, view));
+    }
+
     public static boolean checkAnyActionOnView(UserIdentity currentUser, Set<Long> roleIds, String db, String view) {
         return checkAnyActionOnObject(currentUser, roleIds, ObjectType.VIEW, Arrays.asList(db, view));
     }
@@ -290,6 +295,14 @@ public class PrivilegeActions {
         switch (type) {
             case OLAP:
             case CLOUD_NATIVE:
+            case MYSQL:
+            case ELASTICSEARCH:
+            case HIVE:
+            case ICEBERG:
+            case HUDI:
+            case JDBC:
+            case DELTALAKE:
+            case FILE:
                 return checkAnyActionOnTable(currentUser, roleIds, dbName, tbl.getName());
             case MATERIALIZED_VIEW:
             case CLOUD_NATIVE_MATERIALIZED_VIEW:

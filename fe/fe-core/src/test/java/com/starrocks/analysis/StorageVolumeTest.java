@@ -130,7 +130,7 @@ public class StorageVolumeTest {
         Assert.assertEquals("DESC STORAGE VOLUME storage_volume1", stmt.toSql());
 
         sql = "DESC STORAGE VOLUME storage_volume2";
-        AnalyzeTestUtil.analyzeFail(sql, "storage volume 'storage_volume2' not exists");
+        AnalyzeTestUtil.analyzeFail(sql, "Unknown storage volume: storage_volume2");
     }
 
     @Test

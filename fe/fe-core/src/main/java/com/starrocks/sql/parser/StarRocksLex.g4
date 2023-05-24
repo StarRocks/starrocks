@@ -25,6 +25,7 @@ tokens {
 }
 
 ACCESS: 'ACCESS';
+ACTIVE: 'ACTIVE';
 ADD: 'ADD';
 ADMIN: 'ADMIN';
 AFTER: 'AFTER';
@@ -188,6 +189,7 @@ IMMEDIATE: 'IMMEDIATE';
 IGNORE: 'IGNORE';
 IMAGE: 'IMAGE';
 IN: 'IN';
+INACTIVE: 'INACTIVE';
 INCREMENTAL: 'INCREMENTAL';
 INDEX: 'INDEX';
 INDEXES: 'INDEXES';
@@ -536,5 +538,5 @@ SEMICOLON: ';';
 DOTDOTDOT: '...';
 
 WS
-    : [ \r\n\t]+ -> channel(HIDDEN)
+    : [ \r\n\t\u3000]+ -> channel(HIDDEN)
     ;

@@ -218,6 +218,7 @@ public class FunctionSet {
     public static final String UUID_NUMERIC = "uuid_numeric";
     public static final String SLEEP = "sleep";
     public static final String ISNULL = "isnull";
+    public static final String ISNOTNULL = "isnotnull";
     public static final String ASSERT_TRUE = "assert_true";
     public static final String HOST_NAME = "host_name";
     // Aggregate functions:
@@ -273,6 +274,7 @@ public class FunctionSet {
     public static final String BITMAP_TO_STRING = "bitmap_to_string";
     public static final String BITMAP_TO_ARRAY = "bitmap_to_array";
     public static final String BITMAP_UNION = "bitmap_union";
+    public static final String BITMAP_AGG = "bitmap_agg";
     public static final String BITMAP_XOR = "bitmap_xor";
     public static final String TO_BITMAP = "to_bitmap";
     public static final String BITMAP_COUNT = "bitmap_count";
@@ -422,7 +424,7 @@ public class FunctionSet {
 
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
-            new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
+            new FunctionName(JSON_QUERY), new Type[]{Type.JSON, Type.VARCHAR}, Type.JSON, false);
 
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
@@ -878,6 +880,20 @@ public class FunctionSet {
                 Type.BITMAP,
                 Type.BITMAP,
                 true, false, true));
+
+        // Type.VARCHAR must before all other type, so bitmap_agg(varchar) can convert to bitmap_agg(bigint)
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.BIGINT),
+                Type.BITMAP, Type.BITMAP, true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.LARGEINT),
+                Type.BITMAP, Type.BITMAP, true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.INT),
+                Type.BITMAP, Type.BITMAP, true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.SMALLINT),
+                Type.BITMAP, Type.BITMAP, true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.TINYINT),
+                Type.BITMAP, Type.BITMAP, true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.BOOLEAN),
+                Type.BITMAP, Type.BITMAP, true, false, true));
 
         addBuiltin(AggregateFunction.createBuiltin(BITMAP_UNION_COUNT, Lists.newArrayList(Type.BITMAP),
                 Type.BIGINT,
