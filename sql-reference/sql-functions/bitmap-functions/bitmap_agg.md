@@ -2,7 +2,7 @@
 
 ## 功能
 
-将一列中的多行非 NULL 数值合并成一行 Bitmap 值，即多行转一行。
+将一列中的多行非 NULL 数值合并成一行 BITMAP 值，即多行转一行。
 
 ## 语法
 
@@ -20,7 +20,7 @@ BITMAP_AGG(col)
 
 ## 使用说明
 
-如果列中的某个值小于 0 或者大于 18446744073709551615，该值会被忽略，不会合并到 Bitmap 中（见示例三）。
+如果某个值小于 0 或者大于 18446744073709551615，该值会被忽略，不会合并到 Bitmap 中（见示例三）。
 
 ## 示例
 
@@ -79,7 +79,7 @@ mysql> select bitmap_to_string(bitmap_agg(c1)) from t1_test;
 示例二：将 `c2` 列中的数值合并成 Bitmap，忽略 NULL 值。
 
 ```PlainText
-mysql> SELECT BITMAP_TO_STRING(BITMAP_AGG(c2)) FROM t1_test;
+mysql> select BITMAP_TO_STRING(BITMAP_AGG(c2)) from t1_test;
 +----------------------------------+
 | bitmap_to_string(bitmap_agg(c2)) |
 +----------------------------------+
