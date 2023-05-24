@@ -366,8 +366,8 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
                     label = labelJsonElement.getAsString();
                 } else if (defaultLabel != null) {
                     label = defaultLabel;
-                } else if (labelToSubtype.containsKey(type.getRawType().getSimpleName())) {
-                    label = type.getRawType().getSimpleName();
+                } else if (subtypeToLabel.containsKey(type.getRawType())) {
+                    label = subtypeToLabel.get(type.getRawType());
                 } else {
                     throw new JsonParseException("cannot deserialize " + baseType
                             + " because it does not define a field named " + typeFieldName);
