@@ -329,6 +329,5 @@ public class OperationType {
 
     //Txn json format log
     public static final short OP_UPSERT_TRANSACTION_STATE_V2 = 12110;
-    public static final short OP_DELETE_TRANSACTION_STATE_V2 = 12111;
     public static final short OP_SAVE_TRANSACTION_ID_V2 = 12112;
 }

@@ -153,6 +153,12 @@ public class EditLog {
                             .initTransactionId(id + 1);
                     break;
                 }
+                case OperationType.OP_SAVE_TRANSACTION_ID_V2: {
+                    TransactionIdInfo idInfo = (TransactionIdInfo) journal.getData();
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
+                            .initTransactionId(idInfo.getTxnId() + 1);
+                    break;
+                }
                 case OperationType.OP_SAVE_AUTO_INCREMENT_ID:
                 case OperationType.OP_DELETE_AUTO_INCREMENT_ID: {
                     AutoIncrementInfo info = (AutoIncrementInfo) journal.getData();
@@ -547,6 +553,7 @@ public class EditLog {
                     globalStateMgr.replayUpdateClusterAndBackends(info);
                     break;
                 }
+                case OperationType.OP_UPSERT_TRANSACTION_STATE_V2:
                 case OperationType.OP_UPSERT_TRANSACTION_STATE: {
                     final TransactionState state = (TransactionState) journal.getData();
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionState(state);
@@ -1079,10 +1086,10 @@ public class EditLog {
     }
 
     public void logSaveTransactionId(long transactionId) {
-        if (FeConstants.STARROCKS_META_VERSION <= StarRocksFEMetaVersion.VERSION_3) {
-            logEdit(OperationType.OP_SAVE_TRANSACTION_ID, new Text(Long.toString(transactionId)));
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_SAVE_TRANSACTION_ID_V2, new TransactionIdInfo(transactionId));
         } else {
-
+            logEdit(OperationType.OP_SAVE_TRANSACTION_ID, new Text(Long.toString(transactionId)));
         }
     }
 
@@ -1380,7 +1387,11 @@ public class EditLog {
 
     // for TransactionState
     public void logInsertTransactionState(TransactionState transactionState) {
-        logEdit(OperationType.OP_UPSERT_TRANSACTION_STATE, transactionState);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_V2, transactionState);
+        } else {
+            logEdit(OperationType.OP_UPSERT_TRANSACTION_STATE, transactionState);
+        }
     }
 
     public void logDeleteTransactionState(TransactionState transactionState) {
