@@ -47,7 +47,6 @@ import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -65,7 +64,6 @@ import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
@@ -112,7 +110,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -1151,11 +1148,10 @@ public class OlapTable extends Table {
             throw new AnalysisException("Unsupported partition type: " + partitionType);
         }
 
-        LiteralExpr startExpr = sortedRange.get(startIndex).lowerEndpoint().
-                getKeys().get(0);
-        LiteralExpr endExpr = sortedRange.get(partitionNum - 1).upperEndpoint().getKeys().get(0);
-        String start = AnalyzerUtils.parseLiteralExprToDateString(startExpr, 0);
-        String end = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 0);
+        PartitionKey lowerEndpoint = sortedRange.get(startIndex).lowerEndpoint();
+        PartitionKey upperEndpoint = sortedRange.get(partitionNum - 1).upperEndpoint();
+        String start = AnalyzerUtils.parseLiteralExprToDateString(lowerEndpoint, 0);
+        String end = AnalyzerUtils.parseLiteralExprToDateString(upperEndpoint, 0);
 
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
         Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
@@ -1489,43 +1485,12 @@ public class OlapTable extends Table {
             long indexId = in.readLong();
             this.indexNameToId.put(indexName, indexId);
 
-            if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_75) {
-                // schema
-                int colCount = in.readInt();
-                List<Column> schema = new LinkedList<>();
-                for (int j = 0; j < colCount; j++) {
-                    Column column = Column.read(in);
-                    schema.add(column);
-                }
-
-                // storage type
-                TStorageType storageType = TStorageType.valueOf(Text.readString(in));
-
-                // indices's schema version
-                int schemaVersion = in.readInt();
-
-                // indices's schema hash
-                int schemaHash = in.readInt();
-
-                // indices's short key column count
-                short shortKeyColumnCount = in.readShort();
-
-                // The keys type in here is incorrect
-                MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema, schemaVersion, schemaHash,
-                        shortKeyColumnCount, storageType, KeysType.AGG_KEYS, null);
-                tmpIndexMetaList.add(indexMeta);
-            } else {
-                MaterializedIndexMeta indexMeta = MaterializedIndexMeta.read(in);
-                indexIdToMeta.put(indexId, indexMeta);
-            }
+            MaterializedIndexMeta indexMeta = MaterializedIndexMeta.read(in);
+            indexIdToMeta.put(indexId, indexMeta);
         }
 
         // partition and distribution info
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
-            keysType = KeysType.valueOf(Text.readString(in));
-        } else {
-            keysType = KeysType.AGG_KEYS;
-        }
+        keysType = KeysType.valueOf(Text.readString(in));
 
         // add the correct keys type in tmp index meta
         for (MaterializedIndexMeta indexMeta : tmpIndexMetaList) {
@@ -1542,6 +1507,8 @@ public class OlapTable extends Table {
             partitionInfo = ListPartitionInfo.read(in);
         } else if (partType == PartitionType.EXPR_RANGE) {
             partitionInfo = ExpressionRangePartitionInfo.read(in);
+        } else if (partType == PartitionType.EXPR_RANGE_V2) {
+            partitionInfo = ExpressionRangePartitionInfoV2.read(in);
         } else {
             throw new IOException("invalid partition type: " + partType);
         }
@@ -1562,58 +1529,42 @@ public class OlapTable extends Table {
             nameToPartition.put(partition.getName(), partition);
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_9) {
-            if (in.readBoolean()) {
-                int bfColumnCount = in.readInt();
-                bfColumns = Sets.newHashSet();
-                for (int i = 0; i < bfColumnCount; i++) {
-                    bfColumns.add(Text.readString(in));
-                }
-
-                bfFpp = in.readDouble();
+        if (in.readBoolean()) {
+            int bfColumnCount = in.readInt();
+            bfColumns = Sets.newHashSet();
+            for (int i = 0; i < bfColumnCount; i++) {
+                bfColumns.add(Text.readString(in));
             }
+
+            bfFpp = in.readDouble();
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_46) {
-            if (in.readBoolean()) {
-                colocateGroup = Text.readString(in);
-            }
+        if (in.readBoolean()) {
+            colocateGroup = Text.readString(in);
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_57) {
-            baseIndexId = in.readLong();
-        } else {
-            // the old table use table id as base index id
-            baseIndexId = id;
-        }
+        baseIndexId = in.readLong();
+
 
         // read indexes
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_70) {
-            if (in.readBoolean()) {
-                this.indexes = TableIndexes.read(in);
-            }
+        if (in.readBoolean()) {
+            this.indexes = TableIndexes.read(in);
         }
         // tableProperty
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_71) {
-            if (in.readBoolean()) {
-                tableProperty = TableProperty.read(in);
-            }
+        if (in.readBoolean()) {
+            tableProperty = TableProperty.read(in);
         }
         // temp partitions
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_74) {
-            tempPartitions = TempPartitions.read(in);
-            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_77) {
-                RangePartitionInfo tempRangeInfo = tempPartitions.getPartitionInfo();
-                if (tempRangeInfo != null) {
-                    for (long partitionId : tempRangeInfo.getIdToRange(false).keySet()) {
-                        ((RangePartitionInfo) this.partitionInfo).addPartition(partitionId, true,
-                                tempRangeInfo.getRange(partitionId), tempRangeInfo.getDataProperty(partitionId),
-                                tempRangeInfo.getReplicationNum(partitionId), tempRangeInfo.getIsInMemory(partitionId));
-                    }
-                }
-                tempPartitions.unsetPartitionInfo();
+        tempPartitions = TempPartitions.read(in);
+        RangePartitionInfo tempRangeInfo = tempPartitions.getPartitionInfo();
+        if (tempRangeInfo != null) {
+            for (long partitionId : tempRangeInfo.getIdToRange(false).keySet()) {
+                ((RangePartitionInfo) this.partitionInfo).addPartition(partitionId, true,
+                        tempRangeInfo.getRange(partitionId), tempRangeInfo.getDataProperty(partitionId),
+                        tempRangeInfo.getReplicationNum(partitionId), tempRangeInfo.getIsInMemory(partitionId));
             }
         }
+        tempPartitions.unsetPartitionInfo();
 
         // In the present, the fullSchema could be rebuilt by schema change while the properties is changed by MV.
         // After that, some properties of fullSchema and nameToColumn may be not same as properties of base columns.
@@ -2355,9 +2306,7 @@ public class OlapTable extends Table {
             Table tmpTable = db.getTable(mvId.getId());
             if (tmpTable != null) {
                 MaterializedView mv = (MaterializedView) tmpTable;
-                mv.setActive(false);
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                        "the table {} was dropped.", mv.getName(), mv.getId(), getName());
+                mv.setInactiveAndReason("base-table dropped: " + getName());
             } else {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
             }

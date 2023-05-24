@@ -65,6 +65,20 @@ public:
         tablet_meta->add_rs_meta(src_rowset->rowset_meta());
     }
 
+    void write_empty_version(const TabletMetaSharedPtr& tablet_meta) {
+        RowsetWriterContext rowset_writer_context;
+        create_rowset_writer_context(&rowset_writer_context, _version);
+        _version++;
+        std::unique_ptr<RowsetWriter> rowset_writer;
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
+
+        RowsetSharedPtr src_rowset = *rowset_writer->build();
+        ASSERT_TRUE(src_rowset != nullptr);
+        ASSERT_EQ(0, src_rowset->num_rows());
+
+        tablet_meta->add_rs_meta(src_rowset->rowset_meta());
+    }
+
     void write_specify_version(const TabletSharedPtr& tablet, int64_t version) {
         RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context, version);
@@ -198,7 +212,7 @@ public:
         tablet->set_compaction_context(compaction_context);
     }
 
-    Status compact(const TabletSharedPtr& tablet) {
+    Status compact(const TabletSharedPtr& tablet, bool* is_shortcut_compaction = nullptr) {
         if (!tablet->need_compaction()) {
             LOG(WARNING) << "no need compact";
             return Status::InternalError("no need compact");
@@ -214,6 +228,9 @@ public:
         if (task->compaction_task_state() == COMPACTION_FAILED) {
             LOG(WARNING) << "task fail";
             return Status::InternalError("task fail");
+        }
+        if (is_shortcut_compaction != nullptr) {
+            *is_shortcut_compaction = task->is_shortcut_compaction();
         }
 
         return Status::OK();
@@ -885,6 +902,37 @@ TEST_F(DefaultCompactionPolicyTest, test_multi_segment_cumulative_compaction) {
     ASSERT_EQ(1, versions.size());
     ASSERT_EQ(0, versions[0].first);
     ASSERT_EQ(0, versions[0].second);
+}
+
+TEST_F(DefaultCompactionPolicyTest, test_shortcut_compaction) {
+    LOG(INFO) << "test_shortcut_compaction";
+    create_tablet_schema(UNIQUE_KEYS);
+
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+
+    write_new_version(tablet_meta);
+    write_empty_version(tablet_meta);
+    write_empty_version(tablet_meta);
+
+    TabletSharedPtr tablet =
+            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    tablet->init();
+    init_compaction_context(tablet);
+    ASSERT_EQ(3, tablet->version_count());
+
+    bool is_shortcut_compaction = false;
+    auto res = compact(tablet, &is_shortcut_compaction);
+    ASSERT_TRUE(res.ok());
+    ASSERT_TRUE(is_shortcut_compaction);
+
+    ASSERT_EQ(1, tablet->version_count());
+    ASSERT_EQ(3, tablet->cumulative_layer_point());
+    std::vector<Version> versions;
+    tablet->list_versions(&versions);
+    ASSERT_EQ(1, versions.size());
+    ASSERT_EQ(0, versions[0].first);
+    ASSERT_EQ(2, versions[0].second);
 }
 
 } // namespace starrocks

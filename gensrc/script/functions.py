@@ -291,6 +291,7 @@ vectorized_functions = [
     [30270, 'find_in_set', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::find_in_set'],
     [30310, 'split_part', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::split_part'],
     [30311, 'split', 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::split', 'StringFunctions::split_prepare', 'StringFunctions::split_close'],
+    [30316, 'str_to_map', 'MAP_VARCHAR_VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR'], 'StringFunctions::str_to_map'],
 
     [30320, 'regexp_extract', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'], 'StringFunctions::regexp_extract',
      'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
@@ -444,7 +445,6 @@ vectorized_functions = [
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
     [60010, 'LIKE', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'LikePredicate::like', 'LikePredicate::like_prepare',
      'LikePredicate::like_close'],
-    [60011, 'ILIKE', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'nullptr'],
     [60020, 'REGEXP', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'LikePredicate::regex', 'LikePredicate::regex_prepare',
      'LikePredicate::regex_close'],
 
@@ -474,6 +474,11 @@ vectorized_functions = [
     [70113, 'if', 'PERCENTILE', ['BOOLEAN', 'PERCENTILE', 'PERCENTILE'], 'nullptr'],
     [70114, 'if', 'HLL', ['BOOLEAN', 'HLL', 'HLL'], 'nullptr'],
     [70115, 'if', 'TIME', ['BOOLEAN', 'TIME', 'TIME'], 'nullptr'],
+    [70116, 'if', 'ANY_ARRAY', ['BOOLEAN', 'ANY_ARRAY', 'ANY_ARRAY'], 'nullptr'],
+    [70117, 'if', 'ANY_MAP', ['BOOLEAN', 'ANY_MAP', 'ANY_MAP'], 'nullptr'],
+    [70118, 'if', 'ANY_STRUCT', ['BOOLEAN', 'ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
+    [70119, 'if', 'JSON', ['BOOLEAN', 'JSON', 'JSON'], 'nullptr'],
+
 
     [70200, 'ifnull', 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70201, 'ifnull', 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -494,6 +499,10 @@ vectorized_functions = [
     [70213, 'ifnull', 'PERCENTILE', ['PERCENTILE', 'PERCENTILE'], 'nullptr'],
     [70214, 'ifnull', 'HLL', ['HLL', 'HLL'], 'nullptr'],
     [70215, 'ifnull', 'TIME', ['TIME', 'TIME'], 'nullptr'],
+    [70216, 'ifnull', 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ARRAY'], 'nullptr'],
+    [70217, 'ifnull', 'ANY_MAP', ['ANY_MAP', 'ANY_MAP'], 'nullptr'],
+    [70218, 'ifnull', 'ANY_STRUCT', ['ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
+    [70219, 'ifnull', 'JSON', ['JSON', 'JSON'], 'nullptr'],
 
     [70300, 'nullif', 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70301, 'nullif', 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -514,6 +523,10 @@ vectorized_functions = [
     [70313, 'nullif', 'PERCENTILE', ['PERCENTILE', 'PERCENTILE'], 'nullptr'],
     [70314, 'nullif', 'HLL', ['HLL', 'HLL'], 'nullptr'],
     [70315, 'nullif', 'TIME', ['TIME', 'TIME'], 'nullptr'],
+    [70316, 'nullif', 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ARRAY'], 'nullptr'],
+    [70317, 'nullif', 'ANY_MAP', ['ANY_MAP', 'ANY_MAP'], 'nullptr'],
+    [70318, 'nullif', 'ANY_STRUCT', ['ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
+    [70319, 'nullif', 'JSON', ['JSON', 'JSON'], 'nullptr'],
 
     [70400, 'coalesce', 'BOOLEAN', ['BOOLEAN', '...'], 'nullptr'],
     [70401, 'coalesce', 'TINYINT', ['TINYINT', '...'], 'nullptr'],
@@ -534,6 +547,10 @@ vectorized_functions = [
     [70413, 'coalesce', 'PERCENTILE', ['PERCENTILE', '...'], 'nullptr'],
     [70414, 'coalesce', 'HLL', ['HLL', '...'], 'nullptr'],
     [70416, 'coalesce', 'TIME', ['TIME', '...'], 'nullptr'],
+    [70417, 'coalesce', 'ANY_ARRAY', ['ANY_ARRAY', '...'], 'nullptr'],
+    [70418, 'coalesce', 'ANY_MAP', ['ANY_MAP', '...'], 'nullptr'],
+    [70419, 'coalesce', 'ANY_STRUCT', ['ANY_STRUCT', '...'], 'nullptr'],
+    [70420, 'coalesce', 'JSON', ['JSON', '...'], 'nullptr'],
 
     [70415, 'esquery', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'ESFunctions::match'],
 
@@ -547,7 +564,13 @@ vectorized_functions = [
     [80041, 'hll_deserialize', 'HLL', ['VARCHAR'], 'HyperloglogFunctions::hll_deserialize'],
 
     # bitmap function
-    [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap', False],
+    [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap<TYPE_VARCHAR>', False],
+    [90011, 'to_bitmap', 'BITMAP', ['BOOLEAN'], 'BitmapFunctions::to_bitmap<TYPE_BOOLEAN>', False],
+    [90012, 'to_bitmap', 'BITMAP', ['TINYINT'], 'BitmapFunctions::to_bitmap<TYPE_TINYINT>', False],
+    [90013, 'to_bitmap', 'BITMAP', ['SMALLINT'], 'BitmapFunctions::to_bitmap<TYPE_SMALLINT>', False],
+    [90014, 'to_bitmap', 'BITMAP', ['INT'], 'BitmapFunctions::to_bitmap<TYPE_INT>', False],
+    [90015, 'to_bitmap', 'BITMAP', ['BIGINT'], 'BitmapFunctions::to_bitmap<TYPE_BIGINT>', False],
+    [90016, 'to_bitmap', 'BITMAP', ['LARGEINT'], 'BitmapFunctions::to_bitmap<TYPE_LARGEINT>', False],
     [90020, 'bitmap_hash', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::bitmap_hash', False],
     [90030, 'bitmap_count', 'BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_count'],
     [90040, 'bitmap_empty', 'BITMAP', [], 'BitmapFunctions::bitmap_empty', False],
@@ -940,6 +963,12 @@ vectorized_functions = [
     [170003, 'map_from_arrays', 'ANY_MAP', ['ANY_ARRAY', 'ANY_ARRAY'], 'MapFunctions::map_from_arrays'],
     [170004, 'map_apply', 'ANY_MAP', ['FUNCTION', 'ANY_MAP'], 'nullptr'],
     [170005, 'map_filter', 'ANY_MAP',  ['ANY_MAP', 'ARRAY_BOOLEAN'], 'MapFunctions::map_filter'],
+    [170006, 'distinct_map_keys', 'ANY_MAP',  ['ANY_MAP'], 'MapFunctions::distinct_map_keys'],
+    [170007, 'map_concat', 'ANY_MAP',  ['ANY_MAP', "..."], 'MapFunctions::map_concat'],
+
+    # map, array common functions
+    [170100, 'cardinality', 'INT', ['ANY_MAP'], 'MapFunctions::map_size'],
+    [170101, 'cardinality', 'INT', ['ANY_ARRAY'], 'ArrayFunctions::array_length'],
 
     # struct functions
     # [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],

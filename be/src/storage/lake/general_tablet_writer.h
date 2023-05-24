@@ -29,7 +29,7 @@ namespace starrocks::lake {
 
 class HorizontalGeneralTabletWriter : public TabletWriter {
 public:
-    explicit HorizontalGeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> tschema);
+    explicit HorizontalGeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id);
 
     ~HorizontalGeneralTabletWriter() override;
 
@@ -59,16 +59,16 @@ public:
 
     RowsetTxnMetaPB* rowset_txn_meta() override { return nullptr; }
 
-private:
+protected:
     Status reset_segment_writer();
-    Status flush_segment_writer();
+    virtual Status flush_segment_writer();
 
     std::unique_ptr<SegmentWriter> _seg_writer;
 };
 
 class VerticalGeneralTabletWriter : public TabletWriter {
 public:
-    explicit VerticalGeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> tschema,
+    explicit VerticalGeneralTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
                                          uint32_t max_rows_per_segment);
 
     ~VerticalGeneralTabletWriter() override;

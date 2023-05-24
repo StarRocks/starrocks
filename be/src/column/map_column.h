@@ -29,7 +29,7 @@ class MapColumn final : public ColumnFactory<Column, MapColumn> {
 public:
     using ValueType = void;
 
-    MapColumn(ColumnPtr keys, ColumnPtr values, UInt32Column::Ptr offests);
+    MapColumn(ColumnPtr keys, ColumnPtr values, UInt32Column::Ptr offsets);
 
     MapColumn(const MapColumn& rhs)
             : _keys(rhs._keys->clone_shared()),
@@ -190,7 +190,7 @@ public:
 
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
 
-    void remove_duplicated_keys();
+    void remove_duplicated_keys(bool need_recursive = false);
 
 private:
     // Keys must be NullableColumn to facilitate handling nested types.

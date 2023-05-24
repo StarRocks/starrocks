@@ -44,7 +44,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
@@ -57,12 +56,14 @@ import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -170,18 +171,25 @@ public class RoutineLoadManager implements Writable {
     public void updateBeTaskSlot() {
         slotLock.lock();
         try {
-            Set<Long> aliveBeIds = Sets.newHashSet();
-            aliveBeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true));
+            List<Long> aliveNodeIds = new ArrayList<>();
 
-            // add new be
-            for (Long beId : aliveBeIds) {
-                if (!beTasksNum.containsKey(beId)) {
-                    beTasksNum.put(beId, 0);
+            // TODO: need to refactor after be split into cn + dn
+            aliveNodeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true));
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+                aliveNodeIds = warehouse.getAnyAvailableCluster().getComputeNodeIds();
+            }
+
+            // add new nodes
+            for (Long nodeId : aliveNodeIds) {
+                if (!beTasksNum.containsKey(nodeId)) {
+                    beTasksNum.put(nodeId, 0);
                 }
             }
 
             // remove not alive be
-            beTasksNum.keySet().removeIf(beId -> !aliveBeIds.contains(beId));
+            List<Long> finalAliveNodeIds = aliveNodeIds;
+            beTasksNum.keySet().removeIf(nodeId -> !finalAliveNodeIds.contains(nodeId));
         } finally {
             slotLock.unlock();
         }
@@ -683,9 +691,7 @@ public class RoutineLoadManager implements Writable {
     }
 
     public long loadRoutineLoadJobs(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_49) {
-            readFields(dis);
-        }
+        readFields(dis);
         LOG.info("finished replay routineLoadJobs from image");
         return checksum;
     }

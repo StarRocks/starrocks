@@ -1,0 +1,60 @@
+-- name: test regex
+CREATE TABLE `ts` (
+  `str` varchar(65533) NULL COMMENT "",
+  `regex` varchar(65533) NULL COMMENT "",
+  `replaced` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`str`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`str`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into ts values ('abcd', '.*', 'xx'), ('abcd', 'a.*', 'xx'), ('abcd', '.*abc.*', 'xx'), ('abcd', '.*cd', 'xx'), ('abcd', 'bc', 'xx'), ('', '', 'xx'), (NULL, '', 'xx'), ('abc中文def', '[\\p{Han}]+', 'xx');
+-- result:
+-- !result
+select regexp_replace('abcd', '.*', 'xx');
+-- result:
+xx
+-- !result
+select regexp_replace('abcd', 'a.*', 'xx');
+-- result:
+xx
+-- !result
+select regexp_replace('abcd', '.*abc.*', 'xx');
+-- result:
+xx
+-- !result
+select regexp_replace('abcd', '.*cd', 'xx');
+-- result:
+xx
+-- !result
+select regexp_replace('abcd', 'bc', 'xx');
+-- result:
+axxd
+-- !result
+select regexp_replace('', '', 'xx');
+-- result:
+-- !result
+select regexp_replace(NULL, '', 'xx');
+-- result:
+None
+-- !result
+select regexp_replace('abc中文def', '中文', 'xx');
+-- result:
+abcxxdef
+-- !result
+select regexp_replace('abc中文def', '[\\p{Han}]+', 'xx');
+-- result:
+abcxxdef
+-- !result
+select str, regex, replaced, regexp_replace(str, regex, replaced) from ts order by str, regex, replaced;
+-- result:
+None		xx	None
+		xx	xx
+abcd	.*	xx	xx
+abcd	.*abc.*	xx	xx
+abcd	.*cd	xx	xx
+abcd	a.*	xx	xx
+abcd	bc	xx	axxd
+abc中文def	[\p{Han}]+	xx	abcxxdef
+-- !result

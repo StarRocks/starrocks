@@ -62,7 +62,6 @@ import com.starrocks.thrift.TTaskType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.spark_project.jetty.util.ConcurrentHashSet;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -83,7 +82,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     private static final long RETRY_INTERVAL_MS = 1000;
 
     private Executor lakeTaskExecutor;
-    private ConcurrentHashSet<Long> publishingLakeTransactions;
+    private Set<Long> publishingLakeTransactions;
 
     public PublishVersionDaemon() {
         super("PUBLISH_VERSION", Config.publish_version_interval_ms);
@@ -98,7 +97,13 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
                 return;
             }
+
+            // TODO: need to refactor after be split into cn + dn
             List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                allBackends.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(false));
+            }
+
             if (allBackends.isEmpty()) {
                 LOG.warn("some transaction state need to publish, but no backend exists");
                 return;
@@ -137,9 +142,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return lakeTaskExecutor;
     }
 
-    private @NotNull ConcurrentHashSet<Long> getPublishingLakeTransactions() {
+    private @NotNull Set<Long> getPublishingLakeTransactions() {
         if (publishingLakeTransactions == null) {
-            publishingLakeTransactions = new ConcurrentHashSet<>();
+            publishingLakeTransactions = Sets.newConcurrentHashSet();
         }
         return publishingLakeTransactions;
     }
@@ -273,7 +278,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     void publishVersionForLakeTable(List<TransactionState> readyTransactionStates) {
-        ConcurrentHashSet<Long> publishingTransactions = getPublishingLakeTransactions();
+        Set<Long> publishingTransactions = getPublishingLakeTransactions();
         for (TransactionState txnState : readyTransactionStates) {
             long txnId = txnState.getTransactionId();
             if (publishingTransactions.add(txnId)) { // the set did not already contain the specified element

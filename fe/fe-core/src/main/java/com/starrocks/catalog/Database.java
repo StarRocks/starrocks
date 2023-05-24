@@ -47,7 +47,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
@@ -727,11 +726,7 @@ public class Database extends MetaObject implements Writable {
         super.readFields(in);
 
         id = in.readLong();
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            fullQualifiedName = Text.readString(in);
-        } else {
-            fullQualifiedName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        }
+        fullQualifiedName = ClusterNamespace.getNameFromFullName(Text.readString(in));
         // read groups
         int numTables = in.readInt();
         for (int i = 0; i < numTables; ++i) {
@@ -749,25 +744,19 @@ public class Database extends MetaObject implements Writable {
         // Compatible for attachDbName
         Text.readString(in);
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_47) {
-            int numEntries = in.readInt();
-            for (int i = 0; i < numEntries; ++i) {
-                String name = Text.readString(in);
-                ImmutableList.Builder<Function> builder = ImmutableList.builder();
-                int numFunctions = in.readInt();
-                for (int j = 0; j < numFunctions; ++j) {
-                    builder.add(Function.read(in));
-                }
-
-                name2Function.put(name, builder.build());
+        int numEntries = in.readInt();
+        for (int i = 0; i < numEntries; ++i) {
+            String name = Text.readString(in);
+            ImmutableList.Builder<Function> builder = ImmutableList.builder();
+            int numFunctions = in.readInt();
+            for (int j = 0; j < numFunctions; ++j) {
+                builder.add(Function.read(in));
             }
+
+            name2Function.put(name, builder.build());
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_81) {
-            replicaQuotaSize = in.readLong();
-        } else {
-            replicaQuotaSize = FeConstants.DEFAULT_DB_REPLICA_QUOTA_SIZE;
-        }
+        replicaQuotaSize = in.readLong();
     }
 
     @Override

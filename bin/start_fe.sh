@@ -60,7 +60,7 @@ source $STARROCKS_HOME/bin/common.sh
 # JAVA_OPTS
 # LOG_DIR
 # PID_DIR
-export JAVA_OPTS="-Xmx1024m"
+export JAVA_OPTS="-Xmx8g"
 export LOG_DIR="$STARROCKS_HOME/log"
 export PID_DIR=`cd "$curdir"; pwd`
 
@@ -83,7 +83,7 @@ if [ ! -f "$JAVA_HOME/bin/javac" ]; then
 fi
 
 JAVA=$JAVA_HOME/bin/java
- 
+
 # check java version and choose correct JAVA_OPTS
 JAVA_VERSION=$(jdk_version)
 final_java_opt=$JAVA_OPTS
@@ -91,7 +91,7 @@ if [[ "$JAVA_VERSION" -gt 8 ]]; then
     if [ -z "$JAVA_OPTS_FOR_JDK_9" ]; then
         echo "JAVA_OPTS_FOR_JDK_9 is not set in fe.conf"
         exit -1
-    fi 
+    fi
     final_java_opt=$JAVA_OPTS_FOR_JDK_9
 fi
 
@@ -150,7 +150,7 @@ if [ ${RUN_LOG_CONSOLE} -eq 1 ] ; then
         cp $STARROCKS_HOME/conf/fe.conf.readonly $STARROCKS_HOME/conf/fe.conf
     fi
     # force sys_log_to_console = true
-    echo "sys_log_to_console = true" >> $STARROCKS_HOME/conf/fe.conf
+    echo -e "\nsys_log_to_console = true" >> $STARROCKS_HOME/conf/fe.conf
 else
     # redirect all subsequent commands' stdout/stderr into $LOG_FILE
     exec &>> $LOG_FILE

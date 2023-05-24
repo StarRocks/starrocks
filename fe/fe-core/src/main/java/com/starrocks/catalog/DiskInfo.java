@@ -34,11 +34,10 @@
 
 package com.starrocks.catalog;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -48,20 +47,23 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class DiskInfo implements Writable {
-    private static final Logger LOG = LogManager.getLogger(DiskInfo.class);
-
     public enum DiskState {
         ONLINE,
         OFFLINE
     }
 
+    private static final Logger LOG = LogManager.getLogger(DiskInfo.class);
     private static final long DEFAULT_CAPACITY_B = 1024 * 1024 * 1024 * 1024L; // 1T
 
+    @SerializedName(value = "r")
     private String rootPath;
-    // disk capacity
+    @SerializedName(value = "t")
     private long totalCapacityB;
+    @SerializedName(value = "u")
     private long dataUsedCapacityB;
+    @SerializedName(value = "a")
     private long diskAvailableCapacityB;
+    @SerializedName(value = "s")
     private DiskState state;
 
     // path hash and storage medium are reported from Backend and no need to persist
@@ -198,14 +200,8 @@ public class DiskInfo implements Writable {
     public void readFields(DataInput in) throws IOException {
         this.rootPath = Text.readString(in);
         this.totalCapacityB = in.readLong();
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_36) {
-            this.dataUsedCapacityB = in.readLong();
-            this.diskAvailableCapacityB = in.readLong();
-        } else {
-            long availableCapacityB = in.readLong();
-            this.dataUsedCapacityB = this.totalCapacityB - availableCapacityB;
-            this.diskAvailableCapacityB = availableCapacityB;
-        }
+        this.dataUsedCapacityB = in.readLong();
+        this.diskAvailableCapacityB = in.readLong();
         this.state = DiskState.valueOf(Text.readString(in));
     }
 

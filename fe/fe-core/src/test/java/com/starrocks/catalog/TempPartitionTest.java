@@ -42,9 +42,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -115,7 +113,7 @@ public class TempPartitionTest {
     private void alterTableWithNewAnalyzer(String sql, boolean expectedException) throws Exception {
         try {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-            GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
             if (expectedException) {
                 Assert.fail("expected exception not thrown");
             }
@@ -790,10 +788,6 @@ public class TempPartitionTest {
 
     private void testSerializeTempPartitions(TempPartitions tempPartitionsInstance)
             throws IOException, AnalysisException {
-        MetaContext metaContext = new MetaContext();
-        metaContext.setMetaVersion(FeMetaVersion.VERSION_77);
-        metaContext.setThreadLocalInfo();
-
         // 1. Write objects to file
         File file = new File(tempPartitionFile);
         file.createNewFile();

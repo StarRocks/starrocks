@@ -45,6 +45,7 @@ import com.google.common.collect.Table;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TPartitionVersionInfo;
@@ -458,11 +459,9 @@ public class TabletInvertedIndex {
         writeLock();
         try {
             if (forceDeleteTablets.containsKey(tabletId)) {
-                forceDeleteTablets.get(tabletId).add(tabletId);
+                forceDeleteTablets.get(tabletId).add(backendId);
             } else {
-                Set<Long> backendIds = Sets.newHashSet();
-                backendIds.add(tabletId);
-                forceDeleteTablets.put(tabletId, backendIds);
+                forceDeleteTablets.put(tabletId, Sets.newHashSet(backendId));
             }
         } finally {
             writeUnlock();
@@ -470,9 +469,20 @@ public class TabletInvertedIndex {
     }
 
     public void markTabletForceDelete(long tabletId, Set<Long> backendIds) {
+        if (backendIds.isEmpty()) {
+            return;
+        }
         writeLock();
         forceDeleteTablets.put(tabletId, backendIds);
         writeUnlock();
+    }
+
+    public void markTabletForceDelete(Tablet tablet) {
+        // LakeTablet is managed by StarOS, no need to do this mark and clean up
+        if (tablet instanceof LakeTablet) {
+            return;
+        }
+        markTabletForceDelete(tablet.getId(), tablet.getBackendIds());
     }
     
     public void eraseTabletForceDelete(long tabletId, long backendId) {
@@ -480,7 +490,7 @@ public class TabletInvertedIndex {
         try {
             if (forceDeleteTablets.containsKey(tabletId)) {
                 forceDeleteTablets.get(tabletId).remove(backendId);
-                if (forceDeleteTablets.get(tabletId).size() == 0) {
+                if (forceDeleteTablets.get(tabletId).isEmpty()) {
                     forceDeleteTablets.remove(tabletId);
                 }
             }

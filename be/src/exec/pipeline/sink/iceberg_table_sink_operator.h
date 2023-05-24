@@ -73,7 +73,7 @@ public:
 private:
     std::string _get_partition_location(const std::vector<std::string>& names, const std::vector<std::string>& values);
 
-    std::string _value_to_string(const ColumnPtr& column, size_t index);
+    std::string _value_to_string(const ColumnPtr& column);
 
     std::string _location;
     std::string _iceberg_table_data_location;

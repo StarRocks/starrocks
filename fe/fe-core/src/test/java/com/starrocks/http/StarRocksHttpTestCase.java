@@ -191,11 +191,11 @@ public abstract class StarRocksHttpTestCase {
         partitionInfo.setReplicationNum(testPartitionId + 100, (short) 3);
         EsTable table = null;
         Map<String, String> props = new HashMap<>();
-        props.put(EsTable.HOSTS, "http://node-1:8080");
-        props.put(EsTable.USER, "root");
-        props.put(EsTable.PASSWORD, "root");
-        props.put(EsTable.INDEX, "test");
-        props.put(EsTable.TYPE, "doc");
+        props.put(EsTable.KEY_HOSTS, "http://node-1:8080");
+        props.put(EsTable.KEY_USER, "root");
+        props.put(EsTable.KEY_PASSWORD, "root");
+        props.put(EsTable.KEY_INDEX, "test");
+        props.put(EsTable.KEY_TYPE, "doc");
         try {
             table = new EsTable(testTableId + 1, name, columns, props, partitionInfo);
         } catch (DdlException e) {

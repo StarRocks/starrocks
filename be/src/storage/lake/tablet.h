@@ -89,10 +89,13 @@ public:
     Status delete_tablet_metadata_lock(int64_t version, int64_t expire_time);
 
     // `segment_max_rows` is used in vertical writer
-    StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, uint32_t max_rows_per_segment = 0);
+    // NOTE: This method may update the version hint
+    StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
+                                                       uint32_t max_rows_per_segment = 0);
 
     StatusOr<std::shared_ptr<TabletReader>> new_reader(int64_t version, Schema schema);
 
+    // NOTE: This method may update the version hint
     StatusOr<std::shared_ptr<const TabletSchema>> get_schema();
 
     StatusOr<std::vector<RowsetPtr>> get_rowsets(int64_t version);
@@ -114,7 +117,7 @@ public:
 
     [[nodiscard]] std::string del_location(std::string_view del_name) const;
 
-    [[nodiscard]] std::string delvec_location(int64_t version) const;
+    [[nodiscard]] std::string delvec_location(std::string_view delvec_name) const;
 
     Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
 
@@ -124,9 +127,22 @@ public:
 
     TabletManager* tablet_mgr() { return _mgr; }
 
+    // Many tablet operations need to fetch the tablet schema information
+    // stored in the object storage, if the cache does not hit. In order to
+    // reduce the costly listDirectory/listObject operations, you can specify
+    // an existing tablet metadata version, so you can directly obtain the schema
+    // information by reading the metadata of that version, without listObject.
+    //
+    // NOTE: set this value to a non-positive value means clear the version hint.
+    // NOTE: Some methods of Tablet will internally update this value automatically.
+    void set_version_hint(int64_t version_hint) { _version_hint = version_hint; }
+
+    int64_t version_hint() const { return _version_hint; }
+
 private:
     TabletManager* _mgr;
     int64_t _id;
+    int64_t _version_hint = 0;
 };
 
 } // namespace starrocks::lake

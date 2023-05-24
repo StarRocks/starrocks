@@ -28,7 +28,7 @@ public:
     template <class... Args>
     SpillableAggregateBlockingSinkOperator(AggregatorPtr aggregator, Args&&... args)
             : AggregateBlockingSinkOperator(aggregator, std::forward<Args>(args)...,
-                                            "spillable_aggregate_block_sink_operator") {}
+                                            "spillable_aggregate_blocking_sink") {}
 
     ~SpillableAggregateBlockingSinkOperator() override = default;
 

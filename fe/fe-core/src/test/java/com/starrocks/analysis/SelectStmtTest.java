@@ -66,6 +66,8 @@ public class SelectStmtTest {
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         String createBaseAllStmtStr = "create table db1.baseall(k1 int) distributed by hash(k1) "
                 + "buckets 3 properties('replication_num' = '1');";
+        String createDateTblStmtStr = "create table db1.t(k1 int, dt date) "
+                + "DUPLICATE KEY(k1) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         String createPratitionTableStr = "CREATE TABLE db1.partition_table (\n" +
                 "datekey int(11) NULL COMMENT \"datekey\",\n" +
                 "poi_id bigint(20) NULL COMMENT \"poi_id\"\n" +
@@ -85,6 +87,7 @@ public class SelectStmtTest {
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr)
                 .withTable(createBaseAllStmtStr)
+                .withTable(createDateTblStmtStr)
                 .withTable(createPratitionTableStr);
     }
 
@@ -283,6 +286,44 @@ public class SelectStmtTest {
     }
 
     @Test
+    public void testGroupByCountDistinctArrayWithSkewHint() throws Exception {
+        FeConstants.runningUnitTest = true;
+        // array is not supported now
+        String sql = "select b1, count(distinct [skew] a1) as cnt from (select split('a,b,c', ',') as a1, 'aaa' as b1) t1 group by b1";
+        String s = starRocksAssert.query(sql).explainQuery();
+        Assert.assertTrue(s, s.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:3: expr | 4: count\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  5:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(4: count)\n" +
+                "  |  group by: 3: expr\n" +
+                "  |  \n" +
+                "  4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(2: split)\n" +
+                "  |  group by: 3: expr\n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  <slot 2> : 2: split\n" +
+                "  |  <slot 3> : 'aaa'\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update serialize)\n" +
+                "  |  group by: 2: split\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : split('a,b,c', ',')\n" +
+                "  |  <slot 3> : 'aaa'\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL"));
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
     public void testGroupByMultiColumnCountDistinctWithSkewHint() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql =
@@ -329,7 +370,7 @@ public class SelectStmtTest {
             Assert.fail("Must throw an exception");
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage(),
-                    e.getMessage().contains("NOT support scalar correlated sub-query of type ARRAY<varchar(32)>"));
+                    e.getMessage().contains("NOT support scalar correlated sub-query of type array<varchar(32)>"));
         }
 
         try {
@@ -367,6 +408,17 @@ public class SelectStmtTest {
 
         } finally {
             starRocksAssert.getCtx().getSessionVariable().setCboCteReuse(cboCteReuse);
+        }
+    }
+
+    @Test
+    public void testSubstringConstantFolding() {
+        try {
+            String sql = "select * from db1.t where dt = \"2022-01-02\" or dt = cast(substring(\"2022-01-03\", 1, 10) as date);";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assert.assertTrue(plan, plan.contains("dt IN ('2022-01-02', '2022-01-03')"));
+        } catch (Exception e) {
+            Assert.fail("Should not throw an exception");
         }
     }
 }

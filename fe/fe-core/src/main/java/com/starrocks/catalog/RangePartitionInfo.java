@@ -42,11 +42,9 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.RangePartitionPersistInfo;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
@@ -75,7 +73,7 @@ public class RangePartitionInfo extends PartitionInfo {
     @SerializedName(value = "partitionColumns")
     private List<Column> partitionColumns = Lists.newArrayList();
     // formal partition id -> partition range
-    private Map<Long, Range<PartitionKey>> idToRange = Maps.newHashMap();
+    protected Map<Long, Range<PartitionKey>> idToRange = Maps.newHashMap();
     // temp partition id -> partition range
     private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newHashMap();
 
@@ -215,7 +213,7 @@ public class RangePartitionInfo extends PartitionInfo {
     public Range<PartitionKey> handleNewSinglePartitionDesc(SingleRangePartitionDesc desc,
                                                             long partitionId, boolean isTemp) throws DdlException {
         Preconditions.checkArgument(desc.isAnalyzed());
-        Range<PartitionKey> range = null;
+        Range<PartitionKey> range;
         try {
             range = checkAndCreateRange(desc, isTemp);
             setRangeInternal(partitionId, isTemp, range);
@@ -492,13 +490,11 @@ public class RangePartitionInfo extends PartitionInfo {
             idToRange.put(partitionId, range);
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_77) {
-            counter = in.readInt();
-            for (int i = 0; i < counter; i++) {
-                long partitionId = in.readLong();
-                Range<PartitionKey> range = RangeUtils.readRange(in);
-                idToTempRange.put(partitionId, range);
-            }
+        counter = in.readInt();
+        for (int i = 0; i < counter; i++) {
+            long partitionId = in.readLong();
+            Range<PartitionKey> range = RangeUtils.readRange(in);
+            idToTempRange.put(partitionId, range);
         }
     }
 

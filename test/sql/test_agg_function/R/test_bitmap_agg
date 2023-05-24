@@ -1,0 +1,49 @@
+-- name: test_bitmap_agg
+CREATE TABLE t1 (
+    c1 int,
+    c2 boolean,
+    c3 tinyint,
+    c4 int,
+    c5 bigint,
+    c6 largeint,
+    c7 string
+    )
+DUPLICATE KEY(c1)
+DISTRIBUTED BY HASH(c1)
+BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t1 values
+    (1, true, 11, 111, 1111, 11111, "111111"),
+    (2, false, 22, 222, 2222, 22222, "222222"),
+    (3, true, 33, 333, 3333, 33333, "333333"),
+    (4, null, null, null, null, null, null),
+    (5, -1, -11, -111, -1111, -11111, "-111111"),
+    (6, null, null, null, null, "36893488147419103232", "680564733841876926926749214863536422912");
+-- result:
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_AGG(c2)) FROM t1;
+-- result:
+0,1
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_AGG(c3)) FROM t1;
+-- result:
+11,22,33
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_AGG(c4)) FROM t1;
+-- result:
+111,222,333
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_AGG(c5)) FROM t1;
+-- result:
+1111,2222,3333
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_AGG(c6)) FROM t1;
+-- result:
+11111,22222,33333
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_AGG(c7)) FROM t1;
+-- result:
+111111,222222,333333
+-- !result

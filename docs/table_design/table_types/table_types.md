@@ -13,7 +13,7 @@ StarRocks provides four table types: Duplicate Key table, Aggregate table, Uniqu
 When data is loaded into a table created by using a certain table type, data is sorted and stored according to one or more columns defined as the sort key when the table is created. The sort key is usually one or more columns that are frequently used as filter conditions in queries, thereby accelerating queries.
 
 In the Duplicate Key table, the sort key specified by `DUPLICATE KEY` is used to sort data and is not assigned a UNIQUE constraint.
-In the Aggregate table, the sort key specified by `AGGRAGATE KEY` is used to sort data and is assigned a UNIQUE constraint.
+In the Aggregate table, the sort key specified by `AGGREGATE KEY` is used to sort data and is assigned a UNIQUE constraint.
 In the Unique Key table, the sort key specified by `UNIQUE KEY` is used to sort data and is assigned a UNIQUE constraint.
 In the Primary Key table, the primary key and sort key are decoupled. The primary key specified by `PRIMARY KEY` is assigned UNIQUE and NOT NULL constraints. The sort key specified by `ORDER BY` is used for sorting data.
 

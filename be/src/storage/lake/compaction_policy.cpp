@@ -26,20 +26,51 @@ namespace starrocks::lake {
 
 class BaseAndCumulativeCompactionPolicy : public CompactionPolicy {
 public:
-    explicit BaseAndCumulativeCompactionPolicy(TabletPtr tablet) : _tablet(std::move(tablet)) {}
+    explicit BaseAndCumulativeCompactionPolicy(TabletPtr tablet) : CompactionPolicy(tablet) {}
     ~BaseAndCumulativeCompactionPolicy() override = default;
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
-
-    StatusOr<CompactionAlgorithm> choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) override;
 
 private:
     StatusOr<std::vector<RowsetPtr>> pick_cumulative_rowsets();
     StatusOr<std::vector<RowsetPtr>> pick_base_rowsets();
     void debug_rowsets(CompactionType type, const std::vector<uint32_t>& input_rowset_ids);
 
-    TabletPtr _tablet;
     TabletMetadataPtr _tablet_metadata;
+};
+
+class SizeTieredCompactionPolicy : public CompactionPolicy {
+public:
+    explicit SizeTieredCompactionPolicy(TabletPtr tablet)
+            : CompactionPolicy(tablet),
+              _max_level_size(config::size_tiered_min_level_size *
+                              pow(config::size_tiered_level_multiple, config::size_tiered_level_num)) {}
+    ~SizeTieredCompactionPolicy() override = default;
+
+    StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
+
+private:
+    static double cal_compaction_score(int64_t segment_num, int64_t level_size, int64_t total_size,
+                                       int64_t max_level_size, KeysType keys_type, bool reached_max_version);
+
+    struct SizeTieredLevel {
+        SizeTieredLevel(std::vector<int> r, int64_t s, int64_t l, int64_t t, double sc)
+                : rowsets(std::move(r)), segment_num(s), level_size(l), total_size(t), score(sc) {}
+
+        std::vector<int> rowsets;
+        int64_t segment_num;
+        int64_t level_size;
+        int64_t total_size;
+        double score;
+    };
+
+    struct LevelReverseOrderComparator {
+        bool operator()(const SizeTieredLevel* left, const SizeTieredLevel* right) const {
+            return left->score > right->score || (left->score == right->score && left->rowsets[0] > right->rowsets[0]);
+        }
+    };
+
+    int64_t _max_level_size;
 };
 
 struct RowsetStat {
@@ -74,21 +105,14 @@ public:
 
 class PrimaryCompactionPolicy : public CompactionPolicy {
 public:
-    explicit PrimaryCompactionPolicy(TabletPtr tablet) : _tablet(std::move(tablet)) {}
+    explicit PrimaryCompactionPolicy(TabletPtr tablet) : CompactionPolicy(tablet) {}
     ~PrimaryCompactionPolicy() override = default;
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
 
-    StatusOr<CompactionAlgorithm> choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) override {
-        return HORIZONTAL_COMPACTION;
-    }
-
 private:
     static const size_t kCompactionResultBytesThreashold = 1000000000;
     static const size_t kCompactionResultRowsThreashold = 10000000;
-
-private:
-    TabletPtr _tablet;
 };
 
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(int64_t version) {
@@ -143,7 +167,7 @@ double cumulative_compaction_score(const TabletMetadataPB& metadata) {
         const auto& rowset = metadata.rowsets(i);
         segment_num_score += rowset.overlapped() ? rowset.segments_size() : 1;
     }
-    VLOG(2) << "tablet: " << metadata.id() << ", cumulative compaction score: " << segment_num_score;
+    VLOG(2) << "Tablet: " << metadata.id() << ", cumulative compaction score: " << segment_num_score;
     return segment_num_score;
 }
 
@@ -234,11 +258,11 @@ void BaseAndCumulativeCompactionPolicy::debug_rowsets(CompactionType type,
             delete_rowset_ids.emplace_back(rowset.id());
         }
     }
-    VLOG(verboselevel) << "pick compaction input rowsets. tablet: " << _tablet->id() << ", type: " << to_string(type)
+    VLOG(verboselevel) << "Pick compaction input rowsets. tablet: " << _tablet->id() << ", type: " << to_string(type)
                        << ", version: " << _tablet_metadata->version()
                        << ", cumulative point: " << _tablet_metadata->cumulative_point()
                        << ", input rowsets size: " << input_rowset_ids.size() << ", input rowsets: ["
-                       << JoinInts(input_rowset_ids, ",") + "]"
+                       << JoinInts(input_rowset_ids, ",") << "]"
                        << ", rowsets: [" << JoinInts(rowset_ids, ",") << "]"
                        << ", delete rowsets: [" << JoinInts(delete_rowset_ids, ",") + "]";
 }
@@ -255,8 +279,187 @@ StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_rowsets
     }
 }
 
-StatusOr<CompactionAlgorithm> BaseAndCumulativeCompactionPolicy::choose_compaction_algorithm(
-        const std::vector<RowsetPtr>& rowsets) {
+double SizeTieredCompactionPolicy::cal_compaction_score(int64_t segment_num, int64_t level_size, int64_t total_size,
+                                                        int64_t max_level_size, KeysType keys_type,
+                                                        bool reached_max_version) {
+    // base score is segment num
+    double score = segment_num;
+
+    // data bonus
+    double data_bonus = 0;
+    if (keys_type == KeysType::DUP_KEYS) {
+        // duplicate keys only has write amplification, so that we use more aggressive size-tiered strategy
+        data_bonus = ((double)(total_size - level_size) / level_size) * 2;
+    } else {
+        // agg/unique key also has read amplification, segment num occupies a greater weight
+        data_bonus = (segment_num - 1) * 2 + ((double)(total_size - level_size) / level_size);
+    }
+    // Normalized score, max data bonus limit to triple size_tiered_level_multiple
+    data_bonus = std::min((double)config::size_tiered_level_multiple * 3, data_bonus);
+    score += data_bonus;
+
+    // level bonus: The lower the level means the smaller the data volume of the compaction,
+    // the higher the execution priority
+    int64_t level_bonus = 0;
+    for (int64_t v = level_size; v < max_level_size && level_bonus <= 7; ++level_bonus) {
+        v = v * config::size_tiered_level_multiple;
+    }
+    score += level_bonus;
+
+    // version limit bonus: The version num of the tablet is about to exceed the limit,
+    // we let it perform compaction faster and reduce the version num
+    if (reached_max_version) {
+        score *= 2;
+    }
+
+    return score;
+}
+
+StatusOr<std::vector<RowsetPtr>> SizeTieredCompactionPolicy::pick_rowsets(int64_t version) {
+    ASSIGN_OR_RETURN(auto tablet_metadata, _tablet->get_metadata(version));
+    const auto& rowsets = tablet_metadata->rowsets();
+
+    std::vector<RowsetPtr> input_rowsets;
+    if (rowsets.empty() || (rowsets.size() == 1 && !rowsets[0].overlapped())) {
+        return input_rowsets;
+    }
+
+    // too many delete version will incur read overhead
+    size_t num_delete_rowsets = 0;
+    for (auto& rowset : rowsets) {
+        if (rowset.has_delete_predicate()) {
+            ++num_delete_rowsets;
+        }
+    }
+    bool force_base_compaction = (num_delete_rowsets >= config::tablet_max_versions / 10);
+
+    // check reach max version
+    bool reached_max_version = (rowsets.size() > config::tablet_max_versions / 10 * 9);
+
+    std::vector<std::unique_ptr<SizeTieredLevel>> order_levels;
+    std::set<SizeTieredLevel*, LevelReverseOrderComparator> priority_levels;
+    // rowset index
+    std::vector<int> transient_rowsets;
+    size_t segment_num = 0;
+    int64_t level_multiple = config::size_tiered_level_multiple;
+    auto keys_type = tablet_metadata->schema().keys_type();
+    auto min_compaction_segment_num =
+            std::max<int64_t>(2, std::min(config::min_cumulative_compaction_num_singleton_deltas, level_multiple));
+    int64_t level_size = -1;
+    int64_t total_size = 0;
+    for (int i = 0, size = rowsets.size(); i < size; ++i) {
+        const auto& rowset = rowsets[i];
+        int64_t rowset_size = rowset.data_size() > 0 ? rowset.data_size() : 1;
+        if (level_size == -1) {
+            level_size = rowset_size < _max_level_size ? rowset_size : _max_level_size;
+            total_size = 0;
+        }
+
+        if (rowset.has_delete_predicate()) {
+            // meet a delete version
+            // base compaction can handle delete condition
+            // 1. the first level that has some data rowsets
+            // 2. the first rowset is delete rowset
+            if ((!transient_rowsets.empty() && transient_rowsets[0] == 0) || i == 0) {
+                // do nothing
+            } else {
+                // while upper level segment num less min_compaction_segment_num, we can merge into one level
+                int64_t upper_level = order_levels.size() - 1;
+                while (upper_level >= 0) {
+                    if ((order_levels[upper_level]->segment_num < min_compaction_segment_num ||
+                         order_levels[upper_level]->rowsets.front() == 0) &&
+                        transient_rowsets.front() == order_levels[upper_level]->rowsets.back() + 1) {
+                        transient_rowsets.insert(transient_rowsets.begin(), order_levels[upper_level]->rowsets.begin(),
+                                                 order_levels[upper_level]->rowsets.end());
+                        level_size = std::max(order_levels[upper_level]->level_size, level_size);
+                        segment_num += order_levels[upper_level]->segment_num;
+                        total_size += order_levels[upper_level]->total_size;
+                        priority_levels.erase(order_levels[upper_level].get());
+                        upper_level--;
+                    } else {
+                        break;
+                    }
+                }
+                order_levels.resize(upper_level + 1);
+
+                // after merge, check if we match base compaction condition
+                if (!transient_rowsets.empty() && transient_rowsets[0] != 0) {
+                    auto level = std::make_unique<SizeTieredLevel>(
+                            transient_rowsets, segment_num, level_size, total_size,
+                            cal_compaction_score(segment_num, level_size, total_size, _max_level_size, keys_type,
+                                                 reached_max_version));
+                    priority_levels.emplace(level.get());
+                    order_levels.emplace_back(std::move(level));
+                }
+
+                if (transient_rowsets.empty() || transient_rowsets[0] != 0) {
+                    segment_num = 0;
+                    transient_rowsets.clear();
+                    level_size = -1;
+                    continue;
+                }
+            }
+        } else if ((!force_base_compaction || (!transient_rowsets.empty() && transient_rowsets[0] != 0)) &&
+                   level_size > config::size_tiered_min_level_size && rowset_size < level_size &&
+                   level_size / rowset_size > (level_multiple - 1)) {
+            if (!transient_rowsets.empty()) {
+                auto level = std::make_unique<SizeTieredLevel>(
+                        transient_rowsets, segment_num, level_size, total_size,
+                        cal_compaction_score(segment_num, level_size, total_size, _max_level_size, keys_type,
+                                             reached_max_version));
+                priority_levels.emplace(level.get());
+                order_levels.emplace_back(std::move(level));
+            }
+            segment_num = 0;
+            transient_rowsets.clear();
+            level_size = rowset_size < _max_level_size ? rowset_size : _max_level_size;
+            total_size = 0;
+        }
+
+        segment_num += rowset.overlapped() ? rowset.segments_size() : 1;
+        total_size += rowset_size;
+        transient_rowsets.emplace_back(i);
+    }
+
+    if (!transient_rowsets.empty()) {
+        auto level = std::make_unique<SizeTieredLevel>(
+                transient_rowsets, segment_num, level_size, total_size,
+                cal_compaction_score(segment_num, level_size, total_size, _max_level_size, keys_type,
+                                     reached_max_version));
+        priority_levels.emplace(level.get());
+        order_levels.emplace_back(std::move(level));
+    }
+
+    SizeTieredLevel* selected_level = nullptr;
+    std::vector<uint32_t> level_rowset_ids;
+    if (!priority_levels.empty()) {
+        // We need a minimum number of segments that trigger compaction to
+        // avoid triggering compaction too frequently compared to the old version
+        // But in the old version of compaction, the user may set a large min_cumulative_compaction_num_singleton_deltas
+        // to avoid TOO_MANY_VERSION errors, it is unnecessary in size tiered compaction
+        selected_level = *priority_levels.begin();
+        if (selected_level->segment_num >= min_compaction_segment_num) {
+            for (auto i : selected_level->rowsets) {
+                auto metadata_ptr = std::make_shared<RowsetMetadata>(rowsets[i]);
+                input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet.get(), std::move(metadata_ptr), i));
+                level_rowset_ids.emplace_back(rowsets[i].id());
+            }
+        }
+    }
+
+    // debug
+    const auto& level_rowsets = selected_level->rowsets;
+    auto type = !level_rowsets.empty() && level_rowsets[0] == 0 ? BASE_COMPACTION : CUMULATIVE_COMPACTION;
+    VLOG(3) << "Pick compaction input rowsets. tablet: " << _tablet->id() << ", type: " << to_string(type)
+            << ", level input rowsets: [" << JoinInts(level_rowset_ids, ",") << "]"
+            << ", level segment num: " << selected_level->segment_num << ", level size: " << selected_level->level_size
+            << ", level total size: " << selected_level->total_size << ", level score: " << selected_level->score
+            << ", force base compaction: " << force_base_compaction << ", reached max version: " << reached_max_version;
+
+    return input_rowsets;
+}
+
+StatusOr<CompactionAlgorithm> CompactionPolicy::choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) {
     // TODO: support row source mask buffer based on starlet fs
     // The current row source mask buffer is based on posix tmp file,
     // if there is no storage root path, use horizontal compaction.
@@ -279,6 +482,9 @@ StatusOr<CompactionPolicyPtr> CompactionPolicy::create_compaction_policy(TabletP
     ASSIGN_OR_RETURN(auto tablet_schema, tablet->get_schema());
     if (tablet_schema->keys_type() == PRIMARY_KEYS) {
         return std::make_shared<PrimaryCompactionPolicy>(std::move(tablet));
+    }
+    if (config::enable_size_tiered_compaction_strategy) {
+        return std::make_shared<SizeTieredCompactionPolicy>(std::move(tablet));
     }
     return std::make_shared<BaseAndCumulativeCompactionPolicy>(std::move(tablet));
 }

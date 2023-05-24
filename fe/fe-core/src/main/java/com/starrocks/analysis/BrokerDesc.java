@@ -18,6 +18,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
@@ -38,7 +39,9 @@ import java.util.Map;
 //   "password" = "password0"
 // )
 public class BrokerDesc implements ParseNode, Writable {
+    @SerializedName("name")
     private String name;
+    @SerializedName("properties")
     private Map<String, String> properties;
     private boolean hasBroker;
 
@@ -124,7 +127,7 @@ public class BrokerDesc implements ParseNode, Writable {
 
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("WITH BROKER ").append(name);
+        sb.append(" WITH BROKER ").append(name);
         if (properties != null && !properties.isEmpty()) {
             PrintableMap<String, String> printableMap = new PrintableMap<>(properties, " = ", true, false, true);
             sb.append(" (").append(printableMap.toString()).append(")");

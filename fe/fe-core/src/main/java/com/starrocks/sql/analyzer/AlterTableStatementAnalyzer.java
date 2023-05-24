@@ -123,11 +123,7 @@ public class AlterTableStatementAnalyzer {
             if (Strings.isNullOrEmpty(newTableName)) {
                 throw new SemanticException("New Table name is not set");
             }
-            try {
-                FeNameFormat.checkTableName(newTableName);
-            } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, newTableName);
-            }
+            FeNameFormat.checkTableName(newTableName);
             return null;
         }
 
@@ -296,6 +292,10 @@ public class AlterTableStatementAnalyzer {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), columnDef.getPos());
             }
 
+            if (columnDef.getType().isTime()) {
+                throw new SemanticException("Unsupported data type: TIME");
+            }
+
             if (columnDef.isMaterializedColumn()) {
                 if (!table.isOlapTable()) {
                     throw new SemanticException("Materialized Column only support olap table");
@@ -443,6 +443,10 @@ public class AlterTableStatementAnalyzer {
                 columnDef.analyze(true);
             } catch (AnalysisException e) {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), columnDef.getPos());
+            }
+
+            if (columnDef.getType().isTime()) {
+                throw new SemanticException("Unsupported data type: TIME");
             }
 
             if (columnDef.isMaterializedColumn()) {

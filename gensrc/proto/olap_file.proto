@@ -281,6 +281,7 @@ message TabletMetaPB {
     optional bool enable_persistent_index = 51 [default = false]; // used for persistent index in primary index
     optional BinlogConfigPB binlog_config = 52;
     optional BinlogLsnPB binlog_min_lsn = 53;
+    optional bool enable_shortcut_compaction = 60 [default = true];
 }
 
 message OLAPIndexHeaderMessage {

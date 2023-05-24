@@ -41,12 +41,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.analyzer.AnalyzeState;
-import com.starrocks.sql.analyzer.ExpressionAnalyzer;
-import com.starrocks.sql.analyzer.Field;
-import com.starrocks.sql.analyzer.RelationFields;
-import com.starrocks.sql.analyzer.RelationId;
-import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -133,11 +127,7 @@ public class CreateTableAnalyzer {
         MetaUtils.normalizationTableName(context, tableNameObject);
 
         final String tableName = tableNameObject.getTbl();
-        try {
-            FeNameFormat.checkTableName(tableName);
-        } catch (AnalysisException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
-        }
+        FeNameFormat.checkTableName(tableName);
 
         final String catalogName = tableNameObject.getCatalog();
         try {

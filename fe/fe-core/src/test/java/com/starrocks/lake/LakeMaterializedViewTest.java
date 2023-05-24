@@ -84,6 +84,13 @@ public class LakeMaterializedViewTest {
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB).useDatabase(DB);
 
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
+                return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+            }
+        };
+
         starRocksAssert.withTable("CREATE TABLE base_table\n" +
                 "(\n" +
                 "    k1 date,\n" +
@@ -365,7 +372,7 @@ public class LakeMaterializedViewTest {
             String alterSql = "alter table base_table4 modify column k5 varchar(10)";
             AlterTableStmt
                     alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
-            GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
 
             waitForSchemaChangeAlterJobFinish();
 

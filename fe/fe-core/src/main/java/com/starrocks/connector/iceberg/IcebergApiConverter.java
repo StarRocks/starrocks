@@ -26,7 +26,6 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
-import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergSchema;
@@ -48,14 +47,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
-import static org.apache.iceberg.hive.IcebergHiveCatalog.LOCATION_PROPERTY;
 
 public class IcebergApiConverter {
     private static final Logger LOG = LogManager.getLogger(IcebergApiConverter.class);
@@ -63,8 +60,7 @@ public class IcebergApiConverter {
     private static final int FAKE_FIELD_ID = -1;
 
     public static IcebergTable toIcebergTable(Table nativeTbl, String catalogName, String remoteDbName,
-                                              String remoteTableName, String nativeCatalogType,
-                                              Optional<IcebergMetricsReporter> metricsReporter) {
+                                              String remoteTableName, String nativeCatalogType) {
         IcebergTable.Builder tableBuilder = IcebergTable.builder()
                 .setId(CONNECTOR_ID_GENERATOR.getNextId().asInt())
                 .setSrTableName(remoteTableName)
@@ -74,8 +70,7 @@ public class IcebergApiConverter {
                 .setRemoteTableName(remoteTableName)
                 .setNativeTable(nativeTbl)
                 .setFullSchema(toFullSchemas(nativeTbl))
-                .setIcebergProperties(toIcebergProps(nativeCatalogType))
-                .setMetricsReporter(metricsReporter);
+                .setIcebergProperties(toIcebergProps(nativeCatalogType));
 
         return tableBuilder.build();
     }
@@ -103,10 +98,6 @@ public class IcebergApiConverter {
             builder.identity(field);
         }
         return builder.build();
-    }
-
-    public static Optional<String> getTableLocation(Map<String, String> tableProperties) {
-        return Optional.ofNullable(tableProperties.get(LOCATION_PROPERTY));
     }
 
     public static org.apache.iceberg.types.Type toIcebergColumnType(Type type) {
@@ -187,6 +178,7 @@ public class IcebergApiConverter {
                 srType = Type.UNKNOWN_TYPE;
             }
             Column column = new Column(field.name(), srType, true);
+            column.setComment(field.doc());
             fullSchema.add(column);
         }
         return fullSchema;

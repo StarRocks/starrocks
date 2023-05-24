@@ -60,6 +60,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 
 public class DropPartitionTest {
     private static ConnectContext connectContext;
@@ -105,11 +106,11 @@ public class DropPartitionTest {
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, pathInfo, (FileCacheInfo) any, anyLong);
+                agent.createShards(anyInt, pathInfo, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
                 returns(Lists.newArrayList(10001L, 10002L, 10003L),
                         Lists.newArrayList(10004L, 10005L, 10006L),
                         Lists.newArrayList(10007L, 10008L, 10009L));
-                agent.getPrimaryComputeNodeIdByShard(anyLong);
+                agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
         };

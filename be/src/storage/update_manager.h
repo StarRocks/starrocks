@@ -106,6 +106,9 @@ public:
 
     void clear_cached_delta_column_group(const std::vector<TabletSegmentId>& tsids);
 
+    StatusOr<size_t> clear_delta_column_group_before_version(KVStore* meta, int64_t tablet_id,
+                                                             int64_t min_readable_version);
+
     void expire_cache();
 
     void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
@@ -149,7 +152,7 @@ private:
 
     // Delta Column Group cache, dcg is short for `Delta Column Group`
     std::mutex _delta_column_group_cache_lock;
-    std::unordered_map<TabletSegmentId, DeltaColumnGroupList> _delta_column_group_cache;
+    std::map<TabletSegmentId, DeltaColumnGroupList> _delta_column_group_cache;
     std::unique_ptr<MemTracker> _delta_column_group_cache_mem_tracker;
 
     std::unique_ptr<ThreadPool> _apply_thread_pool;
