@@ -896,6 +896,9 @@ build_broker_thirdparty_jars() {
     mkdir -p $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
     cp -r $TP_SOURCE_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/* $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
     rm $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/hadoop-aliyun-2.7.2.jar
+    # cloudfs-hadoop-with-dependencies will include aws jars, but we already support aws by official sdk, so we don't need it anymore.
+    # And it will conflict with Iceberg's S3FileIO, make access S3 files failed.
+    rm $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/cloudfs-hadoop-with-dependencies-1.1.21.jar
 }
 
 build_aws_cpp_sdk() {
