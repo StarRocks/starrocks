@@ -46,7 +46,6 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.LeaderOpExecutor;
 import com.starrocks.qe.OriginStatement;
@@ -76,11 +75,7 @@ public class ShowProcAction extends RestBaseAction {
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         // check authority
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            checkUserOwnsAdminRole(currentUser);
-        } else {
-            checkGlobalAuth(currentUser, PrivPredicate.ADMIN);
-        }
+        checkUserOwnsAdminRole(currentUser);
 
         String path = request.getSingleParameter("path");
         String forward = request.getSingleParameter("forward");

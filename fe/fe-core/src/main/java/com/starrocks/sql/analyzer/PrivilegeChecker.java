@@ -195,8 +195,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class PrivilegeCheckerV2 {
-    private PrivilegeCheckerV2() {
+public class PrivilegeChecker {
+    private PrivilegeChecker() {
     }
 
     public static void check(StatementBase statement, ConnectContext context) {
@@ -410,7 +410,7 @@ public class PrivilegeCheckerV2 {
                 // If the db or table doesn't exist anymore, we won't check privilege on it
             }
         } else if (analyzeJob != null) {
-            Set<TableName> tableNames = PrivilegeCheckerV2.getAllTableNamesForAnalyzeJobStmt(analyzeJob.getDbId(),
+            Set<TableName> tableNames = PrivilegeChecker.getAllTableNamesForAnalyzeJobStmt(analyzeJob.getDbId(),
                     analyzeJob.getTableId());
             tableNames.forEach(tableName -> {
                 checkTblPrivilegeForKillAnalyzeStmt(context, tableName.getCatalog(), tableName.getDb(),

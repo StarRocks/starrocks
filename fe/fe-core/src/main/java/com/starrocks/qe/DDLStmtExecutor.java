@@ -418,11 +418,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateUserStatement(CreateUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthenticationManager().createUser(stmt);
-                } else {
-                    context.getGlobalStateMgr().getAuth().createUser(stmt);
-                }
+                context.getGlobalStateMgr().getAuthenticationManager().createUser(stmt);
             });
             return null;
         }
@@ -430,12 +426,8 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthenticationManager()
-                            .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo());
-                } else {
-                    context.getGlobalStateMgr().getAuth().alterUser(stmt);
-                }
+                context.getGlobalStateMgr().getAuthenticationManager()
+                        .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo());
             });
             return null;
         }
@@ -443,11 +435,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropUserStatement(DropUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthenticationManager().dropUser(stmt);
-                } else {
-                    context.getGlobalStateMgr().getAuth().dropUser(stmt);
-                }
+                context.getGlobalStateMgr().getAuthenticationManager().dropUser(stmt);
             });
             return null;
         }
@@ -455,18 +443,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    if (stmt instanceof GrantRoleStmt) {
-                        context.getGlobalStateMgr().getAuthorizationManager().grantRole((GrantRoleStmt) stmt);
-                    } else {
-                        context.getGlobalStateMgr().getAuthorizationManager().revokeRole((RevokeRoleStmt) stmt);
-                    }
+
+                if (stmt instanceof GrantRoleStmt) {
+                    context.getGlobalStateMgr().getAuthorizationManager().grantRole((GrantRoleStmt) stmt);
                 } else {
-                    if (stmt instanceof GrantRoleStmt) {
-                        context.getGlobalStateMgr().getAuth().grantRole((GrantRoleStmt) stmt);
-                    } else {
-                        context.getGlobalStateMgr().getAuth().revokeRole((RevokeRoleStmt) stmt);
-                    }
+                    context.getGlobalStateMgr().getAuthorizationManager().revokeRole((RevokeRoleStmt) stmt);
                 }
             });
             return null;
@@ -477,17 +458,11 @@ public class DDLStmtExecutor {
                                                                 ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (stmt instanceof GrantPrivilegeStmt) {
-                    if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                        context.getGlobalStateMgr().getAuthorizationManager().grant((GrantPrivilegeStmt) stmt);
-                    } else {
-                        context.getGlobalStateMgr().getAuth().grant((GrantPrivilegeStmt) stmt);
-                    }
+
+                    context.getGlobalStateMgr().getAuthorizationManager().grant((GrantPrivilegeStmt) stmt);
+
                 } else {
-                    if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                        context.getGlobalStateMgr().getAuthorizationManager().revoke((RevokePrivilegeStmt) stmt);
-                    } else {
-                        context.getGlobalStateMgr().getAuth().revoke((RevokePrivilegeStmt) stmt);
-                    }
+                    context.getGlobalStateMgr().getAuthorizationManager().revoke((RevokePrivilegeStmt) stmt);
                 }
             });
             return null;
@@ -496,11 +471,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthorizationManager().createRole(stmt);
-                } else {
-                    context.getGlobalStateMgr().getAuth().createRole(stmt);
-                }
+                context.getGlobalStateMgr().getAuthorizationManager().createRole(stmt);
             });
             return null;
         }
@@ -508,11 +479,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropRoleStatement(DropRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthorizationManager().dropRole(stmt);
-                } else {
-                    context.getGlobalStateMgr().getAuth().dropRole(stmt);
-                }
+                context.getGlobalStateMgr().getAuthorizationManager().dropRole(stmt);
             });
             return null;
         }
@@ -520,12 +487,9 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitSetUserPropertyStatement(SetUserPropertyStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthenticationManager().updateUserProperty(stmt.getUser(),
-                            stmt.getPropertyPairList());
-                } else {
-                    context.getGlobalStateMgr().getAuth().updateUserProperty(stmt);
-                }
+                context.getGlobalStateMgr().getAuthenticationManager().updateUserProperty(stmt.getUser(),
+                        stmt.getPropertyPairList());
+
             });
             return null;
         }

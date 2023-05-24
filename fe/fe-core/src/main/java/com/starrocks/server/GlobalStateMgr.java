@@ -178,7 +178,6 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
@@ -3438,7 +3437,7 @@ public class GlobalStateMgr {
         if (!catalogMgr.catalogExists(newCatalogName)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
-        if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
+        if (!CatalogMgr.isInternalCatalog(newCatalogName) &&
                 !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
         }
@@ -3465,7 +3464,7 @@ public class GlobalStateMgr {
             if (!catalogMgr.catalogExists(newCatalogName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
             }
-            if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
+            if (!CatalogMgr.isInternalCatalog(newCatalogName) &&
                     !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
             }
@@ -3480,16 +3479,9 @@ public class GlobalStateMgr {
 
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeCheckerV2.
-        if (isUsingNewPrivilege()) {
-            if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, ctx.getCurrentCatalog(), dbName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                        ctx.getQualifiedUser(), dbName);
-            }
-        } else {
-            if (!auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                        ctx.getQualifiedUser(), dbName);
-            }
+        if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, ctx.getCurrentCatalog(), dbName)) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                    ctx.getQualifiedUser(), dbName);
         }
 
         ctx.setDatabase(dbName);

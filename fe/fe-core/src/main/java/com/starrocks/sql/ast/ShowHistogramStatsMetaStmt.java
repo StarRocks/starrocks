@@ -69,8 +69,7 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
             throw new MetaNotFoundException("No found table: " + tableId);
         }
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
-        if (context.getGlobalStateMgr().isUsingNewPrivilege() &&
-                !PrivilegeActions.checkAnyActionOnTable(context, db.getOriginName(), table.getName())) {
+        if (!PrivilegeActions.checkAnyActionOnTable(context, db.getOriginName(), table.getName())) {
             return null;
         }
         row.set(1, table.getName());
