@@ -79,6 +79,14 @@ public:
     virtual Status next_batch(size_t count, uint8_t* dst) {
         return Status::NotSupported("next_batch is not supported");
     }
+
+protected:
+    inline Status check_dict_index_in_bounds(size_t index, size_t dict_size) {
+        if (LIKELY(0 <= index && index < dict_size)) {
+            return Status::OK();
+        }
+        return Status::InternalError("Index not in dictionary bounds");
+    }
 };
 
 class EncodingInfo {
