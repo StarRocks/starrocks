@@ -225,8 +225,9 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
         }
         probe_partition->num_rows += size;
     };
-    RETURN_IF_ERROR(_probe_spiller->partitioned_spill(state, chunk, hash_column.get(), partition_processer, executor,
-                                                      spill::MemTrackerGuard(tls_mem_tracker)));
+    RETURN_IF_ERROR(_probe_spiller->partitioned_spill(
+            state, chunk, hash_column.get(), partition_processer, executor,
+            spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
 
     return Status::OK();
 }
