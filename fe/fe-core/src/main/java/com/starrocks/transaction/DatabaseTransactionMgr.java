@@ -1619,7 +1619,7 @@ public class DatabaseTransactionMgr {
     }
 
     public void unprotectWriteAllTransactionStates(DataOutput out) throws IOException {
-        for (TransactionState transactionState: idToRunningTransactionState.values()) {
+        for (TransactionState transactionState : idToRunningTransactionState.values()) {
             transactionState.write(out);
         }
 
@@ -1630,7 +1630,7 @@ public class DatabaseTransactionMgr {
 
     public void unprotectWriteAllTransactionStatesV2(SRMetaBlockWriter writer)
             throws IOException, SRMetaBlockException {
-        for (TransactionState transactionState: idToRunningTransactionState.values()) {
+        for (TransactionState transactionState : idToRunningTransactionState.values()) {
             writer.writeJson(transactionState);
         }
 

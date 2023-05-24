@@ -791,7 +791,7 @@ public class GlobalTransactionMgr implements Writable {
                 DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionState.getDbId());
                 dbTransactionMgr.unprotectUpsertTransactionState(transactionState, true);
             } catch (AnalysisException e) {
-                LOG.warn("failed to get db transaction manager for {}", transactionState);
+                LOG.warn("failed to get db transaction manager for {}", transactionState, e);
                 throw new IOException("failed to get db transaction manager for txn " + transactionState.getTransactionId(), e);
             }
         }
