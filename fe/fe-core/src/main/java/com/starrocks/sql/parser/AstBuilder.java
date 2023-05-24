@@ -5353,6 +5353,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new IsNullPredicate(params.get(0), false, pos);
         }
 
+        if (functionName.equals(FunctionSet.ISNOTNULL)) {
+            List<Expr> params = visit(context.expression(), Expr.class);
+            if (params.size() != 1) {
+                throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
+            }
+            return new IsNullPredicate(params.get(0), true, pos);
+        }
+
         if (ArithmeticExpr.isArithmeticExpr(fnName.getFunction())) {
             if (context.expression().size() < 1) {
                 throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
