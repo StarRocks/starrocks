@@ -36,9 +36,7 @@ package com.starrocks.http;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
@@ -290,13 +288,6 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-    protected void checkGlobalAuth(UserIdentity currentUser, PrivPredicate predicate) throws UnauthorizedException {
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(currentUser, predicate)) {
-            throw new UnauthorizedException("Access denied; you need (at least one of) the "
-                    + predicate.getPrivs().toString() + " privilege(s) for this operation");
-        }
-    }
-
     // For new RBAC privilege framework
     protected void checkActionOnSystem(UserIdentity currentUser, PrivilegeType... systemActions)
             throws UnauthorizedException {
@@ -329,22 +320,6 @@ public abstract class BaseAction implements IAction {
         }
     }
 
-    protected void checkDbAuth(UserIdentity currentUser, String db, PrivPredicate predicate)
-            throws UnauthorizedException {
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(currentUser, db, predicate)) {
-            throw new UnauthorizedException("Access denied; you need (at least one of) the "
-                    + predicate.getPrivs().toString() + " privilege(s) for this operation");
-        }
-    }
-
-    protected void checkTblAuth(UserIdentity currentUser, String db, String tbl, PrivPredicate predicate)
-            throws UnauthorizedException {
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, db, tbl, predicate)) {
-            throw new UnauthorizedException("Access denied; you need (at least one of) the "
-                    + predicate.getPrivs().toString() + " privilege(s) for this operation");
-        }
-    }
-
     protected void checkTableAction(ConnectContext context, String db, String tbl,
                                     PrivilegeType action) throws UnauthorizedException {
         if (!PrivilegeActions.checkTableAction(context, db, tbl, action)) {
@@ -357,24 +332,14 @@ public abstract class BaseAction implements IAction {
     public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo)
             throws UnauthorizedException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        if (globalStateMgr.isUsingNewPrivilege()) {
-            UserIdentity currentUser =
-                    globalStateMgr.getAuthenticationManager().checkPlainPassword(
-                            authInfo.fullUserName, authInfo.remoteIp, authInfo.password);
-            if (currentUser == null) {
-                throw new UnauthorizedException("Access denied for "
-                        + authInfo.fullUserName + "@" + authInfo.remoteIp);
-            }
-            return currentUser;
-        }
-        List<UserIdentity> currentUser = Lists.newArrayList();
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkPlainPassword(authInfo.fullUserName,
-                authInfo.remoteIp, authInfo.password, currentUser)) {
+        UserIdentity currentUser =
+                globalStateMgr.getAuthenticationManager().checkPlainPassword(
+                        authInfo.fullUserName, authInfo.remoteIp, authInfo.password);
+        if (currentUser == null) {
             throw new UnauthorizedException("Access denied for "
                     + authInfo.fullUserName + "@" + authInfo.remoteIp);
         }
-        Preconditions.checkState(currentUser.size() == 1);
-        return currentUser.get(0);
+        return currentUser;
     }
 
     public ActionAuthorizationInfo getAuthorizationInfo(BaseRequest request)

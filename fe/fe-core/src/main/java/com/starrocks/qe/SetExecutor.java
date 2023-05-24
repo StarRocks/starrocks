@@ -89,19 +89,15 @@ public class SetExecutor {
         } else if (var instanceof SetPassVar) {
             // Set password
             SetPassVar setPassVar = (SetPassVar) var;
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                UserAuthenticationInfo userAuthenticationInfo = GlobalStateMgr.getCurrentState()
-                        .getAuthenticationManager()
-                        .getUserAuthenticationInfoByUserIdentity(setPassVar.getUserIdent());
-                if (null == userAuthenticationInfo) {
-                    throw new DdlException("authentication info for user " + setPassVar.getUserIdent() + " not found");
-                }
-                userAuthenticationInfo.setPassword(setPassVar.getPassword());
-                GlobalStateMgr.getCurrentState().getAuthenticationManager()
-                        .alterUser(setPassVar.getUserIdent(), userAuthenticationInfo);
-            } else {
-                ctx.getGlobalStateMgr().getAuth().setPassword(setPassVar);
+            UserAuthenticationInfo userAuthenticationInfo = GlobalStateMgr.getCurrentState()
+                    .getAuthenticationManager()
+                    .getUserAuthenticationInfoByUserIdentity(setPassVar.getUserIdent());
+            if (null == userAuthenticationInfo) {
+                throw new DdlException("authentication info for user " + setPassVar.getUserIdent() + " not found");
             }
+            userAuthenticationInfo.setPassword(setPassVar.getPassword());
+            GlobalStateMgr.getCurrentState().getAuthenticationManager()
+                    .alterUser(setPassVar.getUserIdent(), userAuthenticationInfo);
         }
     }
 

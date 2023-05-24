@@ -17,11 +17,9 @@ package com.starrocks.load.streamload;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.FunctionalExprProvider;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -34,7 +32,7 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
 
     private static final Logger LOG = LogManager.getLogger(StreamLoadFunctionalExprProvider.class);
 
-    
+
     private static final ColumnValueSupplier<StreamLoadTask> TASK_NAME_SUPPLIER =
             new ColumnValueSupplier<StreamLoadTask>() {
                 @Override
@@ -53,7 +51,7 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
                     return task.getLabel();
                 }
             };
-    private static final ColumnValueSupplier<StreamLoadTask> TASK_ID_SUPPLIER = 
+    private static final ColumnValueSupplier<StreamLoadTask> TASK_ID_SUPPLIER =
             new ColumnValueSupplier<StreamLoadTask>() {
                 @Override
                 public String getColumnName() {
@@ -125,7 +123,7 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
                     return task.getTableName();
                 }
             };
-    private static final ColumnValueSupplier<StreamLoadTask> TASK_STATE_SUPPLIER = 
+    private static final ColumnValueSupplier<StreamLoadTask> TASK_STATE_SUPPLIER =
             new ColumnValueSupplier<StreamLoadTask>() {
                 @Override
                 public String getColumnName() {
@@ -143,6 +141,7 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
                     return task.getStateName();
                 }
             };
+
     @Override
     protected ImmutableList<ColumnValueSupplier<StreamLoadTask>> delegateWhereSuppliers() {
         // return a group of ColumnValueSuppliers which are abled to be filtered and ordered.
@@ -159,15 +158,10 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
     @Override
     protected boolean delegatePostRowFilter(ConnectContext cxt, StreamLoadTask task) {
         // validate table privilege at the end of a predicateChain in the `stream().filter()`
-        if (cxt.getGlobalStateMgr().isUsingNewPrivilege()) {
-            return PrivilegeActions.checkTableAction(
-                    cxt,
-                    task.getDBName(),
-                    task.getTableName(),
-                    PrivilegeType.INSERT);
-        } else {
-            return GlobalStateMgr.getCurrentState().getAuth()
-                    .checkTblPriv(cxt, task.getDBName(), task.getTableName(), PrivPredicate.LOAD);
-        }
+        return PrivilegeActions.checkTableAction(
+                cxt,
+                task.getDBName(),
+                task.getTableName(),
+                PrivilegeType.INSERT);
     }
 }

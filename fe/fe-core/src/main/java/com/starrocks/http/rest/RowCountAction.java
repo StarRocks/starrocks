@@ -49,7 +49,6 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -74,11 +73,7 @@ public class RowCountAction extends RestBaseAction {
     @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            checkUserOwnsAdminRole(currentUser);
-        } else {
-            checkGlobalAuth(currentUser, PrivPredicate.ADMIN);
-        }
+        checkUserOwnsAdminRole(currentUser);
 
         String dbName = request.getSingleParameter(DB_KEY);
         if (Strings.isNullOrEmpty(dbName)) {

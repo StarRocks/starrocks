@@ -276,7 +276,7 @@ public class PrivilegeCheckerV2Test {
         // 1. before grant: access denied
         ctxToTestUser();
         try {
-            PrivilegeCheckerV2.check(statement, ctx);
+            PrivilegeChecker.check(statement, ctx);
             Assert.fail();
         } catch (SemanticException e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
@@ -287,14 +287,14 @@ public class PrivilegeCheckerV2Test {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
 
         ctxToTestUser();
-        PrivilegeCheckerV2.check(statement, ctx);
+        PrivilegeChecker.check(statement, ctx);
 
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx), ctx);
 
         ctxToTestUser();
         try {
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
         } catch (SemanticException e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
@@ -310,7 +310,7 @@ public class PrivilegeCheckerV2Test {
         // 1. before grant: access denied
         ctxToTestUser();
         try {
-            PrivilegeCheckerV2.check(statement, ctx);
+            PrivilegeChecker.check(statement, ctx);
             Assert.fail();
         } catch (SemanticException e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
@@ -329,7 +329,7 @@ public class PrivilegeCheckerV2Test {
 
         // 3. check privileges after grant
         ctxToTestUser();
-        PrivilegeCheckerV2.check(statement, ctx);
+        PrivilegeChecker.check(statement, ctx);
 
         // 4. revoke privileges
         ctxToRoot();
@@ -344,7 +344,7 @@ public class PrivilegeCheckerV2Test {
         // 5. check privileges after revoke
         ctxToTestUser();
         try {
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
         } catch (SemanticException e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
@@ -357,12 +357,12 @@ public class PrivilegeCheckerV2Test {
         ConnectContext ctx = starRocksAssert.getCtx();
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         // user 'root' has GRANT/NODE privilege
-        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statement, starRocksAssert.getCtx());
 
         try {
             ctxToTestUser();
             // user 'test' not has GRANT/NODE privilege
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
         } catch (SemanticException e) {
             System.out.println(e.getMessage());
@@ -376,7 +376,7 @@ public class PrivilegeCheckerV2Test {
         // check resoure privilege
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         try {
-            PrivilegeCheckerV2.check(statement, ctx);
+            PrivilegeChecker.check(statement, ctx);
             Assert.fail();
         } catch (SemanticException e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
@@ -404,10 +404,10 @@ public class PrivilegeCheckerV2Test {
 
         // Anyone can use default_catalog, but can't use other external catalog without any action on it
         ctxToTestUser();
-        PrivilegeCheckerV2.check(
+        PrivilegeChecker.check(
                 UtFrameUtils.parseStmtWithNewParser("use 'catalog default_catalog'", ctx), ctx);
         try {
-            PrivilegeCheckerV2.check(
+            PrivilegeChecker.check(
                     UtFrameUtils.parseStmtWithNewParser("use 'catalog test_ex_catalog'", ctx), ctx);
         } catch (SemanticException e) {
             Assert.assertTrue(e.getMessage().contains(
@@ -470,7 +470,7 @@ public class PrivilegeCheckerV2Test {
 
         // test no authorization on show resource groups
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser("show resource groups", ctx);
-        PrivilegeCheckerV2.check(statement, ctx);
+        PrivilegeChecker.check(statement, ctx);
 
         // test drop resource group
         verifyGrantRevoke(
@@ -609,13 +609,13 @@ public class PrivilegeCheckerV2Test {
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db3.tbl1 to test");
         try {
-            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+            PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         } catch (SemanticException e) {
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on default_catalog.db2.tbl1"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db2.tbl1 to test");
-        PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl2 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db2.tbl1 from test");
@@ -635,12 +635,12 @@ public class PrivilegeCheckerV2Test {
         analyzeManager.addAnalyzeJob(analyzeJob);
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
         try {
-            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+            PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         } catch (SemanticException e) {
             Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on default_catalog.db1.tbl2"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
-        PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl2 from test");
 
@@ -657,12 +657,12 @@ public class PrivilegeCheckerV2Test {
         analyzeJob.setId(4);
         analyzeManager.addAnalyzeJob(analyzeJob);
         try {
-            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+            PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         } catch (SemanticException e) {
             Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on default_catalog.db1.tbl1"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
-        PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
 
         Database db2 = globalStateMgr.getDb("db2");
@@ -705,11 +705,11 @@ public class PrivilegeCheckerV2Test {
 
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
         analyzeManager.addAnalyzeStatus(analyzeStatus);
-        PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
+        PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
 
         try {
-            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
+            PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
         } catch (SemanticException e) {
             Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action"));
         }
@@ -824,7 +824,7 @@ public class PrivilegeCheckerV2Test {
                 "create table db1.ctas_t2 as select k1,k2 from db1.tbl1", ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant select on TABLE db1.tbl1 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
-        PrivilegeCheckerV2.check(createTableAsSelectStmt.getInsertStmt(), ctx);
+        PrivilegeChecker.check(createTableAsSelectStmt.getInsertStmt(), ctx);
 
         // check create table like: create table on db and SELECT on existed table
         String createTableLikeSql = "create table db1.like_tbl like db1.tbl1;";
@@ -944,7 +944,7 @@ public class PrivilegeCheckerV2Test {
                 "drop table if exists db1.tbl_not_exist1", ctx);
         ctxToRoot();
         DDLStmtExecutor.execute(statement, ctx);
-        PrivilegeCheckerV2.check(statement, ctx);
+        PrivilegeChecker.check(statement, ctx);
     }
 
     @Test
@@ -1273,24 +1273,24 @@ public class PrivilegeCheckerV2Test {
         sql = "show grants for test2";
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
         ctxToTestUser();
-        PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser("show grants", ctx), ctx);
+        PrivilegeChecker.check(UtFrameUtils.parseStmtWithNewParser("show grants", ctx), ctx);
 
         sql = "show authentication for test2";
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
         sql = "show all authentication";
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
         ctxToTestUser();
-        PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser("show authentication", ctx), ctx);
+        PrivilegeChecker.check(UtFrameUtils.parseStmtWithNewParser("show authentication", ctx), ctx);
 
         sql = "SHOW PROPERTY FOR 'test2'";
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
         ctxToTestUser();
-        PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser("show property", ctx), ctx);
+        PrivilegeChecker.check(UtFrameUtils.parseStmtWithNewParser("show property", ctx), ctx);
 
         sql = "set property for 'test2' 'max_user_connections' = '100'";
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
         ctxToTestUser();
-        PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+        PrivilegeChecker.check(UtFrameUtils.parseStmtWithNewParser(
                 "set property 'max_user_connections' = '100'", ctx), ctx);
     }
 
@@ -1448,7 +1448,7 @@ public class PrivilegeCheckerV2Test {
                 "drop database if exists db_not_exist1", ctx);
         ctxToRoot();
         DDLStmtExecutor.execute(statement, ctx);
-        PrivilegeCheckerV2.check(statement, ctx);
+        PrivilegeChecker.check(statement, ctx);
     }
 
     @Test
@@ -1509,7 +1509,7 @@ public class PrivilegeCheckerV2Test {
         ctxToTestUser();
         ConnectContext ctx = starRocksAssert.getCtx();
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser("SHOW TRANSACTION FROM db WHERE ID=4005;", ctx);
-        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statement, starRocksAssert.getCtx());
     }
 
     @Test
@@ -1683,11 +1683,11 @@ public class PrivilegeCheckerV2Test {
         // user 'test' not has GRANT/NODE privilege
         sql = "set password = PASSWORD('123456')";
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statement, starRocksAssert.getCtx());
 
         sql = "set password for test = PASSWORD('123456')";
         statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statement, starRocksAssert.getCtx());
     }
 
     @Test
@@ -1715,7 +1715,7 @@ public class PrivilegeCheckerV2Test {
         ConnectContext ctx = starRocksAssert.getCtx();
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(alterSql, starRocksAssert.getCtx());
         try {
-            PrivilegeCheckerV2.check(statement, ctx);
+            PrivilegeChecker.check(statement, ctx);
             Assert.fail();
         } catch (SemanticException e) {
             System.out.println(e.getMessage() + ", sql: " + alterSql);
@@ -1755,12 +1755,12 @@ public class PrivilegeCheckerV2Test {
         // SHOW ROUTINE LOAD stmt;
         String showRoutineLoadSql = "SHOW ROUTINE LOAD FOR db1.job_name1;";
         statement = UtFrameUtils.parseStmtWithNewParser(showRoutineLoadSql, starRocksAssert.getCtx());
-        PrivilegeCheckerV2.check(statement, ctx);
+        PrivilegeChecker.check(statement, ctx);
 
         // SHOW ROUTINE LOAD TASK FROM DB
         String showRoutineLoadTaskSql = "SHOW ROUTINE LOAD TASK FROM db1 WHERE JobName = 'job_name1';";
         statement = UtFrameUtils.parseStmtWithNewParser(showRoutineLoadTaskSql, starRocksAssert.getCtx());
-        PrivilegeCheckerV2.check(statement, ctx);
+        PrivilegeChecker.check(statement, ctx);
     }
 
     @Test
@@ -1845,7 +1845,7 @@ public class PrivilegeCheckerV2Test {
         ctxToTestUser();
         ConnectContext ctx = starRocksAssert.getCtx();
         try {
-            PrivilegeCheckerV2.check(statement, ctx);
+            PrivilegeChecker.check(statement, ctx);
             Assert.fail();
         } catch (SemanticException e) {
             System.out.println(e.getMessage() + ", sql: " + createSql);
@@ -1892,7 +1892,7 @@ public class PrivilegeCheckerV2Test {
         // SHOW LOAD STMT
         String showLoadSql = "SHOW LOAD FROM db1";
         statement = UtFrameUtils.parseStmtWithNewParser(showLoadSql, starRocksAssert.getCtx());
-        PrivilegeCheckerV2.check(statement, ctx);
+        PrivilegeChecker.check(statement, ctx);
     }
 
     @Test
@@ -2012,7 +2012,7 @@ public class PrivilegeCheckerV2Test {
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(createBackupSql,
                 starRocksAssert.getCtx());
         try {
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
         } catch (SemanticException e) {
             System.out.println(e.getMessage() + ", sql: " + createBackupSql);
@@ -2025,7 +2025,7 @@ public class PrivilegeCheckerV2Test {
         ctxToTestUser();
         expectError = "EXPORT command denied to user 'test'@'localhost' for table 'tbl1'";
         try {
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
         } catch (SemanticException e) {
             System.out.println(e.getMessage() + ", sql: " + createBackupSql);
@@ -2036,7 +2036,7 @@ public class PrivilegeCheckerV2Test {
         grantOrRevoke("grant export on db1.tbl1 to test");
         // has all privilege
         ctxToTestUser();
-        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statement, starRocksAssert.getCtx());
         // revoke all privilege
         ctxToRoot();
         grantOrRevoke("revoke repository on system from test");
@@ -2105,7 +2105,7 @@ public class PrivilegeCheckerV2Test {
         ctxToTestUser();
         String expectError = "Access denied; you need (at least one of) the REPOSITORY privilege(s) for this operation";
         try {
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
         } catch (SemanticException e) {
             System.out.println(e.getMessage() + ", sql: " + restoreSql);
@@ -2116,7 +2116,7 @@ public class PrivilegeCheckerV2Test {
         ctxToTestUser();
         expectError = "Access denied for user 'test' to database 'db1'";
         try {
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
         } catch (SemanticException e) {
             System.out.println(e.getMessage() + ", sql: " + restoreSql);
@@ -2368,7 +2368,7 @@ public class PrivilegeCheckerV2Test {
                 "select db1.MY_UDF_JSON_GET(k2, k3) from db1.tbl1",
                 starRocksAssert.getCtx());
         try {
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
         } catch (Exception e) {
             System.out.println(e.getMessage());
@@ -2432,16 +2432,16 @@ public class PrivilegeCheckerV2Test {
         String expectError = "Access denied for user 'test' to database 'db1'";
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(showSql, starRocksAssert.getCtx());
         ctxToTestUser();
-        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statement, starRocksAssert.getCtx());
 
         ctxToRoot();
         grantOrRevoke("grant create materialized view on DATABASE db1 to test");
         expectError = "You need any privilege on any TABLE/VIEW/MV in database";
         ctxToTestUser();
-        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statement, starRocksAssert.getCtx());
         ctxToRoot();
         grantOrRevoke("grant select on db1.tbl1 to test");
-        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statement, starRocksAssert.getCtx());
         ctxToRoot();
         grantOrRevoke("revoke create materialized view on DATABASE db1 from test");
         grantOrRevoke("revoke select on db1.tbl1 from test");
@@ -2461,7 +2461,7 @@ public class PrivilegeCheckerV2Test {
         String showSql = "show full global functions";
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(showSql, starRocksAssert.getCtx());
         ctxToTestUser();
-        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statement, starRocksAssert.getCtx());
     }
 
     @Test
@@ -2480,7 +2480,7 @@ public class PrivilegeCheckerV2Test {
         String selectSQL2 = "select my_udf_json_get2('hello', 'world')";
         try {
             StatementBase statement = UtFrameUtils.parseStmtWithNewParser(selectSQL, starRocksAssert.getCtx());
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            PrivilegeChecker.check(statement, starRocksAssert.getCtx());
             Assert.fail();
         } catch (StarRocksPlannerException e) {
             System.out.println(e.getMessage() + ", sql: " + selectSQL);
@@ -2495,7 +2495,7 @@ public class PrivilegeCheckerV2Test {
         try {
             Config.enable_udf = true;
             StatementBase statement = UtFrameUtils.parseStmtWithNewParser(selectSQL, starRocksAssert.getCtx());
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            PrivilegeChecker.check(statement, starRocksAssert.getCtx());
         } finally {
             Config.enable_udf = false;
         }
@@ -2508,7 +2508,7 @@ public class PrivilegeCheckerV2Test {
         try {
             Config.enable_udf = true;
             StatementBase statement = UtFrameUtils.parseStmtWithNewParser(selectSQL, starRocksAssert.getCtx());
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            PrivilegeChecker.check(statement, starRocksAssert.getCtx());
         } finally {
             Config.enable_udf = false;
         }
@@ -2531,10 +2531,10 @@ public class PrivilegeCheckerV2Test {
         try {
             Config.enable_udf = true;
             StatementBase statement = UtFrameUtils.parseStmtWithNewParser(selectSQL, starRocksAssert.getCtx());
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            PrivilegeChecker.check(statement, starRocksAssert.getCtx());
 
             statement = UtFrameUtils.parseStmtWithNewParser(selectSQL2, starRocksAssert.getCtx());
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            PrivilegeChecker.check(statement, starRocksAssert.getCtx());
         } finally {
             Config.enable_udf = false;
         }
@@ -2548,10 +2548,10 @@ public class PrivilegeCheckerV2Test {
         try {
             Config.enable_udf = true;
             StatementBase statement = UtFrameUtils.parseStmtWithNewParser(selectSQL, starRocksAssert.getCtx());
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            PrivilegeChecker.check(statement, starRocksAssert.getCtx());
 
             statement = UtFrameUtils.parseStmtWithNewParser(selectSQL2, starRocksAssert.getCtx());
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            PrivilegeChecker.check(statement, starRocksAssert.getCtx());
         } finally {
             Config.enable_udf = false;
         }
@@ -2595,14 +2595,14 @@ public class PrivilegeCheckerV2Test {
         DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
 
         ctxToRoot();
-        PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+        PrivilegeChecker.check(UtFrameUtils.parseStmtWithNewParser(
                 "grant root to role r1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
 
-        PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+        PrivilegeChecker.check(UtFrameUtils.parseStmtWithNewParser(
                 "grant cluster_admin to role r1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
 
         try {
-            PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+            PrivilegeChecker.check(UtFrameUtils.parseStmtWithNewParser(
                     "revoke root from root", starRocksAssert.getCtx()), starRocksAssert.getCtx());
             Assert.fail();
         } catch (Exception e) {
@@ -2612,7 +2612,7 @@ public class PrivilegeCheckerV2Test {
 
         ctxToTestUser();
         try {
-            PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+            PrivilegeChecker.check(UtFrameUtils.parseStmtWithNewParser(
                     "grant root to role r1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
             Assert.fail();
         } catch (Exception e) {
@@ -2621,7 +2621,7 @@ public class PrivilegeCheckerV2Test {
         }
 
         try {
-            PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+            PrivilegeChecker.check(UtFrameUtils.parseStmtWithNewParser(
                     "grant cluster_admin to role r1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
             Assert.fail();
         } catch (Exception e) {
@@ -2652,16 +2652,16 @@ public class PrivilegeCheckerV2Test {
         sql = "grant r1 to u1";
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
-        PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+        PrivilegeChecker.check(UtFrameUtils.parseStmtWithNewParser(
                 "set default role r1 to u1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
 
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity("u1", "%"));
-        PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+        PrivilegeChecker.check(UtFrameUtils.parseStmtWithNewParser(
                 "set default role r1 to u1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
 
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity("u2", "%"));
         try {
-            PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+            PrivilegeChecker.check(UtFrameUtils.parseStmtWithNewParser(
                     "set default role r1 to u1", starRocksAssert.getCtx()), starRocksAssert.getCtx());
             Assert.fail();
         } catch (Exception e) {

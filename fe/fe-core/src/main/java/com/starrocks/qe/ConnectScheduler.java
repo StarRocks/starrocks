@@ -41,10 +41,8 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.nio.NConnectContext;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -135,12 +133,7 @@ public class ConnectScheduler {
             connCountByUser.put(ctx.getQualifiedUser(), new AtomicInteger(0));
         }
         int currentConns = connCountByUser.get(ctx.getQualifiedUser()).get();
-        long currentMaxConns;
-        if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
-            currentMaxConns = ctx.getGlobalStateMgr().getAuthenticationManager().getMaxConn(ctx.getQualifiedUser());
-        } else {
-            currentMaxConns = ctx.getGlobalStateMgr().getAuth().getMaxConn(ctx.getQualifiedUser());
-        }
+        long currentMaxConns = ctx.getGlobalStateMgr().getAuthenticationManager().getMaxConn(ctx.getQualifiedUser());
         if (currentConns >= currentMaxConns) {
             return false;
         }
@@ -173,18 +166,10 @@ public class ConnectScheduler {
         ConnectContext currContext = connectContext == null ? ConnectContext.get() : connectContext;
 
         for (ConnectContext ctx : connectionMap.values()) {
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!ctx.getQualifiedUser().equals(user) &&
-                        !PrivilegeActions.checkSystemAction(currContext, PrivilegeType.OPERATE)) {
-                    continue;
-                }
-            } else {
-                // Check auth
-                if (!ctx.getQualifiedUser().equals(user) &&
-                        !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(currContext,
-                                PrivPredicate.GRANT)) {
-                    continue;
-                }
+
+            if (!ctx.getQualifiedUser().equals(user) &&
+                    !PrivilegeActions.checkSystemAction(currContext, PrivilegeType.OPERATE)) {
+                continue;
             }
 
             infos.add(ctx.toThreadInfo());

@@ -20,10 +20,8 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.UnauthorizedException;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 
@@ -40,11 +38,7 @@ public class StopFeAction extends RestBaseAction {
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws UnauthorizedException {
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            checkActionOnSystem(currentUser, PrivilegeType.OPERATE);
-        } else {
-            checkGlobalAuth(currentUser, PrivPredicate.OPERATOR);
-        }
+        checkActionOnSystem(currentUser, PrivilegeType.OPERATE);
 
         response.setContentType("application/json");
         RestResult result = new RestResult();

@@ -45,8 +45,6 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.metric.PrometheusMetricVisitor;
 import com.starrocks.metric.SimpleCoreMetricVisitor;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
@@ -94,11 +92,7 @@ public class MetricsAction extends RestBaseAction {
                 // Right now the table-level metrics could only be viewed by users with `admin_priv`.
                 ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
                 UserIdentity currentUser = checkPassword(authInfo);
-                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    checkUserOwnsAdminRole(currentUser);
-                } else {
-                    checkGlobalAuth(currentUser, PrivPredicate.ADMIN);
-                }
+                checkUserOwnsAdminRole(currentUser);
                 collectTableMetrics = true;
                 if (WITH_TABLE_METRICS_ALL.equalsIgnoreCase(withTableMetrics)) {
                     minifyTableMetrics = false;

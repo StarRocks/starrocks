@@ -49,10 +49,6 @@ public final class ProcService {
 
     private ProcService() {
         root = new BaseProcDir();
-        // show '/proc/auth' won't be supported in new RBAC privilege framework anymore
-        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            root.register("auth", new AuthProcDir(GlobalStateMgr.getCurrentState().getAuth()));
-        }
         root.register("backends", new BackendsProcDir(GlobalStateMgr.getCurrentSystemInfo()));
         root.register("compute_nodes", new ComputeNodeProcDir(GlobalStateMgr.getCurrentSystemInfo()));
         root.register("dbs", new DbsProcDir(GlobalStateMgr.getCurrentState()));
