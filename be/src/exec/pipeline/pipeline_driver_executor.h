@@ -48,7 +48,7 @@ public:
     // non-root drivers maybe has pending io task executed in io threads asynchronously has reference
     // to objects owned by FragmentContext.
     virtual void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
-                                   bool done) = 0;
+                                   bool done, bool attach_profile) = 0;
 
     virtual void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const = 0;
 
@@ -71,8 +71,8 @@ public:
     void change_num_threads(int32_t num_threads) override;
     void submit(DriverRawPtr driver) override;
     void cancel(DriverRawPtr driver) override;
-    void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
-                           bool done) override;
+    void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status, bool done,
+                           bool attach_profile) override;
 
     void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const override;
 
@@ -86,7 +86,7 @@ private:
     void _worker_thread();
     StatusOr<DriverRawPtr> _get_next_driver(std::queue<DriverRawPtr>& local_driver_queue);
     void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
-    void _update_profile_by_level(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool done);
+    RuntimeProfile* _build_merged_instance_profile(QueryContext* query_ctx, FragmentContext* fragment_ctx);
     void _remove_non_core_metrics(QueryContext* query_ctx, std::vector<RuntimeProfile*>& driver_profiles);
 
     void _finalize_epoch(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
