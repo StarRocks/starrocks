@@ -86,6 +86,7 @@ statement
 
     // Task Statement
     | submitTaskStatement
+    | dropTaskStatement
 
     // Materialized View Statement
     | createMaterializedViewStatement
@@ -553,6 +554,10 @@ columnNameWithComment
 submitTaskStatement
     : SUBMIT setVarHint* TASK qualifiedName?
     AS (createTableAsSelectStatement | insertStatement )
+    ;
+
+dropTaskStatement
+    : DROP TASK qualifiedName
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
