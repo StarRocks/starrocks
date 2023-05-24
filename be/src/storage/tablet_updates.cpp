@@ -21,6 +21,11 @@
 #include "storage/chunk_iterator.h"
 #include "storage/compaction_utils.h"
 #include "storage/del_vector.h"
+<<<<<<< HEAD
+=======
+#include "storage/empty_iterator.h"
+#include "storage/merge_iterator.h"
+>>>>>>> cc29298989 ([BugFix] The primary key table segment data maybe out of order after finish schema change (#23985))
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta_manager.h"
@@ -35,6 +40,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/types.h"
+#include "storage/union_iterator.h"
 #include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
 #include "storage/wrapper_field.h"
@@ -2476,7 +2482,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         writer_context.tablet_schema = &_tablet.tablet_schema();
         writer_context.rowset_state = VISIBLE;
         writer_context.version = src_rowset->version();
-        writer_context.segments_overlap = src_rowset->rowset_meta()->segments_overlap();
+        writer_context.segments_overlap = NONOVERLAPPING;
 
         std::unique_ptr<RowsetWriter> rowset_writer;
         status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
@@ -2484,9 +2490,19 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
             LOG(INFO) << "build rowset writer failed";
             return Status::InternalError("build rowset writer failed");
         }
+        ChunkIteratorPtr seg_iterator;
+        if (res.value().empty()) {
+            seg_iterator = new_empty_iterator(base_schema, config::vector_chunk_size);
+        } else {
+            if (src_rowset->rowset_meta()->is_segments_overlapping()) {
+                seg_iterator = new_heap_merge_iterator(res.value());
+            } else {
+                seg_iterator = new_union_iterator(res.value());
+            }
+        }
 
         // notice: rowset's del files not linked, it's not useful
-        status = _convert_from_base_rowset(base_tablet, res.value(), chunk_changer, rowset_writer);
+        status = _convert_from_base_rowset(base_tablet, seg_iterator, chunk_changer, rowset_writer);
         if (!status.ok()) {
             LOG(WARNING) << "failed to convert from base rowset, exit alter process";
             return status;
@@ -2589,8 +2605,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
 }
 
 Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet,
-                                                const std::vector<vectorized::ChunkIteratorPtr>& seg_iterators,
-                                                vectorized::ChunkChanger* chunk_changer,
+                                                const ChunkIteratorPtr& seg_iterator, ChunkChanger* chunk_changer,
                                                 const std::unique_ptr<RowsetWriter>& rowset_writer) {
     vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
     vectorized::ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
@@ -2600,10 +2615,7 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
 
-    for (auto& seg_iterator : seg_iterators) {
-        if (seg_iterator.get() == nullptr) {
-            continue;
-        }
+    if (seg_iterator.get() != nullptr) {
         while (true) {
             base_chunk->reset();
             new_chunk->reset();
