@@ -30,6 +30,7 @@ namespace starrocks {
 
 class DataDir;
 class ExecEnv;
+class MemTracker;
 class SegmentPB;
 class PTabletInfo;
 class FileSystem;
@@ -69,6 +70,7 @@ private:
 
     ReusableClosure<PTabletWriterAddSegmentResult>* _closure = nullptr;
     doris::PBackendService_Stub* _stub = nullptr;
+    MemTracker* _mem_tracker = nullptr;
 
     bool _inited = false;
     Status _st = Status::OK();
