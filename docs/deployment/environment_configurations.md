@@ -353,6 +353,6 @@ If your StarRocks cluster has a high load concurrency, we recommend you set the 
 
 ```Bash
 echo 120000 > /proc/sys/kernel/threads-max
-echo 60000 > /proc/sys/vm/max_map_count
+echo 262144 > /proc/sys/vm/max_map_count
 echo 200000 > /proc/sys/kernel/pid_max
 ```
