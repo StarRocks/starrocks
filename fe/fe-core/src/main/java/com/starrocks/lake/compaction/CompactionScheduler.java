@@ -72,7 +72,7 @@ public class CompactionScheduler extends Daemon {
     private final SystemInfoService systemInfoService;
     private final GlobalTransactionMgr transactionMgr;
     private final GlobalStateMgr stateMgr;
-    private final ConcurrentHashMap<PartitionIdentifier, CompactionContext> runningCompactions;
+    private final ConcurrentHashMap<PartitionIdentifier, CompactionJob> runningCompactions;
     private final SynchronizedCircularQueue<CompactionRecord> history;
     private final SynchronizedCircularQueue<CompactionRecord> failHistory;
     private boolean finishedWaiting = false;
@@ -126,40 +126,40 @@ public class CompactionScheduler extends Daemon {
 
     private void schedule() {
         // Check whether there are completed compaction jobs.
-        for (Iterator<Map.Entry<PartitionIdentifier, CompactionContext>> iterator = runningCompactions.entrySet().iterator();
+        for (Iterator<Map.Entry<PartitionIdentifier, CompactionJob>> iterator = runningCompactions.entrySet().iterator();
                 iterator.hasNext(); ) {
-            Map.Entry<PartitionIdentifier, CompactionContext> entry = iterator.next();
+            Map.Entry<PartitionIdentifier, CompactionJob> entry = iterator.next();
             PartitionIdentifier partition = entry.getKey();
-            CompactionContext context = entry.getValue();
+            CompactionJob job = entry.getValue();
 
-            if (context.compactionFinishedOnBE() && !context.transactionHasCommitted()) {
+            if (job.compactionFinishedOnBE() && !job.transactionHasCommitted()) {
                 try {
-                    commitCompaction(partition, context);
+                    commitCompaction(partition, job);
                 } catch (Exception e) {
-                    LOG.error("Fail to commit compaction. {} error={}", context.getDebugString(), e.getMessage());
+                    LOG.error("Fail to commit compaction. {} error={}", job.getDebugString(), e.getMessage());
                     iterator.remove();
-                    context.setFinishTs(System.currentTimeMillis());
-                    failHistory.offer(CompactionRecord.build(context, e.getMessage()));
+                    job.setFinishTs(System.currentTimeMillis());
+                    failHistory.offer(CompactionRecord.build(job, e.getMessage()));
                     compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
                     try {
-                        transactionMgr.abortTransaction(partition.getDbId(), context.getTxnId(), e.getMessage());
+                        transactionMgr.abortTransaction(partition.getDbId(), job.getTxnId(), e.getMessage());
                     } catch (UserException ex) {
-                        LOG.error("Fail to abort txn " + context.getTxnId(), ex);
+                        LOG.error("Fail to abort txn " + job.getTxnId(), ex);
                     }
                     continue;
                 }
             }
 
-            if (context.transactionHasCommitted() && context.waitTransactionVisible(100, TimeUnit.MILLISECONDS)) {
+            if (job.transactionHasCommitted() && job.waitTransactionVisible(100, TimeUnit.MILLISECONDS)) {
                 iterator.remove();
-                context.setFinishTs(System.currentTimeMillis());
-                history.offer(CompactionRecord.build(context));
-                long cost = context.getFinishTs() - context.getStartTs();
+                job.setFinishTs(System.currentTimeMillis());
+                history.offer(CompactionRecord.build(job));
+                long cost = job.getFinishTs() - job.getStartTs();
                 if (cost >= /*60 minutes=*/3600000) {
-                    LOG.info("Removed published compaction. {} cost={}s running={}", context.getDebugString(),
+                    LOG.info("Removed published compaction. {} cost={}s running={}", job.getDebugString(),
                             cost / 1000, runningCompactions.size());
                 } else if (LOG.isDebugEnabled()) {
-                    LOG.debug("Removed published compaction. {} cost={}s running={}", context.getDebugString(),
+                    LOG.debug("Removed published compaction. {} cost={}s running={}", job.getDebugString(),
                             cost / 1000, runningCompactions.size());
                 }
                 compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS);
@@ -169,7 +169,7 @@ public class CompactionScheduler extends Daemon {
         // Create new compaction tasks.
         int index = 0;
         int compactionLimit = compactionTaskLimit();
-        int numRunningTasks = runningCompactions.values().stream().mapToInt(CompactionContext::getNumCompactionTasks).sum();
+        int numRunningTasks = runningCompactions.values().stream().mapToInt(CompactionJob::getNumCompactionTasks).sum();
         if (numRunningTasks >= compactionLimit) {
             return;
         }
@@ -177,14 +177,14 @@ public class CompactionScheduler extends Daemon {
         List<PartitionIdentifier> partitions = compactionManager.choosePartitionsToCompact(runningCompactions.keySet());
         while (numRunningTasks < compactionLimit && index < partitions.size()) {
             PartitionIdentifier partition = partitions.get(index++);
-            CompactionContext context = startCompaction(partition);
-            if (context == null) {
+            CompactionJob job = startCompaction(partition);
+            if (job == null) {
                 continue;
             }
-            numRunningTasks += context.getNumCompactionTasks();
-            runningCompactions.put(partition, context);
+            numRunningTasks += job.getNumCompactionTasks();
+            runningCompactions.put(partition, job);
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Created new compaction job. partition={} txnId={}", partition, context.getTxnId());
+                LOG.debug("Created new compaction job. partition={} txnId={}", partition, job.getTxnId());
             }
         }
     }
@@ -224,7 +224,7 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
-    private CompactionContext startCompaction(PartitionIdentifier partitionIdentifier) {
+    private CompactionJob startCompaction(PartitionIdentifier partitionIdentifier) {
         Database db = stateMgr.getDb(partitionIdentifier.getDbId());
         if (db == null) {
             compactionManager.removePartition(partitionIdentifier);
@@ -280,20 +280,20 @@ public class CompactionScheduler extends Daemon {
         }
 
         String partitionName = String.format("%s.%s.%s", db.getFullName(), table.getName(), partition.getName());
-        CompactionContext context = new CompactionContext(partitionName, txnId, System.currentTimeMillis());
-        context.setBeToTablets(beToTablets);
+        CompactionJob job = new CompactionJob(partitionName, txnId, System.currentTimeMillis());
+        job.setBeToTablets(beToTablets);
 
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
         try {
             List<Future<CompactResponse>> futures = compactTablets(currentVersion, beToTablets, txnId);
-            context.setResponseList(futures);
-            return context;
+            job.setResponseList(futures);
+            return job;
         } catch (Exception e) {
             LOG.error(e);
             nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_FAILURE;
             abortTransactionIgnoreError(db.getId(), txnId, e.getMessage());
-            context.setFinishTs(System.currentTimeMillis());
-            failHistory.offer(CompactionRecord.build(context, e.getMessage()));
+            job.setFinishTs(System.currentTimeMillis());
+            failHistory.offer(CompactionRecord.build(job, e.getMessage()));
             return null;
         } finally {
             compactionManager.enableCompactionAfter(partitionIdentifier, nextCompactionInterval);
@@ -352,11 +352,11 @@ public class CompactionScheduler extends Daemon {
                 loadJobSourceType, TXN_TIMEOUT_SECOND);
     }
 
-    private void commitCompaction(PartitionIdentifier partition, CompactionContext context)
+    private void commitCompaction(PartitionIdentifier partition, CompactionJob job)
             throws UserException, ExecutionException, InterruptedException {
-        Preconditions.checkState(context.compactionFinishedOnBE());
+        Preconditions.checkState(job.compactionFinishedOnBE());
 
-        for (Future<CompactResponse> responseFuture : context.getResponseList()) {
+        for (Future<CompactResponse> responseFuture : job.getResponseList()) {
             CompactResponse response = responseFuture.get();
             if (response != null && CollectionUtils.isNotEmpty(response.failedTablets)) {
                 if (response.status != null && CollectionUtils.isNotEmpty(response.status.errorMsgs)) {
@@ -368,7 +368,7 @@ public class CompactionScheduler extends Daemon {
         }
 
         List<TabletCommitInfo> commitInfoList = Lists.newArrayList();
-        for (Map.Entry<Long, List<Long>> entry : context.getBeToTablets().entrySet()) {
+        for (Map.Entry<Long, List<Long>> entry : job.getBeToTablets().entrySet()) {
             for (Long tabletId : entry.getValue()) {
                 commitInfoList.add(new TabletCommitInfo(tabletId, entry.getKey()));
             }
@@ -379,18 +379,18 @@ public class CompactionScheduler extends Daemon {
             throw new MetaNotFoundException("database not exist");
         }
         if (LOG.isDebugEnabled()) {
-            LOG.debug("Committing compaction transaction. partition={} txnId={}", partition, context.getTxnId());
+            LOG.debug("Committing compaction transaction. partition={} txnId={}", partition, job.getTxnId());
         }
 
         VisibleStateWaiter waiter;
         db.writeLock();
         try {
-            waiter = transactionMgr.commitTransaction(db.getId(), context.getTxnId(), commitInfoList, Lists.newArrayList());
+            waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList, Lists.newArrayList());
         } finally {
             db.writeUnlock();
         }
-        context.setVisibleStateWaiter(waiter);
-        context.setCommitTs(System.currentTimeMillis());
+        job.setVisibleStateWaiter(waiter);
+        job.setCommitTs(System.currentTimeMillis());
     }
 
     private void abortTransactionIgnoreError(long dbId, long txnId, String reason) {
@@ -406,8 +406,8 @@ public class CompactionScheduler extends Daemon {
         ImmutableList.Builder<CompactionRecord> builder = ImmutableList.builder();
         history.forEach(builder::add);
         failHistory.forEach(builder::add);
-        for (CompactionContext context : runningCompactions.values()) {
-            builder.add(CompactionRecord.build(context));
+        for (CompactionJob job : runningCompactions.values()) {
+            builder.add(CompactionRecord.build(job));
         }
         return builder.build();
     }
