@@ -110,9 +110,10 @@ public class LoadAction extends RestBaseAction {
             Collections.shuffle(nodeIds);
         } else {
             nodeIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-            if (CollectionUtils.isEmpty(nodeIds)) {
-                throw new DdlException("No backend alive.");
-            }
+        }
+        
+        if (CollectionUtils.isEmpty(nodeIds)) {
+            throw new DdlException("No backend alive.");
         }
 
         // TODO: need to refactor after be split into cn + dn
