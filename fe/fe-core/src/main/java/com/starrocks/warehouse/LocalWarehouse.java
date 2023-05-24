@@ -33,8 +33,8 @@ public class LocalWarehouse extends Warehouse {
 
     public static final ImmutableList<String> CLUSTER_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("ClusterId")
-            .add("workerGroupId")
-            .add("cnIds")
+            .add("WorkerGroupId")
+            .add("ComputeNodeIds")
             .add("Pending")
             .add("Running")
             .build();
