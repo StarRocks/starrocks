@@ -1,5 +1,3 @@
-<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=f5ae0b2c-3578-4a40-9056-178e9837cfe0" />
-
 # Deploy StarRocks with Docker
 
 This QuickStart tutorial guides you through the procedures to deploy StarRocks on your local machine with Docker. Before getting started, you can read [StarRocks Architecture](../introduction/Architecture.md) for more conceptual details.
@@ -168,3 +166,5 @@ sudo docker rm <container_id>
 ## What to do next
 
 Having deployed StarRocks, you can continue the QuickStart tutorials on [creating a table](../quick_start/Create_table.md) and [loading and querying data](../quick_start/Import_and_query.md).
+
+<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=f5ae0b2c-3578-4a40-9056-178e9837cfe0" />
