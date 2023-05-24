@@ -583,6 +583,7 @@ dropMaterializedViewStatement
 
 alterMaterializedViewStatement
     : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause | modifyTablePropertiesClause)
+    | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
     ;
 
 refreshMaterializedViewStatement
@@ -2249,6 +2250,11 @@ refreshSchemeDesc
     | MANUAL)
     ;
 
+statusDesc
+    : ACTIVE
+    | INACTIVE
+    ;
+
 properties
     : PROPERTIES '(' property (',' property)* ')'
     ;
@@ -2435,7 +2441,7 @@ number
     ;
 
 nonReserved
-    : ACCESS | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
+    : ACCESS | ACTIVE | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
     | BUILTIN | BASE
     | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
@@ -2447,7 +2453,7 @@ nonReserved
     | FUNCTIONS
     | GLOBAL | GRANTS
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HUB
-    | IDENTIFIED | IMAGE | IMPERSONATE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
+    | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS

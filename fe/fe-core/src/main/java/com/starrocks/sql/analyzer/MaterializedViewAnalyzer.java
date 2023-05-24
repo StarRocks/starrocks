@@ -124,6 +124,84 @@ public class MaterializedViewAnalyzer {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
     }
 
+    public static List<BaseTableInfo> getAndCheckBaseTables(QueryStatement queryStatement) {
+        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+        processBaseTables(queryStatement, baseTableInfos);
+        Set<BaseTableInfo> baseTableInfoSet = Sets.newHashSet(baseTableInfos);
+        baseTableInfos.clear();
+        baseTableInfos.addAll(baseTableInfoSet);
+        return baseTableInfos;
+    }
+
+    private static void processBaseTables(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos) {
+        Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
+        tableNameTableMap.forEach((tableNameInfo, table) -> {
+            Preconditions.checkState(table != null, "Materialized view base table is null");
+            if (!isSupportBasedOnTable(table)) {
+                throw new SemanticException("Create materialized view do not support the table type: " +
+                        table.getType(), tableNameInfo.getPos());
+            }
+            if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                throw new SemanticException(
+                        "Create materialized view from inactive materialized view: " + table.getName(),
+                        tableNameInfo.getPos());
+            }
+
+            if (table.isView()) {
+                return;
+            }
+
+            if (isExternalTableFromResource(table)) {
+                throw new SemanticException(
+                        "Only supports creating materialized views based on the external table " +
+                                "which created by catalog", tableNameInfo.getPos());
+            }
+            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
+                    tableNameInfo.getDb());
+            if (isInternalCatalog(tableNameInfo.getCatalog())) {
+                baseTableInfos.add(new BaseTableInfo(database.getId(), database.getFullName(),
+                        table.getId()));
+            } else {
+                baseTableInfos.add(new BaseTableInfo(tableNameInfo.getCatalog(),
+                        tableNameInfo.getDb(), table.getTableIdentifier()));
+            }
+        });
+        processViews(queryStatement, baseTableInfos);
+    }
+
+    private static boolean isSupportBasedOnTable(Table table) {
+        return SUPPORTED_TABLE_TYPE.contains(table.getType()) || table instanceof OlapTable;
+    }
+
+    private static boolean isExternalTableFromResource(Table table) {
+        if (table instanceof OlapTable) {
+            return false;
+        } else if (table instanceof JDBCTable || table instanceof MysqlTable) {
+            return false;
+        } else if (table instanceof HiveTable || table instanceof HudiTable) {
+            HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
+            String catalogName = hiveMetaStoreTable.getCatalogName();
+            return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
+        } else if (table instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            String catalogName = icebergTable.getCatalogName();
+            return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
+        } else {
+            return true;
+        }
+    }
+
+    private static void processViews(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos) {
+        List<ViewRelation> viewRelations = AnalyzerUtils.collectViewRelations(queryStatement);
+        if (viewRelations.isEmpty()) {
+            return;
+        }
+        Set<ViewRelation> viewRelationSet = Sets.newHashSet(viewRelations);
+        for (ViewRelation viewRelation : viewRelationSet) {
+            processBaseTables(viewRelation.getQueryStatement(), baseTableInfos);
+        }
+    }
+
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
         public enum RefreshTimeUnit {
@@ -131,28 +209,6 @@ public class MaterializedViewAnalyzer {
             HOUR,
             MINUTE,
             SECOND
-        }
-
-        private boolean isSupportBasedOnTable(Table table) {
-            return SUPPORTED_TABLE_TYPE.contains(table.getType()) || table instanceof OlapTable;
-        }
-
-        private boolean isExternalTableFromResource(Table table) {
-            if (table instanceof OlapTable) {
-                return false;
-            } else if (table instanceof JDBCTable || table instanceof MysqlTable) {
-                return false;
-            } else if (table instanceof HiveTable || table instanceof HudiTable) {
-                HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-                String catalogName = hiveMetaStoreTable.getCatalogName();
-                return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
-            } else if (table instanceof IcebergTable) {
-                IcebergTable icebergTable = (IcebergTable) table;
-                String catalogName = icebergTable.getCatalogName();
-                return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
-            } else {
-                return true;
-            }
         }
 
         @Override
@@ -239,62 +295,6 @@ public class MaterializedViewAnalyzer {
                 result.put(entry.getKey(), entry.getValue());
             }
             return result;
-        }
-
-        private List<BaseTableInfo> getAndCheckBaseTables(QueryStatement queryStatement) {
-            List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
-            processBaseTables(queryStatement, baseTableInfos);
-            Set<BaseTableInfo> baseTableInfoSet = Sets.newHashSet(baseTableInfos);
-            baseTableInfos.clear();
-            baseTableInfos.addAll(baseTableInfoSet);
-            return baseTableInfos;
-        }
-
-        private void processBaseTables(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos) {
-            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
-            tableNameTableMap.forEach((tableNameInfo, table) -> {
-                Preconditions.checkState(table != null, "Materialized view base table is null");
-                if (!isSupportBasedOnTable(table)) {
-                    throw new SemanticException("Create materialized view do not support the table type: " +
-                            table.getType(), tableNameInfo.getPos());
-                }
-                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
-                    throw new SemanticException(
-                            "Create materialized view from inactive materialized view: " + table.getName(),
-                            tableNameInfo.getPos());
-                }
-
-                if (table.isView()) {
-                    return;
-                }
-
-                if (isExternalTableFromResource(table)) {
-                    throw new SemanticException(
-                            "Only supports creating materialized views based on the external table " +
-                                    "which created by catalog", tableNameInfo.getPos());
-                }
-                Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
-                        tableNameInfo.getDb());
-                if (isInternalCatalog(tableNameInfo.getCatalog())) {
-                    baseTableInfos.add(new BaseTableInfo(database.getId(), database.getFullName(),
-                            table.getId()));
-                } else {
-                    baseTableInfos.add(new BaseTableInfo(tableNameInfo.getCatalog(),
-                            tableNameInfo.getDb(), table.getTableIdentifier()));
-                }
-            });
-            processViews(queryStatement, baseTableInfos);
-        }
-
-        private void processViews(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos) {
-            List<ViewRelation> viewRelations = AnalyzerUtils.collectViewRelations(queryStatement);
-            if (viewRelations.isEmpty()) {
-                return;
-            }
-            Set<ViewRelation> viewRelationSet = Sets.newHashSet(viewRelations);
-            for (ViewRelation viewRelation : viewRelationSet) {
-                processBaseTables(viewRelation.getQueryStatement(), baseTableInfos);
-            }
         }
 
         // TODO(murphy) implement
@@ -872,6 +872,11 @@ public class MaterializedViewAnalyzer {
                 if (!(table instanceof MaterializedView)) {
                     throw new SemanticException(mvName.getTbl() + " is not async materialized view", mvName.getPos());
                 }
+            } else if (statement.getStatus() != null) {
+                String status = statement.getStatus();
+                if (!AlterMaterializedViewStmt.SUPPORTED_MV_STATUS.contains(status)) {
+                    throw new SemanticException("Unsupported modification for materialized view status:" + status);
+                }
             } else {
                 throw new SemanticException("Unsupported modification for materialized view");
             }
@@ -894,8 +899,9 @@ public class MaterializedViewAnalyzer {
             Preconditions.checkState(table instanceof MaterializedView);
             MaterializedView mv = (MaterializedView) table;
             if (!mv.isActive()) {
-                throw new SemanticException(
-                        "Refresh materialized view failed because " + mv.getName() + " is not active", mvName.getPos());
+                throw new SemanticException("Refresh materialized view failed because [" + mv.getName() +
+                        "] is not active. You can try to active it with ALTER MATERIALIZED VIEW " + mv.getName()
+                        + " ACTIVE; ", mvName.getPos());
             }
             if (statement.getPartitionRangeDesc() == null) {
                 return null;
