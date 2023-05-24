@@ -20,6 +20,7 @@ package com.starrocks.persist.gson;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
+import org.junit.Assert;
 import org.junit.Test;
 
 public class RuntimeTypeAdapterFactoryTest {
@@ -31,7 +32,8 @@ public class RuntimeTypeAdapterFactoryTest {
                 .registerSubtype(B.class, B.class.getSimpleName()));
         Gson gson = builder.create();
         B b = gson.fromJson("{\"a\":1,\"b\":2}", B.class);
-        System.out.println("a: " + b.getA() + ", b: " + b.getB());
+        Assert.assertEquals(1, b.getA());
+        Assert.assertEquals(2, b.getB());
     }
 
     public static class A {

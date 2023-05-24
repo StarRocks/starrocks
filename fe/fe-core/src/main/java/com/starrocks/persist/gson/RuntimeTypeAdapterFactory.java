@@ -361,6 +361,10 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
                     labelJsonElement = jsonElement.getAsJsonObject().remove(typeFieldName);
                 }
 
+                //1. if the typeFieldName is specified in the json string, then use this class.
+                //2. if default class if specified, then use the default class.
+                //3. if the type specified (the second param of GSON.fromJson) is in the register list,
+                //   then use this class.
                 String label;
                 if (labelJsonElement != null) {
                     label = labelJsonElement.getAsString();
