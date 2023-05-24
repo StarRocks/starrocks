@@ -504,36 +504,38 @@ StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_
 StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, int64_t* version_hint) {
 // TODO: Eliminate the explicit dependency on staros worker
 #ifdef USE_STAROS
-    auto shard_info_or = g_worker->get_shard_info(tablet_id);
-    if (shard_info_or.ok()) {
-        const auto& shard_info = shard_info_or.value();
-        const auto& properties = shard_info.properties;
-        auto index_id_iter = properties.find("indexId");
-        if (index_id_iter != properties.end()) {
-            auto schema_id = std::atol(index_id_iter->second.data());
-            auto cache_key = global_schema_cache_key(schema_id);
-            auto schema = lookup_tablet_schema(cache_key);
-            if (schema != nullptr) {
-                return schema;
-            }
-            // else: Cache miss, read the schema file
-            auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(schema_id));
-            auto schema_or = load_and_parse_schema_file(schema_file_path);
-            if (schema_or.ok()) {
-                VLOG(3) << "Got tablet schema of id " << schema_id << " for tablet " << tablet_id;
-                schema = std::move(schema_or).value();
-                // Save the schema into the in-memory cache, use the schema id as the cache key
-                auto cache_value = std::make_unique<CacheValue>(schema);
-                (void)fill_metacache(cache_key, cache_value.release(), 0);
-                return std::move(schema);
-            } else if (schema_or.status().is_not_found()) {
-                // version 3.0 will not generate the tablet schema file, ignore the not found error and
-                // try to extract the tablet schema from the tablet metadata.
+    if (g_worker != nullptr) {
+        auto shard_info_or = g_worker->get_shard_info(tablet_id);
+        if (shard_info_or.ok()) {
+            const auto& shard_info = shard_info_or.value();
+            const auto& properties = shard_info.properties;
+            auto index_id_iter = properties.find("indexId");
+            if (index_id_iter != properties.end()) {
+                auto schema_id = std::atol(index_id_iter->second.data());
+                auto cache_key = global_schema_cache_key(schema_id);
+                auto schema = lookup_tablet_schema(cache_key);
+                if (schema != nullptr) {
+                    return schema;
+                }
+                // else: Cache miss, read the schema file
+                auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(schema_id));
+                auto schema_or = load_and_parse_schema_file(schema_file_path);
+                if (schema_or.ok()) {
+                    VLOG(3) << "Got tablet schema of id " << schema_id << " for tablet " << tablet_id;
+                    schema = std::move(schema_or).value();
+                    // Save the schema into the in-memory cache, use the schema id as the cache key
+                    auto cache_value = std::make_unique<CacheValue>(schema);
+                    (void)fill_metacache(cache_key, cache_value.release(), 0);
+                    return std::move(schema);
+                } else if (schema_or.status().is_not_found()) {
+                    // version 3.0 will not generate the tablet schema file, ignore the not found error and
+                    // try to extract the tablet schema from the tablet metadata.
+                } else {
+                    return schema_or.status();
+                }
             } else {
-                return schema_or.status();
+                // no "indexId" property, will extract the tablet schema from the tablet metadata.
             }
-        } else {
-            // no "indexId" property, will extract the tablet schema from the tablet metadata.
         }
     }
 #endif // USE_STAROS
