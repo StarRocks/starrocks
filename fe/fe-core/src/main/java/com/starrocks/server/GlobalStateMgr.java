@@ -1225,6 +1225,8 @@ public class GlobalStateMgr {
                 initDefaultWarehouse();
             }
 
+            updateDefaultWarehouse();
+
             MetricRepo.init();
 
             isReady.set(true);
@@ -1557,7 +1559,6 @@ public class GlobalStateMgr {
 
     private void postLoadImage() {
         processMvRelatedMeta();
-        updateDefaultWarehouse();
     }
 
     private void processMvRelatedMeta() {

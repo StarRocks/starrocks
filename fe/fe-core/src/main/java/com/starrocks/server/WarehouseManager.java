@@ -82,11 +82,13 @@ public class WarehouseManager implements Writable {
     }
 
     public void updateDefaultWarehouse() {
-        Warehouse warehouse = getDefaultWarehouse();
-        warehouse.getAnyAvailableCluster().addNodes(GlobalStateMgr.getCurrentSystemInfo().
-                getIdToBackend().keySet().asList());
-        warehouse.getAnyAvailableCluster().addNodes(GlobalStateMgr.getCurrentSystemInfo().
-                getIdComputeNode().keySet().asList());
+        Warehouse defaultWarehouse = getDefaultWarehouse();
+        if (defaultWarehouse != null) {
+            defaultWarehouse.getAnyAvailableCluster().addNodes(GlobalStateMgr.getCurrentSystemInfo().
+                    getIdToBackend().keySet().asList());
+            defaultWarehouse.getAnyAvailableCluster().addNodes(GlobalStateMgr.getCurrentSystemInfo().
+                    getIdComputeNode().keySet().asList());
+        }
     }
 
     public boolean warehouseExists(String warehouseName) {
@@ -109,7 +111,7 @@ public class WarehouseManager implements Writable {
             WarehouseManager data = GsonUtils.GSON.fromJson(s, WarehouseManager.class);
             if (data != null) {
                 if (data.fullNameToWh != null) {
-                    // Do nothing
+                    // do nothing
                 }
                 warehouseCount = data.fullNameToWh.size();
             }

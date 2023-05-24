@@ -64,6 +64,8 @@ public class Cluster implements Writable {
 
     public void getProcNodeData(BaseProcResult result) {
         result.addRow(Lists.newArrayList(String.valueOf(this.getId()),
+                String.valueOf(this.getWorkerGroupId()),
+                String.valueOf(this.getComputeNodeIds()),
                 String.valueOf(this.getPendingSqls()),
                 String.valueOf(this.getRunningSqls())));
     }
