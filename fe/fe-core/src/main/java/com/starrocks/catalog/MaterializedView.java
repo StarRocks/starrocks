@@ -43,9 +43,11 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -61,6 +63,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
@@ -74,6 +77,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -84,7 +88,7 @@ import java.util.stream.Collectors;
 /**
  * meta structure for materialized view
  */
-public class MaterializedView extends OlapTable implements GsonPostProcessable {
+public class MaterializedView extends OlapTable implements GsonPreProcessable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(MaterializedView.class);
 
     public enum RefreshType {
@@ -310,6 +314,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     // record expression table column
     @SerializedName(value = "partitionRefTableExprs")
+    private List<GsonUtils.ExpressionSerializedObject> serializedPartitionRefTableExprs;
     private List<Expr> partitionRefTableExprs;
 
     // Maintenance plan for this MV
@@ -602,7 +607,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 BasePartitionInfo basePartitionInfo = versionEntry.getValue();
                 if (basePartitionInfo == null) {
                     result.add(basePartitionName);
-                } else  {
+                } else {
                     // Ignore partitions if mv's partition is the same with the basic table.
                     if (basePartitionVersion == basePartitionInfo.getVersion()) {
                         continue;
@@ -1210,5 +1215,22 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             }
         }
         return properties;
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        this.serializedPartitionRefTableExprs = new ArrayList<>();
+        for (Expr partitionExpr : partitionRefTableExprs) {
+            serializedPartitionRefTableExprs.add(new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
+        partitionRefTableExprs = new ArrayList<>();
+        for (GsonUtils.ExpressionSerializedObject expressionSql : serializedPartitionRefTableExprs) {
+            partitionRefTableExprs.add(SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
+        }
     }
 }

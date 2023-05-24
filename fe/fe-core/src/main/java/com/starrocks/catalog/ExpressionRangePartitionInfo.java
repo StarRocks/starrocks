@@ -24,14 +24,19 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.SqlParser;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import static java.util.stream.Collectors.toList;
@@ -42,19 +47,36 @@ import static java.util.stream.Collectors.toList;
  * 1. no overwrite old serialized method: read、write and readFields, because we use gson now
  */
 @Deprecated
-public class ExpressionRangePartitionInfo extends RangePartitionInfo {
-
-
+public class ExpressionRangePartitionInfo extends RangePartitionInfo implements GsonPreProcessable, GsonPostProcessable {
     public static final String AUTOMATIC_SHADOW_PARTITION_NAME = "$shadow_automatic_partition";
     public static final String SHADOW_PARTITION_PREFIX = "$";
 
-    @SerializedName(value = "partitionExprs")
     private List<Expr> partitionExprs;
+
+    @SerializedName(value = "partitionExprs")
+    private List<GsonUtils.ExpressionSerializedObject> serializedPartitionExprs;
 
     public ExpressionRangePartitionInfo() {
         this.type = PartitionType.EXPR_RANGE;
     }
 
+    @Override
+    public void gsonPreProcess() throws IOException {
+        super.gsonPreProcess();
+        this.serializedPartitionExprs = new ArrayList<>();
+        for (Expr partitionExpr : partitionExprs) {
+            serializedPartitionExprs.add(new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
+        partitionExprs = new ArrayList<>();
+        for (GsonUtils.ExpressionSerializedObject expressionSql : serializedPartitionExprs) {
+            partitionExprs.add(SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
+        }
+    }
 
     public ExpressionRangePartitionInfo(List<Expr> partitionExprs, List<Column> columns, PartitionType type) {
         super(columns);
