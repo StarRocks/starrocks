@@ -46,7 +46,7 @@ if [[ $OSTYPE == darwin* ]] ; then
     PARALLEL=$(sysctl -n hw.ncpu)
     # We know for sure that build-thirdparty.sh will fail on darwin platform, so just skip the step.
 else
-    if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/datasketches/hll.hpp ]]; then
+    if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/async-profiler/profiler.sh ]]; then
         echo "Thirdparty libraries need to be build ..."
         ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
     fi
@@ -401,6 +401,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/fe/lib/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler/* ${STARROCKS_OUTPUT}/fe/bin/
         MSG="${MSG} √ ${MSG_FE}"
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/spark-dpp/
