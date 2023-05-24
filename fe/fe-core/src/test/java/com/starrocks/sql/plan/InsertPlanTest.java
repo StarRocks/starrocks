@@ -36,6 +36,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.stream.Stream;
 
@@ -811,6 +812,9 @@ public class InsertPlanTest extends PlanTestBase {
                 icebergTable.isUnPartitioned();
                 result = true;
                 minTimes = 0;
+
+                icebergTable.getPartitionColumnNames();
+                result = new ArrayList<>();
             }
         };
 
