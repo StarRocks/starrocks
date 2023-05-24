@@ -4297,7 +4297,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitExternalTableFunction(StarRocksParser.ExternalTableFunctionContext context) {
+    public ParseNode visitFileTableFunction(StarRocksParser.FileTableFunctionContext context) {
         Map<String, String> properties = getPropertyList(context.propertyList());
         return new FileTableFunctionRelation(properties, NodePosition.ZERO);
     }

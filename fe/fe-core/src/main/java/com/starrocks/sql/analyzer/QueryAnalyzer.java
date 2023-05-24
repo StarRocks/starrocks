@@ -400,7 +400,7 @@ public class QueryAnalyzer {
         }
 
         @Override
-        public Scope visitExternalTableFunction(FileTableFunctionRelation node, Scope outerScope) {
+        public Scope visitFileTableFunction(FileTableFunctionRelation node, Scope outerScope) {
             TableName tableName = node.getResolveTableName();
             Table table = node.getTable();
 
