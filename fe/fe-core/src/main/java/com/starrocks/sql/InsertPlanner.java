@@ -665,7 +665,6 @@ public class InsertPlanner {
 
         SelectRelation selectRelation = (SelectRelation) queryRelation;
         List<SelectListItem> listItems = selectRelation.getSelectList().getItems();
-        List<Integer> partitionIndexes = icebergTable.partitionColumnIndexes();
 
         for (SelectListItem item : listItems) {
             if (item.isStar()) {
@@ -673,10 +672,21 @@ public class InsertPlanner {
             }
         }
 
-        for (int partitionIndex : partitionIndexes) {
-            Expr expr = listItems.get(partitionIndex).getExpr();
-            if (!expr.isConstant()) {
-                return false;
+        List<String> targetColumnNames;
+        if (insertStmt.getTargetColumnNames() == null) {
+            targetColumnNames = icebergTable.getColumns().stream()
+                    .map(Column::getName).collect(Collectors.toList());
+        } else {
+            targetColumnNames = Lists.newArrayList(insertStmt.getTargetColumnNames());
+        }
+
+        for (int i = 0; i < targetColumnNames.size(); i++) {
+            String columnName = targetColumnNames.get(i);
+            if (icebergTable.getPartitionColumnNames().contains(columnName)) {
+                Expr expr = listItems.get(i).getExpr();
+                if (!expr.isConstant()) {
+                    return false;
+                }
             }
         }
         return true;
