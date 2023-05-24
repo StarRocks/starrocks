@@ -431,6 +431,7 @@
       + [approx_count_distinct](/sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [any_value](/sql-reference/sql-functions/aggregate-functions/any_value.md)
       + [bitmap](/sql-reference/sql-functions/aggregate-functions/bitmap.md)
+      + [bitmap_agg](/sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [count](/sql-reference/sql-functions/aggregate-functions/count.md)
       + [grouping](/sql-reference/sql-functions/aggregate-functions/grouping.md)
       + [grouping_id](/sql-reference/sql-functions/aggregate-functions/grouping_id.md)
@@ -483,6 +484,7 @@
       + [reverse](/sql-reference/sql-functions/string-functions/reverse.md)
       + [unnest](/sql-reference/sql-functions/array-functions/unnest.md)
     + Bitmap 函数
+      + [bitmap_agg](/sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [bitmap_and](/sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](/sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
       + [bitmap_contains](/sql-reference/sql-functions/bitmap-functions/bitmap_contains.md)
