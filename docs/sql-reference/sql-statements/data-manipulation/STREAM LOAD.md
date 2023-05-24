@@ -18,7 +18,7 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 
 This topic uses curl as an example to describe how to load data by using Stream Load. In addition to curl, you can also use other HTTP-compatible tools or languages to perform Stream Load. Load-related parameters are included in HTTP request header fields. When you input these parameters, take note of the following points:
 
-- You can use HTTP chunked transfer encoding, as demonstrated in this topic. If you do not choose chunked encoding, you must input a `Content-Length` header field to indicate the length of content to be transferred, thereby ensuring data integrity.
+- You can use chunked transfer encoding, as demonstrated in this topic. If you do not choose chunked transfer encoding, you must input a `Content-Length` header field to indicate the length of content to be transferred, thereby ensuring data integrity.
 
   > **NOTE**
   >
