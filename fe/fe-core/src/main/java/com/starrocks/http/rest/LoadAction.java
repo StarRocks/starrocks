@@ -103,7 +103,8 @@ public class LoadAction extends RestBaseAction {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
             for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                if (GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId).isAvailable()) {
+                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                if (node != null && node.isAvailable()) {
                     nodeIds.add(nodeId);
                 }
             }

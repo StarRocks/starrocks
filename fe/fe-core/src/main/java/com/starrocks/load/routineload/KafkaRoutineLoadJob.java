@@ -69,6 +69,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
@@ -234,8 +235,9 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
             aliveNodeNum = 0;
             for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                if (GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId).isAlive()) {
-                    aliveNodeNum = aliveNodeNum + 1;
+                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                if (node != null && node.isAlive()) {
+                    ++aliveNodeNum;
                 }
             }
         }

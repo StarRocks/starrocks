@@ -63,6 +63,7 @@ import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -176,7 +177,8 @@ public class RoutineLoadManager implements Writable {
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
                 for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                    if (GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId).isAlive()) {
+                    ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                    if (node != null && node.isAlive()) {
                         aliveNodeIds.add(nodeId);
                     }
                 }

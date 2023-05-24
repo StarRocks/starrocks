@@ -143,7 +143,8 @@ public class PulsarUtil {
                 if ((RunMode.getCurrentRunMode() == RunMode.SHARED_DATA)) {
                     Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
                     for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                        if (GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId).isAlive()) {
+                        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                        if (node != null && node.isAlive()) {
                             nodeIds.add(nodeId);
                         }
                     }
