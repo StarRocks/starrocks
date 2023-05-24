@@ -91,6 +91,8 @@ public class ColumnTypeConverter {
                 return ScalarType.createVarcharType(getVarcharLength(hiveType));
             case "CHAR":
                 return ScalarType.createCharType(getCharLength(hiveType));
+            case "BINARY":
+                return Type.VARBINARY;
             case "BOOLEAN":
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
