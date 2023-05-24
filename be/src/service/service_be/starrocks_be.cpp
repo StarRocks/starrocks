@@ -76,6 +76,8 @@ void start_be() {
         exit(1);
     }
 
+    LOG(INFO) << "BE start successfully";
+
     while (!(starrocks::k_starrocks_exit.load()) && !(starrocks::k_starrocks_exit_quick.load())) {
         sleep(10);
     }
