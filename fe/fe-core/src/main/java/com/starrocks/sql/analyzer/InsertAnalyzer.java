@@ -83,16 +83,21 @@ public class InsertAnalyzer {
         }
 
         if (insertStmt.isOverwrite()) {
-            if (!(table instanceof OlapTable)) {
-                throw unsupportedException("Only support insert overwrite olap table");
+            if (!(table instanceof OlapTable) && !table.isIcebergTable()) {
+                throw unsupportedException("Only support insert overwrite olap table and iceberg table");
             }
-            if (((OlapTable) table).getState() != NORMAL) {
+            if (table instanceof OlapTable && ((OlapTable) table).getState() != NORMAL) {
                 String msg =
                         String.format("table state is %s, please wait to insert overwrite util table state is normal",
                                 ((OlapTable) table).getState());
                 throw unsupportedException(msg);
             }
-        } else if (!table.supportInsert()) {
+        }
+
+        if (!table.supportInsert()) {
+            if (table.isIcebergTable()) {
+                throw unsupportedException("Only support insert into iceberg table with parquet file format");
+            }
             throw unsupportedException("Only support insert into olap table or mysql table or iceberg table");
         }
 
