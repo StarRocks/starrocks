@@ -264,6 +264,7 @@ public class OperationType {
     public static final short OP_CREATE_MATERIALIZED_VIEW = 10094;
     public static final short OP_CREATE_INSERT_OVERWRITE = 10095;
     public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10096;
+    public static final short OP_ALTER_MATERIALIZED_VIEW_STATUS = 10097;
 
     // manage system node info 10101 ~ 10120
     public static final short OP_UPDATE_FRONTEND = 10101;
