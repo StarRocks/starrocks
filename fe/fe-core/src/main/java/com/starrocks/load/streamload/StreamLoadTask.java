@@ -1305,7 +1305,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             case PARALLEL_STREAM_LOAD:
                 return "PARALLEL_STREAM_LOAD";
             default:
-                return "UNKOWN";
+                return "UNKNOWN";
         }
     }
 
