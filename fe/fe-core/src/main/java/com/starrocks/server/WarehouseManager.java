@@ -15,7 +15,6 @@
 package com.starrocks.server;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
@@ -25,8 +24,6 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.system.Backend;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.LocalWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
@@ -86,14 +83,10 @@ public class WarehouseManager implements Writable {
 
     public void updateDefaultWarehouse() {
         Warehouse warehouse = getDefaultWarehouse();
-        ImmutableMap<Long, Backend> backends = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
-        for (long id : backends.keySet()) {
-            warehouse.getAnyAvailableCluster().addNode(id);
-        }
-        ImmutableMap<Long, ComputeNode> ComputeNodes = GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode();
-        for (long id : ComputeNodes.keySet()) {
-            warehouse.getAnyAvailableCluster().addNode(id);
-        }
+        warehouse.getAnyAvailableCluster().addNodes(GlobalStateMgr.getCurrentSystemInfo().
+                getIdToBackend().keySet().asList());
+        warehouse.getAnyAvailableCluster().addNodes(GlobalStateMgr.getCurrentSystemInfo().
+                getIdComputeNode().keySet().asList());
     }
 
     public boolean warehouseExists(String warehouseName) {

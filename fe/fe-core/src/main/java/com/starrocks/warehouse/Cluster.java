@@ -72,6 +72,10 @@ public class Cluster implements Writable {
         computeNodeIds.add(cnId);
     }
 
+    public void addNodes(List<Long> cnIds) {
+        computeNodeIds.addAll(cnIds);
+    }
+
     public void dropNode(long cnId) {
         computeNodeIds.remove(cnId);
     }
