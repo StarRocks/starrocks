@@ -24,6 +24,10 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
@@ -61,8 +65,6 @@ import java.util.stream.Collectors;
 // WorkGroupMgr is employed by GlobalStateMgr to manage WorkGroup in FE.
 public class ResourceGroupMgr implements Writable {
     private static final Logger LOG = LogManager.getLogger(ResourceGroupMgr.class);
-
-    private final GlobalStateMgr globalStateMgr;
     private final Map<String, ResourceGroup> resourceGroupMap = new HashMap<>();
 
     // Record the current short_query resource group.
@@ -75,10 +77,6 @@ public class ResourceGroupMgr implements Writable {
     private final Map<Long, Map<Long, TWorkGroup>> activeResourceGroupsPerBe = new HashMap<>();
     private final Map<Long, Long> minVersionPerBe = new HashMap<>();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-
-    public ResourceGroupMgr(GlobalStateMgr globalStateMgr) {
-        this.globalStateMgr = globalStateMgr;
-    }
 
     private void readLock() {
         lock.readLock().lock();
@@ -552,5 +550,32 @@ public class ResourceGroupMgr implements Writable {
     private static class SerializeData {
         @SerializedName("WorkGroups")
         public List<ResourceGroup> resourceGroups;
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        int numJson = 1 + resourceGroupMap.size();
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, ResourceGroupMgr.class.getName(), numJson);
+        writer.writeJson(resourceGroupMap.size());
+        for (ResourceGroup resourceGroup : resourceGroupMap.values()) {
+            writer.writeJson(resourceGroup);
+        }
+
+        writer.close();
+    }
+
+    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, ResourceGroupMgr.class.getName());
+        try {
+            int numJson = reader.readInt();
+            List<ResourceGroup> resourceGroups = new ArrayList<>();
+            for (int i = 0; i < numJson; ++i) {
+                ResourceGroup resourceGroup = reader.readJson(ResourceGroup.class);
+                resourceGroups.add(resourceGroup);
+            }
+            resourceGroups.sort(Comparator.comparing(ResourceGroup::getVersion));
+            resourceGroups.forEach(this::replayAddResourceGroup);
+        } finally {
+            reader.close();
+        }
     }
 }

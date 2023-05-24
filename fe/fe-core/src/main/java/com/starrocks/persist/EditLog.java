@@ -65,8 +65,8 @@ import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.bdbje.Timestamp;
-import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.DeleteInfo;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportFailMsg;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -404,13 +404,13 @@ public class EditLog {
                     break;
                 case OperationType.OP_FINISH_DELETE: {
                     DeleteInfo info = (DeleteInfo) journal.getData();
-                    DeleteHandler deleteHandler = globalStateMgr.getDeleteHandler();
+                    DeleteMgr deleteHandler = globalStateMgr.getDeleteHandler();
                     deleteHandler.replayDelete(info, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_FINISH_MULTI_DELETE: {
                     MultiDeleteInfo info = (MultiDeleteInfo) journal.getData();
-                    DeleteHandler deleteHandler = globalStateMgr.getDeleteHandler();
+                    DeleteMgr deleteHandler = globalStateMgr.getDeleteHandler();
                     deleteHandler.replayMultiDelete(info, globalStateMgr);
                     break;
                 }

@@ -160,7 +160,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionManager;
 import com.starrocks.leader.Checkpoint;
 import com.starrocks.leader.TaskRunStateSynchronizer;
-import com.starrocks.load.DeleteHandler;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.InsertOverwriteJobManager;
@@ -264,7 +264,7 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
-import com.starrocks.statistic.AnalyzeManager;
+import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
@@ -365,7 +365,7 @@ public class GlobalStateMgr {
     private ConsistencyChecker consistencyChecker;
     private BackupHandler backupHandler;
     private PublishVersionDaemon publishVersionDaemon;
-    private DeleteHandler deleteHandler;
+    private DeleteMgr deleteHandler;
     private UpdateDbUsedDataQuotaDaemon updateDbUsedDataQuotaDaemon;
 
     private FrontendDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
@@ -475,7 +475,7 @@ public class GlobalStateMgr {
 
     private final SafeModeChecker safeModeChecker;
 
-    private AnalyzeManager analyzeManager;
+    private AnalyzeMgr analyzeManager;
 
     private StatisticStorage statisticStorage;
 
@@ -646,7 +646,7 @@ public class GlobalStateMgr {
         this.lock = new QueryableReentrantLock(true);
         this.backupHandler = new BackupHandler(this);
         this.publishVersionDaemon = new PublishVersionDaemon();
-        this.deleteHandler = new DeleteHandler();
+        this.deleteHandler = new DeleteMgr();
         this.updateDbUsedDataQuotaDaemon = new UpdateDbUsedDataQuotaDaemon();
         this.statisticsMetaManager = new StatisticsMetaManager();
         this.statisticAutoCollector = new StatisticAutoCollector();
@@ -675,7 +675,7 @@ public class GlobalStateMgr {
         this.tabletStatMgr = new TabletStatMgr();
         initAuth(USING_NEW_PRIVILEGE);
 
-        this.resourceGroupMgr = new ResourceGroupMgr(this);
+        this.resourceGroupMgr = new ResourceGroupMgr();
 
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
@@ -717,7 +717,7 @@ public class GlobalStateMgr {
 
         this.pluginMgr = new PluginMgr();
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
-        this.analyzeManager = new AnalyzeManager();
+        this.analyzeManager = new AnalyzeMgr();
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
@@ -811,7 +811,7 @@ public class GlobalStateMgr {
         return pluginMgr;
     }
 
-    public AnalyzeManager getAnalyzeManager() {
+    public AnalyzeMgr getAnalyzeManager() {
         return analyzeManager;
     }
 
@@ -890,7 +890,7 @@ public class GlobalStateMgr {
         return getCurrentState().getPluginMgr();
     }
 
-    public static AnalyzeManager getCurrentAnalyzeMgr() {
+    public static AnalyzeMgr getCurrentAnalyzeMgr() {
         return getCurrentState().getAnalyzeManager();
     }
 
@@ -1413,6 +1413,9 @@ public class GlobalStateMgr {
                     loadManager.loadLoadJobsV2JsonFormat(dis);
                     alterJobMgr.load(dis);
                     pluginMgr.load(dis);
+                    deleteHandler.load(dis);
+                    analyzeManager.load(dis);
+                    resourceGroupMgr.load(dis);
                 } catch (SRMetaBlockException | SRMetaBlockEOFException e) {
                     LOG.error("load image failed", e);
                     throw new IOException("load image failed", e);
@@ -1438,11 +1441,6 @@ public class GlobalStateMgr {
                 checksum = routineLoadManager.loadRoutineLoadJobs(dis, checksum);
                 checksum = smallFileMgr.loadSmallFiles(dis, checksum);
 
-                checksum = loadDeleteHandler(dis, checksum);
-                remoteChecksum = dis.readLong();
-                checksum = analyzeManager.loadAnalyze(dis, checksum);
-                remoteChecksum = dis.readLong();
-                checksum = resourceGroupMgr.loadResourceGroups(dis, checksum);
                 checksum = auth.readAsGson(dis, checksum);
                 remoteChecksum = dis.readLong();
                 checksum = taskManager.loadTasks(dis, checksum);
@@ -1726,7 +1724,7 @@ public class GlobalStateMgr {
     }
 
     public long loadDeleteHandler(DataInputStream dis, long checksum) throws IOException {
-        this.deleteHandler = DeleteHandler.read(dis);
+        this.deleteHandler = DeleteMgr.read(dis);
         LOG.info("finished replay deleteHandler from image");
         return checksum;
     }
@@ -1813,6 +1811,9 @@ public class GlobalStateMgr {
                     loadManager.saveLoadJobsV2JsonFormat(dos);
                     alterJobMgr.save(dos);
                     pluginMgr.save(dos);
+                    deleteHandler.save(dos);
+                    analyzeManager.save(dos);
+                    resourceGroupMgr.save(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("save image failed", e);
                     throw new IOException("save image failed", e);
@@ -1832,11 +1833,6 @@ public class GlobalStateMgr {
                 checksum = routineLoadManager.saveRoutineLoadJobs(dos, checksum);
                 checksum = smallFileMgr.saveSmallFiles(dos, checksum);
 
-                checksum = deleteHandler.saveDeleteHandler(dos, checksum);
-                dos.writeLong(checksum);
-                checksum = analyzeManager.saveAnalyze(dos, checksum);
-                dos.writeLong(checksum);
-                checksum = resourceGroupMgr.saveResourceGroups(dos, checksum);
                 checksum = auth.writeAsGson(dos, checksum);
                 dos.writeLong(checksum);
                 checksum = taskManager.saveTasks(dos, checksum);
@@ -3027,7 +3023,7 @@ public class GlobalStateMgr {
         return this.backupHandler;
     }
 
-    public DeleteHandler getDeleteHandler() {
+    public DeleteMgr getDeleteHandler() {
         return this.deleteHandler;
     }
 
