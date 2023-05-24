@@ -24,6 +24,11 @@ tokens {
     CONCAT
 }
 
+<<<<<<< HEAD
+=======
+ACCESS: 'ACCESS';
+ACTIVE: 'ACTIVE';
+>>>>>>> f74e15e57 ([Enhancement] Support alter materialized view to active (#24001))
 ADD: 'ADD';
 ADMIN: 'ADMIN';
 AFTER: 'AFTER';
@@ -181,6 +186,11 @@ IMMEDIATE: 'IMMEDIATE';
 IGNORE: 'IGNORE';
 IMAGE: 'IMAGE';
 IN: 'IN';
+<<<<<<< HEAD
+=======
+INACTIVE: 'INACTIVE';
+INCREMENTAL: 'INCREMENTAL';
+>>>>>>> f74e15e57 ([Enhancement] Support alter materialized view to active (#24001))
 INDEX: 'INDEX';
 INDEXES: 'INDEXES';
 INFILE: 'INFILE';

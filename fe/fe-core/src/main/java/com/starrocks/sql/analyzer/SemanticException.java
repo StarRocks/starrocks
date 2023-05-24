@@ -32,4 +32,12 @@ public class SemanticException extends StarRocksPlannerException {
     public static SemanticException missingAttributeException(Expr node) throws SemanticException {
         throw new SemanticException("Column '%s' cannot be resolved", node.toSql());
     }
+<<<<<<< HEAD
+=======
+
+    public String getDetailMsg() {
+        return detailMsg;
+    }
+
+>>>>>>> f74e15e57 ([Enhancement] Support alter materialized view to active (#24001))
 }
