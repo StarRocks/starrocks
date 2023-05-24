@@ -20,6 +20,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -31,6 +32,10 @@ import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -57,8 +62,8 @@ import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
-public class AnalyzeManager implements Writable {
-    private static final Logger LOG = LogManager.getLogger(AnalyzeManager.class);
+public class AnalyzeMgr implements Writable {
+    private static final Logger LOG = LogManager.getLogger(AnalyzeMgr.class);
     private static final Pair<Long, Long> CHECK_ALL_TABLES =
             new Pair<>(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID);
 
@@ -66,6 +71,7 @@ public class AnalyzeManager implements Writable {
     private final Map<Long, AnalyzeStatus> analyzeStatusMap;
     private final Map<Long, BasicStatsMeta> basicStatsMetaMap;
     private final Map<Pair<Long, String>, HistogramStatsMeta> histogramStatsMetaMap;
+
     // ConnectContext of all currently running analyze tasks
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
     private static final ExecutorService ANALYZE_TASK_THREAD_POOL = ThreadPoolManager.newDaemonFixedThreadPool(
@@ -75,7 +81,7 @@ public class AnalyzeManager implements Writable {
     private final Set<Long> dropPartitionIds = new ConcurrentSkipListSet<>();
     private final List<Pair<Long, Long>> checkTableIds = Lists.newArrayList(CHECK_ALL_TABLES);
 
-    public AnalyzeManager() {
+    public AnalyzeMgr() {
         analyzeJobMap = Maps.newConcurrentMap();
         analyzeStatusMap = Maps.newConcurrentMap();
         basicStatsMetaMap = Maps.newConcurrentMap();
@@ -561,6 +567,73 @@ public class AnalyzeManager implements Writable {
     public long saveAnalyze(DataOutputStream dos, long checksum) throws IOException {
         write(dos);
         return checksum;
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+
+        List<NativeAnalyzeStatus> analyzeStatuses = getAnalyzeStatusMap().values().stream().
+                filter(AnalyzeStatus::isNative).
+                map(status -> (NativeAnalyzeStatus) status).distinct().collect(Collectors.toList());
+
+        int numJson = 1 + analyzeJobMap.size()
+                + 1 + analyzeStatuses.size()
+                + 1 + basicStatsMetaMap.size()
+                + 1 + histogramStatsMetaMap.size();
+
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, ResourceGroupMgr.class.getName(), numJson);
+
+        writer.writeJson(analyzeJobMap.size());
+        for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {
+            writer.writeJson(analyzeJob);
+        }
+
+        writer.writeJson(analyzeStatuses.size());
+        for (AnalyzeStatus analyzeStatus : analyzeStatuses) {
+            writer.writeJson(analyzeStatus);
+        }
+
+        writer.writeJson(basicStatsMetaMap.size());
+        for (BasicStatsMeta basicStatsMeta : basicStatsMetaMap.values()) {
+            writer.writeJson(basicStatsMeta);
+        }
+
+        writer.writeJson(histogramStatsMetaMap.size());
+        for (HistogramStatsMeta histogramStatsMeta : histogramStatsMetaMap.values()) {
+            writer.writeJson(histogramStatsMeta);
+        }
+
+        writer.close();
+    }
+
+    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, AnalyzeMgr.class.getName());
+        try {
+            int analyzeJobSize = reader.readInt();
+            for (int i = 0; i < analyzeJobSize; ++i) {
+                AnalyzeJob analyzeJob = reader.readJson(AnalyzeJob.class);
+                replayAddAnalyzeJob(analyzeJob);
+            }
+
+            int analyzeStatusSize = reader.readInt();
+            for (int i = 0; i < analyzeStatusSize; ++i) {
+                NativeAnalyzeStatus analyzeStatus = reader.readJson(NativeAnalyzeStatus.class);
+                replayAddAnalyzeStatus(analyzeStatus);
+            }
+
+            int basicStatsMetaSize = reader.readInt();
+            for (int i = 0; i < basicStatsMetaSize; ++i) {
+                BasicStatsMeta basicStatsMeta = reader.readJson(BasicStatsMeta.class);
+                replayAddBasicStatsMeta(basicStatsMeta);
+            }
+
+            int histogramStatsMetaSize = reader.readInt();
+            for (int i = 0; i < histogramStatsMetaSize; ++i) {
+                HistogramStatsMeta histogramStatsMeta = reader.readJson(HistogramStatsMeta.class);
+                replayAddHistogramStatsMeta(histogramStatsMeta);
+            }
+        } finally {
+            reader.close();
+        }
     }
 
     private static class SerializeData {
