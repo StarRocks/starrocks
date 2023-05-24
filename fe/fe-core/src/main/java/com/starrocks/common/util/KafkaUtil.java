@@ -184,7 +184,11 @@ public class KafkaUtil {
                 List<Long> nodeIds = new ArrayList<>();
                 if ((RunMode.getCurrentRunMode() == RunMode.SHARED_DATA)) {
                     Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-                    nodeIds = warehouse.getAnyAvailableCluster().getComputeNodeIds();
+                    for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                        if (GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId).isAlive()) {
+                            nodeIds.add(nodeId);
+                        }
+                    }
                     if (nodeIds.isEmpty()) {
                         throw new LoadException("Failed to send proxy request. No alive backends or computeNodes");
                     }

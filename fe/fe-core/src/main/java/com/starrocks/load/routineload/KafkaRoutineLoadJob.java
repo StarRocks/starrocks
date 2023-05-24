@@ -232,7 +232,12 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         int aliveNodeNum = systemInfoService.getAliveBackendNumber();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-            aliveNodeNum = warehouse.getAnyAvailableCluster().getComputeNodeIds().size();
+            aliveNodeNum = 0;
+            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                if (GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId).isAlive()) {
+                    aliveNodeNum = aliveNodeNum + 1;
+                }
+            }
         }
         int partitionNum = currentKafkaPartitions.size();
         if (desireTaskConcurrentNum == 0) {

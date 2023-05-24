@@ -54,6 +54,7 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class LoadAction extends RestBaseAction {
@@ -97,10 +98,14 @@ public class LoadAction extends RestBaseAction {
         }
 
         // Choose a backend sequentially, or choose a cn in shared_data mode
-        List<Long> nodeIds;
+        List<Long> nodeIds = new ArrayList<>();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-            nodeIds = warehouse.getAnyAvailableCluster().getComputeNodeIds();
+            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                if (GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId).isAvailable()) {
+                    nodeIds.add(nodeId);
+                }
+            }
         } else {
             nodeIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
             if (CollectionUtils.isEmpty(nodeIds)) {

@@ -172,12 +172,16 @@ public class RoutineLoadManager implements Writable {
         slotLock.lock();
         try {
             List<Long> aliveNodeIds = new ArrayList<>();
-
             // TODO: need to refactor after be split into cn + dn
-            aliveNodeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true));
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-                aliveNodeIds = warehouse.getAnyAvailableCluster().getComputeNodeIds();
+                for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                    if (GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId).isAlive()) {
+                        aliveNodeIds.add(nodeId);
+                    }
+                }
+            } else {
+                aliveNodeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true));
             }
 
             // add new nodes
