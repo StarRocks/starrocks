@@ -202,38 +202,6 @@ public class ScalarOperatorFunctions {
         }
     }
 
-
-    @ConstantFunction.List(list = {
-            @ConstantFunction(name = "substr", argTypes = {VARCHAR, INT}, returnType = VARCHAR),
-            @ConstantFunction(name = "substring", argTypes = {VARCHAR, INT}, returnType = VARCHAR)
-    })
-    public static ConstantOperator substring(ConstantOperator str, ConstantOperator pos) {
-        String strValue = str.getVarchar();
-        return substring(str, pos, new ConstantOperator(strValue.length(), Type.INT));
-    }
-
-    @ConstantFunction.List(list = {
-            @ConstantFunction(name = "substr", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR),
-            @ConstantFunction(name = "substring", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR)
-    })
-    public static ConstantOperator substring(ConstantOperator str, ConstantOperator pos, ConstantOperator len) {
-        int posInt = pos.getInt();
-        String strValue = str.getVarchar();
-        if (posInt < 0) {
-            posInt += strValue.length();
-        } else {
-            posInt -= 1;
-        }
-        if (posInt < 0) {
-            return ConstantOperator.createVarchar("");
-        }
-        int lenInt = len.getInt();
-        if (posInt + lenInt > strValue.length()) {
-            lenInt = strValue.length() - posInt;
-        }
-        return ConstantOperator.createVarchar(str.getVarchar().substring(posInt, posInt + lenInt));
-    }
-
     @ConstantFunction(name = "str_to_date", argTypes = {VARCHAR, VARCHAR}, returnType = DATETIME)
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
@@ -922,6 +890,29 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "version", argTypes = {}, returnType = VARCHAR)
     public static ConstantOperator version() {
         return ConstantOperator.createVarchar(Config.mysql_server_version);
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "substring", argTypes = {VARCHAR, INT}, returnType = VARCHAR),
+            @ConstantFunction(name = "substring", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR),
+            @ConstantFunction(name = "substr", argTypes = {VARCHAR, INT}, returnType = VARCHAR),
+            @ConstantFunction(name = "substr", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR)
+    })
+    public static ConstantOperator substring(ConstantOperator value, ConstantOperator... index) {
+        Preconditions.checkArgument(index.length == 1 || index.length == 2);
+
+        String string = value.getVarchar();
+        /// If index out of bounds, the substring method will throw exception, we need avoid it,
+        /// otherwise, the Constant Evaluation will fail.
+        /// Besides, the implementation of `substring` function in starrocks includes beginIndex and length,
+        /// and the index is start from 1 and can negative, so we need carefully handle it.
+        int beginIndex = index[0].getInt() >= 0 ? index[0].getInt() - 1 : string.length() + index[0].getInt();
+        int endIndex = (index.length == 2) ? Math.min(beginIndex + index[1].getInt(), string.length()) : string.length();
+
+        if (beginIndex < 0 || beginIndex > endIndex) {
+            return ConstantOperator.createVarchar("");
+        }
+        return ConstantOperator.createVarchar(string.substring(beginIndex, endIndex));
     }
 
     private static ConstantOperator createDecimalConstant(BigDecimal result) {

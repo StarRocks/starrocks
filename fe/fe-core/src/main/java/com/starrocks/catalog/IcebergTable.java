@@ -52,6 +52,8 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
+import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
+import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 
 public class IcebergTable extends Table {
     private static final Logger LOG = LogManager.getLogger(IcebergTable.class);
@@ -60,6 +62,7 @@ public class IcebergTable extends Table {
     private static final String JSON_KEY_ICEBERG_TABLE = "table";
     private static final String JSON_KEY_RESOURCE_NAME = "resource";
     private static final String JSON_KEY_ICEBERG_PROPERTIES = "icebergProperties";
+    private static final String PARQUET_FORMAT = "parquet";
 
     private org.apache.iceberg.Table nativeTable; // actual iceberg table
     private String catalogName;
@@ -247,7 +250,9 @@ public class IcebergTable extends Table {
 
     @Override
     public boolean supportInsert() {
-        return true;
+        // for now, only support writing iceberg table with parquet file format
+        return getNativeTable().properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
+                .equalsIgnoreCase(PARQUET_FORMAT);
     }
 
     @Override

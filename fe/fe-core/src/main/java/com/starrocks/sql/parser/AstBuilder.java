@@ -1637,7 +1637,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.modifyTablePropertiesClause() != null) {
             modifyTablePropertiesClause = (ModifyTablePropertiesClause) visit(context.modifyTablePropertiesClause());
         }
-        return new AlterMaterializedViewStmt(mvName, newMvName, refreshSchemeDesc, modifyTablePropertiesClause,
+        String status = null;
+        if (context.statusDesc() != null) {
+            status = context.statusDesc().getText();
+        }
+        return new AlterMaterializedViewStmt(mvName, newMvName, refreshSchemeDesc, modifyTablePropertiesClause, status,
                 createPos(context));
     }
 
@@ -5351,6 +5355,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
             }
             return new IsNullPredicate(params.get(0), false, pos);
+        }
+
+        if (functionName.equals(FunctionSet.ISNOTNULL)) {
+            List<Expr> params = visit(context.expression(), Expr.class);
+            if (params.size() != 1) {
+                throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
+            }
+            return new IsNullPredicate(params.get(0), true, pos);
         }
 
         if (ArithmeticExpr.isArithmeticExpr(fnName.getFunction())) {
