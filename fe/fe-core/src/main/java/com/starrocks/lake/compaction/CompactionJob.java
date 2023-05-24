@@ -25,7 +25,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import javax.validation.constraints.NotNull;
 
-public class CompactionContext {
+public class CompactionJob {
     private final String partitionName;
     private final long txnId;
     private final long startTs;
@@ -35,7 +35,7 @@ public class CompactionContext {
     private List<Future<CompactResponse>> responseList;
     private VisibleStateWaiter visibleStateWaiter;
 
-    public CompactionContext(String partitionName, long txnId, long startTs) {
+    public CompactionJob(String partitionName, long txnId, long startTs) {
         this.partitionName = partitionName;
         this.txnId = txnId;
         this.startTs = startTs;

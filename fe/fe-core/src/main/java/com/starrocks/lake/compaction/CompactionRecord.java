@@ -25,7 +25,7 @@ public class CompactionRecord {
     private final String partitionName;
     private final String errorMessage;
 
-    private CompactionRecord(CompactionContext context, String errorMessage) {
+    private CompactionRecord(CompactionJob context, String errorMessage) {
         Objects.requireNonNull(context.getFullPartitionName());
         this.txnId = context.getTxnId();
         this.startTs = context.getStartTs();
@@ -35,11 +35,11 @@ public class CompactionRecord {
         this.errorMessage = errorMessage;
     }
 
-    static CompactionRecord build(CompactionContext context) {
+    static CompactionRecord build(CompactionJob context) {
         return new CompactionRecord(context, null);
     }
 
-    static CompactionRecord build(CompactionContext context, String errorMessage) {
+    static CompactionRecord build(CompactionJob context, String errorMessage) {
         return new CompactionRecord(context, errorMessage);
     }
 
