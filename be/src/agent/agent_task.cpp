@@ -305,17 +305,19 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
             Status res = StorageEngine::instance()->execute_task(&engine_task);
             if (!res.ok()) {
                 status_code = TStatusCode::RUNTIME_ERROR;
-                LOG(WARNING) << "storage migrate failed. status:" << res << ", signature:" << agent_task_req->signature;
-                error_msgs.emplace_back("storage migrate failed.");
+                LOG(WARNING) << "local tablet migration failed. status: " << res
+                             << ", signature: " << agent_task_req->signature;
+                error_msgs.emplace_back("local tablet migration failed. error message: " + res.get_error_msg());
             } else {
-                LOG(INFO) << "storage migrate success. status:" << res << ", signature:" << agent_task_req->signature;
+                LOG(INFO) << "local tablet migration succeeded. status: " << res
+                          << ", signature: " << agent_task_req->signature;
 
                 TTabletInfo tablet_info;
                 AgentStatus status = TaskWorkerPoolBase::get_tablet_info(clone_req.tablet_id, clone_req.schema_hash,
                                                                          agent_task_req->signature, &tablet_info);
                 if (status != STARROCKS_SUCCESS) {
-                    LOG(WARNING) << "storage migrate success, but get tablet info failed"
-                                 << ". status:" << status << ", signature:" << agent_task_req->signature;
+                    LOG(WARNING) << "local tablet migration succeeded, but get tablet info failed"
+                                 << ". status: " << status << ", signature: " << agent_task_req->signature;
                 } else {
                     tablet_infos.push_back(tablet_info);
                 }
