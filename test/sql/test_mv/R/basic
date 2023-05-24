@@ -40,5 +40,5 @@ false	base-table dropped: ss
 -- !result
 REFRESH MATERIALIZED VIEW mv1;
 -- result:
-E: (1064, 'Getting analyzing error at line 1, column 26. Detail message: Refresh materialized view failed because mv1 is not active. You can try to active it with ALTER MATERIALIZED VIEW mv1 ACTIVE; .')
+E: (1064, 'Getting analyzing error at line 1, column 26. Detail message: Refresh materialized view failed because [mv1] is not active. You can try to active it with ALTER MATERIALIZED VIEW mv1 ACTIVE; .')
 -- !result
