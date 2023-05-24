@@ -59,6 +59,7 @@ import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -168,12 +169,17 @@ public class RoutineLoadManager implements Writable {
         slotLock.lock();
         try {
             List<Long> aliveNodeIds = new ArrayList<>();
-
             // TODO: need to refactor after be split into cn + dn
-            aliveNodeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true));
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-                aliveNodeIds = warehouse.getAnyAvailableCluster().getComputeNodeIds();
+                for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                    ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                    if (node != null && node.isAlive()) {
+                        aliveNodeIds.add(nodeId);
+                    }
+                }
+            } else {
+                aliveNodeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true));
             }
 
             // add new nodes
