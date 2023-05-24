@@ -137,7 +137,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.statistic.AnalyzeManager;
+import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
 import com.starrocks.statistic.StatisticExecutor;
@@ -955,7 +955,7 @@ public class StmtExecutor {
     private void handleKillAnalyzeStmt() {
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) parsedStmt;
         long analyzeId = killAnalyzeStmt.getAnalyzeId();
-        AnalyzeManager analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
+        AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
         }

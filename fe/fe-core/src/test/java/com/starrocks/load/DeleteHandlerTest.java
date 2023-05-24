@@ -70,7 +70,7 @@ import java.util.concurrent.TimeUnit;
 
 public class DeleteHandlerTest {
 
-    private DeleteHandler deleteHandler;
+    private DeleteMgr deleteHandler;
 
     private static final long BACKEND_ID_1 = 10000L;
     private static final long BACKEND_ID_2 = 10001L;
@@ -106,7 +106,7 @@ public class DeleteHandlerTest {
         globalTransactionMgr = new GlobalTransactionMgr(globalStateMgr);
         globalTransactionMgr.setEditLog(editLog);
         connectContext.setGlobalStateMgr(globalStateMgr);
-        deleteHandler = new DeleteHandler();
+        deleteHandler = new DeleteMgr();
         auth = AccessTestUtil.fetchAdminAccess();
         try {
             db = CatalogMocker.mockDb();

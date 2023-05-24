@@ -159,7 +159,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionManager;
 import com.starrocks.leader.Checkpoint;
 import com.starrocks.leader.TaskRunStateSynchronizer;
-import com.starrocks.load.DeleteHandler;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.InsertOverwriteJobManager;
@@ -263,7 +263,7 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
-import com.starrocks.statistic.AnalyzeManager;
+import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
@@ -362,7 +362,7 @@ public class GlobalStateMgr {
     private ConsistencyChecker consistencyChecker;
     private BackupHandler backupHandler;
     private PublishVersionDaemon publishVersionDaemon;
-    private DeleteHandler deleteHandler;
+    private DeleteMgr deleteHandler;
     private UpdateDbUsedDataQuotaDaemon updateDbUsedDataQuotaDaemon;
 
     private LeaderDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
@@ -470,7 +470,7 @@ public class GlobalStateMgr {
 
     private final StatisticAutoCollector statisticAutoCollector;
 
-    private AnalyzeManager analyzeManager;
+    private AnalyzeMgr analyzeManager;
 
     private StatisticStorage statisticStorage;
 
@@ -624,7 +624,7 @@ public class GlobalStateMgr {
         this.lock = new QueryableReentrantLock(true);
         this.backupHandler = new BackupHandler(this);
         this.publishVersionDaemon = new PublishVersionDaemon();
-        this.deleteHandler = new DeleteHandler();
+        this.deleteHandler = new DeleteMgr();
         this.updateDbUsedDataQuotaDaemon = new UpdateDbUsedDataQuotaDaemon();
         this.statisticsMetaManager = new StatisticsMetaManager();
         this.statisticAutoCollector = new StatisticAutoCollector();
@@ -652,7 +652,7 @@ public class GlobalStateMgr {
         this.tabletStatMgr = new TabletStatMgr();
         initAuth(USING_NEW_PRIVILEGE);
 
-        this.resourceGroupMgr = new ResourceGroupMgr(this);
+        this.resourceGroupMgr = new ResourceGroupMgr();
 
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
@@ -694,7 +694,7 @@ public class GlobalStateMgr {
 
         this.pluginMgr = new PluginMgr();
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
-        this.analyzeManager = new AnalyzeManager();
+        this.analyzeManager = new AnalyzeMgr();
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
@@ -778,7 +778,7 @@ public class GlobalStateMgr {
         return pluginMgr;
     }
 
-    public AnalyzeManager getAnalyzeManager() {
+    public AnalyzeMgr getAnalyzeManager() {
         return analyzeManager;
     }
 
@@ -862,7 +862,7 @@ public class GlobalStateMgr {
         return getCurrentState().getPluginMgr();
     }
 
-    public static AnalyzeManager getCurrentAnalyzeMgr() {
+    public static AnalyzeMgr getCurrentAnalyzeMgr() {
         return getCurrentState().getAnalyzeManager();
     }
 
@@ -1674,7 +1674,7 @@ public class GlobalStateMgr {
 
     public long loadDeleteHandler(DataInputStream dis, long checksum) throws IOException {
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_82) {
-            this.deleteHandler = DeleteHandler.read(dis);
+            this.deleteHandler = DeleteMgr.read(dis);
         }
         LOG.info("finished replay deleteHandler from image");
         return checksum;
@@ -2891,7 +2891,7 @@ public class GlobalStateMgr {
         return this.backupHandler;
     }
 
-    public DeleteHandler getDeleteHandler() {
+    public DeleteMgr getDeleteHandler() {
         return this.deleteHandler;
     }
 
