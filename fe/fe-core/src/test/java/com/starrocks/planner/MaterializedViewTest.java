@@ -2484,4 +2484,25 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id;");
     }
+
+    @Test
+    public void testUnionRewrite() {
+        {
+            String mv = "SELECT `customer`.`c_custkey`, `customer`.`c_name`, `customer`.`c_address`, `customer`.`c_city`," +
+                    " `customer`.`c_nation`, `customer`.`c_region`, `customer`.`c_phone`, `customer`.`c_mktsegment`\n" +
+                    "FROM `customer`\n" +
+                    "WHERE `customer`.`c_city` = 'ETHIOPIA 9'";
+            String query = "select * from lineorder, customer";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "SELECT `customer`.`c_custkey`, `customer`.`c_name`, `customer`.`c_address`, `customer`.`c_city`," +
+                    " `customer`.`c_nation`, `customer`.`c_region`, `customer`.`c_phone`, `customer`.`c_mktsegment`\n" +
+                    "FROM `customer`\n" +
+                    "WHERE `customer`.`c_city` = 'ETHIOPIA 9'";
+            String query = "select * from customer, lineorder";
+            testRewriteOK(mv, query);
+        }
+    }
 }

@@ -116,8 +116,7 @@ std::string get_usage(const std::string& progname) {
     ss << "./meta_tool --operation=show_meta --pb_meta_path=path\n";
     ss << "./meta_tool --operation=show_segment_footer --file=/path/to/segment/file\n";
     ss << "./meta_tool --operation=dump_segment_data --file=/path/to/segment/file\n";
-    ss << "./meta_tool --operation=dump_short_key_index --file=/path/to/segment/file "
-          "--key_column_count=2 --file=/path/to/segment/file\n";
+    ss << "./meta_tool --operation=dump_short_key_index --file=/path/to/segment/file --key_column_count=2\n";
     ss << "./meta_tool --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
           "--table_id=tableid\n";
     ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool --operation=print_lake_metadata\n";
