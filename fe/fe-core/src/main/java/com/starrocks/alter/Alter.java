@@ -24,9 +24,12 @@ package com.starrocks.alter;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -53,6 +56,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
@@ -60,6 +64,14 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.SwapTableOperationLog;
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/alter/Alter.java
+=======
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
+>>>>>>> f74e15e57 ([Enhancement] Support alter materialized view to active (#24001)):fe/fe-core/src/main/java/com/starrocks/alter/AlterJobMgr.java
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.scheduler.Constants;
@@ -67,6 +79,13 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/alter/Alter.java
+=======
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+>>>>>>> f74e15e57 ([Enhancement] Support alter materialized view to active (#24001)):fe/fe-core/src/main/java/com/starrocks/alter/AlterJobMgr.java
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -82,14 +101,23 @@ import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.PartitionRenameClause;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/alter/Alter.java
+=======
+import com.starrocks.sql.ast.SetListItem;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.StatementBase;
+>>>>>>> f74e15e57 ([Enhancement] Support alter materialized view to active (#24001)):fe/fe-core/src/main/java/com/starrocks/alter/AlterJobMgr.java
 import com.starrocks.sql.ast.SwapTableClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
@@ -231,6 +259,7 @@ public class Alter {
         final String oldMvName = mvName.getTbl();
         final String newMvName = stmt.getNewMvName();
         final RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();
+        final String status = stmt.getStatus();
         ModifyTablePropertiesClause modifyTablePropertiesClause = stmt.getModifyTablePropertiesClause();
         String dbName = mvName.getDb();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -268,9 +297,74 @@ public class Alter {
                 } catch (AnalysisException ae) {
                     throw new DdlException(ae.getMessage());
                 }
+            } else if (status != null) {
+                if (AlterMaterializedViewStmt.ACTIVE.equalsIgnoreCase(status)) {
+                    if (materializedView.isActive()) {
+                        return;
+                    }
+                    processChangeMaterializedViewStatus(materializedView, status);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .refreshMaterializedView(dbName, materializedView.getName(), true, null,
+                                    Constants.TaskRunPriority.NORMAL.value(), true, false);
+                } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
+                    if (!materializedView.isActive()) {
+                        return;
+                    }
+                    LOG.warn("Setting the materialized view {}({}) to inactive because " +
+                                    "user use alter materialized view set status to inactive",
+                            materializedView.getName(), materializedView.getId());
+                    processChangeMaterializedViewStatus(materializedView, status);
+                } else {
+                    throw new DdlException("Unsupported modification materialized view status:" + status);
+                }
+                AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
+                        materializedView.getId(), status);
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
             } else {
                 throw new DdlException("Unsupported modification for materialized view");
             }
+        } finally {
+            db.writeUnlock();
+        }
+    }
+
+    private void processChangeMaterializedViewStatus(MaterializedView materializedView, String status) {
+        if (AlterMaterializedViewStmt.ACTIVE.equalsIgnoreCase(status)) {
+            String viewDefineSql = materializedView.getViewDefineSql();
+            ConnectContext context = new ConnectContext();
+            context.setQualifiedUser(AuthenticationManager.ROOT_USER);
+            context.setCurrentUserIdentity(UserIdentity.ROOT);
+            context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+
+            List<StatementBase> statementBaseList = SqlParser.parse(viewDefineSql, context.getSessionVariable());
+            QueryStatement queryStatement = (QueryStatement) statementBaseList.get(0);
+            try {
+                Analyzer.analyze(queryStatement, context);
+            } catch (SemanticException e) {
+                throw new SemanticException("Can not active materialized view [" + materializedView.getName() +
+                        "] because analyze materialized view define sql: \n\n" + viewDefineSql +
+                        "\n\nCause an error: " + e.getDetailMsg());
+            }
+
+            List<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getAndCheckBaseTables(queryStatement);
+            materializedView.setBaseTableInfos(baseTableInfos);
+            materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
+            GlobalStateMgr.getCurrentState().updateBaseTableRelatedMv(materializedView.getDbId(),
+                    materializedView, baseTableInfos);
+            materializedView.setActive(true);
+        } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
+            materializedView.setInactiveAndReason("user use alter materialized view set status to inactive");
+        }
+    }
+
+    public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
+        long dbId = log.getDbId();
+        long tableId = log.getTableId();
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        db.writeLock();
+        try {
+            MaterializedView mv = (MaterializedView) db.getTable(tableId);
+            processChangeMaterializedViewStatus(mv, log.getStatus());
         } finally {
             db.writeUnlock();
         }

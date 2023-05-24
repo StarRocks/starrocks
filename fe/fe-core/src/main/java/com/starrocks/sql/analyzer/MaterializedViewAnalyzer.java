@@ -96,6 +96,84 @@ public class MaterializedViewAnalyzer {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
     }
 
+    public static List<BaseTableInfo> getAndCheckBaseTables(QueryStatement queryStatement) {
+        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+        processBaseTables(queryStatement, baseTableInfos);
+        Set<BaseTableInfo> baseTableInfoSet = Sets.newHashSet(baseTableInfos);
+        baseTableInfos.clear();
+        baseTableInfos.addAll(baseTableInfoSet);
+        return baseTableInfos;
+    }
+
+    private static void processBaseTables(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos) {
+        Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
+        tableNameTableMap.forEach((tableNameInfo, table) -> {
+            Preconditions.checkState(table != null, "Materialized view base table is null");
+            if (!isSupportBasedOnTable(table)) {
+                throw new SemanticException("Create materialized view do not support the table type: " +
+                        table.getType(), tableNameInfo.getPos());
+            }
+            if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                throw new SemanticException(
+                        "Create materialized view from inactive materialized view: " + table.getName(),
+                        tableNameInfo.getPos());
+            }
+
+            if (table.isView()) {
+                return;
+            }
+
+            if (isExternalTableFromResource(table)) {
+                throw new SemanticException(
+                        "Only supports creating materialized views based on the external table " +
+                                "which created by catalog", tableNameInfo.getPos());
+            }
+            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
+                    tableNameInfo.getDb());
+            if (isInternalCatalog(tableNameInfo.getCatalog())) {
+                baseTableInfos.add(new BaseTableInfo(database.getId(), database.getFullName(),
+                        table.getId()));
+            } else {
+                baseTableInfos.add(new BaseTableInfo(tableNameInfo.getCatalog(),
+                        tableNameInfo.getDb(), table.getTableIdentifier()));
+            }
+        });
+        processViews(queryStatement, baseTableInfos);
+    }
+
+    private static boolean isSupportBasedOnTable(Table table) {
+        return SUPPORTED_TABLE_TYPE.contains(table.getType()) || table instanceof OlapTable;
+    }
+
+    private static boolean isExternalTableFromResource(Table table) {
+        if (table instanceof OlapTable) {
+            return false;
+        } else if (table instanceof JDBCTable || table instanceof MysqlTable) {
+            return false;
+        } else if (table instanceof HiveTable || table instanceof HudiTable) {
+            HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
+            String catalogName = hiveMetaStoreTable.getCatalogName();
+            return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
+        } else if (table instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            String catalogName = icebergTable.getCatalogName();
+            return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
+        } else {
+            return true;
+        }
+    }
+
+    private static void processViews(QueryStatement queryStatement, List<BaseTableInfo> baseTableInfos) {
+        List<ViewRelation> viewRelations = AnalyzerUtils.collectViewRelations(queryStatement);
+        if (viewRelations.isEmpty()) {
+            return;
+        }
+        Set<ViewRelation> viewRelationSet = Sets.newHashSet(viewRelations);
+        for (ViewRelation viewRelation : viewRelationSet) {
+            processBaseTables(viewRelation.getQueryStatement(), baseTableInfos);
+        }
+    }
+
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
         public enum RefreshTimeUnit {
@@ -105,6 +183,7 @@ public class MaterializedViewAnalyzer {
             SECOND
         }
 
+<<<<<<< HEAD
         private boolean isSupportBasedOnTable(Table table) {
             return table instanceof OlapTable || table instanceof HiveTable || table instanceof HudiTable ||
                     table instanceof IcebergTable;
@@ -155,6 +234,8 @@ public class MaterializedViewAnalyzer {
             }
         }
 
+=======
+>>>>>>> f74e15e57 ([Enhancement] Support alter materialized view to active (#24001))
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
@@ -199,6 +280,7 @@ public class MaterializedViewAnalyzer {
             if (tableNameTableMap.isEmpty()) {
                 throw new SemanticException("Can not find base table in query statement");
             }
+<<<<<<< HEAD
             tableNameTableMap.forEach((tableNameInfo, table) -> {
                 Preconditions.checkState(table != null, "Materialized view base table is null");
                 if (!isSupportBasedOnTable(table)) {
@@ -234,18 +316,41 @@ public class MaterializedViewAnalyzer {
             // set the columns into createMaterializedViewStatement
             // record the relationship between columns and outputExpressions for next check
             genColumnAndSetIntoStmt(statement, selectRelations.get(0), columnExprMap);
+=======
+            statement.setBaseTableInfos(baseTableInfos);
+
+            // set the columns into createMaterializedViewStatement
+            List<Column> mvColumns = genMaterializedViewColumns(statement);
+            statement.setMvColumnItems(mvColumns);
+
+            // Map<TableName, Table> aliasTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
+            Map<TableName, Table> aliasTableMap = getAllBaseTables(queryStatement, context);
+            Map<Column, Expr> columnExprMap = Maps.newHashMap();
+            List<Expr> outputExpressions = queryStatement.getQueryRelation().getOutputExpression();
+            for (int i = 0; i < outputExpressions.size(); ++i) {
+                columnExprMap.put(mvColumns.get(i), outputExpressions.get(i));
+            }
+>>>>>>> f74e15e57 ([Enhancement] Support alter materialized view to active (#24001))
             // some check if partition exp exists
             if (statement.getPartitionExpDesc() != null) {
                 // check partition expression all in column list and
                 // write the expr into partitionExpDesc if partition expression exists
                 checkExpInColumn(statement, columnExprMap);
+<<<<<<< HEAD
                 // check whether partition expression functions are allowed if it exists
                 checkPartitionExpParams(statement);
+=======
+                // check partition expression is supported
+                checkPartitionColumnExprs(statement, columnExprMap, context, aliasTableMap);
+                // check whether partition expression functions are allowed if it exists
+                checkPartitionExpPatterns(statement);
+>>>>>>> f74e15e57 ([Enhancement] Support alter materialized view to active (#24001))
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, aliasTableMap);
             }
             // check and analyze distribution
             checkDistribution(statement, aliasTableMap);
+<<<<<<< HEAD
             return null;
         }
 
@@ -266,6 +371,30 @@ public class MaterializedViewAnalyzer {
                     checkNondeterministicFunction(selectListItem.getExpr());
                 }
             }
+=======
+
+            planMVQuery(statement, queryStatement, context);
+            return null;
+        }
+
+        private Map<TableName, Table> getAllBaseTables(QueryStatement queryStatement, ConnectContext context) {
+            Map<TableName, Table> aliasTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
+            List<ViewRelation> viewRelations = AnalyzerUtils.collectViewRelations(queryStatement);
+            if (viewRelations.isEmpty()) {
+                return aliasTableMap;
+            }
+            for (ViewRelation viewRelation : viewRelations) {
+                Map<TableName, Table> viewTableMap = getAllBaseTables(viewRelation.getQueryStatement(), context);
+                aliasTableMap.putAll(viewTableMap);
+            }
+            Map<TableName, Table> result = Maps.newHashMap();
+            for (Map.Entry<TableName, Table> entry : aliasTableMap.entrySet()) {
+                // catalog may be null, should do normalization
+                entry.getKey().normalization(context);
+                result.put(entry.getKey(), entry.getValue());
+            }
+            return result;
+>>>>>>> f74e15e57 ([Enhancement] Support alter materialized view to active (#24001))
         }
 
         // TODO(murphy) implement
@@ -693,6 +822,11 @@ public class MaterializedViewAnalyzer {
                 if (!(table instanceof MaterializedView)) {
                     throw new SemanticException(mvName.getTbl() + " is not async materialized view");
                 }
+            } else if (statement.getStatus() != null) {
+                String status = statement.getStatus();
+                if (!AlterMaterializedViewStmt.SUPPORTED_MV_STATUS.contains(status)) {
+                    throw new SemanticException("Unsupported modification for materialized view status:" + status);
+                }
             } else {
                 throw new SemanticException("Unsupported modification for materialized view");
             }
@@ -715,8 +849,14 @@ public class MaterializedViewAnalyzer {
             Preconditions.checkState(table instanceof MaterializedView);
             MaterializedView mv = (MaterializedView) table;
             if (!mv.isActive()) {
+<<<<<<< HEAD
                 throw new SemanticException(
                         "Refresh materialized view failed because " + mv.getName() + " is not active.");
+=======
+                throw new SemanticException("Refresh materialized view failed because [" + mv.getName() +
+                        "] is not active. You can try to active it with ALTER MATERIALIZED VIEW " + mv.getName()
+                        + " ACTIVE; ", mvName.getPos());
+>>>>>>> f74e15e57 ([Enhancement] Support alter materialized view to active (#24001))
             }
             if (statement.getPartitionRangeDesc() == null) {
                 return null;
