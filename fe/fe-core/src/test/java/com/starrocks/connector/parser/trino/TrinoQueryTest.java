@@ -685,6 +685,21 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testRegexp() throws Exception {
+        String sql = "select regexp_like('1a 2b 14m', '\\d+b')";
+        assertPlanContains(sql, "regexp('1a 2b 14m', '\\\\d+b')");
+
+        sql = "select regexp_like('abc123','abc*');";
+        assertPlanContains(sql, "regexp('abc123', 'abc*')");
+
+        sql = "select regexp_extract('1a 2b 14m', '\\d+');";
+        assertPlanContains(sql, "regexp_extract('1a 2b 14m', '\\\\d+', 0)");
+
+        sql = "select regexp_extract('1abb 2b 14m', '[a-z]+');";
+        assertPlanContains(sql, "regexp_extract('1abb 2b 14m', '[a-z]+', 0)");
+    }
+
+    @Test
     public void testLimit() throws Exception {
         String sql = "select * from t0 limit 10";
         assertPlanContains(sql, "limit: 10");

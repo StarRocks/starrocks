@@ -73,6 +73,7 @@ public class Trino2SRFunctionCallTransformer {
         registerArrayFunctionTransformer();
         registerDateFunctionTransformer();
         registerStringFunctionTransformer();
+        registerRegexpFunctionTransformer();
         // todo: support more function transform
     }
 
@@ -167,6 +168,16 @@ public class Trino2SRFunctionCallTransformer {
         // strpos -> locate
         registerFunctionTransformer("strpos", 2, new FunctionCallExpr("locate",
                 ImmutableList.of(new PlaceholderExpr(2, Expr.class), new PlaceholderExpr(1, Expr.class))));
+    }
+
+    private static void registerRegexpFunctionTransformer() {
+        // regexp_like -> regexp
+        registerFunctionTransformer("regexp_like", 2, "regexp",
+                ImmutableList.of(Expr.class, Expr.class));
+
+        // regexp_extract(string, pattern) -> regexp_extract(str, pattern, 0)
+        registerFunctionTransformer("regexp_extract", 2, new FunctionCallExpr("regexp_extract",
+                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class), new IntLiteral(0L))));
     }
 
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,
