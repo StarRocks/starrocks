@@ -46,6 +46,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private final List<ColWithComment> colWithComments;
 
     private boolean ifNotExists;
+    private boolean replace;
     private String comment;
     private RefreshSchemeDesc refreshSchemeDesc;
     private ExpressionPartitionDesc expressionPartitionDesc;
@@ -69,7 +70,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     // record expression which related with partition by clause
     private Expr partitionRefTableExpr;
 
-    public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
+    public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, boolean replace,
                                            List<ColWithComment> colWithComments,
                                            String comment,
                                            RefreshSchemeDesc refreshSchemeDesc,
@@ -81,6 +82,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.tableName = tableName;
         this.colWithComments = colWithComments;
         this.ifNotExists = ifNotExists;
+        this.replace = replace;
         this.comment = comment;
         this.refreshSchemeDesc = refreshSchemeDesc;
         this.expressionPartitionDesc = expressionPartitionDesc;
@@ -108,6 +110,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setIfNotExists(boolean ifNotExists) {
         this.ifNotExists = ifNotExists;
+    }
+
+    public boolean isReplace() {
+        return replace;
     }
 
     public String getComment() {

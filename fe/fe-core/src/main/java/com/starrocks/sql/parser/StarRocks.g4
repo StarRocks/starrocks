@@ -564,7 +564,7 @@ dropTaskStatement
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
 
 createMaterializedViewStatement
-    : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
+    : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? (OR REPLACE)? mvName=qualifiedName
     ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
     comment?
     materializedViewDesc*
