@@ -439,10 +439,17 @@ StatusOr<std::vector<RowsetPtr>> SizeTieredCompactionPolicy::pick_rowsets(int64_
         // to avoid TOO_MANY_VERSION errors, it is unnecessary in size tiered compaction
         selected_level = *priority_levels.begin();
         if (selected_level->segment_num >= min_compaction_segment_num) {
+            int64_t max_segments = config::max_cumulative_compaction_num_singleton_deltas;
             for (auto i : selected_level->rowsets) {
-                auto metadata_ptr = std::make_shared<RowsetMetadata>(rowsets[i]);
+                const auto& rowset = rowsets[i];
+                auto metadata_ptr = std::make_shared<RowsetMetadata>(rowset);
                 input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet.get(), std::move(metadata_ptr), i));
-                level_rowset_ids.emplace_back(rowsets[i].id());
+                level_rowset_ids.emplace_back(rowset.id());
+
+                max_segments -= rowset.overlapped() ? rowset.segments_size() : 1;
+                if (max_segments <= 0) {
+                    break;
+                }
             }
         }
     }
@@ -451,7 +458,8 @@ StatusOr<std::vector<RowsetPtr>> SizeTieredCompactionPolicy::pick_rowsets(int64_
     const auto& level_rowsets = selected_level->rowsets;
     auto type = !level_rowsets.empty() && level_rowsets[0] == 0 ? BASE_COMPACTION : CUMULATIVE_COMPACTION;
     VLOG(3) << "Pick compaction input rowsets. tablet: " << _tablet->id() << ", type: " << to_string(type)
-            << ", level input rowsets: [" << JoinInts(level_rowset_ids, ",") << "]"
+            << ", input rowsets: [" << JoinInts(level_rowset_ids, ",") << "]"
+            << ", input rowsets size: " << level_rowset_ids.size() << ", level rowsets size: " << level_rowsets.size()
             << ", level segment num: " << selected_level->segment_num << ", level size: " << selected_level->level_size
             << ", level total size: " << selected_level->total_size << ", level score: " << selected_level->score
             << ", force base compaction: " << force_base_compaction << ", reached max version: " << reached_max_version;
