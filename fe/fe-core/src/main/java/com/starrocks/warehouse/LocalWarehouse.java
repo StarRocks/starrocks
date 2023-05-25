@@ -42,8 +42,7 @@ public class LocalWarehouse extends Warehouse {
 
     public LocalWarehouse(long id, String name) {
         super(id, name);
-        long clusterId = DEFAULT_CLUSTER_ID;
-        cluster = new Cluster(clusterId);
+        cluster = new Cluster(DEFAULT_CLUSTER_ID);
     }
 
     @Override

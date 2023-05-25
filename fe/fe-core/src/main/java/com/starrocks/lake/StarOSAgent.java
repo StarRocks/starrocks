@@ -566,11 +566,12 @@ public class StarOSAgent {
         return false; // return false if any error happens
     }
 
-    public List<Long> getWorkersByWorkerGroup(List<Long> workerGroupIds) throws UserException {
+    public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
         List<Long> nodeIds = new ArrayList<>();
         prepare();
         try {
-            List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.listWorkerGroup(serviceId, workerGroupIds, true);
+            List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.
+                    listWorkerGroup(serviceId, Collections.singletonList(workerGroupId), true);
             for (WorkerGroupDetailInfo detailInfo : workerGroupDetailInfos) {
                 List<WorkerInfo> workerInfos = detailInfo.getWorkersInfoList();
                 for (WorkerInfo workerInfo : workerInfos) {

@@ -30,7 +30,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -87,7 +86,7 @@ public class Cluster implements Writable {
         List<Long> nodeIds = new ArrayList<>();
         try {
             nodeIds = GlobalStateMgr.getCurrentStarOSAgent().
-                    getWorkersByWorkerGroup(Collections.singletonList(workerGroupId));
+                    getWorkersByWorkerGroup(workerGroupId);
             computeNodeIds = nodeIds.stream().collect(Collectors.toSet());
         } catch (UserException e) {
             LOG.info(e);
