@@ -139,6 +139,7 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
         }
         _is_writer_opened = true;
     }
+
     const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
@@ -146,9 +147,12 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
         close(_state);
         return;
     }
+
     if (Status status = _writer->append_chunk(chunk.get()); !status.ok()) {
-        LOG(WARNING) << "add chunk to file writer failed, error: " << status.to_string();
+        status = status.clone_and_prepend("add chunk to file writer failed, error");
+        LOG(WARNING) << status;
         _fragment_ctx->cancel(status);
+        close(_state);
         return;
     }
 }
