@@ -251,7 +251,7 @@ Your data file `example1.csv` also consists of three columns, which can be mappe
 If you want to load all data from `example1.csv` into `table1` within up to 100 seconds, run the following command:
 
 ```Bash
-curl --location-trusted -u root: -H "label:label1" \
+curl --location-trusted -u <username>:<password> -H "label:label1" \
     -H "Expect:100-continue" \
     -H "timeout:100" \
     -H "max_filter_ratio:0.2" \
@@ -268,7 +268,7 @@ Your data file `example2.csv` also consists of three columns, which can be mappe
 If you want to load all data from `example2.csv` into `table2` with a maximum error tolerance of `0.2`, run the following command:
 
 ```Bash
-curl --location-trusted -u root: -H "label:label2" \
+curl --location-trusted -u <username>:<password> -H "label:label2" \
     -H "Expect:100-continue" \
     -H "max_filter_ratio:0.2" \
     -T example2.csv -XPUT \
@@ -284,7 +284,7 @@ Your data file `example3.csv` also consists of three columns, which can be mappe
 If you want to load all data from `example3.csv` into `table3`, run the following command:
 
 ```Bash
-curl --location-trusted -u root:  -H "label:label3" \
+curl --location-trusted -u <username>:<password>  -H "label:label3" \
     -H "Expect:100-continue" \
     -H "columns: col2, col1, col3" \
     -T example3.csv -XPUT \
@@ -304,7 +304,7 @@ Your data file `example4.csv` also consists of three columns, which can be mappe
 If you want to load only the data records whose values in the first column of `example4.csv` are equal to `20180601` into `table4`, run the following command:
 
 ```Bash
-curl --location-trusted -u root: -H "label:label4" \
+curl --location-trusted -u <username>:<password> -H "label:label4" \
     -H "Expect:100-continue" \
     -H "columns: col1, col2, col3]"\
     -H "where: col1 = 20180601" \
@@ -325,7 +325,7 @@ Your data file `example5.csv` also consists of three columns, which can be mappe
 If you want to load all data from `example5.csv` into partitions `p1` and `p2` of `table5`, run the following command:
 
 ```Bash
-curl --location-trusted -u root:  -H "label:label5" \
+curl --location-trusted -u <username>:<password>  -H "label:label5" \
     -H "Expect:100-continue" \
     -H "partitions: p1, p2" \
     -T example5.csv -XPUT \
@@ -341,7 +341,7 @@ Your data file `example6.csv` also consists of three columns, which can be mappe
 If you want to load all data from `example6.csv` into `table6` by using the strict mode and the time zone `Africa/Abidjan`, run the following command:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     -H "Expect:100-continue" \
     -H "strict_mode: true" \
     -H "timezone: Africa/Abidjan" \
@@ -358,7 +358,7 @@ Your data file `example7.csv` also consists of two columns, among which the firs
 If you want to load data from `example7.csv` into `table7`, run the following command:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     -H "Expect:100-continue" \
     -H "columns: temp1, temp2, col1=hll_hash(temp1), col2=hll_empty()" \
     -T example7.csv -XPUT \
@@ -384,7 +384,7 @@ Your data file `example8.csv` also consists of two columns, among which the firs
 If you want to load data from `example8.csv` into `table8`, run the following command:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     -H "Expect:100-continue" \
     -H "columns: temp1, temp2, col1=to_bitmap(temp1), col2=bitmap_empty()" \
     -T example8.csv -XPUT \
@@ -410,7 +410,7 @@ Your data file `example9.csv` also consists of three columns, which are mapped i
 If you want to load all data from `example9.csv` into `table9`, with the intention of skipping the first five rows of `example9.csv`, removing the spaces preceding and following column separators, and setting `enclose` to `\` and `escape` to `\`, run the following command:
 
 ```Bash
-curl --location-trusted -u root: -H "label:3875" \
+curl --location-trusted -u <username>:<password> -H "label:3875" \
     -H "Expect:100-continue" \
     -H "trim_space: true" -H "skip_header: 5" \
     -H "column_separator:," -H "enclose:\"" -H "escape:\\" \
@@ -440,7 +440,7 @@ Suppose that your data file `example1.json` consists of the following data:
 To load all data from `example1.json` into `tbl1`, run the following command:
 
 ```Bash
-curl --location-trusted -u root: -H "label:label6" \
+curl --location-trusted -u <username>:<password> -H "label:label6" \
     -H "Expect:100-continue" \
     -H "format: json" \
     -T example1.json -XPUT \
@@ -486,7 +486,7 @@ Suppose that your data file `example2.json` consists of the following data:
 To load only `category`, `author`, and `price` from `example2.json`, run the following command:
 
 ```Bash
-curl --location-trusted -u root: -H "label:label7" \
+curl --location-trusted -u <username>:<password> -H "label:label7" \
     -H "Expect:100-continue" \
     -H "format: json" \
     -H "strip_outer_array: true" \
@@ -511,7 +511,7 @@ Suppose your data file `example3.json` consists of the following data:
 To load only `category`, `author`, and `price` from `example3.json`, run the following command:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     -H "Expect:100-continue" \
     -H "format: json" \
     -H "json_root: $.RECORDS" \
