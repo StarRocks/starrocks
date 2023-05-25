@@ -75,7 +75,7 @@ public class Cluster implements Writable {
             nodeIds = GlobalStateMgr.getCurrentStarOSAgent().
                     getWorkersByWorkerGroup(workerGroupId);
         } catch (UserException e) {
-            LOG.info(e);
+            LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
         }
         return nodeIds;
     }

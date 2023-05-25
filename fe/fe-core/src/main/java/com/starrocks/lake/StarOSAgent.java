@@ -578,7 +578,8 @@ public class StarOSAgent {
                     if (workerToBackend.containsKey(workerInfo.getWorkerId())) {
                         nodeIds.add(workerToBackend.get(workerInfo.getWorkerId()));
                     } else {
-                        // follower's workerToBackend may not container this worker, so need to get it from systemInfoSerivce
+                        // workerToBackend may not container this worker, so need to get it from systemInfoSerivce
+                        // and fill it
                         long workerId = workerInfo.getWorkerId();
                         String workerAddr = workerInfo.getIpPort();
                         String[] pair = workerAddr.split(":");
