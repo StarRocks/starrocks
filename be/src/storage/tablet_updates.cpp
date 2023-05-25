@@ -3467,10 +3467,17 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
     std::map<uint32_t, RowsetSharedPtr> rssid_to_rowsets;
     {
         std::lock_guard<std::mutex> l(_rowsets_lock);
+        if (_edit_version_infos.empty()) {
+            std::string msg =
+                    strings::Substitute("tablet deleted when call get_column_values() tablet:", _tablet.tablet_id());
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
         for (const auto& rowset : _rowsets) {
             rssid_to_rowsets.insert(rowset);
         }
     }
+
     if (with_default) {
         for (auto i = 0; i < column_ids.size(); ++i) {
             const TabletColumn& tablet_column = _tablet.tablet_schema().column(column_ids[i]);

@@ -121,8 +121,6 @@ public:
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
 
-    RuntimeProfile* get_runtime_profile() const { return _runtime_profile.get(); }
-
     virtual std::string get_name() const {
         return strings::Substitute("$0_$1_$2($3)", _name, _plan_node_id, this, is_finished() ? "X" : "O");
     }

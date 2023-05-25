@@ -21,6 +21,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.analysis.UserIdentity;
@@ -84,7 +85,6 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
-import jersey.repackaged.com.google.common.collect.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -286,6 +286,12 @@ public class EditLog {
                     ModifyTablePropertyOperationLog log =
                             (ModifyTablePropertyOperationLog) journal.getData();
                     globalStateMgr.replayAlterMaterializedViewProperties(opCode, log);
+                    break;
+                }
+                case OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS: {
+                    AlterMaterializedViewStatusLog log =
+                            (AlterMaterializedViewStatusLog) journal.getData();
+                    globalStateMgr.replayAlterMaterializedViewStatus(log);
                     break;
                 }
                 case OperationType.OP_RENAME_MATERIALIZED_VIEW: {
@@ -1567,6 +1573,10 @@ public class EditLog {
 
     public void logInsertOverwriteStateChange(InsertOverwriteStateChangeInfo info) {
         logEdit(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, info);
+    }
+
+    public void logAlterMvStatus(AlterMaterializedViewStatusLog log) {
+        logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS, log);
     }
 
     public void logMvRename(RenameMaterializedViewLog log) {
