@@ -71,6 +71,7 @@ import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.analysis.TaskName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UserDesc;
@@ -197,6 +198,7 @@ import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropTaskStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.EmptyStmt;
@@ -1321,6 +1323,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new SubmitTaskStmt(dbName, taskName, properties, startIndex, createTableAsSelectStmt);
         } else {
             return new SubmitTaskStmt(dbName, taskName, properties, startIndex, insertStmt);
+        }
+    }
+
+    @Override
+    public ParseNode visitDropTaskStatement(StarRocksParser.DropTaskStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TaskName taskName = qualifiedNameToTaskName(qualifiedName);
+        return new DropTaskStmt(taskName);
+    }
+
+    private TaskName qualifiedNameToTaskName(QualifiedName qualifiedName) {
+        // Hierarchy: database.table
+        List<String> parts = qualifiedName.getParts();
+        if (parts.size() == 2) {
+            return new TaskName(parts.get(0), parts.get(1));
+        } else if (parts.size() == 1) {
+            return new TaskName(null, parts.get(0));
+        } else {
+            throw new ParsingException("error task name ");
         }
     }
 
