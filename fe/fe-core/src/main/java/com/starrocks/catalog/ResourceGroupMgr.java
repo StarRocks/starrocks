@@ -115,6 +115,16 @@ public class ResourceGroupMgr implements Writable {
                                 shortQueryResourceGroup.getName()));
             }
 
+            if (wg.getClassifiers() != null && !wg.getClassifiers().isEmpty() &&
+                    wg.getResourceGroupType().equals(TWorkGroupType.WG_MV)) {
+                throw new DdlException("MV Resource Group not support classifiers.");
+            }
+
+            if (wg.getClassifiers() == null || wg.getClassifiers().isEmpty() &&
+                    !wg.getResourceGroupType().equals(TWorkGroupType.WG_MV)) {
+                throw new DdlException("This type Resource Group need define classifiers.");
+            }
+
             wg.setId(GlobalStateMgr.getCurrentState().getNextId());
             wg.setVersion(wg.getId());
             for (ResourceGroupClassifier classifier : wg.getClassifiers()) {
@@ -297,6 +307,10 @@ public class ResourceGroupMgr implements Writable {
             }
             ResourceGroup wg = resourceGroupMap.get(name);
             AlterResourceGroupStmt.SubCommand cmd = stmt.getCmd();
+            if (wg.getResourceGroupType() == TWorkGroupType.WG_MV &&
+                    !(cmd instanceof AlterResourceGroupStmt.AlterProperties)) {
+                throw new DdlException("MV Resource Group not support classifiers.");
+            }
             if (cmd instanceof AlterResourceGroupStmt.AddClassifiers) {
                 List<ResourceGroupClassifier> newAddedClassifiers = stmt.getNewAddedClassifiers();
                 for (ResourceGroupClassifier classifier : newAddedClassifiers) {
