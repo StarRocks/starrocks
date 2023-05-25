@@ -1,0 +1,95 @@
+-- name: test_mv_swap
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into ss values('2020-01-14', 2);
+-- result:
+-- !result
+insert into ss values('2020-01-14', 3);
+-- result:
+-- !result
+insert into ss values('2020-01-15', 2);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day, sum(pv) FROM ss GROUP BY event_day;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv1;
+-- result:
+165ddf28-faf7-11ed-bee8-024249e13be2
+-- !result
+SELECT sleep(2);
+-- result:
+1
+-- !result
+CREATE MATERIALIZED VIEW mv2 DISTRIBUTED BY hash(event_day) AS SELECT event_day, count(pv) FROM ss GROUP BY event_day;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv2;
+-- result:
+17912e1f-faf7-11ed-bee8-024249e13be2
+-- !result
+SELECT sleep(2);
+-- result:
+1
+-- !result
+SELECT * FROM mv1;
+-- result:
+2020-01-14	5
+2020-01-15	2
+-- !result
+SELECT * FROM mv2;
+-- result:
+2020-01-14	2
+2020-01-15	1
+-- !result
+ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
+-- result:
+-- !result
+SELECT * FROM mv1;
+-- result:
+2020-01-14	2
+2020-01-15	1
+-- !result
+SELECT * FROM mv2;
+-- result:
+2020-01-14	5
+2020-01-15	2
+-- !result
+DESC mv1;
+-- result:
+event_day	date	YES	true	None	
+count(pv)	bigint	NO	true	None	
+-- !result
+DESC mv2;
+-- result:
+event_day	date	YES	true	None	
+sum(pv)	bigint	YES	true	None	
+-- !result
+INSERT INTO ss values('2020-01-15', 2);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv1;
+-- result:
+18d1eb9a-faf7-11ed-bee8-024249e13be2
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv2;
+-- result:
+18d239bc-faf7-11ed-bee8-024249e13be2
+-- !result
+SELECT * FROM mv1;
+-- result:
+2020-01-14	2
+2020-01-15	1
+-- !result
+SELECT * FROM mv2;
+-- result:
+2020-01-14	5
+2020-01-15	2
+-- !result
