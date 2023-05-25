@@ -46,6 +46,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
@@ -734,16 +737,7 @@ public class GlobalTransactionMgr implements Writable {
             }
             transactionStates.add(transactionState);
         }
-        transactionStates.sort(Comparator.comparingLong(TransactionState::getCommitTime));
-        for (TransactionState transactionState : transactionStates) {
-            try {
-                DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionState.getDbId());
-                dbTransactionMgr.unprotectUpsertTransactionState(transactionState, true);
-            } catch (AnalysisException e) {
-                LOG.warn("failed to get db transaction manager for {}", transactionState);
-                throw new IOException("failed to get db transaction manager for txn " + transactionState.getTransactionId(), e);
-            }
-        }
+        putTransactionStats(transactionStates);
         idGenerator.readFields(in);
     }
 
@@ -756,6 +750,44 @@ public class GlobalTransactionMgr implements Writable {
             return newChecksum;
         }
         return checksum;
+    }
+
+    public void loadTransactionStateV2(DataInputStream dis)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        long now = System.currentTimeMillis();
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, GlobalTransactionMgr.class.getName());
+        try {
+            idGenerator = reader.readJson(TransactionIdGenerator.class);
+            int numTransactions = reader.readInt();
+            List<TransactionState> transactionStates = new ArrayList<>(numTransactions);
+            for (int i = 0; i < numTransactions; ++i) {
+                TransactionState transactionState = reader.readJson(TransactionState.class);
+                if (transactionState.isExpired(now)) {
+                    LOG.info("discard expired transaction state: {}", transactionState);
+                    continue;
+                } else if (transactionState.getTransactionStatus() == TransactionStatus.UNKNOWN) {
+                    LOG.info("discard unknown transaction state: {}", transactionState);
+                    continue;
+                }
+                transactionStates.add(transactionState);
+            }
+            putTransactionStats(transactionStates);
+        } finally {
+            reader.close();
+        }
+    }
+
+    private void putTransactionStats(List<TransactionState> transactionStates) throws IOException {
+        transactionStates.sort(Comparator.comparingLong(TransactionState::getCommitTime));
+        for (TransactionState transactionState : transactionStates) {
+            try {
+                DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionState.getDbId());
+                dbTransactionMgr.unprotectUpsertTransactionState(transactionState, true);
+            } catch (AnalysisException e) {
+                LOG.warn("failed to get db transaction manager for {}", transactionState, e);
+                throw new IOException("failed to get db transaction manager for txn " + transactionState.getTransactionId(), e);
+            }
+        }
     }
 
     public List<Pair<Long, Long>> getTransactionIdByCoordinateBe(String coordinateHost, int limit) {

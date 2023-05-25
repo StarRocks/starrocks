@@ -1637,8 +1637,8 @@ public class DatabaseTransactionMgr {
     }
 
     public void unprotectWriteAllTransactionStates(DataOutput out) throws IOException {
-        for (Map.Entry<Long, TransactionState> entry : idToRunningTransactionState.entrySet()) {
-            entry.getValue().write(out);
+        for (TransactionState transactionState : idToRunningTransactionState.values()) {
+            transactionState.write(out);
         }
 
         for (TransactionState transactionState : finalStatusTransactionStateDeque) {
