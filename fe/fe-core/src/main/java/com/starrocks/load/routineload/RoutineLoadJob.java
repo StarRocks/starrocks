@@ -817,7 +817,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 StreamLoadManager streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadManager();
 
                 StreamLoadTask streamLoadTask = streamLoadManager.createLoadTask(db, table.getName(), label,
-                        Config.routine_load_task_timeout_second);
+                        Config.routine_load_task_timeout_second, true);
                 streamLoadTask.setTxnId(txnId);
                 streamLoadTask.setLabel(label);
                 streamLoadTask.setTUniqueId(loadId);
@@ -833,9 +833,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                         add("label", label).
                         add("streamLoadTaskId", streamLoadTask.getId()));
 
-            } else {
-                planParams.query_options.setEnable_profile(false);
             }
+
             // add table indexes to transaction state
             TransactionState txnState =
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
@@ -1015,6 +1014,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                     LOG.warn("failed to pause the job {}. this should not happen", id, e);
                 }
                 return;
+            }
+
+            try {
+                routineLoadTaskInfo.afterVisible(txnState, txnOperated);
+            } catch (UserException e) {
+                LOG.warn("failed to execute 'routineLoadTaskInfo.afterVisible', txnId {}, label {}. " +
+                        "this should not happen", txnState.getTransactionId(), routineLoadTaskInfo.getLabel());
             }
 
             // create new task

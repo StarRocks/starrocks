@@ -303,7 +303,7 @@ public class ResourceGroupStmtTest {
                 "    'concurrency_limit' = '11',\n" +
                 "    'type' = 'illegal-type'" +
                 ");";
-        Assert.assertThrows("Only support 'normal' and 'short_query' type",
+        Assert.assertThrows("Only support 'normal', 'mv' and 'short_query' type",
                 SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(illegalTypeSql));
 
         String illegalDefaultTypeSql = "create resource group rg_unknown\n" +
@@ -316,7 +316,7 @@ public class ResourceGroupStmtTest {
                 "    'concurrency_limit' = '11',\n" +
                 "    'type' = 'default'" +
                 ");";
-        Assert.assertThrows("Only support 'normal' and 'short_query' type",
+        Assert.assertThrows("Only support 'normal', 'mv' and 'short_query' type",
                 SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(illegalDefaultTypeSql));
     }
 

@@ -24,6 +24,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
 public abstract class Warehouse implements Writable {
@@ -77,6 +78,8 @@ public abstract class Warehouse implements Writable {
     public abstract Cluster getAnyAvailableCluster();
 
     public abstract void setClusters(Map<Long, Cluster> clusters) throws DdlException;
+
+    public abstract List<List<String>> getClusterInfo();
 
     @Override
     public void write(DataOutput out) throws IOException {

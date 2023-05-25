@@ -12,38 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.persist;
 
-package com.starrocks.analysis;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.Writable;
 
-import com.starrocks.sql.parser.NodePosition;
+import java.io.DataOutput;
+import java.io.IOException;
 
-public class TaskName {
+public class TransactionIdInfo implements Writable {
+    @SerializedName("txnId")
+    private long txnId;
 
-    private String dbName;
-
-    private String name;
-
-    private final NodePosition pos;
-
-    public TaskName(String dbName, String name, NodePosition pos) {
-        this.dbName = dbName;
-        this.name = name;
-        this.pos = pos;
+    public TransactionIdInfo(long txnId) {
+        this.txnId = txnId;
     }
 
-    public String getDbName() {
-        return dbName;
+    public long getTxnId() {
+        return txnId;
     }
 
-    public void setDbName(String dbName) {
-        this.dbName = dbName;
+    public void setTxnId(long txnId) {
+        this.txnId = txnId;
     }
 
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
+    @Override
+    public void write(DataOutput out) throws IOException {
     }
 }

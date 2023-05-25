@@ -1989,7 +1989,7 @@ public class Auth implements Writable {
 
         DataOutputBuffer buffer = new DataOutputBuffer();
         write(buffer);
-        writer.writeJson(new String(buffer.getData(), buffer.getLength()));
+        writer.writeJson(buffer.getData());
 
         SerializeData data = new SerializeData();
         data.entries = impersonateUserPrivTable.dumpEntries();
@@ -2002,9 +2002,8 @@ public class Auth implements Writable {
     public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         SRMetaBlockReader reader = new SRMetaBlockReader(dis, Auth.class.getName());
         try {
-            String s = reader.readJson(String.class);
-            DataInputStream dataInputStream =
-                    new DataInputStream(new ByteArrayInputStream(s.getBytes()));
+            byte[] s = reader.readJson(byte[].class);
+            DataInputStream dataInputStream = new DataInputStream(new ByteArrayInputStream(s));
             readFields(dataInputStream);
 
             SerializeData serializeData = reader.readJson(SerializeData.class);

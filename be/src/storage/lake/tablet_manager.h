@@ -154,6 +154,8 @@ public:
 
     CompactionScheduler* compaction_scheduler() { return _compaction_scheduler.get(); }
 
+    void update_metacache_limit(size_t limit);
+
 private:
     using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr, DelVectorPtr>;
 

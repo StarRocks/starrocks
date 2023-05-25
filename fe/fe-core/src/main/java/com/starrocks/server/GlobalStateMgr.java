@@ -1225,6 +1225,8 @@ public class GlobalStateMgr {
                 initDefaultWarehouse();
             }
 
+            updateDefaultWarehouse();
+
             MetricRepo.init();
 
             isReady.set(true);
@@ -1381,6 +1383,12 @@ public class GlobalStateMgr {
 
         startAllNodeTypeDaemonThreads();
 
+        if (!isDefaultWarehouseCreated) {
+            initDefaultWarehouse();
+        }
+
+        updateDefaultWarehouse();
+
         MetricRepo.init();
 
         feType = newType;
@@ -1417,6 +1425,7 @@ public class GlobalStateMgr {
                     analyzeMgr.load(dis);
                     resourceGroupMgr.load(dis);
                     routineLoadMgr.loadRoutineLoadJobsV2(dis);
+                    globalTransactionMgr.loadTransactionStateV2(dis);
                     auth.load(dis);
                     authenticationMgr.loadV2(dis);
                     authorizationMgr.loadV2(dis);
@@ -1440,7 +1449,6 @@ public class GlobalStateMgr {
                 checksum = backupHandler.loadBackupHandler(dis, checksum, this);
 
                 // global transaction must be replayed before load jobs v2
-                checksum = globalTransactionMgr.loadTransactionState(dis, checksum);
                 checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
                 checksum = smallFileMgr.loadSmallFiles(dis, checksum);
                 remoteChecksum = dis.readLong();
@@ -1811,6 +1819,7 @@ public class GlobalStateMgr {
                     analyzeMgr.save(dos);
                     resourceGroupMgr.save(dos);
                     routineLoadMgr.saveRoutineLoadJobsV2(dos);
+                    globalTransactionMgr.saveTransactionStateV2(dos);
                     auth.save(dos);
                     authenticationMgr.saveV2(dos);
                     authorizationMgr.saveV2(dos);
@@ -1827,7 +1836,6 @@ public class GlobalStateMgr {
                 checksum = resourceMgr.saveResources(dos, checksum);
                 checksum = exportMgr.saveExportJob(dos, checksum);
                 checksum = backupHandler.saveBackupHandler(dos, checksum);
-                checksum = globalTransactionMgr.saveTransactionState(dos, checksum);
                 checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
                 checksum = smallFileMgr.saveSmallFiles(dos, checksum);
 
@@ -3626,6 +3634,10 @@ public class GlobalStateMgr {
     public void initDefaultWarehouse() {
         warehouseMgr.initDefaultWarehouse();
         isDefaultWarehouseCreated = true;
+    }
+
+    public void updateDefaultWarehouse() {
+        warehouseMgr.updateDefaultWarehouse();
     }
 
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
