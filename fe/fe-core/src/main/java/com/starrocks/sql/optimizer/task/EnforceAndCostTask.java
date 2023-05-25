@@ -473,12 +473,14 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
     }
 
     private PhysicalPropertySet enforceDistribute(PhysicalPropertySet oldOutputProperty) {
-        PhysicalPropertySet newOutputProperty = oldOutputProperty.copy();
-        newOutputProperty.setDistributionProperty(context.getRequiredProperty().getDistributionProperty());
-        GroupExpression enforcer =
-                context.getRequiredProperty().getDistributionProperty().appendEnforcers(groupExpression.getGroup());
+        PhysicalPropertySet requiredPropertySet = oldOutputProperty.copy();
+        // enforcer always ensure the output distribution null strict
+        requiredPropertySet.setDistributionProperty(context.getRequiredProperty()
+                .getDistributionProperty().getNullStrictProperty());
+        GroupExpression enforcer = requiredPropertySet.getDistributionProperty()
+                .appendEnforcers(groupExpression.getGroup());
 
-        updateCostWithEnforcer(enforcer, oldOutputProperty, newOutputProperty);
+        PhysicalPropertySet newOutputProperty = updateCostAndOutputPropertySet(enforcer, oldOutputProperty, requiredPropertySet);
         recordPlanEnumInfo(enforcer, newOutputProperty, Lists.newArrayList(oldOutputProperty));
 
         return newOutputProperty;
@@ -516,11 +518,23 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                                         PhysicalPropertySet newOutputProperty) {
         context.getOptimizerContext().getMemo().
                 insertEnforceExpression(enforcer, groupExpression.getGroup());
-        curTotalCost += CostModel.calculateCost(enforcer);
 
         if (enforcer.updatePropertyWithCost(newOutputProperty, Lists.newArrayList(oldOutputProperty), curTotalCost)) {
             enforcer.setOutputPropertySatisfyRequiredProperty(newOutputProperty, newOutputProperty);
         }
         groupExpression.getGroup().setBestExpression(enforcer, curTotalCost, newOutputProperty);
+    }
+
+    private PhysicalPropertySet updateCostAndOutputPropertySet(GroupExpression enforcer,
+                                                               PhysicalPropertySet oldOutputProperty,
+                                                               PhysicalPropertySet requiredPropertySet) {
+        context.getOptimizerContext().getMemo().insertEnforceExpression(enforcer, groupExpression.getGroup());
+        curTotalCost += CostModel.calculateCost(enforcer);
+        PhysicalPropertySet newOutputProperty = groupExpression.getGroup().updateOutputPropertySet(enforcer, curTotalCost,
+                requiredPropertySet);
+        if (enforcer.updatePropertyWithCost(newOutputProperty, Lists.newArrayList(oldOutputProperty), curTotalCost)) {
+            enforcer.setOutputPropertySatisfyRequiredProperty(newOutputProperty, newOutputProperty);
+        }
+        return newOutputProperty;
     }
 }

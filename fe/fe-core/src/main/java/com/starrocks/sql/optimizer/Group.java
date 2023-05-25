@@ -130,10 +130,33 @@ public class Group {
         return -1000;
     }
 
+    public PhysicalPropertySet updateOutputPropertySet(GroupExpression expression, double cost,
+                                                       PhysicalPropertySet requiredPropertySet) {
+        for (Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry : lowestCostExpressions.entrySet()) {
+            if (entry.getKey().equals(requiredPropertySet)) {
+                if (entry.getValue().first > cost) {
+                    lowestCostExpressions.put(requiredPropertySet, new Pair<>(cost, expression));
+                    return requiredPropertySet;
+                } else {
+                    // already has an enforcer, we should use the origin one.
+                    return entry.getKey();
+                }
+            }
+        }
+        lowestCostExpressions.put(requiredPropertySet, new Pair<>(cost, expression));
+        return requiredPropertySet;
+    }
+
     public void setBestExpression(GroupExpression expression, double cost, PhysicalPropertySet physicalPropertySet) {
         if (lowestCostExpressions.containsKey(physicalPropertySet)) {
             if (lowestCostExpressions.get(physicalPropertySet).first > cost) {
                 lowestCostExpressions.put(physicalPropertySet, new Pair<>(cost, expression));
+            } else {
+                for (PhysicalPropertySet test : lowestCostExpressions.keySet()) {
+                    if (physicalPropertySet.equals(test)) {
+                        physicalPropertySet.setDistributionProperty(test.getDistributionProperty());
+                    }
+                }
             }
         } else {
             lowestCostExpressions.put(physicalPropertySet, new Pair<>(cost, expression));
