@@ -177,6 +177,96 @@ protected:
                 ASSERT_EQ("{4:-1,5:-2,6:-3}", dst_column->debug_item(3));
             }
         }
+
+        // read and check
+        {
+            auto res = ColumnReader::create(&meta, segment.get());
+            ASSERT_TRUE(res.ok());
+            auto reader = std::move(res).value();
+
+
+            ColumnAccessPath child_path;
+            child_path.init(TAccessPathType::type::OFFSET, "offsets", 1);
+            
+            ColumnAccessPath path;
+            path.init(TAccessPathType::type::ROOT, "root", 0);
+            path.children().emplace_back(child_path);
+
+
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
+
+            // sequence read
+            {
+                auto st = iter->seek_to_first();
+                ASSERT_TRUE(st.ok()) << st.to_string();
+
+                auto dst_offsets = UInt32Column::create();
+                auto dst_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                auto dst_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                auto dst_column = MapColumn::create(dst_keys, dst_values, dst_offsets);
+                size_t rows_read = src_column->size();
+                st = iter->next_batch(&rows_read, dst_column.get());
+                ASSERT_TRUE(st.ok());
+                ASSERT_EQ(src_column->size(), rows_read);
+
+                ASSERT_EQ("{0:0}", dst_column->debug_item(0));
+                ASSERT_EQ("{}", dst_column->debug_item(1));
+                ASSERT_EQ("{0:0,0:0}", dst_column->debug_item(2));
+                ASSERT_EQ("{0:0,0:0,0:0}", dst_column->debug_item(3));
+            }
+        }
+
+        // read and check
+        {
+            auto res = ColumnReader::create(&meta, segment.get());
+            ASSERT_TRUE(res.ok());
+            auto reader = std::move(res).value();
+
+
+            ColumnAccessPath child_path;
+            child_path.init(TAccessPathType::type::KEY, "key", 1);
+            
+            ColumnAccessPath path;
+            path.init(TAccessPathType::type::ROOT, "root", 0);
+            path.children().emplace_back(child_path);
+
+
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
+
+            // sequence read
+            {
+                auto st = iter->seek_to_first();
+                ASSERT_TRUE(st.ok()) << st.to_string();
+
+                auto dst_offsets = UInt32Column::create();
+                auto dst_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                auto dst_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                auto dst_column = MapColumn::create(dst_keys, dst_values, dst_offsets);
+                size_t rows_read = src_column->size();
+                st = iter->next_batch(&rows_read, dst_column.get());
+                ASSERT_TRUE(st.ok());
+                ASSERT_EQ(src_column->size(), rows_read);
+
+                ASSERT_EQ("{1:0}", dst_column->debug_item(0));
+                ASSERT_EQ("{}", dst_column->debug_item(1));
+                ASSERT_EQ("{2:0,3:0}", dst_column->debug_item(2));
+                ASSERT_EQ("{4:0,5:0,6:0}", dst_column->debug_item(3));
+            }
+        }
     }
 
 private:

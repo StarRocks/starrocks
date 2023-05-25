@@ -30,11 +30,16 @@ class ColumnAccessPath {
 public:
     Status init(const TColumnAccessPath& column_path, RuntimeState* state, ObjectPool* pool);
 
+    // for test
+    Status init(const TAccessPathType::type& type, const std::string& path, uint32_t index);
+
     const std::string& path() const { return _path; }
 
     uint32_t index() const { return _column_index; }
 
-    const std::vector<std::unique_ptr<ColumnAccessPath>>& children() { return _children; }
+    const std::vector<std::unique_ptr<ColumnAccessPath>>& children() const { return _children; }
+
+    std::vector<std::unique_ptr<ColumnAccessPath>>& children() { return _children; }
 
     bool is_key() { return _type == TAccessPathType::type::KEY; }
 

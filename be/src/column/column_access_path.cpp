@@ -59,6 +59,12 @@ Status ColumnAccessPath::init(const TColumnAccessPath& column_path, RuntimeState
     return Status::OK();
 }
 
+Status ColumnAccessPath::init(const TAccessPathType::type& type, const std::string& path, uint32_t index) {
+    _type = type;
+    _path = path;
+    _column_index = index;
+}
+
 ColumnAccessPathPtr ColumnAccessPath::convert_by_index(const Field* filed, uint32_t index) {
     ColumnAccessPathPtr path = std::make_unique<ColumnAccessPath>();
     path->_type = this->_type;

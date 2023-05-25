@@ -165,6 +165,92 @@ protected:
                 ASSERT_EQ("{f1:1,f2:'Column2'}", dst_column->debug_item(0));
             }
         }
+
+        // read and check
+        {
+            auto res = ColumnReader::create(&meta, segment.get());
+            ASSERT_TRUE(res.ok());
+            auto reader = std::move(res).value();
+
+            ColumnAccessPath child_path;
+            child_path.init(TAccessPathType::type::FIELD, "f1", 0);
+            
+            ColumnAccessPath path;
+            path.init(TAccessPathType::type::ROOT, "root", 0);
+            path.children().emplace_back(child_path);
+
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
+
+            // sequence read
+            {
+                auto st = iter->seek_to_first();
+                ASSERT_TRUE(st.ok()) << st.to_string();
+
+                auto dst_f1_column = Int32Column::create();
+                auto dst_f2_column = BinaryColumn::create();
+                Columns dst_columns;
+                dst_columns.emplace_back(std::move(dst_f1_column));
+                dst_columns.emplace_back(std::move(dst_f2_column));
+
+                ColumnPtr dst_column = StructColumn::create(dst_columns, names);
+                size_t rows_read = src_column->size();
+                st = iter->next_batch(&rows_read, dst_column.get());
+                ASSERT_TRUE(st.ok());
+                ASSERT_EQ(src_column->size(), rows_read);
+
+                ASSERT_EQ("{f1:1,f2:''}", dst_column->debug_item(0));
+            }
+        }
+
+        // read and check
+        {
+            auto res = ColumnReader::create(&meta, segment.get());
+            ASSERT_TRUE(res.ok());
+            auto reader = std::move(res).value();
+
+            ColumnAccessPath child_path;
+            child_path.init(TAccessPathType::type::FIELD, "f2", 1);
+            
+            ColumnAccessPath path;
+            path.init(TAccessPathType::type::ROOT, "root", 0);
+            path.children().emplace_back(child_path);
+
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
+
+            // sequence read
+            {
+                auto st = iter->seek_to_first();
+                ASSERT_TRUE(st.ok()) << st.to_string();
+
+                auto dst_f1_column = Int32Column::create();
+                auto dst_f2_column = BinaryColumn::create();
+                Columns dst_columns;
+                dst_columns.emplace_back(std::move(dst_f1_column));
+                dst_columns.emplace_back(std::move(dst_f2_column));
+
+                ColumnPtr dst_column = StructColumn::create(dst_columns, names);
+                size_t rows_read = src_column->size();
+                st = iter->next_batch(&rows_read, dst_column.get());
+                ASSERT_TRUE(st.ok());
+                ASSERT_EQ(src_column->size(), rows_read);
+
+                ASSERT_EQ("{f1:0,f2:'Column2'}", dst_column->debug_item(0));
+            }
+        }
     }
 
 private:
