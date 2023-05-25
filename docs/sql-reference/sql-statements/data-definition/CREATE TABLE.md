@@ -416,7 +416,7 @@ In most cases, using the default value gains better data writing performance. If
 
 ```sql
     ALTER TABLE example_db.my_table
-    SET ("replicated_storage" = "false");
+    SET ("replicated_storage" = "true");
 ```
 
 #### Create rollup in bulk
