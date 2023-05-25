@@ -89,5 +89,5 @@ jobs:
           !contains(github.event.pull_request.title, 'backport') &&
           contains(toJson(github.event.pull_request.body), '[ ] I have checked the version labels')
         run: |
-          echo "You must mark this checkbox - I have checked the version labels which the pr will be auto backported to target branch"
+          echo "You must mark this checkbox - I have checked the version labels which the pr will be auto-backported to the target branch"
           exit 1
