@@ -36,18 +36,18 @@ import java.io.IOException;
 public class LoadJobFinalOperation extends TxnCommitAttachment implements Writable {
     @SerializedName("id")
     private long id;
-    @SerializedName("loadingStatus")
+    @SerializedName("ls")
     private EtlStatus loadingStatus = new EtlStatus();
-    @SerializedName("progress")
+    @SerializedName("ps")
     private int progress;
-    @SerializedName("loadStartTime")
+    @SerializedName("lst")
     private long loadStartTimestamp;
-    @SerializedName("finishTime")
+    @SerializedName("ft")
     private long finishTimestamp;
-    @SerializedName("jobState")
+    @SerializedName("js")
     private JobState jobState;
     // optional
-    @SerializedName("failMsg")
+    @SerializedName("fm")
     private FailMsg failMsg;
 
     public LoadJobFinalOperation() {

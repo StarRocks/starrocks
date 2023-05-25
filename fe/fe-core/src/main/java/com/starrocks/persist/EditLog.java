@@ -639,11 +639,13 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().replayBackendTabletsInfo(backendTabletsInfo);
                     break;
                 }
+                case OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2:
                 case OperationType.OP_CREATE_ROUTINE_LOAD_JOB: {
                     RoutineLoadJob routineLoadJob = (RoutineLoadJob) journal.getData();
                     GlobalStateMgr.getCurrentState().getRoutineLoadManager().replayCreateRoutineLoadJob(routineLoadJob);
                     break;
                 }
+                case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2:
                 case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB: {
                     RoutineLoadOperation operation = (RoutineLoadOperation) journal.getData();
                     GlobalStateMgr.getCurrentState().getRoutineLoadManager().replayChangeRoutineLoadJob(operation);
