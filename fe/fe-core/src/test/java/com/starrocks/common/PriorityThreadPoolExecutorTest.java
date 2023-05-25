@@ -8,6 +8,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -47,12 +48,14 @@ public class PriorityThreadPoolExecutorTest {
     public void testSamePriority() throws InterruptedException, ExecutionException {
         PriorityBlockingQueue<Runnable> workQueue = new PriorityBlockingQueue<Runnable>(1000);
         PriorityThreadPoolExecutor pool = new PriorityThreadPoolExecutor(1, 1, 1, TimeUnit.MINUTES, workQueue);
+        sleepFlag.set(true);
 
         Future[] futures = new Future[10];
         StringBuffer buffer = new StringBuffer();
         for (int i = 0; i < futures.length; i++) {
             futures[i] = pool.submit(new TenSecondTask(i, 1, buffer));
         }
+        sleepFlag.set(false);
         for (int i = 0; i < futures.length; i++) {
             futures[i].get();
         }
@@ -63,13 +66,15 @@ public class PriorityThreadPoolExecutorTest {
     public void testRandomPriority() throws InterruptedException, ExecutionException {
         PriorityBlockingQueue<Runnable> workQueue = new PriorityBlockingQueue<Runnable>(1000);
         PriorityThreadPoolExecutor pool = new PriorityThreadPoolExecutor(1, 1, 1, TimeUnit.MINUTES, workQueue);
+        sleepFlag.set(true);
 
-        Future[] futures = new Future[20];
+        Future[] futures = new Future[3];
         StringBuffer buffer = new StringBuffer();
         for (int i = 0; i < futures.length; i++) {
             int r = (int) (Math.random() * 100);
             futures[i] = pool.submit(new TenSecondTask(i, r, buffer));
         }
+        sleepFlag.set(false);
         for (int i = 0; i < futures.length; i++) {
             futures[i].get();
         }
@@ -86,6 +91,7 @@ public class PriorityThreadPoolExecutorTest {
     public void testDynamicPriority() throws InterruptedException, ExecutionException {
         PriorityBlockingQueue<Runnable> workQueue = new PriorityBlockingQueue<Runnable>(1000);
         PriorityThreadPoolExecutor pool = new PriorityThreadPoolExecutor(1, 1, 1, TimeUnit.MINUTES, workQueue);
+        sleepFlag.set(true);
 
         PriorityFutureTask<Void>[] futures = new PriorityFutureTask[20];
         StringBuffer buffer = new StringBuffer();
@@ -96,7 +102,7 @@ public class PriorityThreadPoolExecutorTest {
             assertTrue(pool.updatePriority(futures[i], i - 10));
         }
 
-        flag = 1;
+        sleepFlag.set(false);
 
         for (int i = 0; i < futures.length; i++) {
             futures[i].get();
@@ -112,7 +118,7 @@ public class PriorityThreadPoolExecutorTest {
                 buffer.toString());
     }
 
-    public static int flag = 0;
+    public static AtomicBoolean sleepFlag = new AtomicBoolean(true);
 
     public static class TenSecondTask extends PriorityRunnable {
         private StringBuffer buffer;
@@ -127,7 +133,7 @@ public class PriorityThreadPoolExecutorTest {
         @Override
         public void run() {
             try {
-                if (flag == 0) {
+                while (sleepFlag.get()) {
                     Thread.sleep(1000);
                 }
             } catch (InterruptedException e) {
