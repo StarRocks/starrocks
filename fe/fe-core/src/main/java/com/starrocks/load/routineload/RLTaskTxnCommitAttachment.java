@@ -63,6 +63,7 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("progress")
     private RoutineLoadProgress progress;
     private String errorLogUrl;
+    private long loadedBytes;
 
     public RLTaskTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK);
@@ -76,6 +77,7 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
         this.loadedRows = rlTaskTxnCommitAttachment.getLoadedRows();
         this.unselectedRows = rlTaskTxnCommitAttachment.getUnselectedRows();
         this.receivedBytes = rlTaskTxnCommitAttachment.getReceivedBytes();
+        this.loadedBytes = rlTaskTxnCommitAttachment.getLoadedBytes();
         this.taskExecutionTimeMs = rlTaskTxnCommitAttachment.getLoadCostMs();
 
         switch (rlTaskTxnCommitAttachment.getLoadSourceType()) {
@@ -120,6 +122,10 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
 
     public long getReceivedBytes() {
         return receivedBytes;
+    }
+
+    public long getLoadedBytes() {
+        return loadedBytes;
     }
 
     public long getTaskExecutionTimeMs() {
