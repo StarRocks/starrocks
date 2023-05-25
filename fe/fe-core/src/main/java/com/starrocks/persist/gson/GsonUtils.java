@@ -368,6 +368,9 @@ public class GsonUtils {
             .registerTypeHierarchyAdapter(Table.class, new GuavaTableAdapter())
             .registerTypeHierarchyAdapter(Multimap.class, new GuavaMultimapAdapter())
             .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
+            // For call constructor with selectedFields
+            .registerTypeAdapter(MapType.class, new MapType.MapTypeDeserializer())
+            .registerTypeAdapter(StructType.class, new StructType.StructTypeDeserializer())
             .registerTypeAdapterFactory(COLUMN_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(DISTRIBUTION_INFO_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(RESOURCE_TYPE_ADAPTER_FACTORY)

@@ -17,7 +17,13 @@ package com.starrocks.catalog;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.gson.JsonDeserializationContext;
+import com.google.gson.JsonDeserializer;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
@@ -186,6 +192,21 @@ public class MapType extends Type {
             clone.selectedFields = this.selectedFields.clone();
         }
         return clone;
+    }
+
+    // Todo: remove it after remove selectedFields
+    public static class MapTypeDeserializer implements JsonDeserializer<MapType> {
+        @Override
+        public MapType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
+                                   JsonDeserializationContext jsonDeserializationContext)
+                throws JsonParseException {
+            JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
+            JsonObject key = dumpJsonObject.getAsJsonObject("keyType");
+            Type keyType = GsonUtils.GSON.fromJson(key, Type.class);
+            JsonObject value = dumpJsonObject.getAsJsonObject("valueType");
+            Type valueType = GsonUtils.GSON.fromJson(value, Type.class);
+            return new MapType(keyType, valueType);
+        }
     }
 }
 
