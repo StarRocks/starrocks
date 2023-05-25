@@ -139,7 +139,7 @@ public:
 
     std::string del_location(int64_t tablet_id, std::string_view del_name) const;
 
-    std::string delvec_location(int64_t tablet_id, int64_t version) const;
+    std::string delvec_location(int64_t tablet_id, std::string_view delvec_filename) const;
 
     std::string tablet_metadata_lock_location(int64_t tablet_id, int64_t version, int64_t expire_time) const;
 
@@ -153,6 +153,8 @@ public:
     UpdateManager* update_mgr();
 
     CompactionScheduler* compaction_scheduler() { return _compaction_scheduler.get(); }
+
+    void update_metacache_limit(size_t limit);
 
 private:
     using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr, DelVectorPtr>;

@@ -196,9 +196,18 @@ TEST_F(GCTest, test_datafile_gc) {
     // tablet_id_2 owned by worker B
     location_provider_2->_owned_shards.insert(tablet_id_2);
 
+    auto txn_ids = std::vector<int64_t>();
     auto segments = std::vector<std::string>();
     for (int i = 0; i < 10; i++) {
-        segments.emplace_back(random_segment_filename());
+        txn_ids.emplace_back(next_id());
+        segments.emplace_back(gen_segment_filename(txn_ids.back()));
+        auto location = tablet_manager_1->segment_location(tablet_id_1, segments.back());
+        ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(location));
+        ASSERT_OK(wf->close());
+    }
+    // segment files without txn id
+    for (int i = 0; i < 3; i++) {
+        segments.emplace_back(fmt::format("{}.dat", generate_uuid_string()));
         auto location = tablet_manager_1->segment_location(tablet_id_1, segments.back());
         ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(location));
         ASSERT_OK(wf->close());
@@ -257,9 +266,9 @@ TEST_F(GCTest, test_datafile_gc) {
     }
     ASSERT_LT(valid_segment_cnt, segments.size());
 
-    // Orphan segments have not timed out yet
+    // min_active_txn_id check
     config::lake_gc_segment_expire_seconds = 600;
-    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get()));
+    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get(), /*min_active_txn_id=*/txn_ids[0]));
     for (const auto& seg : segments) {
         auto location = join_path(join_path(kTestDir, kSegmentDirectoryName), seg);
         ASSERT_OK(fs->path_exists(location));
@@ -267,23 +276,41 @@ TEST_F(GCTest, test_datafile_gc) {
 
     // Segment GC on tablet_manager_2 should not delete any file
     config::lake_gc_segment_expire_seconds = 0;
-    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_2.get()));
+    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_2.get(), /*min_active_txn_id=*/txn_ids.back() + 1));
     for (const auto& seg : segments) {
         auto location = join_path(join_path(kTestDir, kSegmentDirectoryName), seg);
         ASSERT_OK(fs->path_exists(location));
     }
 
-    // Segment GC on tablet_manager_1
-    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get()));
+    // Segment GC on tablet_manager_1 with `lake_gc_segment_expire_seconds` equals to 600
+    // Files not referenced by any metadata and prefixed with the txn id should be deleted.
+    config::lake_gc_segment_expire_seconds = 600;
+    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get(), /*min_active_txn_id=*/txn_ids.back() + 1));
     for (int i = 0, sz = segments.size(); i < sz; i++) {
         auto location = join_path(join_path(kTestDir, kSegmentDirectoryName), segments[i]);
+        auto st = fs->path_exists(location);
         if (i < valid_segment_cnt) {
-            ASSERT_OK(fs->path_exists(location));
+            ASSERT_OK(st);
+        } else if (extract_txn_id_prefix(segments[i]).has_value()) {
+            ASSERT_TRUE(st.is_not_found()) << st;
         } else {
-            auto st = fs->path_exists(location);
+            ASSERT_OK(st);
+        }
+    }
+    // Run segment GC on tablet_manager_1 again with `lake_gc_segment_expire_seconds` equals to 0
+    // Files not referenced by any metadata and without the txn id prefix should be deleted.
+    config::lake_gc_segment_expire_seconds = 0;
+    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get(), /*min_active_txn_id=*/txn_ids.back() + 1));
+    for (int i = 0, sz = segments.size(); i < sz; i++) {
+        auto location = join_path(join_path(kTestDir, kSegmentDirectoryName), segments[i]);
+        auto st = fs->path_exists(location);
+        if (i < valid_segment_cnt) {
+            ASSERT_OK(st);
+        } else {
             ASSERT_TRUE(st.is_not_found()) << st;
         }
     }
+
     {
         auto orphan_list = join_path(kTestDir, kGCFileName);
         auto st = fs->path_exists(orphan_list);
@@ -309,9 +336,10 @@ TEST_F(GCTest, test_dels_gc) {
         ASSERT_OK(tablet_manager_1->put_tablet_metadata(metadata));
     }
 
+    auto txn_id = next_id();
     auto dels = std::vector<std::string>();
     for (int i = 0; i < 10; i++) {
-        auto name = fmt::format("{}.del", generate_uuid_string());
+        auto name = gen_del_filename(txn_id);
         dels.emplace_back(name);
         auto location = tablet_manager_1->segment_location(tablet_id_1, dels.back());
         ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(location));
@@ -321,23 +349,20 @@ TEST_F(GCTest, test_dels_gc) {
     // add 5 del files to txn logs
     auto log_write = std::make_shared<TxnLog>();
     log_write->set_tablet_id(tablet_id_1);
-    log_write->set_txn_id(next_id());
+    log_write->set_txn_id(txn_id);
     for (int i = 0; i < 5; i++) {
         log_write->mutable_op_write()->add_dels(dels[i]);
     }
     ASSERT_OK(tablet_manager_1->put_txn_log(log_write));
 
-    // Orphan dels have not timed out yet
-    config::lake_gc_segment_expire_seconds = 600;
-    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get()));
+    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get(), /*min_active_txn_id=*/txn_id));
     for (const auto& del : dels) {
         auto location = tablet_manager_1->segment_location(tablet_id_1, del);
         ASSERT_OK(fs->path_exists(location));
     }
 
     // Orphan dels have been deleted
-    config::lake_gc_segment_expire_seconds = 0;
-    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get()));
+    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get(), /*min_active_txn_id=*/txn_id + 1));
     for (int i = 0; i < dels.size(); i++) {
         auto location = tablet_manager_1->segment_location(tablet_id_1, dels[i]);
         if (i < 5) {
@@ -358,32 +383,36 @@ TEST_F(GCTest, test_delvec_gc) {
             std::make_unique<lake::TabletManager>(location_provider_1.get(), update_manager_1.get(), 16384);
     // tablet_id_1 owned by worker A
     location_provider_1->_owned_shards.insert(tablet_id_1);
-    {
-        auto metadata = std::make_shared<TabletMetadata>();
-        metadata->set_id(tablet_id_1);
-        metadata->set_version(1);
-        metadata->set_next_rowset_id(1);
-        for (int i = 1; i < 5; i++) {
-            (*metadata->mutable_delvec_meta()->mutable_delvecs())[i].set_version(i);
-        }
-        ASSERT_OK(tablet_manager_1->put_tablet_metadata(metadata));
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id_1);
+    metadata->set_version(1);
+    metadata->set_next_rowset_id(1);
+    for (int i = 1; i < 5; i++) {
+        (*metadata->mutable_delvec_meta()->mutable_delvecs())[i].set_version(i);
     }
+
     // create delvec files
     for (int i = 1; i < 10; i++) {
-        auto location = location_provider_1->tablet_delvec_location(tablet_id_1, i);
+        auto txn_id = next_id();
+        auto delvec_file = gen_delvec_filename(txn_id);
+        auto location = location_provider_1->delvec_location(tablet_id_1, delvec_file);
         ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(location));
         ASSERT_OK(wf->close());
+        if (i < 5) {
+            (*metadata->mutable_delvec_meta()->mutable_version_to_delvec())[i] = delvec_file;
+        }
     }
+    ASSERT_OK(tablet_manager_1->put_tablet_metadata(metadata));
+
     // gc
     config::lake_gc_segment_expire_seconds = 0;
-    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get()));
-    for (int i = 1; i < 10; i++) {
-        auto location = location_provider_1->tablet_delvec_location(tablet_id_1, i);
-        if (i < 5) {
-            ASSERT_OK(fs->path_exists(location));
-        } else {
-            ASSERT_ERROR(fs->path_exists(location));
-        }
+    ASSERT_OK(datafile_gc(kTestDir, tablet_manager_1.get(), next_id()));
+    for (int i = 1; i < 5; i++) {
+        auto itr = metadata->delvec_meta().version_to_delvec().find(i);
+        EXPECT_TRUE(itr != metadata->delvec_meta().version_to_delvec().end());
+        auto delvec_file = itr->second;
+        auto location = location_provider_1->delvec_location(tablet_id_1, delvec_file);
+        ASSERT_OK(fs->path_exists(location));
     }
 }
 
@@ -409,9 +438,10 @@ void GCTest::test_concurrent_gc_base(int max_retries, bool datagc_should_success
     auto tablet_mgr = std::make_unique<lake::TabletManager>(lp.get(), um.get(), 0);
     lp->_owned_shards.insert(tablet_id);
 
+    auto txn_id = next_id();
     auto segments = std::vector<std::string>();
     for (int i = 0; i < 3; i++) {
-        segments.emplace_back(random_segment_filename());
+        segments.emplace_back(gen_segment_filename(txn_id));
         auto location = tablet_mgr->segment_location(tablet_id, segments.back());
         ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(location));
         ASSERT_OK(wf->append("content"));
@@ -452,9 +482,9 @@ void GCTest::test_concurrent_gc_base(int max_retries, bool datagc_should_success
 
     auto datagc_thread = std::thread([&]() {
         if (datagc_should_success) {
-            EXPECT_OK(datafile_gc(kTestDir, tablet_mgr.get()));
+            EXPECT_OK(datafile_gc(kTestDir, tablet_mgr.get(), txn_id + 1));
         } else {
-            EXPECT_ERROR(datafile_gc(kTestDir, tablet_mgr.get()));
+            EXPECT_ERROR(datafile_gc(kTestDir, tablet_mgr.get(), txn_id + 1));
         }
     });
 

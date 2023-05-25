@@ -45,7 +45,7 @@ Status VerticalCompactionTask::execute(Progress* progress) {
 
     uint32_t max_rows_per_segment =
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _total_num_rows, _total_data_size);
-    ASSIGN_OR_RETURN(auto writer, _tablet->new_writer(kVertical, max_rows_per_segment));
+    ASSIGN_OR_RETURN(auto writer, _tablet->new_writer(kVertical, _txn_id, max_rows_per_segment));
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 

@@ -260,12 +260,11 @@ TEST_P(PrimaryKeyCompactionTest, test1) {
     EXPECT_EQ(new_tablet_metadata1->rowsets_size(), 3);
 
     // make sure delvecs have been generated
-    for (int i = 0; i < 3; i++) {
-        if (i < 2) {
-            EXPECT_TRUE(fs::path_exist(_location_provider->tablet_delvec_location(tablet_id, version - i)));
-        } else {
-            EXPECT_FALSE(fs::path_exist(_location_provider->tablet_delvec_location(tablet_id, version - i)));
-        }
+    for (int i = 0; i < 2; i++) {
+        auto itr = new_tablet_metadata1->delvec_meta().version_to_delvec().find(version - i);
+        EXPECT_TRUE(itr != new_tablet_metadata1->delvec_meta().version_to_delvec().end());
+        auto delvec_file = itr->second;
+        EXPECT_TRUE(fs::path_exist(_location_provider->delvec_location(tablet_id, delvec_file)));
     }
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
@@ -285,10 +284,18 @@ TEST_P(PrimaryKeyCompactionTest, test1) {
     config::lake_gc_segment_expire_seconds = 0;
     config::lake_gc_metadata_max_versions = 1;
     ASSERT_OK(metadata_gc(kTestGroupPath, _tablet_manager.get(), _txn_id + 1));
-    ASSERT_OK(datafile_gc(kTestGroupPath, _tablet_manager.get()));
-    for (int ver = 1; ver <= version; ver++) {
-        EXPECT_FALSE(fs::path_exist(_location_provider->tablet_delvec_location(tablet_id, ver)));
+    ASSERT_OK(datafile_gc(kTestGroupPath, _tablet_manager.get(), _txn_id + 1));
+
+    std::vector<std::string> files;
+    ASSERT_OK(fs::get_children(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName), &files));
+
+    std::vector<std::string> delvec_files;
+    for (auto file : files) {
+        if (file.size() >= strlen(".delvec") && file.substr(file.size() - strlen(".delvec")) == ".delvec") {
+            delvec_files.emplace_back(file);
+        }
     }
+    EXPECT_EQ(delvec_files.size(), 0);
 }
 
 // test write 3 diff chunk

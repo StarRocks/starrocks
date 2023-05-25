@@ -52,6 +52,7 @@
 #include "http/http_request.h"
 #include "http/http_status.h"
 #include "storage/compaction_manager.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/page_cache.h"
@@ -109,6 +110,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("parallel_clone_task_per_path", [&]() {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);
+        });
+        _config_callback.emplace("lake_metadata_cache_limit", [&]() {
+            auto tablet_mgr = _exec_env->lake_tablet_manager();
+            if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
         });
     });
 
