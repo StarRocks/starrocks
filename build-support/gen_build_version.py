@@ -13,10 +13,13 @@ def func(a, *args, **kwargs):
     print(kwargs)
 
 def get_version():
-    version = os.getenv("STARROCKS_VERSION")
-    if not version:
-        version = "UNKNOWN"
-    return version.upper()
+    git_res = subprocess.Popen(["git", "rev-parse", "--abbrev-ref", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out, err = git_res.communicate()
+
+    version = u''
+    if git_res.returncode == 0:
+        version = out.decode('utf-8').strip()
+    return version
 
 def get_commit_hash():
     git_res = subprocess.Popen(["git", "rev-parse", "--short", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)

@@ -39,8 +39,13 @@ ColumnPtr UtilityFunctions::version(FunctionContext* context, const Columns& col
     return ColumnHelper::create_const_column<TYPE_VARCHAR>("5.1.0", 1);
 }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/utility_functions.cpp
 ColumnPtr UtilityFunctions::current_version(FunctionContext* context, const Columns& columns) {
     static std::string version = std::string(STARROCKS_VERSION) + " " + STARROCKS_COMMIT_HASH;
+=======
+StatusOr<ColumnPtr> UtilityFunctions::current_version(FunctionContext* context, const Columns& columns) {
+    static std::string version = std::string(STARROCKS_VERSION) + "-" + STARROCKS_COMMIT_HASH;
+>>>>>>> 145803ae5 ([Enhancement] Make the output of bin/show_be_version.sh more clear (#24142)):be/src/exprs/utility_functions.cpp
     return ColumnHelper::create_const_column<TYPE_VARCHAR>(version, 1);
 }
 

@@ -40,6 +40,10 @@ MACHINE_TYPE=$(uname -m)
 
 export STARROCKS_HOME=${ROOT}
 
+if [ -z $BUILD_TYPE ]; then
+    export BUILD_TYPE=Release
+fi
+
 . ${STARROCKS_HOME}/env.sh
 
 if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/fast_float/fast_float.h ]]; then
@@ -229,7 +233,16 @@ fi
 
 # Clean and build Backend
 if [ ${BUILD_BE} -eq 1 ] ; then
+<<<<<<< HEAD
     CMAKE_BUILD_TYPE=${BUILD_TYPE:-Release}
+=======
+    if ! ${CMAKE_CMD} --version; then
+        echo "Error: cmake is not found"
+        exit 1
+    fi
+
+    CMAKE_BUILD_TYPE=$BUILD_TYPE
+>>>>>>> 145803ae5 ([Enhancement] Make the output of bin/show_be_version.sh more clear (#24142))
     echo "Build Backend: ${CMAKE_BUILD_TYPE}"
     CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}
     if [ "${WITH_GCOV}" = "ON" ]; then

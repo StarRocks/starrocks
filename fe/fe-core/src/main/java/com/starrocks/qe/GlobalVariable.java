@@ -58,7 +58,7 @@ public final class GlobalVariable {
     public static final String QUERY_QUEUE_MAX_QUEUED_QUERIES = "query_queue_max_queued_queries";
 
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
-    public static String versionComment = "StarRocks version " + Version.STARROCKS_VERSION;
+    public static String versionComment = Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
 
     @VariableMgr.VarAttr(name = VERSION, flag = VariableMgr.READ_ONLY)
     public static String version = Config.mysql_server_version;
