@@ -80,6 +80,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -347,7 +348,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             long maxChangedTableRefreshTime = changedTablePartitionInfos.values().stream()
                     .map(x -> x.values().stream().map(
                             MaterializedView.BasePartitionInfo::getLastRefreshTime).max(Long::compareTo))
-                    .map(x -> x.orElse(null))
+                    .map(x -> x.orElse(null)).filter(Objects::nonNull)
                     .max(Long::compareTo)
                     .orElse(System.currentTimeMillis());
             materializedView.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
