@@ -129,6 +129,25 @@ public class CostModel {
             return CostEstimate.zero();
         }
 
+        private CostEstimate adjustCostForMV(ExpressionContext context) {
+            Statistics mvStatistics = context.getStatistics();
+            Group group = context.getGroupExpression().getGroup();
+            List<Double> costs = Lists.newArrayList();
+            // get the costs of all expression in this group
+            for (Pair<Double, GroupExpression> pair : group.getAllBestExpressionWithCost()) {
+                if (!(pair.second.getOp() instanceof PhysicalOlapScanOperator)) {
+                    costs.add(pair.first);
+                }
+            }
+            double groupMinCost = Double.MAX_VALUE;
+            if (costs.size() > 0) {
+                groupMinCost = Collections.min(costs);
+            }
+            // use row count as the adjust cost
+            double adjustCost = mvStatistics.getOutputRowCount();
+            return CostEstimate.of(Math.min(Math.max(groupMinCost - 1, 0), adjustCost), 0, 0);
+        }
+
         @Override
         public CostEstimate visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
@@ -152,22 +171,9 @@ public class CostModel {
                 if (groupStatistics != null && groupStatistics.getColumnStatistics().values().stream().
                         anyMatch(ColumnStatistic::isUnknown) && mvStatistics.getColumnStatistics().values().stream().
                         noneMatch(ColumnStatistic::isUnknown)) {
-                    Group group = context.getGroupExpression().getGroup();
-                    List<Double> costs = Lists.newArrayList();
-                    // get the costs of all expression in this group
-                    for (Pair<Double, GroupExpression> pair : group.getAllBestExpressionWithCost()) {
-                        if (!(pair.second.getOp() instanceof PhysicalOlapScanOperator)) {
-                            costs.add(pair.first);
-                        }
-                    }
-                    double groupMinCost = Double.MAX_VALUE;
-                    if (costs.size() > 0) {
-                        groupMinCost = Collections.min(costs);
-                    }
-                    // use row count as the adjust cost
-                    double adjustCost = mvStatistics.getOutputRowCount();
-                    return CostEstimate.of(Math.min(Math.max(groupMinCost - 1, 0), adjustCost), 0, 0);
+                    return adjustCostForMV(context);
                 }
+                // use the used columns to calculate the cost of mv
                 return CostEstimate.of(statistics.getOutputSize(usedColumns), 0, 0);
             }
             return CostEstimate.of(statistics.getComputeSize(), 0, 0);
