@@ -445,4 +445,19 @@ public class ScanTest extends PlanTestBase {
                 "sum[([count_t1a, VARCHAR, true]); args: BIGINT; result: BIGINT; " +
                 "args nullable: true; result nullable: true]");
     }
+
+    @Test
+    public void testScanOr() throws Exception {
+        String sql = "select v1 from t0 where v2 = 1 or v1 = 2";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+
+        sql = "select * from t0 where v2 = 1 or v1 = 2";
+        plan = getFragmentPlan(sql);
+        System.out.println(plan);
+
+        sql = "select * from tarray where v3[1] = 1 or v3[2] = 2";
+        plan = getFragmentPlan(sql);
+        System.out.println(plan);
+    }
 }

@@ -662,6 +662,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
 
+    @VarAttr(name = "enable_scan_or_to_union", flag = VariableMgr.INVISIBLE)
+    private boolean enableScanOrToUnion = true;
+
     /*
      * the parallel exec instance num for one Fragment in one BE
      * 1 means disable this feature
@@ -2104,6 +2107,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnablePlanValidation(boolean val) {
         this.enablePlanValidation = val;
     }
+
+    public boolean isEnableScanOrToUnion() {
+        return enableScanOrToUnion;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
