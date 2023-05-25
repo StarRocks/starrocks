@@ -103,7 +103,7 @@ public:
 
     RowsetSharedPtr create_rowset_with_mutiple_segments(const TabletSharedPtr& tablet,
                                                         const vector<vector<int64_t>>& keys_by_segment,
-                                                        Column* one_delete = nullptr, bool empty = false,
+                                                        vectorized::Column* one_delete = nullptr, bool empty = false,
                                                         bool has_merge_condition = false) {
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -131,20 +131,20 @@ public:
             auto& cols = chunk->columns();
             for (int64_t key : keys_by_segment[i]) {
                 if (schema.num_key_fields() == 1) {
-                    cols[0]->append_datum(Datum(key));
+                    cols[0]->append_datum(vectorized::Datum(key));
                 } else {
-                    cols[0]->append_datum(Datum(key));
+                    cols[0]->append_datum(vectorized::Datum(key));
                     string v = fmt::to_string(key * 234234342345);
-                    cols[1]->append_datum(Datum(Slice(v)));
-                    cols[2]->append_datum(Datum((int32_t)key));
+                    cols[1]->append_datum(vectorized::Datum(Slice(v)));
+                    cols[2]->append_datum(vectorized::Datum((int32_t)key));
                 }
                 int vcol_start = schema.num_key_fields();
-                cols[vcol_start]->append_datum(Datum((int16_t)(key % 100 + 1)));
+                cols[vcol_start]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
                 if (cols[vcol_start + 1]->is_binary()) {
                     string v = fmt::to_string(key % 1000 + 2);
-                    cols[vcol_start + 1]->append_datum(Datum(Slice(v)));
+                    cols[vcol_start + 1]->append_datum(vectorized::Datum(Slice(v)));
                 } else {
-                    cols[vcol_start + 1]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+                    cols[vcol_start + 1]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
                 }
             }
             if (one_delete == nullptr && !keys_by_segment[i].empty()) {
@@ -1859,7 +1859,7 @@ void TabletUpdatesTest::test_convert_from_with_mutiple_segment(bool enable_persi
     ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset_with_mutiple_segments(_tablet, keys_by_segment)).ok());
 
     tablet_to_schema_change->set_tablet_state(TABLET_NOTREADY);
-    auto chunk_changer = std::make_unique<ChunkChanger>(tablet_to_schema_change->tablet_schema());
+    auto chunk_changer = std::make_unique<vectorized::ChunkChanger>(tablet_to_schema_change->tablet_schema());
     for (int i = 0; i < tablet_to_schema_change->tablet_schema().num_columns(); ++i) {
         const auto& new_column = tablet_to_schema_change->tablet_schema().column(i);
         int32_t column_index = _tablet->field_index(std::string{new_column.name()});
