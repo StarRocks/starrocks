@@ -65,7 +65,7 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.load.streamload.StreamLoadInfo;
-import com.starrocks.load.streamload.StreamLoadManager;
+import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
@@ -814,7 +814,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
             if (planParams.query_options.enable_profile) {
                 planParams.query_options.setEnable_profile(true);
-                StreamLoadManager streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadManager();
+                StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
                 StreamLoadTask streamLoadTask = streamLoadManager.createLoadTask(db, table.getName(), label,
                         Config.routine_load_task_timeout_second, true);

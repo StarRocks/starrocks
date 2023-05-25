@@ -158,7 +158,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
-import com.starrocks.scheduler.mv.MVManager;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -2763,7 +2763,7 @@ public class LocalMetastore implements ConnectorMetadata {
         MaterializedView materializedView;
         if (RunMode.getCurrentRunMode().isAllowCreateOlapTable()) {
             if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
-                materializedView = MVManager.getInstance().createSinkTable(stmt, partitionInfo, mvId, db.getId());
+                materializedView = MaterializedViewMgr.getInstance().createSinkTable(stmt, partitionInfo, mvId, db.getId());
                 materializedView.setMaintenancePlan(stmt.getMaintenancePlan());
             } else {
                 materializedView =
@@ -2862,7 +2862,7 @@ public class LocalMetastore implements ConnectorMetadata {
             materializedView.addPartition(partition);
         }
 
-        MVManager.getInstance().prepareMaintenanceWork(stmt, materializedView);
+        MaterializedViewMgr.getInstance().prepareMaintenanceWork(stmt, materializedView);
 
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
@@ -3046,7 +3046,7 @@ public class LocalMetastore implements ConnectorMetadata {
         MaterializedView.RefreshMoment refreshMoment = materializedView.getRefreshScheme().getMoment();
 
         if (refreshType.equals(MaterializedView.RefreshType.INCREMENTAL)) {
-            MVManager.getInstance().startMaintainMV(materializedView);
+            MaterializedViewMgr.getInstance().startMaintainMV(materializedView);
             return;
         }
 
@@ -3093,7 +3093,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
 
             MaterializedView view = (MaterializedView) table;
-            MVManager.getInstance().stopMaintainMV(view);
+            MaterializedViewMgr.getInstance().stopMaintainMV(view);
 
             MvId mvId = new MvId(db.getId(), table.getId());
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
@@ -3134,7 +3134,7 @@ public class LocalMetastore implements ConnectorMetadata {
             throws DdlException {
         MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
         if (refreshType.equals(MaterializedView.RefreshType.INCREMENTAL)) {
-            MVManager.getInstance().onTxnPublish(materializedView);
+            MaterializedViewMgr.getInstance().onTxnPublish(materializedView);
         } else if (refreshType != MaterializedView.RefreshType.SYNC) {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());

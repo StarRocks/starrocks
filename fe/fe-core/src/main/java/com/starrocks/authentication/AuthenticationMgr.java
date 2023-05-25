@@ -89,10 +89,10 @@ public class AuthenticationMgr {
         /**
          * If someone log in from 10.1.1.1 with name "test_user", the matching UserIdentity
          * can be sorted in the below order,
-         *   1. test_user@10.1.1.1
-         *   2. test_user@["hostname"], in which "hostname" can be resolved to 10.1.1.1.
-         *      If multiple hostnames match the login ip, just return one randomly.
-         *   3. test_user@%, as a fallback.
+         * 1. test_user@10.1.1.1
+         * 2. test_user@["hostname"], in which "hostname" can be resolved to 10.1.1.1.
+         * If multiple hostnames match the login ip, just return one randomly.
+         * 3. test_user@%, as a fallback.
          */
         private static Integer scoreUserIdentityHost(UserIdentity userIdentity) {
             // ip(1) > hostname(2) > %(3)
@@ -740,8 +740,6 @@ public class AuthenticationMgr {
                 }
             } catch (AuthenticationException e) {
                 throw new RuntimeException(e);
-            } finally {
-                reader.close();
             }
             LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
 

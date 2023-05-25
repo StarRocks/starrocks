@@ -143,7 +143,7 @@ public class LocalMetaStoreTest {
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
 
-        localMetaStore.loadClusterV2(image.getDataInputStream(), 0);
+        localMetaStore.load(image.getDataInputStream());
         Assert.assertNotNull(localMetaStore.getDb(SystemId.INFORMATION_SCHEMA_DB_ID));
         Assert.assertNotNull(localMetaStore.getDb(InfoSchemaDb.DATABASE_NAME));
         Assert.assertNotNull(localMetaStore.getDb(SystemId.STARROCKS_DB_ID));

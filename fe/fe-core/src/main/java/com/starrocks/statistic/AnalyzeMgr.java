@@ -20,7 +20,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -580,7 +579,7 @@ public class AnalyzeMgr implements Writable {
                 + 1 + basicStatsMetaMap.size()
                 + 1 + histogramStatsMetaMap.size();
 
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, ResourceGroupMgr.class.getName(), numJson);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, AnalyzeMgr.class.getName(), numJson);
 
         writer.writeJson(analyzeJobMap.size());
         for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {

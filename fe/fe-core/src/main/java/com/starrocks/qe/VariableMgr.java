@@ -47,6 +47,10 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
@@ -62,6 +66,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Field;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.Lock;
@@ -338,6 +343,83 @@ public class VariableMgr {
             replayGlobalVariableV2(info);
         } finally {
             WLOCK.unlock();
+        }
+    }
+
+    public static void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        Map<String, String> m = new HashMap<>();
+        Map<String, String> g = new HashMap<>();
+        try {
+            for (Field field : SessionVariable.class.getDeclaredFields()) {
+                field.setAccessible(true);
+                VarAttr attr = field.getAnnotation(VarAttr.class);
+                if (attr == null) {
+                    continue;
+                }
+                switch (field.getType().getSimpleName()) {
+                    case "boolean":
+                    case "int":
+                    case "long":
+                    case "float":
+                    case "double":
+                    case "String":
+                        m.put(attr.name(), field.get(DEFAULT_SESSION_VARIABLE).toString());
+                        break;
+                    default:
+                        // Unsupported type variable.
+                        throw new IOException("invalid type: " + field.getType().getSimpleName());
+                }
+            }
+
+            for (Field field : GlobalVariable.class.getDeclaredFields()) {
+                field.setAccessible(true);
+                VariableMgr.VarAttr attr = field.getAnnotation(VariableMgr.VarAttr.class);
+                if (attr == null || attr.flag() != VariableMgr.GLOBAL) {
+                    continue;
+                }
+                g.put(attr.name(), field.get(null).toString());
+            }
+
+        } catch (Exception e) {
+            throw new IOException("failed to write session variable: " + e.getMessage());
+        }
+
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, VariableMgr.class.getName(), 1 + m.size() * 2 + 1 + g.size() * 2);
+
+        writer.writeJson(m.size());
+        for (Map.Entry<String, String> e : m.entrySet()) {
+            writer.writeJson(e.getKey());
+            writer.writeJson(e.getValue());
+        }
+
+        writer.writeJson(g.size());
+        for (Map.Entry<String, String> e : g.entrySet()) {
+            writer.writeJson(e.getKey());
+            writer.writeJson(e.getValue());
+        }
+        writer.close();
+    }
+
+    public static void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException, DdlException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, VariableMgr.class.getName());
+        try {
+            int sessionVarSize = reader.readInt();
+            for (int i = 0; i < sessionVarSize; ++i) {
+                String k = reader.readJson(String.class);
+                String v = reader.readJson(String.class);
+                VarContext varContext = getVarContext(k);
+                setValue(varContext.getObj(), varContext.getField(), v);
+            }
+
+            int globalVarSize = reader.readInt();
+            for (int i = 0; i < globalVarSize; ++i) {
+                String k = reader.readJson(String.class);
+                String v = reader.readJson(String.class);
+                VarContext varContext = getVarContext(k);
+                setValue(varContext.getObj(), varContext.getField(), v);
+            }
+        } finally {
+            reader.close();
         }
     }
 
