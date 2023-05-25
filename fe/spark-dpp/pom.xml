@@ -90,6 +90,12 @@ under the License.
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-core_2.12</artifactId>
             <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <artifactId>stream</artifactId>
+                    <groupId>com.clearspring.analytics</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-sql_2.12 -->
@@ -150,6 +156,11 @@ under the License.
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
         </dependency>
 
         <dependency>
