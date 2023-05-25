@@ -20,7 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
@@ -41,7 +41,7 @@ public class LocalWarehouse extends Warehouse {
 
     public LocalWarehouse(long id, String name) {
         super(id, name);
-        long clusterId = GlobalStateMgr.getCurrentState().getNextId();
+        long clusterId = StarOSAgent.DEFAULT_WORKER_GROUP_ID;
         cluster = new Cluster(clusterId);
     }
 

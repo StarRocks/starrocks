@@ -45,6 +45,8 @@ public class WarehouseManager implements Writable {
 
     public static final String DEFAULT_WAREHOUSE_NAME = "default_warehouse";
 
+    public static final long DEFAULT_ID = 0L;
+
     private Map<Long, Warehouse> idToWh = new HashMap<>();
     @SerializedName(value = "fullNameToWh")
     private Map<String, Warehouse> fullNameToWh = new HashMap<>();
@@ -63,7 +65,7 @@ public class WarehouseManager implements Writable {
     public void initDefaultWarehouse() {
         // gen a default warehouse
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Warehouse wh = new LocalWarehouse(GlobalStateMgr.getCurrentState().getNextId(),
+            Warehouse wh = new LocalWarehouse(DEFAULT_ID,
                     DEFAULT_WAREHOUSE_NAME);
             fullNameToWh.put(wh.getFullName(), wh);
             idToWh.put(wh.getId(), wh);
