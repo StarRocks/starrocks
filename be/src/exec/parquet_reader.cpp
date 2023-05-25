@@ -125,8 +125,6 @@ Status ParquetReaderWrap::_init_parquet_reader() {
             }
         }
 
-        _timezone = timezone;
-
         return Status::OK();
     } catch (parquet::ParquetException& e) {
         std::stringstream str_error;
@@ -136,8 +134,7 @@ Status ParquetReaderWrap::_init_parquet_reader() {
     }
 }
 
-Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs,
-                                              const std::string& timezone) {
+Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs) {
     RETURN_IF_ERROR(_init_parquet_reader());
     try {
         if (_current_line_of_group == 0) { // the first read
@@ -347,7 +344,7 @@ int64_t ParquetChunkReader::total_num_rows() const {
 Status ParquetChunkReader::next_batch(RecordBatchPtr* batch) {
     switch (_state) {
     case State::UNINITIALIZED: {
-        RETURN_IF_ERROR(_parquet_reader->init_parquet_reader(_src_slot_descs, _time_zone));
+        RETURN_IF_ERROR(_parquet_reader->init_parquet_reader(_src_slot_descs));
         _state = INITIALIZED;
         break;
     }
@@ -373,7 +370,7 @@ Status ParquetChunkReader::next_batch(RecordBatchPtr* batch) {
 }
 
 Status ParquetChunkReader::get_schema(std::vector<SlotDescriptor>* schema) {
-    RETURN_IF_ERROR(_parquet_reader->init_parquet_reader(_src_slot_descs, _time_zone));
+    RETURN_IF_ERROR(_parquet_reader->init_parquet_reader(_src_slot_descs));
     return _parquet_reader->get_schema(schema);
 }
 

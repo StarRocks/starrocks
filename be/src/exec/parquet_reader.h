@@ -66,7 +66,7 @@ public:
 
     void close();
     Status size(int64_t* size);
-    Status init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs, const std::string& timezone);
+    Status init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs);
     Status read_record_batch(const std::vector<SlotDescriptor*>& tuple_slot_descs, bool* eof);
     const std::shared_ptr<arrow::RecordBatch>& get_batch();
     int64_t num_rows() { return _num_rows; }
@@ -103,7 +103,6 @@ private:
     int64_t _read_offset;
     int64_t _read_size;
 
-    std::string _timezone;
     std::string _filename;
 };
 
