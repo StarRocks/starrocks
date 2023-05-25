@@ -422,6 +422,8 @@ public class FunctionSet {
     public static final String CARDINALITY = "cardinality";
     // Struct functions:
     public static final String ROW = "row";
+    public static final String STRUCT = "struct";
+    public static final String NAME_STRUCT = "name_struct";
 
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(

@@ -259,6 +259,19 @@ public class PruneSubfieldRule implements TreeRewriteRule {
             }
             return visitChildren(optExpression, context);
         }
+
+        @Override
+        public OptExpression visitLogicalExcept(OptExpression optExpression, Void context) {
+            // except/intersect should check whole value, can't prune subfield
+            allComplexColumns.clear();
+            return visitChildren(optExpression, context);
+        }
+
+        @Override
+        public OptExpression visitLogicalIntersect(OptExpression optExpression, Void context) {
+            allComplexColumns.clear();
+            return visitChildren(optExpression, context);
+        }
     }
 
     /*

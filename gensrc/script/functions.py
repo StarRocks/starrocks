@@ -972,5 +972,6 @@ vectorized_functions = [
     [170101, 'cardinality', 'INT', ['ANY_ARRAY'], 'ArrayFunctions::array_length'],
 
     # struct functions
-    # [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],
+    [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::new_struct'],
+    [170501, 'name_struct', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::name_struct'],
 ]

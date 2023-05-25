@@ -1466,4 +1466,40 @@ public class ExpressionTest extends PlanTestBase {
         assertContains(plan2, "<slot 2> : like(lower('AA'), lower('aA'))");
     }
 
+    @Test
+    public void testStructExpression() throws Exception {
+        String sql = "select struct('a', 1, 2, 10000)";
+        String plan = getVerboseExplain(sql);
+        assertCContains(plan, "struct<col0 varchar, col1 tinyint(4), col2 tinyint(4), col3 smallint(6)>");
+
+        sql = "select row('a', 1, 2, 10000, [1, 2, 3], NULL, {'a': 1, 'b': 2})";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "struct<col0 varchar, col1 tinyint(4), col2 tinyint(4), col3 smallint(6), " +
+                "col4 array<tinyint(4)>, col5 boolean, col6 map<varchar,tinyint(4)>>");
+
+        sql = "select name_struct('a', 1, 'b', 2)";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "struct<a tinyint(4), b tinyint(4)>");
+
+        try {
+            sql = "select name_struct('a', 1, 'b', 2, 3, 6)";
+            plan = getVerboseExplain(sql);
+        } catch (Exception e) {
+            assertCContains(e.getMessage(), "The 5-th input of name_struct must be string literal");
+        }
+
+        try {
+            sql = "select name_struct('a', 1, 'b', 2, 3, 'x', 6)";
+            plan = getVerboseExplain(sql);
+        } catch (Exception e) {
+            assertCContains(e.getMessage(), "name_struct arguments must be in name/value pairs");
+        }
+
+        try {
+            sql = "select name_struct('a', 1, 'a', 2)";
+            plan = getVerboseExplain(sql);
+        } catch (Exception e) {
+            assertCContains(e.getMessage(), "name_struct contains duplicate subfield name: a at 3-th input");
+        }
+    }
 }

@@ -20,15 +20,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonDeserializationContext;
-import com.google.gson.JsonDeserializer;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.thrift.TStructField;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
@@ -51,14 +44,21 @@ public class StructType extends Type {
     @SerializedName(value = "fields")
     private final ArrayList<StructField> fields;
 
+    @SerializedName(value = "named")
+    private final boolean isNamed;
+
     public StructType(ArrayList<StructField> structFields) {
+        this(structFields, true);
+    }
+
+    private StructType(List<StructField> structFields, boolean isNamed) {
         Preconditions.checkNotNull(structFields);
         Preconditions.checkArgument(structFields.size() > 0);
         this.fields = new ArrayList<>();
         for (StructField field : structFields) {
             String lowerFieldName = field.getName().toLowerCase();
             if (fieldMap.containsKey(lowerFieldName)) {
-                LOG.warn(String.format("Contains the same struct subfield name: %s, ignore it", lowerFieldName));
+                throw new SemanticException("struct contains duplicate subfield name: " + lowerFieldName);
             } else {
                 field.setPosition(fields.size());
                 fields.add(field);
@@ -67,15 +67,18 @@ public class StructType extends Type {
             }
         }
         selectedFields = new Boolean[fields.size()];
+        this.isNamed = isNamed;
         Arrays.fill(selectedFields, false);
     }
 
     // Used to construct an unnamed struct type, for example, to create a struct type
     // row(1, 'b') to create an unnamed struct type struct<int, string>
     public StructType(List<Type> fieldTypes) {
+        isNamed = false;
         ArrayList<StructField> newFields = new ArrayList<>();
         for (int i = 0; i < fieldTypes.size(); i++) {
             Type fieldType = fieldTypes.get(i);
+            // unnamed struct, default column name is col0, col1, ...
             newFields.add(new StructField("col" + i, fieldType));
         }
         this.fields = newFields;
@@ -126,7 +129,7 @@ public class StructType extends Type {
         }
         ArrayList<String> fieldsSql = Lists.newArrayList();
         for (StructField f : fields) {
-            fieldsSql.add(f.toSql(depth + 1));
+            fieldsSql.add(f.toSql(depth + 1, isNamed));
         }
         return String.format("struct<%s>", Joiner.on(", ").join(fieldsSql));
     }
@@ -136,7 +139,7 @@ public class StructType extends Type {
         String leftPadding = Strings.repeat(" ", lpad);
         ArrayList<String> fieldsSql = Lists.newArrayList();
         for (StructField f : fields) {
-            fieldsSql.add(f.prettyPrint(lpad + 2));
+            fieldsSql.add(f.prettyPrint(lpad + 2, isNamed));
         }
         return String.format("%sSTRUCT<\n%s\n%s>",
                 leftPadding, Joiner.on(",\n").join(fieldsSql), leftPadding);
@@ -238,7 +241,8 @@ public class StructType extends Type {
         Preconditions.checkNotNull(fields);
         Preconditions.checkState(!fields.isEmpty(), "StructType must contains at least one StructField.");
         node.setType(TTypeNodeType.STRUCT);
-        node.setStruct_fields(new ArrayList<TStructField>());
+        node.setStruct_fields(Lists.newArrayList());
+        node.setIs_named(isNamed);
         for (StructField field : fields) {
             field.toThrift(container, node);
         }
@@ -275,19 +279,5 @@ public class StructType extends Type {
         return new StructType(structFields);
     }
 
-    public static class StructTypeDeserializer implements JsonDeserializer<StructType> {
-        @Override
-        public StructType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
-                                      JsonDeserializationContext jsonDeserializationContext)
-                throws JsonParseException {
-            JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
-            JsonArray fields = dumpJsonObject.getAsJsonArray("fields");
-            ArrayList<StructField> structFields = new ArrayList<>(fields.size());
-            for (JsonElement field : fields) {
-                structFields.add(GsonUtils.GSON.fromJson(field, StructField.class));
-            }
-            return new StructType(structFields);
-        }
-    }
 }
 
