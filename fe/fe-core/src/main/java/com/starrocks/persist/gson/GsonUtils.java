@@ -109,8 +109,11 @@ import com.starrocks.load.loadv2.MiniLoadTxnCommitAttachment;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.load.routineload.KafkaProgress;
+import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.PulsarProgress;
+import com.starrocks.load.routineload.PulsarRoutineLoadJob;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadProgress;
 import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
 import com.starrocks.persist.ListPartitionPersistInfo;
@@ -300,6 +303,11 @@ public class GsonUtils {
                     .registerSubtype(KafkaProgress.class, KafkaProgress.class.getSimpleName())
                     .registerSubtype(PulsarProgress.class, PulsarProgress.class.getSimpleName());
 
+    public static final RuntimeTypeAdapterFactory<RoutineLoadJob> ROUTINE_LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(RoutineLoadJob.class, "clazz")
+                    .registerSubtype(KafkaRoutineLoadJob.class, KafkaRoutineLoadJob.class.getSimpleName())
+                    .registerSubtype(PulsarRoutineLoadJob.class, PulsarRoutineLoadJob.class.getSimpleName());
+
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -360,6 +368,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(TXN_COMMIT_ATTACHMENT_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ROUTINE_LOAD_PROGRESS_TYPE_RUNTIME_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(ROUTINE_LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)

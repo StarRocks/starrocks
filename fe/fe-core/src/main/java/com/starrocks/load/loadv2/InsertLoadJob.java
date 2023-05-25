@@ -65,7 +65,7 @@ import java.util.Set;
 public class InsertLoadJob extends LoadJob {
     private static final Logger LOG = LogManager.getLogger(LoadJob.class);
 
-    @SerializedName("tableId")
+    @SerializedName("tid")
     private long tableId;
     private long estimateScanRow;
     private TLoadJobType loadType;
