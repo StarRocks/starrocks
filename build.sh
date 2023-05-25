@@ -40,6 +40,10 @@ MACHINE_TYPE=$(uname -m)
 
 export STARROCKS_HOME=${ROOT}
 
+if [ -z $BUILD_TYPE ]; then
+    export BUILD_TYPE=Release
+fi
+
 . ${STARROCKS_HOME}/env.sh
 
 if [[ $OSTYPE == darwin* ]] ; then
@@ -274,7 +278,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
         exit 1
     fi
 
-    CMAKE_BUILD_TYPE=${BUILD_TYPE:-Release}
+    CMAKE_BUILD_TYPE=$BUILD_TYPE
     echo "Build Backend: ${CMAKE_BUILD_TYPE}"
     CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}
     if [ "${WITH_GCOV}" = "ON" ]; then
