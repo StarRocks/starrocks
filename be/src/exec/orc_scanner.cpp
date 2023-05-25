@@ -183,6 +183,7 @@ Status ORCScanner::_next_orc_batch(ChunkPtr* result) {
 
 Status ORCScanner::_open_next_orc_reader() {
     while (true) {
+        _state->update_num_bytes_scan_from_source(_last_file_size);
         if (_next_range >= _scan_range.ranges.size()) {
             return Status::EndOfFile("no more file to be read");
         }
@@ -198,6 +199,7 @@ Status ORCScanner::_open_next_orc_reader() {
         ASSIGN_OR_RETURN(uint64_t file_size, file->get_size());
         auto inStream = std::make_unique<ORCFileStream>(file, file_size, _counter);
         _next_range++;
+        _last_file_size = file_size;
         _orc_reader->set_read_chunk_size(_max_chunk_size);
         _orc_reader->set_current_file_name(file_name);
         st = _orc_reader->init(std::move(inStream));

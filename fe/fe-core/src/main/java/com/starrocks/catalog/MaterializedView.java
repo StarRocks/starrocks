@@ -175,6 +175,11 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             return baseTableInfoVisibleVersionMap;
         }
 
+        public void clearVisibleVersionMap() {
+            this.baseTableInfoVisibleVersionMap.clear();
+            this.baseTableVisibleVersionMap.clear();
+        }
+
         public boolean isDefineStartTime() {
             return defineStartTime;
         }

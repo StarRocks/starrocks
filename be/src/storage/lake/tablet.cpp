@@ -17,6 +17,7 @@
 #include "column/schema.h"
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/pk_tablet_writer.h"
@@ -75,21 +76,22 @@ Status Tablet::delete_tablet_metadata_lock(int64_t version, int64_t expire_time)
     return _mgr->delete_tablet_metadata_lock(_id, version, expire_time);
 }
 
-StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, uint32_t max_rows_per_segment) {
+StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int64_t txn_id,
+                                                           uint32_t max_rows_per_segment) {
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         if (type == kHorizontal) {
-            return std::make_unique<HorizontalPkTabletWriter>(*this, tablet_schema);
+            return std::make_unique<HorizontalPkTabletWriter>(*this, tablet_schema, txn_id);
         } else {
             DCHECK(type == kVertical);
-            return std::make_unique<VerticalPkTabletWriter>(*this, tablet_schema, max_rows_per_segment);
+            return std::make_unique<VerticalPkTabletWriter>(*this, tablet_schema, txn_id, max_rows_per_segment);
         }
     } else {
         if (type == kHorizontal) {
-            return std::make_unique<HorizontalGeneralTabletWriter>(*this, tablet_schema);
+            return std::make_unique<HorizontalGeneralTabletWriter>(*this, tablet_schema, txn_id);
         } else {
             DCHECK(type == kVertical);
-            return std::make_unique<VerticalGeneralTabletWriter>(*this, tablet_schema, max_rows_per_segment);
+            return std::make_unique<VerticalGeneralTabletWriter>(*this, tablet_schema, txn_id, max_rows_per_segment);
         }
     }
 }
@@ -166,8 +168,8 @@ std::string Tablet::del_location(std::string_view del_name) const {
     return _mgr->del_location(_id, del_name);
 }
 
-std::string Tablet::delvec_location(int64_t version) const {
-    return _mgr->delvec_location(_id, version);
+std::string Tablet::delvec_location(std::string_view delvec_name) const {
+    return _mgr->delvec_location(_id, delvec_name);
 }
 
 std::string Tablet::root_location() const {

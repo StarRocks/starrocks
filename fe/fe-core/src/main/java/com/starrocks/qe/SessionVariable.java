@@ -576,8 +576,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long sqlSelectLimit = DEFAULT_SELECT_LIMIT;
 
     // this is used to make c3p0 library happy
+    // Max packet length to send to or receive from the server,
+    // try to set it to a higher value if `PacketTooBigException` is thrown at client
     @VariableMgr.VarAttr(name = MAX_ALLOWED_PACKET)
-    private int maxAllowedPacket = 1048576;
+    private int maxAllowedPacket = 33554432; // 32MB
     @VariableMgr.VarAttr(name = AUTO_INCREMENT_INCREMENT)
     private int autoIncrementIncrement = 1;
 

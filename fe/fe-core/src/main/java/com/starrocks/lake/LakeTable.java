@@ -166,11 +166,13 @@ public class LakeTable extends OlapTable {
                                           long partitionId, long shardGroupId) {
         FilePathInfo fsInfo = getPartitionFilePathInfo();
         FileCacheInfo cacheInfo = getPartitionFileCacheInfo(partitionId);
-
+        Map<String, String> properties = new HashMap<>();
+        properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(partitionId));
+        properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(index.getId()));
         List<Long> shardIds = null;
         try {
             // Ignore the parameter replicationNum
-            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, shardGroupId);
+            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, fsInfo, cacheInfo, shardGroupId, properties);
         } catch (DdlException e) {
             LOG.error(e.getMessage());
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());

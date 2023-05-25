@@ -58,7 +58,7 @@ public class ShardDeleter extends LeaderDaemon {
             if (db == null) {
                 continue;
             }
-            if (db.isInfoSchemaDb()) {
+            if (db.isSystemDatabase()) {
                 continue;
             }
 

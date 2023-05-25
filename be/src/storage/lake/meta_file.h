@@ -41,7 +41,10 @@ public:
     void apply_opwrite(const TxnLogPB_OpWrite& op_write);
     void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
     // finalize will generate and sync final meta state to storage.
-    Status finalize();
+    // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and
+    // the garbage collection module relies on this value to check if a delvec file can be safely
+    // deleted.
+    Status finalize(int64_t txn_id);
     // find delvec in builder's buffer, used for batch txn log precess.
     StatusOr<bool> find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec) const;
     // when apply or finalize fail, need to clear primary index cache
@@ -49,7 +52,7 @@ public:
     bool has_update_index() const { return _has_update_index; }
 
 private:
-    Status _finalize_delvec(int64_t version);
+    Status _finalize_delvec(int64_t version, int64_t txn_id);
 
 private:
     Tablet _tablet;

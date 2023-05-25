@@ -119,6 +119,63 @@ public class MaterializedViewAnalyzer {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
     }
 
+    public static List<BaseTableInfo> getBaseTableInfos(Map<TableName, Table> tableNameTableMap) {
+        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+
+        if (tableNameTableMap.isEmpty()) {
+            throw new SemanticException("Can not find base table in query statement");
+        }
+        tableNameTableMap.forEach((tableNameInfo, table) -> {
+            Preconditions.checkState(table != null, "Materialized view base table is null");
+            if (!isSupportBasedOnTable(table)) {
+                throw new SemanticException("Create materialized view do not support the table type: " +
+                        table.getType());
+            }
+            if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                throw new SemanticException(
+                        "Create materialized view from inactive materialized view: " + table.getName());
+            }
+            if (isExternalTableFromResource(table)) {
+                throw new SemanticException(
+                        "Only supports creating materialized views based on the external table " +
+                                "which created by catalog");
+            }
+            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
+                    tableNameInfo.getDb());
+            if (isInternalCatalog(tableNameInfo.getCatalog())) {
+                baseTableInfos.add(new BaseTableInfo(database.getId(), database.getFullName(),
+                        table.getId()));
+            } else {
+                baseTableInfos.add(new BaseTableInfo(tableNameInfo.getCatalog(),
+                        tableNameInfo.getDb(), table.getTableIdentifier()));
+            }
+        });
+        return baseTableInfos;
+    }
+
+    private static boolean isSupportBasedOnTable(Table table) {
+        return SUPPORTED_TABLE_TYPE.contains(table.getType()) || table instanceof OlapTable;
+    }
+
+    private static boolean isExternalTableFromResource(Table table) {
+        if (table instanceof OlapTable) {
+            return false;
+        } else if (table instanceof JDBCTable || table instanceof MysqlTable) {
+            return false;
+        } else if (table instanceof HiveTable || table instanceof HudiTable) {
+            HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
+            String catalogName = hiveMetaStoreTable.getCatalogName();
+            return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
+        } else if (table instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            String catalogName = icebergTable.getCatalogName();
+            return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
+        } else {
+            return true;
+        }
+    }
+
+
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
         public enum RefreshTimeUnit {
@@ -126,28 +183,6 @@ public class MaterializedViewAnalyzer {
             HOUR,
             MINUTE,
             SECOND
-        }
-
-        private boolean isSupportBasedOnTable(Table table) {
-            return SUPPORTED_TABLE_TYPE.contains(table.getType()) || table instanceof OlapTable;
-        }
-
-        private boolean isExternalTableFromResource(Table table) {
-            if (table instanceof OlapTable) {
-                return false;
-            } else if (table instanceof JDBCTable || table instanceof MysqlTable) {
-                return false;
-            } else if (table instanceof HiveTable || table instanceof HudiTable) {
-                HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-                String catalogName = hiveMetaStoreTable.getCatalogName();
-                return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
-            } else if (table instanceof IcebergTable) {
-                IcebergTable icebergTable = (IcebergTable) table;
-                String catalogName = icebergTable.getCatalogName();
-                return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
-            } else {
-                return true;
-            }
         }
 
         static class SelectRelationCollector extends AstVisitor<Void, Void> {
@@ -221,39 +256,11 @@ public class MaterializedViewAnalyzer {
             statement.setSimpleViewDef(AstToSQLBuilder.buildSimple(queryStatement));
             // collect table from query statement
             Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
-            List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
             Database db = context.getGlobalStateMgr().getDb(statement.getTableName().getDb());
             if (db == null) {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb());
             }
-            if (tableNameTableMap.isEmpty()) {
-                throw new SemanticException("Can not find base table in query statement");
-            }
-            tableNameTableMap.forEach((tableNameInfo, table) -> {
-                Preconditions.checkState(table != null, "Materialized view base table is null");
-                if (!isSupportBasedOnTable(table)) {
-                    throw new SemanticException("Create materialized view do not support the table type: " +
-                            table.getType());
-                }
-                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
-                    throw new SemanticException(
-                            "Create materialized view from inactive materialized view: " + table.getName());
-                }
-                if (isExternalTableFromResource(table)) {
-                    throw new SemanticException(
-                            "Only supports creating materialized views based on the external table " +
-                                    "which created by catalog");
-                }
-                Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
-                        tableNameInfo.getDb());
-                if (isInternalCatalog(tableNameInfo.getCatalog())) {
-                    baseTableInfos.add(new BaseTableInfo(database.getId(), database.getFullName(),
-                            table.getId()));
-                } else {
-                    baseTableInfos.add(new BaseTableInfo(tableNameInfo.getCatalog(),
-                            tableNameInfo.getDb(), table.getTableIdentifier()));
-                }
-            });
+            List<BaseTableInfo> baseTableInfos = getBaseTableInfos(tableNameTableMap);
             statement.setBaseTableInfos(baseTableInfos);
             Map<Column, Expr> columnExprMap = Maps.newHashMap();
             Map<TableName, Table> aliasTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
@@ -741,6 +748,11 @@ public class MaterializedViewAnalyzer {
                 if (!(table instanceof MaterializedView)) {
                     throw new SemanticException(mvName.getTbl() + " is not async materialized view");
                 }
+            } else if (statement.getStatus() != null) {
+                String status = statement.getStatus();
+                if (!AlterMaterializedViewStmt.SUPPORTED_MV_STATUS.contains(status)) {
+                    throw new SemanticException("Unsupported modification for materialized view status:" + status);
+                }
             } else {
                 throw new SemanticException("Unsupported modification for materialized view");
             }
@@ -764,7 +776,8 @@ public class MaterializedViewAnalyzer {
             MaterializedView mv = (MaterializedView) table;
             if (!mv.isActive()) {
                 throw new SemanticException(
-                        "Refresh materialized view failed because " + mv.getName() + " is not active.");
+                        "Refresh materialized view failed because " + mv.getName() + " is not active. " +
+                        "You can try to active it with ALTER MATERIALIZED VIEW " + mv.getName() + " ACTIVE.");
             }
             if (statement.getPartitionRangeDesc() == null) {
                 return null;
