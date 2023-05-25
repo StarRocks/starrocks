@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.service;
 
 import com.google.common.base.Joiner;
@@ -59,7 +58,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-
 public class InformationSchemaDataSource {
 
     private static final Logger LOG = LogManager.getLogger(InformationSchemaDataSource.class);
@@ -71,7 +69,6 @@ public class InformationSchemaDataSource {
 
     @NotNull
     private static AuthDbRequestResult getAuthDbRequestResult(TAuthInfo authInfo) throws TException {
-
 
         List<String> authorizedDbs = Lists.newArrayList();
         PatternMatcher matcher = null;
@@ -124,7 +121,6 @@ public class InformationSchemaDataSource {
         }
     }
 
-
     // tables_config
     public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request)
             throws TException {
@@ -176,8 +172,11 @@ public class InformationSchemaDataSource {
         return resp;
     }
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> d5a7b2275 ([Enhancement] Add table_id to information_schema.tables_config (#24061))
     private static Map<String, String> genProps(Table table) {
         if (table.isMaterializedView()) {
             MaterializedView mv = (MaterializedView) table;
@@ -301,6 +300,7 @@ public class InformationSchemaDataSource {
             tableConfigInfo.setSort_key(Joiner.on(", ").join(sortKeysColumnNames));
         }
         tableConfigInfo.setProperties(new Gson().toJson(genProps(table)));
+        tableConfigInfo.setTable_id(table.getId());
         return tableConfigInfo;
     }
 
