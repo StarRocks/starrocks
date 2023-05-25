@@ -147,7 +147,7 @@ protected:
 
     const static int64_t kDefaultMaxRowGroupSize = 128 * 1024 * 1024; // 128MB
     int64_t _max_row_group_size = kDefaultMaxRowGroupSize;
-    int64_t _max_file_size = 1 * 1024 * 1024 * 1024; // 1GB
+    int64_t _max_file_size = 512 * 1024 * 1024; // 512MB
 };
 
 class SyncFileWriter : public FileWriterBase {
