@@ -1,8 +1,6 @@
 # Query Cache
 
-Query Cache 可以保存查询的中间计算结果。后续发起的语义等价的查询，能够复用先前缓存的结果，加速计算，从而提升高并发场景下简单聚合查询的 QPS 并降低平均时延。
-
-您可以通过 FE 会话变量 `enable_query_cache` 开启 Query Cache。参见本文“[FE 会话变量](../using_starrocks/query_cache.md#fe-会话变量)”小节。当某个查询无法通过 Query Cache 获得加速时，Query Cache 会进行自适应调整、并动态地跳过该查询，从而避免由于启用 Query Cache 而可能带来的性能损失。
+StarRocks 提供的 Query Cache 特性，可以帮助您极大地提升聚合查询的性能。开启 Query Cache 后，每次处理聚合查询时，StarRocks 都会将本地聚合的中间结果缓存于内存中。这样，后续收到相同或类似的聚合查询时，StarRocks 就能够直接从 Query Cache 获取匹配的聚合结果，而无需从磁盘读取数据并进行计算，大大节省查询的时间和资源成本，并提升查询的可扩展性。在大量用户同时对复杂的大数据集执行相同或类似查询的高并发场景下，Query Cache 的优势尤为明显。
 
 该特性从 2.5 版本开始支持。
 
@@ -45,6 +43,7 @@ Query Cache 支持全部数据分区策略，包括 Unpartitioned、Multi-Column
   - 查询的输出列含多个 DISTINCT 聚合函数。
 - 如果在聚合之前对数据进行了 Shuffle 操作，则 Query Cache 无法加速对该数据的查询。
 - 如果表的分组列或去重列是高基数列 (High-Cardinality Column)，则对该表执行聚合查询生成的结果会很大。这类查询会在运行时绕过 Query Cache。
+- Query Cache 的存储占用 BE 的少量内存，默认缓存大小为 512 MB，因此不宜缓存较大的数据项。此外，在启用 Query Cache 的情况下，如果缓存的命中率低，则会带来性能惩罚。因此，在查询的计算过程中，如果某一个 Tablet 上的计算结果大小超过了 `query_cache_entry_max_bytes` 或 `query_cache_entry_max_rows` 参数指定的阈值，则该查询接下来的计算不再开启 Query Cache，转而触发使用 Passthrough 机制来执行。
 
 ## 原理介绍
 
@@ -74,7 +73,7 @@ FE 判定各个查询是否需要通过 Query Cache 进行加速，并对查询�
 
 为了防止在某些不适用的场景下由于开启 Query Cache 而导致性能损失，BE 会采用自适应策略在运行时绕过 Query Cache。
 
-## 参数配置
+## 开启 Query Cache
 
 本小节介绍用于开启和配置 Query Cache 的参数和会话变量。
 
@@ -94,9 +93,15 @@ FE 判定各个查询是否需要通过 Query Cache 进行加速，并对查询�
 | -------------------- | -------- | ------------------------------------------------------------ |
 | query_cache_capacity | 否       | 指定 Query Cache 的大小。单位：字节。默认为 512 MB。<br>每个 BE 都有自己的 Query Cache，并且只填充 (Populate) 和检查 (Probe) 自己的 Query Cache。Query Cache 占用的是所在 BE 的内存。<br>注意 Query Cache 大小不能不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。 |
 
-## 原理解释
+## 确保最大缓存命中率
 
-### 语义等价
+即使后续查询与先前发起的结果已缓存的查询在语义上并不完全对等，Query Cache 依然能够有效提升缓存命中率，主要包括以下查询场景：
+
+- 语义等价的查询
+- 扫描分区重合的查询
+- 仅涉及追加写入（无 UPDATE 或 DELETE 操作）数据的查询
+
+### 语义等价的查询
 
 如果两个查询相似（这两个查询不一定字面上完全一致、但是其执行计划在语义上是相等的），则这两个查询可以复用彼此先前计算的结果。通俗地说，语义等价是指两个查询计算的数据来源相同、计算方式相同、并且具有相似的执行计划。严格地说，判定两个查询是否语义等价的规则如下：
 
@@ -299,7 +304,9 @@ PROPERTIES
 
 判定两个查询是否等价，是基于查询的物理计划，因此两个查询的字面上差异，不影响语义等价的判定。其次，查询中可以消除常量表达式计算，`cast` 表达式在查询的规划阶段已经消除，因此这些表达式不影响语义等价的判定。再次，Column 和 Relation 的别名同样也不影响等价判定。
 
-### 谓词分解
+### 扫描分区重合的查询
+
+Query Cache 支持谓词分解。
 
 通过谓词分解，可以实现部分计算结果的复用。当查询中含有分区谓词（即，含有分区列的谓词）并且分区谓词表示范围时，可以将范围按照数据表的分区分解成小的区间。各区间内的计算结果，可以分别复用于其他查询。
 
@@ -408,7 +415,9 @@ PROPERTIES
 | Multi-Column Partitioned  | 不支持<br>**说明**<br>未来可能会支持。 |
 | Single-Column Partitioned | 支持                            |
 
-### 多版本 Cache 机制
+### 仅涉及追加写入数据的查询
+
+Query Cache 支持多版本 Cache 机制。
 
 随着数据导入，Tablet 会产生新的版本，进而导致 Query Cache 中缓存结果的 Tablet 版本落后于实际的 Tablet 版本。这时候，多版本 Cache 机制会尝试把 Query Cache 中缓存的结果与磁盘上存储的增量数据合并，确保新查询能够获取到最新版本的 Tablet 数据。多版本 Cache 机制的运行受限于数据模型、查询类型、以及数据更新类型。
 
@@ -435,10 +444,6 @@ PROPERTIES
 - 表结构 (Schema) 变更与 Tablet 剪裁
 
   表结构变更与 Tablet 剪裁会产生全新的 Tablet，导致 Query Cache 中已有的数据失效。
-
-### Passthrough 机制
-
-Query Cache 的存储占用 BE 的少量内存，默认缓存大小为 512 MB，因此不宜缓存较大的数据项。此外，在启用 Query Cache 的情况下，如果缓存的命中率低，则会带来性能惩罚。因此，在查询的计算过程中，如果某一个 Tablet 上的计算结果大小超过了 `query_cache_entry_max_bytes` 或 `query_cache_entry_max_rows` 参数指定的阈值，则该查询接下来的计算不再开启 Query Cache，转而触发使用 Passthrough 机制来执行。
 
 ## 监控指标
 
