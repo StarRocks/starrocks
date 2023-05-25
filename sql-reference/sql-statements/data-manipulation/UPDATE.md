@@ -2,7 +2,7 @@
 
 该语句用于更新一张主键模型表中的数据行。
 
-3.0 版本之前，UPDATE 语句仅支持简单的语法，例如 `UPDATE <table_name> SET <column_name>=<expression> WHERE <where_condition>`。从 3.0 版本开始，StarRocks 丰富了 UPDATE 语法，支持使用多表关联和公用表表达式（CTE）。如果需要将待更新的表与数据库中其他表关联，则可以在 FROM 子句或 CTE 中引用其他的表。
+3.0 版本之前，UPDATE 语句仅支持单表 UPDATE 且不支持公用表表达式（CTE）。从 3.0 版本开始，StarRocks 丰富了 UPDATE 语法，支持使用多表关联和 CTE。如果需要将待更新的表与数据库中其他表关联，则可以在 FROM 子句或 CTE 中引用其他的表。
 
 ## 使用说明
 
@@ -10,12 +10,27 @@
 
 ## 语法
 
+**单表 UPDATE**
+
+如果待更新表的数据行满足 WHERE 条件，则对该数据行的指定列赋予新值。
+
 ```SQL
 [ WITH <with_query> [, ...] ]
 UPDATE <table_name>
-SET <column_name> = <expression> [, ...]
-[ FROM <from_item> [, ...] ]
-WHERE <where_condition>
+    SET <column_name> = <expression> [, ...]
+    WHERE <where_condition>
+```
+
+**多表 UPDATE**
+
+基于多表关联查询的结果集与待更新的表进行匹配，如果待更新表的数据行匹配结果集并且满足 WHERE 条件，则对该数据行的指定列赋予新值。
+
+```SQL
+[ WITH <with_query> [, ...] ]
+UPDATE <table_name>
+    SET <column_name> = <expression> [, ...]
+    [ FROM <from_item> [, ...] ]
+    WHERE <where_condition>
 ```
 
 ## 参数说明
@@ -38,7 +53,7 @@ WHERE <where_condition>
 
 `from_item`
 
-引用数据库中一个或者多个其他的表。该表与待操作的表进行连接，WHERE 子句指定连接条件，最终基于连接查询的结果集给待更新中匹配行的列赋值。 例如 FROM 子句为 `FROM t1 WHERE t0.pk = t1.pk;`，StarRocks 实际执行 UPDATE 语句时会将该 FROM 子句的表表达式会转换为 `t0 JOIN t1 ON t0.pk=t1.pk;`。
+引用数据库中一个或者多个其他的表。该表与待更新的表进行连接，WHERE 子句指定连接条件，最终基于连接查询的结果集给待更新的表中匹配行的列赋值。 例如 FROM 子句为 `FROM t1 WHERE t0.pk = t1.pk;`，StarRocks 实际执行 UPDATE 语句时会将该 FROM 子句的表表达式会转换为 `t0 JOIN t1 ON t0.pk=t1.pk;`。
 
 `where_condition`
 
@@ -46,51 +61,95 @@ WHERE <where_condition>
 
 ## 示例
 
-假设存在如下两张表，表 `employees` 记录雇员信息，表 `accounts` 记录账户信息。
+### 单表 UPDATE
+
+创建表 `Employees` 来记录雇员信息，向表中插入五行数据。
 
 ```SQL
-CREATE TABLE employees
-(
-    id BIGINT NOT NULL,
-    sales_count INT NOT NULL
-) 
-PRIMARY KEY (id)
-DISTRIBUTED BY HASH(id) BUCKETS 1
+CREATE TABLE Employees (
+    EmployeeID INT,
+    Name VARCHAR(50),
+    Salary DECIMAL(10, 2)
+)
+PRIMARY KEY (EmployeeID) 
+DISTRIBUTED BY HASH (EmployeeID) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 
-INSERT INTO employees VALUES (1,100),(2,1000);
-
-CREATE TABLE accounts 
-(
-    accounts_id BIGINT NOT NULL,
-    name VARCHAR(26) NOT NULL,
-    sales_person INT NOT NULL
-) 
-PRIMARY KEY (accounts_id)
-DISTRIBUTED BY HASH(accounts_id) BUCKETS 1
-PROPERTIES ("replication_num" = "1");
-
-INSERT INTO accounts VALUES (1,'Acme Corporation',2),(2,'Acme Corporation',3),(3,'Corporation',3);
+INSERT INTO Employees VALUES
+    (1, 'John Doe', 5000),
+    (2, 'Jane Smith', 6000),
+    (3, 'Robert Johnson', 5500),
+    (4, 'Emily Williams', 4500),
+    (5, 'Michael Brown', 7000);
 ```
 
-如果需要给表 `employees` 中 Acme Corporation 公司管理帐户的销售人员的销售计数增加 1，则可以执行如下语句：
+如果需要对所有员工加薪 10%，则可以执行如下语句：
 
 ```SQL
-UPDATE employees
-SET sales_count = sales_count + 1
-FROM accounts
-WHERE accounts.name = 'Acme Corporation'
-   AND employees.id = accounts.sales_person;
+UPDATE Employees
+SET Salary = Salary * 1.1  -- 将薪水增加10%
+WHERE true;
+```
+
+如果需要对薪水低于平均薪水的员工加薪 10%，则可以执行如下语句，
+
+```SQL
+UPDATE Employees
+SET Salary = Salary * 1.1  -- 将薪水增加10%
+WHERE Salary < (SELECT AVG(Salary) FROM Employees);
 ```
 
 您也可以使用 CTE 改写上述语句，增加易读性。
 
 ```SQL
-WITH acme_accounts as (
-    SELECT * from accounts
-     WHERE accounts.name = 'Acme Corporation'
+WITH AvgSalary AS (
+    SELECT AVG(Salary) AS AverageSalary
+    FROM Employees
 )
-UPDATE employees SET sales_count = sales_count + 1
-FROM acme_accounts
-WHERE employees.id = acme_accounts.sales_person;
+UPDATE Employees
+SET Salary = Salary * 1.1  -- 将薪水增加10%
+FROM AvgSalary
+WHERE Employees.Salary < AvgSalary.AverageSalary;
+```
+
+### 多表 UPDATE
+
+创建表 `Accounts` 来记录账户信息，向表中插入三行数据。
+
+```SQL
+CREATE TABLE Accounts (
+    Accounts_id BIGINT NOT NULL,
+    Name VARCHAR(26) NOT NULL,
+    Sales_person VARCHAR(50) NOT NULL
+) 
+PRIMARY KEY (Accounts_id)
+DISTRIBUTED BY HASH (Accounts_id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO Accounts VALUES
+    (1,'Acme Corporation','John Doe'),
+    (2,'Acme Corporation','Robert Johnson'),
+    (3,'Acme Corporation','Lily Swift');
+```
+
+如果需要给表 `Employees` 中 Acme Corporation 公司管理帐户的员工加薪 10%，则可以执行如下语句：
+
+```SQL
+UPDATE Employees
+SET Salary = Salary * 1.1  -- 将薪水增加10%
+FROM Accounts
+WHERE Accounts.name = 'Acme Corporation'
+    AND Employees.Name = Accounts.Sales_person;
+```
+
+您也可以使用 CTE 改写上述语句，增加易读性。
+
+```SQL
+WITH Acme_Accounts as (
+    SELECT * from Accounts
+    WHERE Accounts.name = 'Acme Corporation'
+)
+UPDATE Employees SET Salary = Salary * 1.1 -- 将薪水增加10%
+FROM Acme_Accounts
+WHERE Employees.Name = Acme_Accounts.Sales_person;
 ```
