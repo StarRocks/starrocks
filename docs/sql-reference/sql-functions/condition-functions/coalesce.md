@@ -2,7 +2,7 @@
 
 ## Description
 
-Returns the first non-NULL expression among the input parameters.  Returns NULL if the input parameters are NULL.
+Returns the first non-NULL expression among the input parameters. Returns NULL if non-NULL expressions cannot be found.
 
 ## Syntax
 
@@ -12,7 +12,7 @@ coalesce(expr1,...);
 
 ## Parameters
 
-input expressions must be compatible in data type.
+`expr1`: the input expressions, which must evaluate to compatible data types. The supported data types are BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, DATETIME, DATE, DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128, VARCHAR, BITMAP, PERCENTILE, HLL, and TIME.
 
 ## Return value
 
