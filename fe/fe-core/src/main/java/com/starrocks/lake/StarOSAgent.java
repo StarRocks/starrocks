@@ -574,7 +574,15 @@ public class StarOSAgent {
             for (WorkerGroupDetailInfo detailInfo : workerGroupDetailInfos) {
                 List<WorkerInfo> workerInfos = detailInfo.getWorkersInfoList();
                 for (WorkerInfo workerInfo : workerInfos) {
-                    nodeIds.add(workerToBackend.get(workerInfo.getWorkerId()));
+                    if (workerToBackend.containsKey(workerInfo.getWorkerId())) {
+                        nodeIds.add(workerToBackend.get(workerInfo.getWorkerId()));
+                    } else {
+                        // for follower fe
+                        String workerAddr = workerInfo.getIpPort();
+                        String[] pair = workerAddr.split(":");
+                        long nodeId = getAvailableBackendId(pair[0], Integer.parseInt(pair[1]));
+                        nodeIds.add(nodeId);
+                    }
                 }
             }
             return nodeIds;

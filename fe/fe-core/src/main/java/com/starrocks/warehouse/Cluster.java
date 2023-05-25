@@ -43,7 +43,7 @@ public class Cluster implements Writable {
     private long id;
     @SerializedName(value = "wgid")
     private long workerGroupId;
-    @SerializedName(value = "computeNodeIds")
+
     private Set<Long> computeNodeIds = new HashSet<>();
 
     public Cluster(long id) {
@@ -76,10 +76,6 @@ public class Cluster implements Writable {
 
     public void addNode(long cnId) {
         computeNodeIds.add(cnId);
-    }
-
-    public void addNodes(List<Long> cnIds) {
-        computeNodeIds.addAll(cnIds);
     }
 
     public void dropNode(long cnId) {

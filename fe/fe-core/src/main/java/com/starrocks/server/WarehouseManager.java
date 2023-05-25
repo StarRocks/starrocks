@@ -83,16 +83,6 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public void updateDefaultWarehouse() {
-        Warehouse defaultWarehouse = getDefaultWarehouse();
-        if (defaultWarehouse != null) {
-            defaultWarehouse.getAnyAvailableCluster().addNodes(GlobalStateMgr.getCurrentSystemInfo().
-                    getIdToBackend().keySet().asList());
-            defaultWarehouse.getAnyAvailableCluster().addNodes(GlobalStateMgr.getCurrentSystemInfo().
-                    getIdComputeNode().keySet().asList());
-        }
-    }
-
     public boolean warehouseExists(String warehouseName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return fullNameToWh.containsKey(warehouseName);

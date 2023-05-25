@@ -1381,6 +1381,10 @@ public class GlobalStateMgr {
 
         startAllNodeTypeDaemonThreads();
 
+        if (!isDefaultWarehouseCreated) {
+            initDefaultWarehouse();
+        }
+
         MetricRepo.init();
 
         feType = newType;
