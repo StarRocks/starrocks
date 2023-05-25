@@ -14,6 +14,7 @@
 
 package com.starrocks.warehouse;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
@@ -22,12 +23,21 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
+import java.util.List;
 import java.util.Map;
 
 // on-premise
 public class LocalWarehouse extends Warehouse {
     @SerializedName(value = "cluster")
     Cluster cluster;
+
+    public static final ImmutableList<String> CLUSTER_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
+            .add("ClusterId")
+            .add("WorkerGroupId")
+            .add("ComputeNodeIds")
+            .add("Pending")
+            .add("Running")
+            .build();
 
     public LocalWarehouse(long id, String name) {
         super(id, name);
@@ -55,5 +65,13 @@ public class LocalWarehouse extends Warehouse {
     @Override
     public Cluster getAnyAvailableCluster() {
         return cluster;
+    }
+
+    @Override
+    public List<List<String>> getClusterInfo() {
+        BaseProcResult result = new BaseProcResult();
+        result.setNames(CLUSTER_PROC_NODE_TITLE_NAMES);
+        cluster.getProcNodeData(result);
+        return result.getRows();
     }
 }
