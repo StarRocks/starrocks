@@ -78,8 +78,8 @@ public class StructType extends Type {
         ArrayList<StructField> newFields = new ArrayList<>();
         for (int i = 0; i < fieldTypes.size(); i++) {
             Type fieldType = fieldTypes.get(i);
-            // unnamed struct, default column name is col0, col1, ...
-            newFields.add(new StructField("col" + i, fieldType));
+            // unnamed struct, default column name is col1, ...
+            newFields.add(new StructField("col" + (i + 1), fieldType));
         }
         this.fields = newFields;
         selectedFields = new Boolean[fields.size()];
