@@ -880,7 +880,7 @@ public class AlterJobMgr {
         String origTblName = origTable.getName();
         String newTblName = clause.getTblName();
         Table newTbl = db.getTable(newTblName);
-        if (newTbl == null || !newTbl.isOlapOrCloudNativeTable()) {
+        if (newTbl == null || !(newTbl.isOlapOrCloudNativeTable() || newTbl.isMaterializedView())) {
             throw new DdlException("Table " + newTblName + " does not exist or is not OLAP/LAKE table");
         }
         OlapTable olapNewTbl = (OlapTable) newTbl;
