@@ -1,4 +1,20 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> d5a7b2275 ([Enhancement] Add table_id to information_schema.tables_config (#24061))
 
 package com.starrocks.service;
 
@@ -47,7 +63,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-
 public class InformationSchemaDataSource {
     
     private static final Logger LOG = LogManager.getLogger(InformationSchemaDataSource.class);
@@ -59,7 +74,6 @@ public class InformationSchemaDataSource {
 
     @NotNull
     private static AuthDbRequestResult getAuthDbRequestResult(TAuthInfo authInfo) throws TException {
-
 
         List<String> authorizedDbs = Lists.newArrayList();
         PatternMatcher matcher = null;
@@ -107,7 +121,6 @@ public class InformationSchemaDataSource {
         }
     }
 
-
     // tables_config
     public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request) throws TException {
         
@@ -154,8 +167,11 @@ public class InformationSchemaDataSource {
         return resp;
     }
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> d5a7b2275 ([Enhancement] Add table_id to information_schema.tables_config (#24061))
     private static Map<String, String> genProps(Table table) {
 
         if (table.getType() == TableType.MATERIALIZED_VIEW) {
@@ -277,6 +293,7 @@ public class InformationSchemaDataSource {
             tableConfigInfo.setSort_key(Joiner.on(", ").join(sortKeysColumnNames));
         }
         tableConfigInfo.setProperties(new Gson().toJson(genProps(table)));
+        tableConfigInfo.setTable_id(table.getId());
         return tableConfigInfo;
     }
 
