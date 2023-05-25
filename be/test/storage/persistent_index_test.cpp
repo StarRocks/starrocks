@@ -1532,7 +1532,7 @@ PARALLEL_TEST(PersistentIndexTest, test_flush_l1_advance) {
 
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
-        ASSERT_OK(index.prepare(EditVersion(1, 0)));
+        ASSERT_OK(index.prepare(EditVersion(1, 0), N));
         const int N = 100000;
         for (int i = 0; i < 5; i++) {
             vector<Key> keys(N);
