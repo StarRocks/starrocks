@@ -82,13 +82,15 @@ public class StructType extends Type {
     // row(1, 'b') to create an unnamed struct type struct<int, string>
     public StructType(List<Type> fieldTypes) {
         isNamed = false;
-        ArrayList<StructField> newFields = new ArrayList<>();
+        this.fields = new ArrayList<>();
         for (int i = 0; i < fieldTypes.size(); i++) {
             Type fieldType = fieldTypes.get(i);
             // unnamed struct, default column name is col1, ...
-            newFields.add(new StructField("col" + (i + 1), fieldType));
+            StructField field = new StructField("col" + (i + 1), fieldType);
+            this.fields.add(field);
+            field.setPosition(i);
+            fieldMap.put(field.getName(), field);
         }
-        this.fields = newFields;
         selectedFields = new Boolean[fields.size()];
         Arrays.fill(selectedFields, false);
     }
@@ -136,7 +138,7 @@ public class StructType extends Type {
         }
         ArrayList<String> fieldsSql = Lists.newArrayList();
         for (StructField f : fields) {
-            fieldsSql.add(f.toSql(depth + 1, isNamed));
+            fieldsSql.add(f.toSql(depth + 1, true));
         }
         return String.format("struct<%s>", Joiner.on(", ").join(fieldsSql));
     }
@@ -146,7 +148,7 @@ public class StructType extends Type {
         String leftPadding = Strings.repeat(" ", lpad);
         ArrayList<String> fieldsSql = Lists.newArrayList();
         for (StructField f : fields) {
-            fieldsSql.add(f.prettyPrint(lpad + 2, isNamed));
+            fieldsSql.add(f.prettyPrint(lpad + 2, true));
         }
         return String.format("%sSTRUCT<\n%s\n%s>",
                 leftPadding, Joiner.on(",\n").join(fieldsSql), leftPadding);

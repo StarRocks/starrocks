@@ -457,8 +457,9 @@ public class ExpressionTest extends PlanTestBase {
         String plan = getThriftPlan(sql);
         Assert.assertTrue(plan, plan.contains(
                 "signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), "
-                + "id:50287, fid:50287, could_apply_dict_optimize:false, ignore_nulls:false), has_nullable_child:false, "
-                + "is_nullable:true"));
+                        +
+                        "id:50287, fid:50287, could_apply_dict_optimize:false, ignore_nulls:false), has_nullable_child:false, "
+                        + "is_nullable:true"));
     }
 
     @Test
@@ -1501,5 +1502,12 @@ public class ExpressionTest extends PlanTestBase {
         } catch (Exception e) {
             assertCContains(e.getMessage(), "name_struct contains duplicate subfield name: a at 3-th input");
         }
+    }
+
+    @Test
+    public void testStructRow() throws Exception {
+        String sql = "select row('a', 1, 'a', 2).col1";
+        String plan = getVerboseExplain(sql);
+        assertCContains(plan, "row('a', 1, 'a', 2).col1");
     }
 }
