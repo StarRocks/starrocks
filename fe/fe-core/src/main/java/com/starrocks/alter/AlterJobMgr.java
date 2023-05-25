@@ -340,6 +340,8 @@ public class AlterJobMgr {
                 AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
                         materializedView.getId(), status);
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
+            } else if (stmt.getSwapTable() != null) {
+                processSwap(db, materializedView, Collections.singletonList(stmt.getSwapTable()));
             } else {
                 throw new DdlException("Unsupported modification for materialized view");
             }
@@ -866,7 +868,7 @@ public class AlterJobMgr {
     }
 
     // entry of processing swap table
-    private void processSwap(Database db, OlapTable origTable, List<AlterClause> alterClauses) throws UserException {
+    private void processSwap(Database db, OlapTable origTable, List<AlterClause> alterClauses) throws DdlException {
         if (!(alterClauses.get(0) instanceof SwapTableClause)) {
             throw new DdlException("swap operation only support table");
         }
@@ -886,6 +888,12 @@ public class AlterJobMgr {
         // First, we need to check whether the table to be operated on can be renamed
         olapNewTbl.checkAndSetName(origTblName, true);
         origTable.checkAndSetName(newTblName, true);
+
+        if (origTable.isMaterializedView() || newTbl.isMaterializedView()) {
+            if (!(origTable.isMaterializedView() && newTbl.isMaterializedView())) {
+                throw new DdlException("Materialized view can only SWAP WITH materialized view");
+            }
+        }
 
         swapTableInternal(db, origTable, olapNewTbl);
 
@@ -935,6 +943,18 @@ public class AlterJobMgr {
         // rename origin table name to new table name and add it to database
         origTable.checkAndSetName(newTblName, false);
         db.createTable(origTable);
+
+        // swap dependencies of base table
+        if (origTable.isMaterializedView()) {
+            MaterializedView oldMv = (MaterializedView) origTable;
+            MaterializedView newMv = (MaterializedView) newTbl;
+            for (BaseTableInfo baseTable : oldMv.getBaseTableInfos()) {
+                baseTable.getTable().replaceRelatedMaterializedView(oldMv.getMvId(), newMv.getMvId());
+            }
+            for (BaseTableInfo baseTable : newMv.getBaseTableInfos()) {
+                baseTable.getTable().replaceRelatedMaterializedView(newMv.getMvId(), oldMv.getMvId());
+            }
+        }
     }
 
     public void processAlterView(AlterViewStmt stmt, ConnectContext ctx) throws UserException {

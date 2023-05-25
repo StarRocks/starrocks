@@ -1488,13 +1488,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitCreateMaterializedViewStatement(
             StarRocksParser.CreateMaterializedViewStatementContext context) {
         boolean ifNotExist = context.IF() != null;
-        boolean replace = context.REPLACE() != null;
         QualifiedName qualifiedName = getQualifiedName(context.mvName);
         TableName tableName = qualifiedNameToTableName(qualifiedName);
 
-        if (ifNotExist && replace) {
-            throw new ParsingException(PARSER_ERROR_MSG.conflictedOptions("IF NOT EXISTS", "OR REPLACE"));
-        }
         List<ColWithComment> colWithComments = null;
         if (!context.columnNameWithComment().isEmpty()) {
             colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
@@ -1591,7 +1587,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException(PARSER_ERROR_MSG.feConfigDisable("enable_experimental_mv"), NodePosition.ZERO);
         }
 
-        return new CreateMaterializedViewStatement(tableName, ifNotExist, replace, colWithComments, comment,
+        return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments, comment,
                 refreshSchemeDesc,
                 expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement, createPos(context));
     }
@@ -1647,7 +1643,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.statusDesc() != null) {
             status = context.statusDesc().getText();
         }
+        // swap table
+        SwapTableClause swapTableClause = null;
+        if (context.swapTableClause() != null) {
+            swapTableClause = (SwapTableClause) visit(context.swapTableClause());
+        }
         return new AlterMaterializedViewStmt(mvName, newMvName, refreshSchemeDesc, modifyTablePropertiesClause, status,
+                swapTableClause,
                 createPos(context));
     }
 
