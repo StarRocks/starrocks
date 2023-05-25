@@ -23,6 +23,7 @@
 #include "util/faststring.h"
 #include "util/filesystem_util.h"
 #include "util/raw_container.h"
+#include "util/threadpool.h"
 #include "util/xxh3.h"
 
 namespace starrocks {
