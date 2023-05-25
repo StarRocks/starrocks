@@ -46,9 +46,11 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
@@ -258,16 +260,24 @@ public class IcebergApiConverter {
     public static Map<String, String> rebuildCreateTableProperties(Map<String, String> createProperties) {
         ImmutableMap.Builder<String, String> tableProperties = ImmutableMap.builder();
         createProperties.entrySet().forEach(tableProperties::put);
-
         String fileFormat = createProperties.getOrDefault("file_format", TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
+        String compressionCodec = null;
+
         if ("parquet".equalsIgnoreCase(fileFormat)) {
             tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "parquet");
+            compressionCodec = createProperties.getOrDefault("compression_codec", TableProperties.PARQUET_COMPRESSION_DEFAULT);
         } else if ("avro".equalsIgnoreCase(fileFormat)) {
             tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "avro");
+            compressionCodec = createProperties.getOrDefault("compression_codec", TableProperties.AVRO_COMPRESSION_DEFAULT);
         } else if ("orc".equalsIgnoreCase(fileFormat)) {
             tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "orc");
+            compressionCodec = createProperties.getOrDefault("compression_codec", TableProperties.ORC_COMPRESSION_DEFAULT);
         } else if (fileFormat != null) {
             throw new IllegalArgumentException("Unsupported format in USING: " + fileFormat);
+        }
+
+        if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionCodec.toLowerCase(Locale.ROOT))) {
+            throw new IllegalArgumentException("Unsupported compression codec in USING: " + compressionCodec);
         }
 
         return tableProperties.build();
