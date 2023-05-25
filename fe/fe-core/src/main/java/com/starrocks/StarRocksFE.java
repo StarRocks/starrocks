@@ -180,7 +180,7 @@ public class StarRocksFE {
 
             addShutdownHook();
 
-            LOG.info("FE start successfully");
+            LOG.info("FE started successfully");
 
             while (!stopped) {
                 Thread.sleep(2000);
