@@ -91,7 +91,7 @@ static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr
     auto& operators = driver->operators();
     for (int32_t i = operators.size() - 1; i >= 0; --i) {
         auto& curr_op = operators[i];
-        driver->runtime_profile()->add_child(curr_op->get_runtime_profile(), true, nullptr);
+        driver->runtime_profile()->add_child(curr_op->runtime_profile(), true, nullptr);
     }
 }
 
