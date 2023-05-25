@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.TaskName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -34,21 +35,21 @@ public class SubmitTaskStmt extends DdlStmt {
     private CreateTableAsSelectStmt createTableAsSelectStmt;
     private InsertStmt insertStmt;
 
-    public SubmitTaskStmt(String dbName, String taskName, Map<String, String> properties, int sqlBeginIndex,
+    public SubmitTaskStmt(TaskName taskName, Map<String, String> properties, int sqlBeginIndex,
                           CreateTableAsSelectStmt createTableAsSelectStmt, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
-        this.taskName = taskName;
+        this.dbName = taskName.getDbName();
+        this.taskName = taskName.getName();
         this.properties = properties;
         this.sqlBeginIndex = sqlBeginIndex;
         this.createTableAsSelectStmt = createTableAsSelectStmt;
     }
 
-    public SubmitTaskStmt(String dbName, String taskName, Map<String, String> properties, int sqlBeginIndex,
+    public SubmitTaskStmt(TaskName taskName, Map<String, String> properties, int sqlBeginIndex,
                           InsertStmt insertStmt, NodePosition pos) {
         super(pos);
-        this.dbName = dbName;
-        this.taskName = taskName;
+        this.dbName = taskName.getDbName();
+        this.taskName = taskName.getName();
         this.properties = properties;
         this.sqlBeginIndex = sqlBeginIndex;
         this.insertStmt = insertStmt;
