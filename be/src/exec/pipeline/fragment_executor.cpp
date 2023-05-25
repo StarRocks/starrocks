@@ -179,11 +179,13 @@ Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams&
     }
 
     WorkGroupPtr wg = nullptr;
-    if (request.common().__isset.workgroup && request.common().workgroup.id != WorkGroup::DEFAULT_WG_ID) {
+    if (!request.common().__isset.workgroup || request.common().workgroup.id == WorkGroup::DEFAULT_WG_ID) {
+        wg = WorkGroupManager::instance()->get_default_workgroup();
+    } else if (request.common().workgroup.id == WorkGroup::DEFAULT_MV_WG_ID) {
+        wg = WorkGroupManager::instance()->get_default_mv_workgroup();
+    } else {
         wg = std::make_shared<WorkGroup>(request.common().workgroup);
         wg = WorkGroupManager::instance()->add_workgroup(wg);
-    } else {
-        wg = WorkGroupManager::instance()->get_default_workgroup();
     }
     DCHECK(wg != nullptr);
     RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get()));
