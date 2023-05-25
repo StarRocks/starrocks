@@ -26,6 +26,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.DistributionCol;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -124,7 +126,10 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
         List<Integer> groupBy = aggregate.getGroupingKeys().stream().map(ColumnRefOperator::getId)
                 .collect(Collectors.toList());
 
-        if (groupBy.isEmpty() || groupBy.containsAll(scan.getDistributionSpec().getShuffleColumns())) {
+        List<Integer> distributionCols = ((HashDistributionSpec) scan.getDistributionSpec()).getShuffleColumns().stream().map(
+                DistributionCol::getColId).collect(Collectors.toList());
+
+        if (groupBy.isEmpty() || groupBy.containsAll(distributionCols)) {
             return false;
         }
 
@@ -134,7 +139,7 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
         }
 
         groupBy.add(distinctColumns.get(0).getId());
-        return groupBy.containsAll(scan.getDistributionSpec().getShuffleColumns());
+        return groupBy.containsAll(distributionCols);
     }
 
     @Override

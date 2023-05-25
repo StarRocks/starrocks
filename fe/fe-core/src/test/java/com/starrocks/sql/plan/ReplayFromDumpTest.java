@@ -772,4 +772,26 @@ public class ReplayFromDumpTest {
         Assert.assertEquals(new CTEProperty(1), expression.getLogicalProperty().getUsedCTEs());
         Assert.assertEquals(4, result.second.getCteProduceFragments().size());
     }
+
+    @Test
+    public void testLeftJoinColocate_01() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/left_colocate_1"), null, TExplainLevel.NORMAL);
+        String plan = replayPair.second;
+        Assert.assertTrue(plan, plan.contains("3:HASH JOIN\n" +
+                "  |    |  join op: LEFT OUTER JOIN (COLOCATE)"));
+        Assert.assertTrue(plan, plan.contains("5:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (COLOCATE)"));
+    }
+
+    @Test
+    public void testLeftJoinColocate_02() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/left_colocate_2"), null, TExplainLevel.NORMAL);
+        String plan = replayPair.second;
+        Assert.assertTrue(plan, plan.contains("3:HASH JOIN\n" +
+                "  |    |  join op: LEFT OUTER JOIN (COLOCATE)"));
+        Assert.assertTrue(plan, plan.contains("6:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (COLOCATE)"));
+    }
 }
