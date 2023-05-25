@@ -47,21 +47,21 @@ PARALLEL_TEST(StructFunctionsTest, test_new_struct) {
         input_columns[i]->append_datum({5 - i});
     }
 
-    MemPool pool;
-    FunctionContext::TypeDesc ret;
+    FunctionContext::TypeDesc ret_type;
     FunctionContext::TypeDesc cint;
     std::vector<FunctionContext::TypeDesc> arg_types;
     cint.type = starrocks::TYPE_INT;
-    ret.type = starrocks::TYPE_STRUCT;
+    ret_type.type = starrocks::TYPE_STRUCT;
     for (int i = 0; i < 5; ++i) {
-        ret.field_names.emplace_back(fmt::format("col%d", (i + 1)));
-        ret.children.emplace_back(cint);
+        ret_type.field_names.emplace_back(fmt::format("col%d", (i + 1)));
+        ret_type.children.emplace_back(cint);
         arg_types.emplace_back(cint);
     }
 
-    FunctionContext* context = FunctionContext::create_context(nullptr, &pool, ret, arg_types);
+    FunctionContext* context = FunctionContext::create_context(nullptr, nullptr, ret_type, arg_types);
 
-    auto ret = StructFunctions::new_struct(&context, input_columns);
+    auto ret = StructFunctions::new_struct(context, input_columns);
+    delete context;
     ASSERT_TRUE(ret.ok());
     auto struct_col = std::move(ret).value();
     ASSERT_EQ(3, struct_col->size());
@@ -93,23 +93,23 @@ PARALLEL_TEST(StructFunctionsTest, test_name_struct) {
         input_columns[i]->append_nulls(1);
     }
 
-    MemPool pool;
-    FunctionContext::TypeDesc ret;
+    FunctionContext::TypeDesc ret_type;
     FunctionContext::TypeDesc cint;
     std::vector<FunctionContext::TypeDesc> arg_types;
     cint.type = starrocks::TYPE_INT;
-    ret.type = starrocks::TYPE_STRUCT;
+    ret_type.type = starrocks::TYPE_STRUCT;
     for (int i = 0; i < 3; ++i) {
-        ret.field_names.emplace_back(fmt::format("col%d", (i + 1)));
-        ret.children.emplace_back(cint);
+        ret_type.field_names.emplace_back(fmt::format("col%d", (i + 1)));
+        ret_type.children.emplace_back(cint);
     }
     for (int i = 0; i < 6; ++i) {
         arg_types.emplace_back(cint);
     }
 
-    FunctionContext* context = FunctionContext::create_context(nullptr, &pool, ret, arg_types);
+    FunctionContext* context = FunctionContext::create_context(nullptr, nullptr, ret_type, arg_types);
 
-    auto ret = StructFunctions::name_struct(nullptr, input_columns);
+    auto ret = StructFunctions::name_struct(context, input_columns);
+    delete context;
     ASSERT_TRUE(ret.ok());
     auto struct_col = std::move(ret).value();
     ASSERT_EQ(3, struct_col->size());
