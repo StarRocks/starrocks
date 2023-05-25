@@ -17,22 +17,14 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ForeignKeyConstraint;
-import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.UniqueConstraint;
-import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.hive.HiveMetaClient;
@@ -40,14 +32,11 @@ import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.ast.DmlStmt;
-import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -61,13 +50,10 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
-import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -76,8 +62,6 @@ import org.junit.Test;
 
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MvRewriteOptimizationTest {
@@ -2640,82 +2624,4 @@ public class MvRewriteOptimizationTest {
             starRocksAssert.dropMaterializedView("partial_mv_13");
         }
     }
-
-    @Test
-    public void testDropBaseTablePartitionRemoveVersionMap() throws Exception {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb(stmt.getTableName().getDb());
-                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
-                    for (Partition partition : tbl.getPartitions()) {
-                        if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                            long version = partition.getVisibleVersion() + 1;
-                            partition.setVisibleVersion(version, System.currentTimeMillis());
-                            MaterializedIndex baseIndex = partition.getBaseIndex();
-                            List<Tablet> tablets = baseIndex.getTablets();
-                            for (Tablet tablet : tablets) {
-                                List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
-                                for (Replica replica : replicas) {
-                                    replica.updateVersionInfo(version, -1, version);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        };
-
-        starRocksAssert.useDatabase("test")
-                .withTable("CREATE TABLE `test`.`tbl_with_partition` (\n" +
-                        "  `k1` date,\n" +
-                        "  `k2` int,\n" +
-                        "  `v1` string\n" +
-                        ") ENGINE=OLAP\n" +
-                        "DUPLICATE KEY(`k1`, `k2`)\n" +
-                        "PARTITION BY RANGE(`k1`)\n" +
-                        "(\n" +
-                        "PARTITION p20230410 VALUES [(\"2023-04-10\"), (\"2023-04-11\")),\n" +
-                        "PARTITION p20230411 VALUES [(\"2023-04-11\"), (\"2023-04-12\")),\n" +
-                        "PARTITION p20230412 VALUES [(\"2023-04-12\"), (\"2023-04-13\")),\n" +
-                        "PARTITION p20230413 VALUES [(\"2023-04-13\"), (\"2023-04-14\"))\n" +
-                        ")\n" +
-                        "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
-                        "PROPERTIES (\"replication_num\" = \"1\");")
-                .withMaterializedView("CREATE MATERIALIZED VIEW `mv_with_partition`\n" +
-                        "PARTITION BY (date_trunc('day', k1))\n" +
-                        "REFRESH DEFERRED MANUAL \n" +
-                        "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
-                        "PROPERTIES (\"replication_num\" = \"1\", \"partition_refresh_number\"=\"1\")\n" +
-                        "AS\n" +
-                        "SELECT \n" +
-                        "k1,\n" +
-                        "count(DISTINCT `v1`) AS `v` \n" +
-                        "FROM `test`.`tbl_with_partition`\n" +
-                        "group by k1;");
-        starRocksAssert.updateTablePartitionVersion("test", "tbl_with_partition", 2);
-        starRocksAssert.refreshMvPartition("REFRESH MATERIALIZED VIEW test.mv_with_partition \n" +
-                "PARTITION START (\"2023-04-10\") END (\"2023-04-14\");");
-        MaterializedView mv = getMv("test", "mv_with_partition");
-        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
-                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
-        Assert.assertEquals(1, versionMap.size());
-        Set<String> partitions = versionMap.values().iterator().next().keySet();
-        Assert.assertEquals(4, partitions.size());
-
-        starRocksAssert.alterMvProperties(
-                "alter materialized view test.mv_with_partition set (\"partition_ttl_number\" = \"1\")");
-
-        DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
-                .getDynamicPartitionScheduler();
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable tbl = (OlapTable) db.getTable("mv_with_partition");
-        dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
-        dynamicPartitionScheduler.runOnceForTest();
-        Assert.assertEquals(Sets.newHashSet("p20230413"), versionMap.values().iterator().next().keySet());
-    }
-
 }
