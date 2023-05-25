@@ -590,7 +590,7 @@ public class StarOSAgent {
                             workerToId.put(workerAddr, workerId);
                             workerToBackend.put(workerId, nodeId);
                         }
-;                    }
+                    }
                 }
             }
             return nodeIds;
