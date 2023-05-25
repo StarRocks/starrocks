@@ -271,3 +271,12 @@ After upgrading all BE and CN nodes, you can then upgrade the FE nodes. You must
    ```
 
 5. Repeat the above procedures to upgrade other Follower FE nodes, and finally the Leader FE node.
+
+   > **CAUTION**
+   >
+   > If you have downgraded your StarRocks cluster after upgrading it from v2.5 to v3.0, and again you upgrade it to v3.0, you must follow these steps in order to avoid metadata upgrade failure for some Follower FE nodes:
+   >
+   > 1. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md) to create a new image.
+   > 2. Wait for the new image to be synchronized to all Follower FEs.
+   >
+   > You can check whether the image file has been synchronized by viewing the log file **fe.log** of the Leader FE node. A record of log like "push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" suggests that the image file has been successfully synchronized.
