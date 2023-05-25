@@ -727,6 +727,11 @@ public class MaterializedViewAnalyzer {
                 if (!(table instanceof MaterializedView)) {
                     throw new SemanticException(mvName.getTbl() + " is not async materialized view");
                 }
+            }  else if (statement.getStatus() != null) {
+                String status = statement.getStatus();
+                if (!AlterMaterializedViewStmt.SUPPORTED_MV_STATUS.contains(status)) {
+                    throw new SemanticException("Unsupported modification for materialized view status:" + status);
+                }
             } else {
                 throw new SemanticException("Unsupported modification for materialized view");
             }
