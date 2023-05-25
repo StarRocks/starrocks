@@ -16,17 +16,21 @@ package com.starrocks.warehouse;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -83,7 +87,16 @@ public class Cluster implements Writable {
     }
 
     public List<Long> getComputeNodeIds() {
-        return computeNodeIds.stream().collect(Collectors.toList());
+        // ask starMgr for node lists
+        List<Long> nodeIds = new ArrayList<>();
+        try {
+            nodeIds = GlobalStateMgr.getCurrentStarOSAgent().
+                    getWorkersByWorkerGroup(Collections.singletonList(workerGroupId));
+            computeNodeIds = nodeIds.stream().collect(Collectors.toSet());
+        } catch (UserException e) {
+            LOG.info(e);
+        }
+        return nodeIds;
     }
 
     @Override

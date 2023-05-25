@@ -41,6 +41,7 @@ import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateMetaGroupInfo;
+import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
@@ -563,5 +564,22 @@ public class StarOSAgent {
             LOG.warn("Failed to query meta group {} whether stable. error:{}", metaGroupId, e.getMessage());
         }
         return false; // return false if any error happens
+    }
+
+    public List<Long> getWorkersByWorkerGroup(List<Long> workerGroupIds) throws UserException {
+        List<Long> nodeIds = new ArrayList<>();
+        prepare();
+        try {
+            List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.listWorkerGroup(serviceId, workerGroupIds, true);
+            for (WorkerGroupDetailInfo detailInfo : workerGroupDetailInfos) {
+                List<WorkerInfo> workerInfos = detailInfo.getWorkersInfoList();
+                for (WorkerInfo workerInfo : workerInfos) {
+                    nodeIds.add(workerToBackend.get(workerInfo.getWorkerId()));
+                }
+            }
+            return nodeIds;
+        } catch (StarClientException e) {
+            throw new UserException("Failed to get workers by group id. error: " + e.getMessage());
+        }
     }
 }
