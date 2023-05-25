@@ -806,7 +806,7 @@ CONF_Int32(starlet_cache_dir_allocate_policy, "0");
 CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
 #endif
 
-CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
+CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mBool(lake_print_delete_log, "true");
 CONF_mInt64(lake_gc_metadata_max_versions, "10");
 CONF_mInt64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
