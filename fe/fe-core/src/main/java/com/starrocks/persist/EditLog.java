@@ -150,6 +150,12 @@ public class EditLog {
                             .initTransactionId(id + 1);
                     break;
                 }
+                case OperationType.OP_SAVE_TRANSACTION_ID_V2: {
+                    TransactionIdInfo idInfo = (TransactionIdInfo) journal.getData();
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
+                            .initTransactionId(idInfo.getTxnId() + 1);
+                    break;
+                }
                 case OperationType.OP_SAVE_AUTO_INCREMENT_ID:
                 case OperationType.OP_DELETE_AUTO_INCREMENT_ID: {
                     AutoIncrementInfo info = (AutoIncrementInfo) journal.getData();
@@ -553,6 +559,7 @@ public class EditLog {
                     globalStateMgr.replayUpdateClusterAndBackends(info);
                     break;
                 }
+                case OperationType.OP_UPSERT_TRANSACTION_STATE_V2:
                 case OperationType.OP_UPSERT_TRANSACTION_STATE: {
                     final TransactionState state = (TransactionState) journal.getData();
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionState(state);
