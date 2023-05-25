@@ -578,12 +578,19 @@ public class StarOSAgent {
                     if (workerToBackend.containsKey(workerInfo.getWorkerId())) {
                         nodeIds.add(workerToBackend.get(workerInfo.getWorkerId()));
                     } else {
-                        // for follower fe
+                        // follower's workerToBackend may not container this worker, so need to get it from systemInfoSerivce
+                        long workerId = workerInfo.getWorkerId();
                         String workerAddr = workerInfo.getIpPort();
                         String[] pair = workerAddr.split(":");
                         long nodeId = getAvailableBackendId(pair[0], Integer.parseInt(pair[1]));
-                        nodeIds.add(nodeId);
-                    }
+                        if (nodeId != -1L) {
+                            nodeIds.add(nodeId);
+
+                            // put it into map
+                            workerToId.put(workerAddr, workerId);
+                            workerToBackend.put(workerId, nodeId);
+                        }
+;                    }
                 }
             }
             return nodeIds;
