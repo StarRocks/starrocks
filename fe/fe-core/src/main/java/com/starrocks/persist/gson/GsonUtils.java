@@ -288,7 +288,7 @@ public class GsonUtils {
 
     public static final RuntimeTypeAdapterFactory<TxnCommitAttachment> TXN_COMMIT_ATTACHMENT_TYPE_RUNTIME_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(TxnCommitAttachment.class, "clazz")
-                    .registerSubtype(InsertTxnCommitAttachment.class, InsertTxnCommitAttachment.class.getSimpleName(), true)
+                    .registerSubtype(InsertTxnCommitAttachment.class, InsertTxnCommitAttachment.class.getSimpleName())
                     .registerSubtype(LoadJobFinalOperation.class, LoadJobFinalOperation.class.getSimpleName())
                     .registerSubtype(ManualLoadTxnCommitAttachment.class, ManualLoadTxnCommitAttachment.class.getSimpleName())
                     .registerSubtype(MiniLoadTxnCommitAttachment.class, MiniLoadTxnCommitAttachment.class.getSimpleName())
