@@ -35,12 +35,12 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SetExecutor;
 import com.starrocks.qe.SqlModeHelper;
@@ -121,13 +121,13 @@ public class SetPassVarTest {
 
     private static StarRocksAssert starRocksAssert;
     private static UserIdentity testUser;
-    private static AuthorizationManager authorizationManager;
+    private static AuthorizationMgr authorizationManager;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
-        authorizationManager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager();
+        authorizationManager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr();
         starRocksAssert.getCtx().setRemoteIP("localhost");
         authorizationManager.initBuiltinRolesAndUsers();
         ctxToRoot();
@@ -148,8 +148,8 @@ public class SetPassVarTest {
         String createUserSql = "CREATE USER 'test' IDENTIFIED BY ''";
         CreateUserStmt createUserStmt =
                 (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
-        AuthenticationManager authenticationManager =
-                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationManager();
+        AuthenticationMgr authenticationManager =
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
         authenticationManager.createUser(createUserStmt);
         testUser = createUserStmt.getUserIdentity();
     }
@@ -157,14 +157,14 @@ public class SetPassVarTest {
     public void testSetPasswordInNewPrivilege() throws Exception {
 
         ctxToRoot();
-        UserAuthenticationInfo userAuthenticationInfo = GlobalStateMgr.getCurrentState().getAuthenticationManager().
+        UserAuthenticationInfo userAuthenticationInfo = GlobalStateMgr.getCurrentState().getAuthenticationMgr().
                 getUserAuthenticationInfoByUserIdentity(testUser);
         Assert.assertEquals(0, userAuthenticationInfo.getPassword().length);
         String setSql = "SET PASSWORD FOR 'test'@'%' = PASSWORD('123456');";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(setSql, starRocksAssert.getCtx());
         SetExecutor executor = new SetExecutor(starRocksAssert.getCtx(), (SetStmt) statementBase);
         executor.execute();
-        userAuthenticationInfo = GlobalStateMgr.getCurrentState().getAuthenticationManager().
+        userAuthenticationInfo = GlobalStateMgr.getCurrentState().getAuthenticationMgr().
                 getUserAuthenticationInfoByUserIdentity(testUser);
         Assert.assertTrue(userAuthenticationInfo.getPassword().length > 0);
 

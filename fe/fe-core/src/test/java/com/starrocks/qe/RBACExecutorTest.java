@@ -73,7 +73,7 @@ public class RBACExecutorTest {
         for (int i = 0; i < 5; i++) {
             String sql = "create user u" + i;
             CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-            globalStateMgr.getAuthenticationManager().createUser(createUserStmt);
+            globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
         }
         for (int i = 0; i < 5; i++) {
             String sql = "create role r" + i;
@@ -153,8 +153,8 @@ public class RBACExecutorTest {
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(stmt, ctx);
 
-        Long roleId1 = ctx.getGlobalStateMgr().getAuthorizationManager().getRoleIdByNameAllowNull("drop_role1");
-        Long roleId2 = ctx.getGlobalStateMgr().getAuthorizationManager().getRoleIdByNameAllowNull("drop_role2");
+        Long roleId1 = ctx.getGlobalStateMgr().getAuthorizationMgr().getRoleIdByNameAllowNull("drop_role1");
+        Long roleId2 = ctx.getGlobalStateMgr().getAuthorizationMgr().getRoleIdByNameAllowNull("drop_role2");
         HashSet roleIds = new HashSet<>();
         roleIds.add(roleId1);
         roleIds.add(roleId2);

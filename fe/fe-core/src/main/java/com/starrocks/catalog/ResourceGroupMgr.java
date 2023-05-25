@@ -28,7 +28,7 @@ import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollection;
@@ -158,7 +158,7 @@ public class ResourceGroupMgr implements Writable {
         Preconditions.checkArgument(ctx != null);
 
         try {
-            AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+            AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
             List<String> validRoles = new ArrayList<>();
 
             Set<Long> activeRoles = ctx.getCurrentRoleIds();

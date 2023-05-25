@@ -54,7 +54,7 @@ import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.KafkaTaskInfo;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.routineload.RoutineLoadJob;
-import com.starrocks.load.routineload.RoutineLoadManager;
+import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadTaskInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -379,7 +379,7 @@ public class GlobalTransactionMgrTest {
         rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
         TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
 
-        RoutineLoadManager routineLoadManager = new RoutineLoadManager();
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.addRoutineLoadJob(routineLoadJob, "db");
 
         Deencapsulation.setField(masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1),
@@ -451,7 +451,7 @@ public class GlobalTransactionMgrTest {
         rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
         TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
 
-        RoutineLoadManager routineLoadManager = new RoutineLoadManager();
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.addRoutineLoadJob(routineLoadJob, "db");
 
         Deencapsulation.setField(masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1),

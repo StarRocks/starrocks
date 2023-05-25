@@ -145,7 +145,7 @@ public class StarRocksAssert {
     public StarRocksAssert withRole(String roleName) throws Exception {
         CreateRoleStmt createRoleStmt =
                 (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser("create role " + roleName + ";", ctx);
-        GlobalStateMgr.getCurrentState().getAuthorizationManager().createRole(createRoleStmt);
+        GlobalStateMgr.getCurrentState().getAuthorizationMgr().createRole(createRoleStmt);
         return this;
     }
 
@@ -153,7 +153,7 @@ public class StarRocksAssert {
         CreateUserStmt createUserStmt =
                 (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                         "create user " + user + " identified by '';", ctx);
-        GlobalStateMgr.getCurrentState().getAuthenticationManager().createUser(createUserStmt);
+        GlobalStateMgr.getCurrentState().getAuthenticationMgr().createUser(createUserStmt);
         return this;
     }
 
@@ -198,13 +198,13 @@ public class StarRocksAssert {
     // };
     public StarRocksAssert withRoutineLoad(String sql) throws Exception {
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getRoutineLoadManager().createRoutineLoadJob(createRoutineLoadStmt);
+        GlobalStateMgr.getCurrentState().getRoutineLoadMgr().createRoutineLoadJob(createRoutineLoadStmt);
         return this;
     }
 
     public StarRocksAssert withLoad(String sql) throws Exception {
         LoadStmt loadStmt = (LoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().getLoadManager().createLoadJobFromStmt(loadStmt, ctx);
+        GlobalStateMgr.getCurrentState().getLoadMgr().createLoadJobFromStmt(loadStmt, ctx);
         return this;
     }
 

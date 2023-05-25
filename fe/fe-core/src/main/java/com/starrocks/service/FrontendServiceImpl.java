@@ -47,7 +47,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -402,7 +402,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         QueryStatement queryStatement = view.getQueryStatement();
 
                         ConnectContext connectContext = new ConnectContext();
-                        connectContext.setQualifiedUser(AuthenticationManager.ROOT_USER);
+                        connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
                         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
                         connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
@@ -1004,7 +1004,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                           String clientIp) throws AuthenticationException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         UserIdentity currentUser =
-                globalStateMgr.getAuthenticationManager().checkPlainPassword(user, clientIp, passwd);
+                globalStateMgr.getAuthenticationMgr().checkPlainPassword(user, clientIp, passwd);
         if (currentUser == null) {
             throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
         }
@@ -1871,25 +1871,25 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TLoadInfo> loads = Lists.newArrayList();
         try {
             if (request.isSetJob_id()) {
-                LoadJob job = GlobalStateMgr.getCurrentState().getLoadManager().getLoadJob(request.getJob_id());
+                LoadJob job = GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJob(request.getJob_id());
                 if (job != null) {
                     loads.add(job.toThrift());
                 }
             } else if (request.isSetDb()) {
                 long dbId = GlobalStateMgr.getCurrentState().getDb(request.getDb()).getId();
                 if (request.isSetLabel()) {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobsByDb(
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
                             dbId, request.getLabel(), true).stream().map(LoadJob::toThrift).collect(Collectors.toList()));
                 } else {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobsByDb(
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
                             dbId, null, false).stream().map(LoadJob::toThrift).collect(Collectors.toList()));
                 }
             } else {
                 if (request.isSetLabel()) {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobs(request.getLabel())
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobs(request.getLabel())
                             .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
                 } else {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobs(null)
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobs(null)
                             .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
                 }
             }

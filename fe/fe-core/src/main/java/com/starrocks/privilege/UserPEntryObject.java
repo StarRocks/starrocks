@@ -38,7 +38,7 @@ public class UserPEntryObject implements PEntryObject {
             return new UserPEntryObject(null);
         }
 
-        if (!mgr.getAuthenticationManager().doesUserExist(user)) {
+        if (!mgr.getAuthenticationMgr().doesUserExist(user)) {
             throw new PrivObjNotFoundException("cannot find user " + user);
         }
         return new UserPEntryObject(user);
@@ -77,7 +77,7 @@ public class UserPEntryObject implements PEntryObject {
      */
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
-        return globalStateMgr.getAuthorizationManager().getUserPrivilegeCollectionUnlockedAllowNull(userIdentity) != null;
+        return globalStateMgr.getAuthorizationMgr().getUserPrivilegeCollectionUnlockedAllowNull(userIdentity) != null;
     }
 
     @Override

@@ -52,11 +52,16 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ImpersonatePrivInfo;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -74,6 +79,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
@@ -1976,6 +1982,42 @@ public class Auth implements Writable {
     public long saveAuth(DataOutputStream dos, long checksum) throws IOException {
         write(dos);
         return checksum;
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, Auth.class.getName(), 2);
+
+        DataOutputBuffer buffer = new DataOutputBuffer();
+        write(buffer);
+        writer.writeJson(new String(buffer.getData(), buffer.getLength()));
+
+        SerializeData data = new SerializeData();
+        data.entries = impersonateUserPrivTable.dumpEntries();
+        data.impersonateRoleToUser = roleManager.dumpImpersonateRoleToUser();
+        writer.writeJson(data);
+
+        writer.close();
+    }
+
+    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, Auth.class.getName());
+        try {
+            String s = reader.readJson(String.class);
+            DataInputStream dataInputStream =
+                    new DataInputStream(new ByteArrayInputStream(s.getBytes()));
+            readFields(dataInputStream);
+
+            SerializeData serializeData = reader.readJson(SerializeData.class);
+            try {
+                this.impersonateUserPrivTable.loadEntries(serializeData.entries);
+                this.roleManager.loadImpersonateRoleToUser(serializeData.impersonateRoleToUser);
+            } catch (AnalysisException e) {
+                LOG.error("failed to readAsGson, ", e);
+                throw new IOException(e.getMessage());
+            }
+        } finally {
+            reader.close();
+        }
     }
 
     @Override
