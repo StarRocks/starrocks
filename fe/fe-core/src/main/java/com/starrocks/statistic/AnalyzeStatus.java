@@ -2,6 +2,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -14,7 +15,6 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.MetaUtils;
-import jersey.repackaged.com.google.common.collect.Lists;
 
 import java.io.DataInput;
 import java.io.DataOutput;
