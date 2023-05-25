@@ -1439,25 +1439,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         NodePosition pos = createPos(context);
-        String dbName;
-        String taskName;
+        TaskName taskName;
         if (qualifiedName == null) {
-            dbName = null;
-            taskName = null;
-        } else if (qualifiedName.getParts().size() == 1) {
-            dbName = null;
-            taskName = qualifiedName.getParts().get(0);
-        } else if (qualifiedName.getParts().size() == 2) {
-            dbName = qualifiedName.getParts().get(0);
-            taskName = qualifiedName.getParts().get(1);
+            taskName = new TaskName(null, null, pos);
         } else {
-            throw new ParsingException(PARSER_ERROR_MSG.invalidTaskFormat(qualifiedName.toString()),
-                    qualifiedName.getPos());
+            taskName = qualifiedNameToTaskName(qualifiedName);
         }
         if (createTableAsSelectStmt != null) {
-            return new SubmitTaskStmt(dbName, taskName, properties, startIndex, createTableAsSelectStmt, pos);
+            return new SubmitTaskStmt(taskName, properties, startIndex, createTableAsSelectStmt, pos);
         } else {
-            return new SubmitTaskStmt(dbName, taskName, properties, startIndex, insertStmt, pos);
+            return new SubmitTaskStmt(taskName, properties, startIndex, insertStmt, pos);
         }
     }
 
