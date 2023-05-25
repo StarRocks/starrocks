@@ -464,6 +464,7 @@
       + [var_samp](/sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](/sql-reference/sql-functions/aggregate-functions/window_funnel.md)
     + Bitmap 函数
+      + [base64_to_bitmap](/sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
       + [bitmap_agg](/sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [bitmap_and](/sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](/sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
