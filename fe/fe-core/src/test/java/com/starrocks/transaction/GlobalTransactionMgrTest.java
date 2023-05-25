@@ -65,8 +65,10 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Injectable;
 import mockit.Mocked;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -114,6 +116,13 @@ public class GlobalTransactionMgrTest {
 
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
         slaveTransMgr.setEditLog(slaveGlobalStateMgr.getEditLog());
+
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @After
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
@@ -774,4 +783,21 @@ public class GlobalTransactionMgrTest {
         assertTrue(GlobalStateMgrTestUtil.compareState(masterGlobalStateMgr, slaveGlobalStateMgr));
     }
 
+    @Test
+    public void testSaveLoadJsonFormatImage() throws Exception {
+        long transactionId = masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        GlobalStateMgrTestUtil.testTxnLable1,
+                        transactionSource,
+                        LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+
+        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
+        masterTransMgr.saveTransactionStateV2(pseudoImage.getDataOutputStream());
+
+        GlobalTransactionMgr followerTransMgr = new GlobalTransactionMgr(masterGlobalStateMgr);
+        followerTransMgr.addDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        followerTransMgr.loadTransactionStateV2(pseudoImage.getDataInputStream());
+
+        Assert.assertEquals(1, followerTransMgr.getTransactionNum());
+    }
 }

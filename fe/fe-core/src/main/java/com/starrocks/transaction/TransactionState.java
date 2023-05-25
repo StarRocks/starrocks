@@ -40,6 +40,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -199,7 +200,9 @@ public class TransactionState implements Writable {
     }
 
     public static class TxnCoordinator {
+        @SerializedName("st")
         public TxnSourceType sourceType;
+        @SerializedName("ip")
         public String ip;
 
         public TxnCoordinator() {
@@ -221,30 +224,45 @@ public class TransactionState implements Writable {
         }
     }
 
+    @SerializedName("dd")
     private long dbId;
+    @SerializedName("tl")
     private List<Long> tableIdList;
+    @SerializedName("tx")
     private long transactionId;
+    @SerializedName("lb")
     private String label;
     // requestId is used to judge whether a begin request is an internal retry request.
     // no need to persist it.
     private TUniqueId requestId;
+    @SerializedName("ci")
     private final Map<Long, TableCommitInfo> idToTableCommitInfos;
     // coordinator is show who begin this txn (FE, or one of BE, etc...)
+    @SerializedName("tc")
     private TxnCoordinator txnCoordinator;
+    @SerializedName("ts")
     private TransactionStatus transactionStatus;
+    @SerializedName("st")
     private LoadJobSourceType sourceType;
+    @SerializedName("pt")
     private long prepareTime;
+    @SerializedName("ct")
     private long commitTime;
+    @SerializedName("ft")
     private long finishTime;
+    @SerializedName("rs")
     private String reason = "";
 
     // whether this txn is finished using new mechanism
     // this field needs to be persisted, so we shared the serialization field with `reason`.
     // `reason` is only used when txn is aborted, so it's ok to reuse the space for visible txns.
+    @SerializedName("nf")
     private boolean newFinish = false;
+    @SerializedName("fs")
     private TxnFinishState finishState;
 
     // error replica ids
+    @SerializedName("er")
     private Set<Long> errorReplicas;
     private final CountDownLatch latch;
 
@@ -254,10 +272,13 @@ public class TransactionState implements Writable {
     private long publishVersionTime = -1;
     private long publishVersionFinishTime = -1;
 
+    @SerializedName("cb")
     private long callbackId = -1;
+    @SerializedName("to")
     private long timeoutMs = Config.stream_load_default_timeout_second * 1000L;
 
     // optional
+    @SerializedName("ta")
     private TxnCommitAttachment txnCommitAttachment;
 
     // this map should be set when load execution begin, so that when the txn commit, it will know
