@@ -26,14 +26,14 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
-    @SerializedName("loadedRows")
+    @SerializedName("ls")
     private long loadedRows;
-    @SerializedName("filteredRows")
+    @SerializedName("fr")
     private long filteredRows;
     private long receivedBytes;
     private long loadedBytes;
     // optional
-    @SerializedName("errorLogUrl")
+    @SerializedName("eu")
     private String errorLogUrl;
 
     public ManualLoadTxnCommitAttachment() {

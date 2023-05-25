@@ -71,7 +71,9 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -88,6 +90,16 @@ public class RoutineLoadManagerTest {
 
     @Mocked
     private SystemInfoService systemInfoService;
+
+    @Before
+    public void setUp() {
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @After
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
 
     @Test
     public void testAddJobByStmt(@Injectable Auth auth,
@@ -780,7 +792,6 @@ public class RoutineLoadManagerTest {
 
     @Test
     public void testLoadImageWithoutExpiredJob() throws Exception {
-        UtFrameUtils.setUpForPersistTest();
 
         Config.label_keep_max_second = 10;
         Config.enable_dict_optimize_routine_load = true;
@@ -831,6 +842,39 @@ public class RoutineLoadManagerTest {
         Assert.assertNull(leaderLoadManager.getJob(discardJobId));
         Assert.assertNotNull(leaderLoadManager.getJob(goodJobId));
 
-        UtFrameUtils.tearDownForPersisTest();
+    }
+
+    @Test
+    public void testJsonFormatImage() throws Exception {
+
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        connectContext.setThreadLocalInfo();
+        String db = "test";
+        String createSQL = "CREATE ROUTINE LOAD db0.routine_load_0 ON t1 " +
+                "PROPERTIES(\"format\" = \"json\",\"jsonpaths\"=\"[\\\"$.k1\\\",\\\"$.k2.\\\\\\\"k2.1\\\\\\\"\\\"]\") " +
+                "FROM KAFKA(\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:xxx\",\"kafka_topic\" = \"topic_0\");";
+
+        RoutineLoadManager leaderLoadManager = new RoutineLoadManager();
+
+        RoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob(1L, "kafkaJob",
+                1, 1, "xxx", "xxtopic");
+        kafkaRoutineLoadJob.setOrigStmt(new OriginStatement(createSQL, 0));
+        leaderLoadManager.addRoutineLoadJob(kafkaRoutineLoadJob, db);
+
+        createSQL = "CREATE ROUTINE LOAD db0.routine_load_2 ON t1 " +
+                "PROPERTIES(\"format\" = \"json\",\"jsonpaths\"=\"[\\\"$.k1\\\",\\\"$.k2.\\\\\\\"k2.1\\\\\\\"\\\"]\") " +
+                "FROM PULSAR(\"pulsar_service_url\" = \"xxx.xxx.xxx.xxx:xxx\",\"pulsar_topic\" = \"topic_0\");";
+        RoutineLoadJob pulsarRoutineLoadJob = new PulsarRoutineLoadJob(2L, "pulsarJob", 1, 1, "xxxx", "xxx", "xxx");
+        pulsarRoutineLoadJob.setOrigStmt(new OriginStatement(createSQL, 0));
+        leaderLoadManager.addRoutineLoadJob(pulsarRoutineLoadJob, db);
+
+        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
+        leaderLoadManager.saveRoutineLoadJobsV2(pseudoImage.getDataOutputStream());
+        RoutineLoadManager restartedRoutineLoadManager = new RoutineLoadManager();
+        restartedRoutineLoadManager.loadRoutineLoadJobsV2(pseudoImage.getDataInputStream());
+
+        Assert.assertNotNull(restartedRoutineLoadManager.getJob(1L));
+        Assert.assertNotNull(restartedRoutineLoadManager.getJob(2L));
     }
 }

@@ -17,6 +17,7 @@
 
 package com.starrocks.persist;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.routineload.RoutineLoadJob.JobState;
@@ -26,7 +27,9 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class RoutineLoadOperation implements Writable {
+    @SerializedName("id")
     private long id;
+    @SerializedName("js")
     private JobState jobState;
 
     private RoutineLoadOperation() {

@@ -535,9 +535,19 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), RoutineLoadJob.class);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB:
             case OperationType.OP_REMOVE_ROUTINE_LOAD_JOB: {
                 data = RoutineLoadOperation.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), RoutineLoadOperation.class);
                 isRead = true;
                 break;
             }

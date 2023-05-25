@@ -73,7 +73,7 @@ public class KafkaProgress extends RoutineLoadProgress {
     public static final long OFFSET_END_VAL = -1;
 
     // (partition id, begin offset)
-    @SerializedName("partitionIdToOffset")
+    @SerializedName("po")
     private Map<Integer, Long> partitionIdToOffset = Maps.newConcurrentMap();
 
     public KafkaProgress() {

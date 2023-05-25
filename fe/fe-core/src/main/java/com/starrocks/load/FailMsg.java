@@ -39,9 +39,9 @@ public class FailMsg implements Writable {
         TXN_UNKNOWN // cancelled because txn status is unknown
     }
 
-    @SerializedName("cancelType")
+    @SerializedName("c")
     private CancelType cancelType;
-    @SerializedName("msg")
+    @SerializedName("m")
     private String msg = "";
 
     public FailMsg() {

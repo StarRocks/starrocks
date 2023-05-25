@@ -325,5 +325,4 @@ public class OperationType {
     public static final short OP_END_LOAD_JOB_V2 = 12101;
     public static final short OP_CREATE_ROUTINE_LOAD_JOB_V2 = 12102;
     public static final short OP_CHANGE_ROUTINE_LOAD_JOB_V2 = 12103;
-    public static final short OP_REMOVE_ROUTINE_LOAD_JOB_V2 = 12104;
 }

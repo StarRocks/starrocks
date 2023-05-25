@@ -50,6 +50,10 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -639,22 +643,20 @@ public class RoutineLoadManager implements Writable {
                 LOG.info("discard expired job [{}]", routineLoadJob.getId());
                 continue;
             }
-            idToRoutineLoadJob.put(routineLoadJob.getId(), routineLoadJob);
-            Map<String, List<RoutineLoadJob>> map = dbToNameToRoutineLoadJob.get(routineLoadJob.getDbId());
-            if (map == null) {
-                map = Maps.newConcurrentMap();
-                dbToNameToRoutineLoadJob.put(routineLoadJob.getDbId(), map);
-            }
 
-            List<RoutineLoadJob> jobs = map.get(routineLoadJob.getName());
-            if (jobs == null) {
-                jobs = Lists.newArrayList();
-                map.put(routineLoadJob.getName(), jobs);
-            }
-            jobs.add(routineLoadJob);
-            if (!routineLoadJob.getState().isFinalState()) {
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
-            }
+            putJob(routineLoadJob);
+        }
+    }
+
+    private void putJob(RoutineLoadJob routineLoadJob) {
+        idToRoutineLoadJob.put(routineLoadJob.getId(), routineLoadJob);
+        Map<String, List<RoutineLoadJob>> map =
+                dbToNameToRoutineLoadJob.computeIfAbsent(routineLoadJob.getDbId(), k -> Maps.newConcurrentMap());
+
+        List<RoutineLoadJob> jobs = map.computeIfAbsent(routineLoadJob.getName(), k -> Lists.newArrayList());
+        jobs.add(routineLoadJob);
+        if (!routineLoadJob.getState().isFinalState()) {
+            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
         }
     }
 
@@ -667,5 +669,36 @@ public class RoutineLoadManager implements Writable {
     public long saveRoutineLoadJobs(DataOutputStream dos, long checksum) throws IOException {
         write(dos);
         return checksum;
+    }
+
+    public void saveRoutineLoadJobsV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        final int cnt = 1 + idToRoutineLoadJob.size();
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, RoutineLoadManager.class.getName(), cnt);
+        writer.writeJson(idToRoutineLoadJob.size());
+        for (RoutineLoadJob loadJob : idToRoutineLoadJob.values()) {
+            writer.writeJson(loadJob);
+        }
+        writer.close();
+    }
+
+    public void loadRoutineLoadJobsV2(DataInputStream dis) throws IOException,
+            SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, RoutineLoadManager.class.getName());
+
+        try {
+            int size = reader.readInt();
+            while (size-- > 0) {
+                RoutineLoadJob routineLoadJob = reader.readJson(RoutineLoadJob.class);
+
+                if (routineLoadJob.needRemove()) {
+                    LOG.info("discard expired job [{}]", routineLoadJob.getId());
+                    continue;
+                }
+
+                putJob(routineLoadJob);
+            }
+        } finally {
+            reader.close();
+        }
     }
 }
