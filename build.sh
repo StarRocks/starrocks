@@ -46,7 +46,7 @@ if [[ $OSTYPE == darwin* ]] ; then
     PARALLEL=$(sysctl -n hw.ncpu)
     # We know for sure that build-thirdparty.sh will fail on darwin platform, so just skip the step.
 else
-    if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/async-profiler/profiler.sh ]]; then
+    if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/datasketches/hll.hpp ]]; then
         echo "Thirdparty libraries need to be build ..."
         ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
     fi
