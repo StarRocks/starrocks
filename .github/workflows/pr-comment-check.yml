@@ -29,6 +29,18 @@ jobs:
         with:
           labels: '2.5'
 
+      - name: add branch-2.4 label
+        if: contains(toJson(github.event.comment.body), '[x] 2.4')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '2.4'
+
+      - name: add branch-2.3 label
+        if: contains(toJson(github.event.comment.body), '[x] 2.3')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '2.3'
+
       - name: remove branch-3.0 label
         if: contains(toJson(github.event.comment.body), '[ ] 3.0') && contains(github.event.issue.labels.*.name, '3.0')
         uses: actions-ecosystem/action-remove-labels@v1
@@ -40,6 +52,18 @@ jobs:
         uses: actions-ecosystem/action-remove-labels@v1
         with:
           labels: '2.5'
+
+      - name: remove branch-2.4 label
+        if: contains(toJson(github.event.comment.body), '[ ] 2.4') && contains(github.event.issue.labels.*.name, '2.4')
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: '2.4'
+
+      - name: remove branch-2.3 label
+        if: contains(toJson(github.event.comment.body), '[ ] 2.3') && contains(github.event.issue.labels.*.name, '2.3')
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: '2.3'
           
       - name: check-done
         if: contains(toJson(github.event.comment.body), '[ ] I have checked the version labels')
