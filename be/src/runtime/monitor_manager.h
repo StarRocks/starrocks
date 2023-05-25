@@ -21,26 +21,26 @@
 
 namespace starrocks {
 
-class HealthChecker {
+// A class managers all monitors
+// TODO report the metrics to FE through heartBeat
+class MonitorManager {
 public:
-    HealthChecker();
-    ~HealthChecker();
-    void execute();
+    MonitorManager();
+    ~MonitorManager();
+
     Status register_monitor(std::string monitor_name, BaseMonitor* monitor);
+
+    // for metrics of all monitor_action can be get by /api/monitor?module=monitor_name
     void register_monitors_to_http_action(MonitorAction* monitor_action);
 
     std::unordered_map<std::string, BaseMonitor*> get_all_monitors();
 
-    void stop();
     void start_all_monitors();
+    void stop_all_monitors();
 
 private:
-    void _collect_all_monitor_status();
-    std::mutex _health_checker_mutex;
+    std::mutex _monitor_manager_mutex;
     std::unordered_map<std::string, BaseMonitor*> _monitor_holder;
-    std::unordered_map<std::string, BaseMonitor*> _monitor_unnormal;
-    std::thread _thread;
-    std::atomic<bool> _stop;
 };
 
 } // namespace starrocks

@@ -51,7 +51,6 @@
 #include "gutil/sysinfo.h"
 #include "runtime/exec_env.h"
 #include "runtime/thread_pool_checker.h"
-#include "runtime/health_checker.h"
 #include "storage/snapshot_manager.h"
 #include "util/phmap/phmap.h"
 #include "util/threadpool.h"

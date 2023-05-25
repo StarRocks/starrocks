@@ -31,21 +31,13 @@ Status ThreadPoolChecker::register_thread_pool(std::string thread_pool_name, Thr
     return Status::OK();
 }
 
-Status ThreadPoolChecker::getStatus() {
-    std::lock_guard lg(_thread_pool_checker_mutex);
-    if (!_thread_pool_busy.empty()) {
-        return Status::InternalError("threaPool is busy");
-    }
-    return Status::OK();
-}
-
 void ThreadPoolChecker::_collect_thread_pool_state() {
     std::lock_guard lg(_thread_pool_checker_mutex);
     for (const auto& iter : _thread_pool_holder) {
 
         if (iter.second == nullptr) {
             // it should't happen
-            LOG(INFO) << "nullptr _collect_thread_pool_state" << iter.first;
+            LOG(WARNING) << "nullptr in _collect_thread_pool_state" << iter.first;
             continue ;
         }
         int num_threads = iter.second->num_threads();
@@ -53,8 +45,13 @@ void ThreadPoolChecker::_collect_thread_pool_state() {
         int num_active_threads = iter.second->num_active_threads();
         LOG(INFO) << iter.first << " num_threads " << num_threads << " num_queued_task " << num_queued_tasks
                   << "num_active_threads " << num_active_threads;
-        if (num_queued_tasks >= 10) {
+        if (num_queued_tasks == iter.second->num_max_queue_size()) {
             _thread_pool_busy.emplace(iter);
+        } else {
+            auto iterator = _thread_pool_busy.find(iter.first);
+            if (iterator != _thread_pool_busy.end()) {
+                _thread_pool_busy.erase(iterator);
+            }
         }
     }
 }
@@ -62,13 +59,13 @@ void ThreadPoolChecker::_collect_thread_pool_state() {
 void* ThreadPoolChecker::_thread_pool_checker_callback(void* arg_this) {
     LOG(INFO) << "ThreadPoolChecker start working.";
     auto* thread_pool_checker_this = (ThreadPoolChecker*)arg_this;
-    int32_t interval = config::health_check_interval;
+    int32_t interval = config::thread_pool_check_interval;
 
     while (!thread_pool_checker_this->_stop) {
         thread_pool_checker_this->_collect_thread_pool_state();
 
         if (interval <= 0) {
-            LOG(WARNING) << "threadPool check interval config is illegal: " << interval << ", force set to 1";
+            LOG(WARNING) << "thread_pool_check_interval config is illegal: " << interval << ", force set to 1";
             interval = 1;
         }
         int32_t left_seconds = interval;
@@ -95,7 +92,6 @@ void ThreadPoolChecker::debug(std::stringstream& ss) {
         int num_active_threads = iter.second->num_active_threads();
         ss << iter.first << " num_threads " << num_threads << " num_queued_task " << num_queued_tasks
                   << "num_active_threads " << num_active_threads;
-        LOG(INFO) << ss.str();
     }
 }
 

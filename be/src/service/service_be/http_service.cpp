@@ -140,7 +140,7 @@ Status HttpServiceBE::start() {
     // Register monitor action
     auto* monitor_action = new MonitorAction();
     // Register all monitors
-    starrocks::ExecEnv::GetInstance()->get_health_checker()->register_monitors_to_http_action(monitor_action);
+    starrocks::ExecEnv::GetInstance()->get_monitor_manager()->register_monitors_to_http_action(monitor_action);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/monitor", monitor_action);
     _http_handlers.emplace_back(monitor_action);
 

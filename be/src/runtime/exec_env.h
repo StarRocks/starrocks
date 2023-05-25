@@ -42,7 +42,7 @@
 #include "exec/query_cache/cache_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "runtime/brpc_thread_checker.h"
-#include "runtime/health_checker.h"
+#include "runtime/monitor_manager.h"
 #include "runtime/thread_pool_checker.h"
 #include "storage/options.h"
 #include "util/threadpool.h"
@@ -247,7 +247,7 @@ public:
 
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
-    HealthChecker* get_health_checker() { return _health_checker; }
+    MonitorManager* get_monitor_manager() { return _monitor_manager; }
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
@@ -362,7 +362,7 @@ private:
 
     ProfileReportWorker* _profile_report_worker = nullptr;
 
-    HealthChecker* _health_checker = nullptr;
+    MonitorManager* _monitor_manager = nullptr;
     ThreadPoolChecker* _thread_pool_checker = nullptr;
     BrpcThreadChecker* _brpc_thread_checker = nullptr;
 

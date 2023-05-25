@@ -26,6 +26,7 @@ std::string BaseMonitor::get_name() {
     return _monitor_name;
 }
 
+
 void BaseMonitor::stop() {
     if (_stop) {
         return;
@@ -34,7 +35,7 @@ void BaseMonitor::stop() {
     if (_thread.joinable()) {
         _thread.join();
     }
-    LOG(INFO) << "base monitor stop";
+    LOG(INFO) << _monitor_name << " stop";
 }
 
 void BaseMonitor::start() {
@@ -45,6 +46,8 @@ void BaseMonitor::start() {
     std::thread worker_thread(_callback_function, this);
     Thread::set_thread_name(worker_thread, _monitor_name);
     _thread = std::move(worker_thread);
+
+    LOG(INFO) << _monitor_name << " start";
 }
 
 BaseMonitor::~BaseMonitor() {

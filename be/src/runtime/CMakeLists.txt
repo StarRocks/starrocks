@@ -83,7 +83,7 @@ set(RUNTIME_FILES
     lake_tablets_channel.cpp
     lake_snapshot_loader.cpp
     profile_report_worker.cpp
-    health_checker.cpp
+    monitor_manager.cpp
     thread_pool_checker.cpp
     brpc_thread_checker.cpp
     base_monitor.cpp

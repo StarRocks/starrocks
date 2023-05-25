@@ -168,11 +168,10 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _stream_mgr = new DataStreamMgr();
     _result_mgr = new ResultBufferMgr();
     _result_queue_mgr = new ResultQueueMgr();
-    _health_checker = new HealthChecker();
+    _monitor_manager = new MonitorManager();
     _thread_pool_checker = new ThreadPoolChecker();
     _brpc_thread_checker = new BrpcThreadChecker();
-    _brpc_thread_checker->start();
-    _health_checker->register_monitor(_brpc_thread_checker->get_name(), _brpc_thread_checker);
+    _monitor_manager->register_monitor(_brpc_thread_checker->get_name(), _brpc_thread_checker);
     _backend_client_cache = new BackendServiceClientCache(config::max_client_cache_size_per_host);
     _frontend_client_cache = new FrontendServiceClientCache(config::max_client_cache_size_per_host);
     _broker_client_cache = new BrokerServiceClientCache(config::max_client_cache_size_per_host);
@@ -232,8 +231,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _driver_executor = new pipeline::GlobalDriverExecutor("pip_exe", std::move(driver_executor_thread_pool), false);
     _driver_executor->initialize(_max_executor_threads);
 
-    _thread_pool_checker->start();
-    _health_checker->register_monitor(_thread_pool_checker->get_name() , _thread_pool_checker);
+    _monitor_manager->register_monitor(_thread_pool_checker->get_name() , _thread_pool_checker);
+    _monitor_manager->start_all_monitors();
 
     _driver_limiter =
             new pipeline::DriverLimiter(_max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread);
@@ -510,7 +509,7 @@ void ExecEnv::_destroy() {
     }
 
     _thread_pool_checker->stop();
-    _health_checker->stop();
+    _monitor_manager->stop_all_monitors();
 
     SAFE_DELETE(_agent_server);
     SAFE_DELETE(_runtime_filter_worker);

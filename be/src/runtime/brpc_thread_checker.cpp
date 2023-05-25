@@ -22,28 +22,20 @@ BrpcThreadChecker::BrpcThreadChecker() : BaseMonitor("brpc_thread_checker"), _br
     _callback_function = _brpc_thread_checker_callback;
 }
 
-Status BrpcThreadChecker::getStatus() {
-    std::lock_guard lg(_brpc_thread_checker_mutex);
-    for (const auto& iter : _bvars_holder) {
-
-    }
-    return Status::OK();
-}
-
 void* BrpcThreadChecker::_brpc_thread_checker_callback(void* arg_this) {
     LOG(INFO) << "BrpcThreadChecker start working.";
 
     auto* brpc_thread_checker_this = (BrpcThreadChecker*)arg_this;
-    int32_t interval = config::health_check_interval;
+    int32_t interval = config::brpc_check_interval;
 
     while (!brpc_thread_checker_this->_stop) {
         std::lock_guard lg(brpc_thread_checker_this->_brpc_thread_checker_mutex);
         bvar::DumpOptions dump_options;
-        dump_options.white_wildcards = "rpc*";
+        dump_options.white_wildcards = "bthread*";
         bvar::Variable::dump_exposed(&(brpc_thread_checker_this->_brpc_dumper), &dump_options);
 
         if (interval <= 0) {
-            LOG(WARNING) << "threadPool check interval config is illegal: " << interval << ", force set to 1";
+            LOG(WARNING) << "brpc_check_interval config is illegal: " << interval << ", force set to 1";
             interval = 1;
         }
         int32_t left_seconds = interval;

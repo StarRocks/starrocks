@@ -12,20 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/health_checker.h"
+#include "runtime/monitor_manager.h"
 #include "runtime/thread_pool_checker.h"
 #include <gtest/gtest.h>
 
 namespace starrocks {
 
-class HealthCheckerTest : public testing::Test {
+class MonitorManagerTest : public testing::Test {
 public:
-    HealthCheckerTest() = default;
-    ~HealthCheckerTest() override = default;
+    MonitorManagerTest() = default;
+    ~MonitorManagerTest() override = default;
 
     void SetUp() override {
 
-        config::health_check_interval = 1;
     }
 
     void TearDown() override {
@@ -34,8 +33,8 @@ public:
 
 };
 
-TEST_F(HealthCheckerTest, health_checker) {
-    std::unique_ptr<HealthChecker> health_checker_ptr(new HealthChecker());
+TEST_F(MonitorManagerTest, monitor_manager) {
+    std::unique_ptr<MonitorManager> monitor_manager_ptr(new MonitorManager());
     std::unique_ptr<ThreadPoolChecker> thread_pool_checker(new ThreadPoolChecker());
 
     std::unique_ptr<ThreadPool> thread_pool_test;
@@ -46,11 +45,12 @@ TEST_F(HealthCheckerTest, health_checker) {
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&thread_pool_test);
 
-    thread_pool_checker->register_thread_pool(thread_pool_test.get());
+    thread_pool_checker->register_thread_pool("thread_pool_test", thread_pool_test.get());
 
-    health_checker_ptr->register_monitor(thread_pool_checker->get_name(), thread_pool_checker.get());
+    monitor_manager_ptr->register_monitor(thread_pool_checker->get_name(), thread_pool_checker.get());
+    monitor_manager_ptr->start_all_monitors();
     sleep(10);
-    health_checker_ptr->stop();
+    monitor_manager_ptr->stop();
 }
 
 } // namespace starrocks

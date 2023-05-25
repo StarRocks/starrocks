@@ -29,15 +29,12 @@ public:
 
     bool dump(const std::string& name, const butil::StringPiece& desc) override {
         _bvars.emplace(name, desc.as_string());
-        LOG(INFO) << "bvar" << name << " " << desc.as_string();
+        //LOG(INFO) << "bvar" << name << " " << desc.as_string();
         return true;
     }
 
-
-
 private:
     std::unordered_map<std::string, std::string> _bvars;
-    bvar::DumpOptions _dump_options;
 };
 
 class BrpcThreadChecker : public BaseMonitor {
@@ -45,17 +42,11 @@ public:
     BrpcThreadChecker();
     ~BrpcThreadChecker() = default;
 
-    Status getStatus() override;
-
-    //Status register_thread_pool(std::string name, ThreadPool* thread_pool);
-
     // monitor iface
     void debug(std::stringstream& ss) override;
 
 private:
     static void* _brpc_thread_checker_callback(void* arg_this);
-    void _collect_thread_pool_state();
-
     std::mutex _brpc_thread_checker_mutex;
 
     std::unordered_map<std::string, std::string> _bvars_holder;
