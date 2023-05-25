@@ -1087,9 +1087,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (connectContext.getSessionVariable().isEnableLoadProfile()) {
             TransactionResult resp = new TransactionResult();
             StreamLoadManager streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadManager();
-            streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), timeoutSecond, resp);
+            streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), timeoutSecond, resp, false);
+            if (!resp.stateOK()) {
+                LOG.warn(resp.msg);
+                throw new UserException(resp.msg);
+            }
 
-            StreamLoadTask task = streamLoadManager.getSyncSteamLoadTaskByLabel(request.getLabel());
+            StreamLoadTask task = streamLoadManager.getTaskByLabel(request.getLabel());
+            // this should't open
             if (task == null || task.getTxnId() == -1) {
                 throw new UserException(String.format("Load label: {} begin transacton failed", request.getLabel()));
             }
@@ -1186,6 +1191,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return;
         }
         TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tbl.getId());
+        StreamLoadTask streamLoadtask = GlobalStateMgr.getCurrentState().getStreamLoadManager().
+                getSyncSteamLoadTaskByTxnId(request.getTxnId());
+
         switch (request.txnCommitAttachment.getLoadType()) {
             case ROUTINE_LOAD:
                 if (!(attachment instanceof RLTaskTxnCommitAttachment)) {
@@ -1197,6 +1205,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 entity.counterRoutineLoadRowsTotal.increase(routineAttachment.getLoadedRows());
                 entity.counterRoutineLoadErrorRowsTotal.increase(routineAttachment.getFilteredRows());
                 entity.counterRoutineLoadUnselectedRowsTotal.increase(routineAttachment.getUnselectedRows());
+
+                if (streamLoadtask != null) {
+                    streamLoadtask.setLoadState(routineAttachment.getLoadedBytes(),
+                            routineAttachment.getLoadedRows(),
+                            routineAttachment.getFilteredRows(),
+                            routineAttachment.getUnselectedRows(),
+                            routineAttachment.getErrorLogUrl(), "");
+                }
+
                 break;
             case MANUAL_LOAD:
                 if (!(attachment instanceof ManualLoadTxnCommitAttachment)) {
@@ -1206,6 +1223,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 entity.counterStreamLoadFinishedTotal.increase(1L);
                 entity.counterStreamLoadBytesTotal.increase(streamAttachment.getReceivedBytes());
                 entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
+
+                if (streamLoadtask != null) {
+                    streamLoadtask.setLoadState(streamAttachment.getLoadedBytes(),
+                            streamAttachment.getLoadedRows(),
+                            streamAttachment.getFilteredRows(),
+                            streamAttachment.getUnselectedRows(),
+                            streamAttachment.getErrorLogUrl(), "");
+                }
 
                 break;
             default:
@@ -1268,6 +1293,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
                 TabletFailInfo.fromThrift(request.getFailInfos()),
                 attachment);
+
     }
 
     @Override
@@ -1324,6 +1350,46 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(dbId, request.getTxnId(),
                 request.isSetReason() ? request.getReason() : "system cancel",
                 TxnCommitAttachment.fromThrift(request.getTxnCommitAttachment()));
+
+        TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
+        StreamLoadTask streamLoadtask = GlobalStateMgr.getCurrentState().getStreamLoadManager().
+                getSyncSteamLoadTaskByTxnId(request.getTxnId());
+
+        switch (request.txnCommitAttachment.getLoadType()) {
+            case ROUTINE_LOAD:
+                if (!(attachment instanceof RLTaskTxnCommitAttachment)) {
+                    break;
+                }
+                RLTaskTxnCommitAttachment routineAttachment = (RLTaskTxnCommitAttachment) attachment;
+
+                if (streamLoadtask != null) {
+                    streamLoadtask.setLoadState(routineAttachment.getLoadedBytes(),
+                            routineAttachment.getLoadedRows(),
+                            routineAttachment.getFilteredRows(),
+                            routineAttachment.getUnselectedRows(),
+                            routineAttachment.getErrorLogUrl(), request.getReason());
+
+                }
+
+                break;
+            case MANUAL_LOAD:
+                if (!(attachment instanceof ManualLoadTxnCommitAttachment)) {
+                    break;
+                }
+                ManualLoadTxnCommitAttachment streamAttachment = (ManualLoadTxnCommitAttachment) attachment;
+
+                if (streamLoadtask != null) {
+                    streamLoadtask.setLoadState(streamAttachment.getLoadedBytes(),
+                            streamAttachment.getLoadedRows(),
+                            streamAttachment.getFilteredRows(),
+                            streamAttachment.getUnselectedRows(),
+                            streamAttachment.getErrorLogUrl(), request.getReason());
+                }
+
+                break;
+            default:
+                break;
+        }
     }
 
     @Override

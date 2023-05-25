@@ -342,6 +342,7 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         manual_load_attach.__set_filteredRows(ctx->number_filtered_rows);
         manual_load_attach.__set_receivedBytes(ctx->receive_bytes);
         manual_load_attach.__set_loadedBytes(ctx->loaded_bytes);
+        manual_load_attach.__set_unselectedRows(ctx->number_unselected_rows);
         if (!ctx->error_url.empty()) {
             manual_load_attach.__set_errorLogUrl(ctx->error_url);
         }

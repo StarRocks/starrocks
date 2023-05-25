@@ -30,6 +30,8 @@ public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
     private long loadedRows;
     @SerializedName("fr")
     private long filteredRows;
+
+    private long unselectedRows;
     private long receivedBytes;
     private long loadedBytes;
     // optional
@@ -46,6 +48,7 @@ public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
         this.loadedBytes = tManualLoadTxnCommitAttachment.getLoadedBytes();
         this.receivedBytes = tManualLoadTxnCommitAttachment.getReceivedBytes();
         this.filteredRows = tManualLoadTxnCommitAttachment.getFilteredRows();
+        this.unselectedRows = tManualLoadTxnCommitAttachment.getUnselectedRows();
         if (tManualLoadTxnCommitAttachment.isSetErrorLogUrl()) {
             this.errorLogUrl = tManualLoadTxnCommitAttachment.getErrorLogUrl();
         }
@@ -65,6 +68,10 @@ public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
 
     public long getFilteredRows() {
         return filteredRows;
+    }
+
+    public long getUnselectedRows() {
+        return unselectedRows;
     }
 
     public String getErrorLogUrl() {

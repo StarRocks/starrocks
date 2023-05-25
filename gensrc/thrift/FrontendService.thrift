@@ -759,6 +759,7 @@ struct TManualLoadTxnCommitAttachment {
     3: optional string errorLogUrl
     4: optional i64 receivedBytes
     5: optional i64 loadedBytes
+    6: optional i64 unselectedRows
 }
 
 struct TTxnCommitAttachment {

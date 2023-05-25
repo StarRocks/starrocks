@@ -142,6 +142,25 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
                 }
             };
 
+    private static final ColumnValueSupplier<StreamLoadTask> TASK_TYPE_SUPPLIER =
+            new ColumnValueSupplier<StreamLoadTask>() {
+                @Override
+                public String getColumnName() {
+                    return "Type";
+                }
+
+                @Override
+                public PrimitiveType getColumnType() {
+                    return PrimitiveType.VARCHAR;
+                }
+
+                @Override
+                @SuppressWarnings("unchecked")
+                public String getColumnValue(StreamLoadTask task) {
+                    return task.getStringByType();
+                }
+            };
+
     @Override
     protected ImmutableList<ColumnValueSupplier<StreamLoadTask>> delegateWhereSuppliers() {
         // return a group of ColumnValueSuppliers which are abled to be filtered and ordered.
@@ -152,6 +171,7 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
                 .add(TASK_DB_NAME_SUPPLIER)
                 .add(TASK_TABLE_NAME_SUPPLIER)
                 .add(TASK_STATE_SUPPLIER)
+                .add(TASK_TYPE_SUPPLIER)
                 .build();
     }
 

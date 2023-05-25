@@ -88,6 +88,7 @@ public class ShowStreamLoadStmt extends ShowStmt {
                     .add("FinishPreparingTimeMs")
                     .add("EndTimeMs")
                     .add("ChannelState")
+                    .add("Type")
                     .build();
 
     private final LabelName labelName;
