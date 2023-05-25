@@ -473,6 +473,11 @@ public class AlterJobMgr {
             isChanged = true;
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP) &&
                 !StringUtils.equals(materializedView.getTableProperty().getResourceGroup(), resourceGroup)) {
+            if (resourceGroup != null && !resourceGroup.isEmpty() &&
+                    GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(resourceGroup) == null) {
+                throw new AnalysisException(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP
+                        + " " + resourceGroup + " does not exist.");
+            }
             curProp.put(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP, resourceGroup);
             materializedView.getTableProperty().setResourceGroup(resourceGroup);
             isChanged = true;
