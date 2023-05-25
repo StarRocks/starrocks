@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <ostream>
 
 #include "common/status.h"
@@ -33,9 +34,16 @@ public:
         std::atomic<int> _value{0};
     };
 
+    // CancelFunc is a function that used to tell the compaction task whether the task
+    // should be cancelled.
+    using CancelFunc = std::function<bool()>;
+
     virtual ~CompactionTask() = default;
 
-    virtual Status execute(Progress* stats) = 0;
+    virtual Status execute(Progress* stats, CancelFunc cancel_func) = 0;
+
+    inline static const CancelFunc kNoCancel = []() { return false; };
+    inline static const CancelFunc kCancelled = []() { return true; };
 };
 
 } // namespace starrocks::lake
