@@ -290,7 +290,7 @@ SELECT /*+ SET_VAR
 
 * max_allowed_packet
 
-  用于兼容 JDBC 连接池 C3P0。 无实际作用。
+  用于兼容 JDBC 连接池 C3P0。该变量值决定了服务端发送给客户端或客户端发送给服务端的最大 packet 大小，默认为 32 MB。当客户端报 `PacketTooBigException` 异常时，可以考虑调大该值。
 
 * max_pushdown_conditions_per_column
 
