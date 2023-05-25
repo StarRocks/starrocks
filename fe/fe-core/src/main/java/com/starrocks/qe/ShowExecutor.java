@@ -1420,7 +1420,7 @@ public class ShowExecutor {
         // if task exists
         List<StreamLoadTask> streamLoadTaskList;
         try {
-            streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadManager()
+            streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadMgr()
                     .getTask(showStreamLoadStmt.getDbFullName(),
                             showStreamLoadStmt.getName(),
                             showStreamLoadStmt.isIncludeHistory());
@@ -2317,7 +2317,7 @@ public class ShowExecutor {
     }
 
     private void handleShowAnalyzeJob() {
-        List<AnalyzeJob> jobs = connectContext.getGlobalStateMgr().getAnalyzeManager().getAllAnalyzeJobList();
+        List<AnalyzeJob> jobs = connectContext.getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList();
         List<List<String>> rows = Lists.newArrayList();
         jobs.sort(Comparator.comparing(AnalyzeJob::getId));
         for (AnalyzeJob job : jobs) {
@@ -2335,7 +2335,7 @@ public class ShowExecutor {
     }
 
     private void handleShowAnalyzeStatus() {
-        List<AnalyzeStatus> statuses = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeManager()
+        List<AnalyzeStatus> statuses = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeMgr()
                 .getAnalyzeStatusMap().values());
         List<List<String>> rows = Lists.newArrayList();
         statuses.sort(Comparator.comparing(AnalyzeStatus::getId));
@@ -2354,7 +2354,7 @@ public class ShowExecutor {
     }
 
     private void handleShowBasicStatsMeta() {
-        List<BasicStatsMeta> metas = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeManager()
+        List<BasicStatsMeta> metas = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeMgr()
                 .getBasicStatsMetaMap().values());
         List<List<String>> rows = Lists.newArrayList();
         for (BasicStatsMeta meta : metas) {
@@ -2372,7 +2372,7 @@ public class ShowExecutor {
     }
 
     private void handleShowHistogramStatsMeta() {
-        List<HistogramStatsMeta> metas = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeManager()
+        List<HistogramStatsMeta> metas = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeMgr()
                 .getHistogramStatsMetaMap().values());
         List<List<String>> rows = Lists.newArrayList();
         for (HistogramStatsMeta meta : metas) {

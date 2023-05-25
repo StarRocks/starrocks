@@ -754,7 +754,7 @@ public class DDLStmtExecutor {
                         stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN);
 
-                context.getGlobalStateMgr().getAnalyzeManager().addAnalyzeJob(analyzeJob);
+                context.getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(analyzeJob);
 
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 // from current session, may execute analyze stmt
@@ -774,7 +774,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropAnalyzeStatement(DropAnalyzeJobStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(
-                    () -> context.getGlobalStateMgr().getAnalyzeManager().removeAnalyzeJob(stmt.getId()));
+                    () -> context.getGlobalStateMgr().getAnalyzeMgr().removeAnalyzeJob(stmt.getId()));
             return null;
         }
 

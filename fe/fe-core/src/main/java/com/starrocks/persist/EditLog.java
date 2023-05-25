@@ -86,7 +86,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
-import com.starrocks.scheduler.mv.MVManager;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
@@ -659,7 +659,7 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_STREAM_LOAD_TASK: {
                     StreamLoadTask streamLoadTask = (StreamLoadTask) journal.getData();
-                    globalStateMgr.getStreamLoadManager().replayCreateLoadTask(streamLoadTask);
+                    globalStateMgr.getStreamLoadMgr().replayCreateLoadTask(streamLoadTask);
                     break;
                 }
                 case OperationType.OP_CREATE_LOAD_JOB_V2:
@@ -835,51 +835,51 @@ public class EditLog {
                 }
                 case OperationType.OP_ADD_ANALYZER_JOB: {
                     AnalyzeJob analyzeJob = (AnalyzeJob) journal.getData();
-                    globalStateMgr.getAnalyzeManager().replayAddAnalyzeJob(analyzeJob);
+                    globalStateMgr.getAnalyzeMgr().replayAddAnalyzeJob(analyzeJob);
                     break;
                 }
                 case OperationType.OP_REMOVE_ANALYZER_JOB: {
                     AnalyzeJob analyzeJob = (AnalyzeJob) journal.getData();
-                    globalStateMgr.getAnalyzeManager().replayRemoveAnalyzeJob(analyzeJob);
+                    globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeJob(analyzeJob);
                     break;
                 }
                 case OperationType.OP_ADD_ANALYZE_STATUS: {
                     NativeAnalyzeStatus analyzeStatus = (NativeAnalyzeStatus) journal.getData();
-                    globalStateMgr.getAnalyzeManager().replayAddAnalyzeStatus(analyzeStatus);
+                    globalStateMgr.getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
                     break;
                 }
                 case OperationType.OP_REMOVE_ANALYZE_STATUS: {
                     NativeAnalyzeStatus analyzeStatus = (NativeAnalyzeStatus) journal.getData();
-                    globalStateMgr.getAnalyzeManager().replayRemoveAnalyzeStatus(analyzeStatus);
+                    globalStateMgr.getAnalyzeMgr().replayRemoveAnalyzeStatus(analyzeStatus);
                     break;
                 }
                 case OperationType.OP_ADD_BASIC_STATS_META: {
                     BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.getData();
-                    globalStateMgr.getAnalyzeManager().replayAddBasicStatsMeta(basicStatsMeta);
+                    globalStateMgr.getAnalyzeMgr().replayAddBasicStatsMeta(basicStatsMeta);
                     // The follower replays the stats meta log, indicating that the master has re-completed
                     // statistic, and the follower's should refresh cache here.
-                    globalStateMgr.getAnalyzeManager().refreshBasicStatisticsCache(basicStatsMeta.getDbId(),
+                    globalStateMgr.getAnalyzeMgr().refreshBasicStatisticsCache(basicStatsMeta.getDbId(),
                             basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), true);
                     break;
                 }
                 case OperationType.OP_REMOVE_BASIC_STATS_META: {
                     BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.getData();
-                    globalStateMgr.getAnalyzeManager().replayRemoveBasicStatsMeta(basicStatsMeta);
+                    globalStateMgr.getAnalyzeMgr().replayRemoveBasicStatsMeta(basicStatsMeta);
                     break;
                 }
                 case OperationType.OP_ADD_HISTOGRAM_STATS_META: {
                     HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.getData();
-                    globalStateMgr.getAnalyzeManager().replayAddHistogramStatsMeta(histogramStatsMeta);
+                    globalStateMgr.getAnalyzeMgr().replayAddHistogramStatsMeta(histogramStatsMeta);
                     // The follower replays the stats meta log, indicating that the master has re-completed
                     // statistic, and the follower's should expire cache here.
-                    globalStateMgr.getAnalyzeManager().refreshHistogramStatisticsCache(
+                    globalStateMgr.getAnalyzeMgr().refreshHistogramStatisticsCache(
                             histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
                             Lists.newArrayList(histogramStatsMeta.getColumn()), true);
                     break;
                 }
                 case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
                     HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.getData();
-                    globalStateMgr.getAnalyzeManager().replayRemoveHistogramStatsMeta(histogramStatsMeta);
+                    globalStateMgr.getAnalyzeMgr().replayRemoveHistogramStatsMeta(histogramStatsMeta);
                     break;
                 }
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
@@ -902,12 +902,12 @@ public class EditLog {
 
                 case OperationType.OP_CREATE_INSERT_OVERWRITE: {
                     CreateInsertOverwriteJobLog jobInfo = (CreateInsertOverwriteJobLog) journal.getData();
-                    globalStateMgr.getInsertOverwriteJobManager().replayCreateInsertOverwrite(jobInfo);
+                    globalStateMgr.getInsertOverwriteJobMgr().replayCreateInsertOverwrite(jobInfo);
                     break;
                 }
                 case OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE: {
                     InsertOverwriteStateChangeInfo stateChangeInfo = (InsertOverwriteStateChangeInfo) journal.getData();
-                    globalStateMgr.getInsertOverwriteJobManager().replayInsertOverwriteStateChange(stateChangeInfo);
+                    globalStateMgr.getInsertOverwriteJobMgr().replayInsertOverwriteStateChange(stateChangeInfo);
                     break;
                 }
                 case OperationType.OP_ADD_UNUSED_SHARD:
@@ -978,12 +978,12 @@ public class EditLog {
                 }
                 case OperationType.OP_MV_JOB_STATE: {
                     MVMaintenanceJob job = (MVMaintenanceJob) journal.getData();
-                    MVManager.getInstance().replay(job);
+                    MaterializedViewMgr.getInstance().replay(job);
                     break;
                 }
                 case OperationType.OP_MV_EPOCH_UPDATE: {
                     MVEpoch epoch = (MVEpoch) journal.getData();
-                    MVManager.getInstance().replayEpoch(epoch);
+                    MaterializedViewMgr.getInstance().replayEpoch(epoch);
                     break;
                 }
                 default: {

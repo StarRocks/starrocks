@@ -197,7 +197,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);
         if (tExecPlanFragmentParams.query_options.enable_profile) {
             StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().
-                    getStreamLoadManager().getTaskByLabel(label);
+                    getStreamLoadMgr().getTaskByLabel(label);
             setStreamLoadTask(streamLoadTask);
         }
         TPlanFragment tPlanFragment = tExecPlanFragmentParams.getFragment();
