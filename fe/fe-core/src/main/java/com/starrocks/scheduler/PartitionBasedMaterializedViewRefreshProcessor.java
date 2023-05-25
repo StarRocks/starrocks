@@ -42,6 +42,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -188,6 +189,13 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                     extraMessage.setBasePartitionsToRefreshMap(sourceTablePartitions);
                 }
 
+                if (mvContext.getCtx().getSessionVariable().isEnableResourceGroup()) {
+                    String rg = materializedView.getTableProperty().getResourceGroup();
+                    if (rg == null || rg.isEmpty()) {
+                        rg = ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME;
+                    }
+                    mvContext.getCtx().getSessionVariable().setResourceGroup(rg);
+                }
                 // create ExecPlan
                 insertStmt = generateInsertStmt(partitionsToRefresh, sourceTablePartitions);
                 execPlan = generateRefreshPlan(mvContext.getCtx(), insertStmt);

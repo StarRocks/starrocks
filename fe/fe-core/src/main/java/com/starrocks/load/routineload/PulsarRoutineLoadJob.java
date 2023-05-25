@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -47,6 +48,7 @@ import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
@@ -72,14 +74,19 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
 
     public static final String PULSAR_FILE_CATALOG = "pulsar";
 
+    @SerializedName("svu")
     private String serviceUrl;
+    @SerializedName("tpc")
     private String topic;
+    @SerializedName("sbs")
     private String subscription;
     // optional, user want to load partitions.
+    @SerializedName("cpp")
     private List<String> customPulsarPartitions = Lists.newArrayList();
     // current pulsar partitions is the actually partition which will be fetched
     private List<String> currentPulsarPartitions = Lists.newArrayList();
     // pulsar properties, property prefix will be mapped to pulsar custom parameters, which can be extended in the future
+    @SerializedName("cpt")
     private Map<String, String> customProperties = Maps.newHashMap();
     private Map<String, String> convertedCustomProperties = Maps.newHashMap();
 
@@ -212,7 +219,13 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         int aliveNodeNum = systemInfoService.getAliveBackendNumber();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-            aliveNodeNum = warehouse.getAnyAvailableCluster().getComputeNodeIds().size();
+            aliveNodeNum = 0;
+            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                if (node != null && node.isAlive()) {
+                    ++aliveNodeNum;
+                }
+            }
         }
         int partitionNum = currentPulsarPartitions.size();
         if (desireTaskConcurrentNum == 0) {

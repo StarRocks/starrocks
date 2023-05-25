@@ -242,7 +242,7 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, cons
             *exist = false;
             return Status::OK();
         } else {
-            const ParquetField* field = _meta_helper->get_parquet_field(column_name_2_pos_in_meta, slot->col_name());
+            const ParquetField* field = _meta_helper->get_parquet_field(slot->col_name());
             if (field == nullptr) {
                 LOG(WARNING) << "Can't get " + slot->col_name() + "'s ParquetField in _read_min_max_chunk.";
                 *exist = false;

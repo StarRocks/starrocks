@@ -35,7 +35,6 @@
 package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
@@ -50,7 +49,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -73,48 +71,31 @@ public class MysqlProto {
 
         String remoteIp = context.getMysqlChannel().getRemoteIp();
 
-        // In new RBAC privilege framework
-        if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-            AuthenticationManager authenticationManager = context.getGlobalStateMgr().getAuthenticationManager();
-            UserIdentity currentUser = null;
-            if (Config.enable_auth_check) {
-                currentUser = authenticationManager.checkPassword(user, remoteIp, scramble, randomString);
-                if (currentUser == null) {
-                    ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
-                    return false;
-                }
-            } else {
-                Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
-                        authenticationManager.getBestMatchedUserIdentity(user, remoteIp);
-                if (matchedUserIdentity == null) {
-                    LOG.info("enable_auth_check is false, but cannot find user '{}'@'{}'", user, remoteIp);
-                    ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
-                    return false;
-                } else {
-                    currentUser = matchedUserIdentity.getKey();
-                }
-            }
-
-
-            context.setCurrentUserIdentity(currentUser);
-            if (!currentUser.isEphemeral()) {
-                context.setCurrentRoleIds(currentUser);
-                context.setAuthDataSalt(randomString);
-            }
-            context.setQualifiedUser(user);
-            return true;
-        }
-
-        // In old `Auth` framework
-        List<UserIdentity> currentUserIdentity = Lists.newArrayList();
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkPassword(user, remoteIp,
-                scramble, randomString, currentUserIdentity)) {
-            ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
-            return false;
-        }
-        context.setAuthDataSalt(randomString);
+        AuthenticationManager authenticationManager = context.getGlobalStateMgr().getAuthenticationManager();
+        UserIdentity currentUser = null;
         if (Config.enable_auth_check) {
-            context.setCurrentUserIdentity(currentUserIdentity.get(0));
+            currentUser = authenticationManager.checkPassword(user, remoteIp, scramble, randomString);
+            if (currentUser == null) {
+                ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
+                return false;
+            }
+        } else {
+            Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
+                    authenticationManager.getBestMatchedUserIdentity(user, remoteIp);
+            if (matchedUserIdentity == null) {
+                LOG.info("enable_auth_check is false, but cannot find user '{}'@'{}'", user, remoteIp);
+                ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
+                return false;
+            } else {
+                currentUser = matchedUserIdentity.getKey();
+            }
+        }
+
+
+        context.setCurrentUserIdentity(currentUser);
+        if (!currentUser.isEphemeral()) {
+            context.setCurrentRoleIds(currentUser);
+            context.setAuthDataSalt(randomString);
         }
         context.setQualifiedUser(user);
         return true;
@@ -201,35 +182,18 @@ public class MysqlProto {
             serializer.reset();
             // 2. build the auth switch request and send to the client
             if (authPluginName.equals(AUTHENTICATION_KERBEROS_CLIENT)) {
-                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    if (GlobalStateMgr.getCurrentState().getAuthenticationManager().isSupportKerberosAuth()) {
-                        try {
-                            handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
-                        } catch (Exception e) {
-                            ErrorReport.report("Building handshake with kerberos error, msg: %s", e.getMessage());
-                            sendResponsePacket(context);
-                            return new NegotiateResult(authPacket, false);
-                        }
-                    } else {
-                        ErrorReport.report(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, "authentication_kerberos");
+                if (GlobalStateMgr.getCurrentState().getAuthenticationManager().isSupportKerberosAuth()) {
+                    try {
+                        handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
+                    } catch (Exception e) {
+                        ErrorReport.report("Building handshake with kerberos error, msg: %s", e.getMessage());
                         sendResponsePacket(context);
                         return new NegotiateResult(authPacket, false);
                     }
                 } else {
-                    if (GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {
-                        try {
-                            handshakePacket.buildKrb5AuthRequestDeprecated(serializer, context.getRemoteIP(),
-                                    authPacket.getUser());
-                        } catch (Exception e) {
-                            ErrorReport.report("Building handshake with kerberos error, msg: %s", e.getMessage());
-                            sendResponsePacket(context);
-                            return new NegotiateResult(authPacket, false);
-                        }
-                    } else {
-                        ErrorReport.report(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, "authentication_kerberos");
-                        sendResponsePacket(context);
-                        return new NegotiateResult(authPacket, false);
-                    }
+                    ErrorReport.report(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, "authentication_kerberos");
+                    sendResponsePacket(context);
+                    return new NegotiateResult(authPacket, false);
                 }
             } else {
                 handshakePacket.buildAuthSwitchRequest(serializer);

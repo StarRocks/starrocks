@@ -153,6 +153,12 @@ public class EditLog {
                             .initTransactionId(id + 1);
                     break;
                 }
+                case OperationType.OP_SAVE_TRANSACTION_ID_V2: {
+                    TransactionIdInfo idInfo = (TransactionIdInfo) journal.getData();
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
+                            .initTransactionId(idInfo.getTxnId() + 1);
+                    break;
+                }
                 case OperationType.OP_SAVE_AUTO_INCREMENT_ID:
                 case OperationType.OP_DELETE_AUTO_INCREMENT_ID: {
                     AutoIncrementInfo info = (AutoIncrementInfo) journal.getData();
@@ -547,6 +553,7 @@ public class EditLog {
                     globalStateMgr.replayUpdateClusterAndBackends(info);
                     break;
                 }
+                case OperationType.OP_UPSERT_TRANSACTION_STATE_V2:
                 case OperationType.OP_UPSERT_TRANSACTION_STATE: {
                     final TransactionState state = (TransactionState) journal.getData();
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionState(state);
@@ -633,11 +640,13 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().replayBackendTabletsInfo(backendTabletsInfo);
                     break;
                 }
+                case OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2:
                 case OperationType.OP_CREATE_ROUTINE_LOAD_JOB: {
                     RoutineLoadJob routineLoadJob = (RoutineLoadJob) journal.getData();
                     GlobalStateMgr.getCurrentState().getRoutineLoadManager().replayCreateRoutineLoadJob(routineLoadJob);
                     break;
                 }
+                case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2:
                 case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB: {
                     RoutineLoadOperation operation = (RoutineLoadOperation) journal.getData();
                     GlobalStateMgr.getCurrentState().getRoutineLoadManager().replayChangeRoutineLoadJob(operation);
@@ -1077,7 +1086,11 @@ public class EditLog {
     }
 
     public void logSaveTransactionId(long transactionId) {
-        logEdit(OperationType.OP_SAVE_TRANSACTION_ID, new Text(Long.toString(transactionId)));
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_SAVE_TRANSACTION_ID_V2, new TransactionIdInfo(transactionId));
+        } else {
+            logEdit(OperationType.OP_SAVE_TRANSACTION_ID, new Text(Long.toString(transactionId)));
+        }
     }
 
     public void logSaveAutoIncrementId(AutoIncrementInfo info) {
@@ -1374,7 +1387,11 @@ public class EditLog {
 
     // for TransactionState
     public void logInsertTransactionState(TransactionState transactionState) {
-        logEdit(OperationType.OP_UPSERT_TRANSACTION_STATE, transactionState);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_V2, transactionState);
+        } else {
+            logEdit(OperationType.OP_UPSERT_TRANSACTION_STATE, transactionState);
+        }
     }
 
     public void logDeleteTransactionState(TransactionState transactionState) {
@@ -1450,11 +1467,19 @@ public class EditLog {
     }
 
     public void logCreateRoutineLoadJob(RoutineLoadJob routineLoadJob) {
-        logEdit(OperationType.OP_CREATE_ROUTINE_LOAD_JOB, routineLoadJob);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2, routineLoadJob);
+        } else {
+            logEdit(OperationType.OP_CREATE_ROUTINE_LOAD_JOB, routineLoadJob);
+        }
     }
 
     public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
-        logEdit(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB, routineLoadOperation);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2, routineLoadOperation);
+        } else {
+            logEdit(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB, routineLoadOperation);
+        }
     }
 
     public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask) {
@@ -1463,8 +1488,7 @@ public class EditLog {
 
     public void logCreateLoadJob(com.starrocks.load.loadv2.LoadJob loadJob) {
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logEdit(OperationType.OP_CREATE_LOAD_JOB_V2,
-                    out -> Text.writeString(out, GsonUtils.GSON.toJson(loadJob)));
+            logJsonObject(OperationType.OP_CREATE_LOAD_JOB_V2, loadJob);
         } else {
             logEdit(OperationType.OP_CREATE_LOAD_JOB, loadJob);
         }
@@ -1472,8 +1496,7 @@ public class EditLog {
 
     public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation) {
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logEdit(OperationType.OP_END_LOAD_JOB_V2,
-                    out -> Text.writeString(out, GsonUtils.GSON.toJson(loadJobFinalOperation)));
+            logJsonObject(OperationType.OP_END_LOAD_JOB_V2, loadJobFinalOperation);
         } else {
             logEdit(OperationType.OP_END_LOAD_JOB, loadJobFinalOperation);
         }
@@ -1737,5 +1760,9 @@ public class EditLog {
 
     public void logAlterTableProperties(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
+    }
+
+    private void logJsonObject(short op, Object obj) {
+        logEdit(op, out -> Text.writeString(out, GsonUtils.GSON.toJson(obj)));
     }
 }

@@ -45,8 +45,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
@@ -64,8 +62,6 @@ import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -110,61 +106,61 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     @SerializedName("id")
     protected long id;
     // input params
-    @SerializedName("dbId")
+    @SerializedName("d")
     protected long dbId;
-    @SerializedName("label")
+    @SerializedName("l")
     protected String label;
-    @SerializedName("state")
+    @SerializedName("s")
     protected JobState state = JobState.PENDING;
-    @SerializedName("jobType")
+    @SerializedName("j")
     protected EtlJobType jobType;
     // the auth info could be null when load job is created before commit named 'Persist auth info in load job'
-    @SerializedName("authorizationInfo")
+    @SerializedName("a")
     protected AuthorizationInfo authorizationInfo;
 
     // optional properties
     // timeout second need to be reset in constructor of subclass
-    @SerializedName("timeout")
+    @SerializedName("t")
     protected long timeoutSecond = Config.broker_load_default_timeout_second;
-    @SerializedName("loadMemLimit")
+    @SerializedName("lm")
     protected long loadMemLimit = 0;      // default no limit for load memory
-    @SerializedName("maxFilterRatio")
+    @SerializedName("m")
     protected double maxFilterRatio = 0;
-    @SerializedName("strictMode")
+    @SerializedName("st")
     protected boolean strictMode = false; // default is false
-    @SerializedName("timezone")
+    @SerializedName("tz")
     protected String timezone = TimeUtils.DEFAULT_TIME_ZONE;
-    @SerializedName("partialUpdate")
+    @SerializedName("p")
     protected boolean partialUpdate = false;
     protected String partialUpdateMode = "row";
-    @SerializedName("priority")
+    @SerializedName("pr")
     protected int priority = LoadPriority.NORMAL_VALUE;
-    @SerializedName("logRejectedRecordNum")
+    @SerializedName("ln")
     protected long logRejectedRecordNum = 0;
     // reuse deleteFlag as partialUpdate
     // @Deprecated
     // protected boolean deleteFlag = false;
 
-    @SerializedName("createTime")
+    @SerializedName("c")
     protected long createTimestamp = -1;
-    @SerializedName("loadStartTime")
+    @SerializedName("ls")
     protected long loadStartTimestamp = -1;
-    @SerializedName("finishTime")
+    @SerializedName("f")
     protected long finishTimestamp = -1;
 
-    @SerializedName("transactionId")
+    @SerializedName("tx")
     protected long transactionId;
-    @SerializedName("failMsg")
+    @SerializedName("fm")
     protected FailMsg failMsg;
     protected Map<Long, LoadTask> idToTasks = Maps.newConcurrentMap();
     protected Set<Long> finishedTaskIds = Sets.newHashSet();
-    @SerializedName("loadingStatus")
+    @SerializedName("lt")
     protected EtlStatus loadingStatus = new EtlStatus();
     // 0: the job status is pending
     // n/100: n is the number of task which has been finished
     // 99: all of tasks have been finished
     // 100: txn status is visible and load has been finished
-    @SerializedName("progress")
+    @SerializedName("pg")
     protected int progress;
 
     public int getProgress() {
@@ -553,8 +549,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     public void cancelJob(FailMsg failMsg) throws DdlException {
         writeLock();
         try {
-            checkAuth("CANCEL LOAD");
-
             // mini load can not be cancelled by frontend
             if (jobType == EtlJobType.MINI) {
                 throw new DdlException("Job could not be cancelled in type " + jobType.name());
@@ -584,61 +578,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     public void replayAlterJob(AlterLoadJobOperationLog log) {
-    }
-
-    private void checkAuth(String command) throws DdlException {
-        if (authorizationInfo == null) {
-            // use the old method to check priv
-            checkAuthWithoutAuthInfo(command);
-            return;
-        }
-        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkPrivByAuthInfo(ConnectContext.get(), authorizationInfo,
-                    PrivPredicate.LOAD)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                        Privilege.LOAD_PRIV);
-            }
-        }
-    }
-
-    /**
-     * This method is compatible with old load job without authorization info
-     * If db or table name could not be found by id, it will throw the NOT_EXISTS_ERROR
-     *
-     * @throws DdlException
-     */
-    private void checkAuthWithoutAuthInfo(String command) throws DdlException {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbId);
-        }
-
-        // check auth, In new RBAC framework, cancel load and show load will be checked in PrivilegeCheckerV2
-        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            try {
-                Set<String> tableNames = getTableNames();
-                if (tableNames.isEmpty()) {
-                    // forward compatibility
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), db.getFullName(),
-                            PrivPredicate.LOAD)) {
-                        ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                                Privilege.LOAD_PRIV);
-                    }
-                } else {
-                    for (String tblName : tableNames) {
-                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), db.getFullName(),
-                                tblName, PrivPredicate.LOAD)) {
-                            ErrorReport.reportDdlException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
-                                    command,
-                                    ConnectContext.get().getQualifiedUser(),
-                                    ConnectContext.get().getRemoteIP(), tblName);
-                        }
-                    }
-                }
-            } catch (MetaNotFoundException e) {
-                throw new DdlException(e.getMessage());
-            }
-        }
     }
 
     /**
@@ -761,8 +700,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     public List<Comparable> getShowInfo() throws DdlException {
         readLock();
         try {
-            // check auth
-            checkAuth("SHOW LOAD");
             List<Comparable> jobInfo = Lists.newArrayList();
             // jobId
             jobInfo.add(id);
@@ -945,8 +882,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         return loadStartTimestamp;
     }
 
-    public void getJobInfo(Load.JobInfo jobInfo) throws DdlException {
-        checkAuth("SHOW LOAD");
+    public void getJobInfo(Load.JobInfo jobInfo) {
         jobInfo.tblNames.addAll(getTableNamesForShow());
         jobInfo.state = com.starrocks.load.loadv2.JobState.valueOf(state.name());
         if (failMsg != null) {

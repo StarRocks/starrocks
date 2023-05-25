@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -69,6 +70,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
@@ -97,16 +99,20 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     private static final String PROPERTY_KAFKA_GROUP_ID = "group.id";
 
+    @SerializedName("bkl")
     private String brokerList;
+    @SerializedName("tpc")
     private String topic;
 
     // optional, user want to load partitions.
+    @SerializedName("ckp")
     private List<Integer> customKafkaPartitions = Lists.newArrayList();
     // current kafka partitions is the actually partition which will be fetched
     private List<Integer> currentKafkaPartitions = Lists.newArrayList();
     // optional, user want to set default offset when new partition add or offset not set.
     private Long kafkaDefaultOffSet = null;
     // kafka properties, property prefix will be mapped to kafka custom parameters, which can be extended in the future
+    @SerializedName("cpr")
     private Map<String, String> customProperties = Maps.newHashMap();
     private Map<String, String> convertedCustomProperties = Maps.newHashMap();
     private String confluentSchemaRegistryUrl = null;
@@ -232,7 +238,13 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         int aliveNodeNum = systemInfoService.getAliveBackendNumber();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-            aliveNodeNum = warehouse.getAnyAvailableCluster().getComputeNodeIds().size();
+            aliveNodeNum = 0;
+            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                if (node != null && node.isAlive()) {
+                    ++aliveNodeNum;
+                }
+            }
         }
         int partitionNum = currentKafkaPartitions.size();
         if (desireTaskConcurrentNum == 0) {

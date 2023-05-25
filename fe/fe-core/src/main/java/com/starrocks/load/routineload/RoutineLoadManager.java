@@ -39,11 +39,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
@@ -51,9 +48,12 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.RoutineLoadDesc;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -63,6 +63,7 @@ import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -172,12 +173,17 @@ public class RoutineLoadManager implements Writable {
         slotLock.lock();
         try {
             List<Long> aliveNodeIds = new ArrayList<>();
-
             // TODO: need to refactor after be split into cn + dn
-            aliveNodeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true));
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-                aliveNodeIds = warehouse.getAnyAvailableCluster().getComputeNodeIds();
+                for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                    ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                    if (node != null && node.isAlive()) {
+                        aliveNodeIds.add(nodeId);
+                    }
+                }
+            } else {
+                aliveNodeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true));
             }
 
             // add new nodes
@@ -195,21 +201,7 @@ public class RoutineLoadManager implements Writable {
         }
     }
 
-    public void createRoutineLoadJob(CreateRoutineLoadStmt createRoutineLoadStmt)
-            throws UserException {
-        // check load auth, in new RBAC framework, create routine load will be checked in PrivilegeCheckerV2
-        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                                                                         createRoutineLoadStmt.getDBName(),
-                                                                         createRoutineLoadStmt.getTableName(),
-                                                                         PrivPredicate.LOAD)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
-                                                    ConnectContext.get().getQualifiedUser(),
-                                                    ConnectContext.get().getRemoteIP(),
-                                                    createRoutineLoadStmt.getDBName(),
-                                                    createRoutineLoadStmt.getTableName());
-            }
-        }
+    public void createRoutineLoadJob(CreateRoutineLoadStmt createRoutineLoadStmt) throws UserException {
         RoutineLoadJob routineLoadJob = null;
         LoadDataSourceType type = LoadDataSourceType.valueOf(createRoutineLoadStmt.getTypeName());
         switch (type) {
@@ -290,32 +282,12 @@ public class RoutineLoadManager implements Writable {
     }
 
     private RoutineLoadJob checkPrivAndGetJob(String dbName, String jobName)
-            throws MetaNotFoundException, DdlException, AnalysisException {
+            throws MetaNotFoundException, DdlException {
         RoutineLoadJob routineLoadJob = getJob(dbName, jobName);
         if (routineLoadJob == null) {
             throw new DdlException("There is not operable routine load job with name " + jobName);
         }
 
-        String dbFullName;
-        String tableName;
-        try {
-            dbFullName = routineLoadJob.getDbFullName();
-            tableName = routineLoadJob.getTableName();
-        } catch (MetaNotFoundException e) {
-            throw new DdlException("The metadata of job has been changed. The job will be cancelled automatically", e);
-        }
-        // check auth, in new RBAC framework, routine load statement will be checked in PrivilegeCheckerV2
-        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                    dbFullName,
-                    tableName,
-                    PrivPredicate.LOAD)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
-                        ConnectContext.get().getQualifiedUser(),
-                        ConnectContext.get().getRemoteIP(),
-                        tableName);
-            }
-        }
         return routineLoadJob;
     }
 
@@ -671,22 +643,20 @@ public class RoutineLoadManager implements Writable {
                 LOG.info("discard expired job [{}]", routineLoadJob.getId());
                 continue;
             }
-            idToRoutineLoadJob.put(routineLoadJob.getId(), routineLoadJob);
-            Map<String, List<RoutineLoadJob>> map = dbToNameToRoutineLoadJob.get(routineLoadJob.getDbId());
-            if (map == null) {
-                map = Maps.newConcurrentMap();
-                dbToNameToRoutineLoadJob.put(routineLoadJob.getDbId(), map);
-            }
 
-            List<RoutineLoadJob> jobs = map.get(routineLoadJob.getName());
-            if (jobs == null) {
-                jobs = Lists.newArrayList();
-                map.put(routineLoadJob.getName(), jobs);
-            }
-            jobs.add(routineLoadJob);
-            if (!routineLoadJob.getState().isFinalState()) {
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
-            }
+            putJob(routineLoadJob);
+        }
+    }
+
+    private void putJob(RoutineLoadJob routineLoadJob) {
+        idToRoutineLoadJob.put(routineLoadJob.getId(), routineLoadJob);
+        Map<String, List<RoutineLoadJob>> map =
+                dbToNameToRoutineLoadJob.computeIfAbsent(routineLoadJob.getDbId(), k -> Maps.newConcurrentMap());
+
+        List<RoutineLoadJob> jobs = map.computeIfAbsent(routineLoadJob.getName(), k -> Lists.newArrayList());
+        jobs.add(routineLoadJob);
+        if (!routineLoadJob.getState().isFinalState()) {
+            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
         }
     }
 
@@ -699,5 +669,36 @@ public class RoutineLoadManager implements Writable {
     public long saveRoutineLoadJobs(DataOutputStream dos, long checksum) throws IOException {
         write(dos);
         return checksum;
+    }
+
+    public void saveRoutineLoadJobsV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        final int cnt = 1 + idToRoutineLoadJob.size();
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, RoutineLoadManager.class.getName(), cnt);
+        writer.writeJson(idToRoutineLoadJob.size());
+        for (RoutineLoadJob loadJob : idToRoutineLoadJob.values()) {
+            writer.writeJson(loadJob);
+        }
+        writer.close();
+    }
+
+    public void loadRoutineLoadJobsV2(DataInputStream dis) throws IOException,
+            SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, RoutineLoadManager.class.getName());
+
+        try {
+            int size = reader.readInt();
+            while (size-- > 0) {
+                RoutineLoadJob routineLoadJob = reader.readJson(RoutineLoadJob.class);
+
+                if (routineLoadJob.needRemove()) {
+                    LOG.info("discard expired job [{}]", routineLoadJob.getId());
+                    continue;
+                }
+
+                putJob(routineLoadJob);
+            }
+        } finally {
+            reader.close();
+        }
     }
 }

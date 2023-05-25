@@ -403,6 +403,13 @@ WorkGroupPtr WorkGroupManager::get_default_workgroup() {
     return _workgroups[unique_id];
 }
 
+WorkGroupPtr WorkGroupManager::get_default_mv_workgroup() {
+    std::shared_lock read_lock(_mutex);
+    auto unique_id = WorkGroup::create_unique_id(WorkGroup::DEFAULT_MV_VERSION, WorkGroup::DEFAULT_MV_WG_ID);
+    DCHECK(_workgroups.count(unique_id));
+    return _workgroups[unique_id];
+}
+
 void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     std::unique_lock write_lock(_mutex);
 
@@ -545,6 +552,13 @@ DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
     auto default_wg = std::make_shared<WorkGroup>("default_wg", WorkGroup::DEFAULT_WG_ID, WorkGroup::DEFAULT_VERSION,
                                                   cpu_limit, memory_limit, 0, WorkGroupType::WG_DEFAULT);
     WorkGroupManager::instance()->add_workgroup(default_wg);
+
+    int64_t mv_cpu_limit = 1;
+    double mv_memory_limit = 0.8;
+    auto default_mv_wg =
+            std::make_shared<WorkGroup>("default_mv_wg", WorkGroup::DEFAULT_MV_WG_ID, WorkGroup::DEFAULT_MV_VERSION,
+                                        mv_cpu_limit, mv_memory_limit, 0, WorkGroupType::WG_MV);
+    WorkGroupManager::instance()->add_workgroup(default_mv_wg);
 }
 
 } // namespace starrocks::workgroup

@@ -42,7 +42,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.google.gson.annotations.SerializedName;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -105,7 +104,6 @@ import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
@@ -145,6 +143,10 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
@@ -249,7 +251,6 @@ import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 public class LocalMetastore implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(LocalMetastore.class);
 
-    @SerializedName(value = "d")
     private final ConcurrentHashMap<Long, Database> idToDb = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Database> fullNameToDb = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Long> tableIdToIncrementId = new ConcurrentHashMap<>();
@@ -2961,6 +2962,16 @@ public class LocalMetastore implements ConnectorMetadata {
                         .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb.toString());
                 materializedView.getTableProperty().setExcludedTriggerTables(tables);
             }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
+                String resourceGroup = PropertyAnalyzer.analyzeResourceGroup(properties);
+                if (GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(resourceGroup) == null) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP
+                            + " " + resourceGroup + " does not exist.");
+                }
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP, resourceGroup);
+                materializedView.getTableProperty().setResourceGroup(resourceGroup);
+            }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
                 boolean forceExternalTableQueryReWrite = PropertyAnalyzer.
                         analyzeForceExternalTableQueryRewrite(properties);
@@ -3073,14 +3084,12 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
         if (table instanceof MaterializedView) {
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkMaterializedViewAction(ConnectContext.get(),
-                        stmt.getDbName(),
-                        stmt.getMvName(),
-                        PrivilegeType.DROP)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                            "DROP MATERIALIZED VIEW");
-                }
+            if (!PrivilegeActions.checkMaterializedViewAction(ConnectContext.get(),
+                    stmt.getDbName(),
+                    stmt.getMvName(),
+                    PrivilegeType.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "DROP MATERIALIZED VIEW");
             }
 
             MaterializedView view = (MaterializedView) table;
@@ -3891,14 +3900,6 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public long loadCluster(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() <= StarRocksFEMetaVersion.VERSION_3) {
-            return loadClusterV1(dis, checksum);
-        } else {
-            return loadClusterV2(dis, checksum);
-        }
-    }
-
-    public long loadClusterV1(DataInputStream dis, long checksum) throws IOException {
         int clusterCount = dis.readInt();
         checksum ^= clusterCount;
         for (long i = 0; i < clusterCount; ++i) {
@@ -3945,28 +3946,6 @@ public class LocalMetastore implements ConnectorMetadata {
             defaultCluster = cluster;
         }
         LOG.info("finished replay cluster from image");
-        return checksum;
-    }
-
-    // put built-in database into cluster
-    public long loadClusterV2(DataInputStream dis, long checksum) throws IOException {
-        InfoSchemaDb infoSchemaDb = new InfoSchemaDb();
-        Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
-                "InfoSchemaDb id shouldn't larger than " + NEXT_ID_INIT_VALUE);
-        idToDb.put(infoSchemaDb.getId(), infoSchemaDb);
-        fullNameToDb.put(infoSchemaDb.getFullName(), infoSchemaDb);
-
-        if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
-            LOG.warn("Since the the database of starrocks already exists, " +
-                    "the system will not automatically create the database of starrocks for system.");
-        } else {
-            StarRocksDb starRocksDb = new StarRocksDb();
-            Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
-                    "starocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
-            idToDb.put(starRocksDb.getId(), starRocksDb);
-            fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
-        }
-
         return checksum;
     }
 
@@ -4706,6 +4685,71 @@ public class LocalMetastore implements ConnectorMetadata {
         Long oldId = tableIdToIncrementId.putIfAbsent(tableId, id);
         if (oldId != null) {
             tableIdToIncrementId.replace(tableId, id);
+        }
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        // Don't write system db meta
+        Map<Long, Database> idToDbNormal = idToDb.entrySet().stream().filter(entry -> entry.getKey() > NEXT_ID_INIT_VALUE)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        int cnt = 1 + idToDbNormal.size() + 1;
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, LocalMetastore.class.getName(), cnt);
+
+        writer.writeJson(idToDbNormal.size());
+        for (Database database : idToDbNormal.values()) {
+            writer.writeJson(database);
+        }
+
+        AutoIncrementInfo info = new AutoIncrementInfo(tableIdToIncrementId);
+        writer.writeJson(info);
+
+        writer.close();
+    }
+
+    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, LocalMetastore.class.getName());
+        try {
+            int dbSize = reader.readJson(int.class);
+            for (int i = 0; i < dbSize; ++i) {
+                Database db = reader.readJson(Database.class);
+
+                idToDb.put(db.getId(), db);
+                fullNameToDb.put(db.getFullName(), db);
+                stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
+                db.getMaterializedViews().forEach(Table::onCreate);
+                db.getHiveTables().forEach(Table::onCreate);
+            }
+
+
+            // put built-in database into local metastore
+            InfoSchemaDb infoSchemaDb = new InfoSchemaDb();
+            Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
+                    "InfoSchemaDb id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+            idToDb.put(infoSchemaDb.getId(), infoSchemaDb);
+            fullNameToDb.put(infoSchemaDb.getFullName(), infoSchemaDb);
+
+            if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
+                LOG.warn("Since the the database of starrocks already exists, " +
+                        "the system will not automatically create the database of starrocks for system.");
+            } else {
+                StarRocksDb starRocksDb = new StarRocksDb();
+                Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
+                        "starocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+                idToDb.put(starRocksDb.getId(), starRocksDb);
+                fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
+            }
+
+            AutoIncrementInfo autoIncrementInfo = reader.readJson(AutoIncrementInfo.class);
+            for (Map.Entry<Long, Long> entry : autoIncrementInfo.tableIdToIncrementId().entrySet()) {
+                Long tableId = entry.getKey();
+                Long id = entry.getValue();
+
+                tableIdToIncrementId.put(tableId, id);
+            }
+
+        } finally {
+            reader.close();
         }
     }
 }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.service;
 
 import com.google.common.base.Joiner;
@@ -34,7 +33,6 @@ import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -59,7 +57,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-
 public class InformationSchemaDataSource {
 
     private static final Logger LOG = LogManager.getLogger(InformationSchemaDataSource.class);
@@ -71,7 +68,6 @@ public class InformationSchemaDataSource {
 
     @NotNull
     private static AuthDbRequestResult getAuthDbRequestResult(TAuthInfo authInfo) throws TException {
-
 
         List<String> authorizedDbs = Lists.newArrayList();
         PatternMatcher matcher = null;
@@ -95,14 +91,8 @@ public class InformationSchemaDataSource {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
         }
         for (String fullName : dbNames) {
-            if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
-                    continue;
-                }
-            } else {
-                if (!globalStateMgr.getAuth().checkDbPriv(currentUser, fullName, PrivPredicate.SHOW)) {
-                    continue;
-                }
+            if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
+                continue;
             }
 
             final String db1 = ClusterNamespace.getNameFromFullName(fullName);
@@ -124,7 +114,6 @@ public class InformationSchemaDataSource {
         }
     }
 
-
     // tables_config
     public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request)
             throws TException {
@@ -142,13 +131,8 @@ public class InformationSchemaDataSource {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
 
-                        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                            // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
-                            if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
-                                continue;
-                            }
-                        } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(result.currentUser, dbName,
-                                table.getName(), PrivPredicate.SHOW)) {
+                        // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
+                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
                             continue;
                         }
 
@@ -175,8 +159,6 @@ public class InformationSchemaDataSource {
         resp.tables_config_infos = tList;
         return resp;
     }
-
-
 
     private static Map<String, String> genProps(Table table) {
         if (table.isMaterializedView()) {
@@ -298,6 +280,7 @@ public class InformationSchemaDataSource {
             tableConfigInfo.setSort_key(Joiner.on(", ").join(sortKeysColumnNames));
         }
         tableConfigInfo.setProperties(new Gson().toJson(genProps(table)));
+        tableConfigInfo.setTable_id(table.getId());
         return tableConfigInfo;
     }
 
@@ -317,13 +300,8 @@ public class InformationSchemaDataSource {
                     List<Table> allTables = db.getTables();
                     for (Table table : allTables) {
 
-                        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                            // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
-                            if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
-                                continue;
-                            }
-                        } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(result.currentUser, dbName,
-                                table.getName(), PrivPredicate.SHOW)) {
+                        // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
+                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table)) {
                             continue;
                         }
 

@@ -78,7 +78,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.delete.LakeDeleteJob;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -86,7 +85,6 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.RangePartitionPruner;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -660,15 +658,6 @@ public class DeleteMgr implements Writable {
             }
 
             for (MultiDeleteInfo deleteInfo : deleteInfos) {
-
-                if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbName,
-                            deleteInfo.getTableName(),
-                            PrivPredicate.LOAD)) {
-                        continue;
-                    }
-                }
-
                 List<Comparable> info = Lists.newArrayList();
                 info.add(deleteInfo.getTableName());
                 if (deleteInfo.isNoPartitionSpecified()) {

@@ -178,7 +178,6 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
@@ -1226,6 +1225,8 @@ public class GlobalStateMgr {
                 initDefaultWarehouse();
             }
 
+            updateDefaultWarehouse();
+
             MetricRepo.init();
 
             isReady.set(true);
@@ -1382,6 +1383,12 @@ public class GlobalStateMgr {
 
         startAllNodeTypeDaemonThreads();
 
+        if (!isDefaultWarehouseCreated) {
+            initDefaultWarehouse();
+        }
+
+        updateDefaultWarehouse();
+
         MetricRepo.init();
 
         feType = newType;
@@ -1417,6 +1424,8 @@ public class GlobalStateMgr {
                     deleteHandler.load(dis);
                     analyzeManager.load(dis);
                     resourceGroupMgr.load(dis);
+                    routineLoadManager.loadRoutineLoadJobsV2(dis);
+                    globalTransactionMgr.loadTransactionStateV2(dis);
                 } catch (SRMetaBlockException | SRMetaBlockEOFException e) {
                     LOG.error("load image failed", e);
                     throw new IOException("load image failed", e);
@@ -1431,17 +1440,13 @@ public class GlobalStateMgr {
                 starRocksRepository.loadTableFromCatalog();
                 checksum = recycleBin.loadRecycleBin(dis, checksum);
                 checksum = VariableMgr.loadGlobalVariable(dis, checksum);
-                checksum = localMetastore.loadCluster(dis, checksum);
                 checksum = loadResources(dis, checksum);
                 checksum = exportMgr.loadExportJob(dis, checksum);
                 checksum = backupHandler.loadBackupHandler(dis, checksum, this);
                 checksum = auth.loadAuth(dis, checksum);
                 // global transaction must be replayed before load jobs v2
-                checksum = globalTransactionMgr.loadTransactionState(dis, checksum);
                 checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
-                checksum = routineLoadManager.loadRoutineLoadJobs(dis, checksum);
                 checksum = smallFileMgr.loadSmallFiles(dis, checksum);
-
                 checksum = auth.readAsGson(dis, checksum);
                 remoteChecksum = dis.readLong();
                 checksum = taskManager.loadTasks(dis, checksum);
@@ -1463,8 +1468,6 @@ public class GlobalStateMgr {
                 globalFunctionMgr.loadGlobalFunctions(dis, checksum);
                 loadRBACPrivilege(dis);
                 checksum = warehouseMgr.loadWarehouses(dis, checksum);
-                remoteChecksum = dis.readLong();
-                checksum = localMetastore.loadAutoIncrementId(dis, checksum);
                 remoteChecksum = dis.readLong();
                 // ** NOTICE **: always add new code at the end
             } else {
@@ -1809,29 +1812,29 @@ public class GlobalStateMgr {
                 try {
                     checksum = saveHeaderV2(dos, checksum);
                     nodeMgr.save(dos);
+                    localMetastore.save(dos);
                     loadManager.saveLoadJobsV2JsonFormat(dos);
                     alterJobMgr.save(dos);
                     pluginMgr.save(dos);
                     deleteHandler.save(dos);
                     analyzeManager.save(dos);
                     resourceGroupMgr.save(dos);
+                    routineLoadManager.saveRoutineLoadJobsV2(dos);
+                    globalTransactionMgr.saveTransactionStateV2(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("save image failed", e);
                     throw new IOException("save image failed", e);
                 }
 
                 //TODO: The following parts have not been refactored, and they are added for the convenience of testing
-                checksum = localMetastore.saveDb(dos, checksum);
+
                 checksum = recycleBin.saveRecycleBin(dos, checksum);
                 checksum = VariableMgr.saveGlobalVariable(dos, checksum);
-                checksum = localMetastore.saveCluster(dos, checksum);
                 checksum = resourceMgr.saveResources(dos, checksum);
                 checksum = exportMgr.saveExportJob(dos, checksum);
                 checksum = backupHandler.saveBackupHandler(dos, checksum);
                 checksum = auth.saveAuth(dos, checksum);
-                checksum = globalTransactionMgr.saveTransactionState(dos, checksum);
                 checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
-                checksum = routineLoadManager.saveRoutineLoadJobs(dos, checksum);
                 checksum = smallFileMgr.saveSmallFiles(dos, checksum);
 
                 checksum = auth.writeAsGson(dos, checksum);
@@ -1854,8 +1857,6 @@ public class GlobalStateMgr {
                 globalFunctionMgr.saveGlobalFunctions(dos, checksum);
                 saveRBACPrivilege(dos);
                 checksum = warehouseMgr.saveWarehouses(dos, checksum);
-                dos.writeLong(checksum);
-                checksum = localMetastore.saveAutoIncrementId(dos, checksum);
                 dos.writeLong(checksum);
                 // ** NOTICE **: always add new code at the end
             } else {
@@ -3439,7 +3440,7 @@ public class GlobalStateMgr {
         if (!catalogMgr.catalogExists(newCatalogName)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
-        if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
+        if (!CatalogMgr.isInternalCatalog(newCatalogName) &&
                 !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
         }
@@ -3466,7 +3467,7 @@ public class GlobalStateMgr {
             if (!catalogMgr.catalogExists(newCatalogName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
             }
-            if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
+            if (!CatalogMgr.isInternalCatalog(newCatalogName) &&
                     !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
             }
@@ -3481,16 +3482,9 @@ public class GlobalStateMgr {
 
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeCheckerV2.
-        if (isUsingNewPrivilege()) {
-            if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, ctx.getCurrentCatalog(), dbName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                        ctx.getQualifiedUser(), dbName);
-            }
-        } else {
-            if (!auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                        ctx.getQualifiedUser(), dbName);
-            }
+        if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, ctx.getCurrentCatalog(), dbName)) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                    ctx.getQualifiedUser(), dbName);
         }
 
         ctx.setDatabase(dbName);
@@ -3644,6 +3638,10 @@ public class GlobalStateMgr {
     public void initDefaultWarehouse() {
         warehouseMgr.initDefaultWarehouse();
         isDefaultWarehouseCreated = true;
+    }
+
+    public void updateDefaultWarehouse() {
+        warehouseMgr.updateDefaultWarehouse();
     }
 
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
