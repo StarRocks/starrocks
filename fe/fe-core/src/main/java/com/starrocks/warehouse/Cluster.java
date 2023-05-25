@@ -30,10 +30,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 public class Cluster implements Writable {
     private static final Logger LOG = LogManager.getLogger(Cluster.class);
@@ -42,8 +39,6 @@ public class Cluster implements Writable {
     private long id;
     @SerializedName(value = "wgid")
     private long workerGroupId;
-
-    private Set<Long> computeNodeIds = new HashSet<>();
 
     public Cluster(long id) {
         this.id = id;
@@ -73,21 +68,12 @@ public class Cluster implements Writable {
                 String.valueOf(this.getRunningSqls())));
     }
 
-    public void addNode(long cnId) {
-        computeNodeIds.add(cnId);
-    }
-
-    public void dropNode(long cnId) {
-        computeNodeIds.remove(cnId);
-    }
-
     public List<Long> getComputeNodeIds() {
         // ask starMgr for node lists
         List<Long> nodeIds = new ArrayList<>();
         try {
             nodeIds = GlobalStateMgr.getCurrentStarOSAgent().
                     getWorkersByWorkerGroup(workerGroupId);
-            computeNodeIds = nodeIds.stream().collect(Collectors.toSet());
         } catch (UserException e) {
             LOG.info(e);
         }
