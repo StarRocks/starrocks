@@ -38,9 +38,9 @@ import java.util.Map;
 //   "password" = "password0"
 // )
 public class BrokerDesc implements Writable {
-    @SerializedName("name")
+    @SerializedName("n")
     private String name;
-    @SerializedName("properties")
+    @SerializedName("p")
     private Map<String, String> properties;
     private boolean hasBroker;
 

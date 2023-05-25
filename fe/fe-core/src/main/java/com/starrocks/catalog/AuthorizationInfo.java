@@ -40,9 +40,9 @@ import java.util.Set;
  * The job checks the priv by auth info.
  */
 public class AuthorizationInfo implements Writable {
-    @SerializedName("dbName")
+    @SerializedName("d")
     private String dbName;
-    @SerializedName("tableNameList")
+    @SerializedName("t")
     private Set<String> tableNameList;
 
     // only for persist

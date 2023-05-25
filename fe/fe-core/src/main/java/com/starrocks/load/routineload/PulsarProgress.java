@@ -18,6 +18,7 @@ package com.starrocks.load.routineload;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DebugUtil;
@@ -42,6 +43,7 @@ public class PulsarProgress extends RoutineLoadProgress {
     private static final Logger LOG = LogManager.getLogger(PulsarProgress.class);
 
     // (partition, backlog num)
+    @SerializedName("pbl")
     private Map<String, Long> partitionToBacklogNum = Maps.newConcurrentMap();
     // Initial positions will only be used at first schedule
     private Map<String, Long> partitionToInitialPosition = Maps.newConcurrentMap();
