@@ -408,7 +408,7 @@ else
 fi
 
 cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.9.379" ]; then
+if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.10.36" ]; then
     if [ ! -f prefetch_crt_dep_ok ]; then
         bash ./prefetch_crt_dependency.sh
         touch prefetch_crt_dep_ok
