@@ -305,9 +305,11 @@ public class FunctionAnalyzer {
                 throw new SemanticException(fnName + " function could only have one child");
             }
             Type inputType = functionCallExpr.getChild(0).getType();
-            if (!inputType.isIntegerType() && !inputType.isBoolean() && !inputType.isLargeIntType()) {
+            if (!inputType.isIntegerType() && !inputType.isBoolean() && !inputType.isLargeIntType()
+                    && !inputType.isStringType()) {
                 throw new SemanticException(
-                        fnName + " function's argument should be of int type or bool type, but was " + inputType);
+                        fnName + " function's argument should be of int type or bool type or string type, but was "
+                                + inputType);
             }
             return;
         }
