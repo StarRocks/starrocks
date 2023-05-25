@@ -273,7 +273,7 @@ public class ConstantExpressionTest extends PlanTestBase {
                         "  |  <slot 9> : '/starrocks/share/english/'\n" +
                         "  |  <slot 10> : 'Elastic License 2.0'\n" +
                         "  |  <slot 11> : 0\n" +
-                        "  |  <slot 12> : 1048576\n" +
+                        "  |  <slot 12> : 33554432\n" +
                         "  |  <slot 13> : 16384\n" +
                         "  |  <slot 14> : 60\n" +
                         "  |  <slot 15> : 1048576\n" +

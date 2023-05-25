@@ -54,6 +54,7 @@ import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AlterLoadJobOperationLog;
+import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
@@ -289,6 +290,10 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_RENAME_MATERIALIZED_VIEW:
                 data = RenameMaterializedViewLog.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS:
+                data = AlterMaterializedViewStatusLog.read(in);
                 isRead = true;
                 break;
             case OperationType.OP_BACKUP_JOB: {

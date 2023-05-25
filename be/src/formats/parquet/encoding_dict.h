@@ -114,6 +114,7 @@ public:
         data_column->resize_uninitialized(cur_size + count);
         T* __restrict__ data = data_column->get_data().data() + cur_size;
         for (int i = 0; i < count; i++) {
+            RETURN_IF_ERROR(check_dict_index_in_bounds(_indexes[i], _dict.size()));
             data[i] = _dict[_indexes[i]];
         }
         return Status::OK();
@@ -212,6 +213,7 @@ public:
         case VALUE: {
             raw::stl_vector_resize_uninitialized(&_slices, count);
             for (int i = 0; i < count; ++i) {
+                RETURN_IF_ERROR(check_dict_index_in_bounds(_indexes[i], _dict.size()));
                 _slices[i] = _dict[_indexes[i]];
             }
             [[maybe_unused]] auto ret = dst->append_strings_overflow(_slices, _max_value_length);

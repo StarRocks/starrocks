@@ -65,6 +65,7 @@ statement
 
     // Task Statement
     | submitTaskStatement
+    | dropTaskStatement
 
     // Materialized View Statement
     | createMaterializedViewStatement
@@ -488,6 +489,10 @@ submitTaskStatement
     AS createTableAsSelectStatement
     ;
 
+dropTaskStatement
+    : DROP TASK qualifiedName
+    ;
+
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
 
 createMaterializedViewStatement
@@ -514,6 +519,7 @@ dropMaterializedViewStatement
 
 alterMaterializedViewStatement
     : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause | modifyTablePropertiesClause)
+    | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
     ;
 
 refreshMaterializedViewStatement
@@ -1970,6 +1976,11 @@ refreshSchemeDesc
     | MANUAL)
     ;
 
+statusDesc
+    : ACTIVE
+    | INACTIVE
+    ;
+
 properties
     : PROPERTIES '(' property (',' property)* ')'
     ;
@@ -2145,7 +2156,7 @@ authOption
     ;
 
 nonReserved
-    : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
+    : ACTIVE | AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
     | CAST | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
     | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
@@ -2154,7 +2165,7 @@ nonReserved
     | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR | HUB
-    | IDENTIFIED | IMAGE | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
+    | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL | LOW_PRIORITY | LOCK
     | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
