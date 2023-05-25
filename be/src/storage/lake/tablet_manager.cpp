@@ -865,6 +865,15 @@ void TabletManager::start_gc() {
     PLOG_IF(FATAL, r != 0) << "Fail to call bthread_start_background";
 }
 
+void TabletManager::update_metacache_limit(size_t new_capacity) {
+    size_t old_capacity = _metacache->get_capacity();
+    int64_t delta = (int64_t)new_capacity - (int64_t)old_capacity;
+    if (delta != 0) {
+        (void)_metacache->adjust_capacity(delta);
+        VLOG(5) << "Changed metadache capacity from " << old_capacity << " to " << _metacache->get_capacity();
+    }
+}
+
 static void metadata_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots, int64_t min_active_txn_id) {
     auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
     auto num_running = std::atomic<int>(roots.size());
