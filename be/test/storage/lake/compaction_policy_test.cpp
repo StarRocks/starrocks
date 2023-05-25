@@ -238,6 +238,34 @@ TEST_F(CompactionPolicyTest, test_size_tiered_max_compaction) {
     }
 }
 
+// 6 rowsets in level 2
+// config::max_cumulative_compaction_num_singleton_deltas = 5
+//
+// rowsets:      [1, 2, 3, 4, 5, 6]
+// rowsets size: [327680, 327680, 327680, 327680, 327680, 327680]
+// compaction input rowsets: [1, 2, 3, 4, 5]
+TEST_F(CompactionPolicyTest, test_size_tiered_max_compaction_by_max_singleton_deltas_config) {
+    config::enable_size_tiered_compaction_strategy = true;
+    config::max_cumulative_compaction_num_singleton_deltas = 5;
+
+    for (int i = 1; i < 7; ++i) {
+        add_data_rowset(i, false, 2);
+    }
+
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    auto tablet_ptr = std::make_shared<Tablet>(tablet);
+    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
+    ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
+    // compaction input rowsets: [1, 2, 3, 4, 5]
+    ASSERT_EQ(5, input_rowsets.size());
+    for (int i = 0; i < input_rowsets.size(); ++i) {
+        EXPECT_EQ(i + 1, input_rowsets[i]->id());
+    }
+}
+
 // 2 data rowsets, 1 delete rowset middle
 //
 // rowsets:      [1, 2, 3]
