@@ -50,8 +50,13 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 
@@ -69,7 +74,7 @@ import static com.starrocks.common.util.DateUtils.DATE_TIME_FORMATTER;
 /**
  * This class represents the column-related metadata.
  */
-public class Column implements Writable {
+public class Column implements Writable, GsonPreProcessable, GsonPostProcessable {
 
     public static final String CAN_NOT_CHANGE_DEFAULT_VALUE = "Can not change default value";
 
@@ -695,6 +700,21 @@ public class Column implements Writable {
         } else {
             String json = Text.readString(in);
             return GsonUtils.GSON.fromJson(json, Column.class);
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (generatedColumnExprSerialized != null && generatedColumnExprSerialized.expressionSql != null) {
+            materializedColumnExpr = SqlParser.parseSqlToExpr(generatedColumnExprSerialized.expressionSql,
+                    SqlModeHelper.MODE_DEFAULT);
+        }
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        if (materializedColumnExpr != null) {
+            generatedColumnExprSerialized = new GsonUtils.ExpressionSerializedObject(materializedColumnExpr.toSql());
         }
     }
 }
