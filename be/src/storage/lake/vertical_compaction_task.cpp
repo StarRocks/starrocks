@@ -30,7 +30,10 @@
 
 namespace starrocks::lake {
 
-Status VerticalCompactionTask::execute(Progress* progress) {
+Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_func) {
+    if (progress == nullptr) {
+        return Status::InvalidArgument("progress is null");
+    }
     ASSIGN_OR_RETURN(_tablet_schema, _tablet->get_schema());
     for (auto& rowset : _input_rowsets) {
         _total_num_rows += rowset->num_rows();
@@ -68,8 +71,13 @@ Status VerticalCompactionTask::execute(Progress* progress) {
             mask_buffer->flip_to_read();
         }
         RETURN_IF_ERROR(compact_column_group(is_key, i, column_group_size, column_groups[i], writer, mask_buffer.get(),
-                                             source_masks.get(), progress));
+                                             source_masks.get(), progress, cancel_func));
     }
+    // Adjust the progress here for 2 reasons:
+    // 1. For primary key, due to the existence of the delete vector, the number of rows read may be less than the
+    //    number of rows counted in the metadata.
+    // 2. If the number of rows is 0, the progress will not be updated
+    progress->update(100);
 
     RETURN_IF_ERROR(writer->finish());
 
@@ -118,7 +126,8 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                                     const std::vector<uint32_t>& column_group,
                                                     std::unique_ptr<TabletWriter>& writer,
                                                     RowSourceMaskBuffer* mask_buffer,
-                                                    std::vector<RowSourceMask>* source_masks, Progress* progress) {
+                                                    std::vector<RowSourceMask>* source_masks, Progress* progress,
+                                                    const CancelFunc& cancel_func) {
     ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size_for_column_group(column_group));
 
     Schema schema = ChunkHelper::convert_schema(*_tablet_schema, column_group);
@@ -141,6 +150,9 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
             return Status::Cancelled("background worker stopped");
         }
+        if (cancel_func()) {
+            return Status::Cancelled("cancelled");
+        }
 #ifndef BE_TEST
         RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
 #endif
@@ -149,6 +161,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
         } else if (!st.ok()) {
             return st;
         }
+
         ChunkHelper::padding_char_columns(char_field_indexes, schema, *_tablet_schema, chunk.get());
         RETURN_IF_ERROR(writer->write_columns(*chunk, column_group, is_key));
         chunk->reset();
@@ -160,13 +173,10 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
             source_masks->clear();
         }
 
-        if (progress != nullptr) {
-            progress->update((100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
-                             column_group_size);
-            VLOG_EVERY_N(3, 1000) << "Compaction progress: " << progress->value();
-        }
+        progress->update((100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
+                         column_group_size);
+        VLOG_EVERY_N(3, 1000) << "Compaction progress: " << progress->value();
     }
-
     RETURN_IF_ERROR(writer->flush_columns());
 
     if (is_key) {

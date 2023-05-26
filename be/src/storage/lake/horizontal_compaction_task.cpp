@@ -28,7 +28,10 @@
 
 namespace starrocks::lake {
 
-Status HorizontalCompactionTask::execute(Progress* progress) {
+Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_func) {
+    if (progress == nullptr) {
+        return Status::InvalidArgument("progress is null");
+    }
     ASSIGN_OR_RETURN(auto tablet_schema, _tablet->get_schema());
     int64_t total_num_rows = 0;
     for (auto& rowset : _input_rowsets) {
@@ -60,6 +63,9 @@ Status HorizontalCompactionTask::execute(Progress* progress) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
             return Status::Cancelled("background worker stopped");
         }
+        if (cancel_func()) {
+            return Status::Cancelled("cancelled");
+        }
 #ifndef BE_TEST
         RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
 #endif
@@ -72,11 +78,13 @@ Status HorizontalCompactionTask::execute(Progress* progress) {
         RETURN_IF_ERROR(writer->write(*chunk));
         chunk->reset();
 
-        if (progress != nullptr) {
-            progress->update(100 * reader.stats().raw_rows_read / total_num_rows);
-            VLOG_EVERY_N(3, 1000) << "Compaction progress: " << progress->value();
-        }
+        progress->update(100 * reader.stats().raw_rows_read / total_num_rows);
+        VLOG_EVERY_N(3, 1000) << "Compaction progress: " << progress->value();
     }
+    // Adjust the progress here for 2 reasons:
+    // 1. For primary key, due to the existence of the delete vector, the rows read may be less than "total_num_rows"
+    // 2. If the "total_num_rows" is 0, the progress will not be updated above
+    progress->update(100);
     RETURN_IF_ERROR(writer->finish());
 
     auto txn_log = std::make_shared<TxnLog>();

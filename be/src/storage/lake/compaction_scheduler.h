@@ -57,6 +57,11 @@ public:
 
     void finish_task(std::unique_ptr<CompactionTaskContext>&& context);
 
+    bool has_error() const {
+        std::lock_guard l(_mtx);
+        return !_status.ok();
+    }
+
 private:
     CompactionScheduler* _scheduler;
     mutable bthread::Mutex _mtx;

@@ -201,7 +201,8 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     } else {
         auto task_or = _tablet_mgr->compact(tablet_id, version, txn_id);
         if (task_or.ok()) {
-            status.update(task_or.value()->execute(&context->progress));
+            auto should_cancel = [&]() { return context->callback->has_error(); };
+            status.update(task_or.value()->execute(&context->progress, std::move(should_cancel)));
         } else {
             status.update(task_or.status());
         }
