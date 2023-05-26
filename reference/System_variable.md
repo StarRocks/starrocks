@@ -56,6 +56,7 @@ SET GLOBAL query_mem_limit = 137438953472;
 * vectorized_engine_enable (2.4 版本开始弃用)
 * wait_timeout
 * sql_dialect
+* enable_tablet_internal_parallel
 
 只支持全局生效的变量包括：
 
@@ -487,3 +488,6 @@ SELECT /*+ SET_VAR
   
   设置进行 Range 分区裁剪时，最多能使用的 IN 谓词的个数，默认值：100。如果超过该值，会扫描全部 tablet，降低查询性能。
   
+  * enable_tablet_internal_parallel
+
+  是否开启自适应 Tablet 并行扫描，使用多个线程并行分段扫描一个 Tablet，可以减少 Tablet 数量对查询能力的限制。默认值为 `true`。自 2.4 版本起，StarRocks 支持该参数。
