@@ -67,7 +67,22 @@ public class AnalyzeArrayTest {
 
         analyzeFail("select element_at([3,2])");
         analyzeFail("select element_at(1,[3,2])");
+<<<<<<< HEAD
         analyzeFail("select array_concat([])");
+=======
+        analyzeSuccess("select array_concat([])");
+        analyzeSuccess("select array_concat([1,2,3])");
+
+        analyzeSuccess("select array_generate(9)");
+        analyzeSuccess("select array_generate(1,9999999999999999)");
+        analyzeSuccess("select array_generate(1,9999999999999999, 10000)");
+        analyzeSuccess("select array_generate(1,NULL,1)");
+        analyzeSuccess("select array_generate(1,NULL)");
+        analyzeFail("select array_generate()");
+        analyzeFail("select array_generate('c')");
+        analyzeFail("select array_generate(a,b) from t");
+
+>>>>>>> ea7746f9c ([Enhancement] Support one param for array_concat (#24164))
     }
 
     @Test
