@@ -55,6 +55,7 @@ SET GLOBAL exec_mem_limit = 137438953472;
 * use_compute_nodes
 * vectorized_engine_enable (2.4 版本开始弃用)
 * wait_timeout
+* enable_tablet_internal_parallel
 
 只支持全局生效的变量包括：
 
@@ -473,3 +474,7 @@ SELECT /*+ SET_VAR
 * runtime_join_filter_push_down_limit
 
   生成 Bloomfilter 类型的 Local RF 的 Hash Table 的行数阈值。超过该阈值, 则不产生 Local RF。该变量避免产生过大 Local RF。取值为整数，表示行数。默认值：1024000。
+  
+  * enable_tablet_internal_parallel
+
+  是否开启自适应 Tablet 并行扫描，使用多个线程并行分段扫描一个 Tablet，可以减少 Tablet 数量对查询能力的限制。默认值为 `true`。自 2.4 版本起，StarRocks 支持该参数。
