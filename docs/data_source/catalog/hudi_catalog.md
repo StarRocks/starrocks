@@ -11,7 +11,8 @@ To ensure successful SQL workloads on your Hudi cluster, your StarRocks cluster 
 
 ## Usage notes
 
-The file format of Hudi that StarRocks supports is Parquet. Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
+- The file format of Hudi that StarRocks supports is Parquet. Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
+- StarRocks provides complete support for Copy On Write（COW）tables and Merge On Read（MOR）tables from Hudi.
 
 ## Integration preparations
 

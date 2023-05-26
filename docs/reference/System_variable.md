@@ -298,7 +298,7 @@ SELECT /*+ SET_VAR
 
 * max_allowed_packet
 
-  Used for compatibility with the JDBC connection pool C3P0. No practical usage.
+  Used for compatibility with the JDBC connection pool C3P0. This parameter specifies the maximum size of packets that can be transmitted between the client and server. Default value: 32 MB. You can raise this value if the client reports "PacketTooBigException".
 
 * max_pushdown_conditions_per_column
 
