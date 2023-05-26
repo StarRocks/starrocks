@@ -14,13 +14,13 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -70,7 +70,7 @@ public class ExternalDbTablePrivTest {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
-        AuthorizationManager authorizationManager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager();
+        AuthorizationMgr authorizationManager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr();
         starRocksAssert.getCtx().setRemoteIP("localhost");
         authorizationManager.initBuiltinRolesAndUsers();
         ctxToRoot();
@@ -136,8 +136,8 @@ public class ExternalDbTablePrivTest {
         CreateUserStmt createUserStmt =
                 (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
 
-        AuthenticationManager authenticationManager =
-                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationManager();
+        AuthenticationMgr authenticationManager =
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
         authenticationManager.createUser(createUserStmt);
         testUser = createUserStmt.getUserIdentity();
     }

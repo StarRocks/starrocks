@@ -45,7 +45,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
@@ -109,7 +109,7 @@ import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.privilege.ActionSet;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.CatalogPEntryObject;
 import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.ObjectType;
@@ -378,7 +378,7 @@ public class ShowExecutor {
 
     private void handleShowAuthentication() {
         final ShowAuthenticationStmt showAuthenticationStmt = (ShowAuthenticationStmt) stmt;
-        AuthenticationManager authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationManager();
+        AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
         List<List<String>> userAuthInfos = Lists.newArrayList();
 
         Map<UserIdentity, UserAuthenticationInfo> authenticationInfoMap = new HashMap<>();
@@ -1280,7 +1280,7 @@ public class ShowExecutor {
                 .map(Enum::name)
                 .collect(Collectors.toSet());
         List<List<Comparable>> loadInfos =
-                globalStateMgr.getLoadManager().getLoadJobInfosByDb(dbId, showStmt.getLabelValue(),
+                globalStateMgr.getLoadMgr().getLoadJobInfosByDb(dbId, showStmt.getLabelValue(),
                         showStmt.isAccurateMatch(),
                         statesValue);
 
@@ -1328,7 +1328,7 @@ public class ShowExecutor {
         // if job exists
         List<RoutineLoadJob> routineLoadJobList;
         try {
-            routineLoadJobList = GlobalStateMgr.getCurrentState().getRoutineLoadManager()
+            routineLoadJobList = GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
                     .getJob(showRoutineLoadStmt.getDbFullName(),
                             showRoutineLoadStmt.getName(),
                             showRoutineLoadStmt.isIncludeHistory());
@@ -1381,7 +1381,7 @@ public class ShowExecutor {
         RoutineLoadJob routineLoadJob;
         try {
             routineLoadJob =
-                    GlobalStateMgr.getCurrentState().getRoutineLoadManager()
+                    GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
                             .getJob(showRoutineLoadTaskStmt.getDbFullName(),
                                     showRoutineLoadTaskStmt.getJobName());
         } catch (MetaNotFoundException e) {
@@ -1464,7 +1464,7 @@ public class ShowExecutor {
         MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
         long dbId = db.getId();
 
-        DeleteMgr deleteHandler = globalStateMgr.getDeleteHandler();
+        DeleteMgr deleteHandler = globalStateMgr.getDeleteMgr();
         List<List<Comparable>> deleteInfos = deleteHandler.getDeleteInfosByDb(dbId);
         List<List<String>> rows = Lists.newArrayList();
         for (List<Comparable> deleteInfo : deleteInfos) {
@@ -2059,7 +2059,7 @@ public class ShowExecutor {
         }
     }
 
-    private List<List<String>> privilegeToRowString(AuthorizationManager authorizationManager, GrantRevokeClause userOrRoleName,
+    private List<List<String>> privilegeToRowString(AuthorizationMgr authorizationManager, GrantRevokeClause userOrRoleName,
                                                     Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>>
                                                             typeToPrivilegeEntryList) throws PrivilegeException {
         List<List<String>> infos = new ArrayList<>();
@@ -2103,7 +2103,7 @@ public class ShowExecutor {
     private void handleShowGrants() {
         ShowGrantsStmt showStmt = (ShowGrantsStmt) stmt;
 
-        AuthorizationManager authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+        AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
             List<List<String>> infos = new ArrayList<>();
             if (showStmt.getRole() != null) {
@@ -2138,7 +2138,7 @@ public class ShowExecutor {
 
 
         List<List<String>> infos = new ArrayList<>();
-        AuthorizationManager authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+        AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         List<String> roles = authorizationManager.getAllRoles();
         roles.forEach(e -> infos.add(Lists.newArrayList(e)));
 
@@ -2150,7 +2150,7 @@ public class ShowExecutor {
 
         ShowUserStmt showUserStmt = (ShowUserStmt) stmt;
         if (showUserStmt.isAll()) {
-            AuthorizationManager authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+            AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
             List<String> users = authorizationManager.getAllUsers();
             users.forEach(u -> rowSet.add(Lists.newArrayList(u)));
         } else {
@@ -2317,7 +2317,7 @@ public class ShowExecutor {
     }
 
     private void handleShowAnalyzeJob() {
-        List<AnalyzeJob> jobs = connectContext.getGlobalStateMgr().getAnalyzeManager().getAllAnalyzeJobList();
+        List<AnalyzeJob> jobs = connectContext.getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList();
         List<List<String>> rows = Lists.newArrayList();
         jobs.sort(Comparator.comparing(AnalyzeJob::getId));
         for (AnalyzeJob job : jobs) {
@@ -2335,7 +2335,7 @@ public class ShowExecutor {
     }
 
     private void handleShowAnalyzeStatus() {
-        List<AnalyzeStatus> statuses = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeManager()
+        List<AnalyzeStatus> statuses = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeMgr()
                 .getAnalyzeStatusMap().values());
         List<List<String>> rows = Lists.newArrayList();
         statuses.sort(Comparator.comparing(AnalyzeStatus::getId));
@@ -2354,7 +2354,7 @@ public class ShowExecutor {
     }
 
     private void handleShowBasicStatsMeta() {
-        List<BasicStatsMeta> metas = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeManager()
+        List<BasicStatsMeta> metas = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeMgr()
                 .getBasicStatsMetaMap().values());
         List<List<String>> rows = Lists.newArrayList();
         for (BasicStatsMeta meta : metas) {
@@ -2372,7 +2372,7 @@ public class ShowExecutor {
     }
 
     private void handleShowHistogramStatsMeta() {
-        List<HistogramStatsMeta> metas = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeManager()
+        List<HistogramStatsMeta> metas = new ArrayList<>(connectContext.getGlobalStateMgr().getAnalyzeMgr()
                 .getHistogramStatsMetaMap().values());
         List<List<String>> rows = Lists.newArrayList();
         for (HistogramStatsMeta meta : metas) {

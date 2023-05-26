@@ -58,7 +58,7 @@ import java.util.List;
 import java.util.Map;
 
 public class LoadManagerTest {
-    private LoadManager loadManager;
+    private LoadMgr loadManager;
     private final String fieldName = "idToLoadJob";
 
     @Before
@@ -92,13 +92,13 @@ public class LoadManagerTest {
             }
         };
 
-        loadManager = new LoadManager(new LoadJobScheduler());
+        loadManager = new LoadMgr(new LoadJobScheduler());
         LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "");
         Deencapsulation.invoke(loadManager, "addLoadJob", job1);
 
         File file = serializeToFile(loadManager);
 
-        LoadManager newLoadManager = deserializeFromFile(file);
+        LoadMgr newLoadManager = deserializeFromFile(file);
 
         Map<Long, LoadJob> loadJobs = Deencapsulation.getField(loadManager, fieldName);
         Map<Long, LoadJob> newLoadJobs = Deencapsulation.getField(newLoadManager, fieldName);
@@ -124,7 +124,7 @@ public class LoadManagerTest {
             }
         };
 
-        loadManager = new LoadManager(new LoadJobScheduler());
+        loadManager = new LoadMgr(new LoadJobScheduler());
         LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "");
         Deencapsulation.invoke(loadManager, "addLoadJob", job1);
 
@@ -134,7 +134,7 @@ public class LoadManagerTest {
 
         File file = serializeToFile(loadManager);
 
-        LoadManager newLoadManager = deserializeFromFile(file);
+        LoadMgr newLoadManager = deserializeFromFile(file);
         Map<Long, LoadJob> newLoadJobs = Deencapsulation.getField(newLoadManager, fieldName);
 
         Assert.assertEquals(0, newLoadJobs.size());
@@ -162,13 +162,13 @@ public class LoadManagerTest {
         Config.label_keep_max_second = 10;
 
         // 1. serialize 1 job to file
-        loadManager = new LoadManager(new LoadJobScheduler());
+        loadManager = new LoadMgr(new LoadJobScheduler());
         LoadJob job1 = new InsertLoadJob("job1", 1L, 1L, System.currentTimeMillis(), "", "");
         Deencapsulation.invoke(loadManager, "addLoadJob", job1);
         File file = serializeToFile(loadManager);
 
         // 2. read it directly, expect 1 job
-        LoadManager newLoadManager = deserializeFromFile(file);
+        LoadMgr newLoadManager = deserializeFromFile(file);
         Map<Long, LoadJob> newLoadJobs = Deencapsulation.getField(newLoadManager, fieldName);
         Assert.assertEquals(1, newLoadJobs.size());
 
@@ -181,7 +181,7 @@ public class LoadManagerTest {
         Assert.assertEquals(0, newLoadJobs.size());
     }
 
-    private File serializeToFile(LoadManager loadManager) throws Exception {
+    private File serializeToFile(LoadMgr loadManager) throws Exception {
         File file = new File("./loadManagerTest");
         file.createNewFile();
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
@@ -191,9 +191,9 @@ public class LoadManagerTest {
         return file;
     }
 
-    private LoadManager deserializeFromFile(File file) throws Exception {
+    private LoadMgr deserializeFromFile(File file) throws Exception {
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        LoadManager loadManager = new LoadManager(new LoadJobScheduler());
+        LoadMgr loadManager = new LoadMgr(new LoadJobScheduler());
         loadManager.readFields(dis);
         return loadManager;
     }
@@ -208,7 +208,7 @@ public class LoadManagerTest {
             }
         };
 
-        loadManager = new LoadManager(new LoadJobScheduler());
+        loadManager = new LoadMgr(new LoadJobScheduler());
         int origLabelKeepMaxSecond = Config.label_keep_max_second;
         int origLabelKeepMaxNum = Config.label_keep_max_num;
         Map<Long, LoadJob> idToLoadJob = Deencapsulation.getField(loadManager, "idToLoadJob");
@@ -322,7 +322,7 @@ public class LoadManagerTest {
             }
         };
 
-        LoadManager loadManager = new LoadManager(new LoadJobScheduler());
+        LoadMgr loadManager = new LoadMgr(new LoadJobScheduler());
         LoadJob loadJob1 = new InsertLoadJob("job0", 0L, 1L, System.currentTimeMillis(), "", "");
         loadJob1.id = 1L;
         loadManager.replayCreateLoadJob(loadJob1);
@@ -339,7 +339,7 @@ public class LoadManagerTest {
 
         loadManager.saveLoadJobsV2JsonFormat(image.getDataOutputStream());
 
-        LoadManager loadManager2 = new LoadManager(new LoadJobScheduler());
+        LoadMgr loadManager2 = new LoadMgr(new LoadJobScheduler());
         loadManager2.loadLoadJobsV2JsonFormat(image.getDataInputStream());
 
 

@@ -90,13 +90,13 @@ public class SetExecutor {
             // Set password
             SetPassVar setPassVar = (SetPassVar) var;
             UserAuthenticationInfo userAuthenticationInfo = GlobalStateMgr.getCurrentState()
-                    .getAuthenticationManager()
+                    .getAuthenticationMgr()
                     .getUserAuthenticationInfoByUserIdentity(setPassVar.getUserIdent());
             if (null == userAuthenticationInfo) {
                 throw new DdlException("authentication info for user " + setPassVar.getUserIdent() + " not found");
             }
             userAuthenticationInfo.setPassword(setPassVar.getPassword());
-            GlobalStateMgr.getCurrentState().getAuthenticationManager()
+            GlobalStateMgr.getCurrentState().getAuthenticationMgr()
                     .alterUser(setPassVar.getUserIdent(), userAuthenticationInfo);
         }
     }
