@@ -36,6 +36,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
@@ -53,6 +54,7 @@ import com.starrocks.thrift.TExprOpcode;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public class ArithmeticExpr extends Expr {
     private static final Map<String, Operator> SUPPORT_FUNCTIONS = ImmutableMap.<String, Operator>builder()
@@ -70,6 +72,14 @@ public class ArithmeticExpr extends Expr {
             .put(Operator.BIT_SHIFT_RIGHT_LOGICAL.getName(), Operator.BIT_SHIFT_RIGHT_LOGICAL)
             .build();
 
+    public static Set<String> DECIMAL_SCALE_ADJUST_OPERATOR_SET = ImmutableSet.<String>builder()
+            .add(Operator.ADD.name)
+            .add(Operator.SUBTRACT.name)
+            .add(Operator.MULTIPLY.name)
+            .add(Operator.DIVIDE.name)
+            .add(Operator.MOD.name)
+            .add(Operator.INT_DIVIDE.name)
+            .build();
     private final Operator op;
 
     public enum OperatorPosition {
