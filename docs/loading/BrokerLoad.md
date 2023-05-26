@@ -288,14 +288,18 @@ For more information, see [SHOW LOAD](../sql-reference/sql-statements/data-manip
 The syntax is as follows:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     'http://<fe_host>:<fe_http_port>/api/<database_name>/_load_info?label=<label_name>'
 ```
+
+> **NOTE**
+>
+> If you use an account for which no password is set, you need to input only `<username>:`.
 
 For example, you can run the following command to view the information about a load job, whose label is `label1`, in the `test_db` database:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     'http://<fe_host>:<fe_http_port>/api/test_db/_load_info?label=label1'
 ```
 

@@ -212,9 +212,13 @@ You can check the INSERT transaction status by using curl command.
 The following example checks the status of the transaction with label `insert_load_wikipedia`.
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
   http://x.x.x.x:8030/api/load_test/_load_info?label=insert_load_wikipedia
 ```
+
+> **NOTE**
+>
+> If you use an account for which no password is set, you need to input only `<username>:`.
 
 The return is as follows:
 
