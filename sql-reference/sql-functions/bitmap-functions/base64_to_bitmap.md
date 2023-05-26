@@ -44,7 +44,7 @@ BITMAP base64_to_bitmap(VARCHAR bitmap)
     );
     ```
 
-2. 使用 Stream Load 将 JSON 格式数据导入到`bitmap_table`中。
+2. 使用 [Stream Load](../../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md) 将 JSON 格式数据导入到 `bitmap_table` 中。
 
     假设有 JSON 格式文件**simpledata**, 内容如下，`userid`为 Base64 编码后的字符串:
 
@@ -59,7 +59,7 @@ BITMAP base64_to_bitmap(VARCHAR bitmap)
     - 导入 JSON 文件中的数据到 `bitmap_table`，使用 base64_to_bitmap 函数将 `userid` 转化为bitmap。
 
     ```Plain Text
-    curl --location-trusted -u root:\
+    curl --location-trusted -u <username>:<password>\
         -H "columns: c1,c2,c3,tagname=c1,tagvalue=c2,userid=base64_to_bitmap(c3)"\
         -H "label:bitmap123"\
         -H "format: json" -H "jsonpaths: [\"$.tagname\",\"$.tagvalue\",\"$.userid\"]"\

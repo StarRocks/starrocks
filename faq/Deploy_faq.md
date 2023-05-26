@@ -60,7 +60,7 @@ wget https://bootstrap.pypa.io/ez_setup.py -O - | python
     示例：
 
     ```plain text
-    curl --location-trusted -u root:root \
+    curl --location-trusted -u <username>:<password> \
     'http://192.168.110.101:8030/api/_set_config?enable_statistic_collect=true'
     ```
 

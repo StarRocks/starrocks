@@ -116,7 +116,7 @@ INSERT INTO site_access TEMPORARY PARTITION (tp3, tp4,...) SELECT * FROM site_ac
 示例：
 
 ```Bash
-curl --location-trusted -u root: -H "label:label1" -H "temporary_partitions: tp1, tp2, ..." -T testData \
+curl --location-trusted -u <username>:<password> -H "label:label1" -H "temporary_partitions: tp1, tp2, ..." -T testData \
     http://host:port/api/example_db/site_access/_stream_load    
 ```
 
