@@ -78,7 +78,7 @@ static Slice split_positive_index(Slice& delimiter, int32_t& part_number, Slice&
     }
 }
 
-static void split_negative_index(ColumnBuilder<TYPE_VARCHAR> res, Slice& delimiter, int32_t& part_number, Slice& haystack) {
+static void split_negative_index(Slice& delimiter, int32_t& part_number, Slice& haystack) {
     part_number = -part_number;
     auto haystack_str = haystack.to_string();
     int32_t offset = haystack.size;
