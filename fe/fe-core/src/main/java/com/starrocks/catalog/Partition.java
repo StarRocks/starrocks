@@ -42,6 +42,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -234,7 +235,7 @@ public class Partition extends MetaObject implements Writable {
     public void createLogicalRollupIndex(Database db,
                                          MaterializedIndex index,
                                          long associatedTableId,
-                                         String partName) {
+                                         String partName) throws DdlException {
         Preconditions.checkNotNull(index);
         index.setState(MaterializedIndex.IndexState.LOGICAL);
         OlapTable targetTable = (OlapTable) db.getTable(associatedTableId);
@@ -243,6 +244,10 @@ public class Partition extends MetaObject implements Writable {
         if (targetTable.isPartitioned()) {
             Preconditions.checkNotNull(partName);
             targetPartition = targetTable.getPartition(partName);
+            if (targetPartition == null) {
+                throw new DdlException("Please ensure the partition " + partName + " is created " +
+                        "in the target table " + targetPartition.getName());
+            }
         } else {
             targetPartition = targetTable.getPartitions().iterator().next();
         }

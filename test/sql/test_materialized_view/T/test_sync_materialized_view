@@ -81,6 +81,17 @@ drop materialized view test_mv1;
 drop materialized view test_mv2;
 drop materialized view test_mv3;
 
+-- not supported yet: column not match with the target table
+CREATE MATERIALIZED VIEW test_mv4
+PROPERTIES ( "enable_populate" = "false" ) to target2
+as
+select k1, sum(k3) as sum_k3, count(k2) as count_k2 from test2 group by k1;
+-- not supported yet: column loss with the target table
+CREATE MATERIALIZED VIEW test_mv4
+PROPERTIES ( "enable_populate" = "false" ) to target2
+as
+select k1, sum(k3) as sum_k3 from test2 group by k1;
+
 ---------- partition tables
 CREATE TABLE `part_test1` (
   `k1` tinyint(4) NULL,

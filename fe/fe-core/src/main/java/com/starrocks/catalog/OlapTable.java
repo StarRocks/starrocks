@@ -485,6 +485,11 @@ public class OlapTable extends Table {
 
         MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema, schemaVersion,
                 schemaHash, shortKeyColumnCount, storageType, keysType, origStmt, sortColumns);
+        addMaterializedIndexMeta(indexName, indexMeta);
+    }
+
+    public void addMaterializedIndexMeta(String indexName, MaterializedIndexMeta indexMeta) {
+        long indexId = indexMeta.getIndexId();
         indexIdToMeta.put(indexId, indexMeta);
         indexNameToId.put(indexName, indexId);
     }
