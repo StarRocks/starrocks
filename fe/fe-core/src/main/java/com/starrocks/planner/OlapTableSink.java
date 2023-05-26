@@ -319,6 +319,8 @@ public class OlapTableSink extends DataSink {
         partitionParam.setEnable_automatic_partition(enableAutomaticPartition);
 
         PartitionType partType = table.getPartitionInfo().getType();
+        boolean hasAssociatedTables = table.hasAssociatedTables();
+        partitionParam.setEnable_associated_tables(hasAssociatedTables);
         switch (partType) {
             case RANGE:
             case EXPR_RANGE:
@@ -333,7 +335,7 @@ public class OlapTableSink extends DataSink {
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(partition.getId());
                     setRangeKeys(rangePartitionInfo, partition, tPartition);
-                    setIndexAndBucketNums(partition, tPartition);
+                    setIndexAndBucketNums(partition, tPartition, hasAssociatedTables);
                     partitionParam.addToPartitions(tPartition);
                     selectedDistInfo = setDistributedColumns(partitionParam, selectedDistInfo, partition, table);
                 }
@@ -357,7 +359,7 @@ public class OlapTableSink extends DataSink {
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(partition.getId());
                     setListPartitionValues(listPartitionInfo, partition, tPartition);
-                    setIndexAndBucketNums(partition, tPartition);
+                    setIndexAndBucketNums(partition, tPartition, hasAssociatedTables);
                     partitionParam.addToPartitions(tPartition);
                     selectedDistInfo = setDistributedColumns(partitionParam, selectedDistInfo, partition, table);
                 }
@@ -379,7 +381,7 @@ public class OlapTableSink extends DataSink {
                 TOlapTablePartition tPartition = new TOlapTablePartition();
                 tPartition.setId(partition.getId());
                 // No lowerBound and upperBound for this range
-                setIndexAndBucketNums(partition, tPartition);
+                setIndexAndBucketNums(partition, tPartition, hasAssociatedTables);
                 partitionParam.addToPartitions(tPartition);
                 partitionParam.setDistributed_columns(
                         getDistColumns(partition.getDistributionInfo(), table));
@@ -446,11 +448,15 @@ public class OlapTableSink extends DataSink {
         }
     }
 
-    private void setIndexAndBucketNums(Partition partition, TOlapTablePartition tPartition) {
-        for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
+    private void setIndexAndBucketNums(Partition partition, TOlapTablePartition tPartition, boolean hasAssociatedTables) {
+        for (MaterializedIndex index : partition.getAllMaterializedIndices()) {
             tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
                     index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
             tPartition.setNum_buckets(index.getTablets().size());
+            long targetPartitionId = index.getTargetPartitionId() != 0 ? index.getTargetPartitionId() : partition.getId();
+            if (hasAssociatedTables) {
+                tPartition.putToAssociated_partition_ids(index.getId(), targetPartitionId);
+            }
         }
     }
 
@@ -480,7 +486,7 @@ public class OlapTableSink extends DataSink {
         for (Long partitionId : partitionIds) {
             Partition partition = table.getPartition(partitionId);
             int quorum = table.getPartitionInfo().getQuorumNum(partition.getId(), table.writeQuorum());
-            for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
+            for (MaterializedIndex index : partition.getAllMaterializedIndices()) {
                 for (Tablet tablet : index.getTablets()) {
                     if (table.isCloudNativeTableOrMaterializedView()) {
                         Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();

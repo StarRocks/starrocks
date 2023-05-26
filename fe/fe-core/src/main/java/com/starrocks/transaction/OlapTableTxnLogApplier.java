@@ -94,7 +94,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                         }
                         long lastFailedVersion = replica.getLastFailedVersion();
                         long newVersion = version;
-                        long lastSucessVersion = replica.getLastSuccessVersion();
+                        long lastSuccessVersion = replica.getLastSuccessVersion();
                         if (!errorReplicaIds.contains(replica.getId())) {
                             if (replica.getLastFailedVersion() > 0) {
                                 // if the replica is a failed replica, then not changing version
@@ -110,7 +110,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                             }
 
                             // success version always move forward
-                            lastSucessVersion = version;
+                            lastSuccessVersion = version;
                         } else {
                             // for example, A,B,C 3 replicas, B,C failed during publish version, then B C will be set abnormal
                             // all loading will failed, B,C will have to recovery by clone, it is very inefficient and maybe lost data
@@ -122,7 +122,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                                 lastFailedVersion = version;
                             }
                         }
-                        replica.updateVersionInfo(newVersion, lastFailedVersion, lastSucessVersion);
+                        replica.updateVersionInfo(newVersion, lastFailedVersion, lastSuccessVersion);
                     }
                 }
             } // end for indices

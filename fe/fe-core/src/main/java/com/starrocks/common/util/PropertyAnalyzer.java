@@ -153,6 +153,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
 
     public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
+    public static final String PROPERTIES_MATERIALIZED_VIEW_POPULATE = "enable_populate";
 
     public static final String PROPERTIES_STORAGE_VOLUME = "storage_volume";
 

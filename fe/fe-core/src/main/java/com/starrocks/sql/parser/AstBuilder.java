@@ -1489,6 +1489,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean ifNotExist = context.IF() != null;
         QualifiedName qualifiedName = getQualifiedName(context.mvName);
         TableName tableName = qualifiedNameToTableName(qualifiedName);
+        TableName targetTableName = null;
+        if (context.targetTable != null) {
+            targetTableName = qualifiedNameToTableName(getQualifiedName(context.targetTable));
+        }
 
         List<ColWithComment> colWithComments = null;
         if (!context.columnNameWithComment().isEmpty()) {
@@ -1575,11 +1579,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("SYNC refresh type", "DISTRIBUTION BY"),
                         distributionDesc.getPos());
             }
-            return new CreateMaterializedViewStmt(tableName.getTbl(), queryStatement, properties);
+            return new CreateMaterializedViewStmt(tableName.getTbl(), queryStatement, properties, targetTableName);
         }
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             checkMaterializedViewAsyncRefreshSchemeUnitIdentifier(asyncRefreshSchemeDesc);
+        }
+        if (targetTableName != null) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr("To targetTable is not supported in async mv"),
+                    targetTableName.getPos());
         }
 
         if (!Config.enable_experimental_mv) {
