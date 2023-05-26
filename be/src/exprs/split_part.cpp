@@ -74,7 +74,7 @@ static void split_positive_index(ColumnBuilder<TYPE_VARCHAR> res, Slice& delimit
         }
 
         if (num == part_number) {
-            res.append( Slice(haystack.data + pre_offset + delimiter.size, offset - pre_offset - delimiter.size));
+            res.append(Slice(haystack.data + pre_offset + delimiter.size, offset - pre_offset - delimiter.size));
         } else {
             res.append_null();
         }
