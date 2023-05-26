@@ -203,6 +203,9 @@ int main(int argc, char** argv) {
     if (starrocks::config::aws_sdk_logging_trace_enabled) {
         aws_sdk_options.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Trace;
     }
+    if (starrocks::config::aws_sdk_enable_compliant_rfc3986_encoding) {
+        aws_sdk_options.httpOptions.compliantRfc3986Encoding = true;
+    }
     Aws::InitAPI(aws_sdk_options);
 
     std::vector<starrocks::StorePath> paths;
