@@ -1,13 +1,18 @@
 # ALTER MATERIALIZED VIEW
 
 ## Description
+You can use `ALTER MATERIALIZED VIEW` to
+- Alter the materialzied view's name.
+- Alter the materialized view's refresh strategy of an asynchronous materialized view.
+- Alter the materialized view's properties.
 
-Alters the name or refresh strategy of an asynchronous materialized view.
+> **CAUTION**
+> - Alter the materialized view's session properties, need add a `session.` prefix to distinguish native materialized view properties, eg: `query_timeout` needs to be `session.query_timeout`, `mv_rewrite_staleness_second` no needs instead.
 
 ## Syntax
 
 ```SQL
-ALTER MATERIALIZED VIEW [database.]mv_name {REFRESH ASYNC new_refresh_scheme_desc | RENAME [database.]new_mv_name}
+ALTER MATERIALIZED VIEW [database.]mv_name {REFRESH ASYNC new_refresh_scheme_desc | RENAME [database.]new_mv_name | SET (key=string '=' value=string) }
 ```
 
 Parameters in brackets [] is optional.
@@ -32,4 +37,13 @@ ALTER MATERIALIZED VIEW lo_mv1 RENAME lo_mv1_new_name;
 
 ```SQL
 ALTER MATERIALIZED VIEW lo_mv2 REFRESH ASYNC EVERY(INTERVAL 1 DAY);
+```
+
+### Example 3: Alter the materialized view's properties.
+
+```SQL
+-- Change `mv1`'s query_timeout to 4000s
+ALTER MATERIALIZED VIEW mv1 SET ("session.query_timeout" = "40000");
+-- Change `mv1`'s mv_rewrite_staleness_second to 600s
+ALTER MATERIALIZED VIEW mv1 SET ("mv_rewrite_staleness_second" = "600");
 ```
