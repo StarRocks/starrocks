@@ -4,6 +4,7 @@ package com.starrocks.service;
 
 import com.google.gson.Gson;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.Auth;
@@ -11,7 +12,10 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
+import com.starrocks.thrift.TGetTablesInfoRequest;
+import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TTableConfigInfo;
+import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -19,6 +23,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.lang.reflect.InvocationTargetException;
@@ -30,7 +35,18 @@ public class InformationSchemaDataSourceTest {
     
     @Mocked
     ExecuteEnv exeEnv;
-    
+
+    private static StarRocksAssert starRocksAssert;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+        starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+        Config.enable_experimental_mv = true;
+    }
+
     @Test
     public void testGetTablesConfig() throws Exception {
 
@@ -41,13 +57,7 @@ public class InformationSchemaDataSourceTest {
             }
         };
 
-        UtFrameUtils.createMinStarRocksCluster();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
-
-        StarRocksAssert starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
         starRocksAssert.withEnableMV().withDatabase("db1").useDatabase("db1");
-        Config.enable_experimental_mv = true;
         String createTblStmtStr = "CREATE TABLE db1.tbl1 (`k1` int,`k2` int,`k3` int,`v1` int,`v2` int,`v3` int) " +
                                   "ENGINE=OLAP " + "PRIMARY KEY(`k1`, `k2`, `k3`) " +
                                   "COMMENT \"OLAP\" " +
@@ -116,20 +126,15 @@ public class InformationSchemaDataSourceTest {
         Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.OLAP_EXTERNAL));
         Assert.assertEquals("VIEW", m.invoke(InformationSchemaDataSource.class, TableType.MATERIALIZED_VIEW));
         Assert.assertEquals("VIEW", m.invoke(InformationSchemaDataSource.class, TableType.VIEW));
-        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.SCHEMA));
+        Assert.assertEquals("SYSTEM VIEW", m.invoke(InformationSchemaDataSource.class, TableType.SCHEMA));
         Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.INLINE_VIEW));
         Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.BROKER));
     }
 
     @Test
     public void testGetTablesConfigBasic() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
 
-        StarRocksAssert starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
         starRocksAssert.withEnableMV().withDatabase("db2").useDatabase("db2");
-        Config.enable_experimental_mv = true;
         String createTblStmtStr = "CREATE TABLE db2.`unique_table_with_null` (\n" +
                 "  `k1` date  COMMENT \"\",\n" +
                 "  `k2` datetime  COMMENT \"\",\n" +
@@ -177,5 +182,28 @@ public class InformationSchemaDataSourceTest {
         Assert.assertEquals("HASH", tableConfig.getDistribute_type());
         Assert.assertEquals(3, tableConfig.getDistribute_bucket());
         Assert.assertEquals("`k1`, `k2`, `k3`, `k4`, `k5`", tableConfig.getSort_key());
+    }
+
+    @Test
+    public void testGetInformationSchemaTable() throws Exception {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesInfoRequest request = new TGetTablesInfoRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("root");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        authInfo.setCurrent_user_ident(userIdentity);
+        authInfo.setPattern(InfoSchemaDb.DATABASE_NAME);
+        request.setAuth_info(authInfo);
+        TGetTablesInfoResponse response = impl.getTablesInfo(request);
+        boolean checkTables = false;
+        for (TTableInfo tablesInfo : response.tables_infos) {
+            if (tablesInfo.getTable_name().equalsIgnoreCase("tables")) {
+                checkTables = true;
+                Assert.assertEquals("SYSTEM VIEW", tablesInfo.getTable_type());
+            }
+        }
+        Assert.assertTrue(checkTables);
     }
 }

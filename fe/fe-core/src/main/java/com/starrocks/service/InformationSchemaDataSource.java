@@ -367,8 +367,9 @@ public class InformationSchemaDataSource {
             case MATERIALIZED_VIEW:
             case VIEW:
                 return "VIEW";
+            case SCHEMA:
+                return "SYSTEM VIEW";
             default:
-                // SCHEMA
                 // INLINE_VIEW
                 // BROKER
                 return "BASE TABLE";
