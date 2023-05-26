@@ -270,6 +270,10 @@ public class MaterializedViewHandler extends AlterHandler {
         // logical materialized view's column should be in the target table.
         Set<String> mvColumnNames = Sets.newHashSet();
         for (Column mvCol : mvColumns) {
+            //            if (!targetOlapTable.containColumn(mvCol.getName())) {
+            //                throw new DdlException("create logical materialized failed. Logical materialized view column:" + mvCol
+            //                        + " should in the target table" + targetOlapTable);
+            //            }
             mvColumnNames.add(mvCol.getName());
         }
         if (mvColumns.size() != targetOlapTable.getBaseSchema().size()) {
@@ -281,8 +285,12 @@ public class MaterializedViewHandler extends AlterHandler {
         for (int i = 0; i < targetOlapTable.getBaseSchema().size(); i++) {
             Column targetCol = targetTable.getBaseSchema().get(i);
             Column mvCol = mvColumns.get(i);
+            // if (!mvCol.getName().equals(targetCol.getName())) {
+            //    throw new DdlException("create logical materialized failed. Logical materialized view column name "
+            //            + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));
+            // }
             if (!mvCol.getType().equals(targetCol.getType())) {
-                throw new DdlException("create logical materialized failed. Logical materialized view column type "
+                throw new DdlException("Logical materialized view column type "
                         + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));
             }
         }
@@ -320,10 +328,10 @@ public class MaterializedViewHandler extends AlterHandler {
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
             List<Column> distributionColumns = hashDistributionInfo.getDistributionColumns();
             for (Column distColumn : distributionColumns) {
-                if (!mvColumns.contains(distColumn)) {
-                    throw new DdlException("create logical materialized failed. Materialized view should contain" +
-                            " the distribution column: " + distColumn.toString());
-                }
+                //                if (!mvColumnNames.contains(distColumn.getName())) {
+                //                    throw new DdlException("create logical materialized failed. Materialized view should contain" +
+                //                            " the distribution column: " + distColumn.toString());
+                //                }
             }
         }
         long targetTableId = targetTable.getId();
@@ -641,8 +649,7 @@ public class MaterializedViewHandler extends AlterHandler {
                 List<String> baseColumnNames = mvColumnItem.getBaseColumnNames();
                 for (String baseColumnName : baseColumnNames) {
                     if (partitionOrDistributedColumnName.contains(baseColumnName.toLowerCase())
-                            && mvColumnItem.getAggregationType() != null &&
-                            mvColumnItem.getAggregationType() != AggregateType.NONE) {
+                            && mvColumnItem.getAggregationType() != null) {
                         throw new DdlException("The partition columns " + baseColumnName
                                 + " must be key column in mv");
                     }

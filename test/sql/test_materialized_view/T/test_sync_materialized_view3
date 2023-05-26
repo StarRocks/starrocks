@@ -1,0 +1,58 @@
+-- name: test_sync_materialized_view3
+
+CREATE TABLE `test4` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+  `k2` varchar(64) NULL DEFAULT "",
+  `k3` bigint NULL DEFAULT "0",
+  `k4` varchar(64) NULL DEFAULT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+CREATE MATERIALIZED VIEW test_mv4 
+-- PROPERTIES ( "enable_populate" = "false" ) 
+as
+select k1 * 2 as k1, k2, sum(k3) as k4, hll_union(hll_hash(k4)) as k5 from test4 group by k1, k2; 
+insert into test4 values (1, 'a', 1, 'aa');
+select * from test4;
+select * from test_mv4 [_SYNC_MV_]; 
+
+-- core!!!
+CREATE TABLE `test5` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+  `k2` varchar(64) NULL DEFAULT "",
+  `k3` bigint NULL DEFAULT "0",
+  `k4` varchar(64) NULL DEFAULT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+CREATE MATERIALIZED VIEW test_mv5 
+-- PROPERTIES ( "enable_populate" = "false" ) 
+as
+select k1 * 2 as k1, k2, sum(k3), hll_union(hll_hash(k4)) as k5 from test5 group by k1, k2; 
+insert into test5 values (1, 'a', 1, 'aa');
+select * from test5;
+select * from test_mv5 [_SYNC_MV_]; 
+
+CREATE TABLE `test6` (
+  `k1` tinyint(4) NULL DEFAULT "0",
+  `k2` varchar(64) NULL DEFAULT "",
+  `k3` bigint NULL DEFAULT "0",
+  `k4` varchar(64) NULL DEFAULT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+CREATE MATERIALIZED VIEW test_mv6 
+-- PROPERTIES ( "enable_populate" = "false" ) 
+as
+select k1 * 2 as k1, k2, sum(k3), hll_union(hll_hash(k4)) as k5 from test6 group by k1, k2; 
+insert into test6 values (1, 'a', 1, 'aa');
+select * from test_mv6 [_SYNC_MV_];
