@@ -253,7 +253,7 @@ StarRocks 数据库 `test_db` 里的表 `table1` 包含三列，按顺序依次�
 如果要把 `example1.csv` 中所有的数据都导入到 `table1` 中，并且要求超时时间最大不超过 100 秒，可以执行如下命令：
 
 ```Bash
-curl --location-trusted -u root: -H "label:label1" \
+curl --location-trusted -u <username>:<password> -H "label:label1" \
     -H "Expect:100-continue" \
     -H "timeout:100" \
     -H "max_filter_ratio:0.2" \
@@ -270,7 +270,7 @@ StarRocks 数据库 `test_db` 里的表 `table2` 包含三列，按顺序依次�
 如果要把 `example2.csv` 中所有的数据都导入到 `table2` 中，并且要求容错率最大不超过 `0.2`，可以执行如下命令：
 
 ```Bash
-curl --location-trusted -u root: -H "label:label2" \
+curl --location-trusted -u <username>:<password> -H "label:label2" \
     -H "Expect:100-continue" \
     -H "max_filter_ratio:0.2" \
     -T example2.csv -XPUT \
@@ -286,7 +286,7 @@ StarRocks 数据库 `test_db` 里的表 `table3` 包含三列，按顺序依次�
 如果要把 `example3.csv` 中所有的数据都导入到 `table3` 中，可以执行如下命令：
 
 ```Bash
-curl --location-trusted -u root:  -H "label:label3" \
+curl --location-trusted -u <username>:<password>  -H "label:label3" \
     -H "Expect:100-continue" \
     -H "columns: col2, col1, col3" \
     -T example3.csv -XPUT \
@@ -306,7 +306,7 @@ StarRocks 数据库 `test_db` 里的表 `table4` 包含三列，按顺序依次�
 如果只想把 `example4.csv` 中第一列的值等于 `20180601` 的数据行导入到 `table4` 中，可以执行如下命令：
 
 ```Bash
-curl --location-trusted -u root: -H "label:label4" \
+curl --location-trusted -u <username>:<password> -H "label:label4" \
     -H "Expect:100-continue" \
     -H "columns: col1, col2，col3]"\
     -H "where: col1 = 20180601" \
@@ -327,7 +327,7 @@ StarRocks 数据库 `test_db` 里的表 `table5` 包含三列，按顺序依次�
 如果要把 `example5.csv` 中所有的数据都导入到 `table5` 所在的分区 `p1` 和 `p2`，可以执行如下命令：
 
 ```Bash
-curl --location-trusted -u root:  -H "label:label5" \
+curl --location-trusted -u <username>:<password>  -H "label:label5" \
     -H "partitions: p1, p2" \
     -T example5.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
@@ -342,7 +342,7 @@ StarRocks 数据库 `test_db` 里的表 `table6` 包含三列，按顺序依次�
 如果要把 `example6.csv` 中所有的数据导入到 `table6` 中，并且要求进严格模式的过滤、使用时区 `Africa/Abidjan`，可以执行如下命令：
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     -H "Expect:100-continue" \
     -H "strict_mode: true" \
     -H "timezone: Africa/Abidjan" \
@@ -359,7 +359,7 @@ StarRocks 数据库 `test_db` 里的表 `table7` 包含两个 HLL 类型的列�
 如果要把 `example7.csv` 中对应的数据导入到 `table7` 中，可以执行如下命令：
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     -H "Expect:100-continue" \
     -H "columns: temp1, temp2, col1=hll_hash(temp1), col2=hll_empty()" \
     -T example7.csv -XPUT \
@@ -385,7 +385,7 @@ StarRocks 数据库 `test_db` 里的表 `table8` 包含两个 BITMAP 类型的�
 如果要把 `example8.csv` 中对应的数据导入到 `table8` 中，可以执行如下命令：
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     -H "Expect:100-continue" \
     -H "columns: temp1, temp2, col1=to_bitmap(temp1), col2=bitmap_empty()" \
     -T example8.csv -XPUT \
@@ -411,7 +411,7 @@ StarRocks 数据库 `test_db` 里的表 `table9` 包含三列，按顺序依次�
 如果要把 `example9.csv` 中所有的数据都导入到 `table9` 中，并且希望跳过 `example9.csv` 中最开头的五行数据、去除列分隔符前后的空格、 指定 `enclose` 字符为斜杠 (`\`)、并且指定 `escape` 字符为斜杠 (`\`)，可以执行如下语句：
 
 ```Bash
-curl --location-trusted -u root: -H "label:3875" \
+curl --location-trusted -u <username>:<password> -H "label:3875" \
     -H "Expect:100-continue" \
     -H "trim_space: true" -H "skip_header: 5" \
     -H "column_separator:," -H "enclose:\"" -H "escape:\\" \
@@ -444,7 +444,7 @@ StarRocks 数据库 `test_db` 里的表 `tbl1` 拥有如下表结构：
 您可以通过如下命令将 `example1.json` 中的数据导入到 `tbl1` 中：
 
 ```Bash
-curl --location-trusted -u root: -H "label:label6" \
+curl --location-trusted -u <username>:<password> -H "label:label6" \
     -H "Expect:100-continue" \
     -H "format: json" \
     -T example1.json -XPUT \
@@ -498,7 +498,7 @@ StarRocks 按照如下顺序对数据进行匹配和处理：
 您可以通过指定 `jsonpaths` 参数进行精准导入，例如只导入 `category`、`author`、`price` 三个字段的数据：
 
 ```Bash
-curl --location-trusted -u root: -H "label:label7" \
+curl --location-trusted -u <username>:<password> -H "label:label7" \
     -H "Expect:100-continue" \
     -H "format: json" \
     -H "strip_outer_array: true" \
@@ -531,7 +531,7 @@ curl --location-trusted -u root: -H "label:label7" \
 您可以通过指定 `jsonpaths` 进行精准导入，例如只导入 `category`、`author`、`price` 三个字段的数据：
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     -H "Expect:100-continue" \
     -H "format: json" \
     -H "json_root: $.RECORDS" \
