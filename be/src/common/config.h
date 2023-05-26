@@ -817,6 +817,13 @@ CONF_Int32(hdfs_client_io_read_retry, "0");
 CONF_mBool(aws_sdk_logging_trace_enabled, "false");
 CONF_String(aws_sdk_logging_trace_level, "trace");
 
+// Enable RFC-3986 encoding.
+// When Querying data on Google Cloud Storage, if the objects key contain special characters like '=', '$', it will fail
+// to Authenticate because the request URL does not translate these special characters.
+// This is critical for Hive partitioned tables. The object key usually contains '=' like 'dt=20230101'.
+// Enabling RFC-3986 encoding will make sure these characters are properly encoded.
+CONF_mBool(aws_sdk_enable_compliant_rfc3986_encoding, "false");
+
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
 // default: 16MB
