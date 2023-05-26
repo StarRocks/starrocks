@@ -561,7 +561,7 @@ public class AuthenticationMgr {
         try {
             // 1 json for myself,1 json for number of users, 2 json for each user(kv)
             final int cnt = 1 + 1 + userToAuthenticationInfo.size() * 2;
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, "AuthenticationManager", cnt);
+            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, "com.starrocks.authentication.AuthenticationManager", cnt);
             // 1 json for myself
             writer.writeJson(this);
             // 1 json for num user
@@ -582,7 +582,7 @@ public class AuthenticationMgr {
 
     public static AuthenticationMgr load(DataInputStream dis) throws IOException, DdlException {
         try {
-            SRMetaBlockReader reader = new SRMetaBlockReader(dis, "AuthenticationManager");
+            SRMetaBlockReader reader = new SRMetaBlockReader(dis, "com.starrocks.authentication.AuthenticationManager");
             AuthenticationMgr ret = null;
             try {
                 // 1 json for myself
