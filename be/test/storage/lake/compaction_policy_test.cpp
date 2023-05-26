@@ -22,19 +22,15 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 
-class CompactionPolicyTest : public testing::Test {
+class LakeCompactionPolicyTest : public TestBase {
 public:
-    CompactionPolicyTest() {
-        _tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
-
-        _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
-        _backup_location_provider = _tablet_manager->TEST_set_location_provider(_location_provider.get());
-
+    LakeCompactionPolicyTest() : TestBase(kTestDirectory) {
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -67,7 +63,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_compaction_policy";
+    constexpr static const char* const kTestDirectory = "test_lake_compaction_policy";
 
     void SetUp() override {
         config::tablet_max_versions = 1000;
@@ -78,19 +74,11 @@ protected:
         config::size_tiered_level_multiple = 5;
         config::size_tiered_level_num = 7;
 
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
-        (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_backup_location_provider);
-        (void)fs::remove_all(kTestGroupPath);
-    }
+    void TearDown() override { remove_test_dir_ignore_error(); }
 
     void add_data_rowset(uint32 id, bool overlap, int64_t level) {
         auto* rowset_metadata = _tablet_metadata->mutable_rowsets()->Add();
@@ -119,8 +107,6 @@ protected:
         std::cout << "delete rowset: " << id << std::endl;
     }
 
-    TabletManager* _tablet_manager;
-    std::unique_ptr<FixedLocationProvider> _location_provider;
     LocationProvider* _backup_location_provider;
     std::shared_ptr<TabletMetadata> _tablet_metadata;
 };
@@ -130,7 +116,7 @@ protected:
 // rowsets: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 // cumulative point: 3
 // compaction input rowsets: [4, 5, 6, 7, 8, 9, 10]
-TEST_F(CompactionPolicyTest, test_cumulative_by_segment_num) {
+TEST_F(LakeCompactionPolicyTest, test_cumulative_by_segment_num) {
     config::enable_size_tiered_compaction_strategy = false;
 
     _tablet_metadata->set_cumulative_point(3);
@@ -145,9 +131,9 @@ TEST_F(CompactionPolicyTest, test_cumulative_by_segment_num) {
         }
         rowset_metadata->set_id(i);
     }
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
@@ -161,7 +147,7 @@ TEST_F(CompactionPolicyTest, test_cumulative_by_segment_num) {
 // rowsets: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 // cumulative point: 6
 // compaction input rowsets: [1, 2, 3, 4, 5, 6]
-TEST_F(CompactionPolicyTest, test_base_by_segment_num) {
+TEST_F(LakeCompactionPolicyTest, test_base_by_segment_num) {
     config::enable_size_tiered_compaction_strategy = false;
 
     _tablet_metadata->set_cumulative_point(6);
@@ -176,9 +162,9 @@ TEST_F(CompactionPolicyTest, test_base_by_segment_num) {
         }
         rowset_metadata->set_id(i);
     }
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
@@ -196,15 +182,15 @@ TEST_F(CompactionPolicyTest, test_base_by_segment_num) {
 // rowsets:      [1]
 // rowsets size: [327680]
 // compaction input rowsets: []
-TEST_F(CompactionPolicyTest, test_size_tiered_min_compaction) {
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_min_compaction) {
     config::enable_size_tiered_compaction_strategy = true;
 
     add_data_rowset(1, true, 2);
 
     _tablet_metadata->set_version(2);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
@@ -217,7 +203,7 @@ TEST_F(CompactionPolicyTest, test_size_tiered_min_compaction) {
 // rowsets:      [1, 2, 3, 4, 5, 6]
 // rowsets size: [327680, 327680, 327680, 327680, 327680, 327680]
 // compaction input rowsets: [1, 2, 3, 4, 5, 6]
-TEST_F(CompactionPolicyTest, test_size_tiered_max_compaction) {
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_max_compaction) {
     config::enable_size_tiered_compaction_strategy = true;
 
     for (int i = 1; i < 7; ++i) {
@@ -225,9 +211,9 @@ TEST_F(CompactionPolicyTest, test_size_tiered_max_compaction) {
     }
 
     _tablet_metadata->set_version(2);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
@@ -244,7 +230,7 @@ TEST_F(CompactionPolicyTest, test_size_tiered_max_compaction) {
 // rowsets:      [1, 2, 3, 4, 5, 6]
 // rowsets size: [327680, 327680, 327680, 327680, 327680, 327680]
 // compaction input rowsets: [1, 2, 3, 4, 5]
-TEST_F(CompactionPolicyTest, test_size_tiered_max_compaction_by_max_singleton_deltas_config) {
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_max_compaction_by_max_singleton_deltas_config) {
     config::enable_size_tiered_compaction_strategy = true;
     config::max_cumulative_compaction_num_singleton_deltas = 5;
 
@@ -253,9 +239,9 @@ TEST_F(CompactionPolicyTest, test_size_tiered_max_compaction_by_max_singleton_de
     }
 
     _tablet_metadata->set_version(2);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
@@ -271,7 +257,7 @@ TEST_F(CompactionPolicyTest, test_size_tiered_max_compaction_by_max_singleton_de
 // rowsets:      [1, 2, 3]
 // rowsets size: [327680, delete, 327680]
 // compaction input rowsets: [1, 2, 3]
-TEST_F(CompactionPolicyTest, test_size_tiered_one_delete_middle) {
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_one_delete_middle) {
     config::enable_size_tiered_compaction_strategy = true;
 
     uint32 id = 1;
@@ -280,9 +266,9 @@ TEST_F(CompactionPolicyTest, test_size_tiered_one_delete_middle) {
     add_data_rowset(id++, true, 2);
 
     _tablet_metadata->set_version(2);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
@@ -298,7 +284,7 @@ TEST_F(CompactionPolicyTest, test_size_tiered_one_delete_middle) {
 // rowsets:      [1, 2, 3, 4]
 // rowsets size: [327680, delete, delete, 327680]
 // compaction input rowsets: [1, 2, 3, 4]
-TEST_F(CompactionPolicyTest, test_size_tiered_two_delete_middle) {
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_two_delete_middle) {
     config::enable_size_tiered_compaction_strategy = true;
 
     uint32 id = 1;
@@ -308,9 +294,9 @@ TEST_F(CompactionPolicyTest, test_size_tiered_two_delete_middle) {
     add_data_rowset(id++, true, 2);
 
     _tablet_metadata->set_version(2);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
@@ -326,7 +312,7 @@ TEST_F(CompactionPolicyTest, test_size_tiered_two_delete_middle) {
 // rowsets:      [1, 2, 3, 4]
 // rowsets size: [delete, delete, 327680, 327680]
 // compaction input rowsets: [1, 2, 3, 4]
-TEST_F(CompactionPolicyTest, test_size_tiered_two_delete_first) {
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_two_delete_first) {
     config::enable_size_tiered_compaction_strategy = true;
 
     uint32 id = 1;
@@ -336,9 +322,9 @@ TEST_F(CompactionPolicyTest, test_size_tiered_two_delete_first) {
     add_data_rowset(id++, true, 2);
 
     _tablet_metadata->set_version(2);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
@@ -354,7 +340,7 @@ TEST_F(CompactionPolicyTest, test_size_tiered_two_delete_first) {
 // rowsets:      [1, 2, 3, 4, 5, 6, 7]
 // rowsets size: [1638400, 1638400, 327680, 327680, 327680, 65536, delete]
 // compaction input rowsets: [1, 2, 3, 4, 5, 6, 7]
-TEST_F(CompactionPolicyTest, test_size_tiered_delete_limit_force_base_compaction) {
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_delete_limit_force_base_compaction) {
     config::enable_size_tiered_compaction_strategy = true;
     config::tablet_max_versions = 10;
 
@@ -368,9 +354,9 @@ TEST_F(CompactionPolicyTest, test_size_tiered_delete_limit_force_base_compaction
     add_delete_rowset(id++);
 
     _tablet_metadata->set_version(2);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
@@ -386,7 +372,7 @@ TEST_F(CompactionPolicyTest, test_size_tiered_delete_limit_force_base_compaction
 // rowsets:      [1, 2, 3]
 // rowsets size: [8192000, 1638400, 327680]
 // compaction input rowsets: []
-TEST_F(CompactionPolicyTest, test_size_tiered_descending_order_level_size) {
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_descending_order_level_size) {
     config::enable_size_tiered_compaction_strategy = true;
 
     uint32 id = 1;
@@ -395,9 +381,9 @@ TEST_F(CompactionPolicyTest, test_size_tiered_descending_order_level_size) {
     add_data_rowset(id++, true, 2);
 
     _tablet_metadata->set_version(2);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
@@ -409,7 +395,7 @@ TEST_F(CompactionPolicyTest, test_size_tiered_descending_order_level_size) {
 //
 // rowsets:      [1, 2, 3, 4, 5, 6, 7, 8]
 // rowsets size: [8192000, 1638400, 1638400, 1638400, 327680, 327680, 327680, 327680]
-TEST_F(CompactionPolicyTest, test_size_tiered_multi_descending_order_level_size) {
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_multi_descending_order_level_size) {
     config::enable_size_tiered_compaction_strategy = true;
 
     // compaction version 2
@@ -425,9 +411,9 @@ TEST_F(CompactionPolicyTest, test_size_tiered_multi_descending_order_level_size)
     add_data_rowset(id++, true, 2);
 
     _tablet_metadata->set_version(2);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
 
@@ -446,7 +432,7 @@ TEST_F(CompactionPolicyTest, test_size_tiered_multi_descending_order_level_size)
     ASSERT_EQ(5, _tablet_metadata->rowsets_size());
 
     _tablet_metadata->set_version(3);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     // compact 2 ~ 4, 9
     ASSIGN_OR_ABORT(input_rowsets, compaction_policy->pick_rowsets(3));
@@ -467,7 +453,7 @@ TEST_F(CompactionPolicyTest, test_size_tiered_multi_descending_order_level_size)
     ASSERT_EQ(2, _tablet_metadata->rowsets_size());
 
     _tablet_metadata->set_version(4);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     // compact 1, 10
     ASSIGN_OR_ABORT(input_rowsets, compaction_policy->pick_rowsets(4));
@@ -482,7 +468,7 @@ TEST_F(CompactionPolicyTest, test_size_tiered_multi_descending_order_level_size)
 // rowsets:      [1, 2, 3]
 // rowsets size: [327680, 1638400, 8192000]
 // compaction input rowsets: [1, 2, 3]
-TEST_F(CompactionPolicyTest, test_size_tiered_order_level_size) {
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_order_level_size) {
     config::enable_size_tiered_compaction_strategy = true;
 
     uint32 id = 1;
@@ -491,9 +477,9 @@ TEST_F(CompactionPolicyTest, test_size_tiered_order_level_size) {
     add_data_rowset(id++, true, 4);
 
     _tablet_metadata->set_version(2);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
@@ -509,7 +495,7 @@ TEST_F(CompactionPolicyTest, test_size_tiered_order_level_size) {
 // rowsets:      [1, 2, 3]
 // rowsets size: [1638400, 327680, delete]
 // compaction input rowsets: [1, 2, 3]
-TEST_F(CompactionPolicyTest, test_size_tiered_backtrace_base_compaction_delete_last) {
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_backtrace_base_compaction_delete_last) {
     config::enable_size_tiered_compaction_strategy = true;
 
     uint32 id = 1;
@@ -518,9 +504,9 @@ TEST_F(CompactionPolicyTest, test_size_tiered_backtrace_base_compaction_delete_l
     add_delete_rowset(id++);
 
     _tablet_metadata->set_version(2);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
@@ -536,7 +522,7 @@ TEST_F(CompactionPolicyTest, test_size_tiered_backtrace_base_compaction_delete_l
 //
 // rowsets:      [1, 2, 3, 4, 5, 6, 7]
 // rowsets size: [1638400, 1638400, 327680, 327680, 327680, 65536, delete]
-TEST_F(CompactionPolicyTest, test_size_tiered_backtrace_base_compaction_delete_last_2) {
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_backtrace_base_compaction_delete_last_2) {
     config::enable_size_tiered_compaction_strategy = true;
 
     // compaction version 2
@@ -551,9 +537,9 @@ TEST_F(CompactionPolicyTest, test_size_tiered_backtrace_base_compaction_delete_l
     add_delete_rowset(id++);
 
     _tablet_metadata->set_version(2);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     // compact 3 ~ 5
@@ -574,7 +560,7 @@ TEST_F(CompactionPolicyTest, test_size_tiered_backtrace_base_compaction_delete_l
     add_delete_rowset(7);
 
     _tablet_metadata->set_version(3);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     // compact 1, 2, 8, 6, 7
     ASSIGN_OR_ABORT(input_rowsets, compaction_policy->pick_rowsets(3));
@@ -592,7 +578,7 @@ TEST_F(CompactionPolicyTest, test_size_tiered_backtrace_base_compaction_delete_l
 // rowsets:      [1, 2, 3, 4, 5, 6]
 // rowsets size: [1638400, 327680, delete, 65536, delete, 65536]
 // compaction input rowsets: [1, 2, 3, 4, 5]
-TEST_F(CompactionPolicyTest, test_size_tiered_backtrace_base_compaction_multi_delete_middle) {
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_backtrace_base_compaction_multi_delete_middle) {
     config::enable_size_tiered_compaction_strategy = true;
 
     uint32 id = 1;
@@ -604,9 +590,9 @@ TEST_F(CompactionPolicyTest, test_size_tiered_backtrace_base_compaction_multi_de
     add_data_rowset(id++, false, 1);
 
     _tablet_metadata->set_version(2);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
@@ -622,7 +608,7 @@ TEST_F(CompactionPolicyTest, test_size_tiered_backtrace_base_compaction_multi_de
 // rowsets:      [1, 2, 3, 4, 5, 6]
 // rowsets size: [1638400, 327680, delete, delete, delete, 65536]
 // compaction input rowsets: [1, 2, 3, 4, 5]
-TEST_F(CompactionPolicyTest, test_size_tiered_backtrace_base_compaction_continous_delete_middle) {
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_backtrace_base_compaction_continous_delete_middle) {
     config::enable_size_tiered_compaction_strategy = true;
 
     uint32 id = 1;
@@ -634,9 +620,9 @@ TEST_F(CompactionPolicyTest, test_size_tiered_backtrace_base_compaction_continou
     add_data_rowset(id++, false, 1);
 
     _tablet_metadata->set_version(2);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
