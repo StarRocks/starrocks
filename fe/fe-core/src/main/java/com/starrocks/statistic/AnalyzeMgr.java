@@ -190,10 +190,6 @@ public class AnalyzeMgr implements Writable {
         statisticExecutor.dropTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
     }
 
-    public boolean hasBasicStatsMeta(long tableId) {
-        return basicStatsMetaMap.containsKey(tableId);
-    }
-
     public void addBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
         basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
         GlobalStateMgr.getCurrentState().getEditLog().logAddBasicStatsMeta(basicStatsMeta);

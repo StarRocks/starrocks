@@ -47,6 +47,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 import org.apache.logging.log4j.LogManager;
@@ -121,11 +122,19 @@ public class StatisticUtils {
             listener.run();
             return;
         }
-        // Check if it's the first load
-        if (GlobalStateMgr.getCurrentState().getAnalyzeManager().hasBasicStatsMeta(table.getId())) {
+        // check if it's first load
+        TableCommitInfo tableCommitInfo = txnState.getIdToTableCommitInfos().get(table.getId());
+        List<Long> collectPartitionIds = Lists.newArrayList();
+        for (long partitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
+            if (table.getPartition(partitionId).isFirstLoad()) {
+                collectPartitionIds.add(partitionId);
+            }
+        }
+        if (collectPartitionIds.isEmpty()) {
             listener.run();
             return;
         }
+
         StatsConstants.AnalyzeType analyzeType = parseAnalyzeType(txnState, table);
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                 db.getId(), table.getId(), null, analyzeType,
@@ -143,10 +152,9 @@ public class StatisticUtils {
                             statsConnectCtx.setThreadLocalInfo();
 
                             statisticExecutor.collectStatistics(statsConnectCtx,
-                                    StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null, null,
-                                            analyzeType, StatsConstants.ScheduleType.ONCE,
-                                            analyzeStatus.getProperties()),
-                                    analyzeStatus, false);
+                                    StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
+                                            collectPartitionIds, null, analyzeType, StatsConstants.ScheduleType.ONCE,
+                                            analyzeStatus.getProperties()), analyzeStatus, false);
                         } finally {
                             listener.run();
                         }
