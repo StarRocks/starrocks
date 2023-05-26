@@ -1558,7 +1558,7 @@ public class AuthorizationMgr {
             // 1 json for number of roles, 2 json for each role(kv)
             final int cnt = 1 + 1 + userToPrivilegeCollection.size() * 2
                     + 1 + roleIdToPrivilegeCollection.size() * 2;
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, "AuthorizationManager", cnt);
+            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, "com.starrocks.privilege.AuthorizationManager", cnt);
             // 1 json for myself
             writer.writeJson(this);
             // 1 json for num user
@@ -1589,7 +1589,7 @@ public class AuthorizationMgr {
             DataInputStream dis, GlobalStateMgr globalStateMgr, AuthorizationProvider provider)
             throws IOException, DdlException {
         try {
-            SRMetaBlockReader reader = new SRMetaBlockReader(dis, "AuthorizationManager");
+            SRMetaBlockReader reader = new SRMetaBlockReader(dis, "com.starrocks.privilege.AuthorizationManager");
             AuthorizationMgr ret = null;
 
             try {
