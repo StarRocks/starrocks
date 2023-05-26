@@ -39,7 +39,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
-import com.starrocks.common.TimeoutException;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PKafkaLoadInfo;
 import com.starrocks.proto.PKafkaMetaProxyRequest;
@@ -64,6 +63,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 
 public class KafkaUtil {
