@@ -37,6 +37,7 @@
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/tablet_schema.h"
+#include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 
@@ -44,20 +45,10 @@ namespace starrocks::lake {
 
 using namespace starrocks;
 
-using VSchema = starrocks::Schema;
-using VChunk = starrocks::Chunk;
-
-class LakeCompactionTest : public testing::Test, public testing::WithParamInterface<CompactionParam> {
+class LakeCompactionTest : public TestBase, testing::WithParamInterface<CompactionParam> {
 public:
-    LakeCompactionTest(std::string test_dir) {
-        _parent_mem_tracker = std::make_unique<MemTracker>(-1);
-        _mem_tracker = std::make_unique<MemTracker>(-1, "", _parent_mem_tracker.get());
-        _location_provider = std::make_unique<FixedLocationProvider>(test_dir);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), _update_manager.get(), 1024 * 1024);
-    }
+    LakeCompactionTest(std::string test_dir) : TestBase(test_dir) {}
 
-protected:
     void check_task(CompactionTaskPtr& task) {
         if (GetParam().algorithm == HORIZONTAL_COMPACTION) {
             ASSERT_TRUE(dynamic_cast<HorizontalCompactionTask*>(task.get()) != nullptr);
@@ -66,17 +57,11 @@ protected:
             ASSERT_TRUE(dynamic_cast<VerticalCompactionTask*>(task.get()) != nullptr);
         }
     }
-
-    std::unique_ptr<MemTracker> _parent_mem_tracker;
-    std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<FixedLocationProvider> _location_provider;
-    std::unique_ptr<UpdateManager> _update_manager;
-    std::unique_ptr<TabletManager> _tablet_manager;
 };
 
-class DuplicateKeyCompactionTest : public LakeCompactionTest {
+class LakeDuplicateKeyCompactionTest : public LakeCompactionTest {
 public:
-    DuplicateKeyCompactionTest() : LakeCompactionTest(kTestGroupPath) {
+    LakeDuplicateKeyCompactionTest() : LakeCompactionTest(kTestDirectory) {
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -109,28 +94,22 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(*schema);
-        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_compaction_task";
+    constexpr static const char* const kTestDirectory = "test_lake_compaction_task";
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
         config::enable_size_tiered_compaction_strategy = false;
-        (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-        (void)fs::remove_all(kTestGroupPath);
-    }
+    void TearDown() override { remove_test_dir_ignore_error(); }
 
-    VChunk generate_data(int64_t chunk_size) {
+    Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
         for (int i = 0; i < chunk_size; i++) {
@@ -146,11 +125,11 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return VChunk({c0, c1}, _schema);
+        return Chunk({c0, c1}, _schema);
     }
 
     int64_t read(int64_t version) {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
         ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
@@ -170,11 +149,11 @@ protected:
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
-    std::shared_ptr<VSchema> _schema;
+    std::shared_ptr<Schema> _schema;
     int64_t _partition_id = 4560;
 };
 
-TEST_P(DuplicateKeyCompactionTest, test1) {
+TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
@@ -187,61 +166,61 @@ TEST_P(DuplicateKeyCompactionTest, test1) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        auto delta_writer =
+                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
-    ASSIGN_OR_ABORT(auto t, _tablet_manager->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto t, _tablet_mgr->get_tablet(tablet_id));
 
     auto txn_id = next_id();
-    ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, txn_id));
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
     check_task(task);
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
 
-    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
 }
 
-INSTANTIATE_TEST_SUITE_P(DuplicateKeyCompactionTest, DuplicateKeyCompactionTest,
+INSTANTIATE_TEST_SUITE_P(LakeDuplicateKeyCompactionTest, LakeDuplicateKeyCompactionTest,
                          ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
                                            CompactionParam{VERTICAL_COMPACTION, 1}),
                          to_string_param_name);
 
-TEST_F(DuplicateKeyCompactionTest, test_empty_tablet) {
+TEST_F(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
     auto version = 1;
     ASSERT_EQ(0, read(version));
     auto tablet_id = _tablet_metadata->id();
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
-    ASSIGN_OR_ABORT(auto t, _tablet_manager->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto t, _tablet_mgr->get_tablet(tablet_id));
 
     auto txn_id = next_id();
-    ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, txn_id));
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
     version++;
     ASSERT_EQ(0, read(version));
 }
 
-class DuplicateKeyOverlapSegmentsCompactionTest : public LakeCompactionTest {
+class LakeDuplicateKeyOverlapSegmentsCompactionTest : public LakeCompactionTest {
 public:
-    DuplicateKeyOverlapSegmentsCompactionTest() : LakeCompactionTest(kTestGroupPath) {
+    LakeDuplicateKeyOverlapSegmentsCompactionTest() : LakeCompactionTest(kTestDirectory) {
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -274,24 +253,21 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(*schema);
-        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_compaction_task_duplicate_overlap_segments";
+    constexpr static const char* const kTestDirectory = "test_lake_compaction_task_duplicate_overlap_segments";
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
-        (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { (void)fs::remove_all(kTestGroupPath); }
+    void TearDown() override { remove_test_dir_ignore_error(); }
 
-    VChunk generate_data(int64_t chunk_size) {
+    Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
         for (int i = 0; i < chunk_size; i++) {
@@ -307,11 +283,11 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return VChunk({c0, c1}, _schema);
+        return Chunk({c0, c1}, _schema);
     }
 
     int64_t read(int64_t version) {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
         ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
@@ -331,11 +307,11 @@ protected:
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
-    std::shared_ptr<VSchema> _schema;
+    std::shared_ptr<Schema> _schema;
     int64_t _partition_id = 4563;
 };
 
-TEST_P(DuplicateKeyOverlapSegmentsCompactionTest, test) {
+TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
     config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
@@ -348,8 +324,8 @@ TEST_P(DuplicateKeyOverlapSegmentsCompactionTest, test) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        auto delta_writer =
+                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         for (int j = 0; j < i + 1; ++j) {
             ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -358,7 +334,7 @@ TEST_P(DuplicateKeyOverlapSegmentsCompactionTest, test) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
     }
     ASSERT_EQ(kChunkSize * 6, read(version));
@@ -366,7 +342,7 @@ TEST_P(DuplicateKeyOverlapSegmentsCompactionTest, test) {
     // Cancelled compaction task
     {
         auto txn_id = next_id();
-        ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, txn_id));
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
         check_task(task);
         CompactionTask::Progress progress;
         auto st = task->execute(&progress, CompactionTask::kCancelledFn);
@@ -376,24 +352,24 @@ TEST_P(DuplicateKeyOverlapSegmentsCompactionTest, test) {
     // Completed compaction task without error
     {
         auto txn_id = next_id();
-        ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, txn_id));
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
         check_task(task);
         CompactionTask::Progress progress;
         ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, progress.value());
-        ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
         version++;
         ASSERT_EQ(kChunkSize * 6, read(version));
     }
 
     // check metadata
-    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
     ASSERT_EQ(1, new_tablet_metadata->rowsets(0).segments_size());
 
     // check data
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
@@ -411,14 +387,14 @@ TEST_P(DuplicateKeyOverlapSegmentsCompactionTest, test) {
     ASSERT_TRUE(st.is_end_of_file());
 }
 
-INSTANTIATE_TEST_SUITE_P(DuplicateKeyOverlapSegmentsCompactionTest, DuplicateKeyOverlapSegmentsCompactionTest,
+INSTANTIATE_TEST_SUITE_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, LakeDuplicateKeyOverlapSegmentsCompactionTest,
                          ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
                                            CompactionParam{VERTICAL_COMPACTION, 1}),
                          to_string_param_name);
 
-class UniqueKeyCompactionTest : public LakeCompactionTest {
+class LakeUniqueKeyCompactionTest : public LakeCompactionTest {
 public:
-    UniqueKeyCompactionTest() : LakeCompactionTest(kTestGroupPath) {
+    LakeUniqueKeyCompactionTest() : LakeCompactionTest(kTestDirectory) {
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -452,24 +428,21 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(*schema);
-        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_compaction_task_unique";
+    constexpr static const char* const kTestDirectory = "test_lake_compaction_task_unique";
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
-        (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { (void)fs::remove_all(kTestGroupPath); }
+    void TearDown() override { remove_test_dir_ignore_error(); }
 
-    VChunk generate_data(int64_t chunk_size) {
+    Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
         for (int i = 0; i < chunk_size; i++) {
@@ -485,11 +458,11 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return VChunk({c0, c1}, _schema);
+        return Chunk({c0, c1}, _schema);
     }
 
     int64_t read(int64_t version) {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
         ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
@@ -509,11 +482,11 @@ protected:
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
-    std::shared_ptr<VSchema> _schema;
+    std::shared_ptr<Schema> _schema;
     int64_t _partition_id = 4561;
 };
 
-TEST_P(UniqueKeyCompactionTest, test1) {
+TEST_P(LakeUniqueKeyCompactionTest, test1) {
     config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
@@ -526,44 +499,44 @@ TEST_P(UniqueKeyCompactionTest, test1) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        auto delta_writer =
+                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, read(version));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
-    ASSIGN_OR_ABORT(auto t, _tablet_manager->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto t, _tablet_mgr->get_tablet(tablet_id));
 
     auto txn_id = next_id();
-    ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, txn_id));
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
     check_task(task);
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
     version++;
     ASSERT_EQ(kChunkSize, read(version));
 
-    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
 }
 
-INSTANTIATE_TEST_SUITE_P(UniqueKeyCompactionTest, UniqueKeyCompactionTest,
+INSTANTIATE_TEST_SUITE_P(LakeUniqueKeyCompactionTest, LakeUniqueKeyCompactionTest,
                          ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
                                            CompactionParam{VERTICAL_COMPACTION, 1}),
                          to_string_param_name);
 
-class UniqueKeyCompactionWithDeleteTest : public LakeCompactionTest {
+class LakeUniqueKeyCompactionWithDeleteTest : public LakeCompactionTest {
 public:
-    UniqueKeyCompactionWithDeleteTest() : LakeCompactionTest(kTestGroupPath) {
+    LakeUniqueKeyCompactionWithDeleteTest() : LakeCompactionTest(kTestDirectory) {
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -597,24 +570,21 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(*schema);
-        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_compaction_task_unique_with_delete";
+    constexpr static const char* const kTestDirectory = "test_lake_compaction_task_unique_with_delete";
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
-        (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { (void)fs::remove_all(kTestGroupPath); }
+    void TearDown() override { remove_test_dir_ignore_error(); }
 
-    VChunk generate_data(int64_t chunk_size) {
+    Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
         for (int i = 0; i < chunk_size; i++) {
@@ -630,11 +600,11 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return VChunk({c0, c1}, _schema);
+        return Chunk({c0, c1}, _schema);
     }
 
     int64_t read(int64_t version) {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
         ASSIGN_OR_ABORT(auto reader, tablet.new_reader(version, *_schema));
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
@@ -654,11 +624,11 @@ protected:
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
-    std::shared_ptr<VSchema> _schema;
+    std::shared_ptr<Schema> _schema;
     int64_t _partition_id = 4562;
 };
 
-TEST_P(UniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) {
+TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) {
     config::vertical_compaction_max_columns_per_group = GetParam().vertical_compaction_max_columns_per_group;
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
@@ -671,24 +641,24 @@ TEST_P(UniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        auto delta_writer =
+                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, read(version));
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
-    ASSIGN_OR_ABORT(auto t, _tablet_manager->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto t, _tablet_mgr->get_tablet(tablet_id));
 
     // add delete rowset version
     {
-        ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
+        ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
         auto new_delete_metadata = std::make_shared<TabletMetadata>(*tablet_metadata);
         auto* rowset = new_delete_metadata->add_rowsets();
         rowset->set_overlapped(false);
@@ -705,27 +675,27 @@ TEST_P(UniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) {
 
         new_delete_metadata->set_version(version + 1);
         new_delete_metadata->set_cumulative_point(new_delete_metadata->rowsets_size());
-        CHECK_OK(_tablet_manager->put_tablet_metadata(*new_delete_metadata));
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*new_delete_metadata));
 
         version++;
     }
 
     auto txn_id = next_id();
-    ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, txn_id));
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
     check_task(task);
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
     version++;
     ASSERT_EQ(kChunkSize - 4, read(version));
 
-    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
     ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
 }
 
-INSTANTIATE_TEST_SUITE_P(UniqueKeyCompactionWithDeleteTest, UniqueKeyCompactionWithDeleteTest,
+INSTANTIATE_TEST_SUITE_P(LakeUniqueKeyCompactionWithDeleteTest, LakeUniqueKeyCompactionWithDeleteTest,
                          ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5},
                                            CompactionParam{VERTICAL_COMPACTION, 1}),
                          to_string_param_name);
