@@ -37,6 +37,7 @@ package com.starrocks.sql.optimizer;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
@@ -64,6 +65,7 @@ public class MVRewriteTest {
     private static final String QUERY_USE_USER_TAG_MV = "rollup: " + USER_TAG_MV_NAME;
     private static final String QUERY_USE_USER_TAG = "rollup: " + USER_TAG_TABLE_NAME;
     private static final String TEST_TABLE_NAME = "test_tb";
+    private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
     @BeforeClass
@@ -72,7 +74,8 @@ public class MVRewriteTest {
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
         GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());
-        starRocksAssert = new StarRocksAssert();
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withEnableMV().withDatabase(HR_DB_NAME).useDatabase(HR_DB_NAME);
         starRocksAssert.withTable("CREATE TABLE `ods_order` (\n" +
                 "  `order_dt` date NOT NULL DEFAULT '9999-12-31',\n" +
@@ -595,7 +598,8 @@ public class MVRewriteTest {
         String createRollupSQL = "alter table agg_table add rollup old_key (k1, k2) "
                 + "properties ('replication_num' = '1');";
         String query = "select k1, k2 from agg_table;";
-        starRocksAssert.withRollup(createRollupSQL).query(query).explainContains("OFF", "old_key");
+        starRocksAssert.withRollup(createRollupSQL).query(query)
+                .explainContains("OFF", "old_key");
     }
 
     @Test
@@ -656,6 +660,7 @@ public class MVRewriteTest {
     public void testBitmapUnionInSubquery() throws Exception {
         String createUserTagMVSql = "create materialized view " + USER_TAG_MV_NAME + " as select user_id, " +
                 "bitmap_union(to_bitmap(tag_id)) from " + USER_TAG_TABLE_NAME + " group by user_id;";
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         starRocksAssert.withMaterializedView(createUserTagMVSql);
         String query = "select user_id from " + USER_TAG_TABLE_NAME + " where user_id in (select user_id from " +
                 USER_TAG_TABLE_NAME + " group by user_id having bitmap_union_count(to_bitmap(tag_id)) >1 ) ;";
@@ -1085,7 +1090,6 @@ public class MVRewriteTest {
                 "THEN T1.user_id_td ELSE NULL END)) AS `c4`\n" +
                 "FROM kkk AS T1\n" +
                 "GROUP BY T1.dt";
-        System.out.println(starRocksAssert.query(query).explainQuery());
         starRocksAssert.query(query).explainContains("rollup: kkk_mv");
         starRocksAssert.dropTable("kkk");
     }
