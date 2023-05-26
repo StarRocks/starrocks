@@ -26,3 +26,9 @@ HYPERSCAN_DOWNLOAD="https://github.com/kunpengcompute/hyperscan/archive/refs/tag
 HYPERSCAN_NAME="hyperscan-5.3.0.aarch64.tar.gz"
 HYPERSCAN_SOURCE="hyperscan-5.3.0.aarch64"
 HYPERSCAN_MD5SUM="ef337257bde6583242a739fab6fb161f"
+
+# async-profiler
+ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releases/download/v2.9/async-profiler-2.9-linux-arm64.tar.gz"
+ASYNC_PROFILER_NAME="async-profiler-2.9-linux-arm64.tar.gz"
+ASYNC_PROFILER_SOURCE="async-profiler-2.9-linux-arm64"
+ASYNC_PROFILER_MD5SUM="d31a70d2c176146a46dffc15948040ed"

@@ -971,6 +971,81 @@ build_streamvbyte() {
     make install
 }
 
+<<<<<<< HEAD
+=======
+# jansson
+build_jansson() {
+    check_if_source_exist $JANSSON_SOURCE
+    cd $TP_SOURCE_DIR/$JANSSON_SOURCE/
+    mkdir -p build
+    cd build
+    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
+# avro-c
+build_avro_c() {
+    check_if_source_exist $AVRO_SOURCE
+    cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
+    mkdir -p build
+    cd build
+    $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_BUILD_TYPE=Release
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+    rm ${TP_INSTALL_DIR}/lib64/libavro.so*
+}
+
+# serders
+build_serdes() {
+    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
+    check_if_source_exist $SERDES_SOURCE
+    cd $TP_SOURCE_DIR/$SERDES_SOURCE
+    export LIBS="-lrt -lpthread -lcurl -ljansson -lrdkafka -lrdkafka++ -lavro -lssl -lcrypto -ldl"
+    ./configure --prefix=${TP_INSTALL_DIR} \
+                --libdir=${TP_INSTALL_DIR}/lib \
+                --CFLAGS="-I ${TP_INSTALL_DIR}/include"  \
+                --CXXFLAGS="-I ${TP_INSTALL_DIR}/include" \
+                --LDFLAGS="-L ${TP_INSTALL_DIR}/lib -L ${TP_INSTALL_DIR}/lib64" \
+                --enable-static \
+                --disable-shared
+
+    make -j$PARALLEL
+    make install
+    rm ${TP_INSTALL_DIR}/lib/libserdes.so*
+    # these symbols also be definition in librdkafka, change these symbols to be local.
+    objcopy --localize-symbol=cnd_timedwait ${TP_INSTALL_DIR}/lib/libserdes.a
+    objcopy --localize-symbol=cnd_timedwait_ms ${TP_INSTALL_DIR}/lib/libserdes.a
+    objcopy --localize-symbol=thrd_is_current ${TP_INSTALL_DIR}/lib/libserdes.a
+    unset LIBS
+    restore_compile_flags
+}
+
+# datasketches
+build_datasketches() {
+    check_if_source_exist $DATASKETCHES_SOURCE
+    mkdir -p $TP_INSTALL_DIR/include/datasketches
+    cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/common/include/* $TP_INSTALL_DIR/include/datasketches/
+    cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/cpc/include/* $TP_INSTALL_DIR/include/datasketches/
+    cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/fi/include/* $TP_INSTALL_DIR/include/datasketches/
+    cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/hll/include/* $TP_INSTALL_DIR/include/datasketches/
+    cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/kll/include/* $TP_INSTALL_DIR/include/datasketches/
+    cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/quantiles/include/* $TP_INSTALL_DIR/include/datasketches/
+    cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/req/include/* $TP_INSTALL_DIR/include/datasketches/
+    cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/sampling/include/* $TP_INSTALL_DIR/include/datasketches/
+    cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/theta/include/* $TP_INSTALL_DIR/include/datasketches/
+    cp -r $TP_SOURCE_DIR/$DATASKETCHES_SOURCE/tuple/include/* $TP_INSTALL_DIR/include/datasketches/
+}
+
+# async-profiler
+build_async_profiler() {
+    check_if_source_exist $ASYNC_PROFILER_SOURCE
+    mkdir -p $TP_INSTALL_DIR/async-profiler
+    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/build $TP_INSTALL_DIR/async-profiler
+    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/profiler.sh $TP_INSTALL_DIR/async-profiler
+}
+
+>>>>>>> 022f9d222 ([Enhancement] Add FE debug tools: async-profiler (#24044))
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1039,6 +1114,14 @@ build_benchmark
 build_fast_float
 build_cachelib
 build_streamvbyte
+<<<<<<< HEAD
+=======
+build_jansson
+build_avro_c
+build_serdes
+build_datasketches
+build_async_profiler
+>>>>>>> 022f9d222 ([Enhancement] Add FE debug tools: async-profiler (#24044))
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
