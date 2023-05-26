@@ -2112,6 +2112,31 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+    public void replayCreateMaterializedIndexMeta(String dbName, String tableName, String indexName,
+                                                  MaterializedIndexMeta indexMeta) {
+        Database db = this.fullNameToDb.get(dbName);
+        if (db == null) {
+            return;
+        }
+        OlapTable table = (OlapTable) db.getTable(tableName);
+        if (table == null) {
+            return;
+        }
+        if (!isCheckpointThread()) {
+            long mvIndexId = indexMeta.getIndexId();
+            long targetTableId = indexMeta.getTargetTableId();
+            for (Partition partition : table.getPartitions()) {
+                String partName = partition.getName();
+                MaterializedIndex rollupIndex = new MaterializedIndex(mvIndexId, MaterializedIndex.IndexState.LOGICAL);
+                partition.createLogicalRollupIndex(db, rollupIndex, targetTableId, partName);
+            }
+
+            table.addMaterializedIndexMeta(indexName, indexMeta);
+            table.rebuildFullSchema();
+            table.lastSchemaUpdateTime.set(System.currentTimeMillis());
+        }
+    }
+
     private void createLakeTablets(OlapTable table, long partitionId, long shardGroupId, MaterializedIndex index,
                                    DistributionInfo distributionInfo, TabletMeta tabletMeta,
                                    Set<Long> tabletIdSet)

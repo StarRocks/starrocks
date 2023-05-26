@@ -2870,6 +2870,11 @@ public class GlobalStateMgr {
         localMetastore.replayCreateMaterializedView(dbName, materializedView);
     }
 
+    public void replayCreateMaterializedIndexMeta(String dbName, String tableName, String indexName,
+                                                  MaterializedIndexMeta indexMeta) {
+        localMetastore.replayCreateMaterializedIndexMeta(dbName, tableName, indexName, indexMeta);
+    }
+
     // Drop table
     public void dropTable(DropTableStmt stmt) throws DdlException {
         localMetastore.dropTable(stmt);

@@ -71,6 +71,7 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.BatchDropInfo;
+import com.starrocks.persist.CreateMaterializedIndexMetaInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.OriginStatement;
@@ -335,6 +336,12 @@ public class MaterializedViewHandler extends AlterHandler {
             mvIndexMeta.setTargetTableIndexId(targetOlapTable.getBaseIndexId());
             mvIndexMeta.setMetaIndexType(MaterializedIndexMeta.MetaIndexType.LOGICAL);
             baseTable.rebuildFullSchema();
+            CreateMaterializedIndexMetaInfo info =
+                    new CreateMaterializedIndexMetaInfo(db.getFullName(), baseTable.getName(),
+                            stmt.getMVName(), mvIndexMeta);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateMaterializedIndexMetaInfo(info);
+        } catch (Exception e) {
+            throw new DdlException("create logical materialized failed:", e);
         } finally {
             db.writeUnlock();
         }
