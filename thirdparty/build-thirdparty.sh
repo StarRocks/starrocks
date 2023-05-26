@@ -914,6 +914,14 @@ build_fast_float() {
     cp -r $TP_SOURCE_DIR/$FAST_FLOAT_SOURCE/include $STARROCKS_THIRDPARTY/installed
 }
 
+# async-profiler
+build_async_profiler() {
+    check_if_source_exist $ASYNC_PROFILER_SOURCE
+    mkdir -p $TP_INSTALL_DIR/async-profiler
+    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/build $TP_INSTALL_DIR/async-profiler
+    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/profiler.sh $TP_INSTALL_DIR/async-profiler
+}
+
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -I${TP_INCLUDE_DIR}"
 export CPPFLAGS=$CXXFLAGS
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
@@ -959,6 +967,7 @@ build_vpack
 build_opentelemetry
 build_jemalloc
 build_fast_float
+build_async_profiler
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
