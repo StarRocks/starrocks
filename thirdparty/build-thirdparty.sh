@@ -971,6 +971,14 @@ build_streamvbyte() {
     make install
 }
 
+# async-profiler
+build_async_profiler() {
+    check_if_source_exist $ASYNC_PROFILER_SOURCE
+    mkdir -p $TP_INSTALL_DIR/async-profiler
+    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/build $TP_INSTALL_DIR/async-profiler
+    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/profiler.sh $TP_INSTALL_DIR/async-profiler
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1039,6 +1047,7 @@ build_benchmark
 build_fast_float
 build_cachelib
 build_streamvbyte
+build_async_profiler
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
