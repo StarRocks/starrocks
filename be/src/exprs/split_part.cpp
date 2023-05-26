@@ -24,7 +24,8 @@
 
 namespace starrocks {
 
-static Slice split_positive_index(Slice& delimiter, int32_t& part_number, Slice& haystack) {
+static void split_positive_index(ColumnBuilder<TYPE_VARCHAR> res, Slice& delimiter, int32_t& part_number,
+                                 Slice& haystack) {
     if (delimiter.size == 1) {
         // if delimiter is a char, use memchr to split
         // Record the two adjacent offsets when matching delimiter.
@@ -48,9 +49,10 @@ static Slice split_positive_index(Slice& delimiter, int32_t& part_number, Slice&
         }
 
         if (num == part_number) {
-            return Slice(haystack.data + pre_offset + 1, offset - pre_offset - 1);
+            res.append(Slice(haystack.data + pre_offset + 1, offset - pre_offset - 1));
+        } else {
+            res.append_null();
         }
-        return Slice();
     } else {
         // if delimiter is a string, use memmem to split
         int32_t pre_offset = -static_cast<int32_t>(delimiter.size);
@@ -72,13 +74,15 @@ static Slice split_positive_index(Slice& delimiter, int32_t& part_number, Slice&
         }
 
         if (num == part_number) {
-            return Slice(haystack.data + pre_offset + delimiter.size, offset - pre_offset - delimiter.size);
+            res.append(Slice(haystack.data + pre_offset + delimiter.size, offset - pre_offset - delimiter.size));
+        } else {
+            res.append_null();
         }
-        return Slice();
     }
 }
 
-static Slice split_negative_index(Slice& delimiter, int32_t& part_number, Slice& haystack) {
+static void split_negative_index(ColumnBuilder<TYPE_VARCHAR> res, Slice& delimiter, int32_t& part_number,
+                                 Slice& haystack) {
     part_number = -part_number;
     auto haystack_str = haystack.to_string();
     int32_t offset = haystack.size;
@@ -101,12 +105,13 @@ static Slice split_negative_index(Slice& delimiter, int32_t& part_number, Slice&
     num = (offset == -1 && num != 0) ? num + 1 : num;
     if (num == part_number) {
         if (offset == -1) {
-            return Slice(haystack.data, pre_offset);
+            res.append(Slice(haystack.data, pre_offset));
         } else {
-            return Slice(haystack.data + offset + delimiter.size, pre_offset - offset - delimiter.size);
+            res.append(Slice(haystack.data + offset + delimiter.size, pre_offset - offset - delimiter.size));
         }
+    } else {
+        res.append_null();
     }
-    return Slice();
 }
 
 /**
@@ -159,16 +164,10 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
                 }
             }
         } else {
-            Slice slice;
             if (part_number > 0) {
-                slice = split_positive_index(delimiter, part_number, haystack);
+                split_positive_index(res, delimiter, part_number, haystack);
             } else {
-                slice = split_negative_index(delimiter, part_number, haystack);
-            }
-            if (slice.empty()) {
-                res.append_null();
-            } else {
-                res.append(slice);
+                split_negative_index(res, delimiter, part_number, haystack);
             }
         }
     }
