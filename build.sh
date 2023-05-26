@@ -32,8 +32,6 @@
 # compiled and installed correctly.
 ##############################################################
 
-set -eo pipefail
-
 ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
 MACHINE_TYPE=$(uname -m)
@@ -44,6 +42,23 @@ if [ -z $BUILD_TYPE ]; then
     export BUILD_TYPE=Release
 fi
 
+if [ -z $STARROCKS_VERSION ]; then
+    tag_name=$(git describe --tags --exact-match 2>/dev/null)
+    branch_name=$(git symbolic-ref -q --short HEAD)
+    if [ ! -z $tag_name ]; then
+        export STARROCKS_VERSION=$tag_name
+    elif [ ! -z $branch_name ]; then
+        export STARROCKS_VERSION=$branch_name
+    else
+        export STARROCKS_VERSION=$(git rev-parse --short HEAD)
+    fi
+fi
+
+if [ -z $STARROCKS_COMMIT_HASH]; then
+    export STARROCKS_COMMIT_HASH=$(git rev-parse --short HEAD)
+fi
+
+set -eo pipefail
 . ${STARROCKS_HOME}/env.sh
 
 if [[ $OSTYPE == darwin* ]] ; then
