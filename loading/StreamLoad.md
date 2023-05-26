@@ -92,7 +92,7 @@ Stream Load 当前不支持导入某一列为 JSON 的 CSV 文件的数据。
 通过如下命令，把 `example1.csv` 文件中的数据导入到 `table1` 表中：
 
 ```Bash
-curl --location-trusted -u root: -H "label:123" \
+curl --location-trusted -u <username>:<password> -H "label:123" \
     -H "Expect:100-continue" \
     -H "column_separator:," \
     -H "columns: id, name, score" \
@@ -149,7 +149,7 @@ MySQL [test_db]> SELECT * FROM table1;
 通过如下语句把 `example2.json` 文件中的数据导入到 `table2` 表中：
 
 ```Bash
-curl -v --location-trusted -u root: -H "strict_mode: true" \
+curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
     -H "Expect:100-continue" \
     -H "format: json" -H "jsonpaths: [\"$.name\", \"$.code\"]" \
     -H "columns: city,tmp_id, id = tmp_id * 100" \
