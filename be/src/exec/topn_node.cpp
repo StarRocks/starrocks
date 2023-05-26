@@ -353,7 +353,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
                 _decompose_to_pipeline<LocalPartitionTopnContextFactory, LocalPartitionTopnSinkOperatorFactory,
                                        LocalPartitionTopnSourceOperatorFactory>(context, is_partition, is_merging);
     } else {
-        if (runtime_state()->enable_spill() && _limit < 0) {
+        if (runtime_state()->enable_spill() && runtime_state()->enable_sort_spill() && _limit < 0) {
             operators_source_with_sort =
                     _decompose_to_pipeline<SortContextFactory, SpillablePartitionSortSinkOperatorFactory,
                                            LocalMergeSortSourceOperatorFactory>(context, is_partition, is_merging);
