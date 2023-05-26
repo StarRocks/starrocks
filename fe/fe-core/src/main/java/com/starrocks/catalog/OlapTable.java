@@ -561,7 +561,7 @@ public class OlapTable extends Table {
         Optional<Partition> firstPartition = idToPartition.values().stream().findFirst();
         if (firstPartition.isPresent()) {
             Partition partition = firstPartition.get();
-            return partition.getMaterializedIndices(IndexExtState.VISIBLE);
+            return partition.getAllVisibleMaterializedIndices();
         }
         return Lists.newArrayList();
     }
@@ -1375,6 +1375,35 @@ public class OlapTable extends Table {
         return Math.abs((int) adler32.getValue());
     }
 
+    @Override
+    public List<Long> getAssociatedTableIds() {
+        List<Long> associatedTableIds = Lists.newArrayList(id);
+        indexIdToMeta.values().stream().filter(MaterializedIndexMeta::isLogical)
+                .forEach(m -> associatedTableIds.add(m.getTargetTableId()));
+        return associatedTableIds;
+    }
+
+    // Return associated table_id to index ids mapping.
+    public Map<Long, List<Long>> getAssociatedTableIdToIndexes() {
+        Map<Long, List<Long>> tableIdToIndexes = Maps.newHashMap();
+        for (Map.Entry<Long, MaterializedIndexMeta> entry : indexIdToMeta.entrySet()) {
+            Long indexId = entry.getKey();
+            MaterializedIndexMeta indexMeta = entry.getValue();
+            if (indexMeta.isLogical()) {
+                tableIdToIndexes.computeIfAbsent(indexMeta.getTargetTableId(), x -> Lists.newArrayList())
+                        .add(indexMeta.getTargetTableIndexId());
+            } else {
+                tableIdToIndexes.computeIfAbsent(id, x -> Lists.newArrayList()).add(indexId);
+            }
+        }
+        return tableIdToIndexes;
+    }
+
+    public boolean hasAssociatedTables() {
+        return indexIdToMeta.values().stream()
+                .anyMatch(x -> x.getMetaIndexType() == MaterializedIndexMeta.MetaIndexType.LOGICAL);
+    }
+
     // get intersect partition names with the given table "anotherTbl". not including temp partitions
     public Status getIntersectPartNamesWith(OlapTable anotherTbl, List<String> intersectPartNames) {
         if (this.getPartitionInfo().getType() != anotherTbl.getPartitionInfo().getType()) {
@@ -1544,7 +1573,6 @@ public class OlapTable extends Table {
         }
 
         baseIndexId = in.readLong();
-
 
         // read indexes
         if (in.readBoolean()) {
@@ -1798,6 +1826,17 @@ public class OlapTable extends Table {
     @Override
     public List<Column> getBaseSchema() {
         return getSchemaByIndexId(baseIndexId);
+    }
+
+    @Override
+    public List<Column> getMVSchema() {
+        List<Column> mvSchema = Lists.newArrayList();
+        for (Map.Entry<Long, MaterializedIndexMeta> entry : indexIdToMeta.entrySet()) {
+            if (entry.getKey() != baseIndexId) {
+                mvSchema.addAll(entry.getValue().getSchema());
+            }
+        }
+        return mvSchema;
     }
 
     public List<Column> getBaseSchemaWithoutMaterializedColumn() {

@@ -15,15 +15,14 @@
 
 package com.starrocks.sql.optimizer.rule.mv;
 
-import com.starrocks.analysis.CaseExpr;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 public class MVUtils {
+    public static final String MATERIALIZED_VIEW_NAME_PREFIX = "mv_";
+
     public static boolean isEquivalencePredicate(ScalarOperator predicate) {
         if (predicate instanceof InPredicateOperator) {
             return true;
@@ -69,12 +68,8 @@ public class MVUtils {
         return operator.isColumnRef();
     }
 
-    public static String getMVColumnName(Column mvColumn, String functionName, String queryColumn) {
-        // Support count(column) MV
-        // The origin MV design is bad !!!
-        if (mvColumn.getDefineExpr() instanceof CaseExpr && functionName.equals(FunctionSet.COUNT)) {
-            return "mv_" + FunctionSet.COUNT + "_" + queryColumn;
-        }
-        return "mv_" + mvColumn.getAggregationType().name().toLowerCase() + "_" + queryColumn;
+    public static String getMVColumnName(String functionName, String baseColumnName) {
+        return new StringBuilder().append(MATERIALIZED_VIEW_NAME_PREFIX).append(functionName).append("_")
+                .append(baseColumnName).toString();
     }
 }

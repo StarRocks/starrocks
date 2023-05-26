@@ -1,0 +1,308 @@
+-- name: test_sync_materialized_view
+CREATE TABLE `test1` (
+  `k1` tinyint(4) NULL,
+  `k2` varchar(64) NULL,
+  `k3` bigint NULL ,
+  `k4` varchar(64) NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `target1` (
+  `k1` tinyint(4) NULL,
+  `k2` varchar(64) NULL,
+  `k3` bigint NULL,
+  `k4` varchar(64) NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 
+PROPERTIES ( "enable_populate" = "false" ) 
+to target1
+as
+select k1, k2, k3, k4 from test1; 
+insert into test1 values (1, 'a', 1, 'aa'), (1, 'b', 2, 'bb'), (3, NULL, NULL, NULL);
+-- result:
+-- !result
+select * from test1 order by k1;
+-- result:
+1	a	1	aa
+1	b	2	bb
+3	None	None	None
+-- !result
+select * from target1 order by k1;
+-- result:
+1	a	1	aa
+1	b	2	bb
+3	None	None	None
+-- !result
+CREATE TABLE `target2` (
+  `k1` tinyint(4) NULL,
+  `count_k2` bigint NULL,
+  `sum_k3` bigint NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv2
+PROPERTIES ( "enable_populate" = "false" ) to target2
+as
+select k1, count(k2) as count_k2, sum(k3) as sum_k3 from test1 group by k1;
+-- result:
+-- !result
+insert into test1 values (4, 'a', 1, 'aa'), (5, 'b', 2, 'bb'), (6, NULL, NULL, NULL);
+-- result:
+-- !result
+select * from test1 order by k1;
+-- result:
+1	a	1	aa
+1	b	2	bb
+3	None	None	None
+4	a	1	aa
+5	b	2	bb
+6	None	None	None
+-- !result
+select * from target1 order by k1;
+-- result:
+1	a	1	aa
+1	b	2	bb
+3	None	None	None
+4	a	1	aa
+5	b	2	bb
+6	None	None	None
+-- !result
+select * from target2 order by k1;
+-- result:
+4	1	1
+5	1	2
+6	0	None
+-- !result
+CREATE TABLE `test2` (
+  `k1` tinyint(4) NULL,
+  `k2` varchar(64) NULL,
+  `k3` bigint NULL,
+  `k4` varchar(64) NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv3
+PROPERTIES ( "enable_populate" = "false" ) to target2
+as
+select k1, count(k2) as count_k2, sum(k3) as sum_k3 from test2 group by k1;
+-- result:
+-- !result
+insert into test2 values (1, 'a', 1, 'aa'), (1, 'b', 2, 'bb'), (3, NULL, NULL, NULL);
+-- result:
+-- !result
+select * from test1 order by k1;
+-- result:
+1	a	1	aa
+1	b	2	bb
+3	None	None	None
+4	a	1	aa
+5	b	2	bb
+6	None	None	None
+-- !result
+select * from target1 order by k1;
+-- result:
+1	a	1	aa
+1	b	2	bb
+3	None	None	None
+4	a	1	aa
+5	b	2	bb
+6	None	None	None
+-- !result
+select * from target2 order by k1;
+-- result:
+1	1	1
+1	1	2
+3	0	None
+4	1	1
+5	1	2
+6	0	None
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+drop materialized view test_mv2;
+-- result:
+-- !result
+drop materialized view test_mv3;
+-- result:
+-- !result
+CREATE TABLE `part_test1` (
+  `k1` tinyint(4) NULL,
+  `k2` varchar(64) NULL,
+  `k3` bigint NULL,
+  `k4` varchar(64) NULL,
+  `dt` datetime NOT NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+PARTITION BY RANGE (dt) (
+ START ("2023-05-20") END ("2023-05-24") EVERY (INTERVAL 1 day)
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `part_target1` (
+  `k1` tinyint(4) NULL,
+  `k2` varchar(64) NULL,
+  `k3` bigint NULL,
+  `k4` varchar(64) NULL,
+  `dt` datetime NOT NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+PARTITION BY RANGE (dt) (
+ START ("2023-05-20") END ("2023-05-24") EVERY (INTERVAL 1 day)
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_part_mv1 
+PROPERTIES ( "enable_populate" = "false" ) 
+to part_target1
+as
+select k1, k2, k3, k4, dt from part_test1; 
+insert into part_test1 values (1, 'a', 1, 'aa', '2023-05-20 00:00:00'), (2, 'b', 2, 'bb', '2023-05-21 00:00:00');
+-- result:
+-- !result
+select * from part_test1 order by k1;
+-- result:
+1	a	1	aa	2023-05-20 00:00:00
+2	b	2	bb	2023-05-21 00:00:00
+-- !result
+select * from part_target1 order by k1;
+-- result:
+1	a	1	aa	2023-05-20 00:00:00
+2	b	2	bb	2023-05-21 00:00:00
+-- !result
+CREATE TABLE `part_target2` (
+  `k1` tinyint(4) NULL,
+  `dt` datetime NOT NULL,
+  `count_k2` bigint sum NULL,
+  `sum_k3` bigint sum NULL
+) ENGINE=OLAP 
+aggregate KEY(`k1`, `dt`)
+PARTITION BY RANGE (dt) (
+ START ("2023-05-20") END ("2023-05-24") EVERY (INTERVAL 1 day)
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_part_mv2
+PROPERTIES ( "enable_populate" = "false" ) to part_target2
+as
+select k1, dt, count(k2) as count_k2, sum(k3) as sum_k3 from part_test1 group by dt, k1; 
+insert into part_test1 values (1, 'a', 1, 'aa', '2023-05-20 00:00:00'), (2, 'b', 2, 'bb', '2023-05-21 00:00:00');
+-- result:
+-- !result
+select * from part_test1 order by k1;
+-- result:
+1	a	1	aa	2023-05-20 00:00:00
+1	a	1	aa	2023-05-20 00:00:00
+2	b	2	bb	2023-05-21 00:00:00
+2	b	2	bb	2023-05-21 00:00:00
+-- !result
+select * from part_target1 order by k1;
+-- result:
+1	a	1	aa	2023-05-20 00:00:00
+1	a	1	aa	2023-05-20 00:00:00
+2	b	2	bb	2023-05-21 00:00:00
+2	b	2	bb	2023-05-21 00:00:00
+-- !result
+select * from part_target2 order by k1;
+-- result:
+1	2023-05-20 00:00:00	1	1
+2	2023-05-21 00:00:00	1	2
+-- !result
+CREATE TABLE `part_test2` (
+  `k1` tinyint(4) NULL,
+  `k2` varchar(64) NULL,
+  `k3` bigint NULL,
+  `k4` varchar(64) NULL,
+  `dt` datetime NOT NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`k1`)
+PARTITION BY RANGE (dt) (
+ START ("2023-05-20") END ("2023-05-24") EVERY (INTERVAL 1 day)
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_part_mv3
+PROPERTIES ( "enable_populate" = "false" ) to part_target2
+as
+select k1, dt, count(k2) as count_k2, sum(k3) as sum_k3 from part_test2 group by dt, k1; 
+insert into part_test1 values (1, 'a', 1, 'aa', '2023-05-20 00:00:00'), (2, 'b', 2, 'bb', '2023-05-21 00:00:00');
+-- result:
+-- !result
+insert into part_test2 values (1, 'a', 1, 'aa', '2023-05-20 00:00:00'), (2, 'b', 2, 'bb', '2023-05-21 00:00:00');
+-- result:
+-- !result
+select * from part_test1 order by k1;
+-- result:
+1	a	1	aa	2023-05-20 00:00:00
+1	a	1	aa	2023-05-20 00:00:00
+1	a	1	aa	2023-05-20 00:00:00
+2	b	2	bb	2023-05-21 00:00:00
+2	b	2	bb	2023-05-21 00:00:00
+2	b	2	bb	2023-05-21 00:00:00
+-- !result
+select * from part_test2 order by k1;
+-- result:
+1	a	1	aa	2023-05-20 00:00:00
+2	b	2	bb	2023-05-21 00:00:00
+-- !result
+select * from part_target1 order by k1;
+-- result:
+1	a	1	aa	2023-05-20 00:00:00
+1	a	1	aa	2023-05-20 00:00:00
+1	a	1	aa	2023-05-20 00:00:00
+2	b	2	bb	2023-05-21 00:00:00
+2	b	2	bb	2023-05-21 00:00:00
+2	b	2	bb	2023-05-21 00:00:00
+-- !result
+select * from part_target2 order by k1;
+-- result:
+1	2023-05-20 00:00:00	3	3
+2	2023-05-21 00:00:00	3	6
+-- !result
+drop materialized view test_part_mv1;
+-- result:
+-- !result
+drop materialized view test_part_mv2;
+-- result:
+-- !result
+drop materialized view test_part_mv3;
+-- result:
+-- !result
