@@ -357,9 +357,13 @@ curl --location-trusted -u {user}:{passwd} \
 以下示例通过 curl 命令查看 Label 为 `insert_load_wikipedia` 的导入作业状态。
 
 ```Plain
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
   http://x.x.x.x:8030/api/load_test/_load_info?label=insert_load_wikipedia
 ```
+
+> **说明**
+>
+> 如果账号没有设置密码，这里只需要传入 `<username>:`。
 
 返回如下：
 
