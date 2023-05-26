@@ -1,10 +1,16 @@
 # UPDATE
 
-Modifies rows in a Primary Key table. In versions earlier than version 3.0, the UPDATE statement only supports Single-table UPDATE and common table expressions (CTEs), such as `UPDATE <table_name> SET <column_name>=<expression> WHERE <where_condition>`. Starting from version 3.0, StarRocks enriches the syntax to support multi-table joins and CTE. If you need to join the table to be updated with other tables in the database, you can reference these other tables in the FROM clause or CTE.
+Modifies rows in a Primary Key table.
+
+In versions earlier than version 3.0, the UPDATE statement only supports single-table UPDATE and does not support common table expressions (CTEs). Starting from version 3.0, StarRocks enriches the syntax to support multi-table joins and CTE. If you need to join the table to be updated with other tables in the database, you can reference these other tables in the FROM clause or CTE.
 
 ## Usage notes
 
-**Single-table syntax**
+When executing the UPDATE statement, StarRocks converts the table expression in the FROM clause of the UPDATE statement into an equivalent JOIN query statement. Therefore, make sure that the table expression that you specify in the FROM clause of the UPDATE statement supports this conversion. For example, the UPDATE statement is 'UPDATE t0 SET v1=t1.v1 FROM t1 WHERE t0.pk = t1.pk;'. The table expression in the FROM clause can be converted to 't0 JOIN t1 ON t0.pk=t1.pk;'. And based on the result set of the JOIN query, StarRocks matches the data rows in the table to be updated and updates the values of the specified columns. If one data row in the result set of the JOIN query has multiple associated results, the update result of that data row in the table to be updated is random.
+
+## Syntax
+
+**Single-table UPDATE**
 
 If the data rows of the table to be updated meet the WHERE condition, the specified columns of these data rows are assigned new values.
 
@@ -15,7 +21,7 @@ UPDATE <table_name>
     WHERE <where_condition>
 ```
 
-**Multi-table syntax**
+**Multi-table UPDATE**
 
 The result set from the multi-table join is matched against the table to be updated. If the data rows of the table to be updated match the result set and meet the WHERE condition, the specified columns of these data rows are assigned new values.
 
@@ -107,7 +113,7 @@ WHERE Employees.Salary < AvgSalary.AverageSalary;
 
 ### Multi-table UPDATE
 
-Create a table called Accounts to record account information and insert three data rows into the table.
+Create a table `Accounts` to record account information and insert three data rows into the table.
 
 ```SQL
 CREATE TABLE Accounts (
@@ -125,7 +131,7 @@ INSERT INTO Accounts VALUES
     (3,'Acme Corporation','Lily Swift');
 ```
 
-If you need to give a 10% raise to employees in the table Employees who manage accounts for Acme Corporation, you can execute the following statement:
+If you need to give a 10% raise to employees in the table `Employees` who manage accounts for Acme Corporation, you can execute the following statement:
 
 ```SQL
 UPDATE Employees
