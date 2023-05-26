@@ -78,7 +78,7 @@ private:
     Status _construct_column(const avro_value_t& input_value, Column* column, const TypeDescriptor& type_desc,
                              const std::string& col_name);
     Status _extract_field(const avro_value_t& input_value, const std::vector<AvroPath>& paths,
-                          const avro_value_t* output_value);
+                          avro_value_t* output_value);
     Status _handle_union(const avro_value_t* input_value, avro_value_t* branch);
     Status _get_array_element(const avro_value_t* cur_value, size_t idx, avro_value_t* element);
     std::string _preprocess_jsonpaths(std::string jsonpath);
