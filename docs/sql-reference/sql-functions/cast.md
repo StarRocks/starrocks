@@ -56,7 +56,7 @@ Example 1: common data conversions
 Example 2: Convert data during loading.
 
 ```bash
-    curl --location-trusted -u root: -T ~/user_data/bigint \
+    curl --location-trusted -u <username>:<password> -T ~/user_data/bigint \
         -H "columns: tmp_k1, k1=cast(tmp_k1 as BIGINT)" \
         http://host:port/api/test/bigint/_stream_load
 ```
@@ -66,7 +66,7 @@ Example 2: Convert data during loading.
 > If the original value is a floating-point value (such as 12.0), it will be converted to NULL. If you want to forcibly convert this type into BIGINT, see the following example:
 
 ```bash
-    curl --location-trusted -u root: -T ~/user_data/bigint \
+    curl --location-trusted -u <username>:<password> -T ~/user_data/bigint \
         -H "columns: tmp_k1, k1=cast(cast(tmp_k1 as DOUBLE) as BIGINT)" \
         http://host:port/api/test/bigint/_stream_load
 ```

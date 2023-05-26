@@ -367,7 +367,7 @@ A: StarRocks v2.0 parses all columns as strings and then performs type conversio
 You can solve this problem by adding the expression `tmp, target=if(tmp,1,0)` to the `columns` parameter of the Stream Load command. The complete command is as follows:
 
 ```shell
-curl --location-trusted -u root:
+curl --location-trusted -u <username>:<password>
 -H "columns: <col_name_1>, <col_name_2>, <tmp>, <col_name_3>=if(<tmp>,1,0)" 
 -T demo.csv -XPUT 
 http://<fe_ip>:<fe_http_port>/api/<db_name>/<table_name>/_stream_load
