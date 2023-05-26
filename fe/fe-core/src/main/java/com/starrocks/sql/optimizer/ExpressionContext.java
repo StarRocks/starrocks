@@ -128,6 +128,14 @@ public class ExpressionContext {
         return statisticsForMv != null ? statisticsForMv : statistics;
     }
 
+    public Statistics getGroupStatistics() {
+        return isGroupExprContext() ? statistics : null;
+    }
+
+    public GroupExpression getGroupExpression() {
+        return groupExpression;
+    }
+
     public void setStatistics(Statistics statistics) {
         this.statistics = statistics;
     }
