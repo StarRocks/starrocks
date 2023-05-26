@@ -20,6 +20,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
+
 public class MVUtils {
     public static final String MATERIALIZED_VIEW_NAME_PREFIX = "mv_";
 
@@ -68,8 +70,8 @@ public class MVUtils {
         return operator.isColumnRef();
     }
 
-    public static String getMVColumnName(String functionName, String baseColumnName) {
+    public static String getMVColumnName(String functionName, List<String> baseColumnNames) {
         return new StringBuilder().append(MATERIALIZED_VIEW_NAME_PREFIX).append(functionName).append("_")
-                .append(baseColumnName).toString();
+                .append(String.join("_", baseColumnNames)).toString();
     }
 }

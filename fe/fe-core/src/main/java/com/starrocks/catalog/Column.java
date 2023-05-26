@@ -476,14 +476,13 @@ public class Column implements Writable {
         materializedColumnExpr = expr;
     }
 
-    public SlotRef getRefColumn() {
-        List<Expr> slots = new ArrayList<>();
+    public List<SlotRef> getRefColumns() {
+        List<SlotRef> slots = new ArrayList<>();
         if (defineExpr == null) {
             return null;
         } else {
             defineExpr.collect(SlotRef.class, slots);
-            Preconditions.checkArgument(slots.size() == 1);
-            return (SlotRef) slots.get(0);
+            return slots;
         }
     }
 

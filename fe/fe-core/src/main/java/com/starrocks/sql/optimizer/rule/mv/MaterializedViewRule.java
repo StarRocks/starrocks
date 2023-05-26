@@ -53,6 +53,7 @@ import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -879,7 +880,9 @@ public class MaterializedViewRule extends Rule {
                 if (queryFnName.equalsIgnoreCase(FunctionSet.COUNT) && mvColumn.getDefineExpr() instanceof CaseExpr) {
                     mvFuncName = FunctionSet.COUNT;
                 }
-                String mvColumnName = MVUtils.getMVColumnName(mvFuncName, queryColumn.getName());
+                List<String> columnNames = new ArrayList<>();
+                columnNames.add(queryColumn.getName());
+                String mvColumnName = MVUtils.getMVColumnName(mvFuncName, columnNames);
                 if (mvColumnName.equalsIgnoreCase(mvColumn.getName())) {
                     mvIdToRewriteContexts.computeIfAbsent(indexId, k -> Lists.newArrayList())
                             .add(new RewriteContext(queryFn, queryColumnRef, mvColumnRef, mvColumn));
