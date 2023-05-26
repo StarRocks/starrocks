@@ -42,8 +42,8 @@ public:
 
     virtual Status execute(Progress* stats, CancelFunc cancel_func) = 0;
 
-    inline static const CancelFunc kNoCancel = []() { return false; };
-    inline static const CancelFunc kCancelled = []() { return true; };
+    inline static const CancelFunc kNoCancelFn = []() { return false; };
+    inline static const CancelFunc kCancelledFn = []() { return true; };
 };
 
 } // namespace starrocks::lake
