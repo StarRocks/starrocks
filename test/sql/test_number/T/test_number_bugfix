@@ -37,7 +37,7 @@ CREATE TABLE `sr_8537` (
                  "dynamic_partition.prefix" = "p_month",
                  "dynamic_partition.buckets" = "12"
                 );
-shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8537.csv -XPUT -H label:stream_load_1668145399844 -H column_separator:, ${url}/api/test_number_bf5a0936_6183_11ed_b695_00163e0b9de0/sr_8537/_stream_load
+shell: curl --location-trusted -u <username>:<password> -T ${root_path}/lib/../common/data/stream_load/sr_8537.csv -XPUT -H label:stream_load_1668145399844 -H column_separator:, ${url}/api/test_number_bf5a0936_6183_11ed_b695_00163e0b9de0/sr_8537/_stream_load
 sync;
 select * from sr_8537;
 drop database test_number_bf5a0936_6183_11ed_b695_00163e0b9de0;

@@ -1450,7 +1450,13 @@ public class GlobalStateMgr {
 
     public void updateBaseTableRelatedMv(Long dbId, MaterializedView mv, List<BaseTableInfo> baseTableInfos) {
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Table table = baseTableInfo.getTable();
+            Table table;
+            try {
+                table = baseTableInfo.getTable();
+            } catch (Exception e) {
+                LOG.warn("there is an exception during get table from mv base table. exception:", e);
+                continue;
+            }
             if (table == null) {
                 LOG.warn("Setting the materialized view {}({}) to invalid because " +
                         "the table {} was not exist.", mv.getName(), mv.getId(), baseTableInfo.getTableName());
