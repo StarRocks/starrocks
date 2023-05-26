@@ -358,7 +358,7 @@ public class DDLStmtExecutor {
                             + " Try using broker load. See 'help broker load;'");
                 }
 
-                context.getGlobalStateMgr().getLoadManager().createLoadJobFromStmt(stmt, context);
+                context.getGlobalStateMgr().getLoadMgr().createLoadJobFromStmt(stmt, context);
             });
             return null;
         }
@@ -366,7 +366,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCancelLoadStatement(CancelLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLoadManager().cancelLoadJob(stmt);
+                context.getGlobalStateMgr().getLoadMgr().cancelLoadJob(stmt);
             });
             return null;
         }
@@ -374,7 +374,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateRoutineLoadStatement(CreateRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getRoutineLoadManager().createRoutineLoadJob(stmt);
+                context.getGlobalStateMgr().getRoutineLoadMgr().createRoutineLoadJob(stmt);
             });
             return null;
         }
@@ -382,7 +382,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitPauseRoutineLoadStatement(PauseRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getRoutineLoadManager().pauseRoutineLoadJob(stmt);
+                context.getGlobalStateMgr().getRoutineLoadMgr().pauseRoutineLoadJob(stmt);
             });
             return null;
         }
@@ -390,7 +390,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getRoutineLoadManager().resumeRoutineLoadJob(stmt);
+                context.getGlobalStateMgr().getRoutineLoadMgr().resumeRoutineLoadJob(stmt);
             });
             return null;
         }
@@ -398,7 +398,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitStopRoutineLoadStatement(StopRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getRoutineLoadManager().stopRoutineLoadJob(stmt);
+                context.getGlobalStateMgr().getRoutineLoadMgr().stopRoutineLoadJob(stmt);
             });
             return null;
         }
@@ -406,7 +406,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterRoutineLoadStatement(AlterRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getRoutineLoadManager().alterRoutineLoadJob(stmt);
+                context.getGlobalStateMgr().getRoutineLoadMgr().alterRoutineLoadJob(stmt);
             });
             return null;
         }
@@ -414,7 +414,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterLoadStatement(AlterLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLoadManager().alterLoadJob(stmt);
+                context.getGlobalStateMgr().getLoadMgr().alterLoadJob(stmt);
             });
             return null;
         }
@@ -422,7 +422,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateUserStatement(CreateUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthenticationManager().createUser(stmt);
+                context.getGlobalStateMgr().getAuthenticationMgr().createUser(stmt);
             });
             return null;
         }
@@ -430,7 +430,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthenticationManager()
+                context.getGlobalStateMgr().getAuthenticationMgr()
                         .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo());
             });
             return null;
@@ -439,7 +439,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropUserStatement(DropUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthenticationManager().dropUser(stmt);
+                context.getGlobalStateMgr().getAuthenticationMgr().dropUser(stmt);
             });
             return null;
         }
@@ -449,9 +449,9 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
 
                 if (stmt instanceof GrantRoleStmt) {
-                    context.getGlobalStateMgr().getAuthorizationManager().grantRole((GrantRoleStmt) stmt);
+                    context.getGlobalStateMgr().getAuthorizationMgr().grantRole((GrantRoleStmt) stmt);
                 } else {
-                    context.getGlobalStateMgr().getAuthorizationManager().revokeRole((RevokeRoleStmt) stmt);
+                    context.getGlobalStateMgr().getAuthorizationMgr().revokeRole((RevokeRoleStmt) stmt);
                 }
             });
             return null;
@@ -463,10 +463,10 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (stmt instanceof GrantPrivilegeStmt) {
 
-                    context.getGlobalStateMgr().getAuthorizationManager().grant((GrantPrivilegeStmt) stmt);
+                    context.getGlobalStateMgr().getAuthorizationMgr().grant((GrantPrivilegeStmt) stmt);
 
                 } else {
-                    context.getGlobalStateMgr().getAuthorizationManager().revoke((RevokePrivilegeStmt) stmt);
+                    context.getGlobalStateMgr().getAuthorizationMgr().revoke((RevokePrivilegeStmt) stmt);
                 }
             });
             return null;
@@ -475,7 +475,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthorizationManager().createRole(stmt);
+                context.getGlobalStateMgr().getAuthorizationMgr().createRole(stmt);
             });
             return null;
         }
@@ -483,7 +483,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropRoleStatement(DropRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthorizationManager().dropRole(stmt);
+                context.getGlobalStateMgr().getAuthorizationMgr().dropRole(stmt);
             });
             return null;
         }
@@ -491,7 +491,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitSetUserPropertyStatement(SetUserPropertyStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthenticationManager().updateUserProperty(stmt.getUser(),
+                context.getGlobalStateMgr().getAuthenticationMgr().updateUserProperty(stmt.getUser(),
                         stmt.getPropertyPairList());
 
             });
@@ -502,7 +502,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement stmt,
                                                                      ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthenticationManager().createSecurityIntegration(
+                context.getGlobalStateMgr().getAuthenticationMgr().createSecurityIntegration(
                         stmt.getName(), stmt.getPropertyMap());
             });
 
@@ -754,7 +754,7 @@ public class DDLStmtExecutor {
                         stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN);
 
-                context.getGlobalStateMgr().getAnalyzeManager().addAnalyzeJob(analyzeJob);
+                context.getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(analyzeJob);
 
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 // from current session, may execute analyze stmt
@@ -774,7 +774,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropAnalyzeStatement(DropAnalyzeJobStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(
-                    () -> context.getGlobalStateMgr().getAnalyzeManager().removeAnalyzeJob(stmt.getId()));
+                    () -> context.getGlobalStateMgr().getAnalyzeMgr().removeAnalyzeJob(stmt.getId()));
             return null;
         }
 

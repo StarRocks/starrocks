@@ -313,9 +313,9 @@ public class ConnectContext {
         try {
             Set<Long> defaultRoleIds;
             if (GlobalVariable.isActivateAllRolesOnLogin()) {
-                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(user);
+                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdsByUser(user);
             } else {
-                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationManager().getDefaultRoleIdsByUser(user);
+                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationMgr().getDefaultRoleIdsByUser(user);
             }
             this.currentRoleIds = defaultRoleIds;
         } catch (PrivilegeException e) {

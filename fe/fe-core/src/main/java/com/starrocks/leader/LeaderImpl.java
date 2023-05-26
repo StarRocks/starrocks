@@ -486,7 +486,7 @@ public class LeaderImpl {
             if (pushTask.getPushType() == TPushType.LOAD || pushTask.getPushType() == TPushType.LOAD_DELETE) {
                 Preconditions.checkArgument(false, "LOAD and LOAD_DELETE not supported");
             } else if (pushTask.getPushType() == TPushType.DELETE) {
-                DeleteJob deleteJob = GlobalStateMgr.getCurrentState().getDeleteHandler().getDeleteJob(transactionId);
+                DeleteJob deleteJob = GlobalStateMgr.getCurrentState().getDeleteMgr().getDeleteJob(transactionId);
                 if (deleteJob == null) {
                     throw new MetaNotFoundException("cannot find delete job, job[" + transactionId + "]");
                 }
@@ -505,7 +505,7 @@ public class LeaderImpl {
             } else if (pushTask.getPushType() == TPushType.LOAD_V2) {
                 long loadJobId = pushTask.getLoadJobId();
                 com.starrocks.load.loadv2.LoadJob job =
-                        GlobalStateMgr.getCurrentState().getLoadManager().getLoadJob(loadJobId);
+                        GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJob(loadJobId);
                 if (job == null) {
                     throw new MetaNotFoundException("cannot find load job, job[" + loadJobId + "]");
                 }

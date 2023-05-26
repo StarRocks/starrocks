@@ -27,7 +27,7 @@ import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.privilege.ActionSet;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.CatalogPEntryObject;
 import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.FunctionPEntryObject;
@@ -89,7 +89,7 @@ public class GrantsTo {
     }
 
     public static TGetGrantsToRolesOrUserResponse getGrantsTo(TGetGrantsToRolesOrUserRequest request) {
-        AuthorizationManager authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+        AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         TGetGrantsToRolesOrUserResponse tGetGrantsToRolesOrUserResponse = new TGetGrantsToRolesOrUserResponse();
         if (request.getType().equals(TGrantsToType.USER)) {
             Set<UserIdentity> userIdentities = authorizationManager.getAllUserIdentities();
@@ -114,7 +114,7 @@ public class GrantsTo {
     }
 
     private static Set<TGetGrantsToRolesOrUserItem> getGrantItems(
-            AuthorizationManager authorizationManager, String grantee,
+            AuthorizationMgr authorizationManager, String grantee,
             Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> privileges) {
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();

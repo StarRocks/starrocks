@@ -178,7 +178,7 @@ public class LakeDeleteJob extends DeleteJob {
 
     @Override
     public void clear() {
-        GlobalStateMgr.getCurrentState().getDeleteHandler().removeKillJob(getId());
+        GlobalStateMgr.getCurrentState().getDeleteMgr().removeKillJob(getId());
     }
 
     @Override

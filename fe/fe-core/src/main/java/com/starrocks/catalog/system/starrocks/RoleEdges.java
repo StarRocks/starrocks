@@ -17,7 +17,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.GlobalStateMgr;
@@ -45,7 +45,7 @@ public class RoleEdges {
     }
 
     public static TGetRoleEdgesResponse getRoleEdges(TGetRoleEdgesRequest request) {
-        AuthorizationManager authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+        AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         TGetRoleEdgesResponse tGetRoleEdgesResponse = new TGetRoleEdgesResponse();
 
         List<String> allRoles = authorizationManager.getAllRoles();

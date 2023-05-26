@@ -216,7 +216,7 @@ public class TaskRun implements Comparable<TaskRun> {
                         long jobId = executor.getCoordinator().getJobId();
                         if (jobId != -1) {
                             InsertLoadJob job = (InsertLoadJob) GlobalStateMgr.getCurrentState()
-                                    .getLoadManager().getLoadJob(jobId);
+                                    .getLoadMgr().getLoadJob(jobId);
                             int progress = job.getProgress();
                             if (progress == 100) {
                                 progress = 99;

@@ -109,7 +109,7 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
             return;
         }
         setState(DeleteState.FINISHED);
-        GlobalStateMgr.getCurrentState().getDeleteHandler().recordFinishedJob(this);
+        GlobalStateMgr.getCurrentState().getDeleteMgr().recordFinishedJob(this);
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
         GlobalStateMgr.getCurrentState().getEditLog().logFinishMultiDelete(deleteInfo);
     }
@@ -154,7 +154,7 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
         TransactionStatus status = TransactionStatus.UNKNOWN;
         try {
             if (commitImpl(db, timeoutMs)) {
-                GlobalStateMgr.getCurrentState().getDeleteHandler()
+                GlobalStateMgr.getCurrentState().getDeleteMgr()
                         .updateTableDeleteInfo(GlobalStateMgr.getCurrentState(), db.getId(),
                                 getDeleteInfo().getTableId());
             }

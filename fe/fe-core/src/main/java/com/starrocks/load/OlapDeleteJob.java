@@ -194,7 +194,7 @@ public class OlapDeleteJob extends DeleteJob {
             while (countDownTime > 0) {
                 if (countDownTime > CHECK_INTERVAL) {
                     countDownTime -= CHECK_INTERVAL;
-                    if (GlobalStateMgr.getCurrentState().getDeleteHandler().removeKillJob(getId())) {
+                    if (GlobalStateMgr.getCurrentState().getDeleteMgr().removeKillJob(getId())) {
                         cancel(DeleteMgr.CancelType.USER, "user cancelled");
                         throw new DdlException("Cancelled");
                     }

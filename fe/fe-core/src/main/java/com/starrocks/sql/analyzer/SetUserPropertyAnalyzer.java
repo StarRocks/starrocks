@@ -15,7 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 
@@ -29,7 +29,7 @@ public class SetUserPropertyAnalyzer {
             statement.setUser(ConnectContext.get().getQualifiedUser());
         } else {
             // If param 'user' is set, check if it needs to be full-qualified
-            if (!user.equals(AuthenticationManager.ROOT_USER)) {
+            if (!user.equals(AuthenticationMgr.ROOT_USER)) {
                 statement.setUser(user);
             }
         }

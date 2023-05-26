@@ -20,7 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationException;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
@@ -33,7 +33,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
@@ -76,12 +76,12 @@ public class PrivilegeStmtAnalyzer {
     }
 
     static class PrivilegeStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
-        private AuthenticationManager authenticationManager = null;
-        private AuthorizationManager authorizationManager = null;
+        private AuthenticationMgr authenticationManager = null;
+        private AuthorizationMgr authorizationManager = null;
 
         public void analyze(StatementBase statement, ConnectContext session) {
-            authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationManager();
-            authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+            authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
             visit(statement, session);
         }
 
@@ -166,7 +166,7 @@ public class PrivilegeStmtAnalyzer {
                 info.setOrigUserHost(userIdentity.getQualifiedUser(), userIdentity.getHost());
                 stmt.setAuthenticationInfo(info);
                 if (stmt instanceof AlterUserStmt) {
-                    session.getGlobalStateMgr().getAuthenticationManager().checkPasswordReuse(
+                    session.getGlobalStateMgr().getAuthenticationMgr().checkPasswordReuse(
                             userIdentity, stmt.getOriginalPassword());
                 }
             } catch (AuthenticationException | DdlException e) {

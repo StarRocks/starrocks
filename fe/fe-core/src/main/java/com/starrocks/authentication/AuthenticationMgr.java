@@ -28,7 +28,7 @@ import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.UserPrivilegeCollection;
@@ -57,8 +57,8 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class AuthenticationManager {
-    private static final Logger LOG = LogManager.getLogger(AuthenticationManager.class);
+public class AuthenticationMgr {
+    private static final Logger LOG = LogManager.getLogger(AuthenticationMgr.class);
     private static final String DEFAULT_PLUGIN = PlainPasswordAuthenticationProvider.PLUGIN_NAME;
     public static final String ROOT_USER = "root";
     public static final long DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER = 100;
@@ -122,7 +122,7 @@ public class AuthenticationManager {
     @SerializedName("sim")
     private Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
 
-    public AuthenticationManager() {
+    public AuthenticationMgr() {
         // default plugin
         AuthenticationProviderFactory.installPlugin(
                 PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider());
@@ -311,7 +311,7 @@ public class AuthenticationManager {
                 userNameToProperty.put(userIdentity.getQualifiedUser(), userProperty);
             }
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            AuthorizationManager authorizationManager = globalStateMgr.getAuthorizationManager();
+            AuthorizationMgr authorizationManager = globalStateMgr.getAuthorizationMgr();
             // init user privilege
             UserPrivilegeCollection collection = authorizationManager.onCreateUser(userIdentity, stmt.getDefaultRoles());
 
@@ -391,7 +391,7 @@ public class AuthenticationManager {
             throws AuthenticationException {
         // using concurrent hash map and COW, we don't need lock protection here
         SecurityIntegration securityIntegration =
-                SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);;
+                SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
         nameToSecurityIntegrationMap.put(name, securityIntegration);
     }
 
@@ -419,7 +419,7 @@ public class AuthenticationManager {
         try {
             dropUserNoLock(userIdentity);
             // drop user privilege as well
-            GlobalStateMgr.getCurrentState().getAuthorizationManager().onDropUser(userIdentity);
+            GlobalStateMgr.getCurrentState().getAuthorizationMgr().onDropUser(userIdentity);
             GlobalStateMgr.getCurrentState().getEditLog().logDropUser(userIdentity);
         } finally {
             writeUnlock();
@@ -431,7 +431,7 @@ public class AuthenticationManager {
         try {
             dropUserNoLock(userIdentity);
             // drop user privilege as well
-            GlobalStateMgr.getCurrentState().getAuthorizationManager().onDropUser(userIdentity);
+            GlobalStateMgr.getCurrentState().getAuthorizationMgr().onDropUser(userIdentity);
         } finally {
             writeUnlock();
         }
@@ -470,7 +470,7 @@ public class AuthenticationManager {
             }
 
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            globalStateMgr.getAuthorizationManager().replayUpdateUserPrivilegeCollection(
+            globalStateMgr.getAuthorizationMgr().replayUpdateUserPrivilegeCollection(
                     userIdentity, privilegeCollection, pluginId, pluginVersion);
         } finally {
             writeUnlock();
@@ -561,7 +561,7 @@ public class AuthenticationManager {
         try {
             // 1 json for myself,1 json for number of users, 2 json for each user(kv)
             final int cnt = 1 + 1 + userToAuthenticationInfo.size() * 2;
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, AuthenticationManager.class.getName(), cnt);
+            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, "AuthenticationManager", cnt);
             // 1 json for myself
             writer.writeJson(this);
             // 1 json for num user
@@ -580,13 +580,13 @@ public class AuthenticationManager {
         }
     }
 
-    public static AuthenticationManager load(DataInputStream dis) throws IOException, DdlException {
+    public static AuthenticationMgr load(DataInputStream dis) throws IOException, DdlException {
         try {
-            SRMetaBlockReader reader = new SRMetaBlockReader(dis, AuthenticationManager.class.getName());
-            AuthenticationManager ret = null;
+            SRMetaBlockReader reader = new SRMetaBlockReader(dis, "AuthenticationManager");
+            AuthenticationMgr ret = null;
             try {
                 // 1 json for myself
-                ret = reader.readJson(AuthenticationManager.class);
+                ret = reader.readJson(AuthenticationMgr.class);
                 ret.userToAuthenticationInfo = new UserAuthInfoTreeMap();
                 // 1 json for num user
                 int numUser = reader.readJson(int.class);
@@ -682,10 +682,10 @@ public class AuthenticationManager {
                             },
                             getClass().getClassLoader()
                     );
-                    authClazz = Class.forName(AuthenticationManager.KRB5_AUTH_CLASS_NAME, true, loader);
+                    authClazz = Class.forName(AuthenticationMgr.KRB5_AUTH_CLASS_NAME, true, loader);
                 }
             } catch (Exception e) {
-                LOG.error("Failed to load {}", AuthenticationManager.KRB5_AUTH_CLASS_NAME, e);
+                LOG.error("Failed to load {}", AuthenticationMgr.KRB5_AUTH_CLASS_NAME, e);
                 return false;
             }
         }
@@ -695,5 +695,63 @@ public class AuthenticationManager {
 
     public Class<?> getAuthClazz() {
         return authClazz;
+    }
+
+    public void saveV2(DataOutputStream dos) throws IOException {
+        try {
+            // 1 json for myself,1 json for number of users, 2 json for each user(kv)
+            final int cnt = 1 + 1 + userToAuthenticationInfo.size() * 2;
+            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, AuthenticationMgr.class.getName(), cnt);
+            // 1 json for myself
+            writer.writeJson(this);
+            // 1 json for num user
+            writer.writeJson(userToAuthenticationInfo.size());
+            for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : userToAuthenticationInfo.entrySet()) {
+                // 2 json for each user(kv)
+                writer.writeJson(entry.getKey());
+                writer.writeJson(entry.getValue());
+            }
+            LOG.info("saved {} users", userToAuthenticationInfo.size());
+            writer.close();
+        } catch (SRMetaBlockException e) {
+            IOException exception = new IOException("failed to save AuthenticationManager!");
+            exception.initCause(e);
+            throw exception;
+        }
+    }
+
+    public void loadV2(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, AuthenticationMgr.class.getName());
+        try {
+            AuthenticationMgr ret = null;
+            try {
+                // 1 json for myself
+                ret = reader.readJson(AuthenticationMgr.class);
+                ret.userToAuthenticationInfo = new UserAuthInfoTreeMap();
+                // 1 json for num user
+                int numUser = reader.readJson(int.class);
+                LOG.info("loading {} users", numUser);
+                for (int i = 0; i != numUser; ++i) {
+                    // 2 json for each user(kv)
+                    UserIdentity userIdentity = reader.readJson(UserIdentity.class);
+                    UserAuthenticationInfo userAuthenticationInfo = reader.readJson(UserAuthenticationInfo.class);
+                    userAuthenticationInfo.analyze();
+                    ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
+                }
+            } catch (AuthenticationException e) {
+                throw new RuntimeException(e);
+            } finally {
+                reader.close();
+            }
+            LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
+
+            // mark data is loaded
+            this.isLoaded = true;
+            this.userNameToProperty = ret.userNameToProperty;
+            this.nameToSecurityIntegrationMap = ret.nameToSecurityIntegrationMap;
+            this.userToAuthenticationInfo = ret.userToAuthenticationInfo;
+        } finally {
+            reader.close();
+        }
     }
 }

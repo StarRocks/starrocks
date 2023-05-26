@@ -42,7 +42,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
@@ -354,7 +354,7 @@ public class AlterJobMgr {
         if (AlterMaterializedViewStmt.ACTIVE.equalsIgnoreCase(status)) {
             String viewDefineSql = materializedView.getViewDefineSql();
             ConnectContext context = new ConnectContext();
-            context.setQualifiedUser(AuthenticationManager.ROOT_USER);
+            context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 

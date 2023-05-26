@@ -31,7 +31,7 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -729,7 +729,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setDatabase(db.getFullName());
         // set privilege
-        connectContext.setQualifiedUser(AuthenticationManager.ROOT_USER);
+        connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;

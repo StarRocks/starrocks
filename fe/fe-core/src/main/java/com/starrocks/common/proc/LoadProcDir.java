@@ -76,7 +76,7 @@ public class LoadProcDir implements ProcDirInterface {
 
         // merge load job from load and loadManager
         LinkedList<List<Comparable>> loadJobInfos = Lists.newLinkedList();
-        loadJobInfos.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobInfosByDb(db.getId(), null,
+        loadJobInfos.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobInfosByDb(db.getId(), null,
                 false,
                 null));
         int counter = 0;
