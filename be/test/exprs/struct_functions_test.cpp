@@ -53,7 +53,7 @@ PARALLEL_TEST(StructFunctionsTest, test_new_struct) {
     cint.type = starrocks::TYPE_INT;
     ret_type.type = starrocks::TYPE_STRUCT;
     for (int i = 0; i < 5; ++i) {
-        ret_type.field_names.emplace_back(fmt::format("col%d", (i + 1)));
+        ret_type.field_names.emplace_back(fmt::format("col{}", (i + 1)));
         ret_type.children.emplace_back(cint);
         arg_types.emplace_back(cint);
     }
@@ -99,7 +99,7 @@ PARALLEL_TEST(StructFunctionsTest, test_name_struct) {
     cint.type = starrocks::TYPE_INT;
     ret_type.type = starrocks::TYPE_STRUCT;
     for (int i = 0; i < 3; ++i) {
-        ret_type.field_names.emplace_back(fmt::format("col%d", (i + 1)));
+        ret_type.field_names.emplace_back(fmt::format("col{}", (i + 1)));
         ret_type.children.emplace_back(cint);
     }
     for (int i = 0; i < 6; ++i) {
