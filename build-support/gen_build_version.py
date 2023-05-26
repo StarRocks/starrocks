@@ -24,15 +24,16 @@ def get_version():
     version = os.getenv("STARROCKS_VERSION")
     if not version:
         version = "UNKNOWN"
+<<<<<<< HEAD
     return version.upper()
+=======
+    return version
+>>>>>>> 5af915f39 ([Refactor] Move the STARROCKS_VERSION and STARROCKS_COMMIT_HASH to the build.sh (#24215))
 
 def get_commit_hash():
-    git_res = subprocess.Popen(["git", "rev-parse", "--short", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    out, err = git_res.communicate()
-
-    commit_hash = u''
-    if git_res.returncode == 0:
-        commit_hash = out.decode('utf-8').strip()
+    commit_hash = os.getenv("STARROCKS_COMMIT_HASH")
+    if not commit_hash:
+        commit_hash = "UNKNOWN"
     return commit_hash
 
 def get_build_type():
