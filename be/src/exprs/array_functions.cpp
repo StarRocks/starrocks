@@ -1529,7 +1529,6 @@ StatusOr<ColumnPtr> ArrayFunctions::array_max_varchar([[maybe_unused]] FunctionC
 }
 
 StatusOr<ColumnPtr> ArrayFunctions::concat(FunctionContext* ctx, const Columns& columns) {
-    DCHECK(columns.size() > 1);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     auto num_rows = columns[0]->size();

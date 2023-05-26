@@ -67,7 +67,8 @@ public class AnalyzeArrayTest {
 
         analyzeFail("select element_at([3,2])");
         analyzeFail("select element_at(1,[3,2])");
-        analyzeFail("select array_concat([])");
+        analyzeSuccess("select array_concat([])");
+        analyzeSuccess("select array_concat([1,2,3])");
     }
 
     @Test
