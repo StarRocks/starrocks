@@ -24,8 +24,7 @@
 
 namespace starrocks {
 
-static void split_positive_index(ColumnBuilder<TYPE_VARCHAR> res, Slice& delimiter, int32_t& part_number,
-                                 Slice& haystack) {
+static Slice split_positive_index(Slice& delimiter, int32_t& part_number, Slice& haystack) {
     if (delimiter.size == 1) {
         // if delimiter is a char, use memchr to split
         // Record the two adjacent offsets when matching delimiter.
@@ -49,10 +48,9 @@ static void split_positive_index(ColumnBuilder<TYPE_VARCHAR> res, Slice& delimit
         }
 
         if (num == part_number) {
-            res.append(Slice(haystack.data + pre_offset + 1, offset - pre_offset - 1));
-        } else {
-            res.append_null();
+            return Slice(haystack.data + pre_offset + 1, offset - pre_offset - 1);
         }
+        return Slice();
     } else {
         // if delimiter is a string, use memmem to split
         int32_t pre_offset = -static_cast<int32_t>(delimiter.size);
@@ -74,15 +72,13 @@ static void split_positive_index(ColumnBuilder<TYPE_VARCHAR> res, Slice& delimit
         }
 
         if (num == part_number) {
-            res.append(Slice(haystack.data + pre_offset + delimiter.size, offset - pre_offset - delimiter.size));
-        } else {
-            res.append_null();
+            return Slice(haystack.data + pre_offset + delimiter.size, offset - pre_offset - delimiter.size);
         }
+        return Slice();
     }
 }
 
-static void split_negative_index(ColumnBuilder<TYPE_VARCHAR> res, Slice& delimiter, int32_t& part_number,
-                                 Slice& haystack) {
+static void split_negative_index(ColumnBuilder<TYPE_VARCHAR> res, Slice& delimiter, int32_t& part_number, Slice& haystack) {
     part_number = -part_number;
     auto haystack_str = haystack.to_string();
     int32_t offset = haystack.size;
@@ -105,13 +101,12 @@ static void split_negative_index(ColumnBuilder<TYPE_VARCHAR> res, Slice& delimit
     num = (offset == -1 && num != 0) ? num + 1 : num;
     if (num == part_number) {
         if (offset == -1) {
-            res.append(Slice(haystack.data, pre_offset));
+            return Slice(haystack.data, pre_offset);
         } else {
-            res.append(Slice(haystack.data + offset + delimiter.size, pre_offset - offset - delimiter.size));
+            return Slice(haystack.data + offset + delimiter.size, pre_offset - offset - delimiter.size);
         }
-    } else {
-        res.append_null();
     }
+    return Slice();
 }
 
 /**
