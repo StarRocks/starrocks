@@ -44,9 +44,6 @@
 
 namespace starrocks::lake {
 
-using VSchema = starrocks::Schema;
-using VChunk = starrocks::Chunk;
-
 class TestLocationProvider : public LocationProvider {
 public:
     explicit TestLocationProvider(std::string dir) : _dir(std::move(dir)) {}
@@ -108,7 +105,7 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(*schema);
-        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
 protected:
@@ -133,7 +130,7 @@ protected:
         (void)fs::remove_all(kTestGroupPath);
     }
 
-    VChunk generate_data(int64_t chunk_size, int shift) {
+    Chunk generate_data(int64_t chunk_size, int shift) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
         for (int i = 0; i < chunk_size; i++) {
@@ -149,10 +146,10 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return VChunk({c0, c1}, _schema);
+        return Chunk({c0, c1}, _schema);
     }
 
-    VChunk generate_data2(int64_t chunk_size, int interval, int shift) {
+    Chunk generate_data2(int64_t chunk_size, int interval, int shift) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
         for (int i = 0; i < chunk_size; i++) {
@@ -168,7 +165,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return VChunk({c0, c1}, _schema);
+        return Chunk({c0, c1}, _schema);
     }
 
     int64_t read(int64_t version) {
@@ -227,7 +224,7 @@ protected:
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
-    std::shared_ptr<VSchema> _schema;
+    std::shared_ptr<Schema> _schema;
     int64_t _partition_id = 4561;
     int64_t _txn_id = 1231;
 };
@@ -272,7 +269,9 @@ TEST_P(PrimaryKeyCompactionTest, test1) {
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
     check_task(task);
-    ASSERT_OK(task->execute(nullptr));
+    CompactionTask::Progress progress;
+    ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, progress.value());
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
     version++;
     ASSERT_EQ(kChunkSize, read(version));
@@ -331,7 +330,9 @@ TEST_P(PrimaryKeyCompactionTest, test2) {
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
     check_task(task);
-    ASSERT_OK(task->execute(nullptr));
+    CompactionTask::Progress progress;
+    ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, progress.value());
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
@@ -382,7 +383,9 @@ TEST_P(PrimaryKeyCompactionTest, test3) {
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
     check_task(task);
-    ASSERT_OK(task->execute(nullptr));
+    CompactionTask::Progress progress;
+    ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, progress.value());
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
     version++;
     ASSERT_EQ(kChunkSize * 2, read(version));
@@ -524,7 +527,9 @@ TEST_P(PrimaryKeyCompactionTest, test_compaction_sorted) {
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
     check_task(task);
-    ASSERT_OK(task->execute(nullptr));
+    CompactionTask::Progress progress;
+    ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, progress.value());
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
