@@ -24,29 +24,22 @@
 #include "common/logging.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
-#include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/tablet_schema.h"
+#include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
-#include "util/lru_cache.h"
 
 namespace starrocks::lake {
 
 using namespace starrocks;
 
-using VSchema = starrocks::Schema;
-using VChunk = starrocks::Chunk;
-
-class DuplicateTabletReaderTest : public testing::Test {
+class LakeDuplicateTabletReaderTest : public TestBase {
 public:
-    DuplicateTabletReaderTest() {
-        _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), _update_manager.get(), 0);
+    LakeDuplicateTabletReaderTest() : TestBase(kTestDirectory) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -78,31 +71,25 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(*schema);
-        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
     void SetUp() override {
-        (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kMetadataDirectoryName)));
-        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kTxnLogDirectoryName)));
-        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kSegmentDirectoryName)));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { (void)fs::remove_all(kTestGroupPath); }
+    void TearDown() override { remove_test_dir_ignore_error(); }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_duplicate_lake_tablet_reader";
+    constexpr static const char* const kTestDirectory = "test_duplicate_lake_tablet_reader";
 
-    std::unique_ptr<FixedLocationProvider> _location_provider;
-    std::unique_ptr<TabletManager> _tablet_manager;
-    std::unique_ptr<UpdateManager> _update_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
-    std::shared_ptr<VSchema> _schema;
+    std::shared_ptr<Schema> _schema;
 };
 
-TEST_F(DuplicateTabletReaderTest, test_read_success) {
+TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
 
@@ -118,12 +105,12 @@ TEST_F(DuplicateTabletReaderTest, test_read_success) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    VChunk chunk0({c0, c1}, _schema);
-    VChunk chunk1({c2, c3}, _schema);
+    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk1({c2, c3}, _schema);
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
 
     {
         int64_t txn_id = next_id();
@@ -159,7 +146,7 @@ TEST_F(DuplicateTabletReaderTest, test_read_success) {
 
     // write tablet metadata
     _tablet_metadata->set_version(2);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     // test reader
     ASSIGN_OR_ABORT(auto reader, tablet.new_reader(2, *_schema));
@@ -188,12 +175,9 @@ TEST_F(DuplicateTabletReaderTest, test_read_success) {
     reader->close();
 }
 
-class AggregateTabletReaderTest : public testing::Test {
+class LakeAggregateTabletReaderTest : public TestBase {
 public:
-    AggregateTabletReaderTest() {
-        _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), _update_manager.get(), 0);
+    LakeAggregateTabletReaderTest() : TestBase(kTestDirectory) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -226,31 +210,25 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(*schema);
-        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
     void SetUp() override {
-        (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kMetadataDirectoryName)));
-        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kTxnLogDirectoryName)));
-        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kSegmentDirectoryName)));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { (void)fs::remove_all(kTestGroupPath); }
+    void TearDown() override { remove_test_dir_ignore_error(); }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_aggregate_lake_tablet_reader";
+    constexpr static const char* const kTestDirectory = "test_aggregate_lake_tablet_reader";
 
-    std::unique_ptr<FixedLocationProvider> _location_provider;
-    std::unique_ptr<TabletManager> _tablet_manager;
-    std::unique_ptr<UpdateManager> _update_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
-    std::shared_ptr<VSchema> _schema;
+    std::shared_ptr<Schema> _schema;
 };
 
-TEST_F(AggregateTabletReaderTest, test_read_success) {
+TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
 
@@ -266,12 +244,12 @@ TEST_F(AggregateTabletReaderTest, test_read_success) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    VChunk chunk0({c0, c1}, _schema);
-    VChunk chunk1({c2, c3}, _schema);
+    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk1({c2, c3}, _schema);
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
 
     {
         // write rowset 1 with 2 segments
@@ -334,7 +312,7 @@ TEST_F(AggregateTabletReaderTest, test_read_success) {
 
     // write tablet metadata
     _tablet_metadata->set_version(3);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     // test reader
     ASSIGN_OR_ABORT(auto reader, tablet.new_reader(3, *_schema));
@@ -360,12 +338,9 @@ TEST_F(AggregateTabletReaderTest, test_read_success) {
     reader->close();
 }
 
-class DuplicateTabletReaderWithDeleteTest : public testing::Test {
+class LakeDuplicateTabletReaderWithDeleteTest : public TestBase {
 public:
-    DuplicateTabletReaderWithDeleteTest() {
-        _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), _update_manager.get(), 0);
+    LakeDuplicateTabletReaderWithDeleteTest() : TestBase(kTestDirectory) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -397,31 +372,25 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(*schema);
-        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
     void SetUp() override {
-        (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
-        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { (void)fs::remove_all(kTestGroupPath); }
+    void TearDown() override { remove_test_dir_ignore_error(); }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_duplicate_lake_tablet_reader_with_delete";
+    constexpr static const char* const kTestDirectory = "test_duplicate_lake_tablet_reader_with_delete";
 
-    std::unique_ptr<FixedLocationProvider> _location_provider;
-    std::unique_ptr<TabletManager> _tablet_manager;
-    std::unique_ptr<UpdateManager> _update_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
-    std::shared_ptr<VSchema> _schema;
+    std::shared_ptr<Schema> _schema;
 };
 
-TEST_F(DuplicateTabletReaderWithDeleteTest, test_read_success) {
+TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
 
@@ -437,12 +406,12 @@ TEST_F(DuplicateTabletReaderWithDeleteTest, test_read_success) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    VChunk chunk0({c0, c1}, _schema);
-    VChunk chunk1({c2, c3}, _schema);
+    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk1({c2, c3}, _schema);
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
 
     {
         // write rowset 1 with 2 segments
@@ -500,7 +469,7 @@ TEST_F(DuplicateTabletReaderWithDeleteTest, test_read_success) {
 
     // write tablet metadata
     _tablet_metadata->set_version(3);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     // test reader
     ASSIGN_OR_ABORT(auto reader, tablet.new_reader(3, *_schema));
