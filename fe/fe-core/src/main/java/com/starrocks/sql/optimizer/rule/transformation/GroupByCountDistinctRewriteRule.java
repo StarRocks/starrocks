@@ -211,6 +211,11 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
             Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
             Function newFunc = Expr.getBuiltinFunction(secondFuncName, argTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            Preconditions.checkNotNull(newFunc);
+            newFunc = newFunc.copy();
+            // for decimal
+            newFunc = newFunc.updateArgType(argTypes);
+            newFunc.setRetType(origin.getFunction().getReturnType());
             return new CallOperator(secondFuncName, newFunc.getReturnType(), args, newFunc);
         }
     }
