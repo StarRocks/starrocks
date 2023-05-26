@@ -190,7 +190,7 @@ private:
 
     TabletManager* _tablet_mgr;
     Limiter _limiter;
-    bthread::Mutex _states_lock;
+    bthread::Mutex _contexts_lock;
     butil::LinkedList<CompactionTaskContext> _contexts;
     int _task_queue_count;
     TaskQueue* _task_queues;
