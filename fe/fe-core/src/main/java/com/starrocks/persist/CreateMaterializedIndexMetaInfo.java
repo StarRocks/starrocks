@@ -63,16 +63,17 @@ public class CreateMaterializedIndexMetaInfo implements Writable {
     }
 
     public void write(DataOutput out) throws IOException {
-        // compatible with old version
         Text.writeString(out, ClusterNamespace.getFullName(dbName));
         Text.writeString(out, ClusterNamespace.getFullName(tableName));
+        Text.writeString(out, ClusterNamespace.getFullName(indexName));
         indexMeta.write(out);
     }
 
     public void readFields(DataInput in) throws IOException {
-        dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        tableName = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        indexMeta = MaterializedIndexMeta.read(in);
+        this.dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
+        this.tableName = ClusterNamespace.getNameFromFullName(Text.readString(in));
+        this.indexName = ClusterNamespace.getNameFromFullName(Text.readString(in));
+        this.indexMeta = MaterializedIndexMeta.read(in);
     }
 
     public static CreateMaterializedIndexMetaInfo read(DataInput in) throws IOException {
@@ -83,7 +84,7 @@ public class CreateMaterializedIndexMetaInfo implements Writable {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(dbName, tableName, indexMeta);
+        return Objects.hashCode(dbName, tableName, indexName, indexMeta);
     }
 
     @Override
@@ -94,10 +95,8 @@ public class CreateMaterializedIndexMetaInfo implements Writable {
         if (!(obj instanceof CreateMaterializedIndexMetaInfo)) {
             return false;
         }
-
         CreateMaterializedIndexMetaInfo info = (CreateMaterializedIndexMetaInfo) obj;
-
-        return dbName.equals(info.dbName)
-                && tableName.equals(info.tableName) && indexMeta.equals(info.indexMeta);
+        return dbName.equals(info.dbName) && tableName.equals(info.tableName)
+                && indexName.equals(info.indexName) && indexMeta.equals(info.indexMeta);
     }
 }

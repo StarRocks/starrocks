@@ -2125,15 +2125,25 @@ public class LocalMetastore implements ConnectorMetadata {
         if (!isCheckpointThread()) {
             long mvIndexId = indexMeta.getIndexId();
             long targetTableId = indexMeta.getTargetTableId();
-            for (Partition partition : table.getPartitions()) {
-                String partName = partition.getName();
-                MaterializedIndex rollupIndex = new MaterializedIndex(mvIndexId, MaterializedIndex.IndexState.LOGICAL);
-                partition.createLogicalRollupIndex(db, rollupIndex, targetTableId, partName);
-            }
 
-            table.addMaterializedIndexMeta(indexName, indexMeta);
-            table.rebuildFullSchema();
-            table.lastSchemaUpdateTime.set(System.currentTimeMillis());
+            db.writeLock();
+            try {
+                for (Partition partition : table.getPartitions()) {
+                    String partName = partition.getName();
+                    MaterializedIndex rollupIndex = new MaterializedIndex(mvIndexId, MaterializedIndex.IndexState.LOGICAL);
+                    try {
+                        partition.createLogicalRollupIndex(db, rollupIndex, targetTableId, partName);
+                    } catch (Exception e) {
+                        LOG.info("replay create sync materialized view {} failed: {}", indexName, e);
+                    }
+                }
+                table.addMaterializedIndexMeta(indexName, indexMeta);
+                table.rebuildFullSchema();
+                table.lastSchemaUpdateTime.set(System.currentTimeMillis());
+                LOG.info("replay create sync materialized view {}", indexName);
+            } finally {
+                db.writeUnlock();
+            }
         }
     }
 

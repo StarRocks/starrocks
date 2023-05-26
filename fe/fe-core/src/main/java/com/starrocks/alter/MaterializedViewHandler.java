@@ -218,7 +218,7 @@ public class MaterializedViewHandler extends AlterHandler {
         Map<String, String> properties = addMVClause.getProperties();
 
         if (addMVClause.getTargetTableName() != null) {
-            createToMaterializedView(addMVClause, db, olapTable, mvColumns);
+            createLogicalMaterializedView(addMVClause, db, olapTable, mvColumns);
         } else {
             // Step2: create mv job
             RollupJobV2 rollupJobV2 = createMaterializedViewJob(mvIndexName, baseIndexName, mvColumns,
@@ -240,10 +240,10 @@ public class MaterializedViewHandler extends AlterHandler {
         }
     }
 
-    public void createToMaterializedView(CreateMaterializedViewStmt stmt,
-                                         Database db,
-                                         OlapTable baseTable,
-                                         List<Column> mvColumns) throws DdlException {
+    public void createLogicalMaterializedView(CreateMaterializedViewStmt stmt,
+                                              Database db,
+                                              OlapTable baseTable,
+                                              List<Column> mvColumns) throws DdlException {
         Map<String, String> mvProperties = stmt.getProperties();
         boolean isPopulate = PropertyAnalyzer.analyzeBooleanProp(mvProperties,
                 PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_POPULATE, true);
@@ -262,6 +262,11 @@ public class MaterializedViewHandler extends AlterHandler {
                     " table[" + target.getTbl() + "], please use new syntax to create materialized view");
         }
         OlapTable targetOlapTable = (OlapTable) targetTable;
+        // target table should not have the associated materialized views.
+        if (targetOlapTable.hasMaterializedView()) {
+            throw new DdlException("create logical materialized failed. Target table should not have " +
+                    "the associated materialized views." + targetOlapTable);
+        }
         // logical materialized view's column should be in the target table.
         Set<String> mvColumnNames = Sets.newHashSet();
         for (Column mvCol : mvColumns) {
@@ -271,7 +276,24 @@ public class MaterializedViewHandler extends AlterHandler {
             }
             mvColumnNames.add(mvCol.getName());
         }
-        // TODO: What if targetOlapTable's column is not in the mv?
+        if (mvColumns.size() != targetOlapTable.getBaseSchema().size()) {
+            throw new DdlException("create logical materialized failed. Logical materialized view columns' size "
+                    + mvColumns.size() + " should be equal to the target table columns' size:"
+                    + targetOlapTable.getBaseSchema().size());
+        }
+        // Ensure targetOlapTable's column is equal to mvColumns.
+        for (int i = 0; i < targetOlapTable.getBaseSchema().size(); i++) {
+            Column targetCol = targetTable.getBaseSchema().get(i);
+            Column mvCol = mvColumns.get(i);
+            if (!mvCol.getName().equals(targetCol.getName())) {
+                throw new DdlException("create logical materialized failed. Logical materialized view column name "
+                        + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));
+            }
+            if (!mvCol.getType().equals(targetCol.getType())) {
+                throw new DdlException("create logical materialized failed. Logical materialized view column type "
+                        + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));
+            }
+        }
 
         // partition keys must be the same with the base table
         if (targetOlapTable.isPartitioned()) {
