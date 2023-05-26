@@ -50,7 +50,6 @@ Status RowsetColumnUpdateState::load(Tablet* tablet, Rowset* rowset, MemTracker*
     }
     std::call_once(_load_once_flag, [&] {
         _tablet_id = tablet->tablet_id();
-        _check_if_preload_column_mode_update_data(rowset, update_mem_tracker);
         _status = _do_load(tablet, rowset);
         if (!_status.ok()) {
             LOG(WARNING) << "load RowsetColumnUpdateState error: " << _status << " tablet:" << _tablet_id << " stack:\n"

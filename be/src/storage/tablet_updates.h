@@ -312,6 +312,7 @@ private:
         size_t num_dels = 0;
         size_t byte_size = 0;
         int64_t compaction_score = 0;
+        bool partial_update_by_column = false;
         std::string to_string() const;
     };
 
