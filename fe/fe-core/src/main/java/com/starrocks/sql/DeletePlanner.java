@@ -31,7 +31,7 @@ import java.util.List;
 
 public class DeletePlanner {
     public ExecPlan plan(DeleteStmt deleteStatement, ConnectContext session) {
-        if (!deleteStatement.supportNewPlanner()) {
+        if (deleteStatement.shouldHandledByDeleteHandler()) {
             // executor will use DeleteHandler to handle delete statement
             // so just return empty plan here
             return null;

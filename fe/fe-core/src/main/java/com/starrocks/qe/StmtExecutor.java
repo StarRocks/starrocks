@@ -670,7 +670,7 @@ public class StmtExecutor {
 
     // Because this is called by other thread
     public void cancel() {
-        if (parsedStmt instanceof DeleteStmt && !((DeleteStmt) parsedStmt).supportNewPlanner()) {
+        if (parsedStmt instanceof DeleteStmt && ((DeleteStmt) parsedStmt).shouldHandledByDeleteHandler()) {
             DeleteStmt deleteStmt = (DeleteStmt) parsedStmt;
             long jobId = deleteStmt.getJobId();
             if (jobId != -1) {
@@ -1243,7 +1243,7 @@ public class StmtExecutor {
         }
 
         // special handling for delete of non-primary key table, using old handler
-        if (stmt instanceof DeleteStmt && !((DeleteStmt) stmt).supportNewPlanner()) {
+        if (stmt instanceof DeleteStmt && ((DeleteStmt) stmt).shouldHandledByDeleteHandler()) {
             try {
                 context.getGlobalStateMgr().getDeleteHandler().process((DeleteStmt) stmt);
                 context.getState().setOk();

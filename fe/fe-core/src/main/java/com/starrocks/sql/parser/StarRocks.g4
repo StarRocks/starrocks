@@ -787,11 +787,11 @@ insertStatement
     ;
 
 updateStatement
-    : explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?
+    : explainDesc? withClause? UPDATE qualifiedName SET assignmentList fromClause (WHERE where=expression)?
     ;
 
 deleteStatement
-    : explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?
+    : explainDesc? withClause? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
