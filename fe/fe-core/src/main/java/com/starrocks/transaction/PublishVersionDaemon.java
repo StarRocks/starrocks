@@ -108,6 +108,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 return;
             }
 
+            if (!RunMode.allowCreateOlapTable()) {
+                publishVersionForLakeTable(readyTransactionStates);
+                return;
+            }
+
             List<TransactionState> olapTransactions = new ArrayList<>();
             List<TransactionState> lakeTransactions = new ArrayList<>();
             for (TransactionState txnState : readyTransactionStates) {
