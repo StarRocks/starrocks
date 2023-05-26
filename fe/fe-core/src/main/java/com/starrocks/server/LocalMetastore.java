@@ -1677,6 +1677,11 @@ public class LocalMetastore implements ConnectorMetadata {
             MaterializedIndex index = entry.getValue();
             MaterializedIndexMeta indexMeta = table.getIndexIdToMeta().get(indexId);
 
+            if (indexMeta.isLogical()) {
+                partition.createLogicalRollupIndex(db, index, indexMeta.getTargetTableId(), partitionName);
+                continue;
+            }
+
             // create tablets
             TabletMeta tabletMeta =
                     new TabletMeta(db.getId(), table.getId(), partitionId, indexId, indexMeta.getSchemaHash(),

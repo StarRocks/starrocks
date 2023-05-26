@@ -774,8 +774,8 @@ public class DatabaseTransactionMgr {
     }
 
     // check whether transaction can be finished or not
-    // for each tablet of load txn, if most replicas version publish successed
-    // the trasaction can be treated as successful and can be finished
+    // for each tablet of load txn, if most replicas version publish successes
+    // the transaction can be treated as successful and can be finished
     public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas, Set<Long> unfinishedBackends) {
         Database db = globalStateMgr.getDb(txn.getDbId());
         if (db == null) {

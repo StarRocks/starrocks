@@ -640,10 +640,12 @@ public class TransactionState implements Writable {
      * No other thread will access this state. So no need to lock
      */
     public void addTableIndexes(OlapTable table) {
-        Set<Long> indexIds = loadedTblIndexes.computeIfAbsent(table.getId(), k -> Sets.newHashSet());
-        // always equal the index ids
-        indexIds.clear();
-        indexIds.addAll(table.getIndexIdToMeta().keySet());
+        for (Map.Entry<Long, List<Long>> entry : table.getAssociatedTableIdToIndexes().entrySet()) {
+            Set<Long> indexIds = loadedTblIndexes.computeIfAbsent(entry.getKey(), k -> Sets.newHashSet());
+            // always equal the index ids
+            indexIds.clear();
+            indexIds.addAll(entry.getValue());
+        }
     }
 
     public List<MaterializedIndex> getPartitionLoadedTblIndexes(long tableId, Partition partition) {

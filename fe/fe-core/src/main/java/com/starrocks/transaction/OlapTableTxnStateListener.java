@@ -151,6 +151,9 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             List<MaterializedIndex> allIndices = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
             int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partition.getId(), table.writeQuorum());
             for (MaterializedIndex index : allIndices) {
+                if (index.isLogical() && index.getTargetTableId() != table.getId()) {
+                    continue;
+                }
                 for (Tablet tablet : index.getTablets()) {
                     long tabletId = tablet.getId();
                     Set<Long> commitBackends = tabletToBackends.get(tabletId);

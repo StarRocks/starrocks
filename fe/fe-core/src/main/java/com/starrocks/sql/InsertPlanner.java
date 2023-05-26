@@ -47,7 +47,6 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
@@ -102,6 +101,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
+import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME_PREFIX;
 
 public class InsertPlanner {
     // Only for unit test
@@ -460,8 +460,9 @@ public class InsertPlanner {
 
             // Target column which starts with "mv" should not be treated as materialized view column when this column exists in base schema,
             // this could be created by user.
-            if (targetColumn.isNameWithPrefix(CreateMaterializedViewStmt.MATERIALIZED_VIEW_NAME_PREFIX) &&
-                    !baseSchema.contains(targetColumn)) {
+            if ((targetColumn.isNameWithPrefix(MATERIALIZED_VIEW_NAME_PREFIX)
+                    || insertStatement.getTargetTable().getMVSchema().contains(targetColumn))
+                    && !baseSchema.contains(targetColumn)) {
                 String originName = targetColumn.getRefColumn().getColumnName();
                 Optional<Column> optOriginColumn = fullSchema.stream()
                         .filter(c -> c.nameEquals(originName, false)).findFirst();
