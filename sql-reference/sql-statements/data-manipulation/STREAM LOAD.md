@@ -32,7 +32,7 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 
 ### username 和 password
 
-用于指定 StarRocks 集群账号的用户名和密码。必选参数。如果使用 `root` 账号、并且没有设置密码，这里只需要传入 `root:`。
+用于指定 StarRocks 集群账号的用户名和密码。必选参数。如果账号没有设置密码，这里只需要传入 `<username>:`。
 
 ### XPUT
 
