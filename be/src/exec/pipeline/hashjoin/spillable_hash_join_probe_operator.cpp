@@ -225,8 +225,9 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
         }
         probe_partition->num_rows += size;
     };
-    RETURN_IF_ERROR(_probe_spiller->partitioned_spill(state, chunk, hash_column.get(), partition_processer, executor,
-                                                      spill::MemTrackerGuard(tls_mem_tracker)));
+    RETURN_IF_ERROR(_probe_spiller->partitioned_spill(
+            state, chunk, hash_column.get(), partition_processer, executor,
+            spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
 
     return Status::OK();
 }
@@ -297,20 +298,20 @@ void SpillableHashJoinProbeOperator::_check_partitions() {
     if (_is_finishing) {
 #ifndef NDEBUG
         auto partitioned_writer = down_cast<spill::PartitionedSpillerWriter*>(_probe_spiller->writer().get());
+        size_t build_rows = 0;
         for (const auto& [level, partitions] : partitioned_writer->level_to_partitions()) {
             auto writer = down_cast<spill::PartitionedSpillerWriter*>(_join_builder->spiller()->writer().get());
             auto& build_partitions = writer->level_to_partitions().find(level)->second;
             DCHECK_EQ(build_partitions.size(), partitions.size());
-            size_t build_rows = 0;
             for (size_t i = 0; i < partitions.size(); ++i) {
                 build_rows += build_partitions[i]->num_rows;
             }
-            DCHECK_EQ(build_rows, _join_builder->spiller()->spilled_append_rows());
             // CHECK if left table is the same as right table
             // for (size_t i = 0; i < partitions.size(); ++i) {
             //     DCHECK_EQ(partitions[i]->num_rows, build_partitions[i]->num_rows);
             // }
         }
+        DCHECK_EQ(build_rows, _join_builder->spiller()->spilled_append_rows());
 #endif
     }
 }

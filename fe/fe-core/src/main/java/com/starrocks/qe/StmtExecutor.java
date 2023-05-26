@@ -99,7 +99,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
-import com.starrocks.sql.analyzer.PrivilegeCheckerV2;
+import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
@@ -391,7 +391,7 @@ public class StmtExecutor {
                     context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
                     if (parsedStmt instanceof ShowStmt) {
                         com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
-                        PrivilegeCheckerV2.check(parsedStmt, context);
+                        PrivilegeChecker.check(parsedStmt, context);
 
                         QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
                         if (selectStmt != null) {
@@ -708,7 +708,7 @@ public class StmtExecutor {
             DeleteStmt deleteStmt = (DeleteStmt) parsedStmt;
             long jobId = deleteStmt.getJobId();
             if (jobId != -1) {
-                GlobalStateMgr.getCurrentState().getDeleteHandler().killJob(jobId);
+                GlobalStateMgr.getCurrentState().getDeleteMgr().killJob(jobId);
             }
         } else {
             Coordinator coordRef = coord;
@@ -1011,9 +1011,7 @@ public class StmtExecutor {
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) parsedStmt;
         long analyzeId = killAnalyzeStmt.getAnalyzeId();
         AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
-        }
+        PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
         // Try to kill the job anyway.
         analyzeManager.killConnection(analyzeId);
     }
@@ -1033,7 +1031,7 @@ public class StmtExecutor {
         }
     }
 
-    private void handleExecAsStmt() throws PrivilegeException, UserException {
+    private void handleExecAsStmt() throws UserException {
         ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
     }
 
@@ -1336,7 +1334,7 @@ public class StmtExecutor {
         // special handling for delete of non-primary key table, using old handler
         if (stmt instanceof DeleteStmt && ((DeleteStmt) stmt).shouldHandledByDeleteHandler()) {
             try {
-                context.getGlobalStateMgr().getDeleteHandler().process((DeleteStmt) stmt);
+                context.getGlobalStateMgr().getDeleteMgr().process((DeleteStmt) stmt);
                 context.getState().setOk();
             } catch (QueryStateException e) {
                 if (e.getQueryState().getStateType() != MysqlStateType.OK) {
@@ -1468,7 +1466,7 @@ public class StmtExecutor {
             }
 
             if (!targetTable.isIcebergTable()) {
-                jobId = context.getGlobalStateMgr().getLoadManager().registerLoadJob(
+                jobId = context.getGlobalStateMgr().getLoadMgr().registerLoadJob(
                         label,
                         database.getFullName(),
                         targetTable.getId(),
@@ -1680,7 +1678,7 @@ public class StmtExecutor {
             // cancel insert load job
             try {
                 if (jobId != -1) {
-                    context.getGlobalStateMgr().getLoadManager()
+                    context.getGlobalStateMgr().getLoadMgr()
                             .recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
                                     "Cancelled, msg: " + t.getMessage(), coord.getTrackingUrl());
                     jobId = -1;
@@ -1693,7 +1691,7 @@ public class StmtExecutor {
             if (insertError) {
                 try {
                     if (jobId != -1) {
-                        context.getGlobalStateMgr().getLoadManager()
+                        context.getGlobalStateMgr().getLoadMgr()
                                 .recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
                                         "Cancelled", coord.getTrackingUrl());
                         jobId = -1;
@@ -1716,7 +1714,7 @@ public class StmtExecutor {
         }
         try {
             if (jobId != -1) {
-                context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId,
+                context.getGlobalStateMgr().getLoadMgr().recordFinishedOrCacnelledLoadJob(jobId,
                         EtlJobType.INSERT,
                         "",
                         coord.getTrackingUrl());

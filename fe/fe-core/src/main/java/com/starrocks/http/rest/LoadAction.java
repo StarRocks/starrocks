@@ -40,7 +40,6 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -54,6 +53,8 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class LoadAction extends RestBaseAction {
@@ -89,23 +90,25 @@ public class LoadAction extends RestBaseAction {
 
         String label = request.getRequest().headers().get(LABEL_KEY);
 
-        // check auth
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.INSERT);
-        } else {
-            checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), dbName, tableName, PrivPredicate.LOAD);
-        }
+        checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.INSERT);
 
         // Choose a backend sequentially, or choose a cn in shared_data mode
-        List<Long> nodeIds;
+        List<Long> nodeIds = new ArrayList<>();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-            nodeIds = warehouse.getAnyAvailableCluster().getComputeNodeIds();
+            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                if (node != null && node.isAvailable()) {
+                    nodeIds.add(nodeId);
+                }
+            }
+            Collections.shuffle(nodeIds);
         } else {
             nodeIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-            if (CollectionUtils.isEmpty(nodeIds)) {
-                throw new DdlException("No backend alive.");
-            }
+        }
+        
+        if (CollectionUtils.isEmpty(nodeIds)) {
+            throw new DdlException("No backend alive.");
         }
 
         // TODO: need to refactor after be split into cn + dn

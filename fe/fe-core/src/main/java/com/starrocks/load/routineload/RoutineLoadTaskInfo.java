@@ -67,7 +67,7 @@ public abstract class RoutineLoadTaskInfo {
 
     public static final long INVALID_BE_ID = -1L;
 
-    private RoutineLoadManager routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
+    private RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
 
     protected UUID id;
     protected long txnId = -1L;
@@ -147,6 +147,10 @@ public abstract class RoutineLoadTaskInfo {
         return txnId;
     }
 
+    public String getLabel() {
+        return label;
+    }
+
     public boolean isRunning() {
         return executeStartTimeMs > 0;
     }
@@ -220,14 +224,21 @@ public abstract class RoutineLoadTaskInfo {
     }
 
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
-        //StreamLoadTask is null, if not specify session variable `enable_profile = true`
+        // StreamLoadTask is null, if not specify session variable `enable_profile = true`
         if (streamLoadTask != null) {
             streamLoadTask.afterCommitted(txnState, txnOperated);
         }
     }
 
+    public void afterVisible(TransactionState txnState, boolean txnOperated) throws UserException {
+        // StreamLoadTask is null, if not specify session variable `enable_profile = true`
+        if (streamLoadTask != null) {
+            streamLoadTask.afterVisible(txnState, txnOperated);
+        }
+    }
+
     public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) throws UserException {
-        //StreamLoadTask is null, if not specify `enable_profile = true` when creating the routine load job
+        // StreamLoadTask is null, if not specify session variable `enable_profile = true`
         if (streamLoadTask != null) {
             streamLoadTask.afterAborted(txnState, txnOperated, txnStatusChangeReason);
         }

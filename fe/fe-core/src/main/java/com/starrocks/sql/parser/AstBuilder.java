@@ -69,6 +69,7 @@ import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.analysis.TaskName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UserDesc;
@@ -204,6 +205,7 @@ import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropTaskStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.EmptyStmt;
@@ -1437,26 +1439,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         NodePosition pos = createPos(context);
-        String dbName;
-        String taskName;
+        TaskName taskName;
         if (qualifiedName == null) {
-            dbName = null;
-            taskName = null;
-        } else if (qualifiedName.getParts().size() == 1) {
-            dbName = null;
-            taskName = qualifiedName.getParts().get(0);
-        } else if (qualifiedName.getParts().size() == 2) {
-            dbName = qualifiedName.getParts().get(0);
-            taskName = qualifiedName.getParts().get(1);
+            taskName = new TaskName(null, null, pos);
         } else {
-            throw new ParsingException(PARSER_ERROR_MSG.invalidTaskFormat(qualifiedName.toString()),
-                    qualifiedName.getPos());
+            taskName = qualifiedNameToTaskName(qualifiedName);
         }
         if (createTableAsSelectStmt != null) {
-            return new SubmitTaskStmt(dbName, taskName, properties, startIndex, createTableAsSelectStmt, pos);
+            return new SubmitTaskStmt(taskName, properties, startIndex, createTableAsSelectStmt, pos);
         } else {
-            return new SubmitTaskStmt(dbName, taskName, properties, startIndex, insertStmt, pos);
+            return new SubmitTaskStmt(taskName, properties, startIndex, insertStmt, pos);
         }
+    }
+
+    @Override
+    public ParseNode visitDropTaskStatement(StarRocksParser.DropTaskStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TaskName taskName = qualifiedNameToTaskName(qualifiedName);
+        return new DropTaskStmt(taskName, createPos(context));
     }
 
     // ------------------------------------------- Materialized View Statement -----------------------------------------
@@ -6394,6 +6394,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return QualifiedName.of(parts, pos);
+    }
+
+    private TaskName qualifiedNameToTaskName(QualifiedName qualifiedName) {
+        // Hierarchy: database.table
+        List<String> parts = qualifiedName.getParts();
+        if (parts.size() == 2) {
+            return new TaskName(parts.get(0), parts.get(1), qualifiedName.getPos());
+        } else if (parts.size() == 1) {
+            return new TaskName(null, parts.get(0), qualifiedName.getPos());
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidTaskFormat(qualifiedName.toString()),
+                    qualifiedName.getPos());
+        }
     }
 
     private TableName qualifiedNameToTableName(QualifiedName qualifiedName) {

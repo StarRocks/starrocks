@@ -31,6 +31,7 @@ import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.sts.StsClient;
+import software.amazon.awssdk.services.sts.StsClientBuilder;
 import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
 import software.amazon.awssdk.services.sts.model.AssumeRoleRequest;
 
@@ -79,7 +80,6 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
     private String glueRegion;
     private String glueEndpoint;
 
-
     @Override
     public void initialize(Map<String, String> properties) {
         this.awsProperties = new AwsProperties(properties);
@@ -104,6 +104,33 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         glueEndpoint = properties.getOrDefault(AWS_GLUE_ENDPOINT, "");
     }
 
+    private StsAssumeRoleCredentialsProvider getAssumeRoleCredentialsProvider(AwsCredentialsProvider baseCredentials,
+                                                                              String iamRoleArn, String externalId,
+                                                                              String region) {
+        // Build sts client
+        StsClientBuilder stsClientBuilder = StsClient.builder().credentialsProvider(baseCredentials);
+        stsClientBuilder.applyMutation(awsProperties::applyHttpClientConfigurations);
+        if (!region.isEmpty()) {
+            stsClientBuilder.region(Region.of(region));
+        }
+
+        // Build AssumeRoleRequest
+        AssumeRoleRequest.Builder assumeRoleBuilder = AssumeRoleRequest.builder();
+        assumeRoleBuilder.roleArn(iamRoleArn);
+        assumeRoleBuilder.roleSessionName(UUID.randomUUID().toString());
+        if (!externalId.isEmpty()) {
+            assumeRoleBuilder.externalId(externalId);
+        }
+        // Below two configuration copied from Iceberg's official SDK
+        assumeRoleBuilder.durationSeconds(awsProperties.clientAssumeRoleTimeoutSec());
+        assumeRoleBuilder.tags(awsProperties.stsClientAssumeRoleTags());
+
+        return StsAssumeRoleCredentialsProvider.builder()
+                .stsClient(stsClientBuilder.build())
+                .refreshRequest(assumeRoleBuilder.build())
+                .build();
+    }
+
     @Override
     public S3Client s3() {
         if (s3UseAWSSDKDefaultBehavior) {
@@ -115,19 +142,8 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
                 getBaseAWSCredentialsProvider(s3UseInstanceProfile, s3AccessKey, s3SecretKey);
         S3ClientBuilder s3ClientBuilder = S3Client.builder();
         if (!s3IamRoleArn.isEmpty()) {
-            StsClient stsClient = StsClient.builder().credentialsProvider(baseAWSCredentialsProvider).build();
-            String sessionName = UUID.randomUUID().toString();
-            AssumeRoleRequest.Builder assumeRoleBuilder = AssumeRoleRequest.builder();
-            assumeRoleBuilder.roleArn(s3IamRoleArn);
-            if (!s3ExternalId.isEmpty()) {
-                assumeRoleBuilder.externalId(s3ExternalId);
-            }
-            assumeRoleBuilder.roleSessionName(sessionName);
-            StsAssumeRoleCredentialsProvider.Builder builder = StsAssumeRoleCredentialsProvider.builder()
-                    .stsClient(stsClient)
-                    .refreshRequest(AssumeRoleRequest.builder()
-                            .build());
-            s3ClientBuilder.credentialsProvider(builder.build());
+            s3ClientBuilder.credentialsProvider(getAssumeRoleCredentialsProvider(baseAWSCredentialsProvider,
+                    s3IamRoleArn, s3ExternalId, s3Region));
         } else {
             s3ClientBuilder.credentialsProvider(baseAWSCredentialsProvider);
         }
@@ -156,19 +172,8 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
                 getBaseAWSCredentialsProvider(glueUseInstanceProfile, glueAccessKey, glueSecretKey);
         GlueClientBuilder glueClientBuilder = GlueClient.builder();
         if (!glueIamRoleArn.isEmpty()) {
-            StsClient stsClient = StsClient.builder().credentialsProvider(baseAWSCredentialsProvider).build();
-            String sessionName = UUID.randomUUID().toString();
-            AssumeRoleRequest.Builder assumeRoleBuilder = AssumeRoleRequest.builder();
-            assumeRoleBuilder.roleArn(glueIamRoleArn);
-            if (!glueExternalId.isEmpty()) {
-                assumeRoleBuilder.externalId(glueExternalId);
-            }
-            assumeRoleBuilder.roleSessionName(sessionName);
-            StsAssumeRoleCredentialsProvider.Builder builder =
-                    StsAssumeRoleCredentialsProvider.builder()
-                            .stsClient(stsClient)
-                            .refreshRequest(AssumeRoleRequest.builder().build());
-            glueClientBuilder.credentialsProvider(builder.build());
+            glueClientBuilder.credentialsProvider(getAssumeRoleCredentialsProvider(baseAWSCredentialsProvider,
+                    glueIamRoleArn, glueExternalId, glueRegion));
         } else {
             glueClientBuilder.credentialsProvider(baseAWSCredentialsProvider);
         }

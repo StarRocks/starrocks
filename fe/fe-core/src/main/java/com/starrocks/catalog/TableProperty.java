@@ -122,6 +122,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
      */
     private String storageVolume;
 
+    // This property only applies to materialized views
+    private String resourceGroup = null;
+
     // the default compression type of this table.
     private TCompressionType compressionType = TCompressionType.LZ4_FRAME;
 
@@ -226,6 +229,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildPartitionRefreshNumber();
         buildAutoRefreshPartitionsLimit();
         buildExcludedTriggerTables();
+        buildResourceGroup();
         return this;
     }
 
@@ -301,6 +305,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildPartitionRefreshNumber() {
         partitionRefreshNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
                 String.valueOf(INVALID)));
+        return this;
+    }
+
+    public TableProperty buildResourceGroup() {
+        resourceGroup = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP,
+                null);
         return this;
     }
 
@@ -419,6 +429,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public void setPartitionRefreshNumber(int partitionRefreshNumber) {
         this.partitionRefreshNumber = partitionRefreshNumber;
+    }
+
+    public void setResourceGroup(String resourceGroup) {
+        this.resourceGroup = resourceGroup;
+    }
+
+    public String getResourceGroup() {
+        return resourceGroup;
     }
 
     public List<TableName> getExcludedTriggerTables() {

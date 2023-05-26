@@ -326,4 +326,8 @@ public class OperationType {
     public static final short OP_CREATE_ROUTINE_LOAD_JOB_V2 = 12102;
     public static final short OP_CHANGE_ROUTINE_LOAD_JOB_V2 = 12103;
     public static final short OP_REMOVE_ROUTINE_LOAD_JOB_V2 = 12104;
+
+    //Txn json format log
+    public static final short OP_UPSERT_TRANSACTION_STATE_V2 = 12110;
+    public static final short OP_SAVE_TRANSACTION_ID_V2 = 12112;
 }

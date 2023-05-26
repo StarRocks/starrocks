@@ -301,6 +301,7 @@ if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-0.9.7" ]; then
 fi
 if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.3.0" ]; then
     patch -p1 < $TP_PATCH_DIR/brpc-1.3.0.patch
+    patch -p1 < $TP_PATCH_DIR/brpc-1.3.0-CVE-2023-31039.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -401,6 +402,18 @@ if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.9.179" ]; th
     patch -p1 -f -i $TP_PATCH_DIR/aws-sdk-cpp-patch-1.9.179-s2n-compile-error.patch
     # refer to https://github.com/aws/aws-sdk-cpp/issues/1824
     patch -p1 < $TP_PATCH_DIR/aws-sdk-cpp-patch-1.9.179-LINK_LIBRARIES_ALL.patch
+    touch $PATCHED_MARK
+    echo "Finished patching $AWS_SDK_CPP_SOURCE"
+else
+    echo "$AWS_SDK_CPP_SOURCE not patched"
+fi
+
+cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.10.36" ]; then
+    if [ ! -f prefetch_crt_dep_ok ]; then
+        bash ./prefetch_crt_dependency.sh
+        touch prefetch_crt_dep_ok
+    fi
     touch $PATCHED_MARK
     echo "Finished patching $AWS_SDK_CPP_SOURCE"
 else

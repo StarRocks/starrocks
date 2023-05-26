@@ -43,7 +43,7 @@ import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -437,7 +437,7 @@ public class AlterTest {
                 ") " +
                 "as select k1, k2 from test.testTable1;";
         createMaterializedView(sql);
-        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(
+        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdsByUser(
                 starRocksAssert.getCtx().getCurrentUserIdentity()));
         dropMaterializedView("drop materialized view test.mv1");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("testTable1");
@@ -532,7 +532,7 @@ public class AlterTest {
         createMaterializedView(sql);
         String alterStmt = "refresh materialized view test.mv1";
         refreshMaterializedView(alterStmt);
-        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(
+        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdsByUser(
                 starRocksAssert.getCtx().getCurrentUserIdentity()));
         dropMaterializedView("drop materialized view test.mv1");
     }
@@ -561,7 +561,7 @@ public class AlterTest {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, k2 from test.testTable4;";
-        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(
+        starRocksAssert.getCtx().setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdsByUser(
                 starRocksAssert.getCtx().getCurrentUserIdentity()));
         createMaterializedView(sql);
         String alterStmt = "refresh materialized view test.mv1";
@@ -1769,8 +1769,8 @@ public class AlterTest {
         String createUserSql = "CREATE USER 'testuser' IDENTIFIED BY ''";
         CreateUserStmt createUserStmt =
                 (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
-        AuthenticationManager authenticationManager =
-                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationManager();
+        AuthenticationMgr authenticationManager =
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationMgr();
         authenticationManager.createUser(createUserStmt);
 
         String sql = "grant ALTER on database test to testuser";
@@ -1783,7 +1783,7 @@ public class AlterTest {
         starRocksAssert.getCtx().setQualifiedUser("testuser");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setCurrentRoleIds(
-                GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(testUser));
+                GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdsByUser(testUser));
         starRocksAssert.getCtx().setRemoteIP("%");
 
         String renameDb = "alter database test rename test0";
@@ -2504,5 +2504,44 @@ public class AlterTest {
                 "ADD PARTITIONS START (\"2022-05-01\") END (\"2022-05-03\") EVERY (INTERVAL 2 day)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+    }
+
+    @Test
+    public void testAlterMvWithResourceGroup() throws Exception {
+        starRocksAssert.executeResourceGroupDdlSql("create resource group if not exists mv_rg" +
+                "   with (" +
+                "   'cpu_core_limit' = '10'," +
+                "   'mem_limit' = '20%'," +
+                "   'concurrency_limit' = '11'," +
+                "   'type' = 'mv'" +
+                "    );");
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `mv2` (a comment \"a1\", b comment \"b2\", c)\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "DISTRIBUTED BY HASH(a) BUCKETS 12\n" +
+                        "REFRESH ASYNC\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"resource_group\" = \"mv_rg\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT k1, k2, v1 from test.tbl1");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv2");
+        Assert.assertEquals("mv_rg", mv.getTableProperty().getResourceGroup());
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER MATERIALIZED VIEW mv2\n" +
+                "set (\"resource_group\" =\"\" )";
+        AlterMaterializedViewStmt alterTableStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterMaterializedView(alterTableStmt);
+        Assert.assertEquals("", mv.getTableProperty().getResourceGroup());
+        sql = "ALTER MATERIALIZED VIEW mv2\n" +
+                "set (\"resource_group\" =\"not_exist_rg\" )";
+        AlterMaterializedViewStmt alterTableStmt2 =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertThrows("resource_group not_exist_rg does not exist.",
+                DdlException.class, () -> GlobalStateMgr.getCurrentState().alterMaterializedView(alterTableStmt2));
+
+        Assert.assertEquals("", mv.getTableProperty().getResourceGroup());
     }
 }

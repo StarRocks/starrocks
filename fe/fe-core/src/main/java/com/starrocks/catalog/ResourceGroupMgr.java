@@ -15,7 +15,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -29,7 +28,7 @@ import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollection;
@@ -116,6 +115,16 @@ public class ResourceGroupMgr implements Writable {
                                 shortQueryResourceGroup.getName()));
             }
 
+            if (wg.getClassifiers() != null && !wg.getClassifiers().isEmpty() &&
+                    wg.getResourceGroupType().equals(TWorkGroupType.WG_MV)) {
+                throw new DdlException("MV Resource Group not support classifiers.");
+            }
+
+            if (wg.getClassifiers() == null || wg.getClassifiers().isEmpty() &&
+                    !wg.getResourceGroupType().equals(TWorkGroupType.WG_MV)) {
+                throw new DdlException("This type Resource Group need define classifiers.");
+            }
+
             wg.setId(GlobalStateMgr.getCurrentState().getNextId());
             wg.setVersion(wg.getId());
             for (ResourceGroupClassifier classifier : wg.getClassifiers()) {
@@ -158,41 +167,29 @@ public class ResourceGroupMgr implements Writable {
     private List<String> getUnqualifiedRole(ConnectContext ctx) {
         Preconditions.checkArgument(ctx != null);
 
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            try {
-                AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
-                List<String> validRoles = new ArrayList<>();
+        try {
+            AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+            List<String> validRoles = new ArrayList<>();
 
-                Set<Long> activeRoles = ctx.getCurrentRoleIds();
-                if (activeRoles == null) {
-                    activeRoles = manager.getRoleIdsByUser(ctx.getCurrentUserIdentity());
-                }
-
-                for (Long roleId : activeRoles) {
-                    RolePrivilegeCollection rolePrivilegeCollection =
-                            manager.getRolePrivilegeCollectionUnlocked(roleId, false);
-                    if (rolePrivilegeCollection != null) {
-                        validRoles.add(rolePrivilegeCollection.getName());
-                    }
-                }
-
-                return validRoles.stream().filter(r -> !PrivilegeBuiltinConstants.BUILT_IN_ROLE_NAMES.contains(r))
-                        .collect(Collectors.toList());
-            } catch (PrivilegeException e) {
-                LOG.info("getUnqualifiedRole failed for resource group, error message: " + e.getMessage());
-                return null;
+            Set<Long> activeRoles = ctx.getCurrentRoleIds();
+            if (activeRoles == null) {
+                activeRoles = manager.getRoleIdsByUser(ctx.getCurrentUserIdentity());
             }
-        }
 
-        String roleName = null;
-        String qualifiedRoleName = GlobalStateMgr.getCurrentState().getAuth()
-                .getRoleName(ctx.getCurrentUserIdentity());
-        if (qualifiedRoleName != null) {
-            //default_cluster:role
-            String[] roleParts = qualifiedRoleName.split(":");
-            roleName = roleParts[roleParts.length - 1];
+            for (Long roleId : activeRoles) {
+                RolePrivilegeCollection rolePrivilegeCollection =
+                        manager.getRolePrivilegeCollectionUnlocked(roleId, false);
+                if (rolePrivilegeCollection != null) {
+                    validRoles.add(rolePrivilegeCollection.getName());
+                }
+            }
+
+            return validRoles.stream().filter(r -> !PrivilegeBuiltinConstants.BUILT_IN_ROLE_NAMES.contains(r))
+                    .collect(Collectors.toList());
+        } catch (PrivilegeException e) {
+            LOG.info("getUnqualifiedRole failed for resource group, error message: " + e.getMessage());
+            return null;
         }
-        return Lists.newArrayList(roleName);
     }
 
     public List<List<String>> showAllResourceGroups(ConnectContext ctx, Boolean isListAll) {
@@ -310,6 +307,10 @@ public class ResourceGroupMgr implements Writable {
             }
             ResourceGroup wg = resourceGroupMap.get(name);
             AlterResourceGroupStmt.SubCommand cmd = stmt.getCmd();
+            if (wg.getResourceGroupType() == TWorkGroupType.WG_MV &&
+                    !(cmd instanceof AlterResourceGroupStmt.AlterProperties)) {
+                throw new DdlException("MV Resource Group not support classifiers.");
+            }
             if (cmd instanceof AlterResourceGroupStmt.AddClassifiers) {
                 List<ResourceGroupClassifier> newAddedClassifiers = stmt.getNewAddedClassifiers();
                 for (ResourceGroupClassifier classifier : newAddedClassifiers) {

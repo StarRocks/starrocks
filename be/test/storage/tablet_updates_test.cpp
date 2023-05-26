@@ -121,6 +121,63 @@ public:
         return *writer->build();
     }
 
+    RowsetSharedPtr create_rowset_with_mutiple_segments(const TabletSharedPtr& tablet,
+                                                        const vector<vector<int64_t>>& keys_by_segment,
+                                                        Column* one_delete = nullptr, bool empty = false,
+                                                        bool has_merge_condition = false) {
+        RowsetWriterContext writer_context;
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+        writer_context.tablet_schema = &tablet->tablet_schema();
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = OVERLAP_UNKNOWN;
+        if (has_merge_condition) {
+            writer_context.merge_condition = "v2";
+        }
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        if (empty) {
+            return *writer->build();
+        }
+        auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+        for (int i = 0; i < keys_by_segment.size(); i++) {
+            auto chunk = ChunkHelper::new_chunk(schema, keys_by_segment[i].size());
+            auto& cols = chunk->columns();
+            for (int64_t key : keys_by_segment[i]) {
+                if (schema.num_key_fields() == 1) {
+                    cols[0]->append_datum(Datum(key));
+                } else {
+                    cols[0]->append_datum(Datum(key));
+                    string v = fmt::to_string(key * 234234342345);
+                    cols[1]->append_datum(Datum(Slice(v)));
+                    cols[2]->append_datum(Datum((int32_t)key));
+                }
+                int vcol_start = schema.num_key_fields();
+                cols[vcol_start]->append_datum(Datum((int16_t)(key % 100 + 1)));
+                if (cols[vcol_start + 1]->is_binary()) {
+                    string v = fmt::to_string(key % 1000 + 2);
+                    cols[vcol_start + 1]->append_datum(Datum(Slice(v)));
+                } else {
+                    cols[vcol_start + 1]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+                }
+            }
+            if (one_delete == nullptr && !keys_by_segment[i].empty()) {
+                CHECK_OK(writer->flush_chunk(*chunk));
+            } else if (one_delete == nullptr) {
+                CHECK_OK(writer->flush());
+            } else if (one_delete != nullptr) {
+                CHECK_OK(writer->flush_chunk_with_deletes(*chunk, *one_delete));
+            }
+        }
+        return *writer->build();
+    }
+
     RowsetSharedPtr create_partial_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
                                           std::vector<int32_t>& column_indexes,
                                           const std::shared_ptr<TabletSchema>& partial_schema) {
@@ -588,6 +645,7 @@ public:
     void test_link_from(bool enable_persistent_index);
     void test_convert_from(bool enable_persistent_index);
     void test_convert_from_with_pending(bool enable_persistent_index);
+    void test_convert_from_with_mutiple_segment(bool enable_persistent_index);
     void test_reorder_from(bool enable_persistent_index);
     void test_load_snapshot_incremental(bool enable_persistent_index);
     void test_load_snapshot_incremental_ignore_already_committed_version(bool enable_persistent_index);
@@ -1990,6 +2048,49 @@ void TabletUpdatesTest::test_convert_from_with_pending(bool enable_persistent_in
     ASSERT_EQ(2 * N, read_tablet_and_compare_schema_changed(tablet_to_schema_change, 4, allkeys));
 }
 
+void TabletUpdatesTest::test_convert_from_with_mutiple_segment(bool enable_persistent_index) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(enable_persistent_index);
+    const auto& tablet_to_schema_change = create_tablet_to_schema_change(rand(), rand());
+    std::vector<std::vector<int64_t>> keys_by_segment;
+    keys_by_segment.resize(2);
+    for (int i = 100; i < 200; i++) {
+        keys_by_segment[0].emplace_back(i);
+    }
+    for (int i = 0; i < 100; i++) {
+        keys_by_segment[1].emplace_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset_with_mutiple_segments(_tablet, keys_by_segment)).ok());
+
+    tablet_to_schema_change->set_tablet_state(TABLET_NOTREADY);
+    auto chunk_changer = std::make_unique<ChunkChanger>(tablet_to_schema_change->tablet_schema());
+    for (int i = 0; i < tablet_to_schema_change->tablet_schema().num_columns(); ++i) {
+        const auto& new_column = tablet_to_schema_change->tablet_schema().column(i);
+        int32_t column_index = _tablet->field_index(std::string{new_column.name()});
+        auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
+        if (column_index >= 0) {
+            column_mapping->ref_column = column_index;
+        }
+    }
+    std::vector<int64_t> ori_keys;
+    for (int i = 100; i < 200; i++) {
+        ori_keys.emplace_back(i);
+    }
+    for (int i = 0; i < 100; i++) {
+        ori_keys.emplace_back(i);
+    }
+    ASSERT_EQ(200, read_tablet_and_compare(_tablet, 2, ori_keys));
+
+    ASSERT_TRUE(tablet_to_schema_change->updates()->convert_from(_tablet, 2, chunk_changer.get()).ok());
+
+    std::vector<int64_t> keys;
+    for (int i = 0; i < 200; i++) {
+        keys.emplace_back(i);
+    }
+    ASSERT_EQ(200, read_tablet_and_compare_schema_changed(tablet_to_schema_change, 2, keys));
+}
+
 TEST_F(TabletUpdatesTest, convert_from) {
     test_convert_from(false);
 }
@@ -2004,6 +2105,14 @@ TEST_F(TabletUpdatesTest, convert_from_with_pending) {
 
 TEST_F(TabletUpdatesTest, convert_from_with_pending_and_persistent_index) {
     test_convert_from_with_pending(true);
+}
+
+TEST_F(TabletUpdatesTest, convert_from_with_mutiple_segment) {
+    test_convert_from_with_mutiple_segment(false);
+}
+
+TEST_F(TabletUpdatesTest, convert_from_with_mutiple_segment_with_persistent_index) {
+    test_convert_from_with_mutiple_segment(true);
 }
 
 void TabletUpdatesTest::test_reorder_from(bool enable_persistent_index) {

@@ -18,7 +18,6 @@ package com.starrocks.sql.ast;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowRolesStmt extends ShowStmt {
@@ -28,23 +27,8 @@ public class ShowRolesStmt extends ShowStmt {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
 
         builder.addColumn(new Column("Name", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("Users", ScalarType.createVarchar(100)));
-        builder.addColumn(new Column("GlobalPrivs", ScalarType.createVarchar(300)));
-        builder.addColumn(new Column("DatabasePrivs", ScalarType.createVarchar(300)));
-        builder.addColumn(new Column("TablePrivs", ScalarType.createVarchar(300)));
-        builder.addColumn(new Column("ResourcePrivs", ScalarType.createVarchar(300)));
 
         META_DATA = builder.build();
-    }
-
-    private static final ShowResultSetMetaData META_DATA_V2;
-
-    static {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-
-        builder.addColumn(new Column("Name", ScalarType.createVarchar(100)));
-
-        META_DATA_V2 = builder.build();
     }
 
     public ShowRolesStmt() {
@@ -57,11 +41,7 @@ public class ShowRolesStmt extends ShowStmt {
 
     @Override
     public ShowResultSetMetaData getMetaData() {
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            return META_DATA_V2;
-        } else {
-            return META_DATA;
-        }
+        return META_DATA;
     }
 
     @Override

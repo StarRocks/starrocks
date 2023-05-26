@@ -63,8 +63,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public class AuthorizationManager {
-    private static final Logger LOG = LogManager.getLogger(AuthorizationManager.class);
+public class AuthorizationMgr {
+    private static final Logger LOG = LogManager.getLogger(AuthorizationMgr.class);
 
     @SerializedName(value = "r")
     private final Map<String, Long> roleNameToId;
@@ -102,7 +102,7 @@ public class AuthorizationManager {
     private final ReentrantReadWriteLock roleLock;
 
     // only used in deserialization
-    protected AuthorizationManager() {
+    protected AuthorizationMgr() {
         roleNameToId = new HashMap<>();
         userToPrivilegeCollection = new HashMap<>();
         roleIdToPrivilegeCollection = new HashMap<>();
@@ -110,7 +110,7 @@ public class AuthorizationManager {
         roleLock = new ReentrantReadWriteLock();
     }
 
-    public AuthorizationManager(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
+    public AuthorizationMgr(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
         this.globalStateMgr = globalStateMgr;
         if (provider == null) {
             this.provider = new DefaultAuthorizationProvider();
@@ -661,7 +661,7 @@ public class AuthorizationManager {
 
 
     public static Set<Long> getOwnedRolesByUser(UserIdentity userIdentity) throws PrivilegeException {
-        AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+        AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
             manager.userReadLock();
             UserPrivilegeCollection userCollection = manager.getUserPrivilegeCollectionUnlocked(userIdentity);
@@ -1558,7 +1558,7 @@ public class AuthorizationManager {
             // 1 json for number of roles, 2 json for each role(kv)
             final int cnt = 1 + 1 + userToPrivilegeCollection.size() * 2
                     + 1 + roleIdToPrivilegeCollection.size() * 2;
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, AuthorizationManager.class.getName(), cnt);
+            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, "com.starrocks.privilege.AuthorizationManager", cnt);
             // 1 json for myself
             writer.writeJson(this);
             // 1 json for num user
@@ -1585,16 +1585,16 @@ public class AuthorizationManager {
         }
     }
 
-    public static AuthorizationManager load(
+    public static AuthorizationMgr load(
             DataInputStream dis, GlobalStateMgr globalStateMgr, AuthorizationProvider provider)
             throws IOException, DdlException {
         try {
-            SRMetaBlockReader reader = new SRMetaBlockReader(dis, AuthorizationManager.class.getName());
-            AuthorizationManager ret = null;
+            SRMetaBlockReader reader = new SRMetaBlockReader(dis, "com.starrocks.privilege.AuthorizationManager");
+            AuthorizationMgr ret = null;
 
             try {
                 // 1 json for myself
-                ret = reader.readJson(AuthorizationManager.class);
+                ret = reader.readJson(AuthorizationMgr.class);
                 ret.globalStateMgr = globalStateMgr;
                 if (provider == null) {
                     ret.provider = new DefaultAuthorizationProvider();
@@ -1679,5 +1679,102 @@ public class AuthorizationManager {
         roleIdToPrivilegeCollection.put(roleId, collection);
         roleNameToId.put(collection.getName(), roleId);
         LOG.info("upgrade role {}[{}]", collection.getName(), roleId);
+    }
+
+    public void loadV2(DataInputStream dis) throws IOException, DdlException {
+        try {
+            SRMetaBlockReader reader = new SRMetaBlockReader(dis, AuthorizationMgr.class.getName());
+            AuthorizationMgr ret = null;
+
+            try {
+                // 1 json for myself
+                ret = reader.readJson(AuthorizationMgr.class);
+
+                // 1 json for num user
+                int numUser = reader.readJson(int.class);
+                LOG.info("loading {} users", numUser);
+                for (int i = 0; i != numUser; ++i) {
+                    // 2 json for each user(kv)
+                    UserIdentity userIdentity = reader.readJson(UserIdentity.class);
+                    UserPrivilegeCollection collection = reader.readJson(UserPrivilegeCollection.class);
+
+                    if (userIdentity.equals(UserIdentity.ROOT)) {
+                        UserPrivilegeCollection rootUserPrivCollection =
+                                ret.getUserPrivilegeCollectionUnlocked(UserIdentity.ROOT);
+                        collection.grantRoles(rootUserPrivCollection.getAllRoles());
+                        collection.setDefaultRoleIds(rootUserPrivCollection.getDefaultRoleIds());
+                        collection.typeToPrivilegeEntryList = rootUserPrivCollection.typeToPrivilegeEntryList;
+                    }
+
+                    ret.userToPrivilegeCollection.put(userIdentity, collection);
+                }
+                // 1 json for num roles
+                int numRole = reader.readJson(int.class);
+                LOG.info("loading {} roles", numRole);
+                for (int i = 0; i != numRole; ++i) {
+                    // 2 json for each role(kv)
+                    Long roleId = reader.readJson(Long.class);
+                    RolePrivilegeCollection collection = reader.readJson(RolePrivilegeCollection.class);
+
+                    // Use hard-code PrivilegeCollection in the memory as the built-in role permission.
+                    // The reason why need to replay from the image here
+                    // is because the associated information of the role-id is stored in the image.
+                    if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                        RolePrivilegeCollection builtInRolePrivilegeCollection =
+                                ret.roleIdToPrivilegeCollection.get(roleId);
+                        collection.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
+                    }
+                    ret.roleIdToPrivilegeCollection.put(roleId, collection);
+                }
+            } catch (SRMetaBlockEOFException eofException) {
+                LOG.warn("got EOF exception, ignore, ", eofException);
+            } finally {
+                reader.close();
+            }
+
+            assert ret != null; // can't be NULL
+            LOG.info("loaded {} users, {} roles",
+                    ret.userToPrivilegeCollection.size(), ret.roleIdToPrivilegeCollection.size());
+
+            // mark data is loaded
+            isLoaded = true;
+            userToPrivilegeCollection = ret.userToPrivilegeCollection;
+            roleIdToPrivilegeCollection = ret.roleIdToPrivilegeCollection;
+        } catch (SRMetaBlockException | PrivilegeException e) {
+            throw new DdlException("failed to load AuthorizationManager!", e);
+        }
+    }
+
+    public void saveV2(DataOutputStream dos) throws IOException {
+        try {
+            // 1 json for myself,1 json for number of users, 2 json for each user(kv)
+            // 1 json for number of roles, 2 json for each role(kv)
+            final int cnt = 1 + 1 + userToPrivilegeCollection.size() * 2
+                    + 1 + roleIdToPrivilegeCollection.size() * 2;
+            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, AuthorizationMgr.class.getName(), cnt);
+            // 1 json for myself
+            writer.writeJson(this);
+            // 1 json for num user
+            writer.writeJson(userToPrivilegeCollection.size());
+            Iterator<Map.Entry<UserIdentity, UserPrivilegeCollection>> iterator =
+                    userToPrivilegeCollection.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<UserIdentity, UserPrivilegeCollection> entry = iterator.next();
+                writer.writeJson(entry.getKey());
+                writer.writeJson(entry.getValue());
+            }
+            // 1 json for num roles
+            writer.writeJson(roleIdToPrivilegeCollection.size());
+            Iterator<Map.Entry<Long, RolePrivilegeCollection>> roleIter =
+                    roleIdToPrivilegeCollection.entrySet().iterator();
+            while (roleIter.hasNext()) {
+                Map.Entry<Long, RolePrivilegeCollection> entry = roleIter.next();
+                writer.writeJson(entry.getKey());
+                writer.writeJson(entry.getValue());
+            }
+            writer.close();
+        } catch (SRMetaBlockException e) {
+            throw new IOException("failed to save AuthenticationManager!", e);
+        }
     }
 }

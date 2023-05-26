@@ -43,7 +43,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.privilege.PrivilegeActions;
@@ -331,15 +330,9 @@ public class ResourceMgr implements Writable {
                 if (resource == null) {
                     continue;
                 }
-                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    if (!PrivilegeActions.checkAnyActionOnResource(ConnectContext.get(), resource.getName())) {
-                        continue;
-                    }
-                } else {
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkResourcePriv(
-                            ConnectContext.get(), resource.getName(), PrivPredicate.SHOW)) {
-                        continue;
-                    }
+
+                if (!PrivilegeActions.checkAnyActionOnResource(ConnectContext.get(), resource.getName())) {
+                    continue;
                 }
                 resource.getProcNodeData(result);
             }

@@ -65,9 +65,9 @@ import java.util.function.Consumer;
 public class EtlStatus implements Writable {
     public static final String DEFAULT_TRACKING_URL = "";
 
-    @SerializedName("state")
+    @SerializedName("s")
     private TEtlState state;
-    @SerializedName("trackingUrl")
+    @SerializedName("t")
     private String trackingUrl;
     private List<String> rejectedRecordPaths = Lists.newArrayList();
 
@@ -77,13 +77,13 @@ public class EtlStatus implements Writable {
      * It has only one k-v pair:
      *   the key is LOAD_STATISTIC; the value is json string of loadStatistic
      */
-    @SerializedName("stats")
+    @SerializedName("ss")
     private Map<String, String> stats = new HashedMap();
-    @SerializedName("loadStatistic")
+    @SerializedName("l")
     private LoadStatistic loadStatistic = new LoadStatistic();
     private static final String LOAD_STATISTIC = "STARROCKS_LOAD_STATISTIC";
 
-    @SerializedName("counters")
+    @SerializedName("c")
     private Map<String, String> counters;
     private Map<Long, Map<String, Long>> tableCounters;
     // not persist

@@ -62,7 +62,7 @@ import java.util.UUID;
 public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     private static final Logger LOG = LogManager.getLogger(KafkaTaskInfo.class);
 
-    private RoutineLoadManager routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
+    private RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
 
     // <partitionId, beginOffsetOfPartitionId>
     private Map<Integer, Long> partitionIdToOffset;
@@ -197,7 +197,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);
         if (tExecPlanFragmentParams.query_options.enable_profile) {
             StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().
-                    getStreamLoadManager().getSyncSteamLoadTaskByLabel(label);
+                    getStreamLoadManager().getTaskByLabel(label);
             setStreamLoadTask(streamLoadTask);
         }
         TPlanFragment tPlanFragment = tExecPlanFragmentParams.getFragment();

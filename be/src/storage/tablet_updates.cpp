@@ -34,6 +34,7 @@
 #include "storage/chunk_iterator.h"
 #include "storage/compaction_utils.h"
 #include "storage/del_vector.h"
+#include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset_factory.h"
@@ -50,6 +51,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/types.h"
+#include "storage/union_iterator.h"
 #include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
 #include "util/defer_op.h"
@@ -267,6 +269,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
         stats->num_rows = rowset->num_rows();
         stats->byte_size = rowset->data_disk_size();
         stats->num_dels = 0;
+        stats->partial_update_by_column = rowset->is_column_mode_partial_update();
         // the unapplied rowsets have no delete vector yet, so we only need to check the applied rowsets
         if (unapplied_rowsets.find(rsid) == unapplied_rowsets.end()) {
             for (int i = 0; i < rowset->num_segments(); i++) {
@@ -639,6 +642,7 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
         rowset_stats->num_rows = rowset->num_rows();
         rowset_stats->num_dels = 0;
         rowset_stats->byte_size = rowset->data_disk_size();
+        rowset_stats->partial_update_by_column = rowset->is_column_mode_partial_update();
         _calc_compaction_score(rowset_stats.get());
 
         std::lock_guard lg(_rowset_stats_lock);
@@ -1622,6 +1626,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
         rowset_stats->num_rows = rowset->num_rows();
         rowset_stats->num_dels = 0;
         rowset_stats->byte_size = rowset->data_disk_size();
+        rowset_stats->partial_update_by_column = false;
         _calc_compaction_score(rowset_stats.get());
 
         std::lock_guard lg(_rowset_stats_lock);
@@ -2076,6 +2081,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     size_t total_bytes = 0;
     size_t total_rows_after_compaction = 0;
     size_t total_bytes_after_compaction = 0;
+    bool has_partial_update_by_column = false;
     int64_t total_score = -_compaction_cost_seek;
     vector<CompactionEntry> candidates;
     {
@@ -2097,6 +2103,8 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
                     total_score += stat.compaction_score;
                     total_rows += stat.num_rows;
                     total_bytes += stat.byte_size;
+                    // rowset with partial update by column, should contains zero rows and dels.
+                    has_partial_update_by_column |= stat.partial_update_by_column;
                     continue;
                 }
                 candidates.emplace_back();
@@ -2115,6 +2123,11 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         size_t new_bytes = total_bytes_after_compaction + e.bytes * (e.num_rows - e.num_dels) / e.num_rows;
         if (info->inputs.size() > 0 && (new_rows > compaction_result_rows_threashold * 3 / 2 ||
                                         new_bytes > compaction_result_bytes_threashold * 3 / 2)) {
+            break;
+        }
+        // Partial update generate empty rowset, compact them first.
+        // Or partial update by column will trigger too many useless compaction cost.
+        if (info->inputs.size() > 1 && has_partial_update_by_column) {
             break;
         }
         info->inputs.push_back(e.rowsetid);
@@ -2478,6 +2491,7 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
     int64_t min_readable_version = 0;
     int64_t version = 0;
     bool has_pending = false;
+    int64_t version_count = 0;
     vector<uint32_t> rowsets;
     {
         std::lock_guard rl(_lock);
@@ -2489,6 +2503,9 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
             version = last->version.major();
             rowsets = last->rowsets;
             has_pending = _pending_commits.size() > 0;
+            // version count in primary key table contains two parts:
+            // 1. rowsets in newest version. 2. pending rowsets.
+            version_count = rowsets.size() + _pending_commits.size();
         }
     }
     string err_rowsets;
@@ -2514,7 +2531,7 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
     info->__set_version(version);
     info->__set_min_readable_version(min_readable_version);
     info->__set_version_miss(has_pending);
-    info->__set_version_count(rowsets.size());
+    info->__set_version_count(version_count);
     info->__set_row_count(total_row);
     info->__set_data_size(total_size);
     info->__set_is_error_state(_error);
@@ -2973,7 +2990,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         writer_context.tablet_schema = &_tablet.tablet_schema();
         writer_context.rowset_state = VISIBLE;
         writer_context.version = src_rowset->version();
-        writer_context.segments_overlap = src_rowset->rowset_meta()->segments_overlap();
+        writer_context.segments_overlap = NONOVERLAPPING;
 
         std::unique_ptr<RowsetWriter> rowset_writer;
         status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
@@ -2981,9 +2998,19 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
             LOG(INFO) << err_msg_header << "build rowset writer failed";
             return Status::InternalError("build rowset writer failed");
         }
+        ChunkIteratorPtr seg_iterator;
+        if (res.value().empty()) {
+            seg_iterator = new_empty_iterator(base_schema, config::vector_chunk_size);
+        } else {
+            if (src_rowset->rowset_meta()->is_segments_overlapping()) {
+                seg_iterator = new_heap_merge_iterator(res.value());
+            } else {
+                seg_iterator = new_union_iterator(res.value());
+            }
+        }
 
         // notice: rowset's del files not linked, it's not useful
-        status = _convert_from_base_rowset(base_tablet, res.value(), chunk_changer, rowset_writer);
+        status = _convert_from_base_rowset(base_tablet, seg_iterator, chunk_changer, rowset_writer);
         if (!status.ok()) {
             LOG(WARNING) << err_msg_header << "failed to convert from base rowset, exit alter process, "
                          << status.to_string();
@@ -3088,8 +3115,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
 }
 
 Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet,
-                                                const std::vector<ChunkIteratorPtr>& seg_iterators,
-                                                ChunkChanger* chunk_changer,
+                                                const ChunkIteratorPtr& seg_iterator, ChunkChanger* chunk_changer,
                                                 const std::unique_ptr<RowsetWriter>& rowset_writer) {
     Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
@@ -3099,10 +3125,7 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
 
-    for (auto& seg_iterator : seg_iterators) {
-        if (seg_iterator.get() == nullptr) {
-            continue;
-        }
+    if (seg_iterator.get() != nullptr) {
         while (true) {
             base_chunk->reset();
             new_chunk->reset();
@@ -3726,6 +3749,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
             stats->num_rows = rowset->num_rows();
             stats->byte_size = rowset->data_disk_size();
             stats->num_dels = _get_rowset_num_deletes(*rowset);
+            stats->partial_update_by_column = rowset->is_column_mode_partial_update();
             _calc_compaction_score(stats.get());
             _rowset_stats.emplace(rid, std::move(stats));
         }

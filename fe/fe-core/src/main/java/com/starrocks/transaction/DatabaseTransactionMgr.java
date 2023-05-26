@@ -54,8 +54,6 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
@@ -64,9 +62,9 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
-import com.starrocks.qe.ConnectContext;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.thrift.TUniqueId;
@@ -1458,28 +1456,6 @@ public class DatabaseTransactionMgr {
                 throw new AnalysisException("transaction with id " + txnId + " does not exist");
             }
 
-            if (ConnectContext.get() != null) {
-                // check auth
-                Set<Long> tblIds = txnState.getIdToTableCommitInfos().keySet();
-                for (Long tblId : tblIds) {
-                    Table tbl = db.getTable(tblId);
-                    if (tbl != null) {
-                        // won't check privilege in new RBAC framework
-                        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                            if (!GlobalStateMgr.getCurrentState().getAuth()
-                                    .checkTblPriv(ConnectContext.get(), db.getFullName(),
-                                            tbl.getName(), PrivPredicate.SHOW)) {
-                                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
-                                        "SHOW TRANSACTION",
-                                        ConnectContext.get().getQualifiedUser(),
-                                        ConnectContext.get().getRemoteIP(),
-                                        tbl.getName());
-                            }
-                        }
-                    }
-                }
-            }
-
             List<String> info = Lists.newArrayList();
             getTxnStateInfo(txnState, info);
             infos.add(info);
@@ -1643,12 +1619,23 @@ public class DatabaseTransactionMgr {
     }
 
     public void unprotectWriteAllTransactionStates(DataOutput out) throws IOException {
-        for (Map.Entry<Long, TransactionState> entry : idToRunningTransactionState.entrySet()) {
-            entry.getValue().write(out);
+        for (TransactionState transactionState : idToRunningTransactionState.values()) {
+            transactionState.write(out);
         }
 
         for (TransactionState transactionState : finalStatusTransactionStateDeque) {
             transactionState.write(out);
+        }
+    }
+
+    public void unprotectWriteAllTransactionStatesV2(SRMetaBlockWriter writer)
+            throws IOException, SRMetaBlockException {
+        for (TransactionState transactionState : idToRunningTransactionState.values()) {
+            writer.writeJson(transactionState);
+        }
+
+        for (TransactionState transactionState : finalStatusTransactionStateDeque) {
+            writer.writeJson(transactionState);
         }
     }
 

@@ -312,6 +312,7 @@ private:
         size_t num_dels = 0;
         size_t byte_size = 0;
         int64_t compaction_score = 0;
+        bool partial_update_by_column = false;
         std::string to_string() const;
     };
 
@@ -385,9 +386,8 @@ private:
 
     void _update_total_stats(const std::vector<uint32_t>& rowsets, size_t* row_count_before, size_t* row_count_after);
 
-    Status _convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet,
-                                     const std::vector<ChunkIteratorPtr>& seg_iterators, ChunkChanger* chunk_changer,
-                                     const std::unique_ptr<RowsetWriter>& rowset_writer);
+    Status _convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet, const ChunkIteratorPtr& seg_iterator,
+                                     ChunkChanger* chunk_changer, const std::unique_ptr<RowsetWriter>& rowset_writer);
 
     void _check_creation_time_increasing();
 

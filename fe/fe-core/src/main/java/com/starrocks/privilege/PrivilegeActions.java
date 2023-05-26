@@ -39,7 +39,7 @@ public class PrivilegeActions {
     private static boolean checkObjectTypeAction(UserIdentity userIdentity, Set<Long> roleIds,
                                                  PrivilegeType privilegeType,
                                                  ObjectType objectType, List<String> objectTokens) {
-        AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+        AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(userIdentity, roleIds);
             return manager.checkAction(collection, objectType, privilegeType, objectTokens);
@@ -125,7 +125,7 @@ public class PrivilegeActions {
      * Check whether current user has specified privilege action on any object(table/view/mv) in the db.
      */
     public static boolean checkActionInDb(ConnectContext context, String db, PrivilegeType privilegeType) {
-        AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+        AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
                     context.getCurrentRoleIds());
@@ -181,7 +181,7 @@ public class PrivilegeActions {
 
     private static boolean checkAnyActionOnObject(UserIdentity currentUser, Set<Long> roleIds, ObjectType objectType,
                                                   List<String> objectTokens) {
-        AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+        AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(currentUser, roleIds);
             PEntryObject pEntryObject = manager.provider.generateObject(
@@ -303,6 +303,7 @@ public class PrivilegeActions {
             case JDBC:
             case DELTALAKE:
             case FILE:
+            case SCHEMA:
                 return checkAnyActionOnTable(currentUser, roleIds, dbName, tbl.getName());
             case MATERIALIZED_VIEW:
             case CLOUD_NATIVE_MATERIALIZED_VIEW:
@@ -359,7 +360,7 @@ public class PrivilegeActions {
 
     private static boolean checkFunctionAction(ConnectContext connectContext, ObjectType objectType,
                                                long databaseId, Function function, PrivilegeType privilegeType) {
-        AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+        AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(connectContext.getCurrentUserIdentity(),
                     connectContext.getCurrentRoleIds());
@@ -393,7 +394,7 @@ public class PrivilegeActions {
     private static boolean checkAnyActionOnFunctionObject(UserIdentity currentUser, Set<Long> roleIds,
                                                           ObjectType objectType,
                                                           long databaseId, long functionId) {
-        AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+        AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(currentUser, roleIds);
             PEntryObject pEntryObject = manager.provider.generateFunctionObject(

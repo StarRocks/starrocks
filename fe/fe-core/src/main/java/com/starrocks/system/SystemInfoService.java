@@ -62,13 +62,11 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DropComputeNodeLog;
-import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
@@ -76,7 +74,6 @@ import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -98,7 +95,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class SystemInfoService implements GsonPostProcessable {
+public class SystemInfoService {
     private static final Logger LOG = LogManager.getLogger(SystemInfoService.class);
     public static final String DEFAULT_CLUSTER = "default_cluster";
 
@@ -161,7 +158,6 @@ public class SystemInfoService implements GsonPostProcessable {
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
         setComputeNodeOwner(newComputeNode);
-        addComputeNodeIntoWarehouse(newComputeNode);
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
@@ -173,22 +169,6 @@ public class SystemInfoService implements GsonPostProcessable {
         Preconditions.checkState(cluster != null);
         cluster.addComputeNode(computeNode.getId());
         computeNode.setBackendState(BackendState.using);
-    }
-
-    private void addComputeNodeIntoWarehouse(ComputeNode computeNode) {
-        final Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getDefaultWarehouse();
-        if (warehouse != null) {
-            warehouse.getAnyAvailableCluster().addNode(computeNode.getId());
-        }
-    }
-
-    private void dropComputeNodeFromWarehouse(ComputeNode computeNode) {
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getDefaultWarehouse();
-        if (warehouse != null) {
-            warehouse.getAnyAvailableCluster().dropNode(computeNode.getId());
-        }
     }
 
     public boolean isSingleBackendAndComputeNode() {
@@ -250,8 +230,6 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // add backend to DEFAULT_CLUSTER
         setBackendOwner(newBackend);
-
-        addComputeNodeIntoWarehouse(newBackend);
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddBackend(newBackend);
@@ -321,8 +299,6 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // update idToComputeNode
         idToComputeNodeRef.remove(dropComputeNode.getId());
-
-        dropComputeNodeFromWarehouse(dropComputeNode);
 
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
@@ -435,8 +411,6 @@ public class SystemInfoService implements GsonPostProcessable {
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.remove(droppedBackend.getId());
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
-
-        dropComputeNodeFromWarehouse(droppedBackend);
 
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
@@ -897,18 +871,6 @@ public class SystemInfoService implements GsonPostProcessable {
         return checksum;
     }
 
-    @Override
-    public void gsonPostProcess() throws IOException {
-        // Add compute node to DEFAULT_WAREHOUSE
-        final Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-        if (warehouse != null) {
-            for (ComputeNode computeNode : idToComputeNodeRef.values()) {
-                warehouse.getAnyAvailableCluster().addNode(computeNode.getId());
-            }
-        }
-    }
-
     private static class SerializeData {
         @SerializedName("computeNodes")
         public List<ComputeNode> computeNodes;
@@ -1010,15 +972,6 @@ public class SystemInfoService implements GsonPostProcessable {
                 // cluster is not created. CN in cluster will be updated in loadCluster.
             }
         }
-
-        // add it to DEFAULT_WAREHOUSE
-        final Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getDefaultWarehouse();
-        if (warehouse != null) {
-            warehouse.getAnyAvailableCluster().addNode(newComputeNode.getId());
-        } else {
-            // TODO: cn will be updated in loadWarehouse
-        }
     }
 
     public void replayAddBackend(Backend newBackend) {
@@ -1041,23 +994,12 @@ public class SystemInfoService implements GsonPostProcessable {
                 // cluster is not created. Be in cluster will be updated in loadCluster.
             }
         }
-
-        // add it to DEFAULT_WAREHOUSE
-        final Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getDefaultWarehouse();
-        if (warehouse != null) {
-            warehouse.getAnyAvailableCluster().addNode(newBackend.getId());
-        } else {
-            // TODO: cn will be updated in loadWarehouse
-        }
     }
 
     public void replayDropComputeNode(long computeNodeId) {
         LOG.debug("replayDropComputeNode: {}", computeNodeId);
         // update idToComputeNode
         ComputeNode cn = idToComputeNodeRef.remove(computeNodeId);
-
-        dropComputeNodeFromWarehouse(cn);
 
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
@@ -1087,8 +1029,6 @@ public class SystemInfoService implements GsonPostProcessable {
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.remove(backend.getId());
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
-
-        dropComputeNodeFromWarehouse(backend);
 
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
