@@ -119,7 +119,7 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 如果 `file1.csv` 文件存储在本地文件系统，可以通过如下语句，创建 [Stream Load](/loading/StreamLoad.md) 导入作业来实现数据导入：
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     -H "column_separator:," \
     -H "columns: user_id, user_gender, event_date, event_type" \
     -T file1.csv -XPUT \
@@ -217,7 +217,7 @@ MySQL [test_db]> SELECT * FROM table1;
 如果 `file1.csv` 文件存储在本地文件系统，可以通过如下语句，创建 [Stream Load](/loading/StreamLoad.md) 导入作业来实现数据导入：
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     -H "column_separator:," \
     -H "columns: user_id, user_gender, event_date, event_type" \
     -H "where: event_type=1" \
@@ -304,7 +304,7 @@ MySQL [test_db]> SELECT * FROM table1;
 如果 `file2.csv` 文件存储在本地文件系统，可以通过如下语句，创建 [Stream Load](/loading/StreamLoad.md) 导入作业来实现数据导入：
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     -H "column_separator:," \
     -H "columns:date,year=year(date),month=month(date),day=day(date)" \
     -T file2.csv -XPUT \

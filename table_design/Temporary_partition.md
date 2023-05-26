@@ -60,9 +60,9 @@ INSERT INTO table_name TEMPORARY PARTITION(tp_name1, tp_name2, ...) SELECT (sql_
 
 示例：
 
-```shell
-curl --location-trusted -u root: -H "label:123" -H "temporary_partitions: tp1, tp2, ..." -T testData \
-    http://host:port/api/testDb/testTbl/_stream_load    
+```Bash
+curl --location-trusted -u <username>:<password> -H "label:label1" -H "temporary_partitions: tp1, tp2, ..." -T testData \
+    http://host:port/api/example_db/site_access/_stream_load    
 ```
 
 ### 通过 BROKER LOAD 方式导入

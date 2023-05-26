@@ -57,7 +57,7 @@ cast(input as type)
 示例二：导入中转换原始数据。
 
 ```bash
-curl --location-trusted -u root: -T ~/user_data/bigint \
+curl --location-trusted -u <username>:<password> -T ~/user_data/bigint \
 
     -H "columns: tmp_k1, k1=cast(tmp_k1 as BIGINT)" \
 
@@ -69,7 +69,7 @@ curl --location-trusted -u root: -T ~/user_data/bigint \
 > 在导入过程中，对于原始数据类型为浮点数的 STRING 做转换时，数据会被转换成 NULL。比如浮点数 12.0 会转为 NULL。如果想强制将这种类型的原始数据转为 BIGINT，需要先将STRING类型的浮点数转为DOUBLE，再转为 BIGINT，请参考如下示例:
 
 ```bash
-curl --location-trusted -u root: -T ~/user_data/bigint \
+curl --location-trusted -u <username>:<password> -T ~/user_data/bigint \
 
     -H "columns: tmp_k1, k1=cast(cast(tmp_k1 as DOUBLE) as BIGINT)" \
 
