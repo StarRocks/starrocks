@@ -120,7 +120,7 @@ This section uses `file1.csv` and `table1` as an example. The four columns of `f
 If `file1.csv` is stored in your local file system, run the following command to create a [Stream Load](../loading/StreamLoad.md) job:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     -H "column_separator:," \
     -H "columns: user_id, user_gender, event_date, event_type" \
     -T file1.csv -XPUT \
@@ -218,7 +218,7 @@ This section uses `file1.csv` and `table1` as an example. If you want to load on
 If `file1.csv` is stored in your local file system, run the following command to create a [Stream Load](../loading/StreamLoad.md) job:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     -H "column_separator:," \
     -H "columns: user_id, user_gender, event_date, event_type" \
     -H "where: event_type=1" \
@@ -305,7 +305,7 @@ This section uses `file2.csv` and `table2` as an example. `file2.csv` consists o
 If `file2.csv` is stored in your local file system, run the following command to create a [Stream Load](../loading/StreamLoad.md) job:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     -H "column_separator:," \
     -H "columns:date,year=year(date),month=month(date),day=day(date)" \
     -T file2.csv -XPUT \
