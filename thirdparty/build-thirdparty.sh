@@ -1040,6 +1040,14 @@ build_serdes() {
     restore_compile_flags
 }
 
+# async-profiler
+build_async_profiler() {
+    check_if_source_exist $ASYNC_PROFILER_SOURCE
+    mkdir -p $TP_INSTALL_DIR/async-profiler
+    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/build $TP_INSTALL_DIR/async-profiler
+    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/profiler.sh $TP_INSTALL_DIR/async-profiler
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1112,6 +1120,7 @@ build_streamvbyte
 build_jansson
 build_avro_c
 build_serdes
+build_async_profiler
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
