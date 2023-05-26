@@ -161,8 +161,7 @@ public class StatisticsCollectJobFactory {
                     Long.parseLong(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL)) :
                     defaultInterval;
 
-            if (statisticsUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now()) &&
-                    sumDataSize > Config.statistic_auto_collect_small_table_size) {
+            if (statisticsUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now())) {
                 LOG.debug("statistics job doesn't work on the interval table: {}, " +
                                 "last collect time: {}, interval: {}, table size: {}MB",
                         table.getName(), tableUpdateTime, timeInterval, ByteSizeUnit.BYTES.toMB(sumDataSize));
