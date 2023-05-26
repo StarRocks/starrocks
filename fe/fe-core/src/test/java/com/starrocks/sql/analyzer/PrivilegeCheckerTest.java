@@ -81,7 +81,7 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 
-public class PrivilegeCheckerV2Test {
+public class PrivilegeCheckerTest {
     private static StarRocksAssert starRocksAssert;
     private static UserIdentity testUser;
 
@@ -1255,6 +1255,9 @@ public class PrivilegeCheckerV2Test {
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
 
         sql = "create role testrole2";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
+        sql = "alter role testrole2 set comment=\"yi shan yi shan, liang jing jing\"";
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
 
         sql = "drop role test_role";

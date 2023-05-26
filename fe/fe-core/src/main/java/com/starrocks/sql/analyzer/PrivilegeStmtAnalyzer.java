@@ -263,7 +263,7 @@ public class PrivilegeStmtAnalyzer {
             }
 
             PrivilegeType privilegeType = PrivilegeType.valueOf(p);
-            if (!authorizationManager.isAvailablePirvType(objectType, privilegeType)) {
+            if (!authorizationManager.isAvailablePrivType(objectType, privilegeType)) {
                 throw new SemanticException("Cannot grant or revoke " + privTypeString + " on '"
                         + objectType + "' type object");
             }
