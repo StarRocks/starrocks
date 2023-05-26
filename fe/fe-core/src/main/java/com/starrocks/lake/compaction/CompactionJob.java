@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake.compaction;
 
-import com.google.common.collect.Lists;
 import com.starrocks.proto.CompactResponse;
+import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.VisibleStateWaiter;
 
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import javax.validation.constraints.NotNull;
+import java.util.stream.Collectors;
 
 public class CompactionJob {
     private final String partitionName;
@@ -31,27 +30,25 @@ public class CompactionJob {
     private final long startTs;
     private volatile long commitTs;
     private volatile long finishTs;
-    private Map<Long, List<Long>> beToTablets;
-    private List<Future<CompactResponse>> responseList;
     private VisibleStateWaiter visibleStateWaiter;
+    private List<CompactionTask> tasks;
 
-    public CompactionJob(String partitionName, long txnId, long startTs) {
+    public CompactionJob(String partitionName, long txnId) {
         this.partitionName = partitionName;
         this.txnId = txnId;
-        this.startTs = startTs;
-        responseList = Lists.newArrayList();
+        this.startTs = System.currentTimeMillis();
     }
 
     public long getTxnId() {
         return txnId;
     }
 
-    public void setResponseList(@NotNull List<Future<CompactResponse>> futures) {
-        responseList = futures;
+    public void setTasks(List<CompactionTask> tasks) {
+        this.tasks = Objects.requireNonNull(tasks, "tasks is null");
     }
 
     public List<Future<CompactResponse>> getResponseList() {
-        return responseList;
+        return tasks.stream().map(CompactionTask::getResponseFuture).collect(Collectors.toList());
     }
 
     public void setVisibleStateWaiter(VisibleStateWaiter visibleStateWaiter) {
@@ -66,40 +63,36 @@ public class CompactionJob {
         return visibleStateWaiter != null;
     }
 
-    public void setBeToTablets(@NotNull Map<Long, List<Long>> beToTablets) {
-        this.beToTablets = beToTablets;
-    }
-
-    public Map<Long, List<Long>> getBeToTablets() {
-        return beToTablets;
+    public List<TabletCommitInfo> buildTabletCommitInfo() {
+        return tasks.stream().map(CompactionTask::buildTabletCommitInfo).flatMap(List::stream).collect(Collectors.toList());
     }
 
     public boolean compactionFinishedOnBE() {
-        return responseList.stream().allMatch(Future::isDone);
+        return tasks.stream().allMatch(CompactionTask::isDone);
     }
 
-    public int getNumCompactionTasks() {
-        return beToTablets.values().stream().mapToInt(List::size).sum();
+    public int getNumTabletCompactionTasks() {
+        return tasks.stream().mapToInt(CompactionTask::tabletCount).sum();
     }
 
     public long getStartTs() {
         return startTs;
     }
 
-    public void setCommitTs(long commitTs) {
-        this.commitTs = commitTs;
-    }
-
     public long getCommitTs() {
         return commitTs;
     }
 
-    public void setFinishTs(long finishTs) {
-        this.finishTs = finishTs;
+    public void setCommitTs(long commitTs) {
+        this.commitTs = commitTs;
     }
 
     public long getFinishTs() {
         return finishTs;
+    }
+
+    public void finish() {
+        this.finishTs = System.currentTimeMillis();
     }
 
     public String getFullPartitionName() {

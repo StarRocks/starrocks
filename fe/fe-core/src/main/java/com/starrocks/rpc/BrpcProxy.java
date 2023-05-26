@@ -72,11 +72,11 @@ public class BrpcProxy {
         return getInstance().getBackendServiceImpl(address);
     }
 
-    public static LakeService getLakeService(TNetworkAddress address) {
+    public static LakeService getLakeService(TNetworkAddress address) throws RpcException {
         return getInstance().getLakeServiceImpl(address);
     }
 
-    public static LakeService getLakeService(String host, int port) {
+    public static LakeService getLakeService(String host, int port) throws RpcException {
         return getInstance().getLakeServiceImpl(new TNetworkAddress(host, port));
     }
 
@@ -84,8 +84,16 @@ public class BrpcProxy {
         return backendServiceMap.computeIfAbsent(address, this::createBackendService);
     }
 
-    protected LakeService getLakeServiceImpl(TNetworkAddress address) {
-        return lakeServiceMap.computeIfAbsent(address, this::createLakeService);
+    protected LakeService getLakeServiceImpl(TNetworkAddress address) throws RpcException {
+        try {
+            return lakeServiceMap.computeIfAbsent(address, this::createLakeService);
+        } catch (Exception e) {
+            if (e.getCause() != null) {
+                throw new RpcException(address.getHostname(), e.getCause().getMessage());
+            } else {
+                throw new RpcException(address.getHostname(), e.getMessage());
+            }
+        }
     }
 
     private PBackendService createBackendService(TNetworkAddress address) {
