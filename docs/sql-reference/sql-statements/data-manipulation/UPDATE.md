@@ -2,11 +2,11 @@
 
 Modifies rows in a Primary Key table.
 
-In versions earlier than version 3.0, the UPDATE statement only supports single-table UPDATE and does not support common table expressions (CTEs). Starting from version 3.0, StarRocks enriches the syntax to support multi-table joins and CTE. If you need to join the table to be updated with other tables in the database, you can reference these other tables in the FROM clause or CTE.
+In versions earlier than version 3.0, the UPDATE statement only supports single-table UPDATE and does not support common table expressions (CTEs). Starting from version 3.0, StarRocks enriches the syntax to support multi-table joins and CTEs. If you need to join the table to be updated with other tables in the database, you can reference these other tables in the FROM clause or CTE.
 
 ## Usage notes
 
-When executing the UPDATE statement, StarRocks converts the table expression in the FROM clause of the UPDATE statement into an equivalent JOIN query statement. Therefore, make sure that the table expression that you specify in the FROM clause of the UPDATE statement supports this conversion. For example, the UPDATE statement is 'UPDATE t0 SET v1=t1.v1 FROM t1 WHERE t0.pk = t1.pk;'. The table expression in the FROM clause can be converted to 't0 JOIN t1 ON t0.pk=t1.pk;'. And based on the result set of the JOIN query, StarRocks matches the data rows in the table to be updated and updates the values of the specified columns. If one data row in the result set of the JOIN query has multiple associated results, the update result of that data row in the table to be updated is random.
+When executing the UPDATE statement, StarRocks converts the table expression in the FROM clause of the UPDATE statement into an equivalent JOIN query statement. Therefore, make sure that the table expression that you specify in the FROM clause of the UPDATE statement supports this conversion. For example, the UPDATE statement is 'UPDATE t0 SET v1=t1.v1 FROM t1 WHERE t0.pk = t1.pk;'. The table expression in the FROM clause can be converted to 't0 JOIN t1 ON t0.pk=t1.pk;'. And based on the result set of the JOIN query, StarRocks matches the data rows in the table to be updated and updates the values of the specified columns. It is possible that multiple rows in the result set match a certain row in the table to be updated. In this scenario, the value of the specified column of that row in the updated table is changed to the value of the specified column from a randomly selected row among the multiple rows in the result set.
 
 ## Syntax
 
