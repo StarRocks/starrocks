@@ -110,7 +110,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
   - 不添加 `__op` 字段：
 
     ```Bash
-    curl --location-trusted -u root: \
+    curl --location-trusted -u <username>:<password> \
         -H "label:label1" \
         -H "column_separator:," \
         -T example1.csv -XPUT\
@@ -120,7 +120,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
   - 添加 `__op` 字段：
 
     ```Bash
-    curl --location-trusted -u root: \
+    curl --location-trusted -u <username>:<password> \
         -H "label:label2" \
         -H "column_separator:," \
         -H "columns:__op ='upsert'" \
@@ -265,7 +265,7 @@ MySQL [test_db]> SELECT * FROM table1;
 - 通过 Stream Load 导入：
 
   ```Bash
-  curl --location-trusted -u root: \
+  curl --location-trusted -u <username>:<password> \
       -H "label:label3" \
       -H "column_separator:," \
       -H "columns:__op='delete'" \
@@ -372,7 +372,7 @@ MySQL [test_db]> SELECT * FROM table2;
 - 通过 Stream Load 导入：
 
   ```Bash
-  curl --location-trusted -u root: \
+  curl --location-trusted -u <username>:<password> \
       -H "label:label4" \
       -H "column_separator:," \
       -H "columns: id, name, score, temp, __op = temp" \
@@ -484,7 +484,7 @@ MySQL [test_db]> SELECT * FROM table3;
 - 通过 Stream Load 导入：
 
   ```Bash
-  curl --location-trusted -u root: \
+  curl --location-trusted -u <username>:<password> \
       -H "label:label7" -H "column_separator:," \
       -H "partial_update:true" \
       -H "columns:id,name" \
@@ -616,7 +616,7 @@ MySQL [test_db]> SELECT * FROM table4;
 - 通过 Stream Load 导入：
 
   ```Bash
-  curl --location-trusted -u root: \
+  curl --location-trusted -u <username>:<password> \
       -H "label:label10" \
       -H "column_separator:," \
       -H "merge_condition:version" \

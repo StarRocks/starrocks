@@ -434,14 +434,18 @@ Broker Load 支持通过 SHOW LOAD 语句和 curl 命令两种方式来查看导
 命令语法如下：
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     'http://<fe_host>:<fe_http_port>/api/<database_name>/_load_info?label=<label_name>'
 ```
+
+> **说明**
+>
+> 如果账号没有设置密码，这里只需要传入 `<username>:`。
 
 例如，可以通过如下命令查看 `db1` 数据库中标签为 `label1` 的导入作业的执行情况：
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     'http://<fe_host>:<fe_http_port>/api/db1/_load_info?label=label1'
 ```
 
