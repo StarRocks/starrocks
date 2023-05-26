@@ -78,7 +78,7 @@ static Slice split_positive_index(Slice& delimiter, int32_t& part_number, Slice&
     }
 }
 
-static void split_negative_index(Slice& delimiter, int32_t& part_number, Slice& haystack) {
+static Slice split_negative_index(Slice& delimiter, int32_t& part_number, Slice& haystack) {
     part_number = -part_number;
     auto haystack_str = haystack.to_string();
     int32_t offset = haystack.size;
@@ -159,10 +159,16 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
                 }
             }
         } else {
+            Slice slice;
             if (part_number > 0) {
-                split_positive_index(res, delimiter, part_number, haystack);
+                slice = split_positive_index(delimiter, part_number, haystack);
             } else {
-                split_negative_index(res, delimiter, part_number, haystack);
+                slice = split_negative_index(delimiter, part_number, haystack);
+            }
+            if (slice.empty()) {
+                res.append_null();
+            } else {
+                res.append(slice);
             }
         }
     }
