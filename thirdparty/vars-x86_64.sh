@@ -38,3 +38,9 @@ HYPERSCAN_DOWNLOAD="https://github.com/intel/hyperscan/archive/v5.4.0.tar.gz"
 HYPERSCAN_NAME="hyperscan-5.4.0.tar.gz"
 HYPERSCAN_SOURCE="hyperscan-5.4.0"
 HYPERSCAN_MD5SUM="65e08385038c24470a248f6ff2fa379b"
+
+# async-profiler
+ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releases/download/v2.9/async-profiler-2.9-linux-x64.tar.gz"
+ASYNC_PROFILER_NAME="async-profiler-2.9-linux-x64.tar.gz"
+ASYNC_PROFILER_SOURCE="async-profiler-2.9-linux-x64"
+ASYNC_PROFILER_MD5SUM="29127cee36b7acf069d31603b4558361"
