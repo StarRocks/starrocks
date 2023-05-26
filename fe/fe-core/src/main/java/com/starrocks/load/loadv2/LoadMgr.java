@@ -99,8 +99,8 @@ import java.util.stream.Collectors;
  * LoadManager.lock
  * LoadJob.lock
  */
-public class LoadManager implements Writable {
-    private static final Logger LOG = LogManager.getLogger(LoadManager.class);
+public class LoadMgr implements Writable {
+    private static final Logger LOG = LogManager.getLogger(LoadMgr.class);
 
     private final Map<Long, LoadJob> idToLoadJob = Maps.newConcurrentMap();
     private final Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Maps.newConcurrentMap();
@@ -108,7 +108,7 @@ public class LoadManager implements Writable {
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    public LoadManager(LoadJobScheduler loadJobScheduler) {
+    public LoadMgr(LoadJobScheduler loadJobScheduler) {
         this.loadJobScheduler = loadJobScheduler;
     }
 
@@ -733,7 +733,7 @@ public class LoadManager implements Writable {
 
     public void loadLoadJobsV2JsonFormat(DataInputStream in) throws IOException,
             SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(in, LoadManager.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(in, LoadMgr.class.getName());
         try {
             int size = reader.readInt();
             long now = System.currentTimeMillis();
@@ -771,7 +771,7 @@ public class LoadManager implements Writable {
         List<LoadJob> loadJobs = idToLoadJob.values().stream().filter(this::needSave).collect(Collectors.toList());
         // 1 json for number of jobs, size of idToLoadJob for jobs
         final int cnt = 1 + loadJobs.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(out, LoadManager.class.getName(), cnt);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(out, LoadMgr.class.getName(), cnt);
         writer.writeJson(loadJobs.size());
         for (LoadJob loadJob : loadJobs) {
             writer.writeJson(loadJob);

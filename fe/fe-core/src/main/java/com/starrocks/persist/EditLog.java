@@ -410,13 +410,13 @@ public class EditLog {
                     break;
                 case OperationType.OP_FINISH_DELETE: {
                     DeleteInfo info = (DeleteInfo) journal.getData();
-                    DeleteMgr deleteHandler = globalStateMgr.getDeleteHandler();
+                    DeleteMgr deleteHandler = globalStateMgr.getDeleteMgr();
                     deleteHandler.replayDelete(info, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_FINISH_MULTI_DELETE: {
                     MultiDeleteInfo info = (MultiDeleteInfo) journal.getData();
-                    DeleteMgr deleteHandler = globalStateMgr.getDeleteHandler();
+                    DeleteMgr deleteHandler = globalStateMgr.getDeleteMgr();
                     deleteHandler.replayMultiDelete(info, globalStateMgr);
                     break;
                 }
@@ -643,18 +643,18 @@ public class EditLog {
                 case OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2:
                 case OperationType.OP_CREATE_ROUTINE_LOAD_JOB: {
                     RoutineLoadJob routineLoadJob = (RoutineLoadJob) journal.getData();
-                    GlobalStateMgr.getCurrentState().getRoutineLoadManager().replayCreateRoutineLoadJob(routineLoadJob);
+                    GlobalStateMgr.getCurrentState().getRoutineLoadMgr().replayCreateRoutineLoadJob(routineLoadJob);
                     break;
                 }
                 case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2:
                 case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB: {
                     RoutineLoadOperation operation = (RoutineLoadOperation) journal.getData();
-                    GlobalStateMgr.getCurrentState().getRoutineLoadManager().replayChangeRoutineLoadJob(operation);
+                    GlobalStateMgr.getCurrentState().getRoutineLoadMgr().replayChangeRoutineLoadJob(operation);
                     break;
                 }
                 case OperationType.OP_REMOVE_ROUTINE_LOAD_JOB: {
                     RoutineLoadOperation operation = (RoutineLoadOperation) journal.getData();
-                    globalStateMgr.getRoutineLoadManager().replayRemoveOldRoutineLoad(operation);
+                    globalStateMgr.getRoutineLoadMgr().replayRemoveOldRoutineLoad(operation);
                     break;
                 }
                 case OperationType.OP_CREATE_STREAM_LOAD_TASK: {
@@ -666,18 +666,18 @@ public class EditLog {
                 case OperationType.OP_CREATE_LOAD_JOB: {
                     com.starrocks.load.loadv2.LoadJob loadJob =
                             (com.starrocks.load.loadv2.LoadJob) journal.getData();
-                    globalStateMgr.getLoadManager().replayCreateLoadJob(loadJob);
+                    globalStateMgr.getLoadMgr().replayCreateLoadJob(loadJob);
                     break;
                 }
                 case OperationType.OP_END_LOAD_JOB_V2:
                 case OperationType.OP_END_LOAD_JOB: {
                     LoadJobFinalOperation operation = (LoadJobFinalOperation) journal.getData();
-                    globalStateMgr.getLoadManager().replayEndLoadJob(operation);
+                    globalStateMgr.getLoadMgr().replayEndLoadJob(operation);
                     break;
                 }
                 case OperationType.OP_UPDATE_LOAD_JOB: {
                     LoadJobStateUpdateInfo info = (LoadJobStateUpdateInfo) journal.getData();
-                    globalStateMgr.getLoadManager().replayUpdateLoadJobStateInfo(info);
+                    globalStateMgr.getLoadMgr().replayUpdateLoadJobStateInfo(info);
                     break;
                 }
                 case OperationType.OP_CREATE_RESOURCE: {
@@ -815,12 +815,12 @@ public class EditLog {
                 }
                 case OperationType.OP_ALTER_ROUTINE_LOAD_JOB: {
                     AlterRoutineLoadJobOperationLog log = (AlterRoutineLoadJobOperationLog) journal.getData();
-                    globalStateMgr.getRoutineLoadManager().replayAlterRoutineLoadJob(log);
+                    globalStateMgr.getRoutineLoadMgr().replayAlterRoutineLoadJob(log);
                     break;
                 }
                 case OperationType.OP_ALTER_LOAD_JOB: {
                     AlterLoadJobOperationLog log = (AlterLoadJobOperationLog) journal.getData();
-                    globalStateMgr.getLoadManager().replayAlterLoadJob(log);
+                    globalStateMgr.getLoadMgr().replayAlterLoadJob(log);
                     break;
                 }
                 case OperationType.OP_GLOBAL_VARIABLE_V2: {
@@ -921,7 +921,7 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_USER_V2: {
                     CreateUserInfo info = (CreateUserInfo) journal.getData();
-                    globalStateMgr.getAuthenticationManager().replayCreateUser(
+                    globalStateMgr.getAuthenticationMgr().replayCreateUser(
                             info.getUserIdentity(),
                             info.getAuthenticationInfo(),
                             info.getUserProperty(),
@@ -932,7 +932,7 @@ public class EditLog {
                 }
                 case OperationType.OP_UPDATE_USER_PRIVILEGE_V2: {
                     UserPrivilegeCollectionInfo info = (UserPrivilegeCollectionInfo) journal.getData();
-                    globalStateMgr.getAuthorizationManager().replayUpdateUserPrivilegeCollection(
+                    globalStateMgr.getAuthorizationMgr().replayUpdateUserPrivilegeCollection(
                             info.getUserIdentity(),
                             info.getPrivilegeCollection(),
                             info.getPluginId(),
@@ -941,34 +941,34 @@ public class EditLog {
                 }
                 case OperationType.OP_ALTER_USER_V2: {
                     AlterUserInfo info = (AlterUserInfo) journal.getData();
-                    globalStateMgr.getAuthenticationManager().replayAlterUser(
+                    globalStateMgr.getAuthenticationMgr().replayAlterUser(
                             info.getUserIdentity(), info.getAuthenticationInfo());
                     break;
                 }
                 case OperationType.OP_UPDATE_USER_PROP_V2: {
                     UserPropertyInfo info = (UserPropertyInfo) journal.getData();
-                    globalStateMgr.getAuthenticationManager().replayUpdateUserProperty(info);
+                    globalStateMgr.getAuthenticationMgr().replayUpdateUserProperty(info);
                     break;
                 }
                 case OperationType.OP_DROP_USER_V2: {
                     UserIdentity userIdentity = (UserIdentity) journal.getData();
-                    globalStateMgr.getAuthenticationManager().replayDropUser(userIdentity);
+                    globalStateMgr.getAuthenticationMgr().replayDropUser(userIdentity);
                     break;
                 }
                 case OperationType.OP_CREATE_SECURITY_INTEGRATION: {
                     SecurityIntegrationInfo info = (SecurityIntegrationInfo) journal.getData();
-                    globalStateMgr.getAuthenticationManager().replayCreateSecurityIntegration(
+                    globalStateMgr.getAuthenticationMgr().replayCreateSecurityIntegration(
                             info.name, info.propertyMap);
                     break;
                 }
                 case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
                     RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
-                    globalStateMgr.getAuthorizationManager().replayUpdateRolePrivilegeCollection(info);
+                    globalStateMgr.getAuthorizationMgr().replayUpdateRolePrivilegeCollection(info);
                     break;
                 }
                 case OperationType.OP_DROP_ROLE_V2: {
                     RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
-                    globalStateMgr.getAuthorizationManager().replayDropRole(info);
+                    globalStateMgr.getAuthorizationMgr().replayDropRole(info);
                     break;
                 }
                 case OperationType.OP_AUTH_UPGRADE_V2: {

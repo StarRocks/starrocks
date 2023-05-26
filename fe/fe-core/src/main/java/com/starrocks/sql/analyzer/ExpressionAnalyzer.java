@@ -67,7 +67,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.qe.ConnectContext;
@@ -1105,11 +1105,6 @@ public class ExpressionAnalyzer {
                                 " should be an array or a lambda function", node.getPos());
                     }
                     break;
-                case FunctionSet.ARRAY_CONCAT:
-                    if (node.getChildren().size() < 2) {
-                        throw new SemanticException(fnName + " should have at least two inputs", node.getPos());
-                    }
-                    break;
                 case FunctionSet.ARRAY_GENERATE:
                     if (node.getChildren().size() < 1 || node.getChildren().size() > 3) {
                         throw new SemanticException(fnName + " has wrong input numbers");
@@ -1356,7 +1351,7 @@ public class ExpressionAnalyzer {
                 node.setStrValue(session.getCurrentUserIdentity().toString());
             } else if (funcType.equalsIgnoreCase("CURRENT_ROLE")) {
                 node.setType(Type.VARCHAR);
-                AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+                AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
                 List<String> roleName = new ArrayList<>();
 
                 try {
