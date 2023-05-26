@@ -610,7 +610,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             if (needToRefreshNonPartitionTable(partitionTable)) {
                 if (start == null && end == null) {
                     // if non partition table changed, should refresh all partitions of materialized view
-                    return materializedView.getValidPartitionMap(partitionTTLNumber).keySet();
+                    return mvRangePartitionNames;
                 } else {
                     // If the user specifies the start and end ranges, and the non-partitioned table still changes,
                     // it should be refreshed according to the user-specified range, not all partitions.
