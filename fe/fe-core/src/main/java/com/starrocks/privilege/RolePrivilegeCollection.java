@@ -32,6 +32,8 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
     private Set<Long> parentRoleIds;
     @SerializedName(value = "s")
     private Set<Long> subRoleIds;
+    @SerializedName(value = "c")
+    private String comment;
 
     public enum RoleFlags {
         MUTABLE(1),
@@ -50,15 +52,21 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         this.mask = 0;
         this.parentRoleIds = new HashSet<>();
         this.subRoleIds = new HashSet<>();
+        this.comment = "";
     }
 
     public RolePrivilegeCollection(String name, RoleFlags... flags) {
+        this(name, null, flags);
+    }
+
+    public RolePrivilegeCollection(String name, String comment, RoleFlags... flags) {
         this.name = name;
         for (RoleFlags flag : flags) {
             this.mask |= flag.mask;
         }
         this.parentRoleIds = new HashSet<>();
         this.subRoleIds = new HashSet<>();
+        this.comment = comment;
     }
 
     private void assertMutable() throws PrivilegeException {
@@ -75,8 +83,20 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         return checkFlag(RoleFlags.REMOVABLE);
     }
 
+    public boolean isMutable() {
+        return checkFlag(RoleFlags.MUTABLE);
+    }
+
     public String getName() {
         return name;
+    }
+
+    public String getComment() {
+        return comment;
+    }
+
+    public void setComment(String comment) {
+        this.comment = comment;
     }
 
     private boolean checkFlag(RoleFlags flag) {

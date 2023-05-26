@@ -19,19 +19,19 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
-public class CreateRoleStmt extends DdlStmt {
+public class AlterRoleStmt extends DdlStmt {
     private final List<String> roles;
-    private final boolean ifNotExists;
+    private final boolean ifExists;
     private final String comment;
 
-    public CreateRoleStmt(List<String> roles, boolean ifNotExists, String comment) {
-        this(roles, ifNotExists, comment, NodePosition.ZERO);
+    public AlterRoleStmt(List<String> roles, boolean ifExists, String comment) {
+        this(roles, ifExists, comment, NodePosition.ZERO);
     }
 
-    public CreateRoleStmt(List<String> roles, boolean ifNotExists, String comment, NodePosition pos) {
+    public AlterRoleStmt(List<String> roles, boolean ifExists, String comment, NodePosition pos) {
         super(pos);
         this.roles = roles;
-        this.ifNotExists = ifNotExists;
+        this.ifExists = ifExists;
         this.comment = comment;
     }
 
@@ -39,8 +39,8 @@ public class CreateRoleStmt extends DdlStmt {
         return roles;
     }
 
-    public boolean isIfNotExists() {
-        return ifNotExists;
+    public boolean isIfExists() {
+        return ifExists;
     }
 
     public String getComment() {
@@ -49,6 +49,6 @@ public class CreateRoleStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateRoleStatement(this, context);
+        return visitor.visitAlterRoleStatement(this, context);
     }
 }

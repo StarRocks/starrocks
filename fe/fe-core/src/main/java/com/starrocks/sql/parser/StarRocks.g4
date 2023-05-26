@@ -208,6 +208,7 @@ statement
     | showAuthenticationStatement
     | executeAsStatement
     | createRoleStatement
+    | alterRoleStatement
     | dropRoleStatement
     | showRolesStatement
     | grantRoleStatement
@@ -1358,7 +1359,11 @@ executeAsStatement
     ;
 
 createRoleStatement
-    : CREATE ROLE (IF NOT EXISTS)? roleList
+    : CREATE ROLE (IF NOT EXISTS)? roleList comment?
+    ;
+
+alterRoleStatement
+    : ALTER ROLE (IF EXISTS)? roleList SET COMMENT '=' string
     ;
 
 dropRoleStatement

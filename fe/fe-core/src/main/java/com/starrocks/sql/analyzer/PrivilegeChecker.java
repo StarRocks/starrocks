@@ -60,6 +60,7 @@ import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
+import com.starrocks.sql.ast.AlterRoleStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -1030,6 +1031,14 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitCreateRoleStatement(CreateRoleStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAlterRoleStatement(AlterRoleStmt statement, ConnectContext context) {
             if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }

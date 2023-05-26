@@ -53,7 +53,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class AuthorizationManagerTest {
+public class AuthorizationMgrTest {
     private ConnectContext ctx;
     private static final String DB_NAME = "db";
     private static final String TABLE_NAME_0 = "tbl0";
@@ -342,6 +342,30 @@ public class AuthorizationManagerTest {
 
         // not check drop twice
         DDLStmtExecutor.execute(stmt, ctx);
+
+        // test create role with comment
+        sql = "create role test_role2 comment \"yi shan yi shan, liang jing jing\"";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
+        System.out.println(manager.getRoleComment("test_role2"));
+        Assert.assertTrue(manager.getRoleComment("test_role2").contains("yi shan yi shan, liang jing jing"));
+
+        // test alter role comment
+        sql = "alter role test_role2 set comment=\"man tian dou shi xiao xing xing\"";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
+        Assert.assertTrue(manager.getRoleComment("test_role2").contains("man tian dou shi xiao xing xing"));
+
+        // test alter immutable role comment, then throw exception
+        sql = "alter role root set comment=\"gua zai tian shang fang guang ming\"";
+        try {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("root is immutable"));
+        }
+
+        // clean
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop role test_role2", ctx), ctx);
     }
 
     // used in testPersistRole

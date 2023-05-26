@@ -2136,11 +2136,12 @@ public class ShowExecutor {
     private void handleShowRoles() {
         ShowRolesStmt showStmt = (ShowRolesStmt) stmt;
 
-
         List<List<String>> infos = new ArrayList<>();
         AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         List<String> roles = authorizationManager.getAllRoles();
-        roles.forEach(e -> infos.add(Lists.newArrayList(e)));
+        roles.forEach(e -> infos.add(Lists.newArrayList(e,
+                authorizationManager.isBuiltinRole(e) ? "true" : "false",
+                authorizationManager.getRoleComment(e))));
 
         resultSet = new ShowResultSet(showStmt.getMetaData(), infos);
     }

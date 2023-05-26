@@ -126,12 +126,25 @@ public class RBACExecutorTest {
 
     @Test
     public void testShowRoles() throws Exception {
+        String sql = "create role test_role comment \"yi shan yi shan, liang jing jing\"";
+        StatementBase createRoleStmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(createRoleStmt, ctx);
+
         ShowRolesStmt stmt = new ShowRolesStmt();
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
-        Assert.assertEquals("[[root], [db_admin], [cluster_admin], [user_admin], [public], " +
-                "[r0], [r1], [r2], [r3], [r4]]", resultSet.getResultRows().toString());
+        String resultString = resultSet.getResultRows().toString();
+        // sampling test a some of the result rows
+        Assert.assertTrue(
+                resultString.contains("[root, true, built-in root role which has all privileges on all objects]"));
+        Assert.assertTrue(
+                resultString.contains("[db_admin, true, built-in database administration role]"));
+        Assert.assertTrue(
+                resultString.contains("[test_role, false, yi shan yi shan, liang jing jing]"));
+
+        // clean
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop role test_role", ctx), ctx);
     }
 
     @Test

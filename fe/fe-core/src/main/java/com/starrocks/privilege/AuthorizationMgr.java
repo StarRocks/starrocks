@@ -16,6 +16,7 @@ package com.starrocks.privilege;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -25,6 +26,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -35,6 +37,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AlterRoleStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
@@ -134,7 +137,8 @@ public class AuthorizationMgr {
             // 1. builtin root role
             RolePrivilegeCollection rolePrivilegeCollection =
                     initBuiltinRoleUnlocked(PrivilegeBuiltinConstants.ROOT_ROLE_ID,
-                            PrivilegeBuiltinConstants.ROOT_ROLE_NAME);
+                            PrivilegeBuiltinConstants.ROOT_ROLE_NAME,
+                            "built-in root role which has all privileges on all objects");
             // GRANT ALL ON ALL
             for (ObjectType objectType : provider.getAllPrivObjectTypes()) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, objectType,
@@ -144,7 +148,7 @@ public class AuthorizationMgr {
 
             // 2. builtin db_admin role
             rolePrivilegeCollection = initBuiltinRoleUnlocked(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID,
-                    PrivilegeBuiltinConstants.DB_ADMIN_ROLE_NAME);
+                    PrivilegeBuiltinConstants.DB_ADMIN_ROLE_NAME, "built-in database administration role");
             // ALL system but GRANT AND NODE
             List<PrivilegeType> actionWithoutNodeGrant = provider.getAvailablePrivType(ObjectType.SYSTEM).stream().filter(
                     x -> !x.equals(PrivilegeType.GRANT) && !x.equals(PrivilegeType.NODE)).collect(Collectors.toList());
@@ -166,7 +170,7 @@ public class AuthorizationMgr {
 
             // 3. cluster_admin
             rolePrivilegeCollection = initBuiltinRoleUnlocked(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_ID,
-                    PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME);
+                    PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_NAME, "built-in cluster administration role");
             // GRANT NODE ON SYSTEM
             initPrivilegeCollections(
                     rolePrivilegeCollection,
@@ -178,7 +182,7 @@ public class AuthorizationMgr {
 
             // 4. user_admin
             rolePrivilegeCollection = initBuiltinRoleUnlocked(PrivilegeBuiltinConstants.USER_ADMIN_ROLE_ID,
-                    PrivilegeBuiltinConstants.USER_ADMIN_ROLE_NAME);
+                    PrivilegeBuiltinConstants.USER_ADMIN_ROLE_NAME, "built-in user administration role");
             // GRANT GRANT ON SYSTEM
             initPrivilegeCollections(
                     rolePrivilegeCollection,
@@ -192,7 +196,8 @@ public class AuthorizationMgr {
 
             // 5. public
             rolePrivilegeCollection = initBuiltinRoleUnlocked(PrivilegeBuiltinConstants.PUBLIC_ROLE_ID,
-                    PrivilegeBuiltinConstants.PUBLIC_ROLE_NAME);
+                    PrivilegeBuiltinConstants.PUBLIC_ROLE_NAME,
+                    "built-in public role which is owned by any user");
             // GRANT SELECT ON ALL TABLES IN information_schema
             List<PEntryObject> object = Collections.singletonList(new TablePEntryObject(
                     Long.toString(SystemId.INFORMATION_SCHEMA_DB_ID), PrivilegeBuiltinConstants.ALL_TABLES_UUID));
@@ -283,8 +288,12 @@ public class AuthorizationMgr {
 
     // called by initBuiltinRolesAndUsers()
     private RolePrivilegeCollection initBuiltinRoleUnlocked(long roleId, String name) {
+        return initBuiltinRoleUnlocked(roleId, name, null);
+    }
+
+    private RolePrivilegeCollection initBuiltinRoleUnlocked(long roleId, String name, String comment) {
         RolePrivilegeCollection collection = new RolePrivilegeCollection(
-                name, RolePrivilegeCollection.RoleFlags.MUTABLE);
+                name, comment, RolePrivilegeCollection.RoleFlags.MUTABLE);
         roleIdToPrivilegeCollection.put(roleId, collection);
         roleNameToId.put(name, roleId);
         LOG.info("create built-in role {}[{}]", name, roleId);
@@ -1115,7 +1124,7 @@ public class AuthorizationMgr {
         return actions;
     }
 
-    public boolean isAvailablePirvType(ObjectType objectType, PrivilegeType privilegeType) {
+    public boolean isAvailablePrivType(ObjectType objectType, PrivilegeType privilegeType) {
         return provider.isAvailablePrivType(objectType, privilegeType);
     }
 
@@ -1139,7 +1148,8 @@ public class AuthorizationMgr {
 
                 long roleId = globalStateMgr.getNextId();
                 RolePrivilegeCollection collection = new RolePrivilegeCollection(
-                        roleName, RolePrivilegeCollection.RoleFlags.REMOVABLE, RolePrivilegeCollection.RoleFlags.MUTABLE);
+                        roleName, stmt.getComment(),
+                        RolePrivilegeCollection.RoleFlags.REMOVABLE, RolePrivilegeCollection.RoleFlags.MUTABLE);
                 rolePrivCollectionModified.put(roleId, collection);
 
                 roleNameToBeCreated.put(roleName, roleId);
@@ -1151,6 +1161,37 @@ public class AuthorizationMgr {
             globalStateMgr.getEditLog().logUpdateRolePrivilege(
                     rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
             LOG.info("created role {}[{}]", stmt.getRoles().toString(), roleNameToBeCreated.values());
+        } finally {
+            roleWriteUnlock();
+        }
+    }
+
+    public void alterRole(AlterRoleStmt stmt) throws DdlException {
+        try {
+            roleWriteLock();
+            // The RolePrivilegeCollections to be modified, for atomicity reason, we do the modification
+            // after all checks passed.
+            Map<Long, RolePrivilegeCollection> rolePrivCollectionModified = new HashMap<>();
+            for (String roleName : stmt.getRoles()) {
+                if (!roleNameToId.containsKey(roleName)) {
+                    throw new DdlException(roleName + " doesn't exist");
+                }
+                long roleId = roleNameToId.get(roleName);
+                RolePrivilegeCollection rolePrivilegeCollection =
+                        roleIdToPrivilegeCollection.get(roleId);
+                Preconditions.checkNotNull(rolePrivilegeCollection);
+                if (!rolePrivilegeCollection.isMutable()) {
+                    throw new DdlException(roleName + " is immutable");
+                }
+                rolePrivCollectionModified.put(roleId, rolePrivilegeCollection);
+            }
+
+            // apply the modification
+            rolePrivCollectionModified.values().forEach(
+                    rolePrivilegeCollection -> rolePrivilegeCollection.setComment(stmt.getComment()));
+
+            globalStateMgr.getEditLog().logUpdateRolePrivilege(
+                    rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
         } finally {
             roleWriteUnlock();
         }
@@ -1238,6 +1279,27 @@ public class AuthorizationMgr {
         roleReadLock();
         try {
             return roleNameToId.containsKey(name);
+        } finally {
+            roleReadUnlock();
+        }
+    }
+
+    public boolean isBuiltinRole(String name) {
+        return PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_NAMES.contains(name);
+    }
+
+    public String getRoleComment(String name) {
+        try {
+            roleReadLock();
+            String result = FeConstants.NULL_STRING;
+            Long roleId = roleNameToId.get(name);
+            if (roleId != null) {
+                String comment = roleIdToPrivilegeCollection.get(roleId).getComment();
+                if (!Strings.isNullOrEmpty(comment)) {
+                    result = comment;
+                }
+            }
+            return result;
         } finally {
             roleReadUnlock();
         }
