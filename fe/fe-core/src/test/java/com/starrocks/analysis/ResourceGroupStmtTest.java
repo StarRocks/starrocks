@@ -139,6 +139,14 @@ public class ResourceGroupStmtTest {
             "    'type' = 'short_query'\n" +
             ");";
 
+    private String createMVRg = "create resource group if not exists mv_rg" +
+            "   with (" +
+            "   'cpu_core_limit' = '10'," +
+            "   'mem_limit' = '20%'," +
+            "   'concurrency_limit' = '11'," +
+            "   'type' = 'mv'" +
+            "   );";
+
     @BeforeClass
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
@@ -465,7 +473,7 @@ public class ResourceGroupStmtTest {
         starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
         starRocksAssert.getCtx().setCurrentRoleIds(
-                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager().getRoleIdsByUser(
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr().getRoleIdsByUser(
                         new UserIdentity(qualifiedUser, "%")
                 )
         );
@@ -751,5 +759,49 @@ public class ResourceGroupStmtTest {
         Assert.assertEquals("rt_rg1", wg.getName());
 
         dropResourceGroups();
+    }
+
+    @Test
+    public void testAlterMvRgAddClassifier() throws Exception {
+        starRocksAssert.executeResourceGroupDdlSql(createMVRg);
+        String sql = "" +
+                "ALTER RESOURCE GROUP mv_rg \n" +
+                "ADD \n" +
+                "   (user='rg1_user5', role='rg1_role5', source_ip='192.168.4.1/16')";
+
+        Assert.assertThrows("MV Resource Group not support classifiers.",
+                DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(sql));
+
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP mv_rg;");
+    }
+
+    @Test
+    public void testCreateMVRgWithClassifier() throws Exception {
+        String createSql = "create resource group if not exists mv_rg2" +
+                "   to" +
+                "   (user='rg1_or_replace', role='rg1_role1', query_type in ('select'), source_ip='192.168.2.1/24')" +
+                "   with (" +
+                "   'cpu_core_limit' = '10'," +
+                "   'mem_limit' = '20%'," +
+                "   'concurrency_limit' = '11'," +
+                "   'type' = 'mv'" +
+                "   );";
+
+        Assert.assertThrows("MV Resource Group not support classifiers.",
+                DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(createSql));
+    }
+
+    @Test
+    public void testCreateNormalRgWithoutClassifier() throws Exception {
+        String createSql = "create resource group if not exists rg2" +
+                "   with (" +
+                "   'cpu_core_limit' = '10'," +
+                "   'mem_limit' = '20%'," +
+                "   'concurrency_limit' = '11'," +
+                "   'type' = 'normal'" +
+                "   );";
+
+        Assert.assertThrows("This type Resource Group need define classifiers.",
+                DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(createSql));
     }
 }

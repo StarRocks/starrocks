@@ -54,11 +54,11 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.JobState;
-import com.starrocks.load.loadv2.LoadManager;
+import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
-import com.starrocks.load.routineload.RoutineLoadManager;
+import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.metric.Metric.MetricType;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.monitor.jvm.JvmService;
@@ -161,7 +161,7 @@ public final class MetricRepo {
 
         // 1. gauge
         // load jobs
-        LoadManager loadManger = GlobalStateMgr.getCurrentState().getLoadManager();
+        LoadMgr loadManger = GlobalStateMgr.getCurrentState().getLoadMgr();
         for (EtlJobType jobType : EtlJobType.values()) {
             if (jobType == EtlJobType.MINI || jobType == EtlJobType.UNKNOWN) {
                 continue;
@@ -262,7 +262,7 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(scheduledTabletNum);
 
         // routine load jobs
-        RoutineLoadManager routineLoadManger = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
+        RoutineLoadMgr routineLoadManger = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
             GaugeMetric<Long> gauge = new GaugeMetric<Long>("routine_load_jobs",
                     MetricUnit.NOUNIT, "routine load jobs") {
@@ -555,7 +555,7 @@ public final class MetricRepo {
     }
 
     public static void updateRoutineLoadProcessMetrics() {
-        List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadManager().getRoutineLoadJobByState(
+        List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadMgr().getRoutineLoadJobByState(
                 Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
                                 RoutineLoadJob.JobState.PAUSED,
                                 RoutineLoadJob.JobState.RUNNING));

@@ -235,7 +235,9 @@ void PartitionedSpillerWriter::_remove_partition(const SpilledPartition* partiti
                                   [partition](auto& val) { return val->partition_id == partition->partition_id; }));
     if (partitions.empty()) {
         _level_to_partitions.erase(level);
-        _min_level = level + 1;
+        if (_min_level == level) {
+            _min_level = level + 1;
+        }
     }
 }
 
@@ -260,6 +262,10 @@ void PartitionedSpillerWriter::shuffle(std::vector<uint32_t>& dst, const SpillHa
         int32_t current_level = _min_level;
         // if has multi level, may be have performance issue
         while (current_level <= _max_level) {
+            if (_level_to_partitions.find(current_level) == _level_to_partitions.end()) {
+                current_level++;
+                continue;
+            }
             auto& partitions = _level_to_partitions[current_level];
             uint32_t hash_mask = partitions.front()->mask();
             for (size_t i = 0; i < hashs.size(); ++i) {

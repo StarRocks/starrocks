@@ -808,7 +808,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
     public void removeInvalidateReference() {
         // privilege object can be invalidated after gc
-        GlobalStateMgr.getCurrentState().getAuthorizationManager().removeInvalidObject();
+        GlobalStateMgr.getCurrentState().getAuthorizationMgr().removeInvalidObject();
     }
 
     @Override
