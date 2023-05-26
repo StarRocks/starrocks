@@ -113,7 +113,7 @@ Run a load job to update the record whose `id` is `101` in `example1.csv` to `ta
   - If you do not want to include the `__op` field, run the following command:
 
     ```Bash
-    curl --location-trusted -u root: \
+    curl --location-trusted -u <username>:<password> \
         -H "label:label1" \
         -H "column_separator:," \
         -T example1.csv -XPUT\
@@ -123,7 +123,7 @@ Run a load job to update the record whose `id` is `101` in `example1.csv` to `ta
   - If you want to include the `__op` field, run the following command:
 
     ```Bash
-    curl --location-trusted -u root: \
+    curl --location-trusted -u <username>:<password> \
         -H "label:label2" \
         -H "column_separator:," \
         -H "columns:__op ='upsert'" \
@@ -268,7 +268,7 @@ Run a load job to delete the record whose `id` is `101` in `example2.csv` from `
 - Run a Stream Load job.
 
   ```Bash
-  curl --location-trusted -u root: \
+  curl --location-trusted -u <username>:<password> \
       -H "label:label3" \
       -H "column_separator:," \
       -H "columns:__op='delete'" \
@@ -375,7 +375,7 @@ Run a load job to delete the record whose `id` is `101` in `example3.csv` from `
 - Run a Stream Load job:
 
   ```Bash
-  curl --location-trusted -u root: \
+  curl --location-trusted -u <username>:<password> \
       -H "label:label4" \
       -H "column_separator:," \
       -H "columns: id, name, score, temp, __op = temp" \
@@ -487,7 +487,7 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
 - Run a Stream Load job:
 
   ```Bash
-  curl --location-trusted -u root: \
+  curl --location-trusted -u <username>:<password> \
       -H "label:label7" -H "column_separator:," \
       -H "partial_update:true" \
       -H "columns:id,name" \
@@ -616,7 +616,7 @@ Run a load to update the records whose `id` values are `101` and `102`, respecti
 - Run a Stream Load job:
 
   ```Bash
-  curl --location-trusted -u root: \
+  curl --location-trusted -u <username>:<password> \
       -H "label:label10" \
       -H "column_separator:," \
       -H "merge_condition:version" \
