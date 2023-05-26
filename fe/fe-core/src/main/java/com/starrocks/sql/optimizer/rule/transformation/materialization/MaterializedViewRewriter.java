@@ -689,11 +689,12 @@ public class MaterializedViewRewriter {
         Set<String> mvPruneKeyColNames = Sets.newHashSet();
         MaterializedView mv = mvContext.getMv();
         DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
-        // only hash distribution is supported
-        Preconditions.checkState(distributionInfo instanceof HashDistributionInfo);
-        HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-        List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
-        distributedColumns.stream().forEach(distKey -> mvPruneKeyColNames.add(distKey.getName()));
+        if (distributionInfo instanceof HashDistributionInfo) {
+            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
+            List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
+            distributedColumns.stream().forEach(distKey -> mvPruneKeyColNames.add(distKey.getName()));
+        }
+
         mv.getPartitionColumnNames().stream().forEach(partName -> mvPruneKeyColNames.add(partName));
         final Set<Integer> mvPruneColumnIdSet = mvOutputColumnRefSet.getStream().map(
                         id -> mvContext.getMvColumnRefFactory().getColumnRef(id))
@@ -714,6 +715,7 @@ public class MaterializedViewRewriter {
                 mvPrunePredicates.add(conj);
             }
         }
+
         return Utils.compoundAnd(mvPrunePredicates);
     }
 
