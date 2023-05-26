@@ -20,7 +20,6 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
@@ -30,6 +29,8 @@ import java.util.Map;
 public class LocalWarehouse extends Warehouse {
     @SerializedName(value = "cluster")
     Cluster cluster;
+
+    public static final long DEFAULT_CLUSTER_ID = 0L;
 
     public static final ImmutableList<String> CLUSTER_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("ClusterId")
@@ -41,8 +42,7 @@ public class LocalWarehouse extends Warehouse {
 
     public LocalWarehouse(long id, String name) {
         super(id, name);
-        long clusterId = GlobalStateMgr.getCurrentState().getNextId();
-        cluster = new Cluster(clusterId);
+        cluster = new Cluster(DEFAULT_CLUSTER_ID);
     }
 
     @Override
