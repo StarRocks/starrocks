@@ -153,17 +153,6 @@ public class CostModel {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
             if (node.getTable().isMaterializedView()) {
-                ColumnRefSet usedColumns = statistics.getUsedColumns();
-                Projection projection = node.getProjection();
-                if (projection != null) {
-                    // we will add a projection on top of rewritten mv plan to keep the output columns the same as
-                    // original query.
-                    // excludes this projection keys when costing mv,
-                    // or the cost of mv may be larger than origal query,
-                    // which will lead to mismatch of mv
-                    usedColumns.except(projection.getColumnRefMap().keySet());
-                }
-
                 Statistics groupStatistics = context.getGroupStatistics();
                 Statistics mvStatistics = context.getStatistics();
                 // only adjust cost for mv scan operator when group statistics is unknown and mv group expression
@@ -172,9 +161,20 @@ public class CostModel {
                         anyMatch(ColumnStatistic::isUnknown) && mvStatistics.getColumnStatistics().values().stream().
                         noneMatch(ColumnStatistic::isUnknown)) {
                     return adjustCostForMV(context);
+                } else {
+                    ColumnRefSet usedColumns = statistics.getUsedColumns();
+                    Projection projection = node.getProjection();
+                    if (projection != null) {
+                        // we will add a projection on top of rewritten mv plan to keep the output columns the same as
+                        // original query.
+                        // excludes this projection keys when costing mv,
+                        // or the cost of mv may be larger than origal query,
+                        // which will lead to mismatch of mv
+                        usedColumns.except(projection.getColumnRefMap().keySet());
+                    }
+                    // use the used columns to calculate the cost of mv
+                    return CostEstimate.of(statistics.getOutputSize(usedColumns), 0, 0);
                 }
-                // use the used columns to calculate the cost of mv
-                return CostEstimate.of(statistics.getOutputSize(usedColumns), 0, 0);
             }
             return CostEstimate.of(statistics.getComputeSize(), 0, 0);
         }
