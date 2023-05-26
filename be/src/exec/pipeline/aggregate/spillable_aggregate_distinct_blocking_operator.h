@@ -30,7 +30,7 @@ public:
     template <class... Args>
     SpillableAggregateDistinctBlockingSinkOperator(AggregatorPtr aggregator, Args&&... args)
             : AggregateDistinctBlockingSinkOperator(aggregator, std::forward<Args>(args)...,
-                                                    "spillable_aggregate_distinct_block_sink_operator") {}
+                                                    "spillable_aggregate_distinct_blocking_sink") {}
     ~SpillableAggregateDistinctBlockingSinkOperator() override = default;
 
     bool need_input() const override;
@@ -95,7 +95,7 @@ public:
     SpillableAggregateDistinctBlockingSourceOperator(AggregatorPtr aggregator,
                                                      SortedStreamingAggregatorPtr stream_aggregator, Args&&... args)
             : AggregateDistinctBlockingSourceOperator(aggregator, std::forward<Args>(args)...,
-                                                      "spillable_aggregate_block_distinct_source_operator"),
+                                                      "spillable_aggregate_distinct_blocking_source"),
               _stream_aggregator(std::move(stream_aggregator)) {}
 
     ~SpillableAggregateDistinctBlockingSourceOperator() override = default;
