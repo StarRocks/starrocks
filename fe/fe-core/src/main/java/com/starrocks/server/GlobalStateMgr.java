@@ -1225,8 +1225,6 @@ public class GlobalStateMgr {
                 initDefaultWarehouse();
             }
 
-            updateDefaultWarehouse();
-
             MetricRepo.init();
 
             isReady.set(true);
@@ -1386,8 +1384,6 @@ public class GlobalStateMgr {
         if (!isDefaultWarehouseCreated) {
             initDefaultWarehouse();
         }
-
-        updateDefaultWarehouse();
 
         MetricRepo.init();
 
@@ -3634,10 +3630,6 @@ public class GlobalStateMgr {
     public void initDefaultWarehouse() {
         warehouseMgr.initDefaultWarehouse();
         isDefaultWarehouseCreated = true;
-    }
-
-    public void updateDefaultWarehouse() {
-        warehouseMgr.updateDefaultWarehouse();
     }
 
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
