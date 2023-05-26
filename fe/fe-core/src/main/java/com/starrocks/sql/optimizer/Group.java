@@ -11,6 +11,7 @@ import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -244,6 +245,10 @@ public class Group {
             return lowestCostExpressions.get(physicalPropertySet).second;
         }
         return null;
+    }
+
+    public Collection<Pair<Double, GroupExpression>> getAllBestExpressionWithCost() {
+        return lowestCostExpressions.values();
     }
 
     public boolean hasBestExpression(PhysicalPropertySet physicalPropertySet) {
