@@ -93,7 +93,7 @@ This section uses curl as an example to describe how to load the data of a CSV o
 Run the following command to load the data of `example1.csv` into `table1`:
 
 ```Bash
-curl --location-trusted -u root: -H "label:123" \
+curl --location-trusted -u <username>:<password> -H "label:123" \
     -H "Expect:100-continue" \
     -H "column_separator:," \
     -H "columns: id, name, score" \
@@ -148,7 +148,7 @@ MySQL [test_db]> SELECT * FROM table1;
 Run the following command to load the data of `example2.json` into `table2`:
 
 ```Bash
-curl -v --location-trusted -u root: -H "strict_mode: true" \
+curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
     -H "Expect:100-continue" \
     -H "format: json" -H "jsonpaths: [\"$.name\", \"$.code\"]" \
     -H "columns: city,tmp_id, id = tmp_id * 100" \
