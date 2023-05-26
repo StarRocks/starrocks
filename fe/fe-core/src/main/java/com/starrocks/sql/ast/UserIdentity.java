@@ -37,7 +37,7 @@ package com.starrocks.sql.ast;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
@@ -65,7 +65,7 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
     public static final UserIdentity ROOT;
 
     static {
-        ROOT = new UserIdentity(AuthenticationManager.ROOT_USER, "%");
+        ROOT = new UserIdentity(AuthenticationMgr.ROOT_USER, "%");
     }
 
     /**

@@ -41,6 +41,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
+import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -68,6 +69,8 @@ import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
+import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -83,6 +86,7 @@ import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTaskStmt;
 import com.starrocks.sql.ast.DropUserStmt;
@@ -102,6 +106,7 @@ import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
@@ -122,6 +127,7 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 public class DDLStmtExecutor {
 
@@ -162,10 +168,12 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateDbStatement(CreateDbStmt stmt, ConnectContext context) {
             String fullDbName = stmt.getFullDbName();
+            String catalogName = stmt.getCatalogName();
+            Map<String, String> properties = stmt.getProperties();
             boolean isSetIfNotExists = stmt.isSetIfNotExists();
             ErrorReport.wrapWithRuntimeException(() -> {
                 try {
-                    context.getGlobalStateMgr().getMetadata().createDb(fullDbName);
+                    context.getGlobalStateMgr().getMetadataMgr().createDb(catalogName, fullDbName, properties);
                 } catch (AlreadyExistsException e) {
                     if (isSetIfNotExists) {
                         LOG.info("create database[{}] which already exists", fullDbName);
@@ -180,10 +188,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropDbStatement(DropDbStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+                String catalogName = stmt.getCatalogName();
                 String dbName = stmt.getDbName();
                 boolean isForceDrop = stmt.isForceDrop();
                 try {
-                    context.getGlobalStateMgr().getMetadata().dropDb(dbName, isForceDrop);
+                    context.getGlobalStateMgr().getMetadataMgr().dropDb(catalogName, dbName, isForceDrop);
                 } catch (MetaNotFoundException e) {
                     if (stmt.isSetIfExists()) {
                         LOG.info("drop database[{}] which does not exist", dbName);
@@ -232,7 +241,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateTableStatement(CreateTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().createTable(stmt);
+                context.getGlobalStateMgr().getMetadataMgr().createTable(stmt);
             });
             return null;
         }
@@ -248,7 +257,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropTableStatement(DropTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().dropTable(stmt);
+                context.getGlobalStateMgr().getMetadataMgr().dropTable(stmt);
             });
             return null;
         }
@@ -349,7 +358,7 @@ public class DDLStmtExecutor {
                             + " Try using broker load. See 'help broker load;'");
                 }
 
-                context.getGlobalStateMgr().getLoadManager().createLoadJobFromStmt(stmt, context);
+                context.getGlobalStateMgr().getLoadMgr().createLoadJobFromStmt(stmt, context);
             });
             return null;
         }
@@ -357,7 +366,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCancelLoadStatement(CancelLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLoadManager().cancelLoadJob(stmt);
+                context.getGlobalStateMgr().getLoadMgr().cancelLoadJob(stmt);
             });
             return null;
         }
@@ -365,7 +374,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateRoutineLoadStatement(CreateRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getRoutineLoadManager().createRoutineLoadJob(stmt);
+                context.getGlobalStateMgr().getRoutineLoadMgr().createRoutineLoadJob(stmt);
             });
             return null;
         }
@@ -373,7 +382,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitPauseRoutineLoadStatement(PauseRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getRoutineLoadManager().pauseRoutineLoadJob(stmt);
+                context.getGlobalStateMgr().getRoutineLoadMgr().pauseRoutineLoadJob(stmt);
             });
             return null;
         }
@@ -381,7 +390,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getRoutineLoadManager().resumeRoutineLoadJob(stmt);
+                context.getGlobalStateMgr().getRoutineLoadMgr().resumeRoutineLoadJob(stmt);
             });
             return null;
         }
@@ -389,7 +398,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitStopRoutineLoadStatement(StopRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getRoutineLoadManager().stopRoutineLoadJob(stmt);
+                context.getGlobalStateMgr().getRoutineLoadMgr().stopRoutineLoadJob(stmt);
             });
             return null;
         }
@@ -397,7 +406,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterRoutineLoadStatement(AlterRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getRoutineLoadManager().alterRoutineLoadJob(stmt);
+                context.getGlobalStateMgr().getRoutineLoadMgr().alterRoutineLoadJob(stmt);
             });
             return null;
         }
@@ -405,7 +414,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterLoadStatement(AlterLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLoadManager().alterLoadJob(stmt);
+                context.getGlobalStateMgr().getLoadMgr().alterLoadJob(stmt);
             });
             return null;
         }
@@ -413,11 +422,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateUserStatement(CreateUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthenticationManager().createUser(stmt);
-                } else {
-                    context.getGlobalStateMgr().getAuth().createUser(stmt);
-                }
+                context.getGlobalStateMgr().getAuthenticationMgr().createUser(stmt);
             });
             return null;
         }
@@ -425,12 +430,8 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthenticationManager()
-                            .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo());
-                } else {
-                    context.getGlobalStateMgr().getAuth().alterUser(stmt);
-                }
+                context.getGlobalStateMgr().getAuthenticationMgr()
+                        .alterUser(stmt.getUserIdentity(), stmt.getAuthenticationInfo());
             });
             return null;
         }
@@ -438,11 +439,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropUserStatement(DropUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthenticationManager().dropUser(stmt);
-                } else {
-                    context.getGlobalStateMgr().getAuth().dropUser(stmt);
-                }
+                context.getGlobalStateMgr().getAuthenticationMgr().dropUser(stmt);
             });
             return null;
         }
@@ -450,18 +447,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    if (stmt instanceof GrantRoleStmt) {
-                        context.getGlobalStateMgr().getAuthorizationManager().grantRole((GrantRoleStmt) stmt);
-                    } else {
-                        context.getGlobalStateMgr().getAuthorizationManager().revokeRole((RevokeRoleStmt) stmt);
-                    }
+
+                if (stmt instanceof GrantRoleStmt) {
+                    context.getGlobalStateMgr().getAuthorizationMgr().grantRole((GrantRoleStmt) stmt);
                 } else {
-                    if (stmt instanceof GrantRoleStmt) {
-                        context.getGlobalStateMgr().getAuth().grantRole((GrantRoleStmt) stmt);
-                    } else {
-                        context.getGlobalStateMgr().getAuth().revokeRole((RevokeRoleStmt) stmt);
-                    }
+                    context.getGlobalStateMgr().getAuthorizationMgr().revokeRole((RevokeRoleStmt) stmt);
                 }
             });
             return null;
@@ -472,17 +462,11 @@ public class DDLStmtExecutor {
                                                                 ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (stmt instanceof GrantPrivilegeStmt) {
-                    if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                        context.getGlobalStateMgr().getAuthorizationManager().grant((GrantPrivilegeStmt) stmt);
-                    } else {
-                        context.getGlobalStateMgr().getAuth().grant((GrantPrivilegeStmt) stmt);
-                    }
+
+                    context.getGlobalStateMgr().getAuthorizationMgr().grant((GrantPrivilegeStmt) stmt);
+
                 } else {
-                    if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                        context.getGlobalStateMgr().getAuthorizationManager().revoke((RevokePrivilegeStmt) stmt);
-                    } else {
-                        context.getGlobalStateMgr().getAuth().revoke((RevokePrivilegeStmt) stmt);
-                    }
+                    context.getGlobalStateMgr().getAuthorizationMgr().revoke((RevokePrivilegeStmt) stmt);
                 }
             });
             return null;
@@ -491,11 +475,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthorizationManager().createRole(stmt);
-                } else {
-                    context.getGlobalStateMgr().getAuth().createRole(stmt);
-                }
+                context.getGlobalStateMgr().getAuthorizationMgr().createRole(stmt);
             });
             return null;
         }
@@ -503,11 +483,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropRoleStatement(DropRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthorizationManager().dropRole(stmt);
-                } else {
-                    context.getGlobalStateMgr().getAuth().dropRole(stmt);
-                }
+                context.getGlobalStateMgr().getAuthorizationMgr().dropRole(stmt);
             });
             return null;
         }
@@ -515,13 +491,21 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitSetUserPropertyStatement(SetUserPropertyStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthenticationManager().updateUserProperty(stmt.getUser(),
-                            stmt.getPropertyPairList());
-                } else {
-                    context.getGlobalStateMgr().getAuth().updateUserProperty(stmt);
-                }
+                context.getGlobalStateMgr().getAuthenticationMgr().updateUserProperty(stmt.getUser(),
+                        stmt.getPropertyPairList());
+
             });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement stmt,
+                                                                     ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getAuthenticationMgr().createSecurityIntegration(
+                        stmt.getName(), stmt.getPropertyMap());
+            });
+
             return null;
         }
 
@@ -770,7 +754,7 @@ public class DDLStmtExecutor {
                         stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN);
 
-                context.getGlobalStateMgr().getAnalyzeManager().addAnalyzeJob(analyzeJob);
+                context.getGlobalStateMgr().getAnalyzeMgr().addAnalyzeJob(analyzeJob);
 
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 // from current session, may execute analyze stmt
@@ -790,7 +774,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropAnalyzeStatement(DropAnalyzeJobStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(
-                    () -> context.getGlobalStateMgr().getAnalyzeManager().removeAnalyzeJob(stmt.getId()));
+                    () -> context.getGlobalStateMgr().getAnalyzeMgr().removeAnalyzeJob(stmt.getId()));
             return null;
         }
 
@@ -871,6 +855,15 @@ public class DDLStmtExecutor {
         }
 
         @Override
+        public ShowResultSet visitSubmitTaskStatement(SubmitTaskStmt stmt, ConnectContext context) {
+            try {
+                return context.getGlobalStateMgr().getTaskManager().handleSubmitTaskStmt(stmt);
+            } catch (UserException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        @Override
         public ShowResultSet visitDropTaskStmt(DropTaskStmt dropTaskStmt, ConnectContext context) {
             TaskManager taskManager = context.getGlobalStateMgr().getTaskManager();
             Task task = taskManager.getTask(dropTaskStmt.getTaskName().getName());
@@ -884,12 +877,36 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitSubmitTaskStatement(SubmitTaskStmt stmt, ConnectContext context) {
-            try {
-                return context.getGlobalStateMgr().getTaskManager().handleSubmitTaskStmt(stmt);
-            } catch (UserException e) {
-                throw new RuntimeException(e);
-            }
+        public ShowResultSet visitCreateStorageVolumeStatement(CreateStorageVolumeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getStorageVolumeMgr().createStorageVolume(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterStorageVolumeStatement(AlterStorageVolumeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getStorageVolumeMgr().updateStorageVolume(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropStorageVolumeStatement(DropStorageVolumeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getStorageVolumeMgr().removeStorageVolume(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt stmt,
+                                                                   ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getStorageVolumeMgr().setDefaultStorageVolume(stmt)
+            );
+            return null;
         }
     }
 

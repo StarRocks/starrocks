@@ -52,15 +52,15 @@ public class RoutineLoadScheduler extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(RoutineLoadScheduler.class);
 
-    private RoutineLoadManager routineLoadManager;
+    private RoutineLoadMgr routineLoadManager;
 
     @VisibleForTesting
     public RoutineLoadScheduler() {
         super();
-        routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
+        routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
     }
 
-    public RoutineLoadScheduler(RoutineLoadManager routineLoadManager) {
+    public RoutineLoadScheduler(RoutineLoadMgr routineLoadManager) {
         super("Routine load scheduler", FeConstants.default_scheduler_interval_millisecond);
         this.routineLoadManager = routineLoadManager;
     }

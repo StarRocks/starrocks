@@ -19,7 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.authentication.AuthenticationException;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
@@ -27,7 +27,7 @@ import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivObjNotFoundException;
@@ -59,14 +59,14 @@ public class AuthUpgrader {
     // constants used when upgrading
     private static final String STAR = "*";
     private final Auth auth;
-    private final AuthenticationManager authenticationManager;
-    private final AuthorizationManager authorizationManager;
+    private final AuthenticationMgr authenticationManager;
+    private final AuthorizationMgr authorizationManager;
     private final GlobalStateMgr globalStateMgr;
 
     public AuthUpgrader(
             Auth auth,
-            AuthenticationManager authenticationManager,
-            AuthorizationManager authorizationManager,
+            AuthenticationMgr authenticationManager,
+            AuthorizationMgr authorizationManager,
             GlobalStateMgr globalStateMgr) {
         this.auth = auth;
         this.authenticationManager = authenticationManager;

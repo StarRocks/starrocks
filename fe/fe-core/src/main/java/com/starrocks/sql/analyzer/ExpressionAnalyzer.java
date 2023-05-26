@@ -68,7 +68,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.qe.ConnectContext;
@@ -1295,7 +1295,7 @@ public class ExpressionAnalyzer {
                 node.setStrValue(session.getCurrentUserIdentity().toString());
             } else if (funcType.equalsIgnoreCase("CURRENT_ROLE")) {
                 node.setType(Type.VARCHAR);
-                AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+                AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
                 List<String> roleName = new ArrayList<>();
 
                 try {

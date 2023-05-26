@@ -56,6 +56,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.Status;
 import com.starrocks.catalog.Column;

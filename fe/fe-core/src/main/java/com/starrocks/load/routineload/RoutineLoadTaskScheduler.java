@@ -81,7 +81,7 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
     private static final long SLOT_FULL_SLEEP_MS = 10000; // 10s
     private static final int THREAD_POOL_SIZE = 10;
 
-    private final RoutineLoadManager routineLoadManager;
+    private final RoutineLoadMgr routineLoadManager;
     private final LinkedBlockingQueue<RoutineLoadTaskInfo> needScheduleTasksQueue = Queues.newLinkedBlockingQueue();
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService threadPool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
@@ -91,10 +91,10 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
     @VisibleForTesting
     public RoutineLoadTaskScheduler() {
         super("Routine load task scheduler", 0);
-        this.routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
+        this.routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
     }
 
-    public RoutineLoadTaskScheduler(RoutineLoadManager routineLoadManager) {
+    public RoutineLoadTaskScheduler(RoutineLoadMgr routineLoadManager) {
         super("Routine load task scheduler", 0);
         this.routineLoadManager = routineLoadManager;
     }

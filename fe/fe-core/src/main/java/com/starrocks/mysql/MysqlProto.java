@@ -35,6 +35,7 @@
 package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.authentication.UserAuthenticationInfo;
@@ -75,7 +76,7 @@ public class MysqlProto {
 
         // In new RBAC privilege framework
         if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-            AuthenticationManager authenticationManager = context.getGlobalStateMgr().getAuthenticationManager();
+            getAuthenticationMgr authenticationManager = context.getGlobalStateMgr().getAuthenticationMgr();
             UserIdentity currentUser = null;
             if (Config.enable_auth_check) {
                 currentUser = authenticationManager.checkPassword(user, remoteIp, scramble, randomString);
@@ -199,7 +200,7 @@ public class MysqlProto {
             // 2. build the auth switch request and send to the client
             if (authPluginName.equals(AUTHENTICATION_KERBEROS_CLIENT)) {
                 if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    if (GlobalStateMgr.getCurrentState().getAuthenticationManager().isSupportKerberosAuth()) {
+                    if (GlobalStateMgr.getCurrentState().getAuthenticationMgr().isSupportKerberosAuth()) {
                         try {
                             handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
                         } catch (Exception e) {

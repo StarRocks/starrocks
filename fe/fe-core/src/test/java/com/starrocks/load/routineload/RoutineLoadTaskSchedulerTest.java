@@ -50,7 +50,7 @@ import java.util.UUID;
 public class RoutineLoadTaskSchedulerTest {
 
     @Mocked
-    private RoutineLoadManager routineLoadManager;
+    private RoutineLoadMgr routineLoadManager;
     @Mocked
     private GlobalStateMgr globalStateMgr;
 
@@ -83,7 +83,7 @@ public class RoutineLoadTaskSchedulerTest {
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
-                globalStateMgr.getRoutineLoadManager();
+                globalStateMgr.getRoutineLoadMgr();
                 minTimes = 0;
                 result = routineLoadManager;
 

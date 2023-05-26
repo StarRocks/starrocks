@@ -47,9 +47,9 @@ import org.apache.logging.log4j.Logger;
 public class LoadTimeoutChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(LoadTimeoutChecker.class);
 
-    private LoadManager loadManager;
+    private LoadMgr loadManager;
 
-    public LoadTimeoutChecker(LoadManager loadManager) {
+    public LoadTimeoutChecker(LoadMgr loadManager) {
         super("Load job timeout checker", Config.load_checker_interval_second * 1000L);
         this.loadManager = loadManager;
     }

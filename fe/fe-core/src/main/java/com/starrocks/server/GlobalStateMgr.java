@@ -48,7 +48,7 @@ import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.binlog.BinlogConfig;
@@ -167,9 +167,9 @@ import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadEtlChecker;
 import com.starrocks.load.loadv2.LoadJobScheduler;
 import com.starrocks.load.loadv2.LoadLoadingChecker;
-import com.starrocks.load.loadv2.LoadManager;
+import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.LoadTimeoutChecker;
-import com.starrocks.load.routineload.RoutineLoadManager;
+import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadManager;
@@ -209,7 +209,7 @@ import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
@@ -354,15 +354,15 @@ public class GlobalStateMgr {
     private final AlterJobMgr alterJobMgr;
 
     private Load load;
-    private LoadManager loadManager;
-    private RoutineLoadManager routineLoadManager;
+    private LoadMgr loadMgr;
+    private RoutineLoadMgr routineLoadMgr;
     private StreamLoadManager streamLoadManager;
     private ExportMgr exportMgr;
 
     private ConsistencyChecker consistencyChecker;
     private BackupHandler backupHandler;
     private PublishVersionDaemon publishVersionDaemon;
-    private DeleteMgr deleteHandler;
+    private DeleteMgr deleteMgr;
     private UpdateDbUsedDataQuotaDaemon updateDbUsedDataQuotaDaemon;
 
     private LeaderDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
@@ -432,8 +432,8 @@ public class GlobalStateMgr {
     // change to true in UT
     private AtomicBoolean usingNewPrivilege;
 
-    private AuthenticationManager authenticationManager;
-    private AuthorizationManager authorizationManager;
+    private AuthenticationMgr authenticationMgr;
+    private AuthorizationMgr authorizationMgr;
 
     private DomainResolver domainResolver;
 
@@ -470,7 +470,7 @@ public class GlobalStateMgr {
 
     private final StatisticAutoCollector statisticAutoCollector;
 
-    private AnalyzeMgr analyzeManager;
+    private AnalyzeMgr analyzeMgr;
 
     private StatisticStorage statisticStorage;
 
@@ -617,14 +617,14 @@ public class GlobalStateMgr {
 
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
-        this.routineLoadManager = new RoutineLoadManager();
+        this.routineLoadMgr = new RoutineLoadMgr();
         this.exportMgr = new ExportMgr();
 
         this.consistencyChecker = new ConsistencyChecker();
         this.lock = new QueryableReentrantLock(true);
         this.backupHandler = new BackupHandler(this);
         this.publishVersionDaemon = new PublishVersionDaemon();
-        this.deleteHandler = new DeleteMgr();
+        this.deleteMgr = new DeleteMgr();
         this.updateDbUsedDataQuotaDaemon = new UpdateDbUsedDataQuotaDaemon();
         this.statisticsMetaManager = new StatisticsMetaManager();
         this.statisticAutoCollector = new StatisticAutoCollector();
@@ -677,12 +677,12 @@ public class GlobalStateMgr {
                 Config.async_load_task_pool_size,
                 Config.desired_max_waiting_jobs * 10, !isCkptGlobalState);
         this.loadJobScheduler = new LoadJobScheduler();
-        this.loadManager = new LoadManager(loadJobScheduler);
-        this.loadTimeoutChecker = new LoadTimeoutChecker(loadManager);
-        this.loadEtlChecker = new LoadEtlChecker(loadManager);
-        this.loadLoadingChecker = new LoadLoadingChecker(loadManager);
-        this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadManager);
-        this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
+        this.loadMgr = new LoadMgr(loadJobScheduler);
+        this.loadTimeoutChecker = new LoadTimeoutChecker(loadMgr);
+        this.loadEtlChecker = new LoadEtlChecker(loadMgr);
+        this.loadLoadingChecker = new LoadLoadingChecker(loadMgr);
+        this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadMgr);
+        this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadMgr);
         this.mvMVJobExecutor = new MVJobExecutor();
 
         this.smallFileMgr = new SmallFileMgr();
@@ -694,7 +694,7 @@ public class GlobalStateMgr {
 
         this.pluginMgr = new PluginMgr();
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
-        this.analyzeManager = new AnalyzeMgr();
+        this.analyzeMgr = new AnalyzeMgr();
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
@@ -778,20 +778,20 @@ public class GlobalStateMgr {
         return pluginMgr;
     }
 
-    public AnalyzeMgr getAnalyzeManager() {
-        return analyzeManager;
+    public AnalyzeMgr getAnalyzeMgr() {
+        return analyzeMgr;
     }
 
     public Auth getAuth() {
         return auth;
     }
 
-    public AuthenticationManager getAuthenticationManager() {
-        return authenticationManager;
+    public AuthenticationMgr getAuthenticationMgr() {
+        return authenticationMgr;
     }
 
-    public AuthorizationManager getAuthorizationManager() {
-        return authorizationManager;
+    public AuthorizationMgr getAuthorizationMgr() {
+        return authorizationMgr;
     }
 
     public ResourceGroupMgr getResourceGroupMgr() {
@@ -863,7 +863,7 @@ public class GlobalStateMgr {
     }
 
     public static AnalyzeMgr getCurrentAnalyzeMgr() {
-        return getCurrentState().getAnalyzeManager();
+        return getCurrentState().getAnalyzeMgr();
     }
 
     public static StatisticStorage getCurrentStatisticStorage() {
@@ -1035,14 +1035,14 @@ public class GlobalStateMgr {
         this.auth = new Auth();
         this.usingNewPrivilege = new AtomicBoolean(usingNewPrivilege);
         if (usingNewPrivilege) {
-            this.authenticationManager = new AuthenticationManager();
-            this.domainResolver = new DomainResolver(authenticationManager);
-            this.authorizationManager = new AuthorizationManager(this, null);
+            this.authenticationMgr = new AuthenticationMgr();
+            this.domainResolver = new DomainResolver(authenticationMgr);
+            this.authorizationMgr = new AuthorizationMgr(this, null);
             LOG.info("using new privilege framework..");
         } else {
             this.domainResolver = new DomainResolver(auth);
-            this.authenticationManager = null;
-            this.authorizationManager = null;
+            this.authenticationMgr = null;
+            this.authorizationMgr = null;
         }
     }
 
@@ -1056,7 +1056,7 @@ public class GlobalStateMgr {
     }
 
     private boolean needUpgradedToNewPrivilege() {
-        return !authorizationManager.isLoaded() || !authenticationManager.isLoaded();
+        return !authorizationMgr.isLoaded() || !authenticationMgr.isLoaded();
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
@@ -1179,10 +1179,10 @@ public class GlobalStateMgr {
             if (USING_NEW_PRIVILEGE) {
                 if (needUpgradedToNewPrivilege()) {
                     reInitializeNewPrivilegeOnUpgrade();
-                    AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, authorizationManager, this);
+                    AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationMgr, authorizationMgr, this);
                     // upgrade metadata in old privilege framework to the new one
                     upgrader.upgradeAsLeader();
-                    this.domainResolver.setAuthenticationManager(authenticationManager);
+                    this.domainResolver.setAuthenticationManager(authenticationMgr);
                 }
                 LOG.info("set usingNewPrivilege to true after transfer to leader");
                 usingNewPrivilege.set(true);
@@ -1251,7 +1251,7 @@ public class GlobalStateMgr {
         // New load scheduler
         pendingLoadTaskScheduler.start();
         loadingLoadTaskScheduler.start();
-        loadManager.prepareJobs();
+        loadMgr.prepareJobs();
         loadJobScheduler.start();
         loadTimeoutChecker.start();
         loadEtlChecker.start();
@@ -1394,13 +1394,13 @@ public class GlobalStateMgr {
                 // global transaction must be replayed before load jobs v2
                 checksum = globalTransactionMgr.loadTransactionState(dis, checksum);
                 checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
-                checksum = routineLoadManager.loadRoutineLoadJobs(dis, checksum);
-                checksum = loadManager.loadLoadJobsV2(dis, checksum);
+                checksum = routineLoadMgr.loadRoutineLoadJobs(dis, checksum);
+                checksum = loadMgr.loadLoadJobsV2(dis, checksum);
                 checksum = smallFileMgr.loadSmallFiles(dis, checksum);
                 checksum = pluginMgr.loadPlugins(dis, checksum);
                 checksum = loadDeleteHandler(dis, checksum);
                 remoteChecksum = dis.readLong();
-                checksum = analyzeManager.loadAnalyze(dis, checksum);
+                checksum = analyzeMgr.loadAnalyze(dis, checksum);
                 remoteChecksum = dis.readLong();
                 checksum = resourceGroupMgr.loadResourceGroups(dis, checksum);
                 checksum = auth.readAsGson(dis, checksum);
@@ -1618,9 +1618,9 @@ public class GlobalStateMgr {
 
     public void loadRBACPrivilege(DataInputStream dis) throws IOException, DdlException {
         if (USING_NEW_PRIVILEGE) {
-            this.authenticationManager = AuthenticationManager.load(dis);
-            this.authorizationManager = AuthorizationManager.load(dis, this, null);
-            this.domainResolver = new DomainResolver(authenticationManager);
+            this.authenticationMgr = AuthenticationMgr.load(dis);
+            this.authorizationMgr = AuthorizationMgr.load(dis, this, null);
+            this.domainResolver = new DomainResolver(authenticationMgr);
         }
     }
 
@@ -1674,7 +1674,7 @@ public class GlobalStateMgr {
 
     public long loadDeleteHandler(DataInputStream dis, long checksum) throws IOException {
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_82) {
-            this.deleteHandler = DeleteMgr.read(dis);
+            this.deleteMgr = DeleteMgr.read(dis);
         }
         LOG.info("finished replay deleteHandler from image");
         return checksum;
@@ -1847,8 +1847,8 @@ public class GlobalStateMgr {
 
     public void saveRBACPrivilege(DataOutputStream dos) throws IOException {
         if (USING_NEW_PRIVILEGE) {
-            this.authenticationManager.save(dos);
-            this.authorizationManager.save(dos);
+            this.authenticationMgr.save(dos);
+            this.authorizationMgr.save(dos);
         }
     }
 
@@ -2891,16 +2891,16 @@ public class GlobalStateMgr {
         return this.backupHandler;
     }
 
-    public DeleteMgr getDeleteHandler() {
-        return this.deleteHandler;
+    public DeleteMgr getDeleteMgr() {
+        return this.deleteMgr;
     }
 
     public Load getLoadInstance() {
         return this.load;
     }
 
-    public LoadManager getLoadManager() {
-        return loadManager;
+    public LoadMgr getLoadMgr() {
+        return loadMgr;
     }
 
     public LeaderTaskExecutor getPendingLoadTaskScheduler() {
@@ -2911,8 +2911,8 @@ public class GlobalStateMgr {
         return loadingLoadTaskScheduler;
     }
 
-    public RoutineLoadManager getRoutineLoadManager() {
-        return routineLoadManager;
+    public RoutineLoadMgr getRoutineLoadMgr() {
+        return routineLoadMgr;
     }
 
     public StreamLoadManager getStreamLoadManager() {
@@ -3653,8 +3653,8 @@ public class GlobalStateMgr {
             // in both cases, we need a definite upgrade, so we mark the managers of
             // new privilege framework as unloaded to trigger upgrade process.
             LOG.info("set authenticationManager and authorizationManager as unloaded because of old auth journal");
-            authenticationManager.setLoaded(false);
-            authorizationManager.setLoaded(false);
+            authenticationMgr.setLoaded(false);
+            authorizationMgr.setLoaded(false);
             domainResolver = new DomainResolver(auth);
         }
         switch (code) {
@@ -3719,17 +3719,17 @@ public class GlobalStateMgr {
         // current image to upgrade, so we initialize a new AuthorizationManager and AuthenticationManger
         // instance here
         LOG.info("reinitialize privilege info before upgrade");
-        this.authenticationManager = new AuthenticationManager();
-        this.authorizationManager = new AuthorizationManager(this, null);
+        this.authenticationMgr = new AuthenticationMgr();
+        this.authorizationMgr = new AuthorizationMgr(this, null);
     }
 
     public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
         reInitializeNewPrivilegeOnUpgrade();
-        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, authorizationManager, this);
+        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationMgr, authorizationMgr, this);
         upgrader.replayUpgrade(info.getRoleNameToId());
         LOG.info("set usingNewPrivilege to true after auth upgrade log replayed");
         usingNewPrivilege.set(true);
-        domainResolver.setAuthenticationManager(authenticationManager);
+        domainResolver.setAuthenticationManager(authenticationMgr);
     }
 
     // entry of checking tablets operation
@@ -3764,7 +3764,7 @@ public class GlobalStateMgr {
 
     public void clearExpiredJobs() {
         try {
-            loadManager.removeOldLoadJob();
+            loadMgr.removeOldLoadJob();
         } catch (Throwable t) {
             LOG.warn("load manager remove old load jobs failed", t);
         }
@@ -3781,7 +3781,7 @@ public class GlobalStateMgr {
             LOG.warn("export manager remove old export jobs failed", t);
         }
         try {
-            deleteHandler.removeOldDeleteInfo();
+            deleteMgr.removeOldDeleteInfo();
         } catch (Throwable t) {
             LOG.warn("delete handler remove old delete info failed", t);
         }
@@ -3791,7 +3791,7 @@ public class GlobalStateMgr {
             LOG.warn("transaction manager remove expired txns failed", t);
         }
         try {
-            routineLoadManager.cleanOldRoutineLoadJobs();
+            routineLoadMgr.cleanOldRoutineLoadJobs();
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
         }

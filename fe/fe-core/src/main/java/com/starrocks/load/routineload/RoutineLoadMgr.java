@@ -85,8 +85,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public class RoutineLoadManager implements Writable {
-    private static final Logger LOG = LogManager.getLogger(RoutineLoadManager.class);
+public class RoutineLoadMgr implements Writable {
+    private static final Logger LOG = LogManager.getLogger(RoutineLoadMgr.class);
 
     // be => running tasks num
     private Map<Long, Integer> beTasksNum = Maps.newHashMap();
@@ -114,7 +114,7 @@ public class RoutineLoadManager implements Writable {
         lock.readLock().unlock();
     }
 
-    public RoutineLoadManager() {
+    public RoutineLoadMgr() {
     }
 
     // returns -1 if there is no available be
@@ -698,7 +698,7 @@ public class RoutineLoadManager implements Writable {
 
     public void loadRoutineLoadJobsV2(DataInputStream dis) throws IOException,
             SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, RoutineLoadManager.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, RoutineLoadMgr.class.getName());
 
         try {
             int size = reader.readInt();
