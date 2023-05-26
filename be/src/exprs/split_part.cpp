@@ -24,7 +24,8 @@
 
 namespace starrocks {
 
-static void split_positive_index(ColumnBuilder<TYPE_VARCHAR> res, Slice& delimiter, int32_t& part_number, Slice& haystack) {
+static void split_positive_index(ColumnBuilder<TYPE_VARCHAR> res, Slice& delimiter, int32_t& part_number,
+                                 Slice& haystack) {
     if (delimiter.size == 1) {
         // if delimiter is a char, use memchr to split
         // Record the two adjacent offsets when matching delimiter.
@@ -73,44 +74,44 @@ static void split_positive_index(ColumnBuilder<TYPE_VARCHAR> res, Slice& delimit
         }
 
         if (num == part_number) {
-            res.append(
-                    Slice(haystack.data + pre_offset + delimiter.size, offset - pre_offset - delimiter.size));
+            res.append( Slice(haystack.data + pre_offset + delimiter.size, offset - pre_offset - delimiter.size));
         } else {
             res.append_null();
         }
     }
 }
 
-static void split_negative_index(ColumnBuilder<TYPE_VARCHAR> res, Slice& delimiter, int32_t& part_number, Slice& haystack) {
-     part_number = -part_number;
-     auto haystack_str = haystack.to_string();
-     int32_t offset = haystack.size;
-     int32_t pre_offset = offset;
-     int32_t num = 0;
-     auto substr = haystack_str;
-     while (num <= part_number && offset >= 0) {
-         offset = (int)substr.rfind(delimiter, offset);
-         if (offset != -1) {
-             if (++num == part_number) {
-                 break;
-             }
-             pre_offset = offset;
-             offset = offset - 1;
-             substr = haystack_str.substr(0, pre_offset);
-         } else {
-             break;
-         }
-     }
-     num = (offset == -1 && num != 0) ? num + 1 : num;
-     if (num == part_number) {
-         if (offset == -1) {
-             res.append(Slice(haystack.data, pre_offset));
-         } else {
-             res.append(Slice(haystack.data + offset + delimiter.size, pre_offset - offset - delimiter.size));
-         }
-     } else {
-         res.append_null();
-     }
+static void split_negative_index(ColumnBuilder<TYPE_VARCHAR> res, Slice& delimiter, int32_t& part_number,
+                                 Slice& haystack) {
+    part_number = -part_number;
+    auto haystack_str = haystack.to_string();
+    int32_t offset = haystack.size;
+    int32_t pre_offset = offset;
+    int32_t num = 0;
+    auto substr = haystack_str;
+    while (num <= part_number && offset >= 0) {
+        offset = (int)substr.rfind(delimiter, offset);
+        if (offset != -1) {
+            if (++num == part_number) {
+                break;
+            }
+            pre_offset = offset;
+            offset = offset - 1;
+            substr = haystack_str.substr(0, pre_offset);
+        } else {
+            break;
+        }
+    }
+    num = (offset == -1 && num != 0) ? num + 1 : num;
+    if (num == part_number) {
+        if (offset == -1) {
+            res.append(Slice(haystack.data, pre_offset));
+        } else {
+            res.append(Slice(haystack.data + offset + delimiter.size, pre_offset - offset - delimiter.size));
+        }
+    } else {
+        res.append_null();
+    }
 }
 
 /**
