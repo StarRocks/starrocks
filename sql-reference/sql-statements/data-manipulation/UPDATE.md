@@ -68,4 +68,4 @@ WHERE Salary < (SELECT AVG(Salary) FROM Employees);
 
 ## 使用限制
 
-2.5 以及之前版本，UPDATE 语法仅支持单表 UPDATE 且不支持公用表表达式（CTE）。
+在 2.5 版本，UPDATE 语法仅支持单表 UPDATE 且不支持公用表表达式（CTE）。
