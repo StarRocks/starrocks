@@ -74,11 +74,33 @@ public class SelectStmtTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
 
+        String createTable1 = "CREATE TABLE `t0` (\n" +
+                "  `c0` varchar(24) NOT NULL COMMENT \"\",\n" +
+                "  `c1` decimal128(24, 5) NOT NULL COMMENT \"\",\n" +
+                "  `c2` decimal128(24, 2) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`c0`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c0`) BUCKETS 1 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                "); ";
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr)
                 .withTable(createBaseAllStmtStr)
+<<<<<<< HEAD
                 .withTable(createPratitionTableStr);
+=======
+                .withTable(createDateTblStmtStr)
+                .withTable(createPratitionTableStr)
+                .withTable(createTable1);
+>>>>>>> 73458e396 ([BugFix] Make decimal-typed ArithmeticExpr analyzing idempotent (#24233))
     }
 
     @Test
@@ -382,4 +404,84 @@ public class SelectStmtTest {
             starRocksAssert.getCtx().getSessionVariable().setCboCteReuse(cboCteReuse);
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testSubstringConstantFolding() {
+        try {
+            String sql = "select * from db1.t where dt = \"2022-01-02\" or dt = cast(substring(\"2022-01-03\", 1, 10) as date);";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assert.assertTrue(plan, plan.contains("dt IN ('2022-01-02', '2022-01-03')"));
+        } catch (Exception e) {
+            Assert.fail("Should not throw an exception");
+        }
+    }
+
+    public void testAnalyzeDecimalArithmeticExprIdempotently()
+            throws Exception {
+        {
+            String sql = "select c0, sum(c2/(1+c1)) as a, sum(c2/(1+c1)) as b from t0 group by c0;";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assert.assertTrue(plan, plan.contains("PLAN FRAGMENT 0(F00)\n" +
+                    "  Output Exprs:1: c0 | 5: sum | 5: sum\n" +
+                    "  Input Partition: RANDOM\n" +
+                    "  RESULT SINK\n" +
+                    "\n" +
+                    "  2:AGGREGATE (update finalize)\n" +
+                    "  |  aggregate: sum[([4: expr, DECIMAL128(38,8), true]); " +
+                    "args: DECIMAL128; result: DECIMAL128(38,8); args nullable: true; " +
+                    "result nullable: true]\n" +
+                    "  |  group by: [1: c0, VARCHAR, false]\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  1:Project\n" +
+                    "  |  output columns:\n" +
+                    "  |  1 <-> [1: c0, VARCHAR, false]\n" +
+                    "  |  4 <-> [3: c2, DECIMAL128(24,2), false] / 1 + [2: c1, DECIMAL128(24,5), false]\n" +
+                    "  |  cardinality: 1"));
+        }
+
+        {
+            String sql = " select c0, sum(1/(1+cast(substr('1.12',1,4) as decimal(24,4)))) as a, " +
+                    "sum(1/(1+cast(substr('1.12',1,4) as decimal(24,4)))) as b from t0 group by c0;";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assert.assertTrue(plan, plan.contains("PLAN FRAGMENT 0(F00)\n" +
+                    "  Output Exprs:1: c0 | 4: sum | 4: sum\n" +
+                    "  Input Partition: RANDOM\n" +
+                    "  RESULT SINK\n" +
+                    "\n" +
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  aggregate: sum[(1 / 1 + cast(substr[('1.12', 1, 4); " +
+                    "args: VARCHAR,INT,INT; result: VARCHAR; args nullable: false; " +
+                    "result nullable: true] as DECIMAL128(24,4))); args: DECIMAL128; " +
+                    "result: DECIMAL128(38,6); args nullable: true; result nullable: true]\n" +
+                    "  |  group by: [1: c0, VARCHAR, false]\n" +
+                    "  |  cardinality: 1"));
+        }
+
+        {
+            String sql = "select c0, sum(cast(c2 as decimal(38,19))/(1+c1)) as a, " +
+                    "sum(cast(c2 as decimal(38,19))/(1+c1)) as b from t0 group by c0;";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assert.assertTrue(plan, plan.contains("PLAN FRAGMENT 0(F00)\n" +
+                    "  Output Exprs:1: c0 | 5: sum | 5: sum\n" +
+                    "  Input Partition: RANDOM\n" +
+                    "  RESULT SINK\n" +
+                    "\n" +
+                    "  2:AGGREGATE (update finalize)\n" +
+                    "  |  aggregate: sum[(cast([4: expr, DECIMAL128(38,19), true] as DECIMAL128(38,18))); " +
+                    "args: DECIMAL128; result: DECIMAL128(38,18); args nullable: true; result nullable: true]\n" +
+                    "  |  group by: [1: c0, VARCHAR, false]\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  1:Project\n" +
+                    "  |  output columns:\n" +
+                    "  |  1 <-> [1: c0, VARCHAR, false]\n" +
+                    "  |  4 <-> cast([3: c2, DECIMAL128(24,2), false] as DECIMAL128(38,19)) / 1 + " +
+                    "[2: c1, DECIMAL128(24,5), false]\n" +
+                    "  |  cardinality: 1"));
+        }
+    }
+>>>>>>> 73458e396 ([BugFix] Make decimal-typed ArithmeticExpr analyzing idempotent (#24233))
 }
