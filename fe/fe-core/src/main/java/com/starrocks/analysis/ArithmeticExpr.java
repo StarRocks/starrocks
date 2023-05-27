@@ -22,6 +22,11 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
+>>>>>>> 73458e396 ([BugFix] Make decimal-typed ArithmeticExpr analyzing idempotent (#24233))
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -41,12 +46,39 @@ import org.apache.logging.log4j.Logger;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 // Our new cost based query optimizer is more powerful and stable than old query optimizer,
 // The old query optimizer related codes could be deleted safely.
 // TODO: Remove old query optimizer related codes before 2021-09-30
 public class ArithmeticExpr extends Expr {
+<<<<<<< HEAD
     private static final Logger LOG = LogManager.getLogger(ArithmeticExpr.class);
+=======
+    private static final Map<String, Operator> SUPPORT_FUNCTIONS = ImmutableMap.<String, Operator>builder()
+            .put(Operator.MULTIPLY.getName(), Operator.MULTIPLY)
+            .put(Operator.DIVIDE.getName(), Operator.DIVIDE)
+            .put(Operator.MOD.getName(), Operator.MOD)
+            .put(Operator.INT_DIVIDE.getName(), Operator.INT_DIVIDE)
+            .put(Operator.ADD.getName(), Operator.ADD)
+            .put(Operator.SUBTRACT.getName(), Operator.SUBTRACT)
+            .put(Operator.BITAND.getName(), Operator.BITAND)
+            .put(Operator.BITOR.getName(), Operator.BITOR)
+            .put(Operator.BITXOR.getName(), Operator.BITXOR)
+            .put(Operator.BIT_SHIFT_LEFT.getName(), Operator.BIT_SHIFT_LEFT)
+            .put(Operator.BIT_SHIFT_RIGHT.getName(), Operator.BIT_SHIFT_RIGHT)
+            .put(Operator.BIT_SHIFT_RIGHT_LOGICAL.getName(), Operator.BIT_SHIFT_RIGHT_LOGICAL)
+            .build();
+
+    public static Set<String> DECIMAL_SCALE_ADJUST_OPERATOR_SET = ImmutableSet.<String>builder()
+            .add(Operator.ADD.name)
+            .add(Operator.SUBTRACT.name)
+            .add(Operator.MULTIPLY.name)
+            .add(Operator.DIVIDE.name)
+            .add(Operator.MOD.name)
+            .add(Operator.INT_DIVIDE.name)
+            .build();
+>>>>>>> 73458e396 ([BugFix] Make decimal-typed ArithmeticExpr analyzing idempotent (#24233))
     private final Operator op;
 
     public enum OperatorPosition {
@@ -244,9 +276,13 @@ public class ArithmeticExpr extends Expr {
         return result;
     }
 
-    private void rewriteDecimalDecimalOperation() throws AnalysisException {
+    private TypeTriple rewriteDecimalDecimalOperation() throws AnalysisException {
         final Type lhsOriginType = getChild(0).type;
         final Type rhsOriginType = getChild(1).type;
+<<<<<<< HEAD
+=======
+
+>>>>>>> 73458e396 ([BugFix] Make decimal-typed ArithmeticExpr analyzing idempotent (#24233))
         Type lhsTargetType = lhsOriginType;
         Type rhsTargetType = rhsOriginType;
 
@@ -256,29 +292,15 @@ public class ArithmeticExpr extends Expr {
         if (!rhsTargetType.isDecimalV3()) {
             rhsTargetType = nonDecimalToDecimal(rhsTargetType);
         }
-        TypeTriple triple = getReturnTypeOfDecimal(op, (ScalarType) lhsTargetType, (ScalarType) rhsTargetType);
-        if (!triple.lhsTargetType.equals(lhsOriginType)) {
-            Preconditions.checkState(triple.lhsTargetType.isValid());
-            castChild(triple.lhsTargetType, 0);
-        }
-        if (!triple.rhsTargetType.equals(rhsOriginType)) {
-            Preconditions.checkState(triple.rhsTargetType.isValid());
-            castChild(triple.rhsTargetType, 1);
-        }
-        type = triple.returnType;
+        return getReturnTypeOfDecimal(op, (ScalarType) lhsTargetType, (ScalarType) rhsTargetType);
     }
 
-    private void rewriteDecimalFloatingPointOperation() throws AnalysisException {
-        Type lhsType = getChild(0).type;
-        Type rhsType = getChild(1).type;
-        Type resultType = Type.DOUBLE;
-        if (!resultType.equals(lhsType)) {
-            castChild(resultType, 0);
-        }
-        if (!resultType.equals(rhsType)) {
-            castChild(resultType, 1);
-        }
-        this.type = resultType;
+    private TypeTriple rewriteDecimalFloatingPointOperation() throws AnalysisException {
+        TypeTriple typeTriple = new TypeTriple();
+        typeTriple.lhsTargetType = Type.DOUBLE;
+        typeTriple.rhsTargetType = Type.DOUBLE;
+        typeTriple.returnType = Type.DOUBLE;
+        return typeTriple;
     }
 
     private boolean hasFloatingPointOrStringType() {
@@ -301,11 +323,11 @@ public class ArithmeticExpr extends Expr {
         }
     }
 
-    public void rewriteDecimalOperation() throws AnalysisException {
+    public TypeTriple rewriteDecimalOperation() throws AnalysisException {
         if (hasFloatingPointOrStringType() && !resultTypeIsBigInt()) {
-            rewriteDecimalFloatingPointOperation();
+            return rewriteDecimalFloatingPointOperation();
         } else {
-            rewriteDecimalDecimalOperation();
+            return rewriteDecimalDecimalOperation();
         }
     }
 

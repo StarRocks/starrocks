@@ -1666,5 +1666,616 @@ public class AggregateTest extends PlanTestBase {
             sessionVariable.setNewPlanerAggStage(prevNewPlannerAggStage);
         }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testMergeAggPruneColumnPruneWindow() throws Exception {
+        String sql = "select v2 " +
+                "from ( " +
+                "   select v2, x3 " +
+                "   from (select v2, sum(v1) over (partition by v3) as x3 from t0) as tt0 " +
+                "   group by v2, x3 " +
+                ") ttt0 " +
+                "group by v2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("ANALYTIC"));
+        Assert.assertEquals(1, StringUtils.countMatches(plan, ":AGGREGATE"));
+    }
+
+    @Test
+    public void testExtractProject() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSumByAssociativeRule(false);
+        String sql;
+        String plan;
+
+        sql = "select sum(t1c + 1) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(CAST(3: t1c AS BIGINT) + 1)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 3> : 3: t1c\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        sql = "select sum(t1c), sum(t1c + 1) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: t1c), sum(CAST(3: t1c AS BIGINT) + 1)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 3> : 3: t1c");
+
+        sql = "select sum(t1c + 1), sum(t1c + 2) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(15: cast + 1), sum(15: cast + 2)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 15> : 15: cast\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 15> : CAST(3: t1c AS BIGINT)");
+
+        sql = "select sum(t1c), sum(t1c + 1), sum(t1c + 2) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: t1c), sum(16: cast + 1), sum(16: cast + 2)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 3> : 3: t1c\n" +
+                "  |  <slot 16> : 16: cast\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 16> : CAST(3: t1c AS BIGINT)");
+
+        sql = "select sum(t1c + 1), sum(t1c + 1 + 2), sum(t1d + 1 + 3) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(11: expr), sum(18: add + 2), sum(4: t1d + 1 + 3)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : 4: t1d\n" +
+                "  |  <slot 11> : 18: add\n" +
+                "  |  <slot 18> : 18: add\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 17> : CAST(3: t1c AS BIGINT)\n" +
+                "  |  <slot 18> : 17: cast + 1");
+        connectContext.getSessionVariable().setEnableRewriteSumByAssociativeRule(true);
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(3);
+        sql = "select count(distinct t1c, upper(id_datetime)) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  5:AGGREGATE (update serialize)\n" +
+                "  |  output: count(if(3: t1c IS NULL, NULL, 11: upper))\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  4:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 3: t1c, 11: upper");
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+
+    }
+
+    @Test
+    public void testSimpleAggRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
+        // normal case
+        String sql = "select min(t1b),max(t1b),min(id_datetime),count(t1b),count(t1c) from test_all_type_not_null";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: min(min_t1b), max(max_t1b), min(min_id_datetime), sum(count_t1b), sum(count_t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:MetaScan\n" +
+                "     Table: test_all_type_not_null\n" +
+                "     <id 16> : min_t1b\n" +
+                "     <id 17> : max_t1b\n" +
+                "     <id 18> : min_id_datetime\n" +
+                "     <id 19> : count_t1b");
+
+        // The following cases will not use MetaScan because some conditions are not met
+        // with group by key
+        sql = "select t1b,max(id_datetime) from test_all_type_not_null group by t1b";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: max(8: id_datetime)\n" +
+                "  |  group by: 2: t1b\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: test_all_type_not_null");
+        // with expr in agg function
+        sql = "select min(t1b+1),max(t1b) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: min(CAST(2: t1b AS INT) + 1), max(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // with unsupported type in agg function
+        sql = "select min(t1b),max(t1a) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: t1b), max(1: t1a)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // with filter
+        sql = "select min(t1b) from test_all_type_not_null where t1c > 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        sql = "select min(t1b) from test_all_type_not_null having abs(1) = 2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  having: abs(1) = 2\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // with nullable column
+        sql = "select min(t1b) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: min(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        sql = "select count(t1b) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // with count distinct, shouldn't apply RewriteSimpleAggToMetaScanRule
+        sql = "select count(distinct t1b) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testGroupByLiteral() throws Exception {
+        String sql = "select -9223372036854775808 group by TRUE;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 3> : -9223372036854775808");
+    }
+
+    @Test
+    public void testRewriteSumByAssociativeRule() throws Exception {
+        // 1. different types
+        // 1.1 nullable
+        String sql = "select sum(t1b+1),sum(t1c+1),sum(t1d+1),sum(t1e+1),sum(t1f+1),sum(t1g+1),sum(id_decimal+1)" +
+                " from test_all_type";
+        String plan = getVerboseExplain(sql);
+        // for each sum(col + 1), should rewrite to sum(col) + count(col) * 1
+        assertContains(plan, "  3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  18 <-> [25: sum, BIGINT, true] + [26: count, BIGINT, true] * 1\n" +
+                "  |  19 <-> [27: sum, BIGINT, true] + [28: count, BIGINT, true] * 1\n" +
+                "  |  20 <-> [29: sum, BIGINT, true] + [30: count, BIGINT, true] * 1\n" +
+                "  |  21 <-> [32: sum, DOUBLE, true] + cast([33: count, BIGINT, true] as DOUBLE) * 1.0\n" +
+                "  |  22 <-> [34: sum, DOUBLE, true] + cast([35: count, BIGINT, true] as DOUBLE) * 1.0\n" +
+                "  |  23 <-> [36: sum, BIGINT, true] + [37: count, BIGINT, true] * 1\n" +
+                "  |  24 <-> [38: sum, DECIMAL128(38,2), true] + cast([39: count, BIGINT, true] as DECIMAL128(18,0)) * 1");
+        // if a column can cast to target type safely, we can remove the implicit cast directly.
+        // in this case, t1b is SMALLINT,and need to be cast to INT implicitly before calculate sum,
+        // after we rewrite sum(add(cast t1b as int), 1),
+        // there must be no project node between aggregate node and olap scan node
+        sql = "select sum(t1b+1) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 12> : 13: sum + 14: count * 1\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: t1b), count(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // apply this rule more than once
+        // 1. sum(add(add(cast t1b as int, 1), 1)) => sum(add(cast t1b as int, 1)) + count(add(cast t1b as int, 1) * 1
+        // 2. sum(add(cast t1b as int,1)) => sum(t1b) + count(t1b) * 1
+        // so the final result is sum(t1b) + count(t1b) * 1 + count(add(cast t1b as int. 1)) * 1
+        sql = "select sum(t1b+1+1) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 12> : 16: sum + 17: count * 1 + 15: count * 1\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: t1b), count(CAST(2: t1b AS INT) + 1), sum(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        // should make sure the argument of count appears in project node
+        sql = "select sum(id_decimal + 1 + 2) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 12> : 16: sum + CAST(17: count AS DECIMAL128(18,0)) * 1 + CAST(15: count AS DECIMAL128(18,0)) * 2\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(10: id_decimal), count(CAST(10: id_decimal AS DECIMAL64(12,2)) + 1), sum(10: id_decimal)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 10> : 10: id_decimal\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // 1.2 not null
+        sql = "select sum(t1b+1),sum(t1c+1),sum(t1d+1),sum(t1e+1),sum(t1f+1),sum(t1g+1),sum(id_decimal+1)" +
+                " from test_all_type_not_null";
+        plan = getVerboseExplain(sql);
+        // for each sum(col + 1), should rewrite to sum(col) + count() * 1,
+        // so count() will be a common expression
+        assertContains(plan, "  3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  18 <-> [25: sum, BIGINT, true] + [40: multiply, BIGINT, true]\n" +
+                "  |  19 <-> [27: sum, BIGINT, true] + [40: multiply, BIGINT, true]\n" +
+                "  |  20 <-> [29: sum, BIGINT, true] + [40: multiply, BIGINT, true]\n" +
+                "  |  21 <-> [32: sum, DOUBLE, true] + cast([33: count, BIGINT, true] as DOUBLE) * 1.0\n" +
+                "  |  22 <-> [34: sum, DOUBLE, true] + cast([35: count, BIGINT, true] as DOUBLE) * 1.0\n" +
+                "  |  23 <-> [36: sum, BIGINT, true] + [40: multiply, BIGINT, true]\n" +
+                "  |  24 <-> [38: sum, DECIMAL128(38,2), true] + cast([35: count, BIGINT, true] as DECIMAL128(18,0)) * 1\n" +
+                "  |  common expressions:\n" +
+                "  |  40 <-> [35: count, BIGINT, true] * 1");
+
+        // 2. aggregate result reuse
+        sql = "select sum(t1b), sum(t1b+1), sum(t1b+2) from test_all_type";
+        // if a column appears multiple times in different sum functions,
+        // we can reuse the results of sum and count
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  13 <-> [18: sum, BIGINT, true]\n" +
+                "  |  14 <-> [18: sum, BIGINT, true] + [17: count, BIGINT, true] * 1\n" +
+                "  |  15 <-> [18: sum, BIGINT, true] + [17: count, BIGINT, true] * 2");
+
+        sql = "select sum(id_decimal), sum(id_decimal+1.0), sum(id_decimal+1.00), sum(id_decimal+1.000), " +
+                "sum(id_decimal+1.000000000000000000) from test_all_type";
+        plan = getVerboseExplain(sql);
+        // for decimal sum with different scales,
+        // the original ADD operator need to cast id_decimal to decimal128 with different scales,
+        // e.g.
+        // sum(id_decimal+1.0) -> sum(add(cast(cast(id_decimal as decimal128(28,9) as decimal128(37,9)))), 1.0)
+        // sum(id_decimal+1.00) -> sum(add(cast(cast(id_decimal as decimal128(28,9) as decimal128(36,9)))), 1.00)
+        // after applying RewriteSumByAssociativeRule, we can remove all unnecessary cast
+        // and reuse the result of sum(id_decimal) and count() multiple times.
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  15 <-> [20: sum, DECIMAL128(38,2), true]\n" +
+                "  |  16 <-> [20: sum, DECIMAL128(38,2), true] + [28: cast, DECIMAL128(18,0), true] * 1.0\n" +
+                "  |  17 <-> [20: sum, DECIMAL128(38,2), true] + [28: cast, DECIMAL128(18,0), true] * 1.00\n" +
+                "  |  18 <-> [20: sum, DECIMAL128(38,2), true] + [28: cast, DECIMAL128(18,0), true] * 1.000\n" +
+                "  |  19 <-> [20: sum, DECIMAL128(38,2), true] + [28: cast, DECIMAL128(18,0), true] * 1.000000000000000000\n" +
+                "  |  common expressions:\n" +
+                "  |  28 <-> cast([21: count, BIGINT, true] as DECIMAL128(18,0))");
+
+        // 3. mix sum and other agg functions
+        sql = "select avg(t1b), max(t1b), sum(t1b), sum(t1b+1) from test_all_type";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  12 <-> [12: avg, DOUBLE, true]\n" +
+                "  |  13 <-> [13: max, SMALLINT, true]\n" +
+                "  |  14 <-> [14: sum, BIGINT, true]\n" +
+                "  |  15 <-> [14: sum, BIGINT, true] + [17: count, BIGINT, true] * 1");
+
+        // 4. with group by key
+        // if the number of agg function can be reduced after applying this rule, do it
+        sql = "select t1c, sum(t1b),sum(t1b+1),sum(t1b+2) from test_all_type group by t1c";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  3 <-> [3: t1c, INT, true]\n" +
+                "  |  13 <-> [18: sum, BIGINT, true]\n" +
+                "  |  14 <-> [18: sum, BIGINT, true] + [17: count, BIGINT, true] * 1\n" +
+                "  |  15 <-> [18: sum, BIGINT, true] + [17: count, BIGINT, true] * 2");
+        assertContains(plan, "  |  group by: [3: t1c, INT, true]");
+        // if the number of agg function cannot be reduced after applying this rule, skip it
+        sql = "select t1c, sum(t1b+1),avg(t1b) from test_all_type group by t1c";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  2 <-> [2: t1b, SMALLINT, true]\n" +
+                "  |  3 <-> [3: t1c, INT, true]\n" +
+                "  |  11 <-> cast([2: t1b, SMALLINT, true] as INT) + 1");
+
+        // 4.2 with group by key and having
+        sql = "select t1c, sum(t1b)+2,sum(t1b+1),sum(t1b+2)+1 from test_all_type group by t1c having sum(t1b+1) > 10";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:Project\n" +
+                "  |  output columns:\n" +
+                "  |  3 <-> [3: t1c, INT, true]\n" +
+                "  |  14 <-> [18: sum, BIGINT, true] + [19: count, BIGINT, true] * 1\n" +
+                "  |  16 <-> [18: sum, BIGINT, true] + 2\n" +
+                "  |  17 <-> [18: sum, BIGINT, true] + [19: count, BIGINT, true] * 2 + 1");
+        assertContains(plan, "  |  group by: [3: t1c, INT, true]\n" +
+                "  |  having: [18: sum, BIGINT, true] + [19: count, BIGINT, true] * 1 > 10");
+    }
+
+    @Test
+    public void testPruneGroupByKeysRule() throws Exception {
+        String sql = "select t1b,t1b+1,count(*) from test_all_type group by 1,2";
+        String plan = getFragmentPlan(sql);
+        // t1b+1 will be pruned
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : CAST(2: t1b AS INT) + 1\n" +
+                "  |  <slot 12> : 12: count\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 2: t1b");
+
+        sql = "select t1b,t1b+1,count(*) from test_all_type group by 2,1";
+        plan = getFragmentPlan(sql);
+        // both keys will be reserved because expr occurs in the first place
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 11: expr, 2: t1b\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : CAST(2: t1b AS INT) + 1");
+
+        // only the keys after original column will be pruned
+        sql = "select t1b+1,t1b,t1b+2,count(*) from test_all_type group by 1,2,3";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : 11: expr\n" +
+                "  |  <slot 12> : CAST(2: t1b AS INT) + 2\n" +
+                "  |  <slot 13> : 13: count\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 11: expr, 2: t1b\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : CAST(2: t1b AS INT) + 1");
+
+        sql = "select t1b,t1c,t1b+1,t1c+1,count(*) from test_all_type group by 1,2,3,4";
+        plan = getFragmentPlan(sql);
+        // t1b+1, t1c+1 will be pruned
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 3> : 3: t1c\n" +
+                "  |  <slot 11> : CAST(2: t1b AS INT) + 1\n" +
+                "  |  <slot 12> : CAST(3: t1c AS BIGINT) + 1\n" +
+                "  |  <slot 13> : 13: count\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 2: t1b, 3: t1c");
+        // the first group by key is not simple column ref, can't be pruned
+        sql = "select 1 from test_all_type group by t1b+rand(), t1b+rand()+1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 13> : 1\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  group by: 11: expr, 12: expr\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 11> : 14: cast + rand()\n" +
+                "  |  <slot 12> : 14: cast + rand() + 1.0\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 14> : CAST(2: t1b AS DOUBLE)");
+        sql =
+                "select cast(id_decimal as decimal(38,2)),cast(id_decimal as decimal(37,2)) from test_all_type group by 1, 2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  group by: 11: cast, 12: cast\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 11> : CAST(10: id_decimal AS DECIMAL128(38,2))\n" +
+                "  |  <slot 12> : CAST(10: id_decimal AS DECIMAL128(37,2))");
+        // complex projections, aggregations and group by keys
+        sql = "select v4,abs(v4),cast(v5 as largeint),max(v4+v5+v6) from t1 group by v4,abs(v4),cast(v5 as largeint);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 1> : 1: v4\n" +
+                "  |  <slot 4> : abs(1: v4)\n" +
+                "  |  <slot 5> : 5: cast\n" +
+                "  |  <slot 7> : 7: max\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: max(6: expr)\n" +
+                "  |  group by: 1: v4, 5: cast\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: v4\n" +
+                "  |  <slot 5> : CAST(2: v5 AS LARGEINT)\n" +
+                "  |  <slot 6> : 1: v4 + 2: v5 + 3: v6");
+        // if all group by keys are constant and the query has aggregations
+        // we should reserve one key to ensure the correct result
+        sql = "select 'a',count(t1b) from test_all_type where t1c>10 group by 'c'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: t1b)\n" +
+                "  |  group by: 11: expr\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : 'c'");
+        sql = "select 'a','b',count(t1b) from test_all_type where t1c>10 group by 'c','d'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: t1b)\n" +
+                "  |  group by: 11: expr\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 11> : 'c'");
+        // if all group by keys and projections are constant, we can remove the agg node and add a limit operator.
+        sql = "select 'a','b' from test_all_type group by 'c','d'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 13> : 'a'\n" +
+                "  |  <slot 14> : 'b'");
+        assertContains(plan, "  2:EXCHANGE\n" +
+                "     limit: 1");
+    }
+
+    @Test
+    public void testPruneGroupByKeysRule2() throws Exception {
+        String sql = "select 1 from test_all_type group by NULL " +
+                "having (NOT (((DROUND(0.09733420538671422) ) IS NOT NULL)))";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:Project\n" +
+                "  |  <slot 12> : 1\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  group by: 11: expr\n" +
+                "  |  having: dround(0.09733420538671422) IS NULL\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 11> : NULL");
+    }
+
+    @Test
+    public void testPruneGroupByKeysRule3() throws Exception {
+        String sql = "select count(*), sum(t1b) from test_all_type group by NULL " +
+                "having (NOT (((DROUND(0.09733420538671422) ) IS NOT NULL)))";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:Project\n" +
+                "  |  <slot 12> : 12: count\n" +
+                "  |  <slot 13> : 13: sum\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*), sum(2: t1b)\n" +
+                "  |  group by: 11: expr\n" +
+                "  |  having: dround(0.09733420538671422) IS NULL");
+    }
+
+    @Test
+    public void testDistinctRewrite() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select count(distinct t1a), sum(t1c) from test_all_type group by t1b";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "sum[([13: sum, BIGINT, true]); args: BIGINT; result: BIGINT; args nullable: true;");
+
+        sql = "select multi_distinct_count(t1a), max(t1c) from test_all_type group by t1b, t1c";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "max[([13: max, INT, true]); args: INT;");
+
+        sql = "select sum(distinct v1), hll_union(hll_hash(v3)) from test_object group by v2";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "hll_union[([16: hll_union, HLL, true]); args: HLL; result: HLL; args nullable: true;");
+
+        sql = "select count(distinct v1), BITMAP_UNION(b1) from test_object group by v2, v3";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "bitmap_union[([15: bitmap_union, BITMAP, true]); args: BITMAP; result: BITMAP; " +
+                "args nullable: true;");
+
+        sql = "select count(distinct t1a), PERCENTILE_UNION(PERCENTILE_HASH(t1f)) from test_all_type group by t1c";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "percentile_union[([14: percentile_union, PERCENTILE, true]); args: PERCENTILE; " +
+                "result: PERCENTILE; args nullable: true;");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testMultiCountDistinctWithMoreGroupBy() throws Exception {
+        String sql = "select count(distinct t1c), count(distinct t1d), count(distinct t1e)" +
+                "from test_all_type group by t1a, t1b";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "multi_distinct_count");
+
+        sql = "select count(distinct t1c), count(distinct t1d), count(distinct t1e)" +
+                "from test_all_type group by t1a";
+
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "multi_distinct_count");
+    }
+
+
+    @Test
+    public void testRemoveExchange() throws Exception {
+        int oldValue = connectContext.getSessionVariable().getNewPlannerAggStage();
+        connectContext.getSessionVariable().setNewPlanerAggStage(1);
+        String sql = "select sum(v1) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)");
+
+        sql = "select sum(v1 + v2) from t0 group by v3";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  3:Project\n" +
+                "  |  <slot 5> : 5: sum\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(4: expr)");
+        connectContext.getSessionVariable().setNewPlanerAggStage(oldValue);
+    }
+
+    @Test
+    public void testDistinctConst() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "SELECT DISTINCT 16 col0 FROM t0 AS cor0 LEFT JOIN t1 AS cor1 ON NULL IS NULL";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "6:Project\n" +
+                "  |  <slot 7> : 16\n" +
+                "  |  limit: 1");
+        sql = "SELECT DISTINCT 61 AS col0 FROM t0 AS cor0 LEFT JOIN t1 AS cor1 ON NOT NULL IS NOT NULL, t0 AS cor2;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "11:Project\n" +
+                "  |  <slot 10> : 61\n" +
+                "  |  limit: 1");
+    }
+
+    @Test
+    public void testPercentileFunctionConst() throws Exception {
+        // For compatibility
+        String sql = "select percentile_approx(1, cast(0.4 as DOUBLE));";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "percentile_approx[(1.0, 0.4); args: DOUBLE,DOUBLE");
+
+        sql = "select percentile_approx(1, cast(1.3 as DOUBLE));";
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("Getting analyzing error. " +
+                "Detail message: percentile_approx second parameter'value must be between 0 and 1.");
+        getCostExplain(sql);
+        plan = getCostExplain(sql);
+
+
+        sql = "select percentile_cont(1, cast(0.4 as DOUBLE));";
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("Getting analyzing error. " +
+                "Detail message: percentile_cont 's second parameter's data type is wrong .");
+        getCostExplain(sql);
+
+
+        sql = "select PERCENTILE_DISC(1, cast(0.4 as DOUBLE));";
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("Getting analyzing error. " +
+                "Detail message: percentile_disc 's second parameter's data type is wrong .");
+        getCostExplain(sql);
+>>>>>>> 73458e396 ([BugFix] Make decimal-typed ArithmeticExpr analyzing idempotent (#24233))
     }
 }

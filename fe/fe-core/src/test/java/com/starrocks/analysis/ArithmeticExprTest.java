@@ -21,6 +21,7 @@ public class ArithmeticExprTest {
         rhsExpr.setType(decimal32p9s2);
         ArithmeticExpr addExpr = new ArithmeticExpr(
                 ArithmeticExpr.Operator.ADD, lhsExpr, rhsExpr);
+<<<<<<< HEAD
         try {
             ScalarType decimal64p18s2 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2);
             addExpr.analyzeImpl(null);
@@ -33,6 +34,14 @@ public class ArithmeticExprTest {
             Assert.fail("Should not throw exception");
         }
 
+=======
+        ScalarType decimal64p10s2 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2);
+        ExpressionAnalyzer.analyzeExpressionIgnoreSlot(addExpr, ConnectContext.get());
+        Assert.assertEquals(addExpr.type, decimal64p10s2);
+        Assert.assertNotNull(addExpr.getFn());
+        Assert.assertEquals(addExpr.getFn().getArgs()[0], decimal64p10s2);
+        Assert.assertEquals(addExpr.getFn().getArgs()[1], decimal64p10s2);
+>>>>>>> 73458e396 ([BugFix] Make decimal-typed ArithmeticExpr analyzing idempotent (#24233))
     }
 
     private ScalarType dec(int bits, int precision, int scale) {
