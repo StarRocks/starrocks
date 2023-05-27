@@ -1943,15 +1943,14 @@ public class AggregateTest extends PlanTestBase {
         sql = "select sum(id_decimal + 1 + 2) from test_all_type";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  3:Project\n" +
-                "  |  <slot 12> : 14: sum + CAST(15: count AS DECIMAL128(18,0)) * 2\n" +
+                "  |  <slot 12> : 16: sum + CAST(17: count AS DECIMAL128(18,0)) * 1 + CAST(15: count AS DECIMAL128(18,0)) * 2\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(13: cast), count(13: cast)\n" +
+                "  |  output: count(10: id_decimal), count(CAST(10: id_decimal AS DECIMAL64(12,2)) + 1), sum(10: id_decimal)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 13> : " +
-                "CAST(CAST(CAST(10: id_decimal AS DECIMAL64(12,2)) AS DECIMAL64(15,2)) + 1 AS DECIMAL64(13,2))\n" +
+                "  |  <slot 10> : 10: id_decimal\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
         // 1.2 not null
