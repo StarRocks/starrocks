@@ -278,22 +278,21 @@ public class ExpressionAnalyzer {
                 Type t1 = node.getChild(0).getType().getNumResultType();
                 Type t2 = node.getChild(1).getType().getNumResultType();
                 if (t1.isDecimalV3() || t2.isDecimalV3()) {
+                    ArithmeticExpr.TypeTriple typeTriple = null;
                     try {
-                        node.rewriteDecimalOperation();
+                        typeTriple = node.rewriteDecimalOperation();
                     } catch (AnalysisException ex) {
                         throw new SemanticException(ex.getMessage());
                     }
-                    Type lhsType = node.getChild(0).getType();
-                    Type rhsType = node.getChild(1).getType();
-                    Type resultType = node.getType();
-                    Type[] args = {lhsType, rhsType};
+                    Preconditions.checkArgument(typeTriple != null);
+                    Type[] args = {typeTriple.lhsTargetType, typeTriple.rhsTargetType};
                     Function fn = Expr.getBuiltinFunction(op.getName(), args, Function.CompareMode.IS_IDENTICAL);
                     // In resolved function instance, it's argTypes and resultType are wildcard decimal type
                     // (both precision and and scale are -1, only used in function instance resolution), it's
                     // illegal for a function and expression to has a wildcard decimal type as its type in BE,
                     // so here substitute wildcard decimal types with real decimal types.
-                    Function newFn = new ScalarFunction(fn.getFunctionName(), args, resultType, fn.hasVarArgs());
-                    node.setType(resultType);
+                    Function newFn = new ScalarFunction(fn.getFunctionName(), args, typeTriple.returnType, fn.hasVarArgs());
+                    node.setType(typeTriple.returnType);
                     node.setFn(newFn);
                     return null;
                 }
