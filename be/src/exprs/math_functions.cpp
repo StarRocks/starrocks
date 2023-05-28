@@ -228,6 +228,22 @@ StatusOr<ColumnPtr> MathFunctions::bin(FunctionContext* context, const Columns& 
     return VectorizedStringStrictUnaryFunction<binImpl>::evaluate<TYPE_BIGINT, TYPE_VARCHAR>(columns[0]);
 }
 
+// oct
+DEFINE_STRING_UNARY_FN_WITH_IMPL(octImpl, v) {
+    return MathFunctions::decimal_to_base(v, 8);
+}
+
+StatusOr<ColumnPtr> MathFunctions::oct(FunctionContext* context, const Columns& columns) {
+    return VectorizedStringStrictUnaryFunction<octImpl>::evaluate<TYPE_BIGINT, TYPE_VARCHAR>(columns[0]);
+}
+
+// oct_length
+DEFINE_UNARY_FN_WITH_IMPL(oct_lengthImpl, v) {
+    return MathFunctions::decimal_to_base(v, 8).size();
+}
+
+DEFINE_MATH_UNARY_FN(oct_length, TYPE_BIGINT, TYPE_INT);
+
 // unary math
 // float double abs
 DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_double, TYPE_DOUBLE, TYPE_DOUBLE, std::fabs);

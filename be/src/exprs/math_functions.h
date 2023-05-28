@@ -317,10 +317,22 @@ public:
      * Get the string based on TinyInt2 from String based on TinyInt1.
      */
     DEFINE_VECTORIZED_FN(conv_string);
-    //    /**
-    //     * @param: [BigIntColumn, BigIntColumn]
-    //     * @return: BigIntColumn
-    //     */
+    /**
+     * @param: [BigIntColumn]
+     * @return: StringColumn
+     * Get the octal representation of BIGINT as string.
+     */
+    DEFINE_VECTORIZED_FN(oct);
+    /**
+     * @param: [BigIntColumn]
+     * @return: IntColumn
+     * Get the length of the decimal representation of string as BIGINT.
+     */
+    DEFINE_VECTORIZED_FN(oct_length);
+    /**
+    * @param: [BigIntColumn, BigIntColumn]
+    * @return: BigIntColumn
+    */
 
     /**
      * @tparam : TYPE_DOUBLE, TYPE_BIGINT

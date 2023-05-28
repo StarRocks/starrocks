@@ -575,6 +575,8 @@
       + [mod](./sql-reference/sql-functions/math-functions/mod.md)
       + [multiply](./sql-reference/sql-functions/math-functions/multiply.md)
       + [negative](./sql-reference/sql-functions/math-functions/negative.md)
+      + [oct](./sql-reference/sql-functions//math-functions/oct.md)
+      + [oct_length](./sql-reference/sql-functions//math-functions/oct.md)
       + [pi](./sql-reference/sql-functions/math-functions/pi.md)
       + [pmod](./sql-reference/sql-functions/math-functions/pmod.md)
       + [positive](./sql-reference/sql-functions/math-functions/positive.md)

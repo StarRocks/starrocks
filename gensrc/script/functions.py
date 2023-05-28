@@ -184,6 +184,9 @@ vectorized_functions = [
 
     [10322, "square", "DOUBLE", ["DOUBLE"], "MathFunctions::square"],
 
+    [10324, "oct", "VARCHAR", ["BIGINT"], "MathFunctions::oct"],
+    [10325, "oct_length", "INT", ["BIGINT"], "MathFunctions::oct_length"],
+
     # 20xxx: bit functions
     [20010, 'bitand', 'TINYINT', ['TINYINT', 'TINYINT'], "BitFunctions::bitAnd<TYPE_TINYINT>"],
     [20011, 'bitand', 'SMALLINT', ['SMALLINT', 'SMALLINT'], "BitFunctions::bitAnd<TYPE_SMALLINT>"],
