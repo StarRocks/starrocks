@@ -1453,4 +1453,11 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int heartbeat_retry_times = 3;
+
+    /**
+     * Switch of the synchronization of OLAP external table meta,
+     * set this to true if users want to load data using OLAP external table.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_olap_external_table_sync = false;
 }
