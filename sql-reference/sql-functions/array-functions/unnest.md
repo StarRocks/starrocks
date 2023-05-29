@@ -100,7 +100,7 @@ DUPLICATE KEY(id)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(id) BUCKETS 1
 PROPERTIES (
-"replication_num" = "1");
+"replication_num" = "3");
 
 -- 向表插入数据。
 INSERT INTO example_table VALUES

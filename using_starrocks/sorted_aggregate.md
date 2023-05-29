@@ -2,7 +2,7 @@
 
 数据库常见的聚合方法有 Hash 聚合和排序聚合。
 
-从 2.5 版本开始，StarRocks 支持了有限的排序聚合 (Sorted streaming aggregate)。
+从 2.5 版本开始，StarRocks 支持了有序的排序聚合 (Sorted streaming aggregate)。
 
 ## 原理
 
@@ -45,7 +45,7 @@ set enable_sort_aggregate=true;
     COMMENT "OLAP"
     DISTRIBUTED BY HASH(`id_int`) BUCKETS 10 
     PROPERTIES (
-    "replication_num" = "1"
+    "replication_num" = "3"
     ); 
 
     INSERT INTO test_sorted_streaming_agg_basic VALUES

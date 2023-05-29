@@ -62,7 +62,7 @@ PARTITION BY RANGE(`date`)
 )
 DISTRIBUTED BY HASH(`date`) BUCKETS 1
 PROPERTIES
-("replication_num" = "1");
+("replication_num" = "3");
 
 INSERT INTO `my_table` VALUES
 ('2022-03-11', 3, 'abc'),
@@ -91,7 +91,7 @@ select * from my_table order by date;
 
 #### 删除数据
 
-##### 删除指定分区中的行
+**删除指定分区中的行**
 
 删除 `my_table` 表 `p1` 分区中 `k1` 列值为 `3` 的数据行。
 
@@ -109,7 +109,7 @@ select * from my_table partition (p1);
 +------------+------+------+
 ```
 
-##### 删除指定分区中满足 AND 条件的行
+**删除指定分区中满足 AND 条件的行**
 
 删除 `my_table` 表 `p1` 分区中 `k1` 列值大于等于 `3` 且 `k2` 列值为 `"abc"` 的数据行。
 
@@ -125,7 +125,7 @@ select * from my_table partition (p1);
 +------------+------+------+
 ```
 
-##### 删除所有分区中满足条件的行
+**删除所有分区中满足条件的行**
 
 删除 `my_table` 表所有分区中 `k2` 列值为 `"abc"` 或 `"cba"` 的数据行。
 
@@ -187,7 +187,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id`) BUCKETS 1
 PROPERTIES
 (
-    "replication_num" = "1",
+    "replication_num" = "3",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false"
 );
@@ -216,7 +216,7 @@ select * from score_board;
 
 #### 删除数据
 
-##### 按主键删除数据
+**按主键删除数据**
 
 通过指定主键，可以避免全表扫描。
 
@@ -236,7 +236,7 @@ select * from score_board;
 3 rows in set (0.01 sec)
 ```
 
-##### 按条件删除数据
+**按条件删除数据**
 
 条件中的列，可以为任意列。
 
@@ -285,7 +285,7 @@ select * from score_board;
 2 rows in set (0.00 sec)
 ```
 
-##### 按子查询结果删除数据
+**按子查询结果删除数据**
 
 可以在 `DELETE` 语句中嵌套一个或多个子查询，并使用子查询结果作为删除条件。
 
@@ -301,7 +301,7 @@ PRIMARY KEY(`uid`)COMMENT "OLAP"
 DISTRIBUTED BY HASH(`uid`) BUCKETS 1
 PROPERTIES
 (
-    "replication_num" = "1",
+    "replication_num" = "3",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false"
 );
@@ -360,7 +360,7 @@ select * from score_board;
 2 rows in set (0.00 sec)
 ```
 
-##### 按多表关联或者 CTE 的结果集删除数据
+**按多表关联或者 CTE 的结果集删除数据**
 
 删除制片人 foo 制作的所有电影，则可以执行以下语句：
 
