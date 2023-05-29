@@ -2,9 +2,9 @@
 
 ## 功能
 
-Select 语句由 select，from，where，group by，having，order by，union 等部分组成。
+SELECT 语句由 SELECT，FROM，WHERE，GROUP BY，HAVING，ORDER BY，UNION 等部分组成。
 
-StarRocks 的查询语句基本符合 SQL-92 标准，下面简要介绍支持的 select 用法。
+StarRocks 的查询语句基本符合 SQL-92 标准。下面简要介绍支持的 SELECT 用法。
 
 ### 连接 (Join)
 
@@ -465,11 +465,13 @@ select count(distinct tiny_column, int_column), count(distinct varchar_column) f
 
 ```sql
 SELECT x FROM t1 WHERE x [NOT] IN (SELECT y FROM t2);
-```
 
-```sql
+SELECT * FROM t1 WHERE (x,y) [NOT] IN (SELECT x,y FROM t2 LIMIT 2);
+
 SELECT x FROM t1 WHERE EXISTS (SELECT y FROM t2 WHERE y = 1);
 ```
+
+从 3.0 版本开始，`SELECT... FROM... WHERE... [NOT] IN` 支持在 WHERE 中指定多个字段进行比较，即上面第二个示例中的 `WHERE (x,y)` 用法。
 
 #### 相关子查询
 
