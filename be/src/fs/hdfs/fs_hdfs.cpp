@@ -177,6 +177,11 @@ private:
 
 Status HDFSWritableFile::append(const Slice& data) {
     tSize r = hdfsWrite(_fs, _file, data.data, data.size);
+    if (r == -1) { // error
+        auto error_msg = fmt::format("Fail to append {}: {}", _path, std::strerror(errno));
+        LOG(WARNING) << error_msg;
+        return Status::IOError(error_msg);
+    }
     if (r != data.size) {
         auto error_msg =
                 "Fail to append {}, expect written size: {}, actual written size {} "_format(_path, data.size, r);
