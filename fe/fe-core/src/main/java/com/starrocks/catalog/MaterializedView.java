@@ -1226,8 +1226,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @Override
     public void gsonPreProcess() throws IOException {
         this.serializedPartitionRefTableExprs = new ArrayList<>();
-        for (Expr partitionExpr : partitionRefTableExprs) {
-            serializedPartitionRefTableExprs.add(new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
+        if (partitionRefTableExprs != null) {
+            for (Expr partitionExpr : partitionRefTableExprs) {
+                if (partitionExpr != null) {
+                    serializedPartitionRefTableExprs.add(new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
+                }
+            }
         }
     }
 
@@ -1235,8 +1239,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
         partitionRefTableExprs = new ArrayList<>();
-        for (GsonUtils.ExpressionSerializedObject expressionSql : serializedPartitionRefTableExprs) {
-            partitionRefTableExprs.add(SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
+        if (serializedPartitionRefTableExprs != null) {
+            for (GsonUtils.ExpressionSerializedObject expressionSql : serializedPartitionRefTableExprs) {
+                if (expressionSql != null) {
+                    partitionRefTableExprs.add(SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
+                }
+            }
         }
     }
 }

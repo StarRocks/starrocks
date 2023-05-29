@@ -65,7 +65,9 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         super.gsonPreProcess();
         this.serializedPartitionExprs = new ArrayList<>();
         for (Expr partitionExpr : partitionExprs) {
-            serializedPartitionExprs.add(new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
+            if (partitionExpr != null) {
+                serializedPartitionExprs.add(new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
+            }
         }
     }
 
@@ -74,7 +76,9 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         super.gsonPostProcess();
         partitionExprs = new ArrayList<>();
         for (GsonUtils.ExpressionSerializedObject expressionSql : serializedPartitionExprs) {
-            partitionExprs.add(SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
+            if (expressionSql.expressionSql != null) {
+                partitionExprs.add(SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
+            }
         }
     }
 
@@ -131,9 +135,18 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         ExpressionRangePartitionInfo info = new ExpressionRangePartitionInfo();
         info.readFields(in);
         String json = Text.readString(in);
-        List<Expr> exprs = GsonUtils.GSON.fromJson(json, new TypeToken<List<Expr>>(){}.getType());
+        List<GsonUtils.ExpressionSerializedObject> expressionSerializedObjects =
+                GsonUtils.GSON.fromJson(json, new TypeToken<List<GsonUtils.ExpressionSerializedObject>>() {
+                }.getType());
+        List<Expr> partitionExprs = new ArrayList<>();
+        for (GsonUtils.ExpressionSerializedObject expressionSql : expressionSerializedObjects) {
+            if (expressionSql.expressionSql != null) {
+                partitionExprs.add(SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
+            }
+        }
+
         List<Column> partitionColumns = info.getPartitionColumns();
-        for (Expr expr : exprs) {
+        for (Expr expr : partitionExprs) {
             if (expr instanceof FunctionCallExpr) {
                 SlotRef slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
                 // TODO: Later, for automatically partitioned tables,
@@ -147,14 +160,21 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
                 }
             }
         }
-        info.setPartitionExprs(exprs);
+        info.setPartitionExprs(partitionExprs);
         return info;
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
-        Text.writeString(out, GsonUtils.GSON.toJson(partitionExprs));
+
+        this.serializedPartitionExprs = new ArrayList<>();
+        for (Expr partitionExpr : partitionExprs) {
+            if (partitionExpr != null) {
+                serializedPartitionExprs.add(new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
+            }
+        }
+        Text.writeString(out, GsonUtils.GSON.toJson(serializedPartitionExprs));
     }
 
     public void renameTableName(String newTableName) {
