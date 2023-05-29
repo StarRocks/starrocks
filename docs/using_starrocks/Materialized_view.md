@@ -257,11 +257,11 @@ View Delta Join queries can be rewritten only when the following requirements ar
 
   For example, the materialized view is of the form `A INNER JOIN B ON (A.a1 = B.b1) LEFT OUTER JOIN C ON (B.b2 = C.c1)`, and the query is of the form `A INNER JOIN B ON (A.a1 = B.b1)`. In this case, `B LEFT OUTER JOIN C ON (B.b2 = C.c1)` is the Delta Join. `B.b2` must be the Foreign Key of B, and `C.c1` must be the Primary Key or Unique Key of C.
 
-To implement the above constraints, you must define the Foreign Key constraints of a table using the property `unique_constraints/foreign_key_constraints` when creating the table. For more information, see [CREATE TABLE - PROPERTIES](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md#parameters).
+To implement the above constraints, you must define the Unique Key constraints and Foreign Key constraints of a table using the properties `unique_constraints` and `foreign_key_constraints` when creating the table. For more information, see [CREATE TABLE - PROPERTIES](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md#parameters).
 
 > **CAUTION**
 >
-> The Unique Key constraints and Foreign Key constraints are only used for query rewrite. Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
+> The Unique Key constraints and Foreign Key constraints are only used for query rewrite. The Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
 
 The following example defines multiple Foreign Keys when creating the table `lineorder`:
 
