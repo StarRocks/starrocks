@@ -348,10 +348,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
 #endif
 
-#if defined(USE_STAROS) && !defined(BE_TEST)
-    _lake_tablet_manager->start_gc();
-#endif
-
     _agent_server = new AgentServer(this, false);
     _agent_server->init_or_die();
 
@@ -366,6 +362,10 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init());
+
+#if defined(USE_STAROS) && !defined(BE_TEST)
+    _lake_tablet_manager->start_gc();
+#endif
     return Status::OK();
 }
 
