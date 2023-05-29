@@ -1014,6 +1014,18 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             cluster.removeComputeNode(computeNodeId);
+<<<<<<< HEAD
+=======
+            // clear map in starosAgent
+            if (RunMode.allowCreateLakeTable()) {
+                long starletPort = cn.getStarletPort();
+                if (starletPort == 0) {
+                    return;
+                }
+                String workerAddr = cn.getHost() + ":" + starletPort;
+                GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerAddr);
+            }
+>>>>>>> f72d55cf5 ([BugFix]fix NPE bug when execute "drop compute node/drop backend" on follower FE (#24284))
         } else {
             LOG.error("Cluster DEFAULT_CLUSTER " + DEFAULT_CLUSTER + " no exist.");
         }
@@ -1042,8 +1054,12 @@ public class SystemInfoService {
                     return;
                 }
                 String workerAddr = backend.getHost() + ":" + starletPort;
+<<<<<<< HEAD
                 long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerId(workerAddr);
                 GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerId, workerAddr);
+=======
+                GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerAddr);
+>>>>>>> f72d55cf5 ([BugFix]fix NPE bug when execute "drop compute node/drop backend" on follower FE (#24284))
             }
         } else {
             LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
