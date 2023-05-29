@@ -12,7 +12,7 @@ This change does not affect your download behavior or use of StarRocks. You can 
 
 ## Precautions
 
-GDB 12.0 or later is recommended for debugging.
+GDB 12.1 or later is recommended for debugging.
 
 ## How to use the debuginfo file
 
