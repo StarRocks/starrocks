@@ -332,7 +332,7 @@ StarRocks 访问 Hudi 集群文件存储的相关参数配置。
   ```SQL
   "azure.adls2.oauth2_client_id" = "<service_client_id>",
   "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
   `StorageCredentialParams` 包含如下参数。
@@ -649,7 +649,7 @@ PROPERTIES
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-      "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint> 
+      "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>" 
   );
   ```
 
