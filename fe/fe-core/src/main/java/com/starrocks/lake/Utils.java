@@ -118,14 +118,10 @@ public class Utils {
             request.tabletIds = entry.getValue();
             request.txnIds = txnIds;
 
-            try {
-                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
-                Future<PublishVersionResponse> future = lakeService.publishVersion(request);
-                responseList.add(future);
-                backendList.add(backend);
-            } catch (Throwable e) {
-                throw new RpcException(backend.getHost(), e.getMessage());
-            }
+            LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+            Future<PublishVersionResponse> future = lakeService.publishVersion(request);
+            responseList.add(future);
+            backendList.add(backend);
         }
 
         for (int i = 0; i < responseList.size(); i++) {
@@ -167,14 +163,10 @@ public class Utils {
             request.txnId = txnId;
             request.version = version;
 
-            try {
-                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
-                Future<PublishLogVersionResponse> future = lakeService.publishLogVersion(request);
-                responseList.add(future);
-                backendList.add(backend);
-            } catch (Throwable e) {
-                throw new RpcException(backend.getHost(), e.getMessage());
-            }
+            LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+            Future<PublishLogVersionResponse> future = lakeService.publishLogVersion(request);
+            responseList.add(future);
+            backendList.add(backend);
         }
 
         for (int i = 0; i < responseList.size(); i++) {
