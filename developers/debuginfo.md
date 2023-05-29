@@ -6,6 +6,10 @@
 
 ![debuginfo](/assets/debug-en.png)
 
+## 注意事项
+
+推荐使用 GDB 12.1 及以上版本进行调试。
+
 ## 使用方法
 
 1. 下载并解压 debuginfo 包。
