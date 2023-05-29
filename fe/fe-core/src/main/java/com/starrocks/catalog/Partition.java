@@ -348,6 +348,10 @@ public class Partition extends MetaObject implements Writable {
                 || FeConstants.runningUnitTest);
     }
 
+    public boolean isFirstLoad() {
+        return visibleVersion == PARTITION_INIT_VERSION + 1;
+    }
+
     /*
      * Change the index' state from SHADOW to NORMAL
      * Also move it to idToVisibleRollupIndex if it is not the base index.

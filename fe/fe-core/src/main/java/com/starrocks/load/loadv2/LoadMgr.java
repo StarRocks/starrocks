@@ -691,7 +691,7 @@ public class LoadMgr implements Writable {
     public void updateJobPrgress(Long jobId, TReportExecStatusParams params) {
         LoadJob job = idToLoadJob.get(jobId);
         if (job != null) {
-            job.updateProgess(params);
+            job.updateProgress(params);
         }
     }
 

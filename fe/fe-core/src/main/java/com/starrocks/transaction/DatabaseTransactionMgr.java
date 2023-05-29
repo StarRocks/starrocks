@@ -67,6 +67,7 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
 import org.apache.commons.collections4.CollectionUtils;
@@ -82,6 +83,7 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -1048,6 +1050,9 @@ public class DatabaseTransactionMgr {
             db.writeUnlock();
             finishSpan.end();
         }
+
+        collectStatisticsForStreamLoadOnFirstLoad(transactionState, db);
+
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
@@ -1687,7 +1692,30 @@ public class DatabaseTransactionMgr {
             db.writeUnlock();
             finishSpan.end();
         }
+
+        collectStatisticsForStreamLoadOnFirstLoad(transactionState, db);
+
         LOG.info("finish transaction {} successfully", transactionState);
+    }
+
+    private void collectStatisticsForStreamLoadOnFirstLoad(TransactionState txnState, Database db) {
+        TransactionState.LoadJobSourceType sourceType = txnState.getSourceType();
+        if (!TransactionState.LoadJobSourceType.FRONTEND_STREAMING.equals(sourceType)
+                && !TransactionState.LoadJobSourceType.BACKEND_STREAMING.equals(sourceType)) {
+            return;
+        }
+        List<Table> tables = txnState.getIdToTableCommitInfos().values().stream()
+                .map(TableCommitInfo::getTableId)
+                .distinct()
+                .map(db::getTable)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        StatisticUtils.CountedListener counteredListener =
+                StatisticUtils.createCounteredListener(tables.size(), null);
+        for (Table table : tables) {
+            StatisticUtils.triggerCollectionOnFirstLoad(txnState, db, table, false, counteredListener);
+        }
     }
 
     public String getTxnPublishTimeoutDebugInfo(long txnId) {

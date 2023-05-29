@@ -46,6 +46,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.loadv2.dpp.DppResult;
+import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TEtlState;
 import com.starrocks.thrift.TReportExecStatusParams;
@@ -149,6 +150,14 @@ public class EtlStatus implements Writable {
 
     public void setCounters(Map<String, String> counters) {
         this.counters = counters;
+    }
+
+    public Long getLoadedRows(long tableId) {
+        Map<String, Long> counters = tableCounters.get(tableId);
+        if (counters == null) {
+            return null;
+        }
+        return counters.get(TableMetricsEntity.TABLE_LOAD_ROWS);
     }
 
     public Map<String, Long> getFileMap() {
