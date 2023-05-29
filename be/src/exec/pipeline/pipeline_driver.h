@@ -407,7 +407,7 @@ public:
     /// Handle the event where the fragment instance is cancelled.
     /// Transition to CANCELLED or PENDING_CANCELLED.
     DriverState on_cancelling(DriverState final_state = DriverState::CANCELED);
-    /// Handle the event where the sink operator.
+    /// Handle the event where the sink operator is finished.
     /// Transition to FINISH or PENDING_FINISH.
     DriverState on_finishing();
     /// Handle the event where the pending state is finished.
