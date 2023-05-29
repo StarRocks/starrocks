@@ -88,11 +88,7 @@ public class BrpcProxy {
         try {
             return lakeServiceMap.computeIfAbsent(address, this::createLakeService);
         } catch (Exception e) {
-            if (e.getCause() != null) {
-                throw new RpcException(address.getHostname(), e.getCause().getMessage());
-            } else {
-                throw new RpcException(address.getHostname(), e.getMessage());
-            }
+            throw new RpcException(e);
         }
     }
 
