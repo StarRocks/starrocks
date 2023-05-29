@@ -16,8 +16,8 @@ From v2.5 onwards, StarRocks no longer depends on brokers to set up connections 
 
 When your data is stored in HDFS, however, broker-free loading may not work and you can resort to broker-based loading:
 
-- If you load data from multiple HDFS clusters, you need to deploy and configure an independent broker for each of these HDFS clusters.
-- If you load data from a single HDFS cluster and you have configured multiple Kerberos users, you need to deploy one independent broker.
+- If you load data from multiple HDFS clusters, you need to deploy an independent broker group for each of these HDFS clusters.
+- If you load data from a single HDFS cluster and you have configured multiple Kerberos users, you need to deploy at least one independent broker group for your HDFS cluster (in most cases, one broker group is sufficient).
 
 > **NOTE**
 >
