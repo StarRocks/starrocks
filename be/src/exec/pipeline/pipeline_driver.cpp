@@ -215,7 +215,7 @@ bool PipelineDriver::is_expirable() const {
 bool PipelineDriver::is_cancelable() const {
     // Return false,
     // - when the driver is at finished state,
-    // - or has already been cancelled and at pending state.
+    // - or has already been cancelled and still at pending state.
     return !is_finished() && _state != DriverState::PENDING_CANCELLED && _state != DriverState::EPOCH_PENDING_CANCELLED;
 };
 
