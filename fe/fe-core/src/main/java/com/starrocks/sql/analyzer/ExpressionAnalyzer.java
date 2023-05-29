@@ -992,9 +992,9 @@ public class ExpressionAnalyzer {
                     fn = Expr.getBuiltinFunction(FunctionSet.ARRAY_CONCAT, argumentTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 }
-            } else if (FunctionSet.NAME_STRUCT.equals(fnName)) {
+            } else if (FunctionSet.NAMED_STRUCT.equals(fnName)) {
                 // deriver struct type
-                fn = Expr.getBuiltinFunction(FunctionSet.NAME_STRUCT, argumentTypes,
+                fn = Expr.getBuiltinFunction(FunctionSet.NAMED_STRUCT, argumentTypes,
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 fn = fn.copy();
                 ArrayList<StructField> sf = Lists.newArrayList();
@@ -1159,7 +1159,7 @@ public class ExpressionAnalyzer {
                     }
                     break;
                 }
-                case FunctionSet.NAME_STRUCT: {
+                case FunctionSet.NAMED_STRUCT: {
                     if (node.getChildren().size() < 2) {
                         throw new SemanticException(fnName + " should have at least two inputs", node.getPos());
                     }
@@ -1171,13 +1171,13 @@ public class ExpressionAnalyzer {
                     for (int i = 0; i < node.getChildren().size(); i = i + 2) {
                         if (!(node.getChild(i) instanceof StringLiteral)) {
                             throw new SemanticException(
-                                    "The " + (i + 1) + "-th input of name_struct must be string literal",
+                                    "The " + (i + 1) + "-th input of named_struct must be string literal",
                                     node.getPos());
                         }
 
                         String name = ((StringLiteral) node.getChild(i)).getValue();
                         if (check.contains(name)) {
-                            throw new SemanticException("name_struct contains duplicate subfield name: " +
+                            throw new SemanticException("named_struct contains duplicate subfield name: " +
                                     name + " at " + (i + 1) + "-th input", node.getPos());
                         }
 

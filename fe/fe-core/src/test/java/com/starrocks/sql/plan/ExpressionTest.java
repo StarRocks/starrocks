@@ -1478,29 +1478,29 @@ public class ExpressionTest extends PlanTestBase {
         assertCContains(plan, "struct<col1 varchar, col2 tinyint(4), col3 tinyint(4), col4 smallint(6), " +
                 "col5 array<tinyint(4)>, col6 boolean, col7 map<varchar,tinyint(4)>>");
 
-        sql = "select name_struct('a', 1, 'b', 2)";
+        sql = "select named_struct('a', 1, 'b', 2)";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "struct<a tinyint(4), b tinyint(4)>");
 
         try {
-            sql = "select name_struct('a', 1, 'b', 2, 3, 6)";
+            sql = "select named_struct('a', 1, 'b', 2, 3, 6)";
             plan = getVerboseExplain(sql);
         } catch (Exception e) {
-            assertCContains(e.getMessage(), "The 5-th input of name_struct must be string literal");
+            assertCContains(e.getMessage(), "The 5-th input of named_struct must be string literal");
         }
 
         try {
-            sql = "select name_struct('a', 1, 'b', 2, 3, 'x', 6)";
+            sql = "select named_struct('a', 1, 'b', 2, 3, 'x', 6)";
             plan = getVerboseExplain(sql);
         } catch (Exception e) {
-            assertCContains(e.getMessage(), "name_struct arguments must be in name/value pairs");
+            assertCContains(e.getMessage(), "named_struct arguments must be in name/value pairs");
         }
 
         try {
-            sql = "select name_struct('a', 1, 'a', 2)";
+            sql = "select named_struct('a', 1, 'a', 2)";
             plan = getVerboseExplain(sql);
         } catch (Exception e) {
-            assertCContains(e.getMessage(), "name_struct contains duplicate subfield name: a at 3-th input");
+            assertCContains(e.getMessage(), "named_struct contains duplicate subfield name: a at 3-th input");
         }
     }
 

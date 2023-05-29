@@ -71,7 +71,7 @@ PARALLEL_TEST(StructFunctionsTest, test_new_struct) {
     ASSERT_STREQ("{col1:5,col2:4,col3:3,col4:2,col5:1}", struct_col->debug_item(2).c_str());
 }
 
-PARALLEL_TEST(StructFunctionsTest, test_name_struct) {
+PARALLEL_TEST(StructFunctionsTest, test_named_struct) {
     Columns input_columns;
     for (int i = 0; i < 6; ++i) {
         TypeDescriptor type;
@@ -108,7 +108,7 @@ PARALLEL_TEST(StructFunctionsTest, test_name_struct) {
 
     FunctionContext* context = FunctionContext::create_context(nullptr, nullptr, ret_type, arg_types);
 
-    auto ret = StructFunctions::name_struct(context, input_columns);
+    auto ret = StructFunctions::named_struct(context, input_columns);
     delete context;
     ASSERT_TRUE(ret.ok());
     auto struct_col = std::move(ret).value();

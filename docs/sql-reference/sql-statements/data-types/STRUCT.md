@@ -35,7 +35,7 @@ create table t2(
   c0 INT,
   c1 STRUCT<a INT, b INT> NOT NULL
 )
-duplicate key(c0)
+duplicate key(c0);
 ~~~
 
 The struct type has the following restrictions:
@@ -73,7 +73,7 @@ There are two ways to write struct values to StarRocks. Insert into is suitable 
 
 * **Import from ORC Parquet file**
 
-  The struct type in StarRocks corresponds to the list structure in ORC/Parquet format; no additional specification is needed. 
+  The struct type in StarRocks corresponds to the nest columns structure in ORC/Parquet format; no additional specification is needed. 
 
 
 ### Struct element access

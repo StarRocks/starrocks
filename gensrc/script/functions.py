@@ -973,5 +973,5 @@ vectorized_functions = [
 
     # struct functions
     [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::new_struct'],
-    [170501, 'name_struct', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::name_struct'],
+    [170501, 'named_struct', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::named_struct'],
 ]

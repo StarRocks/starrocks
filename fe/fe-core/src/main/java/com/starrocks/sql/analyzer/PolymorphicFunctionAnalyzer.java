@@ -221,7 +221,7 @@ public class PolymorphicFunctionAnalyzer {
             .put("nullif", new CommonDeduce())
             .put("coalesce", new CommonDeduce())
             // it's mock, need handle it in expressionAnalyzer
-            .put(FunctionSet.NAME_STRUCT, new RowDeduce())
+            .put(FunctionSet.NAMED_STRUCT, new RowDeduce())
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {

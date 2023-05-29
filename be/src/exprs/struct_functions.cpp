@@ -42,7 +42,7 @@ StatusOr<ColumnPtr> StructFunctions::new_struct(FunctionContext* context, const 
     return res;
 }
 
-StatusOr<ColumnPtr> StructFunctions::name_struct(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StructFunctions::named_struct(FunctionContext* context, const Columns& columns) {
     Columns cols;
     for (int i = 1; i < columns.size(); i = i + 2) {
         cols.emplace_back(columns[i]);
