@@ -1046,7 +1046,7 @@ public class MaterializedViewRewriter {
                 // predicate can not be pushdown, we should add it it optExpression
                 Operator.Builder builder = OperatorBuilderFactory.build(optExpression.getOp());
                 builder.withOperator(optExpression.getOp());
-                builder.setPredicate(predicate);
+                builder.setPredicate(Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
                 Operator newQueryOp = builder.build();
                 return OptExpression.create(newQueryOp, optExpression.getInputs());
             } else {
