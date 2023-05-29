@@ -601,6 +601,10 @@ public class ConnectContext {
         this.parent = parent;
     }
 
+    public ConnectContext getParent() {
+        return parent;
+    }
+
     // kill operation with no protect.
     public void kill(boolean killConnection) {
         LOG.warn("kill query, {}, kill connection: {}",

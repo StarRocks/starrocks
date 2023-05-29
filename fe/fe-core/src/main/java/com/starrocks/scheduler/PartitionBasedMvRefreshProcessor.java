@@ -968,6 +968,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         ConnectContext ctx = mvContext.getCtx();
         StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
         ctx.setExecutor(executor);
+        if (ctx.getParent() != null && ctx.getParent().getExecutor() != null) {
+            StmtExecutor parentStmtExecutor = ctx.getParent().getExecutor();
+            parentStmtExecutor.registerSubStmtExecutor(executor);
+        }
         ctx.setStmtId(new AtomicInteger().incrementAndGet());
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
         try {
