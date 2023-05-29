@@ -168,6 +168,7 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 [Stream Loa
 | sink.properties.*                | 否       | 无          | String   | Stream Load 的参数，控制导入行为，例如 `sink.properties.columns`，支持的参数和说明，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。 <br> **说明** <br> 自 2.4 版本起，flink-connector-starrocks 支持主键模型的表进行部分更新。 |
 | sink.properties.format           | 否       | CSV           | String   | Stream Load 导入时的数据格式。取值为 `CSV` 或者 `JSON`。      |
 | sink.properties.timeout          | 否       | 600           | String   | Stream Load 超时时间，单位为秒。 exactly-once 下需要确保该值大于 Flink checkpoint 间隔。 |
+| sink.properties.max_filter_ratio | 否       | 0             | String   | 用于指定导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：0~1。默认值：0。更多说明，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD#opt_properties)。|
 
 ## Flink 与 StarRocks 的数据类型映射关系
 
