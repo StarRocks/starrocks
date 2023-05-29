@@ -289,7 +289,7 @@ DUPLICATE KEY(`lo_orderkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 192
 PROPERTIES (
--- Define Unqiue Keys in unique_constraints
+-- Define Unique Keys in unique_constraints
 "unique_constraints" = "lo_orderkey,lo_linenumber",
 -- Define Foreign Keys in foreign_key_constraints
 "foreign_key_constraints" = "
