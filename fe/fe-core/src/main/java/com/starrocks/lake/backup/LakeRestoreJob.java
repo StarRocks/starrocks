@@ -52,6 +52,7 @@ import com.starrocks.proto.RestoreSnapshotsRequest;
 import com.starrocks.proto.RestoreSnapshotsResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.THdfsProperties;
@@ -205,7 +206,12 @@ public class LakeRestoreJob extends RestoreJob {
     protected void sendDownloadTasks() {
         for (Map.Entry<Long, RestoreSnapshotsRequest> entry : requests.entrySet()) {
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey());
-            LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+            LakeService lakeService = null;
+            try {
+                lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+            } catch (RpcException e) {
+                throw new RuntimeException(e);
+            }
             Future<RestoreSnapshotsResponse> response = lakeService.restoreSnapshots(entry.getValue());
             responses.put(entry.getKey(), response);
         }

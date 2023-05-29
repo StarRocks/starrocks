@@ -39,6 +39,7 @@ import com.starrocks.proto.UploadSnapshotsRequest;
 import com.starrocks.proto.UploadSnapshotsResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.THdfsProperties;
@@ -133,7 +134,12 @@ public class LakeBackupJob extends BackupJob {
     protected void sendSnapshotRequests() {
         for (Map.Entry<SnapshotInfo, LockTabletMetadataRequest> entry : lockRequests.entrySet()) {
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey().getBeId());
-            LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+            LakeService lakeService = null;
+            try {
+                lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+            } catch (RpcException e) {
+                throw new RuntimeException(e);
+            }
             Future<LockTabletMetadataResponse> response = lakeService.lockTabletMetadata(entry.getValue());
             lockResponses.put(entry.getKey(), response);
         }
@@ -151,8 +157,13 @@ public class LakeBackupJob extends BackupJob {
             request.version = ((LakeTableSnapshotInfo) info).getVersion();
             request.expireTime = (createTime + timeoutMs) / 1000;
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(info.getBeId());
-            LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(),
-                    backend.getBrpcPort());
+            LakeService lakeService = null;
+            try {
+                lakeService = BrpcProxy.getLakeService(backend.getHost(),
+                        backend.getBrpcPort());
+            } catch (RpcException e) {
+                throw new RuntimeException(e);
+            }
             lakeService.unlockTabletMetadata(request);
         }
     }
@@ -182,7 +193,12 @@ public class LakeBackupJob extends BackupJob {
     @Override
     protected void sendUploadTasks() {
         for (Map.Entry<Backend, UploadSnapshotsRequest> entry : uploadRequests.entrySet()) {
-            LakeService lakeService = BrpcProxy.getLakeService(entry.getKey().getHost(), entry.getKey().getBrpcPort());
+            LakeService lakeService = null;
+            try {
+                lakeService = BrpcProxy.getLakeService(entry.getKey().getHost(), entry.getKey().getBrpcPort());
+            } catch (RpcException e) {
+                throw new RuntimeException(e);
+            }
             Future<UploadSnapshotsResponse> response = lakeService.uploadSnapshots(entry.getValue());
             uploadResponses.put(entry.getKey().getId(), response);
         }
