@@ -39,8 +39,8 @@ Use the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definitio
 CREATE EXTERNAL CATALOG hive_catalog_gcs
 PROPERTIES
 (
-    "type"="hive", 
-    "hive.metastore.uris"="thrift://34.132.15.127:9083",
+    "type" = "hive", 
+    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
     StorageCredentialParams
 );
 ```
