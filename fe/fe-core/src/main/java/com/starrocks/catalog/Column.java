@@ -597,15 +597,22 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         } else {
             sb.append("NOT NULL ");
         }
-        if (isAutoIncrement) {
+        if (defaultExpr == null && isAutoIncrement) {
             sb.append("AUTO_INCREMENT ");
-        }
-        if (isMaterializedColumn()) {
-            sb.append("AS " + materializedColumnExpr.toSql() + " ");
+        } else if (defaultExpr != null) {
+            if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+                // compatible with mysql
+                sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
+            } else {
+                sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
+            }
         }
         if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
                 getPrimitiveType() != PrimitiveType.BITMAP) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
+        }
+        if (isMaterializedColumn()) {
+            sb.append("AS " + materializedColumnExpr.toSql() + " ");
         }
         sb.append("COMMENT \"").append(comment).append("\"");
 
