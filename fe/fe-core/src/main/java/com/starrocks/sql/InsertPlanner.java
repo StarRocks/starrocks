@@ -463,12 +463,6 @@ public class InsertPlanner {
             if ((targetColumn.isNameWithPrefix(MATERIALIZED_VIEW_NAME_PREFIX)
                     || insertStatement.getTargetTable().getMVSchema().contains(targetColumn))
                     && !baseSchema.contains(targetColumn)) {
-                String originName = targetColumn.getRefColumn().getColumnName();
-                Optional<Column> optOriginColumn = fullSchema.stream()
-                        .filter(c -> c.nameEquals(originName, false)).findFirst();
-                Preconditions.checkState(optOriginColumn.isPresent());
-                Column originColumn = optOriginColumn.get();
-                ColumnRefOperator originColRefOp = outputColumns.get(fullSchema.indexOf(originColumn));
 
                 ExpressionAnalyzer.analyzeExpression(targetColumn.getDefineExpr(), new AnalyzeState(),
                         new Scope(RelationId.anonymous(),
@@ -480,7 +474,21 @@ public class InsertPlanner {
                 ExpressionMapping expressionMapping =
                         new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
                                 Lists.newArrayList());
-                expressionMapping.put(targetColumn.getRefColumn(), originColRefOp);
+                List<SlotRef> slots = targetColumn.getRefColumns();
+
+                for (SlotRef slot : slots) {
+                    String originName = slot.getColumnName();
+
+                    Optional<Column> optOriginColumn = fullSchema.stream()
+                            .filter(c -> c.nameEquals(originName, false)).findFirst();
+                    Preconditions.checkState(optOriginColumn.isPresent());
+
+                    Column originColumn = optOriginColumn.get();
+                    ColumnRefOperator originColRefOp = outputColumns.get(fullSchema.indexOf(originColumn));
+
+                    expressionMapping.put(slot, originColRefOp);
+                }
+
                 ScalarOperator scalarOperator =
                         SqlToScalarOperatorTranslator.translate(targetColumn.getDefineExpr(), expressionMapping,
                                 columnRefFactory);
