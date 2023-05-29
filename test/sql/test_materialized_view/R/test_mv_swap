@@ -86,10 +86,10 @@ INSERT INTO ss values('2020-01-15', 2);
 SELECT * FROM mv1;
 -- result:
 2020-01-14	2
-2020-01-15	1
+2020-01-15	2
 -- !result
 SELECT * FROM mv2;
 -- result:
 2020-01-14	5
-2020-01-15	2
+2020-01-15	4
 -- !result

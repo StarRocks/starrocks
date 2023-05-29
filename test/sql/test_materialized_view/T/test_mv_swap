@@ -25,6 +25,6 @@ DESC mv2;
 INSERT INTO ss values('2020-01-15', 2);
 [UC]REFRESH MATERIALIZED VIEW mv1;
 [UC]REFRESH MATERIALIZED VIEW mv2;
-select sleep(1000);
+select sleep(2);
 SELECT * FROM mv1;
 SELECT * FROM mv2;
