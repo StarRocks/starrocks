@@ -270,10 +270,6 @@ public class MaterializedViewHandler extends AlterHandler {
         // logical materialized view's column should be in the target table.
         Set<String> mvColumnNames = Sets.newHashSet();
         for (Column mvCol : mvColumns) {
-            if (!targetOlapTable.containColumn(mvCol.getName())) {
-                throw new DdlException("create logical materialized failed. Logical materialized view column:" + mvCol
-                        + " should in the target table" + targetOlapTable);
-            }
             mvColumnNames.add(mvCol.getName());
         }
         if (mvColumns.size() != targetOlapTable.getBaseSchema().size()) {
@@ -285,10 +281,6 @@ public class MaterializedViewHandler extends AlterHandler {
         for (int i = 0; i < targetOlapTable.getBaseSchema().size(); i++) {
             Column targetCol = targetTable.getBaseSchema().get(i);
             Column mvCol = mvColumns.get(i);
-            if (!mvCol.getName().equals(targetCol.getName())) {
-                throw new DdlException("create logical materialized failed. Logical materialized view column name "
-                        + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));
-            }
             if (!mvCol.getType().equals(targetCol.getType())) {
                 throw new DdlException("create logical materialized failed. Logical materialized view column type "
                         + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));

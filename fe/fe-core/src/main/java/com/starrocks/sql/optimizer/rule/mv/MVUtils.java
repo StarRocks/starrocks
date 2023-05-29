@@ -74,4 +74,8 @@ public class MVUtils {
         return new StringBuilder().append(MATERIALIZED_VIEW_NAME_PREFIX).append(functionName).append("_")
                 .append(String.join("_", baseColumnNames)).toString();
     }
+
+    public static String getMVColumnName(String alias) {
+        return new StringBuilder().append(MATERIALIZED_VIEW_NAME_PREFIX).append(alias).toString();
+    }
 }
