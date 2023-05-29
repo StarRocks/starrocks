@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS detail (
 DUPLICATE KEY(event_time, event_type)
 DISTRIBUTED BY HASH(user_id) BUCKETS 8
 PROPERTIES (
-"replication_num" = "1"
+"replication_num" = "3"
 );
 ```
 

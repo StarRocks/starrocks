@@ -385,12 +385,12 @@ StarRocks 支持对 Elasticsearch 表进行谓词下推，把过滤条件推给 
 ~~~SQL
 create external resource jdbc0
 properties (
-    "type"="jdbc",
-    "user"="postgres",
-    "password"="changeme",
-    "jdbc_uri"="jdbc:postgresql://127.0.0.1:5432/jdbc_test",
-    "driver_url"="https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar",
-    "driver_class"="org.postgresql.Driver"
+    "type" = "jdbc",
+    "user" = "postgres",
+    "password" = "changeme",
+    "jdbc_uri" = "jdbc:postgresql://127.0.0.1:5432/jdbc_test",
+    "driver_url" = "https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar",
+    "driver_class" = "org.postgresql.Driver"
 );
 ~~~
 
@@ -476,8 +476,8 @@ create external table jdbc_tbl (
     `data` varchar(200) NULL 
 ) ENGINE=jdbc 
 properties (
-    "resource"="jdbc0",
-    "table"="dest_tbl"
+    "resource" = "jdbc0",
+    "table" = "dest_tbl"
 );
 ~~~
 
@@ -912,7 +912,10 @@ Hive 表 (Hive Table) 的 Partition 统计信息以及 Partition 下面的文件
 
 ~~~SQL
 CREATE EXTERNAL RESOURCE "iceberg0" 
-PROPERTIES ( "type" = "iceberg", "iceberg.catalog.type"="HIVE", "iceberg.catalog.hive.metastore.uris"="thrift://192.168.0.81:9083" 
+PROPERTIES (
+   "type" = "iceberg",
+   "iceberg.catalog.type" = "HIVE",
+   "iceberg.catalog.hive.metastore.uris" = "thrift://192.168.0.81:9083" 
 );
 ~~~
 
@@ -932,7 +935,10 @@ Custom catalog 需要继承抽象类 BaseMetastoreCatalog，并实现 IcebergCat
 
 ~~~SQL
 CREATE EXTERNAL RESOURCE "iceberg1" 
-PROPERTIES ( "type" = "iceberg", "iceberg.catalog.type"="CUSTOM", "iceberg.catalog-impl"="com.starrocks.IcebergCustomCatalog" 
+PROPERTIES (
+   "type" = "iceberg",
+   "iceberg.catalog.type" = "CUSTOM",
+   "iceberg.catalog-impl" = "com.starrocks.IcebergCustomCatalog" 
 );
 ~~~
 

@@ -149,7 +149,7 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
    COMMENT "OLAP"
    DISTRIBUTED BY HASH(`id`) BUCKETS 1
    PROPERTIES (
-       "replication_num" = "1"
+       "replication_num" = "3"
    );
    ```
 
@@ -401,7 +401,7 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
    )
    DISTRIBUTED BY HASH(`k`) BUCKETS 3
    PROPERTIES (
-       "replication_num" = "1"
+       "replication_num" = "3"
    );
    ```
 

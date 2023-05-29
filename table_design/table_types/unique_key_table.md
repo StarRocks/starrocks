@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS orders (
 UNIQUE KEY(create_time, order_id)
 DISTRIBUTED BY HASH(order_id) BUCKETS 8
 PROPERTIES (
-"replication_num" = "1"
+"replication_num" = "3"
 ); 
 ```
 

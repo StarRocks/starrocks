@@ -140,7 +140,7 @@ PARTITION BY RANGE (datekey) (
 )
 DISTRIBUTED BY HASH(site_id) BUCKETS 10
 PROPERTIES (
-    "replication_num" = "1" 
+    "replication_num" = "3" 
 );
 ```
 
@@ -175,7 +175,7 @@ PARTITION BY RANGE (datekey) (
 )
 DISTRIBUTED BY HASH(site_id) BUCKETS 10
 PROPERTIES (
-    "replication_num" = "1"
+    "replication_num" = "3"
 );
 ```
 
@@ -218,7 +218,7 @@ PARTITION BY RANGE (datekey) (
 )
 DISTRIBUTED BY HASH(site_id) BUCKETS 10
 PROPERTIES (
-    "replication_num" = "1"
+    "replication_num" = "3"
 );
 ```
 

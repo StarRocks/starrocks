@@ -76,7 +76,7 @@ PARTITION BY RANGE(`recruit_date`)
 )
 DISTRIBUTED BY HASH(`recruit_date`, `region_num`) BUCKETS 8
 PROPERTIES (
-    "replication_num" = "1" 
+    "replication_num" = "3" 
 );
 ```
 

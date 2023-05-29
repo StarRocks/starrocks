@@ -25,7 +25,7 @@ DUPLICATE KEY(`id`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id`) BUCKETS 1
 PROPERTIES (
-    "replication_num" = "1",
+    "replication_num" = "3",
     "storage_format" = "DEFAULT"
 );
 ```
