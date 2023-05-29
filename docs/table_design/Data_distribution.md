@@ -234,8 +234,7 @@ If you need to create partitions in advance, you can use other partition creatio
           START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 DAY)
       )
       DISTRIBUTED BY HASH(site_id) BUCKETS 10
-      PROPERTIES ("replication_num" = "1" 
-      );
+      PROPERTIES ("replication_num" = "3" );
       ```
 
       The PARTITION BY RANGE clause in this example is equal to the following:
@@ -268,7 +267,7 @@ If you need to create partitions in advance, you can use other partition creatio
       )
       DISTRIBUTED BY HASH(site_id) BUCKETS 10
       PROPERTIES(
-          "replication_num" = "1"
+          "replication_num" = "3"
       );
       ```
 
@@ -306,8 +305,7 @@ If you need to create partitions in advance, you can use other partition creatio
       PARTITION BY RANGE (datekey) (START ("1") END ("5") EVERY (1)
       )
       DISTRIBUTED BY HASH(site_id) BUCKETS 10
-      PROPERTIES ("replication_num" = "1"
-      );
+      PROPERTIES ("replication_num" = "3");
       ```
 
       The PARTITION BY RANGE clause in this example is equal to the following:

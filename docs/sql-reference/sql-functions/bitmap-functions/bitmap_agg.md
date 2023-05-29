@@ -38,7 +38,7 @@ mysql> CREATE TABLE t1_test (
 DUPLICATE KEY(c1)
 DISTRIBUTED BY HASH(c1)
 BUCKETS 1
-PROPERTIES ("replication_num" = "1");
+PROPERTIES ("replication_num" = "3");
 
 INSERT INTO t1_test VALUES
     (1, true, 11, 111, 1111, 11111),

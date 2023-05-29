@@ -78,7 +78,7 @@ Take the calculation of page UVs as an example.
     AGGREGATE KEY(`page_id`, `visit_date`)
     DISTRIBUTED BY HASH(`page_id`) BUCKETS 1
     PROPERTIES (
-      "replication_num" = "1",
+      "replication_num" = "3",
       "storage_format" = "DEFAULT"
     );
     ```

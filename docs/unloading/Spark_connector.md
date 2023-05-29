@@ -147,7 +147,7 @@ Do as follows to prepare a sample table:
    COMMENT "OLAP"
    DISTRIBUTED BY HASH(`id`) BUCKETS 1
    PROPERTIES (
-       "replication_num" = "1"
+       "replication_num" = "3"
    );
    ```
 
@@ -400,7 +400,7 @@ Do as follows to prepare a sample table:
    )
    DISTRIBUTED BY HASH(`k`) BUCKETS 3
    PROPERTIES (
-       "replication_num" = "1"
+       "replication_num" = "3"
    );
    ```
 

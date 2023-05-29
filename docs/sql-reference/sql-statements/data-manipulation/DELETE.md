@@ -64,7 +64,7 @@ PARTITION BY RANGE(`date`)
 )
 DISTRIBUTED BY HASH(`date`) BUCKETS 1
 PROPERTIES
-("replication_num" = "1");
+("replication_num" = "3");
 
 INSERT INTO `my_table` VALUES
 ('2022-03-11', 3, 'abc'),
@@ -93,7 +93,7 @@ select * from my_table order by date;
 
 #### Delete data
 
-##### Delete data from a specified partition
+**Delete data from a specified partition**
 
 Delete rows whose `k1` values are `3` from the `p1` partition.
 
@@ -112,7 +112,7 @@ select * from my_table partition (p1);
 +------------+------+------+
 ```
 
-##### Delete data from a specified partition using AND
+**Delete data from a specified partition using AND**
 
 Delete rows whose `k1` values are greater than or equal to `3` and whose `k2` values are `"abc"` from the `p1` partition.
 
@@ -128,7 +128,7 @@ select * from my_table partition (p1);
 +------------+------+------+
 ```
 
-##### Delete data from all partitions
+**Delete data from all partitions**
 
 Delete rows whose `k2` values are `"abc"` or `"cba"` from all partitions.
 
@@ -191,7 +191,7 @@ PRIMARY KEY(`id`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id`) BUCKETS 1
 PROPERTIES (
-"replication_num" = "1",
+"replication_num" = "3",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false"
 );
@@ -222,7 +222,7 @@ select * from score_board;
 
 #### Delete data
 
-##### Delete data by primary key
+**Delete data by primary key**
 
 You can specify the primary key in the DELETE statement, so StarRocks does not need to scan the entire table.
 
@@ -241,7 +241,7 @@ select * from score_board;
 +------+------+------+
 ```
 
-##### Delete data by condition
+**Delete data by condition**
 
 Example 1: Delete rows whose `score` values are `22` from the `score_board` table.
 
@@ -286,7 +286,7 @@ select * from score_board;
 2 rows in set (0.00 sec)
 ```
 
-##### Delete data by subquery result
+**Delete data by subquery result**
 
 You can nest one or more subqueries in the `DELETE` statement and use the subquery results as conditions.
 
@@ -302,7 +302,7 @@ PRIMARY KEY(`uid`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`uid`) BUCKETS 1
 PROPERTIES (
-"replication_num" = "1",
+"replication_num" = "3",
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false"
 );
@@ -365,7 +365,7 @@ select * from score_board;
 2 rows in set (0.00 sec)
 ```
 
-##### Delete data by using multi-table join or CTE
+**Delete data by using multi-table join or CTE**
 
 To delete all movies produced by the producer "foo", you can execute the following statement:
 

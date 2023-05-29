@@ -73,7 +73,8 @@ CREATE TABLE Employees (
 )
 PRIMARY KEY (EmployeeID) 
 DISTRIBUTED BY HASH (EmployeeID) BUCKETS 1
-PROPERTIES ("replication_num" = "1");
+PROPERTIES ("replication_num" = "3");
+
 INSERT INTO Employees VALUES
     (1, 'John Doe', 5000),
     (2, 'Jane Smith', 6000),
@@ -123,7 +124,7 @@ CREATE TABLE Accounts (
 ) 
 PRIMARY KEY (Accounts_id)
 DISTRIBUTED BY HASH (Accounts_id) BUCKETS 1
-PROPERTIES ("replication_num" = "1");
+PROPERTIES ("replication_num" = "3");
 
 INSERT INTO Accounts VALUES
     (1,'Acme Corporation','John Doe'),

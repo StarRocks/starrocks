@@ -42,7 +42,7 @@ set enable_sort_aggregate=true;
     DUPLICATE KEY(`id_int`)COMMENT "OLAP"
     DISTRIBUTED BY HASH(`id_int`) BUCKETS 10 
     PROPERTIES
-    ("replication_num" = "1"); 
+    ("replication_num" = "3"); 
 
     INSERT INTO test_sorted_streaming_agg_basic VALUES
     (1, 'v1'),

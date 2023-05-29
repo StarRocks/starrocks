@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS example_db.aggregate_tbl (
 AGGREGATE KEY(site_id, date, city_code)
 DISTRIBUTED BY HASH(site_id) BUCKETS 8
 PROPERTIES (
-"replication_num" = "1"
+"replication_num" = "3"
 );
 ```
 
