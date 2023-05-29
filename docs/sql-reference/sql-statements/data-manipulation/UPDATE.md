@@ -43,14 +43,65 @@ The condition based on which you want to update rows. Only rows that meet the WH
 For example, there are two tables `employees` and `accounts` in StarRocks. The table `employees` records employee information, and the table `accounts` records account information.
 
 ```SQL
-CREATE TABLE employees
-(
-    id BIGINT NOT NULL,
-    sales_count INT NOT NULL
+CREATE TABLE Employees (
+    EmployeeID INT,
+    Name VARCHAR(50),
+    Salary DECIMAL(10, 2)
+)
+PRIMARY KEY (EmployeeID) 
+DISTRIBUTED BY HASH (EmployeeID) BUCKETS 1
+PROPERTIES ("replication_num" = "3");
+
+INSERT INTO Employees VALUES
+    (1, 'John Doe', 5000),
+    (2, 'Jane Smith', 6000),
+    (3, 'Robert Johnson', 5500),
+    (4, 'Emily Williams', 4500),
+    (5, 'Michael Brown', 7000);
+```
+
+If you need to give a 10% raise to all employees, you can execute the following statement:
+
+```SQL
+UPDATE Employees
+SET Salary = Salary * 1.1  -- Increase the salary by 10%.
+WHERE true;
+```
+
+If you need to give a 10% raise to employees with salaries lower than the average salary, you can execute the following statement:
+
+```SQL
+UPDATE Employees
+SET Salary = Salary * 1.1   -- Increase the salary by 10%.
+WHERE Salary < (SELECT AVG(Salary) FROM Employees);
+```
+
+You can also use a CTE to rewrite the above statement to improve readability.
+
+```SQL
+WITH AvgSalary AS (
+    SELECT AVG(Salary) AS AverageSalary
+    FROM Employees
+)
+UPDATE Employees
+SET Salary = Salary * 1.1   -- Increase the salary by 10%.
+FROM AvgSalary
+WHERE Employees.Salary < AvgSalary.AverageSalary;
+```
+
+### Multi-table UPDATE
+
+Create a table `Accounts` to record account information and insert three data rows into the table.
+
+```SQL
+CREATE TABLE Accounts (
+    Accounts_id BIGINT NOT NULL,
+    Name VARCHAR(26) NOT NULL,
+    Sales_person VARCHAR(50) NOT NULL
 ) 
-PRIMARY KEY (id)
-DISTRIBUTED BY HASH(id) BUCKETS 1
-PROPERTIES ("replication_num" = "1");
+PRIMARY KEY (Accounts_id)
+DISTRIBUTED BY HASH (Accounts_id) BUCKETS 1
+PROPERTIES ("replication_num" = "3");
 
 INSERT INTO employees VALUES (1,100),(2,1000);
 
@@ -62,7 +113,7 @@ CREATE TABLE accounts
 ) 
 PRIMARY KEY (accounts_id)
 DISTRIBUTED BY HASH(accounts_id) BUCKETS 1
-PROPERTIES ("replication_num" = "1");
+PROPERTIES ("replication_num" = "3");
 
 INSERT INTO accounts VALUES (1,'Acme Corporation',2),(2,'Acme Corporation',3),(3,'Corporation',3);
 ```
