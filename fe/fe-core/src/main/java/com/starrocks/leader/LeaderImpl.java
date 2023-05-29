@@ -76,6 +76,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -1164,7 +1165,7 @@ public class LeaderImpl {
             if (RunMode.isSharedDataMode() || node instanceof Backend) {
                 TBackendMeta nodeMeta = new TBackendMeta();
                 nodeMeta.setBackend_id(node.getId());
-                nodeMeta.setHost(node.getHost());
+                nodeMeta.setHost(NetUtils.getIpByHost(node.getHost()));
                 nodeMeta.setBe_port(node.getBePort());
                 nodeMeta.setRpc_port(node.getBrpcPort());
                 nodeMeta.setHttp_port(node.getHttpPort());

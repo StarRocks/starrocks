@@ -203,4 +203,18 @@ public class NetUtils {
         // so prefixLength = 32 - log2(addressCount) = 32 - (63 - leadingZeros(addressCount)) = leadingZeros(addressCount) - 31
         return Long.numberOfLeadingZeros(subnetUtils.getInfo().getAddressCountLong()) - 31;
     }
+
+    /**
+     * Return original hostname if parse ip with failure
+     * @param host
+     * @return
+     */
+    public static String getIpByHost(String host) {
+        try {
+            host = NetUtils.getIpAndFqdnByHost(host).first;
+        } catch (UnknownHostException e) {
+            LOG.warn("parsed ip for {} failed!", host);
+        }
+        return host;
+    }
 }

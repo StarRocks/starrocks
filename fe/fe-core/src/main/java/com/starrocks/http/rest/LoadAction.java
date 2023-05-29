@@ -39,6 +39,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -61,12 +62,9 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -206,15 +204,7 @@ public class LoadAction extends RestBaseAction {
 
         String redirectHost = node.getHost();
         if (Config.stream_load_force_use_ip) {
-            InetAddressValidator validator = InetAddressValidator.getInstance();
-            if (!validator.isValidInet4Address(redirectHost) && !validator.isValidInet6Address(redirectHost)) {
-                try {
-                    InetAddress host = InetAddress.getByName(redirectHost);
-                    redirectHost = host.getHostAddress();
-                } catch (UnknownHostException ex) {
-                    LOG.warn("get redirect host for be {} failed!", redirectHost);
-                }
-            }
+            redirectHost = NetUtils.getIpByHost(redirectHost);
         }
 
         TNetworkAddress redirectAddr = new TNetworkAddress(redirectHost, node.getHttpPort());
