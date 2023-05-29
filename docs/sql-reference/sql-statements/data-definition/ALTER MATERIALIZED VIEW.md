@@ -6,7 +6,7 @@ This SQL statement can：
 
 - alter the name of a materialzied view
 - alter the refresh strategy of an asynchronous materialized view
-- Alter the properties of a materialized view
+- alter the properties of a materialized view
 
 ## Syntax
 
