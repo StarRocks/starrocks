@@ -57,6 +57,11 @@ public:
 
     void finish_task(std::unique_ptr<CompactionTaskContext>&& context);
 
+    bool has_error() const {
+        std::lock_guard l(_mtx);
+        return !_status.ok();
+    }
+
 private:
     CompactionScheduler* _scheduler;
     mutable bthread::Mutex _mtx;
@@ -185,7 +190,7 @@ private:
 
     TabletManager* _tablet_mgr;
     Limiter _limiter;
-    bthread::Mutex _states_lock;
+    bthread::Mutex _contexts_lock;
     butil::LinkedList<CompactionTaskContext> _contexts;
     int _task_queue_count;
     TaskQueue* _task_queues;

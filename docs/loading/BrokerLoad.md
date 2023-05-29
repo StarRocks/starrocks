@@ -147,7 +147,7 @@ PROPERTIES
 );
 ```
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#hdfs).
 
 #### Load data from AWS S3
 
@@ -176,7 +176,7 @@ WITH BROKER
 >
 > Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as the file path with `s3a://`.
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#aws-s3).
 
 #### Load data from Google GCS
 
@@ -205,7 +205,7 @@ WITH BROKER
 >
 > Broker Load supports accessing Google GCS only according to the gs protocol. Therefore, when you load data from Google GCS, you must include `gs://` as the prefix in the GCS URI that you pass as the file path.
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#google-gcs).
 
 #### Load data from other S3-compatible storage system
 
@@ -230,7 +230,7 @@ WITH BROKER
 );
 ```
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#other-s3-compatible-storage-system).
 
 #### Load data from Microsoft Azure Storage
 
@@ -267,7 +267,7 @@ WITH BROKER
   >   - If your Data Lake Storage Gen2 allows access only via HTTP, use `abfs://` as the prefix, for example, `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
   >   - If your Data Lake Storage Gen2 allows access only via HTTPS, use `abfss://` as the prefix, for example, `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#microsoft-azure-storage).
 
 #### Query data
 
@@ -336,6 +336,8 @@ WITH BROKER
 );
 ```
 
+In the preceding examples, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#aws-s3).
+
 ### View a load job
 
 Broker Load allows you to view a lob job by using the SHOW LOAD statement or the `curl` command.
@@ -349,14 +351,18 @@ For more information, see [SHOW LOAD](../sql-reference/sql-statements/data-manip
 The syntax is as follows:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     'http://<fe_host>:<fe_http_port>/api/<database_name>/_load_info?label=<label_name>'
 ```
+
+> **NOTE**
+>
+> If you use an account for which no password is set, you need to input only `<username>:`.
 
 For example, you can run the following command to view the information about a load job, whose label is `label1`, in the `test_db` database:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     'http://<fe_host>:<fe_http_port>/api/test_db/_load_info?label=label1'
 ```
 
