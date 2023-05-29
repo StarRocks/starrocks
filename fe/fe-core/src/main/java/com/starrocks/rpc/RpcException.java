@@ -23,4 +23,12 @@ public class RpcException extends IOException {
     public RpcException(String host, String message) {
         super(message + ", host: " + host);
     }
+
+    public RpcException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
+    public RpcException(Throwable cause) {
+        super(cause);
+    }
 }
