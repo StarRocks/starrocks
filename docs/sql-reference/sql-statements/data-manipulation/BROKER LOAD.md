@@ -246,7 +246,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
   
     - To perform load-free loading, you must place the `hdfs-site.xml` file to the `{deploy}/conf` paths of each FE node and each BE node.
   
-  - If you load data from a single HDFS cluster and you have configured multiple Kerberos users, only broker-based loading is supported. You must [deploy at least one independent broker group](../../../deployment/deploy_broker.md) (in most cases, you only need to deploy one broker), and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the node that hosts the broker group for your HDFS cluster.
+  - If you load data from a single HDFS cluster and you have configured multiple Kerberos users, only broker-based loading is supported. You must [deploy at least one independent broker group](../../../deployment/deploy_broker.md) (in most cases, one broker group is sufficient), and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the node that hosts the broker group for your HDFS cluster.
 
   - If you load data from multiple HDFS clusters, only broker-based loading is supported. You must [deploy one independent broker group](../../../deployment/deploy_broker.md) for each HDFS cluster. Take one of the following actions to enable brokers to read information about the HDFS cluster nodes:
 
