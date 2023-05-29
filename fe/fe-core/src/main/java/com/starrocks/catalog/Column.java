@@ -529,9 +529,25 @@ public class Column implements Writable {
         } else {
             sb.append("NOT NULL ");
         }
+<<<<<<< HEAD
+=======
+        if (defaultExpr == null && isAutoIncrement) {
+            sb.append("AUTO_INCREMENT ");
+        } else if (defaultExpr != null) {
+            if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+                // compatible with mysql
+                sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
+            } else {
+                sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
+            }
+        }
+>>>>>>> 6fc5ca3ab ([BugFix] Fix bug primary key table does not display current_timestamp (#24257))
         if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
                 getPrimitiveType() != PrimitiveType.BITMAP) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
+        }
+        if (isMaterializedColumn()) {
+            sb.append("AS " + materializedColumnExpr.toSql() + " ");
         }
         sb.append("COMMENT \"").append(comment).append("\"");
 
