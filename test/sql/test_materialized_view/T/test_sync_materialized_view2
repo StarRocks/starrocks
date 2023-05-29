@@ -1,6 +1,7 @@
 -- name: test_sync_materialized_view2
 
 -- CASE1
+drop table if exists test2;
 CREATE TABLE `test2` (
   `k1` tinyint(4) NULL DEFAULT "0",
   `k2` varchar(64) NULL DEFAULT "",
@@ -13,13 +14,15 @@ PROPERTIES (
 "replication_num" = "1"
 );
 
+drop table if exists target2;
 CREATE TABLE `target2` (
   `k1` tinyint(4) NULL DEFAULT "0",
   `k2` int NULL DEFAULT "0",
+  `k11` tinyint(4) NULL DEFAULT "0",
   `k4` bigint sum DEFAULT "0",
   `k5` hll hll_union
 ) ENGINE=OLAP 
-AGGREGATE KEY(`k1`, `k2`)
+AGGREGATE KEY(`k1`, `k2`, `k11`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1"
@@ -30,7 +33,8 @@ PROPERTIES ( "enable_populate" = "false" )
 to target2
 as
 -- select k1 * 2 as k1, length(k2) as k2, sum(k3) as k4, hll_union(hll_hash(k4)) as k5 from test2 group by k1, k2; 
-select cast(k1 * 2 as tinyint(4)) as k1, length(k2) as k2, sum(k3) as k4, hll_union(hll_hash(k4)) as k5 from test2 group by k1, k2; 
+select k1, length(k2) as k2, cast(k1 * 2 as tinyint(4)) as k11,  sum(k3) as k4, hll_union(hll_hash(k4)) as k5 from test2 group by k1, k2; 
+
 insert into test2 values (1, 'a', 1, 'aa');
 select * from test2;
 select * from target2;
@@ -53,10 +57,11 @@ CREATE TABLE `target3` (
   `k1` tinyint(4) NULL DEFAULT "0",
   -- `k2` varchar(64) NULL DEFAULT "0",
   `k2` int NULL DEFAULT "0",
+  `k11` tinyint(4) NULL DEFAULT "0",
   `k4` bigint sum DEFAULT "0",
   `k5` hll hll_union
 ) ENGINE=OLAP 
-AGGREGATE KEY(`k1`, `k2`)
+AGGREGATE KEY(`k1`, `k2`, `k11`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1"
@@ -66,7 +71,7 @@ CREATE MATERIALIZED VIEW test_mv3
 PROPERTIES ( "enable_populate" = "false" ) 
 to target3
 as
-select cast(k1 * 2 as tinyint(4)) as k1, length(k2) as k2, sum(k3), hll_union(hll_hash(k4)) as k5 from test3 group by k1, k2; 
+select k1, length(k2) as k2, cast(k1 * 2 as tinyint(4)) as k11, sum(k3), hll_union(hll_hash(k4)) as k5 from test3 group by k1, k2; 
 --select k1 * 2, length(k2), sum(k3), hll_union(hll_hash(k4)) as k5 from test3 group by k1, k2; 
 
 insert into test3 values (1, 'a', 1, 'aa');

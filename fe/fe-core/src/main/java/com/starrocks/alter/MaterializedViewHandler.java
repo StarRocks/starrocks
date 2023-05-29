@@ -277,7 +277,7 @@ public class MaterializedViewHandler extends AlterHandler {
             mvColumnNames.add(mvCol.getName());
         }
         if (mvColumns.size() != targetOlapTable.getBaseSchema().size()) {
-            throw new DdlException("create logical materialized failed. Logical materialized view columns' size "
+            throw new DdlException("Logical materialized view columns' size "
                     + mvColumns.size() + " should be equal to the target table columns' size:"
                     + targetOlapTable.getBaseSchema().size());
         }
@@ -285,10 +285,10 @@ public class MaterializedViewHandler extends AlterHandler {
         for (int i = 0; i < targetOlapTable.getBaseSchema().size(); i++) {
             Column targetCol = targetTable.getBaseSchema().get(i);
             Column mvCol = mvColumns.get(i);
-            // if (!mvCol.getName().equals(targetCol.getName())) {
-            //    throw new DdlException("create logical materialized failed. Logical materialized view column name "
-            //            + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));
-            // }
+            //            if (!mvCol.getName().equals(targetCol.getName())) {
+            //                throw new DdlException("create logical materialized failed. Logical materialized view column name "
+            //                        + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));
+            //            }
             if (!mvCol.getType().equals(targetCol.getType())) {
                 throw new DdlException("Logical materialized view column type "
                         + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));
@@ -298,29 +298,29 @@ public class MaterializedViewHandler extends AlterHandler {
         // partition keys must be the same with the base table
         if (targetOlapTable.isPartitioned()) {
             if (!baseTable.isPartitioned()) {
-                throw new DdlException("create logical materialized failed. Target table:" + baseTable + " should be " +
+                throw new DdlException("Target table:" + baseTable + " should be " +
                         " partitioned table");
             }
             if (baseTable.getPartitionInfo().equals(targetOlapTable.getPartitionInfo())) {
-                throw new DdlException("create logical materialized failed. Target table:" + targetOlapTable + " should be " +
+                throw new DdlException("Target table:" + targetOlapTable + " should be " +
                         " the same with the base table");
             }
             try {
                 List<Column> partitionColumns = targetOlapTable.getPartitionInfo().getPartitionColumns();
                 for (Column partColumn : partitionColumns) {
                     if (!mvColumns.contains(partColumn)) {
-                        throw new DdlException("create logical materialized failed. Materialized view should contain" +
+                        throw new DdlException("Materialized view should contain" +
                                 " the partition column: " + partColumn.toString());
                     }
                 }
             } catch (NotImplementedException e) {
-                throw new DdlException("create logical materialized failed. Materialized view should contain" +
+                throw new DdlException("Materialized view should contain" +
                         " the partition column");
             }
         }
         // distribution keys must be the same with the base table: only need to check the colum name is the same
         if (!baseTable.getDefaultDistributionInfo().equals(targetOlapTable.getDefaultDistributionInfo())) {
-            throw new DdlException("create logical materialized failed. Base table's distribution keys should be the" +
+            throw new DdlException("Base table's distribution keys should be the" +
                     " same with the target table: " + targetOlapTable);
         }
         DistributionInfo distributionInfo = targetOlapTable.getDefaultDistributionInfo();
@@ -328,10 +328,10 @@ public class MaterializedViewHandler extends AlterHandler {
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
             List<Column> distributionColumns = hashDistributionInfo.getDistributionColumns();
             for (Column distColumn : distributionColumns) {
-                //                if (!mvColumnNames.contains(distColumn.getName())) {
-                //                    throw new DdlException("create logical materialized failed. Materialized view should contain" +
-                //                            " the distribution column: " + distColumn.toString());
-                //                }
+                if (!mvColumnNames.contains(distColumn.getName())) {
+                    throw new DdlException("Materialized view should contain" +
+                            " the distribution column: " + distColumn.toString());
+                }
             }
         }
         long targetTableId = targetTable.getId();

@@ -1268,11 +1268,12 @@ public class MVRewriteTest {
                 ");";
         String target1 = "CREATE TABLE `target1` (\n" +
                 "  `k1` smallint NULL DEFAULT \"0\",\n" +
+                "  `k11` smallint NULL DEFAULT \"0\",\n" +
                 "  `k2` int NULL DEFAULT \"0\",\n" +
                 "  `k4` bigint sum DEFAULT \"0\",\n" +
                 "  `k5` hll hll_union\n" +
                 ") ENGINE=OLAP \n" +
-                "AGGREGATE KEY(`k1`, `k2`)\n" +
+                "AGGREGATE KEY(`k1`, `k11`, `k2`)\n" +
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1281,7 +1282,7 @@ public class MVRewriteTest {
                 "PROPERTIES ( \"enable_populate\" = \"false\") \n" +
                 "to target1\n" +
                 "as\n" +
-                "select cast((k1 * 2) as smallint) as k1, length(k2) as k2, sum(k3) as k4, hll_union(hll_hash(k4)) as k5 " +
+                "select k1, cast((k1 * 2) as smallint) as k11, length(k2) as k2, sum(k3) as k4, hll_union(hll_hash(k4)) as k5 " +
                 "from test1 group by k1, k2;";
         starRocksAssert.withTable(test1)
                 .withTable(target1)
@@ -1306,11 +1307,12 @@ public class MVRewriteTest {
                 "        )";
         String t2 = "CREATE TABLE `target3` (\n" +
                 "  `k1` tinyint(4) NULL DEFAULT \"0\",\n" +
+                "  `k11` tinyint(4) NULL DEFAULT \"0\",\n" +
                 "  `k2` int NULL DEFAULT \"0\",\n" +
                 "  `k4` bigint sum DEFAULT \"0\",\n" +
                 "  `k5` hll hll_union\n" +
                 ") ENGINE=OLAP\n" +
-                "        AGGREGATE KEY(`k1`, `k2`)\n" +
+                "        AGGREGATE KEY(`k1`, `k11`, `k2`)\n" +
                 "        DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
                 "        PROPERTIES (\n" +
                 "                \"replication_num\" = \"1\"\n" +
@@ -1319,7 +1321,7 @@ public class MVRewriteTest {
                 "        PROPERTIES ( \"enable_populate\" = \"false\" )\n" +
                 "        to target3\n" +
                 "        as\n" +
-                "        select cast(k1 * 2 as tinyint(4)) as k1, length(k2) as k2, sum(k3), hll_union(hll_hash(k4)) as k5 " +
+                "        select k1, cast(k1 * 2 as tinyint(4)) as k1, length(k2) as k2, sum(k3), hll_union(hll_hash(k4)) as k5 " +
                 "from test3 group by k1, k2;";
         starRocksAssert.withTable(t1)
                 .withTable(t2)
