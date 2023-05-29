@@ -72,6 +72,9 @@ public class StarRocksRepository extends MasterDaemon {
         if (!Catalog.getCurrentCatalog().isMaster()) {
             return;
         }
+        if (!Config.enable_olap_external_table_sync) {
+            return;
+        }
         for (ExternalOlapTable table : srTables.values()) {
             metaSyncer.syncTable(table);
         }
