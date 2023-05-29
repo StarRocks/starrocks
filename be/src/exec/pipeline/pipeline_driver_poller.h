@@ -65,6 +65,8 @@ public:
 
 private:
     void run_internal();
+    void maybe_change_driver_state(DriverRawPtr driver);
+
     PipelineDriverPoller(const PipelineDriverPoller&) = delete;
     PipelineDriverPoller& operator=(const PipelineDriverPoller&) = delete;
 

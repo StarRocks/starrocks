@@ -130,16 +130,12 @@ void GlobalDriverExecutor::_worker_thread() {
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
             if (fragment_ctx->is_canceled()) {
-                driver->cancel_operators(runtime_state);
-                if (driver->is_still_pending_finish()) {
-                    driver->set_driver_state(DriverState::PENDING_FINISH);
-                    _blocked_driver_poller->add_blocked_driver(driver);
-                } else if (driver->is_still_epoch_finishing()) {
-                    driver->set_driver_state(DriverState::EPOCH_PENDING_FINISH);
-                    _blocked_driver_poller->add_blocked_driver(driver);
-                } else {
+                if (driver->on_cancelling(DriverState::CANCELED) == DriverState::CANCELED) {
                     _finalize_driver(driver, runtime_state, DriverState::CANCELED);
+                } else {
+                    _blocked_driver_poller->add_blocked_driver(driver);
                 }
+
                 continue;
             }
             // a blocked driver is canceled because of fragment cancellation or query expiration.
@@ -170,13 +166,13 @@ void GlobalDriverExecutor::_worker_thread() {
                              << ", status=" << status;
                 driver->runtime_profile()->add_info_string("ErrorMsg", status.get_error_msg());
                 query_ctx->cancel(status);
-                driver->cancel_operators(runtime_state);
-                if (driver->is_still_pending_finish()) {
-                    driver->set_driver_state(DriverState::PENDING_FINISH);
-                    _blocked_driver_poller->add_blocked_driver(driver);
-                } else {
+
+                if (driver->on_cancelling(DriverState::INTERNAL_ERROR) == DriverState::INTERNAL_ERROR) {
                     _finalize_driver(driver, runtime_state, DriverState::INTERNAL_ERROR);
+                } else {
+                    _blocked_driver_poller->add_blocked_driver(driver);
                 }
+
                 continue;
             }
             auto driver_state = maybe_state.value();
@@ -206,7 +202,9 @@ void GlobalDriverExecutor::_worker_thread() {
             case INPUT_EMPTY:
             case OUTPUT_FULL:
             case PENDING_FINISH:
+            case PENDING_CANCELLED:
             case EPOCH_PENDING_FINISH:
+            case EPOCH_PENDING_CANCELLED:
             case PRECONDITION_BLOCK: {
                 _blocked_driver_poller->add_blocked_driver(driver);
                 break;

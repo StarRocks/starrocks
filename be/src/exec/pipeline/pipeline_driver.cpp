@@ -208,6 +208,74 @@ static inline bool is_multilane(pipeline::OperatorPtr& op) {
     return false;
 }
 
+bool PipelineDriver::is_expirable() const {
+    return !is_query_never_expired() && is_cancelable();
+}
+
+bool PipelineDriver::is_cancelable() const {
+    // Return false,
+    // - when the driver is at finished state,
+    // - or has already been cancelled and at pending state.
+    return !is_finished() && _state != DriverState::PENDING_CANCELLED && _state != DriverState::EPOCH_PENDING_CANCELLED;
+};
+
+bool PipelineDriver::is_not_blocked() const {
+    return _state != DriverState::PRECONDITION_BLOCK && _state != DriverState::OUTPUT_FULL &&
+           _state != DriverState::INPUT_EMPTY && !is_finishing() && !is_epoch_finishing();
+}
+
+DriverState PipelineDriver::on_ready() {
+    set_driver_state(DriverState::READY);
+    return _state;
+}
+
+DriverState PipelineDriver::on_cancelling(DriverState final_state) {
+    DCHECK(_fragment_ctx->is_canceled());
+
+    cancel_operators(_runtime_state);
+
+    if (is_still_pending_finish()) {
+        set_driver_state(DriverState::PENDING_CANCELLED);
+    } else if (is_still_epoch_finishing()) {
+        set_driver_state(DriverState::EPOCH_PENDING_CANCELLED);
+    } else {
+        set_driver_state(final_state);
+    }
+
+    return _state;
+}
+
+DriverState PipelineDriver::on_finishing() {
+    DCHECK(sink_operator()->is_finished());
+
+    finish_operators(_runtime_state);
+    set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
+
+    return _state;
+}
+
+DriverState PipelineDriver::on_pending_finished() {
+    DCHECK(!is_still_pending_finish());
+
+    if (_state == PENDING_CANCELLED) {
+        set_driver_state(DriverState::CANCELED);
+    } else {
+        set_driver_state(DriverState::FINISH);
+    }
+    return _state;
+}
+
+DriverState PipelineDriver::on_epoch_pending_finished() {
+    DCHECK(!is_still_epoch_finishing());
+
+    if (_state == EPOCH_PENDING_CANCELLED) {
+        set_driver_state(DriverState::CANCELED);
+    } else {
+        set_driver_state(DriverState::EPOCH_FINISH);
+    }
+    return _state;
+}
+
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int worker_id) {
     COUNTER_UPDATE(_schedule_counter, 1);
     SCOPED_TIMER(_active_timer);
@@ -373,9 +441,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         _first_unfinished = new_first_unfinished;
 
         if (sink_operator()->is_finished()) {
-            finish_operators(runtime_state);
-            set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
-            return _state;
+            return on_finishing();
         }
 
         // no chunk moved in current round means that the driver is blocked.
@@ -424,8 +490,7 @@ void PipelineDriver::check_short_circuit() {
     _first_unfinished = last_finished + 1;
 
     if (sink_operator()->is_finished()) {
-        finish_operators(_runtime_state);
-        set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
+        on_finishing();
     }
 }
 
@@ -555,15 +620,7 @@ void PipelineDriver::set_workgroup(workgroup::WorkGroupPtr wg) {
 
 bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {
     if (_fragment_ctx->is_canceled()) {
-        cancel_operators(runtime_state);
-        // If the fragment is cancelled after the source operator commits an i/o task to i/o threads,
-        // the driver cannot be finished immediately and should wait for the completion of the pending i/o task.
-        if (is_still_pending_finish()) {
-            set_driver_state(DriverState::PENDING_FINISH);
-        } else {
-            set_driver_state(_fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED);
-        }
-
+        on_cancelling();
         return true;
     }
 

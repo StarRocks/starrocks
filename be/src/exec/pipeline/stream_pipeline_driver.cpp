@@ -276,9 +276,7 @@ StatusOr<DriverState> StreamPipelineDriver::_handle_finish_operators(RuntimeStat
     }
     _first_unfinished = new_first_unfinished;
     if (sink_operator()->is_finished()) {
-        finish_operators(runtime_state);
-        set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
-        return _state;
+        return on_finishing();
     }
     return _state;
 }

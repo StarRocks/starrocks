@@ -139,10 +139,6 @@ public:
     void set_is_stream_test(bool is_stream_test) { _is_stream_test = is_stream_test; }
     bool is_stream_test() const { return _is_stream_test; }
 
-    size_t expired_log_count() { return _expired_log_count; }
-
-    void set_expired_log_count(size_t val) { _expired_log_count = val; }
-
 private:
     // Id of this query
     TUniqueId _query_id;
@@ -188,8 +184,6 @@ private:
 
     bool _enable_adaptive_dop = false;
     AdaptiveDopParam _adaptive_dop_param;
-
-    size_t _expired_log_count = 0;
 };
 
 class FragmentContextManager {

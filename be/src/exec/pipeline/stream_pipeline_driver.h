@@ -36,7 +36,7 @@ public:
 
     StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id) override;
 
-    bool is_query_never_expired() override { return true; }
+    bool is_query_never_expired() const override { return true; }
 
     void epoch_finalize(RuntimeState* runtime_state, DriverState state);
     Status reset_epoch(RuntimeState* state);

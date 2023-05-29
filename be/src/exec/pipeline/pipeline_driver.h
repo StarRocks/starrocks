@@ -50,6 +50,28 @@ using IterateImmutableDriverFunc = std::function<void(DriverConstRawPtr)>;
 using ImmutableDriverPredicateFunc = std::function<bool(DriverConstRawPtr)>;
 class DriverQueue;
 
+/// A pipeline driver switch states according to the following graph:
+/// NOT_READY
+///   │
+///   │
+///   ▼
+/// READY ────────────► RUNNING ───────────────────────────────────┬──────────────────────────────────┐
+///   ▲                   │                                        │                                  │
+///   │                   │                                        ▼                                  │
+///   │                   │            ┌───────────────────────────────────────────────────────┐      │
+///   └── on_ready ───────┼────────────┤PRECONDITION_BLOCK      INPUT_EMPTY        OUTPUT_FULL │      │
+///                       │            └───────────────────────────┬───────────────────────────┘      ▼
+///                       ▼                                        │                                  │
+///                       │                                        │                                  │
+///                       ├────────────────────◄───────────────────┴───────────►──────────────────────┤
+///                       │                                    ┌──────────►───────────────────────────│
+///                 on_finishing[is_still_pending_finish]      │    on_cancelling[is_still_pending_finish]
+///                       │                                    │                                      │
+///                       ├───────────────────► PENDING_FINISH ┘     PENDING_CANCELLED ◄──────────────┤
+///                       │                          │                       │                        │
+///                 on_finishing                     │  on_pending_finished  │                 on_cancelling
+///                       │                          ▼                       ▼                        │
+///                       └───────────────────────►FINISH                CANCELLED ◄──────────────────┘
 enum DriverState : uint32_t {
     NOT_READY = 0,
     READY = 1,
@@ -70,7 +92,9 @@ enum DriverState : uint32_t {
     // in the working thread other than moving the driver frequently between ready queue and pending queue, which
     // will lead to drastic performance deduction (the "ScheduleTime" in profile will be super high).
     // We can enable this optimization by overriding SourceOperator::is_mutable to return true.
-    LOCAL_WAITING = 12
+    LOCAL_WAITING = 12,
+    PENDING_CANCELLED = 13,
+    EPOCH_PENDING_CANCELLED = 14,
 };
 
 [[maybe_unused]] static inline std::string ds_to_string(DriverState ds) {
@@ -101,6 +125,10 @@ enum DriverState : uint32_t {
         return "EPOCH_FINISH";
     case LOCAL_WAITING:
         return "LOCAL_WAITING";
+    case PENDING_CANCELLED:
+        return "PENDING_CANCELLED";
+    case EPOCH_PENDING_CANCELLED:
+        return "EPOCH_PENDING_CANCELLED";
     }
     DCHECK(false);
     return "UNKNOWN_STATE";
@@ -254,6 +282,7 @@ public:
             _precondition_block_timer->update(_precondition_block_timer_sw->elapsed_time());
             break;
         case DriverState::PENDING_FINISH:
+        case DriverState::PENDING_CANCELLED:
             _pending_finish_timer->update(_pending_finish_timer_sw->elapsed_time());
             break;
         default:
@@ -271,6 +300,7 @@ public:
             _precondition_block_timer_sw->reset();
             break;
         case DriverState::PENDING_FINISH:
+        case DriverState::PENDING_CANCELLED:
             _pending_finish_timer_sw->reset();
             break;
         default:
@@ -303,11 +333,13 @@ public:
     void cancel_operators(RuntimeState* runtime_state);
 
     Operator* sink_operator() { return _operators.back().get(); }
-    bool is_finished() {
+    bool is_finished() const {
         return _state == DriverState::FINISH || _state == DriverState::CANCELED ||
                _state == DriverState::INTERNAL_ERROR;
     }
-    bool pending_finish() { return _state == DriverState::PENDING_FINISH; }
+    bool is_finishing() const {
+        return _state == DriverState::PENDING_FINISH || _state == DriverState::PENDING_CANCELLED;
+    }
     bool is_still_pending_finish() { return source_operator()->pending_finish() || sink_operator()->pending_finish(); }
     // return false if all the dependencies are ready, otherwise return true.
     bool dependencies_block() {
@@ -362,7 +394,30 @@ public:
         }
     }
 
-    bool is_not_blocked() {
+    bool is_expirable() const;
+    bool is_cancelable() const;
+
+    bool is_not_blocked() const;
+
+    /// Event handlers. See the comment of DriverState for detail.
+    ///
+    /// Handle the event where the driver is ready.
+    /// Transition to READY.
+    DriverState on_ready();
+    /// Handle the event where the fragment instance is cancelled.
+    /// Transition to CANCELLED or PENDING_CANCELLED.
+    DriverState on_cancelling(DriverState final_state = DriverState::CANCELED);
+    /// Handle the event where the sink operator.
+    /// Transition to FINISH or PENDING_FINISH.
+    DriverState on_finishing();
+    /// Handle the event where the pending state is finished.
+    /// Transition to FINISH or CANCELLED.
+    DriverState on_pending_finished();
+    /// Handle the event where the epoch pending state is finished.
+    /// Transition to EPOCH_FINISH or CANCELLED.
+    DriverState on_epoch_pending_finished();
+
+    bool maybe_not_blocked_anymore() {
         // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
         if (sink_operator()->is_finished()) {
             return true;
@@ -382,7 +437,7 @@ public:
             mark_precondition_ready(_runtime_state);
 
             check_short_circuit();
-            if (_state == DriverState::PENDING_FINISH) {
+            if (is_finishing() || is_epoch_finishing()) {
                 return false;
             }
             // Driver state must be set to a state different from PRECONDITION_BLOCK bellow,
@@ -423,11 +478,12 @@ public:
     inline std::string get_name() const { return strings::Substitute("PipelineDriver (id=$0)", _driver_id); }
 
     // Whether the query can be expirable or not.
-    virtual bool is_query_never_expired() { return false; }
+    virtual bool is_query_never_expired() const { return false; }
     // Whether the driver's state is already `EPOCH_FINISH`.
-    bool is_epoch_finished() { return _state == DriverState::EPOCH_FINISH; }
-    // Whether the driver's state is already `EPOCH_PENDING_FINISH`.
-    bool is_epoch_finishing() { return _state == DriverState::EPOCH_PENDING_FINISH; }
+    bool is_epoch_finished() const { return _state == DriverState::EPOCH_FINISH; }
+    bool is_epoch_finishing() const {
+        return _state == DriverState::EPOCH_PENDING_FINISH || _state == DriverState::EPOCH_PENDING_CANCELLED;
+    }
     // Whether the driver is at finishing state in one epoch. when the driver is in `EPOCH_PENDING_FINISH` state,
     // use `is_still_epoch_finishing` method to check whether the driver has changed yet.
     bool is_still_epoch_finishing() {
