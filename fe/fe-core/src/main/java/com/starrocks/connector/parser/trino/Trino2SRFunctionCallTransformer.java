@@ -74,6 +74,7 @@ public class Trino2SRFunctionCallTransformer {
         registerDateFunctionTransformer();
         registerStringFunctionTransformer();
         registerRegexpFunctionTransformer();
+        registerJsonFunctionTransformer();
         // todo: support more function transform
     }
 
@@ -178,6 +179,24 @@ public class Trino2SRFunctionCallTransformer {
         // regexp_extract(string, pattern) -> regexp_extract(str, pattern, 0)
         registerFunctionTransformer("regexp_extract", 2, new FunctionCallExpr("regexp_extract",
                 ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class), new IntLiteral(0L))));
+    }
+
+    private static void registerJsonFunctionTransformer() {
+        // json_array_length -> json_length
+        registerFunctionTransformer("json_array_length", 1, "json_length",
+                ImmutableList.of(Expr.class));
+
+        // json_parse -> parse_json
+        registerFunctionTransformer("json_parse", 1, "parse_json",
+                ImmutableList.of(Expr.class));
+
+        // json_extract -> json_query
+        registerFunctionTransformer("json_extract", 2, "json_query",
+                ImmutableList.of(Expr.class, Expr.class));
+
+        // json_size -> json_length
+        registerFunctionTransformer("json_size", 2, "json_length",
+                ImmutableList.of(Expr.class, Expr.class));
     }
 
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,

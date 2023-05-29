@@ -765,6 +765,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             } catch (AnalysisException e) {
                 throw new ParsingException(e.getMessage());
             }
+        } else if (node.getType().equalsIgnoreCase("json")) {
+            return new com.starrocks.analysis.StringLiteral(node.getValue());
         }
         throw new ParsingException("Parse Error : unknown type " + node.getType());
     }
