@@ -287,7 +287,7 @@ public class CompactionScheduler extends Daemon {
         try {
             List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId);
             for (CompactionTask task : tasks) {
-                task.sendRequest();;
+                task.sendRequest();
             }
             job.setTasks(tasks);
             return job;
