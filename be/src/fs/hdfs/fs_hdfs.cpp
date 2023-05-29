@@ -60,11 +60,12 @@ private:
 HdfsInputStream::~HdfsInputStream() {
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
         int r = hdfsCloseFile(this->_fs, this->_file);
-        if (r == 0) {
-            return Status::OK();
-        } else {
-            return Status::IOError("close error, file: {}"_format(_file_name));
+        if (r == -1) {
+            auto error_msg = fmt::format("Fail to close file {}: {}", _file_name, get_hdfs_err_msg());
+            LOG(WARNING) << error_msg;
+            return Status::IOError(error_msg);
         }
+        return Status::OK();
     });
     Status st = ret->get_future().get();
     PLOG_IF(ERROR, !st.ok()) << "close " << _file_name << " failed";
@@ -93,7 +94,8 @@ StatusOr<int64_t> HdfsInputStream::get_size() {
         auto ret = call_hdfs_scan_function_in_pthread([this] {
             auto info = hdfsGetPathInfo(_fs, _file_name.c_str());
             if (UNLIKELY(info == nullptr)) {
-                return Status::InternalError(fmt::format("hdfsGetPathInfo failed, file={}", _file_name));
+                return Status::IOError(
+                        fmt::format("Fail to get path info of {}: {}", _file_name, get_hdfs_err_msg()));
             }
             this->_file_size = info->mSize;
             hdfsFreeFileInfo(info, 1);
@@ -120,7 +122,9 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
     auto ret = call_hdfs_scan_function_in_pthread([this, stats] {
         struct hdfsReadStatistics* hdfs_statistics = nullptr;
         auto r = hdfsFileGetReadStatistics(_file, &hdfs_statistics);
-        if (r != 0) return Status::InternalError(fmt::format("hdfsFileGetReadStatistics failed: {}", r));
+        if (r == -1) {
+            return Status::IOError(fmt::format("Fail to get read statistics of {}: {}", r, get_hdfs_err_msg()));
+        }
         stats->reserve(4);
         stats->append("TotalBytesRead", hdfs_statistics->totalBytesRead);
         stats->append("TotalLocalBytesRead", hdfs_statistics->totalLocalBytesRead);
@@ -149,18 +153,18 @@ public:
 
     Status close() override;
 
-    Status pre_allocate(uint64_t size) override { return Status::NotSupported("HDFS file pre_allocate"); }
+    Status pre_allocate(uint64_t size) override { return Status::NotSupported("HDFS file pre_allocate not supported"); }
 
     Status flush(FlushMode mode) override {
         int status = hdfsHFlush(_fs, _file);
         return status == 0 ? Status::OK()
-                           : Status::InternalError(strings::Substitute("HDFS file flush error $0", _path));
+                           : Status::IOError(fmt::format("Fail to flush {}: {}", _path, get_hdfs_err_msg()));
     }
 
     Status sync() override {
         int status = hdfsHSync(_fs, _file);
         return status == 0 ? Status::OK()
-                           : Status::InternalError(strings::Substitute("HDFS file sync error $0", _path));
+                           : Status::IOError(fmt::format("Fail to sync {}: {}", _path, get_hdfs_err_msg()));
     }
 
     uint64_t size() const override { return _offset; }
@@ -206,16 +210,20 @@ Status HDFSWritableFile::close() {
     FileSystem::on_file_write_close(this);
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
         int r = hdfsHSync(_fs, _file);
-        if (r != 0) {
-            return Status::IOError("sync error, file: {}"_format(_path));
+        if (r == -1) {
+            auto error_msg = fmt::format("Fail to sync file {}: {}", _path, std::strerror(errno));
+            LOG(WARNING) << error_msg;
+            return Status::IOError(error_msg);
         }
 
         r = hdfsCloseFile(_fs, _file);
-        if (r == 0) {
-            return Status::OK();
-        } else {
-            return Status::IOError("close error, file: {}"_format(_path));
+        if (r == -1) {
+            auto error_msg = fmt::format("Fail to close file {}: {}", _path, std::strerror(errno));
+            LOG(WARNING) << error_msg;
+            return Status::IOError(error_msg);
         }
+
+        return Status::OK();
     });
     Status st = ret->get_future().get();
     PLOG_IF(ERROR, !st.ok()) << "close " << _path << " failed";
