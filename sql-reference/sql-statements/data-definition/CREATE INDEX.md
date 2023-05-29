@@ -29,12 +29,16 @@ CREATE INDEX index_name ON table_name (column_name) [USING BITMAP] [COMMENT'']
 例如有一张表`sales_records`，其建表语句如下：
 
 ```SQL
-CREATE TABLE sales_records(
+CREATE TABLE sales_records
+(
     record_id int,
     seller_id int,
     item_id int
-) distributed BY hash(record_id)
-properties("replication_num" = "1");
+)
+DISTRIBUTED BY hash(record_id)
+PROPERTIES (
+    "replication_num" = "3"
+);
 ```
 
 为表`sales_records`中的`item_id`列创建 bitmap 索引，索引名称为`index3`。

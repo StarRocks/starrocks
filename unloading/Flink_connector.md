@@ -169,7 +169,7 @@ Flink 连接器支持两种数据读取方式：Flink SQL 和 Flink DataStream�
    DISTRIBUTED BY HASH(`id`) BUCKETS 1
    PROPERTIES
    (
-       "replication_num" = "1"
+       "replication_num" = "3"
    );
    ```
 

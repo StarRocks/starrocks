@@ -40,7 +40,7 @@ CREATE TABLE Employees (
 )
 PRIMARY KEY (EmployeeID) 
 DISTRIBUTED BY HASH (EmployeeID) BUCKETS 1
-PROPERTIES ("replication_num" = "1");
+PROPERTIES ("replication_num" = "3");
 
 INSERT INTO Employees VALUES
     (1, 'John Doe', 5000),

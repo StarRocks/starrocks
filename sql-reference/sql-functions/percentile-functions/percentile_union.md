@@ -30,7 +30,7 @@ CREATE TABLE sales_records(
     sale_date date, 
     sale_amt bigint
 ) distributed BY hash(record_id) 
-properties("replication_num" = "1");
+properties("replication_num" = "3");
 ```
 
 对`sale_amt`建立 PERCENTILE 类型物化视图表。
@@ -53,7 +53,7 @@ AGGREGATE KEY(`record_id`, `seller_id`, `store_id`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`record_id`) BUCKETS 3
 PROPERTIES (
-"replication_num" = "1",
+"replication_num" = "3",
 "storage_format" = "DEFAULT"
 );
 ```
