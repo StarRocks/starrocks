@@ -60,6 +60,7 @@ import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -540,6 +541,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             throw new SchedException(Status.UNRECOVERABLE, "unable to find source replica");
         }
 
+        // Shuffle the candidate list first so that we won't always choose the same replica with
+        // the highest version to avoid continuous clone failure
+        Collections.shuffle(candidates);
         // Sort the candidates by version in desc order, so that replica with higher version
         // can be used as clone source first.
         candidates.sort((c1, c2) -> (int) (c2.getVersion() - c1.getVersion()));
