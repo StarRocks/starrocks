@@ -335,7 +335,7 @@ If you choose Data Lake Storage Gen2 as storage for your Delta Lake cluster, tak
   ```SQL
   "azure.adls2.oauth2_client_id" = "<service_client_id>",
   "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
   The following table describes the parameters you need to configure `in StorageCredentialParams`.
@@ -658,7 +658,7 @@ PROPERTIES
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-      "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint> 
+      "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   );
   ```
 
