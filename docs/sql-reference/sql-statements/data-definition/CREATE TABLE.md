@@ -442,13 +442,13 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 [PROPERTIES ("key"="value", ...)],...)
 ```
 
-#### Define Foreign Key constraints for View Delta Join query rewrite
+#### Define Unique Key constraints and Foreign Key constraints for View Delta Join query rewrite
 
-To enable query rewrite in the View Delta Join scenario, you must define the Foreign Key constraints `unique_constraints/foreign_key_constraints` for the table to be joined in the Delta Join. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/Materialized_view.md#rewrite-queries-in-view-delta-join-scenario) for further information.
+To enable query rewrite in the View Delta Join scenario, you must define the Unique Key constraints `unique_constraints` and Foreign Key constraints `foreign_key_constraints` for the table to be joined in the Delta Join. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/Materialized_view.md#rewrite-queries-in-view-delta-join-scenario) for further information.
 
 ```SQL
 PROPERTIES (
-    "unique_constraints" = "<child_column>[, ...]",
+    "unique_constraints" = "<unique_column>[, ...]",
     "foreign_key_constraints" = "
     (<child_column>[, ...]) 
     REFERENCES 
@@ -465,9 +465,10 @@ PROPERTIES (
 - `parent_column`: the column to be joined. They must be the Primary Keys or Unique Keys of the corresponding tables.
 
 > **CAUTION**
-> - The Unique Key constraints and Foreign Key constraints are only used for query rewrite. Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
-> - The `primary keys` of a `PrimaryKey` table or `unique keys` of a `UniqueKey` table have the `unique_constraints` and no need to set it again.
-> - The `<child_column>s` of the table's `foreign_key_constraints` must be referenced to another table's `unique_constraints`.
+>
+> - The Unique Key constraints and Foreign Key constraints are only used for query rewrite. The Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
+> - The primary keys of a Primary Key table or the unique keys of a Unique Key table are, by default, the corresponding `unique_constraints`. You do not need to set it manually.
+> - The `child_column` in a table's `foreign_key_constraints` must be referenced to a `unique_column` in another table's `unique_constraints`.
 > - The number of `child_column` and `parent_column` must agree.
 > - The data types of the `child_column` and the corresponding `parent_column` must match.
 
