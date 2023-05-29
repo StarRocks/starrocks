@@ -226,7 +226,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
     | kerberos_keytab                 | The save path of the Kerberos keytab file. |
     | kerberos_keytab_content         | The Base64-encoded content of the the Kerberos keytab file. You can choose to specify either `kerberos_keytab` or `kerberos_keytab_content`. |
 
-    If you load data from a single HDFS cluster and you have configured multiple Kerberos users, you must deploy independent [brokers](../../../deployment/deploy_broker.md) (in most cases, you only need to deploy one broker) and in the load statement you must input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. Additionally, you must open the broker startup script file **start_broker.sh** and modify line 42 of the file to enable the brokers to read the **krb5.conf** file. Example:
+    If you load data from a single HDFS cluster and you have configured multiple Kerberos users, you must [deploy at least one independent broker group](../../../deployment/deploy_broker.md) (in most cases, one broker group is sufficient) and in the load statement you must input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. Additionally, you must open the broker startup script file **start_broker.sh** and modify line 42 of the file to enable the brokers to read the **krb5.conf** file. Example:
 
     ```Plain
     export JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx1024m -Dfile.encoding=UTF-8 -Djava.security.krb5.conf=/etc/krb5.conf"
