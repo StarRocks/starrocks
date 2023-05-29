@@ -35,6 +35,7 @@ import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
@@ -49,6 +50,7 @@ import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -138,7 +140,7 @@ public class CompactionScheduler extends Daemon {
                 } catch (Exception e) {
                     LOG.error("Fail to commit compaction. {} error={}", job.getDebugString(), e.getMessage());
                     iterator.remove();
-                    job.setFinishTs(System.currentTimeMillis());
+                    job.finish();
                     failHistory.offer(CompactionRecord.build(job, e.getMessage()));
                     compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
                     try {
@@ -152,7 +154,7 @@ public class CompactionScheduler extends Daemon {
 
             if (job.transactionHasCommitted() && job.waitTransactionVisible(100, TimeUnit.MILLISECONDS)) {
                 iterator.remove();
-                job.setFinishTs(System.currentTimeMillis());
+                job.finish();
                 history.offer(CompactionRecord.build(job));
                 long cost = job.getFinishTs() - job.getStartTs();
                 if (cost >= /*60 minutes=*/3600000) {
@@ -169,7 +171,7 @@ public class CompactionScheduler extends Daemon {
         // Create new compaction tasks.
         int index = 0;
         int compactionLimit = compactionTaskLimit();
-        int numRunningTasks = runningCompactions.values().stream().mapToInt(CompactionJob::getNumCompactionTasks).sum();
+        int numRunningTasks = runningCompactions.values().stream().mapToInt(CompactionJob::getNumTabletCompactionTasks).sum();
         if (numRunningTasks >= compactionLimit) {
             return;
         }
@@ -181,7 +183,7 @@ public class CompactionScheduler extends Daemon {
             if (job == null) {
                 continue;
             }
-            numRunningTasks += job.getNumCompactionTasks();
+            numRunningTasks += job.getNumTabletCompactionTasks();
             runningCompactions.put(partition, job);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Created new compaction job. partition={} txnId={}", partition, job.getTxnId());
@@ -278,20 +280,21 @@ public class CompactionScheduler extends Daemon {
             db.readUnlock();
         }
 
-        String partitionName = String.format("%s.%s.%s", db.getFullName(), table.getName(), partition.getName());
-        CompactionJob job = new CompactionJob(partitionName, txnId, System.currentTimeMillis());
-        job.setBeToTablets(beToTablets);
-
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
+        String partitionName = String.format("%s.%s.%s", db.getFullName(), table.getName(), partition.getName());
+        CompactionJob job = new CompactionJob(partitionName, txnId);
         try {
-            List<Future<CompactResponse>> futures = compactTablets(currentVersion, beToTablets, txnId);
-            job.setResponseList(futures);
+            List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId);
+            for (CompactionTask task : tasks) {
+                task.sendRequest();
+            }
+            job.setTasks(tasks);
             return job;
         } catch (Exception e) {
             LOG.error(e);
             nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_FAILURE;
             abortTransactionIgnoreError(db.getId(), txnId, e.getMessage());
-            job.setFinishTs(System.currentTimeMillis());
+            job.finish();
             failHistory.offer(CompactionRecord.build(job, e.getMessage()));
             return null;
         } finally {
@@ -300,23 +303,32 @@ public class CompactionScheduler extends Daemon {
     }
 
     @NotNull
-    private List<Future<CompactResponse>> compactTablets(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId)
-            throws UserException {
-        List<Future<CompactResponse>> futures = Lists.newArrayListWithCapacity(beToTablets.size());
+    private List<CompactionTask> createCompactionTasks(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId)
+            throws UserException, RpcException {
+        List<CompactionTask> tasks = new ArrayList<>();
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
+<<<<<<< HEAD
             Backend backend = systemInfoService.getBackend(entry.getKey());
             if (backend == null) {
                 throw new UserException("Backend " + entry.getKey() + " has been dropped");
+=======
+            ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
+            if (node == null) {
+                throw new UserException("Node " + entry.getKey() + " has been dropped");
+>>>>>>> 0b3cb1270 ([Refactor] Some code refactoring (#24216))
             }
+
+            LakeService service = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
+
             CompactRequest request = new CompactRequest();
             request.tabletIds = entry.getValue();
             request.txnId = txnId;
             request.version = currentVersion;
 
-            LakeService service = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
-            futures.add(service.compact(request));
+            CompactionTask task = new CompactionTask(node.getId(), service, request);
+            tasks.add(task);
         }
-        return futures;
+        return tasks;
     }
 
     @NotNull
@@ -366,12 +378,7 @@ public class CompactionScheduler extends Daemon {
             }
         }
 
-        List<TabletCommitInfo> commitInfoList = Lists.newArrayList();
-        for (Map.Entry<Long, List<Long>> entry : job.getBeToTablets().entrySet()) {
-            for (Long tabletId : entry.getValue()) {
-                commitInfoList.add(new TabletCommitInfo(tabletId, entry.getKey()));
-            }
-        }
+        List<TabletCommitInfo> commitInfoList = job.buildTabletCommitInfo();
 
         Database db = stateMgr.getDb(partition.getDbId());
         if (db == null) {
