@@ -54,7 +54,7 @@ PARTITION BY RANGE(reg_date)
 )
 DISTRIBUTED BY HASH(city_code)
 PROPERTIES(
-    "replication_num" = "1"
+    "replication_num" = "3"
 );
 ```
 

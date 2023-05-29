@@ -434,8 +434,8 @@ create external table jdbc_tbl (
     `data` varchar(200) NULL 
 ) ENGINE=jdbc 
 properties (
-    "resource"="jdbc0",
-    "table"="dest_tbl"
+    "resource" = "jdbc0",
+    "table" = "dest_tbl"
 );
 ~~~
 
@@ -747,7 +747,10 @@ For example, create a resource named `iceberg0` and set the catalog type to `HIV
 
 ~~~SQL
 CREATE EXTERNAL RESOURCE "iceberg0" 
-PROPERTIES ( "type" = "iceberg", "iceberg.catalog.type"="HIVE", "iceberg.catalog.hive.metastore.uris"="thrift://192.168.0.81:9083" 
+PROPERTIES (
+   "type" = "iceberg",
+   "iceberg.catalog.type" = "HIVE",
+   "iceberg.catalog.hive.metastore.uris" = "thrift://192.168.0.81:9083" 
 );
 ~~~
 
@@ -767,7 +770,10 @@ For example, create a resource named `iceberg1` and set the catalog type to `CUS
 
 ~~~SQL
 CREATE EXTERNAL RESOURCE "iceberg1" 
-PROPERTIES ( "type" = "iceberg", "iceberg.catalog.type"="CUSTOM", "iceberg.catalog-impl"="com.starrocks.IcebergCustomCatalog" 
+PROPERTIES (
+   "type" = "iceberg",
+   "iceberg.catalog.type" = "CUSTOM",
+   "iceberg.catalog-impl" = "com.starrocks.IcebergCustomCatalog" 
 );
 ~~~
 
@@ -776,7 +782,7 @@ The following table describes the related parameters.
 | **Parameter**          | **Description**                                              |
 | ---------------------- | ------------------------------------------------------------ |
 | type                   | The resource type. Set the value to `iceberg`.               |
-| iceberg.catalog.type | The catalog type of the resource. Both Hive catalog and custom catalog are supported. If you specify a Hive catalog, set the value to `HIVE`.If you specify a custom catalog, set the value to `CUSTOM`. |
+| iceberg.catalog.type | The catalog type of the resource. Both Hive catalog and custom catalog are supported. If you specify a Hive catalog, set the value to `HIVE`. If you specify a custom catalog, set the value to `CUSTOM`. |
 | iceberg.catalog-impl   | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg external table. |
 
 You can modify `hive.metastore.uris` and `iceberg.catalog-impl`of a Iceberg resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md).
