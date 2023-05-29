@@ -210,4 +210,25 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select json_extract_scalar(json_parse('{\"a\": {\"b\": 1}}'), '$.a.b');";
         assertPlanContains(sql, "CAST(json_query(parse_json('{\"a\": {\"b\": 1}}'), '$.a.b') AS VARCHAR)");
     }
+
+    @Test
+    public void testBitFnTransform() throws Exception {
+        String sql = "select bitwise_and(19,25)";
+        assertPlanContains(sql, "17");
+
+        sql = "select bitwise_not(19)";
+        assertPlanContains(sql, "~ 19");
+
+        sql = "select bitwise_or(19,25)";
+        assertPlanContains(sql, "27");
+
+        sql = "select bitwise_xor(19,25)";
+        assertPlanContains(sql, "10");
+
+        sql = "select bitwise_left_shift(1, 2)";
+        assertPlanContains(sql, "1 BITSHIFTLEFT 2");
+
+        sql = "select bitwise_right_shift(8, 3)";
+        assertPlanContains(sql, "8 BITSHIFTRIGHT 3");
+    }
 }
