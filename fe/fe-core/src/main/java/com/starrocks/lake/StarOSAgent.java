@@ -267,6 +267,16 @@ public class StarOSAgent {
         LOG.info("remove worker {} success from StarMgr", workerIpPort);
     }
 
+    public void removeWorkerFromMap(String workerIpPort) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Long workerId = workerToId.remove(workerIpPort);
+            if (workerId != null) {
+                workerToBackend.remove(workerId);
+            }
+        }
+        LOG.info("remove worker {} success from StarMgr", workerIpPort);
+    }
+
     public long getWorkerIdByBackendId(long backendId) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return getWorkerIdByBackendIdInternal(backendId);
