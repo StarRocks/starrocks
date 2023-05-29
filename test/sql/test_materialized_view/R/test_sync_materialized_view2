@@ -38,16 +38,20 @@ to target2
 as
 select k1, length(k2) as k2, cast(k1 * 2 as tinyint(4)) as k11,  sum(k3) as k4, hll_union(hll_hash(k4)) as k5 from test2 group by k1, k2; 
 
-insert into test2 values (1, 'a', 1, 'aa');
+insert into test2 values (1, 'a', 1, 'aa'), (2, 'b', 1, 'aa'), (3, 'a', 1, 'cc');
 -- result:
 -- !result
-select * from test2;
+select * from test2 order by k1;
 -- result:
 1	a	1	aa
+2	b	1	aa
+3	a	1	cc
 -- !result
-select * from target2;
+select * from target2 order by k1;
 -- result:
 1	1	2	1	None
+2	1	4	1	None
+3	1	6	1	None
 -- !result
 drop materialized view test_mv2;
 -- result:
@@ -86,16 +90,42 @@ to target3
 as
 select k1, length(k2) as k2, cast(k1 * 2 as tinyint(4)) as k11, sum(k3), hll_union(hll_hash(k4)) as k5 from test3 group by k1, k2; 
 
-insert into test3 values (1, 'a', 1, 'aa');
+insert into test3 values (1, 'a', 1, 'aa'), (2, 'b', 1, 'aa'), (3, 'a', 1, 'cc');
 -- result:
 -- !result
-select * from test3;
+select * from test3 order by k1;
 -- result:
 1	a	1	aa
+2	b	1	aa
+3	a	1	cc
 -- !result
-select * from target3;
+select * from target3 order by k1;
 -- result:
 1	1	2	1	None
+2	1	4	1	None
+3	1	6	1	None
+-- !result
+CREATE MATERIALIZED VIEW test_mv3_1
+PROPERTIES ( "enable_populate" = "false" ) 
+to target3
+as
+select k1, length(k2) as k2, k1 * 2 as k11, sum(k3), hll_union(hll_hash(k4)) as k5 from test2 group by k1, k2; 
+insert into test2 values (1, 'a', 1, 'aa'), (2, 'b', 1, 'aa'), (3, 'a', 1, 'cc');
+-- result:
+-- !result
+select * from test3 order by k1;
+-- result:
+1	a	1	aa
+2	b	1	aa
+3	a	1	cc
+-- !result
+select * from target3 order by k1;
+-- result:
+1	1	2	2	None
+2	1	0	1	None
+2	1	4	1	None
+3	1	4	1	None
+3	1	6	1	None
 -- !result
 CREATE TABLE `test8` (
   `k1` tinyint(4) NULL DEFAULT "0",
@@ -128,10 +158,18 @@ PROPERTIES ( "enable_populate" = "false" )
 to target8
 as
 select k1, length(k2) as k22, sum(k3) as k33, hll_union(hll_hash(k4)) as k44 from test8 group by k1, k22; 
-insert into test8 values (1, 'a', 1, 'aa');
+insert into test8 values (1, 'a', 1, 'aa'), (2, 'b', 1, 'aa'), (3, 'a', 1, 'cc');
 -- result:
 -- !result
-select * from target8;
+select * from test8 order by k1;
+-- result:
+1	a	1	aa
+2	b	1	aa
+3	a	1	cc
+-- !result
+select * from target8 order by k1;
 -- result:
 1	1	1	None
+2	1	1	None
+3	1	1	None
 -- !result

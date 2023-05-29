@@ -39,6 +39,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -290,8 +292,10 @@ public class MaterializedViewHandler extends AlterHandler {
             //                        + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));
             //            }
             if (!mvCol.getType().equals(targetCol.getType())) {
-                throw new DdlException("Logical materialized view column type "
-                        + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));
+                Expr newDefinedExpr = new CastExpr(targetCol.getType(), mvCol.getDefineExpr());
+                mvCol.setDefineExpr(newDefinedExpr);
+                //                throw new DdlException("Logical materialized view column type "
+                //                        + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));
             }
         }
 
