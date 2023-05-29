@@ -266,7 +266,7 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
             _collect_iter = timed_chunk_iterator(_collect_iter, aggr_timer);
         } else {
             if (_is_vertical_merge && !_is_key) {
-                _collect_iter = new_mask_merge_it    erator(seg_iters, _mask_buffer);
+                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
             } else {
                 _collect_iter = new_heap_merge_iterator(seg_iters);
             }

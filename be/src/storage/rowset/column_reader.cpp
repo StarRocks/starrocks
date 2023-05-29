@@ -205,7 +205,8 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
         _sub_readers = std::make_unique<SubReaderList>();
         if (meta->is_nullable()) {
             if (meta->children_columns_size() != 5) {
-                return Status::InvalidArgument("nullable map should have 4 children columns, but there are" + meta->children_columns_size());
+                return Status::InvalidArgument("nullable map should have 4 children columns, but there are" +
+                                               std::to_string(meta->children_columns_size()));
             }
             _sub_readers->reserve(5);
 
