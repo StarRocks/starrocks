@@ -197,7 +197,7 @@ The following examples demonstrate how to partition a table by specifying START,
       START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 DAY)
   )
   DISTRIBUTED BY HASH(site_id) BUCKETS 10
-  PROPERTIES ("replication_num" = "1" 
+  PROPERTIES ("replication_num" = "3" 
   );
   ```
 
