@@ -32,6 +32,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -76,6 +77,7 @@ import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
@@ -1020,13 +1022,16 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private DistributionDesc getDistributionDesc(MaterializedView materializedView) {
-        HashDistributionInfo hashDistributionInfo =
-                (HashDistributionInfo) materializedView.getDefaultDistributionInfo();
-        List<String> distColumnNames = new ArrayList<>();
-        for (Column distributionColumn : hashDistributionInfo.getDistributionColumns()) {
-            distColumnNames.add(distributionColumn.getName());
+        DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
+        if (distributionInfo instanceof HashDistributionInfo) {
+            List<String> distColumnNames = new ArrayList<>();
+            for (Column distributionColumn : ((HashDistributionInfo) distributionInfo).getDistributionColumns()) {
+                distColumnNames.add(distributionColumn.getName());
+            }
+            return new HashDistributionDesc(distributionInfo.getBucketNum(), distColumnNames);
+        } else {
+            return new RandomDistributionDesc();
         }
-        return new HashDistributionDesc(hashDistributionInfo.getBucketNum(), distColumnNames);
     }
 
     private void addPartitions(Database database, MaterializedView materializedView,
