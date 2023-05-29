@@ -376,7 +376,7 @@ PARTITION BY RANGE(`dt`)
 PARTITION p20210821 VALUES [('2021-08-21'), ('2021-08-22')) ) 
 DISTRIBUTED BY HASH(order_id) BUCKETS 4 
 PROPERTIES (
-    "replication_num" = "1", 
+    "replication_num" = "3", 
     "enable_persistent_index" = "true"
 );
 ```
