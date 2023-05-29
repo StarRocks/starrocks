@@ -42,7 +42,7 @@ The mapping between column values and return value types is as follows:
     COMMENT "OLAP"
     DISTRIBUTED BY HASH(`k0`) BUCKETS 1
     PROPERTIES(
-        "replication_num" = "1",
+        "replication_num" = "3",
         "storage_format" = "DEFAULT"
     );
     ```

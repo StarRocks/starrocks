@@ -169,7 +169,7 @@ The following examples assume you have created a database named `test` in your S
    DISTRIBUTED BY HASH(`id`) BUCKETS 1
    PROPERTIES
    (
-       "replication_num" = "1"
+       "replication_num" = "3"
    );
    ```
 
