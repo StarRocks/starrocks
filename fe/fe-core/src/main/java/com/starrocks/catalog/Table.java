@@ -366,6 +366,9 @@ public class Table extends MetaObject implements Writable {
         if (this instanceof MaterializedView) {
             return "VIEW";
         }
+        if (this instanceof SchemaTable) {
+            return "SYSTEM VIEW";
+        }
         return "BASE TABLE";
     }
 

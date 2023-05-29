@@ -67,7 +67,7 @@ http://<ip>:<fe_http_port/api/_set_config?key=value>
 Example:
 
 ```Plain%20Text
-curl --location-trusted -u root:root \
+curl --location-trusted -u <username>:<password> \
 http://192.168.110.101:8030/api/_set_config?enable_statistic_collect=true
 ```
 

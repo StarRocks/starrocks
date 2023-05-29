@@ -32,7 +32,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 ### `username` and `password`
 
-Specify the username and password of the account that you use to connect to your StarRocks cluster. This is a required parameter. If you use the account `root` for which no password is set, you need to input only `root:`.
+Specify the username and password of the account that you use to connect to your StarRocks cluster. This is a required parameter. If you use an account for which no password is set, you need to input only `<username>:`.
 
 ### `XPUT`
 
