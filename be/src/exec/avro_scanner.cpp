@@ -216,7 +216,7 @@ Status AvroScanner::_construct_row(const avro_value_t& avro_value, Chunk* chunk)
             continue;
         }
         avro_value_t output_value;
-        auto st = _extract_field(avro_value, _json_paths[i], output_value);
+        auto st = _extract_field(avro_value, _json_paths[i], &output_value);
         if (LIKELY(st.ok())) {
             RETURN_IF_ERROR(_construct_column(output_value, column, _src_slot_descriptors[i]->type(),
                                               _src_slot_descriptors[i]->col_name()));
@@ -362,8 +362,15 @@ Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_val
         }
 
         auto& column = chunk->get_column_by_slot_id(slot_info.id_);
+        // We should expand the union type.
+        avro_value_t* cur_value = &element_value;
+        if (UNLIKELY(avro_value_get_type(cur_value) == AVRO_UNION)) {
+            avro_value_t branch;
+            RETURN_IF_ERROR(_handle_union(cur_value, &branch));
+            *cur_value = branch;
+        }
         // construct column with value.
-        RETURN_IF_ERROR(_construct_column(element_value, column.get(), slot_info.type_, slot_info.key_));
+        RETURN_IF_ERROR(_construct_column(*cur_value, column.get(), slot_info.type_, slot_info.key_));
     }
 
     for (int i = 0; i < _found_columns.size(); i++) {
@@ -546,7 +553,7 @@ void AvroScanner::close() {
     FileScanner::close();
 }
 
-Status AvroScanner::_get_array_element(avro_value_t* cur_value, size_t idx, avro_value_t* element) {
+Status AvroScanner::_get_array_element(const avro_value_t* cur_value, size_t idx, avro_value_t* element) {
     size_t element_count;
     if (avro_value_get_size(cur_value, &element_count) != 0) {
         auto err_msg = "Cannot get avro array size: " + std::string(avro_strerror());
@@ -579,18 +586,18 @@ bool construct_path_from_str(std::string path_str, std::vector<AvroPath>& paths)
 //         ]
 //     ]
 // The whole logic is to return the deepest data, which could be null or some other data type.
-Status AvroScanner::_handle_union(avro_value_t input_value, avro_value_t& branch) {
-    while (avro_value_get_type(&input_value) == AVRO_UNION) {
+Status AvroScanner::_handle_union(const avro_value_t* input_value, avro_value_t* branch) {
+    while (avro_value_get_type(input_value) == AVRO_UNION) {
         int disc;
-        if (avro_value_get_discriminant(&input_value, &disc) != 0) {
+        if (avro_value_get_discriminant(input_value, &disc) != 0) {
             auto err_msg = "Cannot get union discriminan: " + std::string(avro_strerror());
             return Status::InternalError(err_msg);
         }
-        if (avro_value_set_branch(&input_value, disc, &branch) != 0) {
+        if (avro_value_set_branch(input_value, disc, branch) != 0) {
             auto err_msg = "Cannot set union branch: " + std::string(avro_strerror());
             return Status::InternalError(err_msg);
         }
-        if (avro_value_get_type(&branch) == AVRO_NULL) {
+        if (avro_value_get_type(branch) == AVRO_NULL) {
             return Status::OK();
         }
         input_value = branch;
@@ -604,7 +611,7 @@ Status AvroScanner::_handle_union(avro_value_t input_value, avro_value_t& branch
 // paths: input param
 // output_value: output param
 Status AvroScanner::_extract_field(const avro_value_t& input_value, const std::vector<AvroPath>& paths,
-                                   avro_value_t& output_value) {
+                                   avro_value_t* output_value) {
     avro_value_t cur_value = input_value;
 
     // Select the entire data
@@ -612,10 +619,10 @@ Status AvroScanner::_extract_field(const avro_value_t& input_value, const std::v
         // Remove union
         if (avro_value_get_type(&cur_value) == AVRO_UNION) {
             avro_value_t branch;
-            RETURN_IF_ERROR(_handle_union(cur_value, branch));
+            RETURN_IF_ERROR(_handle_union(&cur_value, &branch));
             cur_value = branch;
         }
-        output_value = cur_value;
+        *output_value = cur_value;
         return Status::OK();
     }
 
@@ -648,10 +655,10 @@ Status AvroScanner::_extract_field(const avro_value_t& input_value, const std::v
         // If it is not null, the corresponding value is extracted and the progress continues.
         if (UNLIKELY(avro_value_get_type(&cur_value) == AVRO_UNION)) {
             avro_value_t branch;
-            RETURN_IF_ERROR(_handle_union(cur_value, branch));
+            RETURN_IF_ERROR(_handle_union(&cur_value, &branch));
             cur_value = branch;
             if (avro_value_get_type(&branch) == AVRO_NULL) {
-                output_value = cur_value;
+                *output_value = cur_value;
                 return Status::OK();
             }
         }
@@ -680,10 +687,10 @@ Status AvroScanner::_extract_field(const avro_value_t& input_value, const std::v
                 // }
                 if (avro_value_get_type(&cur_value) == AVRO_UNION) {
                     avro_value_t branch;
-                    RETURN_IF_ERROR(_handle_union(cur_value, branch));
+                    RETURN_IF_ERROR(_handle_union(&cur_value, &branch));
                     cur_value = branch;
                     if (avro_value_get_type(&branch) == AVRO_NULL) {
-                        output_value = cur_value;
+                        *output_value = cur_value;
                         return Status::OK();
                     }
                 }
@@ -706,10 +713,10 @@ Status AvroScanner::_extract_field(const avro_value_t& input_value, const std::v
     // Remove union
     if (UNLIKELY(avro_value_get_type(&cur_value) == AVRO_UNION)) {
         avro_value_t branch;
-        RETURN_IF_ERROR(_handle_union(cur_value, branch));
+        RETURN_IF_ERROR(_handle_union(&cur_value, &branch));
         cur_value = branch;
     }
-    output_value = cur_value;
+    *output_value = cur_value;
     return Status::OK();
 }
 
