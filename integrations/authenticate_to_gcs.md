@@ -39,8 +39,8 @@ StarRocks 支持在以下场景中集成 GCS：
 CREATE EXTERNAL CATALOG hive_catalog_gcs
 PROPERTIES
 (
-    "type"="hive", 
-    "hive.metastore.uris"="thrift://34.132.15.127:9083",
+    "type" = "hive", 
+    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
     StorageCredentialParams
 );
 ```
