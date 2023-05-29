@@ -339,8 +339,18 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_BACKUP_JOB_V2: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), AbstractJob.class);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_RESTORE_JOB: {
                 data = AbstractJob.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_RESTORE_JOB_V2: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), AbstractJob.class);
                 isRead = true;
                 break;
             }

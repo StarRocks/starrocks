@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob.JobType;
 import com.starrocks.backup.BackupJob.BackupJobState;
@@ -54,6 +55,10 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AbstractBackupStmt;
 import com.starrocks.sql.ast.BackupStmt;
@@ -96,6 +101,7 @@ public class BackupHandler extends FrontendDaemon implements Writable {
 
     public static final Path TEST_BACKUP_ROOT_DIR = Paths.get(Config.tmp_dir, "test_backup").normalize();
 
+    @SerializedName("rm")
     private RepositoryMgr repoMgr = new RepositoryMgr();
 
     // db id -> last running or finished backup/restore jobs
@@ -669,6 +675,38 @@ public class BackupHandler extends FrontendDaemon implements Writable {
         setGlobalStateMgr(globalStateMgr);
         LOG.info("finished replay backupHandler from image");
         return checksum;
+    }
+
+    public void saveBackupHandlerV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos,
+                BackupHandler.class.getName(), 2 + dbIdToBackupOrRestoreJob.size());
+        writer.writeJson(this);
+        writer.writeJson(dbIdToBackupOrRestoreJob.size());
+        for (AbstractJob job : dbIdToBackupOrRestoreJob.values()) {
+            writer.writeJson(job);
+        }
+        writer.close();
+    }
+
+    public void loadBackupHandlerV2(DataInputStream dis) throws IOException, SRMetaBlockException,
+            SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, BackupHandler.class.getName());
+        try {
+            BackupHandler data = reader.readJson(BackupHandler.class);
+            this.repoMgr = data.repoMgr;
+            int size = reader.readInt();
+            long currentTimeMs = System.currentTimeMillis();
+            while (size-- > 0) {
+                AbstractJob job = reader.readJson(AbstractJob.class);
+                if (isJobExpired(job, currentTimeMs)) {
+                    LOG.warn("skip expired job {}", job);
+                    continue;
+                }
+                dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
+            }
+        } finally {
+            reader.close();
+        }
     }
 
     /**
