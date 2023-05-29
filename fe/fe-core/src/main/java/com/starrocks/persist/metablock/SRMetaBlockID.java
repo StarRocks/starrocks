@@ -67,7 +67,11 @@ public enum SRMetaBlockID {
 
     COLOCATE_TABLE_INDEX(24),
 
-    VARIABLE_MGR(25);
+    VARIABLE_MGR(25),
+
+    RESOURCE_MGR(26),
+
+    TASK_MGR(27);
 
     @SerializedName("i")
     private final int id;

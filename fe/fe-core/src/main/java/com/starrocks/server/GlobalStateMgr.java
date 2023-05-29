@@ -1460,15 +1460,12 @@ public class GlobalStateMgr {
                     MaterializedViewMgr.getInstance().load(dis);
                     globalFunctionMgr.load(dis);
                     backupHandler.loadBackupHandlerV2(dis);
+                    taskManager.loadTasksV2(dis);
+                    resourceMgr.loadResourcesV2(dis, catalogMgr);
                 } catch (SRMetaBlockException | SRMetaBlockEOFException e) {
                     LOG.error("load image failed", e);
                     throw new IOException("load image failed", e);
                 }
-
-                //TODO: The following parts have not been refactored, and they are added for the convenience of testing
-
-                checksum = loadResources(dis, checksum);
-                checksum = taskManager.loadTasks(dis, checksum);
             } else {
                 checksum = loadHeaderV1(dis, checksum);
                 checksum = nodeMgr.loadLeaderInfo(dis, checksum);
@@ -1841,15 +1838,12 @@ public class GlobalStateMgr {
                     MaterializedViewMgr.getInstance().save(dos);
                     globalFunctionMgr.save(dos);
                     backupHandler.saveBackupHandlerV2(dos);
+                    taskManager.saveTasksV2(dos);
+                    resourceMgr.saveResourcesV2(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("save image failed", e);
                     throw new IOException("save image failed", e);
                 }
-
-                //TODO: The following parts have not been refactored, and they are added for the convenience of testing
-
-                checksum = resourceMgr.saveResources(dos, checksum);
-                checksum = taskManager.saveTasks(dos, checksum);
             } else {
                 checksum = saveVersion(dos, checksum);
                 checksum = saveHeader(dos, replayedJournalId, checksum);

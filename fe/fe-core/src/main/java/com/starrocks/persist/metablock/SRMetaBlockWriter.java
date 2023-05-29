@@ -47,6 +47,7 @@ public class SRMetaBlockWriter {
     private final SRMetaBlockHeader header;
     private int numJsonWritten;
 
+    @Deprecated
     public SRMetaBlockWriter(DataOutputStream dos, String name, int numJson) throws SRMetaBlockException {
         if (numJson <= 0) {
             throw new SRMetaBlockException(String.format("invalid numJson: %d", numJson));
