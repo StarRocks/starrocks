@@ -448,7 +448,7 @@ To enable query rewrite in the View Delta Join scenario, you must define the Uni
 
 ```SQL
 PROPERTIES (
-    "unique_constraints" = "<unique_column>[, ...]",
+    "unique_constraints" = "<unique_key>[, ...]",
     "foreign_key_constraints" = "
     (<child_column>[, ...]) 
     REFERENCES 
