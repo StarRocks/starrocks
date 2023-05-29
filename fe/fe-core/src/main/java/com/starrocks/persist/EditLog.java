@@ -739,12 +739,14 @@ public class EditLog {
                     globalStateMgr.getTaskManager().replayAlterRunningTaskRunProgress(
                             taskRunPeriodStatusChange.getTaskRunProgressMap());
                     break;
-                case OperationType.OP_CREATE_SMALL_FILE: {
+                case OperationType.OP_CREATE_SMALL_FILE:
+                case OperationType.OP_CREATE_SMALL_FILE_V2: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     globalStateMgr.getSmallFileMgr().replayCreateFile(smallFile);
                     break;
                 }
-                case OperationType.OP_DROP_SMALL_FILE: {
+                case OperationType.OP_DROP_SMALL_FILE:
+                case OperationType.OP_DROP_SMALL_FILE_V2: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     globalStateMgr.getSmallFileMgr().replayRemoveFile(smallFile);
                     break;
