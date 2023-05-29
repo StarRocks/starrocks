@@ -94,8 +94,7 @@ StatusOr<int64_t> HdfsInputStream::get_size() {
         auto ret = call_hdfs_scan_function_in_pthread([this] {
             auto info = hdfsGetPathInfo(_fs, _file_name.c_str());
             if (UNLIKELY(info == nullptr)) {
-                return Status::IOError(
-                        fmt::format("Fail to get path info of {}: {}", _file_name, get_hdfs_err_msg()));
+                return Status::IOError(fmt::format("Fail to get path info of {}: {}", _file_name, get_hdfs_err_msg()));
             }
             this->_file_size = info->mSize;
             hdfsFreeFileInfo(info, 1);
@@ -182,7 +181,7 @@ private:
 Status HDFSWritableFile::append(const Slice& data) {
     tSize r = hdfsWrite(_fs, _file, data.data, data.size);
     if (r == -1) { // error
-        auto error_msg = fmt::format("Fail to append {}: {}", _path, std::strerror(errno));
+        auto error_msg = fmt::format("Fail to append {}: {}", _path, get_hdfs_err_msg());
         LOG(WARNING) << error_msg;
         return Status::IOError(error_msg);
     }
@@ -211,14 +210,14 @@ Status HDFSWritableFile::close() {
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
         int r = hdfsHSync(_fs, _file);
         if (r == -1) {
-            auto error_msg = fmt::format("Fail to sync file {}: {}", _path, std::strerror(errno));
+            auto error_msg = fmt::format("Fail to sync file {}: {}", _path, get_hdfs_err_msg());
             LOG(WARNING) << error_msg;
             return Status::IOError(error_msg);
         }
 
         r = hdfsCloseFile(_fs, _file);
         if (r == -1) {
-            auto error_msg = fmt::format("Fail to close file {}: {}", _path, std::strerror(errno));
+            auto error_msg = fmt::format("Fail to close file {}: {}", _path, get_hdfs_err_msg());
             LOG(WARNING) << error_msg;
             return Status::IOError(error_msg);
         }
