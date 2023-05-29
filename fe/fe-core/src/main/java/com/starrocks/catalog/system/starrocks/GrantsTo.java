@@ -26,6 +26,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.CatalogPEntryObject;
@@ -37,11 +39,13 @@ import com.starrocks.privilege.PrivilegeCollection;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.ResourceGroupPEntryObject;
 import com.starrocks.privilege.ResourcePEntryObject;
+import com.starrocks.privilege.StorageVolumePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserItem;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
@@ -387,6 +391,29 @@ public class GrantsTo {
                         objects.add(Lists.newArrayList(null, null, null));
                         break;
                     }
+                    case STORAGE_VOLUME: {
+                        StorageVolumePEntryObject storageVolumePEntryObject =
+                                (StorageVolumePEntryObject) privilegeEntry.getObject();
+                        String storageVolumeId = storageVolumePEntryObject.getId();
+                        StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+                        if (storageVolumeId == null) {
+                            try {
+                                List<String> storageVolumeNames = storageVolumeMgr.listStorageVolumeNames();
+                                for (String storageVolumeName : storageVolumeNames) {
+                                    objects.add(Lists.newArrayList(null, null, storageVolumeName));
+                                }
+                            } catch (DdlException e) {
+                                continue;
+                            }
+                        } else {
+                            String storageVolumeName = getStorageVolumeName(storageVolumeId);
+                            if (storageVolumeName == null) {
+                                continue;
+                            }
+                            objects.add(Lists.newArrayList(null, null, storageVolumeName));
+                        }
+                        break;
+                    }
                 }
 
                 ActionSet actionSet = privilegeEntry.getActionSet();
@@ -424,5 +451,13 @@ public class GrantsTo {
             catalogName = catalog.getName();
         }
         return catalogName;
+    }
+
+    private static String getStorageVolumeName(String storageVolumeId) {
+        try {
+            return GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolume(storageVolumeId).getName();
+        } catch (AnalysisException e) {
+            return null;
+        }
     }
 }
