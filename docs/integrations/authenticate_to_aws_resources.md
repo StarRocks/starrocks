@@ -305,8 +305,8 @@ PROPERTIES
 (
     "path" = "s3://starrocks-test/",
     "format" = "ORC",
-    "aws.s3.use_instance_profile"="true",
-    "aws.s3.region"="us-west-2"
+    "aws.s3.use_instance_profile" = "true",
+    "aws.s3.region" = "us-west-2"
 );
 ```
 
@@ -325,9 +325,9 @@ PROPERTIES
 (
     "path" = "s3://starrocks-test/",
     "format" = "ORC",
-    "aws.s3.use_instance_profile"="true",
-    "aws.s3.iam_role_arn"="arn:aws:iam::081976408565:role/test_s3_role",
-    "aws.s3.region"="us-west-2"
+    "aws.s3.use_instance_profile" = "true",
+    "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+    "aws.s3.region" = "us-west-2"
 );
 ```
 
@@ -349,7 +349,7 @@ PROPERTIES
     "aws.s3.use_instance_profile" = "false",
     "aws.s3.access_key" = "<iam_user_access_key>",
     "aws.s3.secret_key" = "<iam_user_secret_key>",
-    "aws.s3.region"="us-west-2"
+    "aws.s3.region" = "us-west-2"
 );
 ```
 
@@ -372,12 +372,12 @@ LOAD LABEL test_s3_db.test_credential_instanceprofile_7
 )
 WITH BROKER
 (
-    "aws.s3.use_instance_profile"= "true",
-    "aws.s3.region"="us-west-1"
+    "aws.s3.use_instance_profile" = "true",
+    "aws.s3.region" = "us-west-1"
 )
 PROPERTIES
 (
-    "timeout"="1200"
+    "timeout" = "1200"
 );
 ```
 
@@ -394,13 +394,13 @@ LOAD LABEL test_s3_db.test_credential_instanceprofile_7
 )
 WITH BROKER
 (
-    "aws.s3.use_instance_profile"= "true",
+    "aws.s3.use_instance_profile" = "true",
     "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-    "aws.s3.region"="us-west-1"
+    "aws.s3.region" = "us-west-1"
 )
 PROPERTIES
 (
-    "timeout"="1200"
+    "timeout" = "1200"
 );
 ```
 
@@ -420,10 +420,10 @@ WITH BROKER
     "aws.s3.use_instance_profile" = "false",
     "aws.s3.access_key" = "<iam_user_access_key>",
     "aws.s3.secret_key" = "<iam_user_secret_key>",
-    "aws.s3.region"="us-west-1"
+    "aws.s3.region" = "us-west-1"
 )
 PROPERTIES
 (
-    "timeout"="1200"
+    "timeout" = "1200"
 );
 ```
