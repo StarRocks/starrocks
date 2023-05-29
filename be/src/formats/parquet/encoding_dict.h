@@ -132,8 +132,17 @@ public:
         size_t cur_size = data_column->size();
         data_column->resize_uninitialized(cur_size + count);
         T* __restrict__ data = data_column->get_data().data() + cur_size;
+
+        auto flag = 0;
+        size_t size = _dict.size();
         for (int i = 0; i < count; i++) {
-            RETURN_IF_ERROR(check_dict_index_in_bounds(_indexes[i], _dict.size()));
+            flag |= _indexes[i] >= size;
+        }
+        if (UNLIKELY(flag)) {
+            return Status::InternalError("Index not in dictionary bounds");
+        }
+
+        for (int i = 0; i < count; i++) {
             data[i] = _dict[_indexes[i]];
         }
         return Status::OK();
@@ -247,8 +256,15 @@ public:
         }
         case VALUE: {
             raw::stl_vector_resize_uninitialized(&_slices, count);
+            auto flag = 0;
+            size_t size = _dict.size();
+            for (int i = 0; i < count; i++) {
+                flag |= _indexes[i] >= size;
+            }
+            if (UNLIKELY(flag)) {
+                return Status::InternalError("Index not in dictionary bounds");
+            }
             for (int i = 0; i < count; ++i) {
-                RETURN_IF_ERROR(check_dict_index_in_bounds(_indexes[i], _dict.size()));
                 _slices[i] = _dict[_indexes[i]];
             }
             auto ret = dst->append_strings_overflow(_slices, _max_value_length);
