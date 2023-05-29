@@ -2,9 +2,9 @@
 
 ## Description
 
-The SELECT statement consists of select, from, where, group by, having, order by, union, and so on.
+The SELECT statement consists of the following clauses: SELECT, FROM, WHERE, GROUP BY, HAVING, ORDER BY, and UNION.
 
-StarRocks' query statement basically conforms to the SQL92 standard. Here is a brief description of the supported select usage.
+StarRocks' query statement basically conforms to the SQL92 standard. Here is a brief description of the supported SELECT usage.
 
 ### Join
 
@@ -482,11 +482,13 @@ Example:
 
 ```sql
 SELECT x FROM t1 WHERE x [NOT] IN (SELECT y FROM t2);
-```
 
-```sql
+SELECT * FROM t1 WHERE (x,y) [NOT] IN (SELECT x,y FROM t2 LIMIT 2);
+
 SELECT x FROM t1 WHERE EXISTS (SELECT y FROM t2 WHERE y = 1);
 ```
+
+From v3.0 onwards, you can specify multiple fields in the WHERE clause of `SELECT... FROM... WHERE... [NOT] IN`, for example, `WHERE (x,y)` in the second SELECT statement.
 
 #### Related subquery
 
