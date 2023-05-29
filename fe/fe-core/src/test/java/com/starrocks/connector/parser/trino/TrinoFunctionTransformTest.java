@@ -177,4 +177,37 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select strpos('bccaab', 'aa');";
         assertPlanContains(sql, "locate('aa', 'bccaab')");
     }
+
+    @Test
+    public void testJsonFnTransform() throws Exception {
+        String sql = "select json_array_length('[1, 2, 3]')";
+        assertPlanContains(sql, "json_length(CAST('[1, 2, 3]' AS JSON))");
+
+        sql = "select json_parse('{\"a\": {\"b\": 1}}');";
+        assertPlanContains(sql, "parse_json('{\"a\": {\"b\": 1}}')");
+
+        sql = "select json_extract(json_parse('{\"a\": {\"b\": 1}}'), '$.a.b')";
+        assertPlanContains(sql, "json_query(parse_json('{\"a\": {\"b\": 1}}'), '$.a.b')");
+
+        sql = "select json_extract(JSON '{\"a\": {\"b\": 1}}', '$.a.b');";
+        assertPlanContains(sql, "json_query(CAST('{\"a\": {\"b\": 1}}' AS JSON), '$.a.b')");
+
+        sql = "select json_format(JSON '[1, 2, 3]')";
+        assertPlanContains(sql, "'[1, 2, 3]'");
+
+        sql = "select json_format(json_parse('{\"a\": {\"b\": 1}}'))";
+        assertPlanContains(sql, "CAST(parse_json('{\"a\": {\"b\": 1}}') AS VARCHAR)");
+
+        sql = "select json_size('{\"x\": {\"a\": 1, \"b\": 2}}', '$.x');";
+        assertPlanContains(sql, "json_length(CAST('{\"x\": {\"a\": 1, \"b\": 2}}' AS JSON), '$.x')");
+
+        sql = "select json_extract_scalar('[1, 2, 3]', '$[2]');";
+        assertPlanContains(sql, "CAST(json_query(CAST('[1, 2, 3]' AS JSON), '$[2]') AS VARCHAR)");
+
+        sql = "select json_extract_scalar(JSON '{\"a\": {\"b\": 1}}', '$.a.b');";
+        assertPlanContains(sql, "CAST(json_query(CAST('{\"a\": {\"b\": 1}}' AS JSON), '$.a.b') AS VARCHAR)");
+
+        sql = "select json_extract_scalar(json_parse('{\"a\": {\"b\": 1}}'), '$.a.b');";
+        assertPlanContains(sql, "CAST(json_query(parse_json('{\"a\": {\"b\": 1}}'), '$.a.b') AS VARCHAR)");
+    }
 }

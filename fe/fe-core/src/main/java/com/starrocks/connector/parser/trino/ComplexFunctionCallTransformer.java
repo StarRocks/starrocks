@@ -14,9 +14,13 @@
 
 package com.starrocks.connector.parser.trino;
 
+import com.google.common.collect.ImmutableList;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.catalog.Type;
 
 public class ComplexFunctionCallTransformer {
     public static Expr transform(String functionName, Expr... args) {
@@ -28,6 +32,11 @@ public class ComplexFunctionCallTransformer {
                 return new TimestampArithmeticExpr(functionName, date, interval,
                         unit.getStringValue());
             }
+        } else if (functionName.equalsIgnoreCase("json_format")) {
+            return new CastExpr(Type.VARCHAR, args[0]);
+        } else if (functionName.equalsIgnoreCase("json_extract_scalar")) {
+            return new CastExpr(Type.VARCHAR, new FunctionCallExpr("json_query",
+                    ImmutableList.of(args[0], args[1])));
         }
         return null;
     }
