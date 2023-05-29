@@ -352,12 +352,16 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                                        config::lake_metadata_cache_limit);
 #endif
 
+<<<<<<< HEAD
 #if defined(USE_STAROS) && !defined(BE_TEST)
         _lake_tablet_manager->start_gc();
 #endif
     }
 
     _agent_server = new AgentServer(this, is_compute_node);
+=======
+    _agent_server = new AgentServer(this, false);
+>>>>>>> b54a2b76d ([BugFix] fix lake data gc core when agent server is not initialized (#24317))
     _agent_server->init_or_die();
 
     _broker_mgr->init();
@@ -371,6 +375,10 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init());
+
+#if defined(USE_STAROS) && !defined(BE_TEST)
+    _lake_tablet_manager->start_gc();
+#endif
     return Status::OK();
 }
 
