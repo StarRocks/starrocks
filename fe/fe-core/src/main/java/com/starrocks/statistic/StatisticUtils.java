@@ -114,62 +114,74 @@ public class StatisticUtils {
 
     public static void triggerCollectionOnFirstLoad(TransactionState txnState, Database db, Table table,
                                                     boolean sync, CountedListener listener) {
-        if (!Config.enable_statistic_collect_on_first_load) {
-            listener.run();
-            return;
-        }
-        if (statisticDatabaseBlackListCheck(db.getFullName())) {
-            listener.run();
-            return;
-        }
-        // check if it's first load
-        TableCommitInfo tableCommitInfo = txnState.getIdToTableCommitInfos().get(table.getId());
-        List<Long> collectPartitionIds = Lists.newArrayList();
-        for (long partitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
-            if (table.getPartition(partitionId).isFirstLoad()) {
-                collectPartitionIds.add(partitionId);
-            }
-        }
-        if (collectPartitionIds.isEmpty()) {
-            listener.run();
-            return;
-        }
-
-        StatsConstants.AnalyzeType analyzeType = parseAnalyzeType(txnState, table);
-        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), table.getId(), null, analyzeType,
-                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
-
-        Future<?> future;
+        boolean earlyReturn = true;
         try {
-            future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
-                    .submit(() -> {
-                        try {
-                            StatisticExecutor statisticExecutor = new StatisticExecutor();
-                            ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                            statsConnectCtx.setThreadLocalInfo();
+            if (!Config.enable_statistic_collect_on_first_load) {
+                return;
+            }
+            if (statisticDatabaseBlackListCheck(db.getFullName())) {
+                return;
+            }
 
-                            statisticExecutor.collectStatistics(statsConnectCtx,
-                                    StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
-                                            collectPartitionIds, null, analyzeType, StatsConstants.ScheduleType.ONCE,
-                                            analyzeStatus.getProperties()), analyzeStatus, false);
-                        } finally {
-                            listener.run();
-                        }
-                    });
-        } catch (Throwable e) {
-            LOG.error("failed to submit statistic collect job", e);
-            listener.run();
-            return;
-        }
+            // check if it's first load
+            if (txnState.getIdToTableCommitInfos() == null) {
+                return;
+            }
+            TableCommitInfo tableCommitInfo = txnState.getIdToTableCommitInfos().get(table.getId());
+            if (tableCommitInfo == null) {
+                return;
+            }
+            List<Long> collectPartitionIds = Lists.newArrayList();
+            for (long partitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
+                if (table.getPartition(partitionId).isFirstLoad()) {
+                    collectPartitionIds.add(partitionId);
+                }
+            }
+            if (collectPartitionIds.isEmpty()) {
+                return;
+            }
 
-        if (sync) {
+            StatsConstants.AnalyzeType analyzeType = parseAnalyzeType(txnState, table);
+            AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                    db.getId(), table.getId(), null, analyzeType,
+                    StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+
+            Future<?> future;
             try {
-                future.get();
-            } catch (InterruptedException | ExecutionException e) {
-                LOG.error("failed to execute statistic collect job", e);
+                future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
+                        .submit(() -> {
+                            try {
+                                StatisticExecutor statisticExecutor = new StatisticExecutor();
+                                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                                statsConnectCtx.setThreadLocalInfo();
+
+                                statisticExecutor.collectStatistics(statsConnectCtx,
+                                        StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
+                                                collectPartitionIds, null, analyzeType,
+                                                StatsConstants.ScheduleType.ONCE,
+                                                analyzeStatus.getProperties()), analyzeStatus, false);
+                            } finally {
+                                listener.run();
+                            }
+                        });
+            } catch (Throwable e) {
+                LOG.error("failed to submit statistic collect job", e);
+                return;
+            }
+
+            earlyReturn = false;
+            if (sync) {
+                try {
+                    future.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    LOG.error("failed to execute statistic collect job", e);
+                }
+            }
+        } finally {
+            if (earlyReturn) {
+                listener.run();
             }
         }
     }
