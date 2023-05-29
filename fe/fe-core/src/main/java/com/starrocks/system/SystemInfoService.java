@@ -1012,8 +1012,7 @@ public class SystemInfoService {
                     return;
                 }
                 String workerAddr = cn.getHost() + ":" + starletPort;
-                long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerId(workerAddr);
-                GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerId, workerAddr);
+                GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerAddr);
             }
         } else {
             LOG.error("Cluster DEFAULT_CLUSTER " + DEFAULT_CLUSTER + " no exist.");
@@ -1042,8 +1041,7 @@ public class SystemInfoService {
                     return;
                 }
                 String workerAddr = backend.getHost() + ":" + starletPort;
-                long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerId(workerAddr);
-                GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerId, workerAddr);
+                GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerAddr);
             }
         } else {
             LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
