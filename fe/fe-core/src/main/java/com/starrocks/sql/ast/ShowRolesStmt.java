@@ -27,6 +27,8 @@ public class ShowRolesStmt extends ShowStmt {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
 
         builder.addColumn(new Column("Name", ScalarType.createVarchar(100)));
+        builder.addColumn(new Column("Builtin", ScalarType.createVarchar(30)));
+        builder.addColumn(new Column("Comment", ScalarType.createVarchar(300)));
 
         META_DATA = builder.build();
     }
