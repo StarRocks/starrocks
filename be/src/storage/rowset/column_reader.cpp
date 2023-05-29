@@ -58,6 +58,7 @@
 #include "storage/rowset/struct_column_iterator.h"
 #include "storage/rowset/zone_map_index.h"
 #include "storage/types.h"
+#include "types/logical_type.h"
 #include "util/compression/block_compression.h"
 #include "util/rle_encoding.h"
 
@@ -204,7 +205,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
         _sub_readers = std::make_unique<SubReaderList>();
         if (meta->is_nullable()) {
             if (meta->children_columns_size() != 5) {
-                return Status::InvalidArgument("nullable map should have 4 children columns");
+                return Status::InvalidArgument("nullable map should have 4 children columns, but there are" + meta->children_columns_size());
             }
             _sub_readers->reserve(5);
 
@@ -532,8 +533,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator() {
         ASSIGN_OR_RETURN(auto offsets, (*_sub_readers)[col++]->new_iterator());
         ASSIGN_OR_RETURN(auto flat_columns, (*_sub_readers)[col++]->new_iterator());
         return std::make_unique<MapColumnIterator>(std::move(nulls), std::move(offsets), std::move(keys),
-                                                   std::move(values), std::move(flat_columns),
-                                                   _map_keys_name);
+                                                   std::move(values), std::move(flat_columns), _map_keys_name);
     } else if (_column_type == LogicalType::TYPE_STRUCT) {
         auto num_fields = _sub_readers->size();
 

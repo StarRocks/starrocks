@@ -60,7 +60,8 @@ Status CompactionUtils::construct_output_rowset_writer(Tablet* tablet, uint32_t 
     context.partition_id = tablet->partition_id();
     context.tablet_schema_hash = tablet->schema_hash();
     context.rowset_path_prefix = tablet->schema_hash_path();
-    context.tablet_schema = &tablet->tablet_schema();
+    context.tablet_schema_ref = tablet->tablet_schema().deep_copy();
+    context.tablet_schema = context.tablet_schema_ref.get();
     context.rowset_state = VISIBLE;
     context.version = version;
     context.segments_overlap = NONOVERLAPPING;

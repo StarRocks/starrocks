@@ -52,13 +52,13 @@ Status MapColumnIterator::init(const ColumnIteratorOptions& opts) {
     return Status::OK();
 }
 
-Status MapColumnIterator::new_flat_column_or_check(MapColumn const* map_column) {
+Status MapColumnIterator::new_flat_column_or_check(MapColumn* map_column) {
     if (map_column->flat_column() == nullptr) {
         Columns fields;
         for (auto i = 0; i < _flat_names.size(); ++i) {
             fields.push_back(map_column->values_column()->clone_empty());
         }
-        map_column->flat_column() = StructColumn::create(fields, _flat_names);
+        map_column->flat_column() = StructColumn::create(std::move(fields), _flat_names);
     } else {
         // change to DCHECK() later.
         auto check = [&]() {
@@ -117,7 +117,7 @@ Status MapColumnIterator::next_batch(size_t* n, Column* dst) {
     RETURN_IF_ERROR(_values->next_batch(&num_to_read, map_column->values_column().get()));
 
     if (_flat != nullptr) {
-        new_flat_column_or_check(map_column);
+        RETURN_IF_ERROR(new_flat_column_or_check(map_column));
         RETURN_IF_ERROR(_flat->next_batch(n, map_column->flat_column().get()));
     }
 
@@ -191,9 +191,8 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
 
     // TODO: what if exiting flat column's schema differs from this column?
     if (_flat != nullptr) {
-        new_flat_column_or_check(map_column);
+        RETURN_IF_ERROR(new_flat_column_or_check(map_column));
         RETURN_IF_ERROR(_flat->next_batch(range, map_column->flat_column().get()));
-        std::cout << "scan " << map_column->flat_column()->debug_string() << std::endl;
     }
     return Status::OK();
 }
@@ -242,7 +241,7 @@ Status MapColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t si
     }
 
     if (_flat != nullptr) {
-        new_flat_column_or_check(map_column);
+        RETURN_IF_ERROR(new_flat_column_or_check(map_column));
         RETURN_IF_ERROR(_flat->fetch_values_by_rowid(rowids, size, map_column->flat_column().get()));
     }
 

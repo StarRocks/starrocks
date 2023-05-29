@@ -34,6 +34,8 @@
 
 #include "storage/tablet_schema.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <vector>
 
@@ -297,6 +299,12 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_table
     return std::make_shared<TabletSchema>(partial_tablet_schema_pb);
 }
 
+std::shared_ptr<TabletSchema> TabletSchema::deep_copy() const {
+    TabletSchemaPB partial_tablet_schema_pb;
+    this->to_schema_pb(&partial_tablet_schema_pb);
+    return create(partial_tablet_schema_pb);
+}
+
 std::shared_ptr<TabletSchema> TabletSchema::create_with_uid(const TabletSchema& tablet_schema,
                                                             const std::vector<uint32_t>& unique_column_ids) {
     std::unordered_set<int32_t> unique_cid_filter(unique_column_ids.begin(), unique_column_ids.end());
@@ -469,13 +477,19 @@ bool operator==(const TabletSchema& a, const TabletSchema& b) {
 
 std::string TabletColumn::debug_string() const {
     std::stringstream ss;
-    ss << "(unique_id=" << _unique_id << ",name=" << _col_name << ",type=" << _type << ",is_key=" << is_key()
-       << ",aggregation=" << _aggregation << ",is_nullable=" << is_nullable()
-       << ",default_value=" << (has_default_value() ? default_value() : "N/A")
-       << ",precision=" << (has_precision() ? std::to_string(_precision) : "N/A")
-       << ",frac=" << (has_scale() ? std::to_string(_scale) : "N/A") << ",length=" << _length
-       << ",index_length=" << _index_length << ",is_bf_column=" << is_bf_column()
-       << ",has_bitmap_index=" << has_bitmap_index() << ")";
+    ss << "(unique_id=" << _unique_id << ",name=" << _col_name << ",type=" << type_to_string_v2(_type) << "\n";
+    // << ",is_key=" << is_key() << ",aggregation=" << _aggregation << ",is_nullable=" << is_nullable()
+    // << ",default_value=" << (has_default_value() ? default_value() : "N/A")
+    // << ",precision=" << (has_precision() ? std::to_string(_precision) : "N/A")
+    // << ",frac=" << (has_scale() ? std::to_string(_scale) : "N/A") << ",length=" << _length
+    // << ",index_length=" << _index_length << ",is_bf_column=" << is_bf_column()
+    // << ",has_bitmap_index=" << has_bitmap_index() << ")";
+    if (_extra_fields != nullptr) {
+        for (int i = 0; i < _extra_fields->sub_columns.size(); ++i) {
+            ss << i + 1 << "-th sub_column " << (_extra_fields->flatten ? "flatten" : "")
+               << _extra_fields->sub_columns[i].debug_string();
+        }
+    }
     return ss.str();
 }
 
@@ -492,10 +506,50 @@ std::string TabletSchema::debug_string() const {
         }
         ss << _cols[i].debug_string();
     }
-    ss << "],keys_type=" << _keys_type << ",num_columns=" << num_columns() << ",num_key_columns=" << _num_key_columns
-       << ",num_short_key_columns=" << _num_short_key_columns << ",num_rows_per_row_block=" << _num_rows_per_row_block
-       << ",next_column_unique_id=" << _next_column_unique_id << ",has_bf_fpp=" << _has_bf_fpp << ",bf_fpp=" << _bf_fpp;
+    // ss << "],keys_type=" << _keys_type << ",num_columns=" << num_columns() << ",num_key_columns=" << _num_key_columns
+    //    << ",num_short_key_columns=" << _num_short_key_columns << ",num_rows_per_row_block=" << _num_rows_per_row_block
+    //    << ",next_column_unique_id=" << _next_column_unique_id << ",has_bf_fpp=" << _has_bf_fpp << ",bf_fpp=" << _bf_fpp;
     return ss.str();
+}
+
+///TODO(fzh) refactor it later
+Status TabletSchema::update_schema(const TabletSchema& global_ts) {
+    std::unique_lock l(_schema_mutex);
+    for (auto i = 0; i < _cols.size(); ++i) {
+        if (_cols[i] != global_ts._cols[i]) {
+            return Status::RuntimeError("schema mismatch between rowset and tablet.");
+        }
+        switch (_cols[i].type()) {
+        case LogicalType::TYPE_MAP: {              // merge new schema sub columns to global tablet's schema
+            if (_cols[i].subcolumn_count() == 2) { // no flat columns
+                break;
+            }
+            global_ts._cols[i].get_extra_fields()->flatten = true;
+            if (global_ts._cols[i].subcolumn_count() == 2) {
+                global_ts._cols[i].get_extra_fields()->sub_columns.push_back(
+                        _cols[i].get_extra_fields()->sub_columns[2]);
+            } else {
+                auto& new_sub_columns = _cols[i].get_extra_fields()->sub_columns[2].get_extra_fields()->sub_columns;
+                auto& sub_columns =
+                        global_ts._cols[i].get_extra_fields()->sub_columns[2].get_extra_fields()->sub_columns;
+                for (const auto new_col : new_sub_columns) {
+                    bool exist = false;
+                    for (const auto col : sub_columns) {
+                        if (new_col.name() == col.name()) {
+                            exist = true;
+                        }
+                    }
+                    if (!exist) {
+                        sub_columns.push_back(new_col);
+                    }
+                }
+            }
+        } break;
+        default: {
+        }
+        }
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

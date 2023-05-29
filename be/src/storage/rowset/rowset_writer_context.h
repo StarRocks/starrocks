@@ -59,6 +59,7 @@ public:
 
     const TabletSchema* tablet_schema = nullptr;
     std::shared_ptr<TabletSchema> partial_update_tablet_schema = nullptr;
+    std::shared_ptr<TabletSchema> tablet_schema_ref = nullptr;
     std::vector<int32_t> referenced_column_ids;
 
     RowsetId rowset_id{};

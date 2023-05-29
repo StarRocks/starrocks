@@ -260,8 +260,8 @@ Status MapColumnWriter::finish() {
 
     ColumnWriterOptions flat_options;
     flat_options.meta = _opts.meta->add_children_columns();
-    flat_options.meta->set_column_id(_opts.meta->column_id());
-    flat_options.meta->set_unique_id(_opts.meta->unique_id());
+    flat_options.meta->set_column_id(_opts.meta->children_columns(1).column_id());
+    flat_options.meta->set_unique_id(_opts.meta->children_columns(1).unique_id());
     flat_options.meta->set_type(TYPE_STRUCT);
     flat_options.meta->set_length(0);
     flat_options.meta->set_encoding(DEFAULT_ENCODING);
@@ -286,7 +286,9 @@ Status MapColumnWriter::finish() {
     for (auto i = 0; i < field_columns.size(); ++i) {
         const TabletColumn& value_column = _tablet_column->subcolumn(1);
         struct_column.add_sub_column(value_column);
+        struct_column.get_extra_fields()->sub_columns[i].set_name(field_names[i]);
     }
+
     CHECK(_wfile != nullptr);
     ASSIGN_OR_RETURN(_flat_writer, ColumnWriter::create(flat_options, &struct_column, _wfile));
 
@@ -306,6 +308,29 @@ Status MapColumnWriter::finish() {
     RETURN_IF_ERROR(_values_writer->finish());
     RETURN_IF_ERROR(_flat_writer->finish());
 
+    auto* extra_fields = _tablet_column->get_extra_fields();
+    // update tablet_column from rowset schema to a super one
+    /// TODO: one tablet has only a segment writting?
+    if (extra_fields->sub_columns.size() > 2) {
+        for (auto i = 0; i < struct_column.subcolumn_count(); ++i) {
+            const auto& new_sub_col = struct_column.subcolumn(i);
+            auto sub_col_num = extra_fields->sub_columns[2].subcolumn_count();
+            bool exist = false;
+            for (auto j = 0; j < sub_col_num; ++j) {
+                const auto& sub_col = extra_fields->sub_columns[2].subcolumn(j);
+                if (sub_col.name() == new_sub_col.name()) {
+                    exist = true;
+                    break;
+                }
+            }
+            if (!exist) {
+                extra_fields->sub_columns[2].add_sub_column(new_sub_col);
+            }
+        }
+    } else {
+        extra_fields->sub_columns.push_back(std::move(struct_column));
+    }
+    extra_fields->flatten = true;
     _opts.meta->set_num_rows(get_next_rowid());
     _opts.meta->set_total_mem_footprint(total_mem_footprint());
     return Status::OK();

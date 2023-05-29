@@ -50,7 +50,7 @@ public:
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
-    Status new_flat_column_or_check(MapColumn const* col);
+    Status new_flat_column_or_check(MapColumn* col);
 
 private:
     std::unique_ptr<ColumnIterator> _nulls;

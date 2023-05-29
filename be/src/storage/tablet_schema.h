@@ -59,6 +59,7 @@ class TabletColumn {
         std::string default_value;
         std::vector<TabletColumn> sub_columns;
         bool has_default_value = false;
+        bool flatten = false;
     };
 
 public:
@@ -164,6 +165,8 @@ public:
         return mem_usage;
     }
 
+    ExtraFields* const get_extra_fields() const { return _extra_fields; }
+
 private:
     constexpr static uint8_t kIsKeyShift = 0;
     constexpr static uint8_t kIsNullableShift = 1;
@@ -224,6 +227,7 @@ public:
                                                 const std::vector<int32_t>& column_indexes);
     static std::shared_ptr<TabletSchema> create_with_uid(const TabletSchema& tablet_schema,
                                                          const std::vector<uint32_t>& unique_column_ids);
+    std::shared_ptr<TabletSchema> deep_copy() const;
 
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java
@@ -273,6 +277,8 @@ public:
 
     Schema* schema() const;
 
+    Status update_schema(const TabletSchema& ts);
+
 private:
     friend class SegmentReaderWriterTest;
     FRIEND_TEST(SegmentReaderWriterTest, estimate_segment_size);
@@ -305,6 +311,8 @@ private:
 
     mutable std::unique_ptr<starrocks::Schema> _schema;
     mutable std::once_flag _init_schema_once_flag;
+
+    std::mutex _schema_mutex;
 };
 
 bool operator==(const TabletSchema& a, const TabletSchema& b);

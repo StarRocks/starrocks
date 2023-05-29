@@ -138,6 +138,12 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         opts.page_format = 2;
         opts.meta = _footer.add_columns();
 
+        ///TODO: reset map type
+        if (column.type() == LogicalType::TYPE_MAP) {
+            column.get_extra_fields()->sub_columns.resize(2);
+            column.get_extra_fields()->flatten = false;
+        }
+
         if (!_opts.referenced_column_ids.empty()) {
             DCHECK(_opts.referenced_column_ids.size() == num_columns);
             _init_column_meta(opts.meta, _opts.referenced_column_ids[column_index], column);
