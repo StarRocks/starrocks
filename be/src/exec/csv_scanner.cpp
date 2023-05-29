@@ -443,14 +443,14 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
                 if (_counter->num_rows_filtered++ < 50) {
                     std::stringstream error_msg;
                     error_msg << "The field " << j << " is out of range. "
-                              << "Value is " << data.to_string() << "."
+                              << "Value is " << field.to_string() << "."
                               << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
                     _report_error(record.to_string(), error_msg.str());
                 }
                 if (_state->enable_log_rejected_record()) {
                     std::stringstream error_msg;
                     error_msg << "The field " << j << " is out of range. "
-                              << "Value is " << data.to_string() << "."
+                              << "Value is " << field.to_string() << "."
                               << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
                     _state->append_rejected_record_to_file(record.to_string(), error_msg.str(),
                                                            _curr_reader->filename());
