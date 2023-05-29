@@ -726,12 +726,14 @@ public class EditLog {
                     globalStateMgr.getTaskManager().replayAlterRunningTaskRunProgress(
                             taskRunPeriodStatusChange.getTaskRunProgressMap());
                     break;
-                case OperationType.OP_CREATE_SMALL_FILE: {
+                case OperationType.OP_CREATE_SMALL_FILE:
+                case OperationType.OP_CREATE_SMALL_FILE_V2: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     globalStateMgr.getSmallFileMgr().replayCreateFile(smallFile);
                     break;
                 }
-                case OperationType.OP_DROP_SMALL_FILE: {
+                case OperationType.OP_DROP_SMALL_FILE:
+                case OperationType.OP_DROP_SMALL_FILE_V2: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     globalStateMgr.getSmallFileMgr().replayRemoveFile(smallFile);
                     break;
@@ -1515,11 +1517,19 @@ public class EditLog {
     }
 
     public void logCreateSmallFile(SmallFile info) {
-        logEdit(OperationType.OP_CREATE_SMALL_FILE, info);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_CREATE_SMALL_FILE_V2, info);
+        } else {
+            logEdit(OperationType.OP_CREATE_SMALL_FILE, info);
+        }
     }
 
     public void logDropSmallFile(SmallFile info) {
-        logEdit(OperationType.OP_DROP_SMALL_FILE, info);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_DROP_SMALL_FILE_V2, info);
+        } else {
+            logEdit(OperationType.OP_DROP_SMALL_FILE, info);
+        }
     }
 
     public void logAlterJob(AlterJobV2 alterJob) {

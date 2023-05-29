@@ -638,6 +638,12 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_CREATE_SMALL_FILE_V2:
+            case OperationType.OP_DROP_SMALL_FILE_V2: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), SmallFile.class);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_ALTER_JOB_V2: {
                 data = AlterJobV2.read(in);
                 isRead = true;

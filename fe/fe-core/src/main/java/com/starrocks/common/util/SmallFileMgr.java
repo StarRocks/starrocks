@@ -39,11 +39,16 @@ import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Table;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.DropFileStmt;
@@ -79,13 +84,21 @@ public class SmallFileMgr implements Writable {
     public static final Logger LOG = LogManager.getLogger(SmallFileMgr.class);
 
     public static class SmallFile implements Writable {
+        @SerializedName("db")
         public long dbId;
+        @SerializedName("ct")
         public String catalog;
+        @SerializedName("nm")
         public String name;
+        @SerializedName("id")
         public long id;
+        @SerializedName("ce")
         public String content;
+        @SerializedName("sz")
         public long size;
+        @SerializedName("m5")
         public String md5;
+        @SerializedName("ic")
         public boolean isContent;
 
         private SmallFile() {
@@ -547,8 +560,30 @@ public class SmallFileMgr implements Writable {
         return checksum;
     }
 
+    public void loadSmallFilesV2(DataInputStream in) throws IOException, SRMetaBlockEOFException, SRMetaBlockException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(in, SmallFileMgr.class.getName());
+        try {
+            int size = reader.readInt();
+            while (size-- > 0) {
+                SmallFile file = reader.readJson(SmallFile.class);
+                idToFiles.put(file.id, file);
+            }
+        } finally {
+            reader.close();
+        }
+    }
+
     public long saveSmallFiles(DataOutputStream out, long checksum) throws IOException {
         write(out);
         return checksum;
+    }
+
+    public void saveSmallFilesV2(DataOutputStream out) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(out, SmallFileMgr.class.getName(), 1 + idToFiles.size());
+        writer.writeJson(idToFiles.size());
+        for (SmallFile file : idToFiles.values()) {
+            writer.writeJson(file);
+        }
+        writer.close();
     }
 }
