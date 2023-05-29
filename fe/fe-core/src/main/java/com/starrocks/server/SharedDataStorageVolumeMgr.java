@@ -82,6 +82,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(svKey);
             Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svKey);
+            Preconditions.checkState(sv.getEnabled(), "Storage volume '%s' is disabled", svKey);
             this.defaultStorageVolumeId = sv.getId();
         }
     }

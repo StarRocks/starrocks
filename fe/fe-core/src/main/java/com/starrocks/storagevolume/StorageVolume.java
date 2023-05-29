@@ -64,14 +64,25 @@ public class StorageVolume {
         this.id = id;
         this.name = name;
         this.svt = toStorageVolumeType(svt);
-        this.locations = locations;
+        this.locations = new ArrayList<>(locations);
         this.comment = comment;
         this.enabled = enabled;
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
         if (!isValidCloudConfiguration()) {
             throw new AnalysisException("Storage params is not valid");
         }
-        this.params = params;
+        this.params = new HashMap<>(params);
+    }
+
+    public StorageVolume(StorageVolume sv) {
+        this.id = sv.id;
+        this.name = sv.name;
+        this.svt = sv.svt;
+        this.locations = new ArrayList<>(sv.locations);
+        this.comment = sv.comment;
+        this.enabled = sv.enabled;
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(sv.params);
+        this.params = new HashMap<>(sv.params);
     }
 
     public void setCloudConfiguration(Map<String, String> params) throws AnalysisException {

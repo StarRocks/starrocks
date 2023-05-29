@@ -66,21 +66,24 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
                     "Storage volume '%s' does not exist", name);
 
             StorageVolume sv = nameToSV.get(name);
+            StorageVolume copied = new StorageVolume(sv);
             if (!params.isEmpty()) {
-                sv.setCloudConfiguration(params);
+                copied.setCloudConfiguration(params);
             }
 
             if (enabled.isPresent()) {
                 boolean enabledValue = enabled.get();
                 if (!enabledValue) {
-                    Preconditions.checkState(sv.getId() != defaultStorageVolumeId, "Default volume can not be disabled");
+                    Preconditions.checkState(copied.getId() != defaultStorageVolumeId, "Default volume can not be disabled");
                 }
-                sv.setEnabled(enabledValue);
+                copied.setEnabled(enabledValue);
             }
 
             if (!comment.isEmpty()) {
-                sv.setComment(comment);
+                copied.setComment(comment);
             }
+
+            nameToSV.put(name, copied);
         }
     }
 
@@ -90,6 +93,7 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
             Preconditions.checkState(nameToSV.containsKey(svKey),
                     "Storage volume '%s' does not exist", svKey);
             StorageVolume sv = nameToSV.get(svKey);
+            Preconditions.checkState(sv.getEnabled(), "Storage volume '%s' is disabled", svKey);
             defaultStorageVolumeId = sv.getId();
         }
     }

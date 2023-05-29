@@ -73,6 +73,7 @@ public class SharedNothingStorageVolumeMgrTest {
             Assert.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
         }
         svm.updateStorageVolume(svKey, storageParams, Optional.of(true), "test update");
+        sv = svm.getStorageVolumeByName(svKey);
         cloudConfiguration = sv.getCloudConfiguration();
         Assert.assertEquals("region1", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
                 .getRegion());
