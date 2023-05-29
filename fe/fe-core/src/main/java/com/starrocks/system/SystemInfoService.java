@@ -1042,8 +1042,7 @@ public class SystemInfoService {
                     return;
                 }
                 String workerAddr = backend.getHost() + ":" + starletPort;
-                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerId(workerAddr);
-                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerId, workerAddr);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerAddr);
             }
         } else {
             LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
