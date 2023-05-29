@@ -234,7 +234,8 @@ Open-source HDFS supports two authentication methods: simple authentication and 
 
     > **NOTE**
     >
-    > In the preceding example, `/etc/krb5.conf` can be replaced with your actual save path of the **krb5.conf** file. Make sure that the broker has read permissions on that file. If multiple brokers are deployed, you must modify the **start_broker.sh** file for each of these brokers and then restart the nodes that host the brokers to make the modifications take effect.
+    > - In the preceding example, `/etc/krb5.conf` can be replaced with your actual save path of the **krb5.conf** file. Make sure that the broker has read permissions on that file. If multiple brokers are deployed, you must modify the **start_broker.sh** file for each of these brokers and then restart the nodes that host the brokers to make the modifications take effect.
+    > - You can use the [SHOW BROKER](../Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster.
 
 - HA configuration
 
@@ -270,6 +271,10 @@ Open-source HDFS supports two authentication methods: simple authentication and 
       | dfs.ha.namenodes.XXX               | The name of the NameNode in the HDFS cluster. If you specify multiple NameNode names, separate them with commas (`,`). `xxx` is the HDFS cluster name that you have specified in `dfs.nameservices`. |
       | dfs.namenode.rpc-address.XXX.NN    | The RPC address of the NameNode in the HDFS cluster. `NN` is the NameNode name that you have specified in `dfs.ha.namenodes.XXX`. |
       | dfs.client.failover.proxy.provider | The provider of the NameNode to which the client will connect. Default value: `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`. |
+
+  > **NOTE**
+  >
+  > You can use the [SHOW BROKER](../Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster.
 
 #### AWS S3
 
