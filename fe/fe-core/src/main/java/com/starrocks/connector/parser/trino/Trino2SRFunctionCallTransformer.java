@@ -75,6 +75,7 @@ public class Trino2SRFunctionCallTransformer {
         registerStringFunctionTransformer();
         registerRegexpFunctionTransformer();
         registerJsonFunctionTransformer();
+        registerBitwiseFunctionTransformer();
         // todo: support more function transform
     }
 
@@ -197,6 +198,26 @@ public class Trino2SRFunctionCallTransformer {
         // json_size -> json_length
         registerFunctionTransformer("json_size", 2, "json_length",
                 ImmutableList.of(Expr.class, Expr.class));
+    }
+
+    private static void registerBitwiseFunctionTransformer() {
+        // bitwise_and -> bitand
+        registerFunctionTransformer("bitwise_and", 2, "bitand", ImmutableList.of(Expr.class, Expr.class));
+
+        // bitwise_not -> bitnot
+        registerFunctionTransformer("bitwise_not", 1, "bitnot", ImmutableList.of(Expr.class));
+
+        // bitwise_or -> bitor
+        registerFunctionTransformer("bitwise_or", 2, "bitor", ImmutableList.of(Expr.class, Expr.class));
+
+        // bitwise_xor -> bitxor
+        registerFunctionTransformer("bitwise_xor", 2, "bitxor", ImmutableList.of(Expr.class, Expr.class));
+
+        // bitwise_left_shift -> bit_shift_left
+        registerFunctionTransformer("bitwise_left_shift", 2, "bit_shift_left", ImmutableList.of(Expr.class, Expr.class));
+
+        // bitwise_right_shift -> bit_shift_right
+        registerFunctionTransformer("bitwise_right_shift", 2, "bit_shift_right", ImmutableList.of(Expr.class, Expr.class));
     }
 
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,
