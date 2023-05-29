@@ -816,7 +816,7 @@ CONF_mInt64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
 CONF_mInt64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
 CONF_mBool(lake_compaction_check_txn_log_first, "false");
 CONF_mInt64(experimental_lake_segment_gc_max_retries, "3");
-CONF_mBool(experimental_lake_enable_fast_gc, "false");
+CONF_mBool(experimental_lake_enable_fast_gc, "true");
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 
