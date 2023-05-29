@@ -153,9 +153,10 @@ public class StarOSAgent {
         return true;
     }
 
+    // for ut only
     public long getWorkerId(String workerIpPort) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            return workerToId.getOrDefault(workerIpPort, -1L);
+            return workerToId.get(workerIpPort);
         }
     }
 
