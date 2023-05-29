@@ -948,12 +948,8 @@ public class AlterJobMgr {
         if (origTable.isMaterializedView()) {
             MaterializedView oldMv = (MaterializedView) origTable;
             MaterializedView newMv = (MaterializedView) newTbl;
-            for (BaseTableInfo baseTable : oldMv.getBaseTableInfos()) {
-                baseTable.getTable().replaceRelatedMaterializedView(oldMv.getMvId(), newMv.getMvId());
-            }
-            for (BaseTableInfo baseTable : newMv.getBaseTableInfos()) {
-                baseTable.getTable().replaceRelatedMaterializedView(newMv.getMvId(), oldMv.getMvId());
-            }
+            updateTaskDefinition(oldMv);
+            updateTaskDefinition(newMv);
         }
     }
 
