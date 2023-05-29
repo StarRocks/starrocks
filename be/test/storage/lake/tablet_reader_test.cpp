@@ -503,4 +503,134 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
     reader->close();
 }
 
+<<<<<<< HEAD
+=======
+class LakeDuplicateTabletReaderWithDeleteNotInOneValueTest : public TestBase {
+public:
+    LakeDuplicateTabletReaderWithDeleteNotInOneValueTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata->set_id(next_id());
+        _tablet_metadata->set_version(1);
+        //
+        //  | column | type | KEY | NULL |
+        //  +--------+------+-----+------+
+        //  |   c0   |  INT | YES |  NO  |
+        //  |   c1   |  INT | NO  |  NO  |
+        auto schema = _tablet_metadata->mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(DUP_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        {
+            c0->set_unique_id(next_id());
+            c0->set_name("c0");
+            c0->set_type("INT");
+            c0->set_is_key(true);
+            c0->set_is_nullable(false);
+        }
+        auto c1 = schema->add_column();
+        {
+            c1->set_unique_id(next_id());
+            c1->set_name("c1");
+            c1->set_type("INT");
+            c1->set_is_key(false);
+            c1->set_is_nullable(false);
+        }
+
+        _tablet_schema = TabletSchema::create(*schema);
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
+    }
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    void TearDown() override { remove_test_dir_ignore_error(); }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_duplicate_lake_tablet_reader_with_delete_not_in_one";
+
+    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+};
+
+TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) {
+    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+    std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
+
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+
+    Chunk chunk0({c0, c1}, _schema);
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+
+    {
+        // write rowset 1 with 1 segments
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+
+        // write rowset data
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->finish());
+
+        auto files = writer->files();
+        ASSERT_EQ(1, files.size());
+
+        // add rowset metadata
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(true);
+        rowset->set_id(1);
+        auto* segs = rowset->mutable_segments();
+        for (auto& file : writer->files()) {
+            segs->Add(std::move(file));
+        }
+
+        writer->close();
+    }
+
+    {
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(0);
+        rowset->set_data_size(0);
+
+        auto* delete_predicate = rowset->mutable_delete_predicate();
+        delete_predicate->set_version(-1);
+        // delete c0 not in (10)
+        auto* in_predicate = delete_predicate->add_in_predicates();
+        in_predicate->set_column_name("c0");
+        in_predicate->set_is_not_in(true);
+        in_predicate->add_values("10");
+    }
+
+    // write tablet metadata
+    _tablet_metadata->set_version(3);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    // test reader
+    ASSIGN_OR_ABORT(auto reader, tablet.new_reader(3, *_schema));
+    ASSERT_OK(reader->prepare());
+    TabletReaderParams params;
+    ASSERT_OK(reader->open(params));
+
+    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
+    ASSERT_EQ(1, read_chunk_ptr->num_rows());
+    EXPECT_EQ(10, read_chunk_ptr->get(0)[0].get_int32());
+    EXPECT_EQ(20, read_chunk_ptr->get(0)[1].get_int32());
+
+    read_chunk_ptr->reset();
+    ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
+
+    reader->close();
+}
+
+>>>>>>> 8ff8d4291 ([Refactor] Simple code refactoring of UT (#24292))
 } // namespace starrocks::lake
