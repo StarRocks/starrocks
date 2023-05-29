@@ -194,7 +194,7 @@ public class DeleteHandler implements Writable {
         }
 
         // get partitions
-        List<String> partitionNames = stmt.getPartitionNames();
+        List<String> partitionNames = stmt.getPartitionNamesList();
         Preconditions.checkState(partitionNames != null);
         boolean noPartitionSpecified = partitionNames.isEmpty();
         if (noPartitionSpecified) {

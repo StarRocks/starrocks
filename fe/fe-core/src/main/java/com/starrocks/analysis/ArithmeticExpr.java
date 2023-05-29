@@ -22,6 +22,8 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
@@ -37,8 +39,18 @@ import com.starrocks.thrift.TExprOpcode;
 
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.Set;
 
 public class ArithmeticExpr extends Expr {
+    public static Set<String> DECIMAL_SCALE_ADJUST_OPERATOR_SET = ImmutableSet.<String>builder()
+            .add(Operator.ADD.name)
+            .add(Operator.SUBTRACT.name)
+            .add(Operator.MULTIPLY.name)
+            .add(Operator.DIVIDE.name)
+            .add(Operator.MOD.name)
+            .add(Operator.INT_DIVIDE.name)
+            .build();
+
     private final Operator op;
 
     public enum OperatorPosition {
@@ -279,17 +291,9 @@ public class ArithmeticExpr extends Expr {
         return result;
     }
 
-    private void rewriteDecimalDecimalOperation() throws AnalysisException {
+    private TypeTriple rewriteDecimalDecimalOperation() throws AnalysisException {
         final Type lhsOriginType = getChild(0).type;
         final Type rhsOriginType = getChild(1).type;
-
-        // if both of left child and right child are implict cast.
-        // It means ArithmeticExpr has been applied rewriteDecimalDecimalOperation.
-        // so we don't have to rewrite again.
-        // TODO:
-        if (getChild(0).isImplicitCast() && getChild(1).isImplicitCast()) {
-            return;
-        }
 
         Type lhsTargetType = lhsOriginType;
         Type rhsTargetType = rhsOriginType;
@@ -300,29 +304,15 @@ public class ArithmeticExpr extends Expr {
         if (!rhsTargetType.isDecimalV3()) {
             rhsTargetType = nonDecimalToDecimal(rhsTargetType);
         }
-        TypeTriple triple = getReturnTypeOfDecimal(op, (ScalarType) lhsTargetType, (ScalarType) rhsTargetType);
-        if (!triple.lhsTargetType.equals(lhsOriginType)) {
-            Preconditions.checkState(triple.lhsTargetType.isValid());
-            castChild(triple.lhsTargetType, 0);
-        }
-        if (!triple.rhsTargetType.equals(rhsOriginType)) {
-            Preconditions.checkState(triple.rhsTargetType.isValid());
-            castChild(triple.rhsTargetType, 1);
-        }
-        type = triple.returnType;
+        return getReturnTypeOfDecimal(op, (ScalarType) lhsTargetType, (ScalarType) rhsTargetType);
     }
 
-    private void rewriteDecimalFloatingPointOperation() throws AnalysisException {
-        Type lhsType = getChild(0).type;
-        Type rhsType = getChild(1).type;
-        Type resultType = Type.DOUBLE;
-        if (!resultType.equals(lhsType)) {
-            castChild(resultType, 0);
-        }
-        if (!resultType.equals(rhsType)) {
-            castChild(resultType, 1);
-        }
-        this.type = resultType;
+    private TypeTriple rewriteDecimalFloatingPointOperation() throws AnalysisException {
+        TypeTriple typeTriple = new TypeTriple();
+        typeTriple.lhsTargetType = Type.DOUBLE;
+        typeTriple.rhsTargetType = Type.DOUBLE;
+        typeTriple.returnType = Type.DOUBLE;
+        return typeTriple;
     }
 
     private boolean hasFloatingPointOrStringType() {
@@ -348,11 +338,11 @@ public class ArithmeticExpr extends Expr {
         }
     }
 
-    public void rewriteDecimalOperation() throws AnalysisException {
+    public TypeTriple rewriteDecimalOperation() throws AnalysisException {
         if (hasFloatingPointOrStringType() && !resultTypeIsBigInt()) {
-            rewriteDecimalFloatingPointOperation();
+            return rewriteDecimalFloatingPointOperation();
         } else {
-            rewriteDecimalDecimalOperation();
+            return rewriteDecimalDecimalOperation();
         }
     }
 

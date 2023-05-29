@@ -1388,8 +1388,29 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         List<ColumnAssignment> assignments = visit(context.assignmentList().assignment(), ColumnAssignment.class);
+        List<Relation> fromRelations = null;
+        if (context.fromClause() instanceof StarRocksParser.DualContext) {
+            ArrayList<Expr> row = new ArrayList<>();
+            List<String> columnNames = new ArrayList<>();
+            row.add(NullLiteral.create(Type.NULL));
+            columnNames.add("");
+            List<ArrayList<Expr>> rows = new ArrayList<>();
+            rows.add(row);
+            ValuesRelation valuesRelation = new ValuesRelation(rows, columnNames);
+            valuesRelation.setNullValues(true);
+            fromRelations = Lists.newArrayList(valuesRelation);
+        } else {
+            StarRocksParser.FromContext fromContext = (StarRocksParser.FromContext) context.fromClause();
+            if (fromContext.relations() != null) {
+                fromRelations = visit(fromContext.relations().relation(), Relation.class);
+            }
+        }
         Expr where = context.where != null ? (Expr) visit(context.where) : null;
-        UpdateStmt ret = new UpdateStmt(targetTableName, assignments, where);
+        List<CTERelation> ctes = null;
+        if (context.withClause() != null) {
+            ctes = visit(context.withClause().commonTableExpression(), CTERelation.class);
+        }
+        UpdateStmt ret = new UpdateStmt(targetTableName, assignments, fromRelations, where, ctes);
         if (context.explainDesc() != null) {
             ret.setIsExplain(true, getExplainType(context.explainDesc()));
         }
@@ -1404,8 +1425,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.partitionNames() != null) {
             partitionNames = (PartitionNames) visit(context.partitionNames());
         }
+        List<Relation> usingRelations = context.using != null ? visit(context.using.relation(), Relation.class) : null;
         Expr where = context.where != null ? (Expr) visit(context.where) : null;
-        DeleteStmt ret = new DeleteStmt(targetTableName, partitionNames, where);
+        List<CTERelation> ctes = null;
+        if (context.withClause() != null) {
+            ctes = visit(context.withClause().commonTableExpression(), CTERelation.class);
+        }
+        DeleteStmt ret = new DeleteStmt(targetTableName, partitionNames, usingRelations, where, ctes);
         if (context.explainDesc() != null) {
             ret.setIsExplain(true, getExplainType(context.explainDesc()));
         }

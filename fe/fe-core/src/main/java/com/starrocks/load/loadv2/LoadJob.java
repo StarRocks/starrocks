@@ -696,6 +696,15 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         unprotectReadEndOperation((LoadJobFinalOperation) txnState.getTxnCommitAttachment(), false);
     }
 
+    /**
+     * This method will update job failMsg without edit log and lock
+     *
+     * @param failMsg
+     */
+    public void unprotectUpdateFailMsg(FailMsg failMsg) {
+        this.failMsg = failMsg;
+    }
+
     public List<Comparable> getShowInfo() throws DdlException {
         readLock();
         try {

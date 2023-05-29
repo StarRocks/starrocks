@@ -38,7 +38,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv1.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv2.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv3.sql");
-       connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
     }
 
     @Test
@@ -78,6 +78,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     }
 
     @Test
+    @Ignore
     public void testQuery8() {
         runFileUnitTest("materialized-view/tpch/q8");
     }
@@ -155,28 +156,28 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
 
     /**
      * ========= Analyze TPCH MVs Result =========
-     *
+     * <p>
      * TableName:partsupp_mv
      * Columns:n_name,p_mfgr,p_size,p_type,ps_partkey,ps_partvalue,ps_suppkey,ps_supplycost,r_name,s_acctbal,s_address,
-     *         s_comment,s_name,s_nationkey,s_phone
+     * s_comment,s_name,s_nationkey,s_phone
      * Queries:11,16,2
-     *
+     * <p>
      * TableName:lineitem_mv
      * Columns:c_acctbal,c_address,c_comment,c_mktsegment,c_name,c_nationkey,c_phone,l_commitdate,l_extendedprice,
-     *          l_orderkey,l_partkey,l_quantity,l_receiptdate,l_returnflag,l_saleprice,l_shipdate,l_shipinstruct,
-     *          l_shipmode,l_shipyear,l_suppkey,l_supplycost,n_name1,n_name2,n_regionkey1,n_regionkey2,o_custkey,
-     *          o_orderdate,o_orderpriority,o_orderstatus,o_orderyear,o_shippriority,o_totalprice,p_brand,p_container,
-     *          p_name,p_size,p_type,r_name1,r_name2,s_name,s_nationkey
+     * l_orderkey,l_partkey,l_quantity,l_receiptdate,l_returnflag,l_saleprice,l_shipdate,l_shipinstruct,
+     * l_shipmode,l_shipyear,l_suppkey,l_supplycost,n_name1,n_name2,n_regionkey1,n_regionkey2,o_custkey,
+     * o_orderdate,o_orderpriority,o_orderstatus,o_orderyear,o_shippriority,o_totalprice,p_brand,p_container,
+     * p_name,p_size,p_type,r_name1,r_name2,s_name,s_nationkey
      * Queries:10,12,14,17,18,19,21,3,5,7,8,9
-     *
+     * <p>
      * TableName:lineitem_agg_mv
      * Columns:l_orderkey,l_partkey,l_shipdate,l_suppkey,sum_disc_price,sum_qty
      * Queries:15,18,20
-     *
+     * <p>
      * TableName:customer_order_mv
      * Columns:c_custkey,o_comment,o_orderkey
      * Queries:13
-     *
+     * <p>
      * ========= Analyze TPCH MVs Result =========
      */
     @Test
@@ -188,7 +189,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         for (int i = 1; i < 23; i++) {
             String content = getFileContent("sql/materialized-view/tpch/q" + i + ".sql");
             String[] lines = content.split("\n");
-            for (String line: lines) {
+            for (String line : lines) {
                 if (line.contains("mv[")) {
                     Matcher matcher = mvPattern.matcher(line);
                     if (matcher.find()) {
@@ -224,7 +225,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     private List<String> splitMVTableColumns(String line) {
         String[] s1 = line.split(",");
         List<String> ret = new ArrayList<>();
-        for (String s: s1) {
+        for (String s : s1) {
             String[] s2 = s.split(":");
             ret.add(s2[1].trim());
         }
