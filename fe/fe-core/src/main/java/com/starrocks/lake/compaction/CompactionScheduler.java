@@ -32,7 +32,6 @@ import com.starrocks.common.util.Daemon;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.CompactRequest;
-import com.starrocks.proto.CompactResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
@@ -45,7 +44,6 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.VisibleStateWaiter;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -55,9 +53,8 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import javax.validation.constraints.NotNull;
@@ -134,25 +131,33 @@ public class CompactionScheduler extends Daemon {
             PartitionIdentifier partition = entry.getKey();
             CompactionJob job = entry.getValue();
 
-            if (job.compactionFinishedOnBE() && !job.transactionHasCommitted()) {
-                try {
-                    commitCompaction(partition, job);
-                } catch (Exception e) {
-                    LOG.error("Fail to commit compaction. {} error={}", job.getDebugString(), e.getMessage());
+            if (!job.transactionHasCommitted()) {
+                String errorMsg = null;
+
+                if (job.isCompleted()) {
+                    try {
+                        commitCompaction(partition, job);
+                        assert job.transactionHasCommitted();
+                    } catch (Exception e) {
+                        LOG.error("Fail to commit compaction. {} error={}", job.getDebugString(), e.getMessage());
+                        errorMsg = "fail to commit transaction: " + e.getMessage();
+                    }
+                } else if (job.isFailed()) {
+                    errorMsg = Objects.requireNonNull(job.getFailMessage(), "getFailMessage() is null");
+                    job.abort(); // Abort any executing task, if present.
+                }
+
+                if (errorMsg != null) {
                     iterator.remove();
                     job.finish();
-                    failHistory.offer(CompactionRecord.build(job, e.getMessage()));
+                    failHistory.offer(CompactionRecord.build(job, errorMsg));
                     compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
-                    try {
-                        transactionMgr.abortTransaction(partition.getDbId(), job.getTxnId(), e.getMessage());
-                    } catch (UserException ex) {
-                        LOG.error("Fail to abort txn " + job.getTxnId(), ex);
-                    }
+                    abortTransactionIgnoreException(partition.getDbId(), job.getTxnId(), errorMsg);
                     continue;
                 }
             }
 
-            if (job.transactionHasCommitted() && job.waitTransactionVisible(100, TimeUnit.MILLISECONDS)) {
+            if (job.transactionHasCommitted() && job.waitTransactionVisible(50, TimeUnit.MILLISECONDS)) {
                 iterator.remove();
                 job.finish();
                 history.offer(CompactionRecord.build(job));
@@ -188,6 +193,14 @@ public class CompactionScheduler extends Daemon {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Created new compaction job. partition={} txnId={}", partition, job.getTxnId());
             }
+        }
+    }
+
+    private void abortTransactionIgnoreException(long dbId, long txnId, String reason) {
+        try {
+            transactionMgr.abortTransaction(dbId, txnId, reason);
+        } catch (UserException ex) {
+            LOG.error("Fail to abort txn " + txnId, ex);
         }
     }
 
@@ -359,19 +372,8 @@ public class CompactionScheduler extends Daemon {
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job)
-            throws UserException, ExecutionException, InterruptedException {
-        Preconditions.checkState(job.compactionFinishedOnBE());
-
-        for (Future<CompactResponse> responseFuture : job.getResponseList()) {
-            CompactResponse response = responseFuture.get();
-            if (response != null && CollectionUtils.isNotEmpty(response.failedTablets)) {
-                if (response.status != null && CollectionUtils.isNotEmpty(response.status.errorMsgs)) {
-                    throw new UserException(response.status.errorMsgs.get(0));
-                } else {
-                    throw new UserException("Fail to compact tablet " + response.failedTablets.get(0));
-                }
-            }
-        }
+            throws UserException {
+        Preconditions.checkState(job.isCompleted());
 
         List<TabletCommitInfo> commitInfoList = job.buildTabletCommitInfo();
 
