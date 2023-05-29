@@ -1,15 +1,36 @@
 # UPDATE
 
-Modifies rows in a Primary Key table. In versions earlier than version 3.0, the UPDATE statement only supports simple syntax, such as `UPDATE <table_name> SET <column_name>=<expression> WHERE <where_condition>`. Starting from version 3.0, StarRocks enriches the syntax to support multi-table joins and common table expressions (CTEs). If you need to join the table to be updated with other tables in the database, you can reference these other tables in the FROM clause or CTE.
+Updates rows in a Primary Key table.
+
+In versions earlier than version 3.0, the UPDATE statement only supports single-table UPDATE and does not support common table expressions (CTEs). Starting from version 3.0, StarRocks enriches the syntax to support multi-table joins and CTEs. If you need to join the table to be updated with other tables in the database, you can reference these other tables in the FROM clause or CTE.
 
 ## Usage notes
+
+When executing the UPDATE statement, StarRocks converts the table expression in the FROM clause of the UPDATE statement into an equivalent JOIN query statement. Therefore, make sure that the table expression that you specify in the FROM clause of the UPDATE statement supports this conversion. For example, the UPDATE statement is 'UPDATE t0 SET v1=t1.v1 FROM t1 WHERE t0.pk = t1.pk;'. The table expression in the FROM clause can be converted to 't0 JOIN t1 ON t0.pk=t1.pk;'. StarRocks matches the data rows to be updated based on the result set of the JOIN query. It is possible that multiple rows in the result set match a certain row in the table to be updated. In this scenario, that row is updated based on the value of a random row among these multiple rows.
+
+## Syntax
+
+**Single-table UPDATE**
+
+If the data rows of the table to be updated meet the WHERE condition, the specified columns of these data rows are assigned new values.
 
 ```SQL
 [ WITH <with_query> [, ...] ]
 UPDATE <table_name>
-SET <column_name> = <expression> [, ...]
-[ FROM <from_item> [, ...] ]
-WHERE <where_condition>
+    SET <column_name> = <expression> [, ...]
+    WHERE <where_condition>
+```
+
+**Multi-table UPDATE**
+
+The result set from the multi-table join is matched against the table to be updated. If the data rows of the table to be updated match the result set and meet the WHERE condition, the specified columns of these data rows are assigned new values.
+
+```SQL
+[ WITH <with_query> [, ...] ]
+UPDATE <table_name>
+    SET <column_name> = <expression> [, ...]
+    [ FROM <from_item> [, ...] ]
+    WHERE <where_condition>
 ```
 
 ## Parameters
@@ -40,51 +61,94 @@ The condition based on which you want to update rows. Only rows that meet the WH
 
 ## Examples
 
-For example, there are two tables `employees` and `accounts` in StarRocks. The table `employees` records employee information, and the table `accounts` records account information.
+### Single-table UPDATE
+
+Create a table `Employees` to record employee information and insert five data rows into the table.
 
 ```SQL
-CREATE TABLE employees
-(
-    id BIGINT NOT NULL,
-    sales_count INT NOT NULL
-) 
-PRIMARY KEY (id)
-DISTRIBUTED BY HASH(id) BUCKETS 1
+CREATE TABLE Employees (
+    EmployeeID INT,
+    Name VARCHAR(50),
+    Salary DECIMAL(10, 2)
+)
+PRIMARY KEY (EmployeeID) 
+DISTRIBUTED BY HASH (EmployeeID) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
-
-INSERT INTO employees VALUES (1,100),(2,1000);
-
-CREATE TABLE accounts 
-(
-    accounts_id BIGINT NOT NULL,
-    name VARCHAR(26) NOT NULL,
-    sales_person INT NOT NULL
-) 
-PRIMARY KEY (accounts_id)
-DISTRIBUTED BY HASH(accounts_id) BUCKETS 1
-PROPERTIES ("replication_num" = "1");
-
-INSERT INTO accounts VALUES (1,'Acme Corporation',2),(2,'Acme Corporation',3),(3,'Corporation',3);
+INSERT INTO Employees VALUES
+    (1, 'John Doe', 5000),
+    (2, 'Jane Smith', 6000),
+    (3, 'Robert Johnson', 5500),
+    (4, 'Emily Williams', 4500),
+    (5, 'Michael Brown', 7000);
 ```
 
-If you need to increase the sales count of salespersons that manage Acme Corporation's account in the `employees` table by 1, you can execute the following statement:
+If you need to give a 10% raise to all employees, you can execute the following statement:
 
 ```SQL
-UPDATE employees
-SET sales_count = sales_count + 1
-FROM accounts
-WHERE accounts.name = 'Acme Corporation'
-   AND employees.id = accounts.sales_person;
+UPDATE Employees
+SET Salary = Salary * 1.1  -- Increase the salary by 10%.
+WHERE true;
+```
+
+If you need to give a 10% raise to employees with salaries lower than the average salary, you can execute the following statement:
+
+```SQL
+UPDATE Employees
+SET Salary = Salary * 1.1   -- Increase the salary by 10%.
+WHERE Salary < (SELECT AVG(Salary) FROM Employees);
 ```
 
 You can also use a CTE to rewrite the above statement to improve readability.
 
 ```SQL
-WITH acme_accounts as (
-    SELECT * from accounts
-     WHERE accounts.name = 'Acme Corporation'
+WITH AvgSalary AS (
+    SELECT AVG(Salary) AS AverageSalary
+    FROM Employees
 )
-UPDATE employees SET sales_count = sales_count + 1
-FROM acme_accounts
-WHERE employees.id = acme_accounts.sales_person;
+UPDATE Employees
+SET Salary = Salary * 1.1   -- Increase the salary by 10%.
+FROM AvgSalary
+WHERE Employees.Salary < AvgSalary.AverageSalary;
+```
+
+### Multi-table UPDATE
+
+Create a table `Accounts` to record account information and insert three data rows into the table.
+
+```SQL
+CREATE TABLE Accounts (
+    Accounts_id BIGINT NOT NULL,
+    Name VARCHAR(26) NOT NULL,
+    Sales_person VARCHAR(50) NOT NULL
+) 
+PRIMARY KEY (Accounts_id)
+DISTRIBUTED BY HASH (Accounts_id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO Accounts VALUES
+    (1,'Acme Corporation','John Doe'),
+    (2,'Acme Corporation','Robert Johnson'),
+    (3,'Acme Corporation','Lily Swift');
+```
+
+If you need to give a 10% raise to employees in the table `Employees` who manage accounts for Acme Corporation, you can execute the following statement:
+
+```SQL
+UPDATE Employees
+SET Salary = Salary * 1.1  -- Increase the salary by 10%.
+FROM Accounts
+WHERE Accounts.name = 'Acme Corporation'
+    AND Employees.Name = Accounts.Sales_person;
+```
+
+You can also use a CTE to rewrite the above statement to improve readability.
+
+```SQL
+WITH Acme_Accounts as (
+    SELECT * from Accounts
+    WHERE Accounts.name = 'Acme Corporation'
+)
+UPDATE Employees SET Salary = Salary * 1.1 -- Increase the salary by 10%.
+FROM Acme_Accounts
+WHERE Employees.Name = Acme_Accounts.Sales_person;
 ```
