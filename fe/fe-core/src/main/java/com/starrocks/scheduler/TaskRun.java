@@ -58,6 +58,8 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private ConnectContext runCtx;
 
+    private ConnectContext parentRunCtx;
+
     private TaskRunProcessor processor;
 
     private TaskRunStatus status;
@@ -97,7 +99,7 @@ public class TaskRun implements Comparable<TaskRun> {
     }
 
     public void setConnectContext(ConnectContext context) {
-        this.runCtx = context;
+        this.parentRunCtx = context;
     }
 
     public TaskRunProcessor getProcessor() {
@@ -150,8 +152,9 @@ public class TaskRun implements Comparable<TaskRun> {
         Preconditions.checkNotNull(status.getDefinition(), "The definition of task run should not null");
         taskRunContext.setDefinition(status.getDefinition());
         taskRunContext.setPostRun(status.getPostRun());
-        if (runCtx == null) {
-            runCtx = new ConnectContext(null);
+        runCtx = new ConnectContext(null);
+        if (parentRunCtx != null) {
+            runCtx.setParentConnectContext(parentRunCtx);
         }
         runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         runCtx.setDatabase(task.getDbName());
