@@ -63,7 +63,8 @@ Example 2: Convert each value in a BITMAP column into Base64-encoded strings.
         AGGREGATE KEY(`page_id`, `visit_date`)
         DISTRIBUTED BY HASH(`page_id`) BUCKETS 1
         PROPERTIES (
-        "replication_num" = "1","storage_format" = "DEFAULT"
+        "replication_num" = "3",
+        "storage_format" = "DEFAULT"
         );
     ```
 

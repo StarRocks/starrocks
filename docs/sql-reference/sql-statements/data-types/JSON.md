@@ -16,7 +16,7 @@ StarRocks supports both storage and efficient querying and analytics of JSON dat
 
 When you create a table, you can use the `JSON` keyword to specify the `j` column as a JSON column.
 
-```Plain%20Text
+```sql
 CREATE TABLE `tj` (
     `id` INT(11) NOT NULL COMMENT "",
     `j`  JSON NULL COMMENT ""
@@ -25,8 +25,7 @@ DUPLICATE KEY(`id`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id`) BUCKETS 1
 PROPERTIES (
-    "replication_num" = "1",
-    "in_memory" = "false",
+    "replication_num" = "3",
     "storage_format" = "DEFAULT"
 );
 ```
