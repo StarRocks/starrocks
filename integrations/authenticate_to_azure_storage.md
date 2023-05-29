@@ -215,8 +215,8 @@ WITH BROKER
 CREATE EXTERNAL CATALOG hive_catalog_azure
 PROPERTIES
 (
-    "type"="hive", 
-    "hive.metastore.uris"="thrift://10.1.0.18:9083",
+    "type" = "hive", 
+    "hive.metastore.uris" = "thrift://10.1.0.18:9083",
     "azure.adls1.oauth2_client_id" = "<application_client_id>",
     "azure.adls1.oauth2_credential" = "<application_client_credential>",
     "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
