@@ -35,7 +35,7 @@ Roaring Bitmap 实现，细节可以参考：[具体论文和实现](https://git
   AGGREGATE KEY(`page_id`, `visit_date`)
   DISTRIBUTED BY HASH(`page_id`) BUCKETS 1
   PROPERTIES (
-    "replication_num" = "1",
+    "replication_num" = "3",
     "storage_format" = "DEFAULT"
   );
   ```
