@@ -88,7 +88,7 @@ public class BrpcProxy {
         try {
             return lakeServiceMap.computeIfAbsent(address, this::createLakeService);
         } catch (Exception e) {
-            throw new RpcException(e);
+            throw new RpcException("fail to initialize the LakeService on node " + address.getHostname(), e);
         }
     }
 
