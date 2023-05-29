@@ -60,10 +60,10 @@ public:
     static std::string preprocess_jsonpaths(std::string jsonpath);
 
     struct SlotInfo {
-        SlotInfo() : _id(-2) {}
-        SlotId _id;
-        TypeDescriptor _type;
-        std::string _key;
+        SlotInfo() : id(-2) {}
+        SlotId id;
+        TypeDescriptor type;
+        std::string key;
     };
 
 private:

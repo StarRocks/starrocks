@@ -340,28 +340,28 @@ Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_val
             return Status::InternalError(err_msg);
         }
         SlotInfo& slot_info = _data_idx_to_slot[i];
-        if (slot_info._id > -1) {
-            int column_index = chunk->get_index_by_slot_id(slot_info._id);
+        if (slot_info.id > -1) {
+            int column_index = chunk->get_index_by_slot_id(slot_info.id);
             _found_columns[column_index] = true;
-        } else if (slot_info._id == -1) {
+        } else if (slot_info.id == -1) {
             continue;
-        } else if (UNLIKELY(slot_info._id < -1)) {
+        } else if (UNLIKELY(slot_info.id < -1)) {
             const std::string& key = _data_idx_to_fieldname[i];
             // look up key in the slot dict.
             auto itr = _slot_desc_dict.find(key);
             if (itr == _slot_desc_dict.end()) {
-                slot_info._id = -1;
+                slot_info.id = -1;
                 continue;
             }
             auto slot_desc = itr->second;
-            slot_info._id = slot_desc->id();
-            slot_info._type = slot_desc->type();
-            slot_info._key = key;
-            int column_index = chunk->get_index_by_slot_id(slot_info._id);
+            slot_info.id = slot_desc->id();
+            slot_info.type = slot_desc->type();
+            slot_info.key = key;
+            int column_index = chunk->get_index_by_slot_id(slot_info.id);
             _found_columns[column_index] = true;
         }
 
-        auto& column = chunk->get_column_by_slot_id(slot_info._id);
+        auto& column = chunk->get_column_by_slot_id(slot_info.id);
         // We should expand the union type.
         avro_value_t* cur_value = &element_value;
         if (UNLIKELY(avro_value_get_type(cur_value) == AVRO_UNION)) {
@@ -370,7 +370,7 @@ Status AvroScanner::_construct_row_without_jsonpath(const avro_value_t& avro_val
             *cur_value = branch;
         }
         // construct column with value.
-        RETURN_IF_ERROR(_construct_column(*cur_value, column.get(), slot_info._type, slot_info._key));
+        RETURN_IF_ERROR(_construct_column(*cur_value, column.get(), slot_info.type, slot_info.key));
     }
 
     for (int i = 0; i < _found_columns.size(); i++) {
