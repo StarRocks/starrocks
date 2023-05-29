@@ -1425,6 +1425,7 @@ public class GlobalStateMgr {
                     auth.load(dis);
                     authenticationMgr.loadV2(dis);
                     authorizationMgr.loadV2(dis);
+                    smallFileMgr.loadSmallFilesV2(dis);
                     catalogMgr.load(dis);
                     insertOverwriteJobMgr.load(dis);
                     compactionMgr.load(dis);
@@ -1450,7 +1451,6 @@ public class GlobalStateMgr {
                 checksum = exportMgr.loadExportJob(dis, checksum);
                 checksum = backupHandler.loadBackupHandler(dis, checksum, this);
                 checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
-                checksum = smallFileMgr.loadSmallFiles(dis, checksum);
                 checksum = taskManager.loadTasks(dis, checksum);
                 checksum = localMetastore.loadAutoIncrementId(dis, checksum);
             } else {
@@ -1812,6 +1812,7 @@ public class GlobalStateMgr {
                     auth.save(dos);
                     authenticationMgr.saveV2(dos);
                     authorizationMgr.saveV2(dos);
+                    smallFileMgr.saveSmallFilesV2(dos);
                     catalogMgr.save(dos);
                     insertOverwriteJobMgr.save(dos);
                     compactionMgr.save(dos);
@@ -1832,7 +1833,6 @@ public class GlobalStateMgr {
                 checksum = exportMgr.saveExportJob(dos, checksum);
                 checksum = backupHandler.saveBackupHandler(dos, checksum);
                 checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
-                checksum = smallFileMgr.saveSmallFiles(dos, checksum);
                 checksum = taskManager.saveTasks(dos, checksum);
                 checksum = localMetastore.saveAutoIncrementId(dos, checksum);
 
