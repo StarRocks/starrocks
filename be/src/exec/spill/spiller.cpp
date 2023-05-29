@@ -52,6 +52,17 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
     restore_bytes = ADD_COUNTER(profile, "SpillRestoreBytes", TUnit::BYTES);
     serialize_timer = ADD_TIMER(profile, "SpillSerializeTimer");
     deserialize_timer = ADD_TIMER(profile, "SpillDeserializeTimer");
+
+    restore_from_mem_rows = ADD_COUNTER(profile, "SpillRestoreFromMemRows", TUnit::UNIT);
+    restore_from_mem_bytes = ADD_COUNTER(profile, "SpillRestoreFromMemBytes", TUnit::UNIT);
+
+    mem_table_peak_memory_usage = profile->AddHighWaterMarkCounter(
+            "SpillMemTablePeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    input_stream_peak_memory_usage = profile->AddHighWaterMarkCounter(
+            "SpillInputStreamPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    partition_writer_peak_memory_usage =
+            profile->AddHighWaterMarkCounter("SpillPartitionWriterPeakMemoryUsage", TUnit::BYTES,
+                                             RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
 }
 
 Status Spiller::prepare(RuntimeState* state) {

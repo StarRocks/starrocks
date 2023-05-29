@@ -59,6 +59,13 @@ struct SpillProcessMetrics {
     RuntimeProfile::Counter* restore_bytes = nullptr;
     RuntimeProfile::Counter* serialize_timer = nullptr;
     RuntimeProfile::Counter* deserialize_timer = nullptr;
+
+    RuntimeProfile::Counter* restore_from_mem_bytes = nullptr;
+    RuntimeProfile::Counter* restore_from_mem_rows = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* mem_table_peak_memory_usage = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* input_stream_peak_memory_usage = nullptr;
+
+    RuntimeProfile::HighWaterMarkCounter* partition_writer_peak_memory_usage = nullptr;
 };
 
 // major spill interfaces

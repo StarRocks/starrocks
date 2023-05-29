@@ -71,6 +71,8 @@ public:
 
     bool ready() const { return _ready; }
 
+    int64_t hash_table_mem_usage() { return _ht.mem_usage(); }
+
 private:
     HashJoiner& _hash_joiner;
     JoinHashTable _ht;
