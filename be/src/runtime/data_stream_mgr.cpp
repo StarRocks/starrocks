@@ -55,6 +55,18 @@ inline uint32_t DataStreamMgr::get_bucket(const TUniqueId& fragment_instance_id)
     return value % BUCKET_NUM;
 }
 
+void DataStreamMgr::cancel_all() {
+    for (size_t i = 0; i < BUCKET_NUM; i++) {
+        std::shared_lock l(_lock[i]);
+        auto& receiver_map = _receiver_map[i];
+        for (auto& iter : receiver_map) {
+            for (auto& sub_iter : *iter.second) {
+                sub_iter.second->cancel_stream();
+            }
+        }
+    }
+}
+
 std::shared_ptr<DataStreamRecvr> DataStreamMgr::create_recvr(
         RuntimeState* state, const RowDescriptor& row_desc, const TUniqueId& fragment_instance_id,
         PlanNodeId dest_node_id, int num_senders, int buffer_size, const std::shared_ptr<RuntimeProfile>& profile,
