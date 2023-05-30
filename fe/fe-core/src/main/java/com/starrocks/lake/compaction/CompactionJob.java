@@ -14,13 +14,11 @@
 
 package com.starrocks.lake.compaction;
 
-import com.starrocks.proto.CompactResponse;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.VisibleStateWaiter;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -47,8 +45,13 @@ public class CompactionJob {
         this.tasks = Objects.requireNonNull(tasks, "tasks is null");
     }
 
-    public List<Future<CompactResponse>> getResponseList() {
-        return tasks.stream().map(CompactionTask::getResponseFuture).collect(Collectors.toList());
+    public boolean isFailed() {
+        return tasks.stream().anyMatch(CompactionTask::isFailed);
+    }
+
+    public String getFailMessage() {
+        CompactionTask task = tasks.stream().filter(CompactionTask::isFailed).findAny().orElse(null);
+        return task != null ? task.getFailMessage() : null;
     }
 
     public void setVisibleStateWaiter(VisibleStateWaiter visibleStateWaiter) {
@@ -67,8 +70,8 @@ public class CompactionJob {
         return tasks.stream().map(CompactionTask::buildTabletCommitInfo).flatMap(List::stream).collect(Collectors.toList());
     }
 
-    public boolean compactionFinishedOnBE() {
-        return tasks.stream().allMatch(CompactionTask::isDone);
+    public boolean isCompleted() {
+        return tasks.stream().allMatch(CompactionTask::isCompleted);
     }
 
     public int getNumTabletCompactionTasks() {
@@ -93,6 +96,10 @@ public class CompactionJob {
 
     public void finish() {
         this.finishTs = System.currentTimeMillis();
+    }
+
+    public void abort() {
+        tasks.forEach(CompactionTask::abort);
     }
 
     public String getFullPartitionName() {

@@ -14,13 +14,18 @@
 
 package com.starrocks.lake.compaction;
 
+import com.google.common.base.Preconditions;
+import com.starrocks.proto.AbortCompactionRequest;
+import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.transaction.TabletCommitInfo;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
@@ -53,10 +58,66 @@ public class CompactionTask {
         return responseFuture != null && responseFuture.isDone();
     }
 
+    /**
+     * Checks if compaction was completed successfully for all tablets in the task.
+     *
+     * @return True if compaction completed successfully for all tablets in the task
+     *         False if compaction for any tablet failed or is still in progress
+     */
+    public boolean isCompleted() {
+        return isDone() && !isFailed();
+    }
+
+    /**
+     * Checks if compaction failed for any tablet in the task.
+     *
+     * @return True if compaction failed for any tablet in the task,
+     *         False if compaction succeeded for all tablets in the task or is still in progress
+     */
+    public boolean isFailed() {
+        if (!isDone()) {
+            return false;
+        }
+        try {
+            CompactResponse response = responseFuture.get();
+            return CollectionUtils.isNotEmpty(response.failedTablets);
+        } catch (ExecutionException e) {
+            return true;
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+            return true;
+        }
+    }
+
+    public String getFailMessage() {
+        Preconditions.checkState(isDone());
+        try {
+            CompactResponse response = responseFuture.get();
+            if (response.status != null && CollectionUtils.isNotEmpty(response.status.errorMsgs)) {
+                return response.status.errorMsgs.get(0);
+            } else if (CollectionUtils.isNotEmpty(response.failedTablets)) {
+                return String.format("fail to compact tablet %d", response.failedTablets.get(0));
+            } else {
+                return null;
+            }
+        } catch (Exception e) {
+            return e.getMessage();
+        }
+    }
+
     public void sendRequest() {
         if (responseFuture == null) {
             responseFuture = rpcChannel.compact(request);
         }
+    }
+
+    public void abort() {
+        if (responseFuture == null || responseFuture.isDone()) { // No need to send abort request
+            return;
+        }
+        AbortCompactionRequest abortRequest = new AbortCompactionRequest();
+        abortRequest.txnId = request.txnId;
+        Future<AbortCompactionResponse> ignored = rpcChannel.abortCompaction(abortRequest);
     }
 
     public List<TabletCommitInfo> buildTabletCommitInfo() {
