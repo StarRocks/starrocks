@@ -20,31 +20,23 @@ insert into ss values('2020-01-15', 2);
 CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day, sum(pv) FROM ss GROUP BY event_day;
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW mv1;
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode ;
 -- result:
-165ddf28-faf7-11ed-bee8-024249e13be2
--- !result
-SELECT sleep(2);
--- result:
-1
+67318362-fe9a-11ed-ba33-02762d81431e
 -- !result
 CREATE MATERIALIZED VIEW mv2 DISTRIBUTED BY hash(event_day) AS SELECT event_day, count(pv) FROM ss GROUP BY event_day;
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW mv2;
+[UC]REFRESH MATERIALIZED VIEW mv2 with sync mode ;
 -- result:
-17912e1f-faf7-11ed-bee8-024249e13be2
+67bfb8b3-fe9a-11ed-ba33-02762d81431e
 -- !result
-SELECT sleep(2);
--- result:
-1
--- !result
-SELECT * FROM mv1;
+SELECT * FROM mv1 ORDER BY event_day;
 -- result:
 2020-01-14	5
 2020-01-15	2
 -- !result
-SELECT * FROM mv2;
+SELECT * FROM mv2 ORDER BY event_day;
 -- result:
 2020-01-14	2
 2020-01-15	1
@@ -52,12 +44,12 @@ SELECT * FROM mv2;
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
 -- result:
 -- !result
-SELECT * FROM mv1;
+SELECT * FROM mv1 ORDER BY event_day;
 -- result:
 2020-01-14	2
 2020-01-15	1
 -- !result
-SELECT * FROM mv2;
+SELECT * FROM mv2 ORDER BY event_day;
 -- result:
 2020-01-14	5
 2020-01-15	2
@@ -75,20 +67,20 @@ sum(pv)	bigint	YES	true	None
 INSERT INTO ss values('2020-01-15', 2);
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW mv1;
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
 -- result:
-18d1eb9a-faf7-11ed-bee8-024249e13be2
+6882bac7-fe9a-11ed-ba33-02762d81431e
 -- !result
-[UC]REFRESH MATERIALIZED VIEW mv2;
+[UC]REFRESH MATERIALIZED VIEW mv2 with sync mode;
 -- result:
-18d239bc-faf7-11ed-bee8-024249e13be2
+68effb92-fe9a-11ed-ba33-02762d81431e
 -- !result
-SELECT * FROM mv1;
+SELECT * FROM mv1 ORDER BY event_day;
 -- result:
 2020-01-14	2
 2020-01-15	2
 -- !result
-SELECT * FROM mv2;
+SELECT * FROM mv2 ORDER BY event_day;
 -- result:
 2020-01-14	5
 2020-01-15	4
