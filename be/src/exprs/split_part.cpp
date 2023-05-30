@@ -24,8 +24,7 @@
 
 namespace starrocks {
 
-static void split_index(const Slice& haystack, const Slice& delimiter, int32_t part_number,
-                        Slice& res) {
+static void split_index(const Slice& haystack, const Slice& delimiter, int32_t part_number, Slice& res) {
     if (part_number > 0) {
         if (delimiter.size == 1) {
             // if delimiter is a char, use memchr to split
