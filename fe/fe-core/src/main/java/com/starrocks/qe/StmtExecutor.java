@@ -1419,7 +1419,12 @@ public class StmtExecutor {
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
-        Table targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        Table targetTable;
+        if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
+            targetTable = ((InsertStmt) stmt).getTargetTable();
+        } else {
+            targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        }
 
         if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite() &&
                 !((InsertStmt) parsedStmt).hasOverwriteJob() &&

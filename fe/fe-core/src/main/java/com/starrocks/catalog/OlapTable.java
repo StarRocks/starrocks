@@ -284,8 +284,7 @@ public class OlapTable extends Table {
 
     // Only Copy necessary metadata for query.
     // We don't do deep copy, because which is very expensive;
-    public OlapTable copyOnlyForQuery() {
-        OlapTable olapTable = new OlapTable();
+    public void copyOnlyForQuery(OlapTable olapTable) {
         olapTable.id = this.id;
         olapTable.name = this.name;
         olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
@@ -315,7 +314,6 @@ public class OlapTable extends Table {
         if (this.tableProperty != null) {
             olapTable.tableProperty = this.tableProperty.copy();
         }
-        return olapTable;
     }
 
     public BinlogConfig getCurBinlogConfig() {

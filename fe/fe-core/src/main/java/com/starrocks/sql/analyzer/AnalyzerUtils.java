@@ -530,7 +530,8 @@ public class AnalyzerUtils {
                 OlapTable table = (OlapTable) node.getTable();
                 olapTables.add(table);
                 // Only copy the necessary olap table meta to avoid the lock when plan query
-                OlapTable copied = table.copyOnlyForQuery();
+                OlapTable copied = new OlapTable();
+                table.copyOnlyForQuery(copied);
                 node.setTable(copied);
             }
             return null;

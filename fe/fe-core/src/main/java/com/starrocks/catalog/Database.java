@@ -240,6 +240,10 @@ public class Database extends MetaObject implements Writable {
         this.rwLock.readLock().unlock();
     }
 
+    public boolean isReadLockHeldByCurrentThread() {
+        return this.rwLock.getReadHoldCount() > 0;
+    }
+
     public void writeLock() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         String threadDump = getOwnerInfo(rwLock.getOwner());
