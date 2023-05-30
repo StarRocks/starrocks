@@ -59,6 +59,7 @@ public class DeriveStatsTask extends OptimizerTask {
         Statistics currentStatistics = groupExpression.getGroup().getStatistics();
         // @Todo: update choose algorithm, like choose the least predicate statistics
         // choose best statistics
+        // do set group statistics when the groupExpression is a materialized view scan
         if (currentStatistics == null ||
                 (expressionContext.getStatistics().getOutputRowCount() < currentStatistics.getOutputRowCount() &&
                         !isMaterializedView())) {
