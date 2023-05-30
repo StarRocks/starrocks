@@ -179,10 +179,20 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
 Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
     RETURN_IF_ERROR(_init_parquet_reader());
 
-    auto file_schema = _file_metadata->schema();
-    for (int i = 0; i < file_schema->num_columns(); ++i) {
-        auto column = file_schema->Column(i);
-        auto name = column->name();
+    const auto& file_schema = _file_metadata->schema();
+
+    for (auto i = 0; i < file_schema->group_node()->field_count(); i++) {
+        const auto &field = file_schema->group_node()->field(i);
+        const auto &name = field->name();
+
+        if (!field->is_primitive()) {
+            // Now, we treat all nested types as VARCHAR.
+            schema->emplace_back(i, name, TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+            continue;
+        }
+
+        auto column = file_schema->Column(file_schema->ColumnIndex(*field));
+
         auto physical_type = column->physical_type();
         auto logical_type = column->logical_type();
 
@@ -216,6 +226,7 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
             tp = TypeDescriptor(TYPE_DATETIME);
             break;
         case parquet::Type::BYTE_ARRAY:
+        case parquet::Type::FIXED_LEN_BYTE_ARRAY:
             tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
             break;
         default:
@@ -224,6 +235,7 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
         }
         schema->emplace_back(i, name, tp);
     }
+
     return Status::OK();
 }
 

@@ -77,6 +77,7 @@ private:
     Status column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs);
     Status handle_timestamp(const std::shared_ptr<arrow::TimestampArray>& ts_array, uint8_t* buf, int32_t* wbtyes);
     Status next_selected_row_group();
+    // _init_parquet_reader initializes the underlying parquets reader.
     Status _init_parquet_reader();
 
     const int32_t _num_of_columns_from_file;
