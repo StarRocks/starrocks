@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     private Map<String, StorageVolume> nameToSV = new HashMap<>();
@@ -50,10 +51,13 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
             Preconditions.checkState(nameToSV.containsKey(name),
                     "Storage volume '%s' does not exist", name);
             StorageVolume sv = nameToSV.get(name);
-            Preconditions.checkState(sv.getId() != defaultStorageVolumeId, "default storage volume can not be removed");
-            Preconditions.checkState(!storageVolumeToDbs.containsKey(sv.getId())
-                            && !storageVolumeToTables.containsKey(sv.getId()),
-                    "Storage volume '%s' is referenced by db or table", name);
+            Preconditions.checkState(sv.getId() != defaultStorageVolumeId,
+                    "default storage volume can not be removed");
+            Set<Long> dbs = storageVolumeToDbs.get(sv.getId());
+            Set<Long> tables = storageVolumeToTables.get(sv.getId());
+            Preconditions.checkState(dbs == null && tables == null,
+                    "Storage volume '%s' is referenced by dbs or tables, dbs: %s, tables: %s",
+                    name, dbs != null ? dbs.toString() : "[]", tables != null ? tables.toString() : "[]");
             nameToSV.remove(name);
         }
     }

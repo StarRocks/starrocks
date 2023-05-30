@@ -188,7 +188,8 @@ public class SharedDataStorageVolumeMgrTest {
             svm.removeStorageVolume(svKey);
             Assert.fail();
         } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("Storage volume 'test' is referenced by db or table"));
+            Assert.assertTrue(e.getMessage().contains("Storage volume 'test' is referenced by dbs or tables, " +
+                    "dbs: [1], tables: [1]"));
         }
         svm.unbindDbToStorageVolume(sv.getId(), 1L);
         svm.unbindTableToStorageVolume(sv.getId(), 1L);
