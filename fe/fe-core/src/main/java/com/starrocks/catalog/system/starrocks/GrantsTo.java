@@ -354,7 +354,8 @@ public class GrantsTo {
                             } else {
                                 for (Function f : database.getFunctions()) {
                                     if (f.getFunctionId() == functionPEntryObject.getFunctionId()) {
-                                        objects.add(Lists.newArrayList(null, null, f.signatureString()));
+                                        objects.add(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                                database.getFullName(), f.signatureString()));
                                         break;
                                     }
                                 }
