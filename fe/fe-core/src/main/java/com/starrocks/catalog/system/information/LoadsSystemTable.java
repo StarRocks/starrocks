@@ -32,6 +32,7 @@ public class LoadsSystemTable {
                         .column("JOB_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("LABEL", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("DATABASE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("TABLE_NAMES", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("PROGRESS", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))

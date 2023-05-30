@@ -459,13 +459,14 @@ struct TLoadInfo {
     15: optional string job_details
     16: optional string error_msg
     17: optional string db
-    18: optional i64 txn_id
-    19: optional string tracking_sql
-    20: optional i64 num_scan_rows
-    21: optional i64 num_filtered_rows
-    22: optional i64 num_unselected_rows
-    23: optional i64 num_sink_rows
-    24: optional string rejected_record_path
+    18: optional string tables
+    19: optional i64 txn_id
+    20: optional string tracking_sql
+    21: optional i64 num_scan_rows
+    22: optional i64 num_filtered_rows
+    23: optional i64 num_unselected_rows
+    24: optional i64 num_sink_rows
+    25: optional string rejected_record_path
 }
 
 // getTableNames returns a list of unqualified table names
