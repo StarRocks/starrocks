@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
+#include "simd/gather.h"
 #include "util/coding.h"
 #include "util/rle_encoding.h"
 #include "util/slice.h"
@@ -132,6 +133,8 @@ public:
         size_t cur_size = data_column->size();
         data_column->resize_uninitialized(cur_size + count);
         T* __restrict__ data = data_column->get_data().data() + cur_size;
+        T* __restrict__ dict = _dict.data();
+        uint32_t* __restrict__ index = _indexes.data();
 
         auto flag = 0;
         size_t size = _dict.size();
@@ -142,8 +145,14 @@ public:
             return Status::InternalError("Index not in dictionary bounds");
         }
 
-        for (int i = 0; i < count; i++) {
-            data[i] = _dict[_indexes[i]];
+        {
+            if constexpr (sizeof (T) == 8) {
+                SIMDGather::gather64(data, dict, index, count, count);
+            } else {
+                for (int i = 0; i < count; i++) {
+                    data[i] = _dict[_indexes[i]];
+                }
+            }
         }
         return Status::OK();
     }
