@@ -64,7 +64,7 @@ public class InformationSchemaDataSource {
     private static final String DEF = "def";
     private static final String DEFAULT_EMPTY_STRING = "";
     private static final long DEFAULT_EMPTY_NUM = -1L;
-    private static final String UTF8_GENERAL_CI = "utf8_general_ci";
+    public static final String UTF8_GENERAL_CI = "utf8_general_ci";
 
     @NotNull
     private static AuthDbRequestResult getAuthDbRequestResult(TAuthInfo authInfo) throws TException {
@@ -353,7 +353,7 @@ public class InformationSchemaDataSource {
         return response;
     }
 
-    private static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
+    public static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
 
         OlapTable olapTable = (OlapTable) table;
         Collection<Partition> partitions = table.getPartitions();
@@ -382,7 +382,7 @@ public class InformationSchemaDataSource {
         return info;
     }
 
-    private static TTableInfo genDefaultConfigInfo(TTableInfo info) {
+    public static TTableInfo genDefaultConfigInfo(TTableInfo info) {
         info.setTable_rows(DEFAULT_EMPTY_NUM);
         info.setAvg_row_length(DEFAULT_EMPTY_NUM);
         info.setData_length(DEFAULT_EMPTY_NUM);
