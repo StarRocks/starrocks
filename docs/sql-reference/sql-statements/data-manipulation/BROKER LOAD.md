@@ -249,7 +249,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
   
   - If you load data from a single HDFS cluster and you have configured multiple Kerberos users, only broker-based loading is supported. You must [deploy at least one independent broker group](../../../deployment/deploy_broker.md) (in most cases, one broker group is sufficient), and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the node that hosts the broker group for your HDFS cluster.
 
-  - If you load data from multiple HDFS clusters, only broker-based loading is supported. You must [deploy one independent broker group](../../../deployment/deploy_broker.md) for each HDFS cluster. Take one of the following actions to enable brokers to read information about the HDFS cluster nodes:
+  - If you load data from multiple HDFS clusters, only broker-based loading is supported. You must [deploy one independent broker group](../../../deployment/deploy_broker.md) for each of these HDFS clusters, and take one of the following actions to enable the brokers to read information about the HDFS cluster nodes:
 
     - Place the `hdfs-site.xml` file to the `{deploy}/conf` path on the node that hosts the broker group for each HDFS cluster. As such, StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the nodes in that HDFS cluster.
 
