@@ -601,6 +601,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitAlterRoleStatement(AlterRoleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitDropRoleStatement(DropRoleStmt statement, C context) {
         return visitStatement(statement, context);
     }

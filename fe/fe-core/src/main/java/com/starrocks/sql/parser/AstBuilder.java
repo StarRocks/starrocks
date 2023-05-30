@@ -122,6 +122,7 @@ import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
+import com.starrocks.sql.ast.AlterRoleStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterStorageVolumeClause;
 import com.starrocks.sql.ast.AlterStorageVolumeCommentClause;
@@ -1656,6 +1657,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     (PartitionRangeDesc) visit(context.partitionRangeDesc());
         }
         return new RefreshMaterializedViewStatement(mvName, partitionRangeDesc, context.FORCE() != null,
+                context.SYNC() != null,
                 createPos(context));
     }
 
@@ -4593,10 +4595,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreateRoleStatement(StarRocksParser.CreateRoleStatementContext context) {
-        List<String> roles = new ArrayList<>();
-        roles.addAll(context.roleList().identifierOrString().stream().map(this::visit).map(
-                s -> ((Identifier) s).getValue()).collect(toList()));
-        return new CreateRoleStmt(roles, context.NOT() != null, createPos(context));
+        List<String> roles = context.roleList().identifierOrString().stream().map(this::visit).map(
+                s -> ((Identifier) s).getValue()).collect(Collectors.toList());
+        String comment = context.comment() == null ? "" : ((StringLiteral) visit(context.comment())).getStringValue();
+        return new CreateRoleStmt(roles, context.NOT() != null, comment, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterRoleStatement(StarRocksParser.AlterRoleStatementContext context) {
+        List<String> roles = context.roleList().identifierOrString().stream().map(this::visit).map(
+                s -> ((Identifier) s).getValue()).collect(Collectors.toList());
+
+        StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+        String comment = stringLiteral.getStringValue();
+        return new AlterRoleStmt(roles, context.IF() != null, comment);
     }
 
     @Override

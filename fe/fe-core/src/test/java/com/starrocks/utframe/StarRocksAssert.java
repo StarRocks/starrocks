@@ -60,7 +60,7 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.MvTaskRunContext;
-import com.starrocks.scheduler.PartitionBasedMaterializedViewRefreshProcessor;
+import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskRun;
@@ -337,7 +337,7 @@ public class StarRocksAssert {
     }
 
     private void waitingTaskFinish(TaskRun taskRun) {
-        MvTaskRunContext mvContext = ((PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor()).getMvContext();
+        MvTaskRunContext mvContext = ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
         int retryCount = 0;
         int maxRetry = 5;
         while (retryCount < maxRetry) {

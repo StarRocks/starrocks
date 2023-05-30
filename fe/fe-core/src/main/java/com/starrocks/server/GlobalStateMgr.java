@@ -1421,6 +1421,7 @@ public class GlobalStateMgr {
                     // rebuild es state state
                     esRepository.loadTableFromCatalog();
                     starRocksRepository.loadTableFromCatalog();
+                    recycleBin.load(dis);
 
                     loadMgr.loadLoadJobsV2JsonFormat(dis);
                     alterJobMgr.load(dis);
@@ -1434,6 +1435,7 @@ public class GlobalStateMgr {
                     auth.load(dis);
                     authenticationMgr.loadV2(dis);
                     authorizationMgr.loadV2(dis);
+                    smallFileMgr.loadSmallFilesV2(dis);
                     catalogMgr.load(dis);
                     insertOverwriteJobMgr.load(dis);
                     compactionMgr.load(dis);
@@ -1446,15 +1448,13 @@ public class GlobalStateMgr {
                 }
 
                 //TODO: The following parts have not been refactored, and they are added for the convenience of testing
-                checksum = recycleBin.loadRecycleBin(dis, checksum);
+
                 checksum = loadResources(dis, checksum);
                 checksum = exportMgr.loadExportJob(dis, checksum);
                 checksum = backupHandler.loadBackupHandler(dis, checksum, this);
                 // global transaction must be replayed before load jobs v2
                 checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
-                checksum = smallFileMgr.loadSmallFiles(dis, checksum);
                 checksum = taskManager.loadTasks(dis, checksum);
-                // ** NOTICE **: always add new code at the end
             } else {
                 checksum = loadHeaderV1(dis, checksum);
                 checksum = nodeMgr.loadLeaderInfo(dis, checksum);
@@ -1804,6 +1804,7 @@ public class GlobalStateMgr {
                     checksum = saveHeaderV2(dos, checksum);
                     nodeMgr.save(dos);
                     localMetastore.save(dos);
+                    recycleBin.save(dos);
                     loadMgr.saveLoadJobsV2JsonFormat(dos);
                     alterJobMgr.save(dos);
                     VariableMgr.save(dos);
@@ -1816,6 +1817,7 @@ public class GlobalStateMgr {
                     auth.save(dos);
                     authenticationMgr.saveV2(dos);
                     authorizationMgr.saveV2(dos);
+                    smallFileMgr.saveSmallFilesV2(dos);
                     catalogMgr.save(dos);
                     insertOverwriteJobMgr.save(dos);
                     compactionMgr.save(dos);
@@ -1828,13 +1830,11 @@ public class GlobalStateMgr {
                 }
 
                 //TODO: The following parts have not been refactored, and they are added for the convenience of testing
-                checksum = recycleBin.saveRecycleBin(dos, checksum);
 
                 checksum = resourceMgr.saveResources(dos, checksum);
                 checksum = exportMgr.saveExportJob(dos, checksum);
                 checksum = backupHandler.saveBackupHandler(dos, checksum);
                 checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
-                checksum = smallFileMgr.saveSmallFiles(dos, checksum);
                 checksum = taskManager.saveTasks(dos, checksum);
             } else {
                 checksum = saveVersion(dos, checksum);

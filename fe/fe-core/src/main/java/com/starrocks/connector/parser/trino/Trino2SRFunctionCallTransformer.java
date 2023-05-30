@@ -74,6 +74,8 @@ public class Trino2SRFunctionCallTransformer {
         registerDateFunctionTransformer();
         registerStringFunctionTransformer();
         registerRegexpFunctionTransformer();
+        registerJsonFunctionTransformer();
+        registerBitwiseFunctionTransformer();
         // todo: support more function transform
     }
 
@@ -178,6 +180,44 @@ public class Trino2SRFunctionCallTransformer {
         // regexp_extract(string, pattern) -> regexp_extract(str, pattern, 0)
         registerFunctionTransformer("regexp_extract", 2, new FunctionCallExpr("regexp_extract",
                 ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class), new IntLiteral(0L))));
+    }
+
+    private static void registerJsonFunctionTransformer() {
+        // json_array_length -> json_length
+        registerFunctionTransformer("json_array_length", 1, "json_length",
+                ImmutableList.of(Expr.class));
+
+        // json_parse -> parse_json
+        registerFunctionTransformer("json_parse", 1, "parse_json",
+                ImmutableList.of(Expr.class));
+
+        // json_extract -> json_query
+        registerFunctionTransformer("json_extract", 2, "json_query",
+                ImmutableList.of(Expr.class, Expr.class));
+
+        // json_size -> json_length
+        registerFunctionTransformer("json_size", 2, "json_length",
+                ImmutableList.of(Expr.class, Expr.class));
+    }
+
+    private static void registerBitwiseFunctionTransformer() {
+        // bitwise_and -> bitand
+        registerFunctionTransformer("bitwise_and", 2, "bitand", ImmutableList.of(Expr.class, Expr.class));
+
+        // bitwise_not -> bitnot
+        registerFunctionTransformer("bitwise_not", 1, "bitnot", ImmutableList.of(Expr.class));
+
+        // bitwise_or -> bitor
+        registerFunctionTransformer("bitwise_or", 2, "bitor", ImmutableList.of(Expr.class, Expr.class));
+
+        // bitwise_xor -> bitxor
+        registerFunctionTransformer("bitwise_xor", 2, "bitxor", ImmutableList.of(Expr.class, Expr.class));
+
+        // bitwise_left_shift -> bit_shift_left
+        registerFunctionTransformer("bitwise_left_shift", 2, "bit_shift_left", ImmutableList.of(Expr.class, Expr.class));
+
+        // bitwise_right_shift -> bit_shift_right
+        registerFunctionTransformer("bitwise_right_shift", 2, "bit_shift_right", ImmutableList.of(Expr.class, Expr.class));
     }
 
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,

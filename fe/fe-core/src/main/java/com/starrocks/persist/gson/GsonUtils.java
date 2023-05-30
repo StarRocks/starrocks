@@ -65,7 +65,6 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
-import com.starrocks.analysis.Expr;
 import com.starrocks.authentication.LDAPSecurityIntegration;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.backup.SnapshotInfo;
@@ -132,12 +131,10 @@ import com.starrocks.privilege.ResourcePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.privilege.ViewPEntryObject;
-import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.optimizer.dump.HiveTableDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
-import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.BackendHbResponse;
 import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.system.FrontendHbResponse;
@@ -328,9 +325,9 @@ public class GsonUtils {
     private static final JsonDeserializer<HiveTableDumpInfo> HIVE_TABLE_DUMP_INFO_DESERIALIZER = new HiveTableDumpInfo.
             HiveTableDumpInfoDeserializer();
 
-    private static final JsonSerializer<Expr> EXPRESSION_SERIALIZER = new ExpressionSerializer();
+    //private static final JsonSerializer<Expr> EXPRESSION_SERIALIZER = new ExpressionSerializer();
 
-    private static final JsonDeserializer<Expr> EXPRESSION_DESERIALIZER = new ExpressionDeserializer();
+    //private static final JsonDeserializer<Expr> EXPRESSION_DESERIALIZER = new ExpressionDeserializer();
 
     private static final JsonDeserializer<PrimitiveType> PRIMITIVE_TYPE_DESERIALIZER = new PrimitiveTypeDeserializer();
 
@@ -378,9 +375,7 @@ public class GsonUtils {
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_DESERIALIZER)
             .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_SERIALIZER)
             .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_DESERIALIZER)
-            .registerTypeAdapter(PrimitiveType.class, PRIMITIVE_TYPE_DESERIALIZER)
-            .registerTypeHierarchyAdapter(Expr.class, EXPRESSION_SERIALIZER)
-            .registerTypeHierarchyAdapter(Expr.class, EXPRESSION_DESERIALIZER);
+            .registerTypeAdapter(PrimitiveType.class, PRIMITIVE_TYPE_DESERIALIZER);
 
     // this instance is thread-safe.
     public static final Gson GSON = GSON_BUILDER.create();
@@ -622,6 +617,12 @@ public class GsonUtils {
         }
     }
 
+    /*
+    * For historical reasons, there was a period of time when the code serialized Expr directly in GsonUtils,
+    * which would cause problems for the future expansion of Expr. This class is for code compatibility.
+    * Starting from version 3.2, this compatibility class can be deleted.
+    *
+    *
     private static class ExpressionSerializer implements JsonSerializer<Expr> {
         @Override
         public JsonElement serialize(Expr expr, Type type, JsonSerializationContext context) {
@@ -639,5 +640,14 @@ public class GsonUtils {
             String expressionSql = expressionObject.get("expr").getAsString();
             return SqlParser.parseSqlToExpr(expressionSql, SqlModeHelper.MODE_DEFAULT);
         }
+    }
+     */
+    public static class ExpressionSerializedObject {
+        public ExpressionSerializedObject(String expressionSql) {
+            this.expressionSql = expressionSql;
+        }
+
+        @SerializedName("expr")
+        public String expressionSql;
     }
 }

@@ -78,7 +78,7 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
 CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
         : _tablet_mgr(tablet_mgr),
           _limiter(config::compact_threads),
-          _states_lock(),
+          _contexts_lock(),
           _contexts(),
           _task_queue_count(config::compact_threads),
           _task_queues(new TaskQueue[_task_queue_count]) {
@@ -110,7 +110,7 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     for (auto tablet_id : request->tablet_ids()) {
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(), cb);
         {
-            std::lock_guard l(_states_lock);
+            std::lock_guard l(_contexts_lock);
             _contexts.Append(context.get());
         }
         _task_queues[idx].put(std::move(context));
@@ -118,7 +118,7 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
 }
 
 void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
-    std::lock_guard l(_states_lock);
+    std::lock_guard l(_contexts_lock);
     for (butil::LinkNode<CompactionTaskContext>* node = _contexts.head(); node != _contexts.end();
          node = node->next()) {
         CompactionTaskContext* context = node->value();
@@ -140,7 +140,7 @@ void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
 }
 
 void CompactionScheduler::remove_states(const std::vector<std::unique_ptr<CompactionTaskContext>>& states) {
-    std::lock_guard l(_states_lock);
+    std::lock_guard l(_contexts_lock);
     for (auto& context : states) {
         context->RemoveFromList();
     }
