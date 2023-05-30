@@ -98,7 +98,7 @@ void FragmentContext::count_down_pipeline(RuntimeState* state, size_t val) {
 
     finish();
     auto status = final_status();
-    state->exec_env()->driver_executor()->report_exec_state(query_ctx, this, status, true);
+    state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, status, true);
 
     destroy_pass_through_chunk_buffer();
 
@@ -122,8 +122,7 @@ void FragmentContext::set_final_status(const Status& status) {
             } else {
                 LOG(WARNING) << ss.str();
             }
-            DriverExecutor* executor = enable_resource_group() ? _runtime_state->exec_env()->wg_driver_executor()
-                                                               : _runtime_state->exec_env()->driver_executor();
+            DriverExecutor* executor = _runtime_state->exec_env()->wg_driver_executor();
             iterate_drivers([executor](const DriverPtr& driver) {
                 executor->cancel(driver.get());
                 return Status::OK();
