@@ -23,9 +23,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.TaskBuilder;
-import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.utframe.StarRocksAssert;
@@ -144,15 +141,7 @@ public class RefreshMaterializedViewTest {
     }
 
     private void refreshMaterializedView(String dbName, String mvName) throws Exception {
-        MaterializedView mv = getMv(dbName, mvName);
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
-        if (!taskManager.containTask(mvTaskName)) {
-            Task task = TaskBuilder.buildMvTask(mv, "test");
-            TaskBuilder.updateTaskInfo(task, mv);
-            taskManager.createTask(task, false);
-        }
-        taskManager.executeTaskSync(mvTaskName);
+        cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
     }
 
     @Test
