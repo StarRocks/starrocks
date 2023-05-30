@@ -77,6 +77,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         if (search_it != op_compaction.input_rowsets().end()) {
             // find it
             delete_delvec_sid_range.push_back(std::make_pair(it->id(), it->id() + it->segments_size() - 1));
+            _tablet_meta->mutable_compaction_inputs()->Add(std::move(*it));
             it = _tablet_meta->mutable_rowsets()->erase(it);
             del_range_ss << "[" << delete_delvec_sid_range.back().first << "," << delete_delvec_sid_range.back().second
                          << "] ";
