@@ -62,6 +62,11 @@ public:
         return !_status.ok();
     }
 
+    void update_status(const Status& st) {
+        std::lock_guard l(_mtx);
+        _status.update(st);
+    }
+
 private:
     CompactionScheduler* _scheduler;
     mutable bthread::Mutex _mtx;
@@ -154,6 +159,13 @@ public:
 
     void compact(::google::protobuf::RpcController* controller, const CompactRequest* request,
                  CompactResponse* response, ::google::protobuf::Closure* done);
+
+    // Finds all compaction tasks for the given |txn_id| and aborts them.
+    // Marks the tasks as aborted and returns immediately, without waiting
+    // for the tasks to exit.
+    // Returns Status::NotFound if no task with the given txn_id is found,
+    // otherwise returns Status::OK.
+    Status abort(int64_t txn_id);
 
     void list_tasks(std::vector<CompactionTaskInfo>* infos);
 
