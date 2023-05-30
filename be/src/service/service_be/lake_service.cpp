@@ -29,6 +29,7 @@
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet.h"
+#include "testutil/sync_point.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
 #include "util/threadpool.h"
@@ -37,16 +38,7 @@ namespace starrocks {
 
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
-LakeServiceImpl::LakeServiceImpl(ExecEnv* env) : _env(env) {
-#if defined(USE_STAROS) || defined(BE_TEST)
-    auto st = ThreadPoolBuilder("lake_compact")
-                      .set_min_threads(0)
-                      .set_max_threads(config::compact_threads)
-                      .set_max_queue_size(config::compact_thread_pool_queue_size)
-                      .build(&(_compact_thread_pool));
-    CHECK(st.ok()) << st;
-#endif
-}
+LakeServiceImpl::LakeServiceImpl(ExecEnv* env) : _env(env) {}
 
 LakeServiceImpl::~LakeServiceImpl() {}
 
@@ -556,6 +548,26 @@ void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
     }
 
     _env->lake_tablet_manager()->compaction_scheduler()->compact(controller, request, response, guard.release());
+}
+
+void LakeServiceImpl::abort_compaction(::google::protobuf::RpcController* controller,
+                                       const ::starrocks::lake::AbortCompactionRequest* request,
+                                       ::starrocks::lake::AbortCompactionResponse* response,
+                                       ::google::protobuf::Closure* done) {
+    TEST_SYNC_POINT("LakeServiceImpl::abort_compaction:enter");
+
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (!request->has_txn_id()) {
+        cntl->SetFailed("missing txn_id");
+        return;
+    }
+
+    auto scheduler = _env->lake_tablet_manager()->compaction_scheduler();
+    auto st = scheduler->abort(request->txn_id());
+    TEST_SYNC_POINT("LakeServiceImpl::abort_compaction:aborted");
+    st.to_protobuf(response->mutable_status());
 }
 
 } // namespace starrocks
