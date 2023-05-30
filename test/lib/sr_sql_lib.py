@@ -121,6 +121,12 @@ class StarrocksSQLApiLib(object):
         for (rep_key, rep_value) in config_parser.items("replace"):
             self.__setattr__(rep_key, rep_value)
 
+        # read env info
+        for (env_key, env_value) in config_parser.items("env"):
+            if not env_value:
+                env_value = os.environ.get(env_key, "")
+            self.__setattr__(env_key, env_value)
+
     def connect_starrocks(self):
         mysql_dict = {
             "host": self.mysql_host,
