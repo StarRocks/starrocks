@@ -84,14 +84,14 @@ public class FunctionAnalyzer {
         
         if (fnName.getFunction().equals(FunctionSet.REGEXP)) {
             if (functionCallExpr.getChildren().size() > 2) {
-                final String lowerParam = ((StringLiteral) functionCallExpr.getChild(2)).getValue().toLowerCase();
-                functionCallExpr.setChild(2, new StringLiteral(lowerParam, functionCallExpr.getChild(2).getPos()));
-                if (functionCallExpr.getChild(2).getType().isStringType()) {
-                    if (!Lists.newArrayList("i", "c")
-                            .contains(lowerParam)) {
-                        throw new SemanticException("regexp function can't support argument other than " +
-                                "i|c", functionCallExpr.getChild(2).getPos());
-                    }
+                if (!(functionCallExpr.getChild(2) instanceof StringLiteral)) {
+                    throw new SemanticException("regexp requires third parameter must be a string constant",
+                            functionCallExpr.getChild(2).getPos());
+                }
+                final String param = ((StringLiteral) functionCallExpr.getChild(2)).getValue();
+                if (!Lists.newArrayList("i", "c").contains(param)) {
+                    throw new SemanticException("regexp function can't support argument other than " +
+                            "i|c", functionCallExpr.getChild(2).getPos());
                 }
             }
         }
