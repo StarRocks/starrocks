@@ -293,14 +293,13 @@ public class MaterializedViewHandler extends AlterHandler {
             //                        + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));
             //            }
             if (!mvCol.getType().equals(targetCol.getType())) {
-                if (Type.isImplicitlyCastable(mvCol.getType(), targetCol.getType(), true)) {
-                    Expr newDefinedExpr = new CastExpr(targetCol.getType(), mvCol.getDefineExpr());
-
-                    mvCol.setDefineExpr(newDefinedExpr);
-                } else {
+                if (!Type.canCastTo(mvCol.getType(), targetCol.getType())) {
                     throw new DdlException("Logical materialized view column type "
-                            + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));
+                            + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i)
+                            + " and can not cast " + mvColumns.get(i) + " to " + targetOlapTable.getBaseSchema().get(i));
                 }
+                Expr newDefinedExpr = new CastExpr(targetCol.getType(), mvCol.getDefineExpr());
+                mvCol.setDefineExpr(newDefinedExpr);
             }
         }
 
