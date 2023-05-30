@@ -14,22 +14,30 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.starrocks.GrantsTo;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzer;
+import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserItem;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -247,5 +255,52 @@ public class InfoSchemaDbTest {
         RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         authorizationManager.revoke(revokePrivilegeStmt);
         Assert.assertFalse(GrantsTo.getGrantsTo(request).grants_to.contains(item));
+    }
+
+
+    @Test
+    public void testShowFunctionsWithPriv() throws Exception {
+        new MockUp<CreateFunctionStmt>() {
+            @Mock
+            public void analyze(ConnectContext context) throws AnalysisException {
+            }
+        };
+
+        new MockUp<PrivilegeStmtAnalyzer>() {
+            @Mock
+            public void analyze(ConnectContext context) throws AnalysisException {
+            }
+        };
+
+        String createSql = "CREATE FUNCTION db.MY_UDF_JSON_GET(string, string) RETURNS string " +
+                "properties ( " +
+                "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
+                ")";
+
+        CreateFunctionStmt statement = (CreateFunctionStmt) UtFrameUtils.parseStmtWithNewParser(createSql, ctx);
+        Type[] arg = new Type[1];
+        arg[0] = Type.INT;
+        Function function = ScalarFunction.createUdf(new FunctionName("db", "MY_UDF_JSON_GET"), arg, Type.INT,
+                false, TFunctionBinaryType.SRJAR,
+                "objectFile", "mainClass.getCanonicalName()", "", "");
+        function.setChecksum("checksum");
+
+        statement.setFunction(function);
+        DDLStmtExecutor.execute(statement, ctx);
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant usage on function db.my_udf_json_get(int) to test_user", ctx), ctx);
+
+        TGetGrantsToRolesOrUserRequest request = new TGetGrantsToRolesOrUserRequest();
+        request.setType(TGrantsToType.USER);
+        TGetGrantsToRolesOrUserItem item = new TGetGrantsToRolesOrUserItem();
+        item.setGrantee("'test_user'@'%'");
+        item.setObject_catalog("default_catalog");
+        item.setObject_database("db");
+        item.setObject_name("my_udf_json_get(INT)");
+        item.setObject_type("FUNCTION");
+        item.setPrivilege_type("USAGE");
+        item.setIs_grantable(false);
+        Assert.assertTrue(GrantsTo.getGrantsTo(request).grants_to.contains(item));
     }
 }
