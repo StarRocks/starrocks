@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/nljoin/spillable_nl_join_build_operator.h"
+#include "exec/pipeline/nljoin/spillable_nljoin_build_operator.h"
 
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
 #include "exec/pipeline/query_context.h"
@@ -94,7 +94,7 @@ Status SpillableNLJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->min_spilled_size = state->spill_operator_min_bytes();
     _spill_options->max_memory_size_each_partition = state->spill_operator_max_bytes();
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
-    _spill_options->name = "nestloop-join-build";
+    _spill_options->name = "spillable-nestloop-join-build";
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->read_shared = true;
 

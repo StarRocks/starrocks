@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/nljoin/spillable_nl_join_probe_operator.h"
+#include "exec/pipeline/nljoin/spillable_nljoin_probe_operator.h"
 
 #include <glog/logging.h>
 
