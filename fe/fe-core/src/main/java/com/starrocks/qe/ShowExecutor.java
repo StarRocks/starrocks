@@ -1460,7 +1460,7 @@ public class ShowExecutor {
         // if task exists
         List<StreamLoadTask> streamLoadTaskList;
         try {
-            streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadManager()
+            streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadMgr()
                     .getTask(showStreamLoadStmt.getDbFullName(),
                             showStreamLoadStmt.getName(),
                             showStreamLoadStmt.isIncludeHistory());

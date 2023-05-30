@@ -41,6 +41,10 @@ import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import org.apache.logging.log4j.LogManager;
@@ -383,6 +387,37 @@ public class CatalogMgr {
         public static String toResourceName(String catalogName, String type) {
             return isResourceMappingCatalog(catalogName) ?
                     catalogName.substring(RESOURCE_MAPPING_CATALOG_PREFIX.length() + type.length() + 1) : catalogName;
+        }
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        Map<String, Catalog> serializedCatalogs = catalogs.entrySet().stream()
+                .filter(entry -> !isResourceMappingCatalog(entry.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        int numJson = 1 + serializedCatalogs.size();
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, CatalogMgr.class.getName(), numJson);
+
+        writer.writeJson(serializedCatalogs.size());
+        for (Catalog catalog : serializedCatalogs.values()) {
+            writer.writeJson(catalog);
+        }
+
+        writer.close();
+    }
+
+    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, CatalogMgr.class.getName());
+        try {
+            int serializedCatalogsSize = reader.readInt();
+            for (int i = 0; i < serializedCatalogsSize; ++i) {
+                Catalog catalog = reader.readJson(Catalog.class);
+                replayCreateCatalog(catalog);
+            }
+        } catch (DdlException e) {
+            throw new RuntimeException(e);
+        } finally {
+            reader.close();
         }
     }
 }

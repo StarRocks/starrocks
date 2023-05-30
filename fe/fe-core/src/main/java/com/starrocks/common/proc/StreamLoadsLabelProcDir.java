@@ -16,7 +16,7 @@
 package com.starrocks.common.proc;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.load.streamload.StreamLoadManager;
+import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ShowStreamLoadStmt;
@@ -40,7 +40,7 @@ public class StreamLoadsLabelProcDir implements ProcNodeInterface {
 
     @Override
     public ProcResult fetchResult() throws AnalysisException {
-        StreamLoadManager streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadManager();
+        StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
         List<StreamLoadTask> streamLoadTaskList = streamLoadManager.getTaskByName(label);
         if (streamLoadTaskList.isEmpty()) {
             throw new AnalysisException("stream load label[" + label + "] does not exist");
