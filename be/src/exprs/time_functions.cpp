@@ -2323,4 +2323,42 @@ Status TimeFunctions::previous_day_close(FunctionContext* context, FunctionConte
     return Status::OK();
 }
 
+StatusOr<ColumnPtr> TimeFunctions::make_date(FunctionContext* context, const Columns& columns) {
+    auto year_viewer = ColumnViewer<TYPE_INT>(columns[0]);
+    auto date_viewer = ColumnViewer<TYPE_INT>(columns[1]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_DATE> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (year_viewer.is_null(row) || date_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto date_of_year = date_viewer.value(row);
+        if (date_of_year <= 0) {
+            result.append_null();
+            continue;
+        }
+
+        auto year = year_viewer.value(row);
+        DateValue dv = DateValue::create(year, 1, 1);
+        dv = dv.add<TimeUnit::DAY>(date_of_year - 1);
+        if (!dv.is_valid()) {
+            result.append_null();
+            continue;
+        }
+
+        int tmp_year = 0, tmp_month = 0, tmp_day = 0;
+        dv.to_date(&tmp_year, &tmp_month, &tmp_day);
+        if (tmp_year != year) {
+            result.append_null();
+            continue;
+        }
+
+        result.append(dv);
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
 } // namespace starrocks
