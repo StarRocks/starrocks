@@ -630,7 +630,6 @@ jobs:
           BRANCH=${{steps.branch.outputs.branch}}
           git checkout $BRANCH;
           git checkout ${BASE_VERSION} || true;
-          git pull;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
           git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
           git checkout $BRANCH_NAME;
