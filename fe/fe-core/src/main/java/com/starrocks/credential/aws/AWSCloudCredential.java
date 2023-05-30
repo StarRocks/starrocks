@@ -237,6 +237,7 @@ public class AWSCloudCredential implements CloudCredential {
         FileStoreInfo.Builder fileStore = FileStoreInfo.newBuilder();
         fileStore.setFsType(FileStoreType.S3);
         S3FileStoreInfo.Builder s3FileStoreInfo = S3FileStoreInfo.newBuilder();
+        s3FileStoreInfo.setRegion(region).setEndpoint(endpoint);
         AwsCredentialInfo.Builder awsCredentialInfo = AwsCredentialInfo.newBuilder();
         if (useAWSSDKDefaultBehavior) {
             AwsDefaultCredentialInfo.Builder defaultCredentialInfo = AwsDefaultCredentialInfo.newBuilder();

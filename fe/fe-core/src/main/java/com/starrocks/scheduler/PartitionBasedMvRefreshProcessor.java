@@ -32,6 +32,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -76,6 +77,7 @@ import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
@@ -106,11 +108,11 @@ import java.util.stream.Collectors;
 
 /**
  * Core logic of materialized view refresh task run
- * PartitionBasedMaterializedViewRefreshProcessor is not thread safe for concurrent runs of the same materialized view
+ * PartitionBasedMvRefreshProcessor is not thread safe for concurrent runs of the same materialized view
  */
-public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunProcessor {
+public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
-    private static final Logger LOG = LogManager.getLogger(PartitionBasedMaterializedViewRefreshProcessor.class);
+    private static final Logger LOG = LogManager.getLogger(PartitionBasedMvRefreshProcessor.class);
 
     public static final String MV_ID = "mvId";
 
@@ -121,6 +123,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     private MvTaskRunContext mvContext;
     // table id -> <base table info, snapshot table>
     private Map<Long, Pair<BaseTableInfo, Table>> snapshotBaseTables;
+
+    private long oldTransactionVisibleWaitTimeout;
 
     @VisibleForTesting
     public MvTaskRunContext getMvContext() {
@@ -140,7 +144,14 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     @Override
     public void processTaskRun(TaskRunContext context) throws Exception {
         prepare(context);
+        try {
+            doMvRefresh(context);
+        } finally {
+            postProcess();
+        }
+    }
 
+    private void doMvRefresh(TaskRunContext context) throws Exception {
         InsertStmt insertStmt = null;
         ExecPlan execPlan = null;
         int retryNum = 0;
@@ -226,6 +237,10 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         if (mvContext.hasNextBatchPartition()) {
             generateNextTaskRun();
         }
+    }
+
+    private void postProcess() {
+        mvContext.ctx.getSessionVariable().setTransactionVisibleWaitTimeout(oldTransactionVisibleWaitTimeout);
     }
 
     public MVTaskRunExtraMessage getMVTaskRunExtraMessage() {
@@ -450,6 +465,11 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             LOG.warn(errorMsg);
             throw new DmlException(errorMsg);
         }
+        // wait util transaction is visible for mv refresh task
+        // because mv will update base tables' visible version after insert, the mv's visible version
+        // should keep up with the base tables, or it will return outdated result.
+        oldTransactionVisibleWaitTimeout = context.ctx.getSessionVariable().getTransactionVisibleWaitTimeout();
+        context.ctx.getSessionVariable().setTransactionVisibleWaitTimeout(Long.MAX_VALUE / 1000);
         mvContext = new MvTaskRunContext(context);
     }
 
@@ -948,6 +968,10 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         ConnectContext ctx = mvContext.getCtx();
         StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
         ctx.setExecutor(executor);
+        if (ctx.getParent() != null && ctx.getParent().getExecutor() != null) {
+            StmtExecutor parentStmtExecutor = ctx.getParent().getExecutor();
+            parentStmtExecutor.registerSubStmtExecutor(executor);
+        }
         ctx.setStmtId(new AtomicInteger().incrementAndGet());
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
         try {
@@ -1020,13 +1044,16 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private DistributionDesc getDistributionDesc(MaterializedView materializedView) {
-        HashDistributionInfo hashDistributionInfo =
-                (HashDistributionInfo) materializedView.getDefaultDistributionInfo();
-        List<String> distColumnNames = new ArrayList<>();
-        for (Column distributionColumn : hashDistributionInfo.getDistributionColumns()) {
-            distColumnNames.add(distributionColumn.getName());
+        DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
+        if (distributionInfo instanceof HashDistributionInfo) {
+            List<String> distColumnNames = new ArrayList<>();
+            for (Column distributionColumn : ((HashDistributionInfo) distributionInfo).getDistributionColumns()) {
+                distColumnNames.add(distributionColumn.getName());
+            }
+            return new HashDistributionDesc(distributionInfo.getBucketNum(), distColumnNames);
+        } else {
+            return new RandomDistributionDesc();
         }
-        return new HashDistributionDesc(hashDistributionInfo.getBucketNum(), distColumnNames);
     }
 
     private void addPartitions(Database database, MaterializedView materializedView,

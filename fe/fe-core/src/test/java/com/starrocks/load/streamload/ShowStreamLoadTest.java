@@ -66,7 +66,7 @@ public class ShowStreamLoadTest {
 
     @Test
     public void testShowStreamLoad() throws Exception {
-        StreamLoadManager streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadManager();
+        StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
         String dbName = "test_db";
         String tableName = "test_tbl";

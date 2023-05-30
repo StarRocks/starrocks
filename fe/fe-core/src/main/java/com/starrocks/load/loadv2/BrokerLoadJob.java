@@ -440,10 +440,10 @@ public class BrokerLoadJob extends BulkLoadJob {
     }
 
     @Override
-    public void updateProgess(TReportExecStatusParams params) {
+    public void updateProgress(TReportExecStatusParams params) {
         writeLock();
         try {
-            super.updateProgess(params);
+            super.updateProgress(params);
             if (!loadingStatus.getLoadStatistic().getLoadFinish()) {
                 if (jobType == EtlJobType.BROKER) {
                     progress = (int) ((double) loadingStatus.getLoadStatistic().sourceScanBytes() /

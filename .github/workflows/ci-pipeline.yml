@@ -274,6 +274,7 @@ jobs:
               - 'run-fe-ut.sh'
               - 'java-extensions/**'
               - 'build.sh'
+              - 'test/**'
 
       - run: echo ${{ steps.changes.outputs.fe }}
 
@@ -462,6 +463,7 @@ jobs:
       BRANCH: ${{ github.base_ref }}
     outputs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
+      base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
     if: always() && (needs.be-ut.result == 'success' && needs.fe-ut.result == 'success') || (needs.be-checker.outputs.output1 != 'true' && needs.fe-ut.result == 'success') || (needs.fe-checker.outputs.output1 != 'true' && needs.be-ut.result == 'success')
     steps:
       - name: Clean Workspace
@@ -599,7 +601,7 @@ jobs:
   SQL-Tester:
     runs-on: self-hosted
     name: SQL-Tester
-    needs: deploy
+    needs: [ build, deploy ]
     if: always() && needs.deploy.result == 'success'
     timeout-minutes: 30
     env:
@@ -607,6 +609,7 @@ jobs:
       CLUSTER_NAME: ci-admit
       FE_NODE: ${{ needs.deploy.outputs.fe }}
       BE_NODE: ${{ needs.deploy.outputs.be }}
+      BASE_VERSION: ${{needs.build.outputs.base_version}}
     steps:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
@@ -626,7 +629,7 @@ jobs:
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
           git checkout $BRANCH;
-          git pull;
+          git reset ${BASE_VERSION} --hard || true;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
           git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
           git checkout $BRANCH_NAME;

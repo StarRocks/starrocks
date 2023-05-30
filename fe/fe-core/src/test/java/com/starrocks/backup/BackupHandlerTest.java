@@ -578,4 +578,22 @@ public class BackupHandlerTest {
         UtFrameUtils.tearDownForPersisTest();
     }
 
+    @Test
+    public void testSaveLoadJsonFormatImage() throws Exception {
+        UtFrameUtils.setUpForPersistTest();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        handler = new BackupHandler(globalStateMgr);
+        BackupJob runningJob = new BackupJob("running_job", 1, "test_db", new ArrayList<>(), 10000, globalStateMgr, 1);
+        handler.dbIdToBackupOrRestoreJob.put(runningJob.getDbId(), runningJob);
+
+
+        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
+        handler.saveBackupHandlerV2(pseudoImage.getDataOutputStream());
+        BackupHandler followerHandler = new BackupHandler(globalStateMgr);
+        followerHandler.loadBackupHandlerV2(pseudoImage.getDataInputStream());
+
+        Assert.assertEquals(1, followerHandler.dbIdToBackupOrRestoreJob.size());
+
+        UtFrameUtils.tearDownForPersisTest();
+    }
 }

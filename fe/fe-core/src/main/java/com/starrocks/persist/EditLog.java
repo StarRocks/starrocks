@@ -86,7 +86,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
-import com.starrocks.scheduler.mv.MVManager;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
@@ -354,12 +354,14 @@ public class EditLog {
                     globalStateMgr.replayRenamePartition(info);
                     break;
                 }
-                case OperationType.OP_BACKUP_JOB: {
+                case OperationType.OP_BACKUP_JOB:
+                case OperationType.OP_BACKUP_JOB_V2: {
                     BackupJob job = (BackupJob) journal.getData();
                     globalStateMgr.getBackupHandler().replayAddJob(job);
                     break;
                 }
-                case OperationType.OP_RESTORE_JOB: {
+                case OperationType.OP_RESTORE_JOB:
+                case OperationType.OP_RESTORE_JOB_V2: {
                     RestoreJob job = (RestoreJob) journal.getData();
                     job.setGlobalStateMgr(globalStateMgr);
                     globalStateMgr.getBackupHandler().replayAddJob(job);
@@ -659,7 +661,7 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_STREAM_LOAD_TASK: {
                     StreamLoadTask streamLoadTask = (StreamLoadTask) journal.getData();
-                    globalStateMgr.getStreamLoadManager().replayCreateLoadTask(streamLoadTask);
+                    globalStateMgr.getStreamLoadMgr().replayCreateLoadTask(streamLoadTask);
                     break;
                 }
                 case OperationType.OP_CREATE_LOAD_JOB_V2:
@@ -726,12 +728,14 @@ public class EditLog {
                     globalStateMgr.getTaskManager().replayAlterRunningTaskRunProgress(
                             taskRunPeriodStatusChange.getTaskRunProgressMap());
                     break;
-                case OperationType.OP_CREATE_SMALL_FILE: {
+                case OperationType.OP_CREATE_SMALL_FILE:
+                case OperationType.OP_CREATE_SMALL_FILE_V2: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     globalStateMgr.getSmallFileMgr().replayCreateFile(smallFile);
                     break;
                 }
-                case OperationType.OP_DROP_SMALL_FILE: {
+                case OperationType.OP_DROP_SMALL_FILE:
+                case OperationType.OP_DROP_SMALL_FILE_V2: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     globalStateMgr.getSmallFileMgr().replayRemoveFile(smallFile);
                     break;
@@ -902,12 +906,12 @@ public class EditLog {
 
                 case OperationType.OP_CREATE_INSERT_OVERWRITE: {
                     CreateInsertOverwriteJobLog jobInfo = (CreateInsertOverwriteJobLog) journal.getData();
-                    globalStateMgr.getInsertOverwriteJobManager().replayCreateInsertOverwrite(jobInfo);
+                    globalStateMgr.getInsertOverwriteJobMgr().replayCreateInsertOverwrite(jobInfo);
                     break;
                 }
                 case OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE: {
                     InsertOverwriteStateChangeInfo stateChangeInfo = (InsertOverwriteStateChangeInfo) journal.getData();
-                    globalStateMgr.getInsertOverwriteJobManager().replayInsertOverwriteStateChange(stateChangeInfo);
+                    globalStateMgr.getInsertOverwriteJobMgr().replayInsertOverwriteStateChange(stateChangeInfo);
                     break;
                 }
                 case OperationType.OP_ADD_UNUSED_SHARD:
@@ -978,12 +982,12 @@ public class EditLog {
                 }
                 case OperationType.OP_MV_JOB_STATE: {
                     MVMaintenanceJob job = (MVMaintenanceJob) journal.getData();
-                    MVManager.getInstance().replay(job);
+                    MaterializedViewMgr.getInstance().replay(job);
                     break;
                 }
                 case OperationType.OP_MV_EPOCH_UPDATE: {
                     MVEpoch epoch = (MVEpoch) journal.getData();
-                    MVManager.getInstance().replayEpoch(epoch);
+                    MaterializedViewMgr.getInstance().replayEpoch(epoch);
                     break;
                 }
                 default: {
@@ -1399,7 +1403,11 @@ public class EditLog {
     }
 
     public void logBackupJob(BackupJob job) {
-        logEdit(OperationType.OP_BACKUP_JOB, job);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_BACKUP_JOB_V2, job);
+        } else {
+            logEdit(OperationType.OP_BACKUP_JOB, job);
+        }
     }
 
     public void logCreateRepository(Repository repo) {
@@ -1411,7 +1419,11 @@ public class EditLog {
     }
 
     public void logRestoreJob(RestoreJob job) {
-        logEdit(OperationType.OP_RESTORE_JOB, job);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_RESTORE_JOB_V2, job);
+        } else {
+            logEdit(OperationType.OP_RESTORE_JOB, job);
+        }
     }
 
     public void logUpdateUserProperty(UserPropertyInfo propertyInfo) {
@@ -1515,11 +1527,19 @@ public class EditLog {
     }
 
     public void logCreateSmallFile(SmallFile info) {
-        logEdit(OperationType.OP_CREATE_SMALL_FILE, info);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_CREATE_SMALL_FILE_V2, info);
+        } else {
+            logEdit(OperationType.OP_CREATE_SMALL_FILE, info);
+        }
     }
 
     public void logDropSmallFile(SmallFile info) {
-        logEdit(OperationType.OP_DROP_SMALL_FILE, info);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_DROP_SMALL_FILE_V2, info);
+        } else {
+            logEdit(OperationType.OP_DROP_SMALL_FILE, info);
+        }
     }
 
     public void logAlterJob(AlterJobV2 alterJob) {

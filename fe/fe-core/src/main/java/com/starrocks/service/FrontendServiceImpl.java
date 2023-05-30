@@ -91,7 +91,7 @@ import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.streamload.StreamLoadInfo;
-import com.starrocks.load.streamload.StreamLoadManager;
+import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
@@ -118,7 +118,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.mv.MVManager;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -1086,7 +1086,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         ConnectContext connectContext = new ConnectContext();
         if (connectContext.getSessionVariable().isEnableLoadProfile()) {
             TransactionResult resp = new TransactionResult();
-            StreamLoadManager streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadManager();
+            StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
             streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), timeoutSecond, resp, false);
             if (!resp.stateOK()) {
                 LOG.warn(resp.msg);
@@ -1191,7 +1191,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return;
         }
         TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tbl.getId());
-        StreamLoadTask streamLoadtask = GlobalStateMgr.getCurrentState().getStreamLoadManager().
+        StreamLoadTask streamLoadtask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
                 getSyncSteamLoadTaskByTxnId(request.getTxnId());
 
         switch (request.txnCommitAttachment.getLoadType()) {
@@ -1352,7 +1352,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 TxnCommitAttachment.fromThrift(request.getTxnCommitAttachment()));
 
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
-        StreamLoadTask streamLoadtask = GlobalStateMgr.getCurrentState().getStreamLoadManager().
+        StreamLoadTask streamLoadtask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
                 getSyncSteamLoadTaskByTxnId(request.getTxnId());
 
         switch (request.txnCommitAttachment.getLoadType()) {
@@ -1453,7 +1453,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TExecPlanFragmentParams plan = planner.plan(streamLoadInfo.getId());
 
             if (plan.query_options.enable_profile) {
-                StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadManager().
+                StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
                         getSyncSteamLoadTaskByTxnId(request.getTxnId());
                 if (streamLoadTask == null) {
                     throw new UserException("can not find stream load task by txnId " + request.getTxnId());
@@ -1925,7 +1925,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (!request.getTask_type().equals(MVTaskType.REPORT_EPOCH)) {
             throw new TException("Only support report_epoch task");
         }
-        MVManager.getInstance().onReportEpoch(request);
+        MaterializedViewMgr.getInstance().onReportEpoch(request);
         return new TMVReportEpochResponse();
     }
 

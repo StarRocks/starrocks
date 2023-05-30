@@ -28,6 +28,7 @@
 #include "storage/lake/txn_log.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/sync_point.h"
 #include "util/countdown_latch.h"
 
 namespace starrocks {
@@ -576,6 +577,7 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
     }
 }
 
+// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
     // write 1 rowset when schema change
     {
@@ -658,6 +660,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
     ASSERT_EQ(3, rowset2.segments_size());
 }
 
+// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_lock_unlock_tablet_metadata) {
     ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
     lake::LockTabletMetadataRequest lock_request;
@@ -692,6 +695,53 @@ TEST_F(LakeServiceTest, test_lock_unlock_tablet_metadata) {
     ASSERT_FALSE(cntl.Failed());
     auto st = FileSystem::Default()->path_exists(tablet_metadata_lock_path);
     ASSERT_TRUE(st.is_not_found()) << st;
+}
+
+TEST_F(LakeServiceTest, test_abort_compaction) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->LoadDependency(
+            {{"CompactionScheduler::compact:return", "LakeServiceImpl::abort_compaction:enter"},
+             {"LakeServiceImpl::abort_compaction:aborted", "CompactionScheduler::do_compaction:before_execute_task"}});
+
+    auto txn_id = next_id();
+
+    auto compaction_thread = std::thread([&]() {
+        brpc::Controller cntl;
+        lake::CompactRequest request;
+        lake::CompactResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(txn_id);
+        request.set_version(1);
+        CountDownLatch latch(1);
+        auto cb = ::google::protobuf::NewCallback(&latch, &CountDownLatch::count_down);
+        _lake_service.compact(&cntl, &request, &response, cb);
+        latch.wait();
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(TStatusCode::ABORTED, response.status().status_code());
+    });
+
+    {
+        brpc::Controller cntl;
+        lake::AbortCompactionRequest request;
+        lake::AbortCompactionResponse response;
+        request.set_txn_id(txn_id);
+        _lake_service.abort_compaction(&cntl, &request, &response, nullptr);
+        ASSERT_EQ(TStatusCode::OK, response.status().status_code());
+    }
+
+    compaction_thread.join();
+
+    {
+        brpc::Controller cntl;
+        lake::AbortCompactionRequest request;
+        lake::AbortCompactionResponse response;
+        request.set_txn_id(txn_id);
+        _lake_service.abort_compaction(&cntl, &request, &response, nullptr);
+        ASSERT_EQ(TStatusCode::NOT_FOUND, response.status().status_code());
+    }
+
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
 } // namespace starrocks

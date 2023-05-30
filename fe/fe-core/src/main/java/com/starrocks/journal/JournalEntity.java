@@ -339,8 +339,18 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_BACKUP_JOB_V2: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), AbstractJob.class);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_RESTORE_JOB: {
                 data = AbstractJob.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_RESTORE_JOB_V2: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), AbstractJob.class);
                 isRead = true;
                 break;
             }
@@ -635,6 +645,12 @@ public class JournalEntity implements Writable {
             case OperationType.OP_CREATE_SMALL_FILE:
             case OperationType.OP_DROP_SMALL_FILE: {
                 data = SmallFile.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_SMALL_FILE_V2:
+            case OperationType.OP_DROP_SMALL_FILE_V2: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), SmallFile.class);
                 isRead = true;
                 break;
             }

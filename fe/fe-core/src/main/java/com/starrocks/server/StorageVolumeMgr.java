@@ -15,136 +15,86 @@
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
+import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.storagevolume.StorageVolume;
 
-import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class StorageVolumeMgr {
-    private Map<String, StorageVolume> nameToSV = new HashMap<>();
-
-    private Map<Long, StorageVolume> idToSV = new HashMap<>();
-
-    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
-
-    private String defaultSV;
-
+public abstract class StorageVolumeMgr {
     private static final String ENABLED = "enabled";
 
+    @SerializedName("defaultStorageVolumeId")
+    protected long defaultStorageVolumeId = -1;
 
-    public void createStorageVolume(CreateStorageVolumeStmt stmt) throws AlreadyExistsException, AnalysisException {
+    protected final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+
+    // volume id to dbs
+    @SerializedName("storageVolumeToDbs")
+    protected Map<Long, Set<Long>> storageVolumeToDbs = new HashMap<>();
+
+    // volume id to tables
+    @SerializedName("storageVolumeToTables")
+    protected Map<Long, Set<Long>> storageVolumeToTables = new HashMap<>();
+
+    public Long createStorageVolume(CreateStorageVolumeStmt stmt)
+            throws AlreadyExistsException, AnalysisException, DdlException {
         Map<String, String> params = new HashMap<>();
         Optional<Boolean> enabled = parseProperties(stmt.getProperties(), params);
-        createStorageVolume(stmt.getName(), stmt.getStorageVolumeType(), stmt.getStorageLocations(), params,
+        return createStorageVolume(stmt.getName(), stmt.getStorageVolumeType(), stmt.getStorageLocations(), params,
                 enabled, stmt.getComment());
     }
 
-    public void createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
+    public abstract Long createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
                                     Optional<Boolean> enabled, String comment)
-            throws AlreadyExistsException, AnalysisException {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (nameToSV.containsKey(name)) {
-                throw new AlreadyExistsException(String.format("Storage Volume '%s' already exists", name));
-            }
-            long id = GlobalStateMgr.getCurrentState().getNextId();
-            StorageVolume sv = new StorageVolume(id, name, svType, locations, params, enabled.orElse(true), comment);
-            nameToSV.put(name, sv);
-            idToSV.put(sv.getId(), sv);
-        }
-    }
+            throws AlreadyExistsException, AnalysisException, DdlException;
 
-    public void removeStorageVolume(DropStorageVolumeStmt stmt) {
+    public void removeStorageVolume(DropStorageVolumeStmt stmt) throws DdlException, AnalysisException {
         removeStorageVolume(stmt.getName());
     }
 
-    public void removeStorageVolume(String name) {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(nameToSV.containsKey(name),
-                    "Storage Volume '%s' does not exist", name);
-            Preconditions.checkState(!name.equals(defaultSV), "default storage volume can not be removed");
-            // TODO: check ref count
-            StorageVolume sv = nameToSV.remove(name);
-            idToSV.remove(sv.getId());
-        }
-    }
+    public abstract void removeStorageVolume(String name) throws AnalysisException, DdlException;
 
-    public void updateStorageVolume(AlterStorageVolumeStmt stmt) throws AnalysisException {
+    public void updateStorageVolume(AlterStorageVolumeStmt stmt) throws AnalysisException, DdlException {
         Map<String, String> params = new HashMap<>();
         Optional<Boolean> enabled = parseProperties(stmt.getProperties(), params);
         updateStorageVolume(stmt.getName(), params, enabled, stmt.getComment());
     }
 
-    public void updateStorageVolume(String name, Map<String, String> params, Optional<Boolean> enabled, String comment)
-            throws AnalysisException {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(nameToSV.containsKey(name),
-                    "Storage Volume '%s' does not exist", name);
+    public abstract void updateStorageVolume(String name, Map<String, String> params, Optional<Boolean> enabled, String comment)
+            throws AnalysisException, DdlException;
 
-            StorageVolume sv = nameToSV.get(name);
-            if (!params.isEmpty()) {
-                sv.setCloudConfiguration(params);
-            }
-
-            if (enabled.isPresent()) {
-                if (!enabled.get()) {
-                    Preconditions.checkState(!name.equals(defaultSV), "Default volume can not be disabled");
-                }
-                sv.setEnabled(enabled.get());
-            }
-
-            if (!comment.isEmpty()) {
-                sv.setComment(comment);
-            }
-        }
-    }
-
-    public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) {
+    public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) throws AnalysisException, DdlException {
         setDefaultStorageVolume(stmt.getName());
     }
 
-    public void setDefaultStorageVolume(String svKey) {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(nameToSV.containsKey(svKey),
-                    "Storage Volume '%s' does not exist", svKey);
-            StorageVolume sv = nameToSV.get(svKey);
-            sv.setIsDefault();
-            defaultSV = svKey;
-        }
+    public abstract void setDefaultStorageVolume(String svKey) throws AnalysisException, DdlException;
+
+    public long getDefaultStorageVolumeId() {
+        return defaultStorageVolumeId;
     }
 
-    public String getDefaultSV() {
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            return defaultSV;
-        }
-    }
+    public abstract boolean exists(String svKey) throws DdlException;
 
-    public boolean exists(String svKey) {
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            return nameToSV.containsKey(svKey);
-        }
-    }
+    public abstract StorageVolume getStorageVolumeByName(String svKey) throws AnalysisException;
 
-    public StorageVolume getStorageVolume(String svKey) {
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            return nameToSV.get(svKey);
-        }
-    }
+    public abstract StorageVolume getStorageVolume(long storageVolumeId) throws AnalysisException;
 
-    public List<String> listStorageVolumeNames() {
-        return new ArrayList<>(nameToSV.keySet());
-    }
+    public abstract List<String> listStorageVolumeNames() throws DdlException;
 
     private Optional<Boolean> parseProperties(Map<String, String> properties, Map<String, String> params) {
         params.putAll(properties);
@@ -154,5 +104,43 @@ public class StorageVolumeMgr {
             params.remove(ENABLED);
         }
         return enabled;
+    }
+
+    public void bindDbToStorageVolume(long svId, long dbId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Set<Long> dbs = storageVolumeToDbs.getOrDefault(svId, new HashSet<>());
+            dbs.add(dbId);
+            storageVolumeToDbs.put(svId, dbs);
+        }
+    }
+
+    public void unbindDbToStorageVolume(long svId, long dbId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Preconditions.checkState(storageVolumeToDbs.containsKey(svId), "Storage volume does not exist");
+            Set<Long> dbs = storageVolumeToDbs.get(svId);
+            dbs.remove(dbId);
+            if (dbs.isEmpty()) {
+                storageVolumeToDbs.remove(svId);
+            }
+        }
+    }
+
+    public void bindTableToStorageVolume(long svId, long tableId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Set<Long> tables = storageVolumeToTables.getOrDefault(svId, new HashSet<>());
+            tables.add(tableId);
+            storageVolumeToTables.put(svId, tables);
+        }
+    }
+
+    public void unbindTableToStorageVolume(long svId, long tableId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Preconditions.checkState(storageVolumeToTables.containsKey(svId), "Storage volume does not exist");
+            Set<Long> tables = storageVolumeToTables.get(svId);
+            tables.remove(tableId);
+            if (tables.isEmpty()) {
+                storageVolumeToTables.remove(svId);
+            }
+        }
     }
 }
