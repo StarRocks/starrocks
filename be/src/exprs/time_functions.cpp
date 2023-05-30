@@ -2481,5 +2481,5 @@ Status TimeFunctions::last_day_close(FunctionContext* context, FunctionContext::
     }
     return Status::OK();
 }
-
+// last_day end
 } // namespace starrocks
