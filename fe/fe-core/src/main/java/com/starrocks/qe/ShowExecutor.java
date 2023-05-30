@@ -852,6 +852,10 @@ public class ShowExecutor {
                     continue;
                 }
                 Table table = metadataMgr.getTable(catalogName, dbName, tableName);
+                if (table == null) {
+                    LOG.warn("table {}.{}.{} does not exist", catalogName, dbName, tableName);
+                    continue;
+                }
                 if (table.isView()) {
                     if (!PrivilegeActions.checkAnyActionOnView(
                             connectContext, catalogName, db.getFullName(), table.getName())) {
