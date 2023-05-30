@@ -4,13 +4,13 @@
     "color": "EEEEEE"
   },
   "CHECKS": {
-    "prefixes": ["[BugFix]", "[Enhancement]", "[Feature]", "[Refactor]", "[UT]", "[Doc]", "[Tool]"],
+    "prefixes": ["[BugFix]", "[Enhancement]", "[Feature]", "[Refactor]", "[UT]", "[Doc]", "[Tool]", "[Build]"],
     "regexpFlags": "i",
     "ignoreLabels" : ["ignore-pr-title-check", "pass"]
   },
   "MESSAGES": {
     "success": "All OK",
-    "failure": "Missing type in the title of the pull request. [BugFix], [Enhancement], [Feature], [Refactor], [UT], [Doc], [Tool]. \nExample: [BugFix] Fix some implicit conversion.",
+    "failure": "Missing type in the title of the pull request. [BugFix], [Enhancement], [Feature], [Refactor], [UT], [Doc], [Tool], [Build]. \nExample: [BugFix] Fix some implicit conversion.",
     "notice": ""
   }
 }

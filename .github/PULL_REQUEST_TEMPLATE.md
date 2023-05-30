@@ -8,6 +8,7 @@ Fixes #issue
 - [ ] UT
 - [ ] Doc
 - [ ] Tool
+- [ ] Build
 
 ## Checklist:
 - [ ] I have added test cases for my bug fix or my new feature
