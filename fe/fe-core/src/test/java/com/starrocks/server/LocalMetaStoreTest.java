@@ -142,6 +142,7 @@ public class LocalMetaStoreTest {
                 GlobalStateMgr.getCurrentSystemInfo());
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        localMetaStore.save(image.getDataOutputStream());
 
         localMetaStore.load(image.getDataInputStream());
         Assert.assertNotNull(localMetaStore.getDb(SystemId.INFORMATION_SCHEMA_DB_ID));

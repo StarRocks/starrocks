@@ -1230,7 +1230,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, GlobalFunctionMgr.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, CatalogRecycleBin.class.getName());
         try {
             int idToDatabaseSize = reader.readInt();
             for (int i = 0; i < idToDatabaseSize; ++i) {
@@ -1254,6 +1254,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             idToRecycleTime = (Map<Long, Long>) reader.readJson(new TypeToken<Map<Long, Long>>() {
             }.getType());
 
+            if (!isCheckpointThread()) {
+                // add tablet in Recycle bin to TabletInvertedIndex
+                addTabletToInvertedIndex();
+            }
+            // create DatabaseTransactionMgr for db in recycle bin.
+            // these dbs do not exist in `idToDb` of the globalStateMgr.
+            for (Long dbId : getAllDbIds()) {
+                GlobalStateMgr.getCurrentGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
+            }
         } finally {
             reader.close();
         }

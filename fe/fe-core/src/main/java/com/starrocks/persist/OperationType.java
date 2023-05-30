@@ -334,4 +334,8 @@ public class OperationType {
     // small files json format log
     public static final short OP_CREATE_SMALL_FILE_V2 = 12140;
     public static final short OP_DROP_SMALL_FILE_V2 = 12141;
+
+    //Backup/Restore json format log
+    public static final short OP_BACKUP_JOB_V2 = 12150;
+    public static final short OP_RESTORE_JOB_V2 = 12151;
 }

@@ -15,6 +15,13 @@ storage_volume_default_2	S3	false	s3://xxx	{"aws.s3.region":"us-west-2","aws.s3.
 -- !result
 SET storage_volume_default_1 AS DEFAULT STORAGE VOLUME;
 -- result:
+E: (1064, "Unexpected exception: Storage volume 'storage_volume_default_1' is disabled")
+-- !result
+ALTER STORAGE VOLUME storage_volume_default_1 SET ("aws.s3.region"="us-west-1", "aws.s3.endpoint"="endpoint1", "enabled"="true");
+-- result:
+-- !result
+SET storage_volume_default_1 AS DEFAULT STORAGE VOLUME;
+-- result:
 -- !result
 DROP STORAGE VOLUME IF EXISTS storage_volume_default_1;
 -- result:
@@ -28,6 +35,13 @@ storage_volume_default_1
 SHOW STORAGE VOLUMES like 'storage_volume_default_1';
 -- result:
 storage_volume_default_1
+-- !result
+SET storage_volume_default_2 AS DEFAULT STORAGE VOLUME;
+-- result:
+E: (1064, "Unexpected exception: Storage volume 'storage_volume_default_2' is disabled")
+-- !result
+ALTER STORAGE VOLUME storage_volume_default_2 SET ("aws.s3.region"="us-west-1", "aws.s3.endpoint"="endpoint1", "enabled"="true");
+-- result:
 -- !result
 SET storage_volume_default_2 AS DEFAULT STORAGE VOLUME;
 -- result:

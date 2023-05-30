@@ -4698,13 +4698,21 @@ public class LocalMetastore implements ConnectorMetadata {
         // Don't write system db meta
         Map<Long, Database> idToDbNormal = idToDb.entrySet().stream().filter(entry -> entry.getKey() > NEXT_ID_INIT_VALUE)
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        int tableSize = 0;
+        for (Database database : idToDbNormal.values()) {
+            tableSize += database.getTableNumber();
+        }
+        int cnt = 1 + idToDbNormal.size() + tableSize + 1;
 
-        int cnt = 1 + idToDbNormal.size() + 1;
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, LocalMetastore.class.getName(), cnt);
 
         writer.writeJson(idToDbNormal.size());
         for (Database database : idToDbNormal.values()) {
             writer.writeJson(database);
+            List<Table> tables = database.getTables();
+            for (Table table : tables) {
+                writer.writeJson(table);
+            }
         }
 
         AutoIncrementInfo info = new AutoIncrementInfo(tableIdToIncrementId);
@@ -4719,6 +4727,11 @@ public class LocalMetastore implements ConnectorMetadata {
             int dbSize = reader.readJson(int.class);
             for (int i = 0; i < dbSize; ++i) {
                 Database db = reader.readJson(Database.class);
+                int tableSize = reader.readInt();
+                for (int j = 0; j < tableSize; ++j) {
+                    Table table = reader.readJson(Table.class);
+                    db.createTableWithLock(table, true);
+                }
 
                 idToDb.put(db.getId(), db);
                 fullNameToDb.put(db.getFullName(), db);

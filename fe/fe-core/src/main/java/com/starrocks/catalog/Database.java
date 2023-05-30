@@ -102,9 +102,6 @@ public class Database extends MetaObject implements Writable {
     private long id;
     @SerializedName(value = "n")
     private String fullQualifiedName;
-    @SerializedName(value = "t")
-    private Map<String, Table> nameToTable;
-    private final Map<Long, Table> idToTable;
     // user define function
     @SerializedName(value = "f")
     private ConcurrentMap<String, ImmutableList<Function>> name2Function = Maps.newConcurrentMap();
@@ -112,6 +109,9 @@ public class Database extends MetaObject implements Writable {
     private volatile long dataQuotaBytes;
     @SerializedName(value = "r")
     private volatile long replicaQuotaSize;
+
+    private final Map<String, Table> nameToTable;
+    private final Map<Long, Table> idToTable;
 
     // catalogName is set if the database comes from an external catalog
     private String catalogName;

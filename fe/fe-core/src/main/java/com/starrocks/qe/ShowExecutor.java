@@ -93,6 +93,7 @@ import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
@@ -129,6 +130,7 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
@@ -202,12 +204,14 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -876,6 +880,7 @@ public class ShowExecutor {
         ShowTableStatusStmt showStmt = (ShowTableStatusStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
         Database db = connectContext.getGlobalStateMgr().getDb(showStmt.getDb());
+        ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
         if (db != null) {
             db.readLock();
             try {
@@ -894,16 +899,51 @@ public class ShowExecutor {
                         continue;
                     }
 
+                    TTableInfo info = new TTableInfo();
+                    if (table.isNativeTableOrMaterializedView() || table.getType() == Table.TableType.OLAP_EXTERNAL) {
+                        InformationSchemaDataSource.genNormalTableInfo(table, info);
+                    } else {
+                        InformationSchemaDataSource.genDefaultConfigInfo(info);
+                    }
+
                     List<String> row = Lists.newArrayList();
                     // Name
                     row.add(table.getName());
                     // Engine
                     row.add(table.getEngine());
-                    // version, ra
-                    for (int i = 0; i < 15; ++i) {
-                        row.add(null);
-                    }
+                    // Version
+                    row.add(null);
+                    // Row_format
+                    row.add("");
+                    // Rows
+                    row.add(String.valueOf(info.getTable_rows()));
+                    // Avg_row_length
+                    row.add(String.valueOf(info.getAvg_row_length()));
+                    // Data_length
+                    row.add(String.valueOf(info.getData_length()));
+                    // Max_data_length
+                    row.add(null);
+                    // Index_length
+                    row.add(null);
+                    // Data_free
+                    row.add(null);
+                    // Auto_increment
+                    row.add(null);
+                    // Create_time
+                    row.add(DateUtils.formatTimeStampInSeconds(table.getCreateTime(), currentTimeZoneId));
+                    // Update_time
+                    row.add(DateUtils.formatTimeStampInSeconds(info.getUpdate_time(), currentTimeZoneId));
+                    // Check_time
+                    row.add(null);
+                    // Collation
+                    row.add(InformationSchemaDataSource.UTF8_GENERAL_CI);
+                    // Checksum
+                    row.add(null);
+                    // Create_options
+                    row.add("");
+                    // Comment
                     row.add(table.getComment());
+
                     rows.add(row);
                 }
             } finally {
@@ -2496,7 +2536,7 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
-    private void handleShowStorageVolumes() {
+    private void handleShowStorageVolumes() throws DdlException {
         ShowStorageVolumesStmt showStmt = (ShowStorageVolumesStmt) stmt;
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         StorageVolumeMgr storageVolumeMgr = globalStateMgr.getStorageVolumeMgr();
@@ -2518,7 +2558,7 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
-    private void handleDescStorageVolume() {
+    private void handleDescStorageVolume() throws AnalysisException {
         DescStorageVolumeStmt desc = (DescStorageVolumeStmt) stmt;
         resultSet = new ShowResultSet(desc.getMetaData(), desc.getResultRows());
     }

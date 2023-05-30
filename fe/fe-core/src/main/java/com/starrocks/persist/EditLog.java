@@ -354,12 +354,14 @@ public class EditLog {
                     globalStateMgr.replayRenamePartition(info);
                     break;
                 }
-                case OperationType.OP_BACKUP_JOB: {
+                case OperationType.OP_BACKUP_JOB:
+                case OperationType.OP_BACKUP_JOB_V2: {
                     BackupJob job = (BackupJob) journal.getData();
                     globalStateMgr.getBackupHandler().replayAddJob(job);
                     break;
                 }
-                case OperationType.OP_RESTORE_JOB: {
+                case OperationType.OP_RESTORE_JOB:
+                case OperationType.OP_RESTORE_JOB_V2: {
                     RestoreJob job = (RestoreJob) journal.getData();
                     job.setGlobalStateMgr(globalStateMgr);
                     globalStateMgr.getBackupHandler().replayAddJob(job);
@@ -1401,7 +1403,11 @@ public class EditLog {
     }
 
     public void logBackupJob(BackupJob job) {
-        logEdit(OperationType.OP_BACKUP_JOB, job);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_BACKUP_JOB_V2, job);
+        } else {
+            logEdit(OperationType.OP_BACKUP_JOB, job);
+        }
     }
 
     public void logCreateRepository(Repository repo) {
@@ -1413,7 +1419,11 @@ public class EditLog {
     }
 
     public void logRestoreJob(RestoreJob job) {
-        logEdit(OperationType.OP_RESTORE_JOB, job);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_RESTORE_JOB_V2, job);
+        } else {
+            logEdit(OperationType.OP_RESTORE_JOB, job);
+        }
     }
 
     public void logUpdateUserProperty(UserPropertyInfo propertyInfo) {
