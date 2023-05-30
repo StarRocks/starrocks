@@ -102,7 +102,7 @@ public class Utils {
         for (Tablet tablet : tablets) {
             Long beId = Utils.chooseBackend((LakeTablet) tablet);
             if (beId == null) {
-                throw new NoAliveBackendException("No alive backend or for computeNode " +
+                throw new NoAliveBackendException("No alive backend or computeNode for " +
                         "handle publish version request");
             }
             beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
