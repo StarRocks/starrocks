@@ -19,6 +19,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.lake.StarOSAgent;
@@ -214,27 +215,27 @@ public class SharedDataStorageVolumeMgrTest {
     @Test
     public void testParseParamsFromConfig() throws AnalysisException {
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
-        Map<String, String> params = sdsvm.parseParamsFromConfig();
+        Map<String, String> params = Deencapsulation.invoke(sdsvm, "parseParamsFromConfig");
         Assert.assertEquals("access_key", params.get(AWS_S3_ACCESS_KEY));
         Assert.assertEquals("secret_key", params.get(AWS_S3_SECRET_KEY));
         Assert.assertEquals("region", params.get(AWS_S3_REGION));
         Assert.assertEquals("endpoint", params.get(AWS_S3_ENDPOINT));
 
         Config.cloud_native_storage_type = "aaa";
-        params = sdsvm.parseParamsFromConfig();
+        params = Deencapsulation.invoke(sdsvm, "parseParamsFromConfig");
         Assert.assertEquals(0, params.size());
     }
 
     @Test
     public void testParseLocationsFromConfig() throws AnalysisException {
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
-        List<String> locations = sdsvm.parseLocationsFromConfig();
+        List<String> locations = Deencapsulation.invoke(sdsvm, "parseLocationsFromConfig");
         Assert.assertEquals(1, locations.size());
         Assert.assertEquals("s3://default-bucket/1", locations.get(0));
 
         Config.cloud_native_storage_type = "hdfs";
         Config.cloud_native_hdfs_url = "url";
-        locations = sdsvm.parseLocationsFromConfig();
+        locations = Deencapsulation.invoke(sdsvm, "parseLocationsFromConfig");
         Assert.assertEquals(1, locations.size());
         Assert.assertEquals("hdfs://url", locations.get(0));
     }
@@ -246,6 +247,7 @@ public class SharedDataStorageVolumeMgrTest {
         sdsvm.createOrUpdateBuiltinStorageVolume();
         Assert.assertTrue(sdsvm.exists(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
         StorageVolume sv = sdsvm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        Assert.assertEquals(sv.getId(), sdsvm.getDefaultStorageVolumeId());
         Assert.assertEquals("region", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getRegion());
         Assert.assertEquals("endpoint", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getEndpoint());
 

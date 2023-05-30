@@ -151,18 +151,20 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         List<String> locations = parseLocationsFromConfig();
         Map<String, String> params = parseParamsFromConfig();
 
-        if (exists(BUILTIN_STORAGE_VOLUME)) {
-            updateStorageVolume(BUILTIN_STORAGE_VOLUME, params, Optional.empty(), "");
-        } else {
-            createStorageVolume(BUILTIN_STORAGE_VOLUME,
-                    Config.cloud_native_storage_type, locations, params, Optional.of(true), "");
-            if (getDefaultStorageVolumeId().isEmpty()) {
-                setDefaultStorageVolume(BUILTIN_STORAGE_VOLUME);
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            if (exists(BUILTIN_STORAGE_VOLUME)) {
+                updateStorageVolume(BUILTIN_STORAGE_VOLUME, params, Optional.empty(), "");
+            } else {
+                createStorageVolume(BUILTIN_STORAGE_VOLUME,
+                        Config.cloud_native_storage_type, locations, params, Optional.of(true), "");
+                if (getDefaultStorageVolumeId().isEmpty()) {
+                    setDefaultStorageVolume(BUILTIN_STORAGE_VOLUME);
+                }
             }
         }
     }
 
-    public List<String> parseLocationsFromConfig() {
+    private List<String> parseLocationsFromConfig() {
         List<String> locations = new ArrayList<>();
         switch (Config.cloud_native_storage_type.toLowerCase()) {
             case "s3":
@@ -179,7 +181,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         return locations;
     }
 
-    public Map<String, String> parseParamsFromConfig() {
+    private Map<String, String> parseParamsFromConfig() {
         Map<String, String> params = new HashMap<>();
         switch (Config.cloud_native_storage_type.toLowerCase()) {
             case "s3":
