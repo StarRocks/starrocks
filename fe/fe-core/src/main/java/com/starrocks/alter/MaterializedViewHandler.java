@@ -61,6 +61,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -292,10 +293,14 @@ public class MaterializedViewHandler extends AlterHandler {
             //                        + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));
             //            }
             if (!mvCol.getType().equals(targetCol.getType())) {
-                Expr newDefinedExpr = new CastExpr(targetCol.getType(), mvCol.getDefineExpr());
-                mvCol.setDefineExpr(newDefinedExpr);
-                //                throw new DdlException("Logical materialized view column type "
-                //                        + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));
+                if (Type.isImplicitlyCastable(mvCol.getType(), targetCol.getType(), true)) {
+                    Expr newDefinedExpr = new CastExpr(targetCol.getType(), mvCol.getDefineExpr());
+
+                    mvCol.setDefineExpr(newDefinedExpr);
+                } else {
+                    throw new DdlException("Logical materialized view column type "
+                            + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i));
+                }
             }
         }
 
