@@ -205,6 +205,9 @@ public class OlapTable extends Table {
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
 
+    @SerializedName(value = "storageVolumeId")
+    protected String storageVolumeId = "";
+
     protected BinlogConfig curBinlogConfig;
 
     // After ensuring that all binlog config of tablets in BE have taken effect,
@@ -382,6 +385,14 @@ public class OlapTable extends Table {
 
     public OlapTableState getState() {
         return state;
+    }
+
+    public void setStorageVolumeId(String storageVolumeId) {
+        this.storageVolumeId = storageVolumeId;
+    }
+
+    public String getStorageVolumeId() {
+        return storageVolumeId;
     }
 
     public List<Index> getIndexes() {
@@ -2395,9 +2406,15 @@ public class OlapTable extends Table {
         properties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, isInMemory().toString());
 
         Map<String, String> tableProperty = getTableProperty().getProperties();
-        if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
-                    tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+        if (tableProperty != null) {
+            if (tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
+                        tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+            }
+            if (tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
+                        tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME));
+            }
         }
         return properties;
     }

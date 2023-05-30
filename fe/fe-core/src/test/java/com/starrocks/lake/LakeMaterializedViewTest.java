@@ -15,6 +15,8 @@
 package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
+import com.staros.proto.AwsCredentialInfo;
+import com.staros.proto.AwsDefaultCredentialInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
@@ -76,20 +78,57 @@ public class LakeMaterializedViewTest {
 
     @BeforeClass
     public static void setUp() throws Exception {
+        Config.cloud_native_storage_type = "s3";
+        Config.aws_s3_access_key = "access_key";
+        Config.aws_s3_secret_key = "secret_key";
+        Config.aws_s3_region = "region";
+        Config.aws_s3_endpoint = "endpoint";
+        Config.aws_s3_path = "default-bucket/1";
         Config.run_mode = "shared_data";
         Config.enable_experimental_mv = true;
-        PseudoCluster.getOrCreateWithRandomPort(true, 3);
-        cluster = PseudoCluster.getInstance();
-        connectContext = UtFrameUtils.createDefaultCtx();
-        starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withDatabase(DB).useDatabase(DB);
+
+        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
+
+        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+        s3FsBuilder.setBucket("test-bucket");
+        s3FsBuilder.setRegion("test-region");
+        s3FsBuilder.setCredential(AwsCredentialInfo.newBuilder()
+                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()));
+        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
+
+        fsBuilder.setFsType(FileStoreType.S3);
+        fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setFsName("test-fsname");
+        fsBuilder.setS3FsInfo(s3FsInfo);
+        FileStoreInfo fsInfo = fsBuilder.build();
+
+        builder.setFsInfo(fsInfo);
+        builder.setFullPath("s3://test-bucket/1/");
+        FilePathInfo pathInfo = builder.build();
 
         new MockUp<StarOSAgent>() {
             @Mock
             public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
                 return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
+
+            @Mock
+            public FileStoreInfo getFileStore(String fsKey) {
+                return fsInfo;
+            }
+
+            @Mock
+            public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) {
+                return pathInfo;
+            }
         };
+
+        PseudoCluster.getOrCreateWithRandomPort(true, 3);
+        cluster = PseudoCluster.getInstance();
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase(DB).useDatabase(DB);
 
         starRocksAssert.withTable("CREATE TABLE base_table\n" +
                 "(\n" +

@@ -163,6 +163,16 @@ public class StarOSAgentTest {
         Config.cloud_native_storage_type = "ss";
         ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Invalid cloud native storage type: ss",
                 () -> starosAgent.allocateFilePath(tableId));
+
+        new Expectations() {
+            {
+                client.allocateFilePath("1", "test-fskey", Long.toString(tableId));
+                result = FilePathInfo.newBuilder().build();
+                minTimes = 0;
+            }
+        };
+        Config.cloud_native_storage_type = "s3";
+        ExceptionChecker.expectThrowsNoException(() -> starosAgent.allocateFilePath("test-fskey", tableId));
     }
 
     @Test
@@ -562,7 +572,7 @@ public class StarOSAgentTest {
                 .setFsName("test-fsname").setFsType(FileStoreType.S3).setS3FsInfo(s3FsInfo).build();
         new Expectations() {
             {
-                client.getFileStore("test-fsname", "1");
+                client.getFileStoreByName("test-fsname", "1");
                 result = fsInfo;
                 minTimes = 0;
             }
@@ -570,5 +580,23 @@ public class StarOSAgentTest {
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         Assert.assertEquals("test-fskey", starosAgent.getFileStoreByName("test-fsname").getFsKey());
+    }
+
+    @Test
+    public void testGetFileStore() throws StarClientException, DdlException {
+        S3FileStoreInfo s3FsInfo = S3FileStoreInfo.newBuilder()
+                .setRegion("region").setEndpoint("endpoint").build();
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsKey("test-fskey")
+                .setFsName("test-fsname").setFsType(FileStoreType.S3).setS3FsInfo(s3FsInfo).build();
+        new Expectations() {
+            {
+                client.getFileStore("test-fskey", "1");
+                result = fsInfo;
+                minTimes = 0;
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assert.assertEquals("test-fskey", starosAgent.getFileStore("test-fskey").getFsKey());
     }
 }

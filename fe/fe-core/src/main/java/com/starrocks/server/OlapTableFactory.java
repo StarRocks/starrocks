@@ -15,7 +15,6 @@
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.binlog.BinlogConfig;
@@ -62,6 +61,7 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -193,20 +193,39 @@ public class OlapTableFactory implements AbstractTableFactory {
                     distributionInfo, indexes, properties);
         } else if (stmt.isOlapEngine()) {
             RunMode runMode = RunMode.getCurrentRunMode();
-            String volume = (properties != null) ? properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME) : null;
+            String volume = "";
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+                volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+            }
 
-            if ("local".equalsIgnoreCase(volume)) {
-                table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-            } else if ("default".equalsIgnoreCase(volume)) {
+            if (runMode == RunMode.SHARED_DATA) {
+                if (volume.equals("local")) {
+                    throw new DdlException("Cannot create table " +
+                            "without persistent volume in current run mode \"" + runMode + "\"");
+                }
+
+                StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+                StorageVolume sv = null;
+                try {
+                    if (volume.isEmpty()) {
+                        sv = svm.getStorageVolume(db.getStorageVolumeId());
+                    } else if (volume.equals(StorageVolumeMgr.DEFAULT)) {
+                        sv = svm.getDefaultStorageVolume();
+                    } else {
+                        sv = svm.getStorageVolumeByName(volume);
+                    }
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
+                if (sv == null) {
+                    throw new DdlException("Unknown storage volume \"" + volume + "\"");
+                }
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-                metastore.setLakeStorageInfo(table, properties);
-            } else if (!Strings.isNullOrEmpty(volume)) {
-                throw new DdlException("Unknown storage volume \"" + volume + "\"");
-            } else if (runMode == RunMode.SHARED_DATA) {
-                table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-                metastore.setLakeStorageInfo(table, properties);
+                metastore.setLakeStorageInfo(table, sv.getId(), properties);
+                table.setStorageVolume(sv.getName());
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
+                table.setStorageVolume("local");
             }
 
             if (table.isCloudNativeTable() && !runMode.isAllowCreateLakeTable())  {
@@ -428,10 +447,6 @@ public class OlapTableFactory implements AbstractTableFactory {
         if (properties != null && properties.containsKey("storage_format")) {
             properties.remove("storage_format");
         }
-
-        // get storage volume
-        String storageVolume = RunMode.allowCreateLakeTable() ? "default" : "local";
-        table.setStorageVolume(storageVolume);
 
         // get compression type
         TCompressionType compressionType = TCompressionType.LZ4_FRAME;

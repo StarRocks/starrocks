@@ -128,6 +128,8 @@ public class Database extends MetaObject implements Writable {
     // For external database location like hdfs://name_node:9000/user/hive/warehouse/test.db/
     private String location;
 
+    private String storageVolumeId = "";
+
     public Database() {
         this(0, null);
     }
@@ -340,6 +342,14 @@ public class Database extends MetaObject implements Writable {
     public Database setLocation(String location) {
         this.location = location;
         return this;
+    }
+
+    public String getStorageVolumeId() {
+        return storageVolumeId;
+    }
+
+    public void setStorageVolumeId(String storageVolumeId) {
+        this.storageVolumeId = storageVolumeId;
     }
 
     public void setNameWithLock(String newName) {

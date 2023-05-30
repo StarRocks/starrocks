@@ -210,6 +210,7 @@ import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -379,7 +380,22 @@ public class LocalMetastore implements ConnectorMetadata {
                 id = getNextId();
                 Database db = new Database(id, dbName);
                 unprotectCreateDb(db);
-                GlobalStateMgr.getCurrentState().getEditLog().logCreateDb(db);
+
+                if (RunMode.allowCreateLakeTable()) {
+                    String volume = StorageVolumeMgr.DEFAULT;
+                    if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+                        volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+                    }
+                    setDbStorageVolumeInfo(db, volume);
+                }
+
+                /* TODO (log compatibility):
+                    For the compatibility reasons of the development version,
+                    temporarily use OP_CREATE_DB, we will use the new log of the new version in a single PR
+                 */
+                //CreateDbInfo createDbInfo = new CreateDbInfo(id, dbName);
+                //editLog.logCreateDb(createDbInfo);
+                editLog.logCreateDb(db);
             }
         } finally {
             unlock();
@@ -1968,6 +1984,20 @@ public class LocalMetastore implements ConnectorMetadata {
         // get service shard storage info from StarMgr
         FilePathInfo pathInfo = stateMgr.getStarOSAgent().allocateFilePath(table.getId());
         table.setStorageInfo(pathInfo, storageCacheInfo);
+    }
+
+    void setLakeStorageInfo(OlapTable table, String storageVolumeId, Map<String, String> properties) throws DdlException {
+        StorageCacheInfo storageCacheInfo = null;
+        try {
+            storageCacheInfo = PropertyAnalyzer.analyzeStorageCacheInfo(properties);
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+
+        // get service shard storage info from StarMgr
+        FilePathInfo pathInfo = stateMgr.getStarOSAgent().allocateFilePath(storageVolumeId, table.getId());
+        table.setStorageInfo(pathInfo, storageCacheInfo);
+        table.setStorageVolumeId(storageVolumeId);
     }
 
     void registerTable(Database db, Table table, CreateTableStmt stmt) throws DdlException {
@@ -4640,6 +4670,24 @@ public class LocalMetastore implements ConnectorMetadata {
         if (oldId != null) {
             tableIdToIncrementId.replace(tableId, id);
         }
+    }
+
+    private void setDbStorageVolumeInfo(Database db, String volume) throws DdlException {
+        StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        StorageVolume sv = null;
+        try {
+            if (volume.equals(StorageVolumeMgr.DEFAULT)) {
+                sv = svm.getDefaultStorageVolume();
+            } else {
+                sv = svm.getStorageVolumeByName(volume);
+            }
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+        if (sv == null) {
+            throw new DdlException("Unknown storage volume \"" + volume + "\"");
+        }
+        db.setStorageVolumeId(sv.getId());
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
