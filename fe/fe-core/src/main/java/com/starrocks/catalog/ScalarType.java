@@ -458,6 +458,10 @@ public class ScalarType extends Type implements Cloneable {
             return INVALID;
         }
 
+        if (t1.type.ordinal() > t2.type.ordinal() && strict) {
+            return INVALID;
+        }
+
         PrimitiveType smallerType =
                 (t1.type.ordinal() < t2.type.ordinal() ? t1.type : t2.type);
         PrimitiveType largerType =
