@@ -156,13 +156,13 @@ import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.lake.compaction.CompactionManager;
+import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.leader.Checkpoint;
 import com.starrocks.leader.TaskRunStateSynchronizer;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
-import com.starrocks.load.InsertOverwriteJobManager;
+import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadEtlChecker;
 import com.starrocks.load.loadv2.LoadJobScheduler;
@@ -172,7 +172,7 @@ import com.starrocks.load.loadv2.LoadTimeoutChecker;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
-import com.starrocks.load.streamload.StreamLoadManager;
+import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
@@ -220,7 +220,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
-import com.starrocks.scheduler.mv.MVManager;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -356,7 +356,7 @@ public class GlobalStateMgr {
     private Load load;
     private LoadMgr loadMgr;
     private RoutineLoadMgr routineLoadMgr;
-    private StreamLoadManager streamLoadManager;
+    private StreamLoadMgr streamLoadMgr;
     private ExportMgr exportMgr;
 
     private ConsistencyChecker consistencyChecker;
@@ -490,7 +490,7 @@ public class GlobalStateMgr {
     private ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
 
     private TaskManager taskManager;
-    private InsertOverwriteJobManager insertOverwriteJobManager;
+    private InsertOverwriteJobMgr insertOverwriteJobMgr;
 
     private LocalMetastore localMetastore;
     private GlobalFunctionMgr globalFunctionMgr;
@@ -505,7 +505,7 @@ public class GlobalStateMgr {
     private BinlogManager binlogManager;
 
     // For LakeTable
-    private CompactionManager compactionManager;
+    private CompactionMgr compactionMgr;
 
     private WarehouseManager warehouseMgr;
 
@@ -583,8 +583,8 @@ public class GlobalStateMgr {
         return localMetastore;
     }
 
-    public CompactionManager getCompactionManager() {
-        return compactionManager;
+    public CompactionMgr getCompactionMgr() {
+        return compactionMgr;
     }
 
     public ConfigRefreshDaemon getConfigRefreshDaemon() {
@@ -616,7 +616,7 @@ public class GlobalStateMgr {
         this.alterJobMgr = new AlterJobMgr();
 
         this.load = new Load();
-        this.streamLoadManager = new StreamLoadManager();
+        this.streamLoadMgr = new StreamLoadMgr();
         this.routineLoadMgr = new RoutineLoadMgr();
         this.exportMgr = new ExportMgr();
 
@@ -703,9 +703,9 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
 
         this.taskManager = new TaskManager();
-        this.insertOverwriteJobManager = new InsertOverwriteJobManager();
+        this.insertOverwriteJobMgr = new InsertOverwriteJobMgr();
         this.shardManager = new ShardManager();
-        this.compactionManager = new CompactionManager();
+        this.compactionMgr = new CompactionMgr();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
         this.shardDeleter = new ShardDeleter();
 
@@ -921,8 +921,8 @@ public class GlobalStateMgr {
         return binlogManager;
     }
 
-    public InsertOverwriteJobManager getInsertOverwriteJobManager() {
-        return insertOverwriteJobManager;
+    public InsertOverwriteJobMgr getInsertOverwriteJobMgr() {
+        return insertOverwriteJobMgr;
     }
 
     public WarehouseManager getWarehouseMgr() {
@@ -1193,7 +1193,7 @@ public class GlobalStateMgr {
             startLeaderOnlyDaemonThreads();
             // start other daemon threads that should run on all FEs
             startNonLeaderDaemonThreads();
-            insertOverwriteJobManager.cancelRunningJobs();
+            insertOverwriteJobMgr.cancelRunningJobs();
 
             MetricRepo.init();
 
@@ -1319,7 +1319,7 @@ public class GlobalStateMgr {
         // domain resolver
         domainResolver.start();
         if (RunMode.allowCreateLakeTable()) {
-            compactionManager.start();
+            compactionMgr.start();
         }
         configRefreshDaemon.start();
     }
@@ -1420,7 +1420,7 @@ public class GlobalStateMgr {
                 remoteChecksum = dis.readLong();
                 checksum = loadStreamLoadManager(dis, checksum);
                 remoteChecksum = dis.readLong();
-                checksum = MVManager.getInstance().reload(dis, checksum);
+                checksum = MaterializedViewMgr.getInstance().reload(dis, checksum);
                 remoteChecksum = dis.readLong();
                 globalFunctionMgr.loadGlobalFunctions(dis, checksum);
                 loadRBACPrivilege(dis);
@@ -1682,7 +1682,7 @@ public class GlobalStateMgr {
 
     public long loadInsertOverwriteJobs(DataInputStream dis, long checksum) throws IOException {
         try {
-            this.insertOverwriteJobManager = InsertOverwriteJobManager.read(dis);
+            this.insertOverwriteJobMgr = InsertOverwriteJobMgr.read(dis);
         } catch (EOFException e) {
             LOG.warn("no InsertOverwriteJobManager to replay.", e);
         }
@@ -1690,7 +1690,7 @@ public class GlobalStateMgr {
     }
 
     public long saveInsertOverwriteJobs(DataOutputStream dos, long checksum) throws IOException {
-        getInsertOverwriteJobManager().write(dos);
+        getInsertOverwriteJobMgr().write(dos);
         return checksum;
     }
 
@@ -1713,14 +1713,14 @@ public class GlobalStateMgr {
     }
 
     public long loadCompactionManager(DataInputStream in, long checksum) throws IOException {
-        compactionManager = CompactionManager.loadCompactionManager(in);
-        checksum ^= compactionManager.getChecksum();
+        compactionMgr = CompactionMgr.loadCompactionManager(in);
+        checksum ^= compactionMgr.getChecksum();
         return checksum;
     }
 
     public long loadStreamLoadManager(DataInputStream in, long checksum) throws IOException {
-        streamLoadManager = StreamLoadManager.loadStreamLoadManager(in);
-        checksum ^= streamLoadManager.getChecksum();
+        streamLoadMgr = StreamLoadMgr.loadStreamLoadManager(in);
+        checksum ^= streamLoadMgr.getChecksum();
         return checksum;
     }
 
@@ -2050,7 +2050,7 @@ public class GlobalStateMgr {
                     toJournalId, replayedJournalId.get()));
         }
 
-        streamLoadManager.cancelUnDurableTaskAfterRestart();
+        streamLoadMgr.cancelUnDurableTaskAfterRestart();
 
         long replayInterval = System.currentTimeMillis() - replayStartTime;
         LOG.info("finish replay from {} to {} in {} msec", startJournalId, toJournalId, replayInterval);
@@ -2915,8 +2915,8 @@ public class GlobalStateMgr {
         return routineLoadMgr;
     }
 
-    public StreamLoadManager getStreamLoadManager() {
-        return streamLoadManager;
+    public StreamLoadMgr getStreamLoadMgr() {
+        return streamLoadMgr;
     }
 
     public RoutineLoadTaskScheduler getRoutineLoadTaskScheduler() {
@@ -3801,7 +3801,7 @@ public class GlobalStateMgr {
             LOG.warn("backup handler clean old jobs failed", t);
         }
         try {
-            streamLoadManager.cleanOldStreamLoadTasks();
+            streamLoadMgr.cleanOldStreamLoadTasks();
         } catch (Throwable t) {
             LOG.warn("delete handler remove old delete info failed", t);
         }

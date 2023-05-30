@@ -28,7 +28,7 @@ public class CompactionManagerTest {
     public void testChoosePartitionsToCompact() {
         Config.lake_compaction_selector = "SimpleSelector";
         Config.lake_compaction_sorter = "RandomSorter";
-        CompactionManager compactionManager = new CompactionManager();
+        CompactionMgr compactionManager = new CompactionMgr();
 
         PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
         PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
