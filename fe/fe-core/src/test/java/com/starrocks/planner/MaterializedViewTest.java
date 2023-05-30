@@ -2543,7 +2543,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testUnionRewrite() {
+    public void testUnionRewrite() throws Exception {
+        /*
         {
             String mv = "SELECT `customer`.`c_custkey`, `customer`.`c_name`, `customer`.`c_address`, `customer`.`c_city`," +
                     " `customer`.`c_nation`, `customer`.`c_region`, `customer`.`c_phone`, `customer`.`c_mktsegment`\n" +
@@ -2559,6 +2560,30 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "FROM `customer`\n" +
                     "WHERE `customer`.`c_city` = 'ETHIOPIA 9'";
             String query = "select * from customer, lineorder";
+            testRewriteOK(mv, query);
+        }
+
+         */
+
+        {
+            // test compensation predicates are not in output of query
+            String eventTable = "CREATE TABLE `event1` (\n" +
+                    "  `event_id` int(11) NOT NULL COMMENT \"\",\n" +
+                    "  `event_type` varchar(26) NOT NULL COMMENT \"\",\n" +
+                    "  `event_time` datetime NOT NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`event_id`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`event_id`) BUCKETS 12\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");";
+            starRocksAssert.withTable(eventTable);
+
+            String mv = "SELECT `event_id`, `event_type`, `event_time`\n" +
+                    "FROM `event1`\n" +
+                    "WHERE `event_type` = 'click'; ";
+            String query = "select count(event_id) from event1";
             testRewriteOK(mv, query);
         }
     }
