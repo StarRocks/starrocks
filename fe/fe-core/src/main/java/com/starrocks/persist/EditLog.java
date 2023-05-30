@@ -345,12 +345,14 @@ public class EditLog {
                     globalStateMgr.replayRenamePartition(info);
                     break;
                 }
-                case OperationType.OP_BACKUP_JOB: {
+                case OperationType.OP_BACKUP_JOB:
+                case OperationType.OP_BACKUP_JOB_V2: {
                     BackupJob job = (BackupJob) journal.getData();
                     globalStateMgr.getBackupHandler().replayAddJob(job);
                     break;
                 }
-                case OperationType.OP_RESTORE_JOB: {
+                case OperationType.OP_RESTORE_JOB:
+                case OperationType.OP_RESTORE_JOB_V2: {
                     RestoreJob job = (RestoreJob) journal.getData();
                     job.setGlobalStateMgr(globalStateMgr);
                     globalStateMgr.getBackupHandler().replayAddJob(job);
