@@ -254,6 +254,16 @@ public class MaterializedViewHandler extends AlterHandler {
             throw new DdlException("Cannot populate history data if target table is set.");
         }
 
+        Set<String> baseColumnNames = baseTable.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
+
+        /// When create logic MV, we should always get different mv column name with base column name
+        for (Column column : mvColumns) {
+            if (baseColumnNames.contains(column.getName())) {
+                throw new DdlException("Mv column name should not same as base table's column name when" +
+                        " create logical materialized view failed. ");
+            }
+        }
+
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TableName target = stmt.getTargetTableName();
         Table targetTable = db.getTable(target.getTbl());
