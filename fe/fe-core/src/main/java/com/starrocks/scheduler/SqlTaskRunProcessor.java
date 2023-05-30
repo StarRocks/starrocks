@@ -14,6 +14,7 @@
 
 package com.starrocks.scheduler;
 
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import org.apache.logging.log4j.LogManager;
@@ -32,6 +33,7 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
             ctx.getAuditEventBuilder().reset();
             ctx.getAuditEventBuilder()
                     .setTimestamp(System.currentTimeMillis())
+                    .setClusterName(Config.cluster_name)
                     .setClientIp(context.getRemoteIp())
                     .setUser(ctx.getQualifiedUser())
                     .setDb(ctx.getDatabase())
