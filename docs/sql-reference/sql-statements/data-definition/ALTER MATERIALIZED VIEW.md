@@ -4,14 +4,14 @@
 
 This SQL statement can：
 
-- alter the name of a materialzied view
-- alter the refresh strategy of an asynchronous materialized view
-- alter the properties of a materialized view
+- alter the name of a materialized view.
+- alter the refresh strategy of an asynchronous materialized view.
+- alter the properties of a materialized view.
 
 ## Syntax
 
 ```SQL
-ALTER MATERIALIZED VIEW [database.]mv_name { REFRESH ASYNC new_refresh_scheme_desc | RENAME [database.]new_mv_name | SET ( "key" = "value"[,...]) }
+ALTER MATERIALIZED VIEW [db_name.]mv_name { REFRESH ASYNC new_refresh_scheme_desc | RENAME [database.]new_mv_name | SET ( "key" = "value"[,...]) }
 ```
 
 Parameters in brackets [] is optional.
