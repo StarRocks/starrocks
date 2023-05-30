@@ -60,7 +60,7 @@ public class RangePartitionInfo extends PartitionInfo {
     @SerializedName(value = "partitionColumns")
     private List<Column> partitionColumns = Lists.newArrayList();
     // formal partition id -> partition range
-    private Map<Long, Range<PartitionKey>> idToRange = Maps.newHashMap();
+    protected Map<Long, Range<PartitionKey>> idToRange = Maps.newHashMap();
     // temp partition id -> partition range
     private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newHashMap();
 
@@ -192,7 +192,7 @@ public class RangePartitionInfo extends PartitionInfo {
     public Range<PartitionKey> handleNewSinglePartitionDesc(SingleRangePartitionDesc desc,
                                                             long partitionId, boolean isTemp) throws DdlException {
         Preconditions.checkArgument(desc.isAnalyzed());
-        Range<PartitionKey> range = null;
+        Range<PartitionKey> range;
         try {
             range = checkAndCreateRange(desc, isTemp);
             setRangeInternal(partitionId, isTemp, range);

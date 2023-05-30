@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.ast;
 
@@ -6,11 +19,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.PartitionKeyDesc.PartitionRangeType;
@@ -25,6 +40,8 @@ public class RangePartitionDesc extends PartitionDesc {
     private final List<String> partitionColNames;
     private final List<SingleRangePartitionDesc> singleRangePartitionDescs;
     private final List<MultiRangePartitionDesc> multiRangePartitionDescs;
+    // for automatic partition table is ture. otherwise is false
+    protected boolean isAutoPartitionTable = false;
 
     public RangePartitionDesc(List<String> partitionColNames, List<PartitionDesc> partitionDescs) {
         type = PartitionType.RANGE;
@@ -66,7 +83,7 @@ public class RangePartitionDesc extends PartitionDesc {
 
             boolean found = false;
             for (ColumnDef columnDef : columnDefs) {
-                if (columnDef.getName().equals(partitionCol)) {
+                if (columnDef.getName().equalsIgnoreCase(partitionCol)) {
                     if (!columnDef.isKey() && columnDef.getAggregateType() != AggregateType.NONE) {
                         throw new AnalysisException("The partition column could not be aggregated column"
                                 + " and unique table's partition column must be key column");
@@ -94,8 +111,18 @@ public class RangePartitionDesc extends PartitionDesc {
             }
 
             for (MultiRangePartitionDesc multiRangePartitionDesc : multiRangePartitionDescs) {
-                this.singleRangePartitionDescs.addAll(multiRangePartitionDesc.
-                        convertToSingle(firstPartitionColumn.getType(), otherProperties));
+                TimestampArithmeticExpr.TimeUnit timeUnit = TimestampArithmeticExpr.TimeUnit
+                        .fromName(multiRangePartitionDesc.getTimeUnit());
+                if (timeUnit == TimestampArithmeticExpr.TimeUnit.HOUR && firstPartitionColumn.getType() != Type.DATETIME) {
+                    throw new AnalysisException("Batch build partition for hour interval only supports " +
+                            "partition column as DATETIME type");
+                }
+                PartitionConvertContext context = new PartitionConvertContext();
+                context.setAutoPartitionTable(isAutoPartitionTable);
+                context.setFirstPartitionColumnType(firstPartitionColumn.getType());
+                context.setProperties(otherProperties);
+
+                this.singleRangePartitionDescs.addAll(multiRangePartitionDesc.convertToSingle(context));
             }
         }
 
@@ -121,40 +148,24 @@ public class RangePartitionDesc extends PartitionDesc {
         }
     }
 
+    public void setAutoPartitionTable(boolean autoPartitionTable) {
+        this.isAutoPartitionTable = autoPartitionTable;
+    }
+
     @Override
-    public PartitionInfo toPartitionInfo(List<Column> schema, Map<String, Long> partitionNameToId,
-                                         boolean isTemp, boolean isExprPartition)
+    public PartitionInfo toPartitionInfo(List<Column> schema, Map<String, Long> partitionNameToId, boolean isTemp)
             throws DdlException {
         List<Column> partitionColumns = Lists.newArrayList();
 
         // check and get partition column
         for (String colName : partitionColNames) {
-            boolean find = false;
-            for (Column column : schema) {
-                if (column.getName().equalsIgnoreCase(colName)) {
-                    if (!column.isKey() && column.getAggregationType() != AggregateType.NONE) {
-                        throw new DdlException("The partition column could not be aggregated column"
-                                + " and unique table's partition column must be key column");
-                    }
-
-                    if (column.getType().isFloatingPointType() || column.getType().isComplexType()) {
-                        throw new DdlException(String.format("Invalid partition column '%s': %s",
-                                column.getName(), "invalid data type " + column.getType()));
-                    }
-
-                    try {
-                        RangePartitionInfo.checkRangeColumnType(column);
-                    } catch (AnalysisException e) {
-                        throw new DdlException(e.getMessage());
-                    }
-
-                    partitionColumns.add(column);
-                    find = true;
-                    break;
+            ExpressionPartitionDesc.findRangePartitionColumn(schema, partitionColumns, colName);
+            for (Column column : partitionColumns) {
+                try {
+                    RangePartitionInfo.checkRangeColumnType(column);
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
                 }
-            }
-            if (!find) {
-                throw new DdlException("Partition column[" + colName + "] does not found");
             }
         }
 

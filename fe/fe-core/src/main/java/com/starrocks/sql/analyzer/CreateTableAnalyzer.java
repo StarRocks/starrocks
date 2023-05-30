@@ -26,6 +26,7 @@ import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.common.MetaUtils;
@@ -280,6 +281,13 @@ public class CreateTableAnalyzer {
                         partitionDesc.analyze(columnDefs, properties);
                     } catch (AnalysisException e) {
 
+                        throw new SemanticException(e.getMessage());
+                    }
+                } else if (partitionDesc instanceof ExpressionPartitionDesc) {
+                    ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
+                    try {
+                        expressionPartitionDesc.analyze(columnDefs, properties);
+                    } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
                 } else {

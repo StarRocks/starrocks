@@ -1356,6 +1356,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
             partitionInfo = ListPartitionInfo.read(in);
         } else if (partType == PartitionType.EXPR_RANGE) {
             partitionInfo = ExpressionRangePartitionInfo.read(in);
+        } else if (partType == PartitionType.EXPR_RANGE_V2) {
+            partitionInfo = ExpressionRangePartitionInfoV2.read(in);
         } else {
             throw new IOException("invalid partition type: " + partType);
         }

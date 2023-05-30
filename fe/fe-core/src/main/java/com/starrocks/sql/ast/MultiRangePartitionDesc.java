@@ -67,23 +67,22 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         return timeUnit;
     }
 
-    public List<SingleRangePartitionDesc> convertToSingle(Type firstPartitionColumnType,
-                                                          Map<String, String> properties) throws AnalysisException {
+    public List<SingleRangePartitionDesc> convertToSingle(PartitionConvertContext context) throws AnalysisException {
 
         if (this.getStep() <= 0) {
             throw new AnalysisException("Batch partition every clause mush be larger than zero.");
         }
-
+        Type firstPartitionColumnType = context.getFirstPartitionColumnType();
         if (firstPartitionColumnType.isDateType()) {
-            return buildDateTypePartition(properties);
+            return buildDateTypePartition(context);
         } else if (firstPartitionColumnType.isIntegerType()) {
-            return buildNumberTypePartition(properties);
+            return buildNumberTypePartition(context);
         } else {
             throw new AnalysisException("Unsupported batch partition build type:" + firstPartitionColumnType + ".");
         }
     }
 
-    private List<SingleRangePartitionDesc> buildDateTypePartition(Map<String, String> properties)
+    private List<SingleRangePartitionDesc> buildDateTypePartition(PartitionConvertContext context)
             throws AnalysisException {
         // int type does not support datekey int type
 
@@ -134,6 +133,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         int dayOfMonth = 1;
         TimeZone timeZone = TimeUtils.getSystemTimeZone();
         String partitionPrefix = defaultPrefix;
+        Map<String, String> properties = context.getProperties();
         if (properties != null) {
             if (properties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
                 String dayOfWeekStr = properties.get(DynamicPartitionProperty.START_DAY_OF_WEEK);
@@ -226,7 +226,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         return singleRangePartitionDescs;
     }
 
-    private List<SingleRangePartitionDesc> buildNumberTypePartition(Map<String, String> properties)
+    private List<SingleRangePartitionDesc> buildNumberTypePartition(PartitionConvertContext context)
             throws AnalysisException {
         if (this.getTimeUnit() != null) {
             throw new AnalysisException("Batch build partition EVERY is date type " +
@@ -258,7 +258,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(Lists.newArrayList(lowerPartitionValue),
                     Lists.newArrayList(upperPartitionValue));
             SingleRangePartitionDesc singleRangePartitionDesc = new SingleRangePartitionDesc(false,
-                    partitionName, partitionKeyDesc, properties);
+                    partitionName, partitionKeyDesc, context.getProperties());
             singleRangePartitionDescs.add(singleRangePartitionDesc);
 
             currentLoopNum++;
