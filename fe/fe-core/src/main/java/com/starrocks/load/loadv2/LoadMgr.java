@@ -57,6 +57,7 @@ import com.starrocks.load.Load;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
@@ -733,7 +734,7 @@ public class LoadMgr implements Writable {
 
     public void loadLoadJobsV2JsonFormat(DataInputStream in) throws IOException,
             SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(in, LoadMgr.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(in, SRMetaBlockID.LOAD_MGR);
         try {
             int size = reader.readInt();
             long now = System.currentTimeMillis();
@@ -771,7 +772,7 @@ public class LoadMgr implements Writable {
         List<LoadJob> loadJobs = idToLoadJob.values().stream().filter(this::needSave).collect(Collectors.toList());
         // 1 json for number of jobs, size of idToLoadJob for jobs
         final int cnt = 1 + loadJobs.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(out, LoadMgr.class.getName(), cnt);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(out, SRMetaBlockID.LOAD_MGR, cnt);
         writer.writeJson(loadJobs.size());
         for (LoadJob loadJob : loadJobs) {
             writer.writeJson(loadJob);

@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.UserException;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
@@ -180,7 +181,7 @@ public class GlobalFunctionMgr {
         List<Function> functions = getFunctions();
 
         int numJson = 1 + functions.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, GlobalFunctionMgr.class.getName(), numJson);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.GLOBAL_FUNCTION_MGR, numJson);
         writer.writeJson(functions.size());
         for (Function function : functions) {
             writer.writeJson(function);
@@ -190,7 +191,7 @@ public class GlobalFunctionMgr {
     }
 
     public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, GlobalFunctionMgr.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.GLOBAL_FUNCTION_MGR);
         try {
             int numJson = reader.readInt();
             for (int i = 0; i < numJson; ++i) {

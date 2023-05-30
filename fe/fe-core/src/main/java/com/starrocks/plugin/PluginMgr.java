@@ -45,6 +45,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.plugin.PluginInfo.PluginType;
@@ -363,7 +364,7 @@ public class PluginMgr implements Writable {
         List<PluginInfo> pluginInfos = getAllDynamicPluginInfo();
 
         int numJson = 1 + pluginInfos.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, PluginMgr.class.getName(), numJson);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.PLUGIN_MGR, numJson);
         writer.writeJson(pluginInfos.size());
         for (PluginInfo pluginInfo : pluginInfos) {
             writer.writeJson(pluginInfo);
@@ -373,7 +374,7 @@ public class PluginMgr implements Writable {
     }
 
     public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, PluginMgr.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.PLUGIN_MGR);
         try {
             int pluginInfoSize = reader.readInt();
             for (int i = 0; i < pluginInfoSize; ++i) {

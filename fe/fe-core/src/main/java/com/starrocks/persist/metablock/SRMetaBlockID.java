@@ -11,43 +11,64 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-
 package com.starrocks.persist.metablock;
 
 import com.google.gson.annotations.SerializedName;
 
-public class SRMetaBlockHeader {
-    @SerializedName(value = "n")
-    private String name;
-    @SerializedName(value = "i")
-    private SRMetaBlockID id;
-    @SerializedName(value = "nj")
-    private int numJson;
+public enum SRMetaBlockID {
+    INVALID(0),
 
-    public SRMetaBlockHeader(SRMetaBlockID id, int numJson) {
+    NODE_MGR(1),
+
+    LOAD_MGR(2),
+
+    ALTER_MGR(3),
+
+    PLUGIN_MGR(4),
+
+    DELETE_MGR(5),
+
+    ANALYZE_MGR(6),
+
+    RESOURCE_GROUP_MGR(7),
+
+    ROUTINE_LOAD_MGR(8),
+
+    GLOBAL_TRANSACTION_MGR(9),
+
+    @Deprecated
+    AUTH(10),
+
+    AUTHENTICATION_MGR(11),
+
+    AUTHORIZATION_MGR(12),
+
+    EXPORT_MGR(13),
+
+    SMALL_FILE_MGR(14),
+
+    CATALOG_MGR(15),
+
+    INSERT_OVERWRITE_JOB_MGR(16),
+
+    COMPACTION_MGR(17),
+
+    STREAM_LOAD_MGR(18),
+
+    MATERIALIZED_VIEW_MGR(19),
+
+    GLOBAL_FUNCTION_MGR(20),
+
+    BACKUP_MGR(21);
+
+    @SerializedName("i")
+    private final int id;
+
+    SRMetaBlockID(int id) {
         this.id = id;
-        this.numJson = numJson;
     }
 
-    public SRMetaBlockHeader(String name, int numJson) {
-        this.name = name;
-        this.numJson = numJson;
-    }
-
-    public int getNumJson() {
-        return numJson;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public SRMetaBlockID getId() {
-        if (id == null) {
-            return SRMetaBlockID.INVALID;
-        } else {
-            return id;
-        }
+    public int getId() {
+        return id;
     }
 }
