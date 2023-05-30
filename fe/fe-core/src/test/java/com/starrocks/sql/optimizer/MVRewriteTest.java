@@ -1252,4 +1252,119 @@ public class MVRewriteTest {
         String query = "select count(*) from " + EMPS_TABLE_NAME + " where bitmap_contains(to_bitmap(1),2)";
         starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS);
     }
+
+    @Test
+    public void testLogicalMaterializedView1() throws Exception {
+        String test1 = "CREATE TABLE `test1` (\n" +
+                "  `k1` smallint NULL DEFAULT \"0\",\n" +
+                "  `k2` varchar(64) NULL DEFAULT \"\",\n" +
+                "  `k3` bigint NULL DEFAULT \"0\",\n" +
+                "  `k4` varchar(64) NULL DEFAULT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        String target1 = "CREATE TABLE `target1` (\n" +
+                "  `k1` smallint NULL DEFAULT \"0\",\n" +
+                "  `k11` smallint NULL DEFAULT \"0\",\n" +
+                "  `k2` int NULL DEFAULT \"0\",\n" +
+                "  `k4` bigint sum DEFAULT \"0\",\n" +
+                "  `k5` hll hll_union\n" +
+                ") ENGINE=OLAP \n" +
+                "AGGREGATE KEY(`k1`, `k11`, `k2`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        String mv1 = "CREATE MATERIALIZED VIEW test_mv1 \n" +
+                "PROPERTIES ( \"enable_populate\" = \"false\") \n" +
+                "to target1\n" +
+                "as\n" +
+                "select k1, cast((k1 * 2) as smallint) as k11, length(k2) as k2, sum(k3) as k4, hll_union(hll_hash(k4)) as k5 " +
+                "from test1 group by k1, k2;";
+        starRocksAssert.withTable(test1)
+                .withTable(target1)
+                .withMaterializedView(mv1);
+        starRocksAssert.query("select cast((k1 * 2) as smallint) as k1, length(k2) as k2, sum(k3) as k4, " +
+                        "hll_union(hll_hash(k4)) as k5 from test1 group by k1, k2")
+                .explainWithout("target1");
+    }
+
+    @Test
+    public void testLogicalMaterializedView2() throws Exception {
+        String t1 = "CREATE TABLE `test3` (\n" +
+                "  `k1` tinyint(4) NULL DEFAULT \"0\",\n" +
+                "  `k2` varchar(64) NULL DEFAULT \"\",\n" +
+                "  `k3` bigint NULL DEFAULT \"0\",\n" +
+                "  `k4` varchar(64) NULL DEFAULT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "        DUPLICATE KEY(`k1`)\n" +
+                "        DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
+                "        PROPERTIES (\n" +
+                "                \"replication_num\" = \"1\"\n" +
+                "        )";
+        String t2 = "CREATE TABLE `target3` (\n" +
+                "  `k1` tinyint(4) NULL DEFAULT \"0\",\n" +
+                "  `k11` tinyint(4) NULL DEFAULT \"0\",\n" +
+                "  `k2` int NULL DEFAULT \"0\",\n" +
+                "  `k4` bigint sum DEFAULT \"0\",\n" +
+                "  `k5` hll hll_union\n" +
+                ") ENGINE=OLAP\n" +
+                "        AGGREGATE KEY(`k1`, `k11`, `k2`)\n" +
+                "        DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
+                "        PROPERTIES (\n" +
+                "                \"replication_num\" = \"1\"\n" +
+                "        );";
+        String mv1 = "CREATE MATERIALIZED VIEW test_mv3\n" +
+                "        PROPERTIES ( \"enable_populate\" = \"false\" )\n" +
+                "        to target3\n" +
+                "        as\n" +
+                "        select k1, cast(k1 * 2 as tinyint(4)) as k1, length(k2) as k2, sum(k3), hll_union(hll_hash(k4)) as k5 " +
+                "from test3 group by k1, k2;";
+        starRocksAssert.withTable(t1)
+                .withTable(t2)
+                .withMaterializedView(mv1);
+        starRocksAssert.query("select k1 * 2, length(k2), sum(k3), hll_union(hll_hash(k4)) as k5 from test3 group by k1, k2;")
+                .explainWithout("target1");
+    }
+
+    @Test
+    public void testLogicalMaterializedView3() throws Exception {
+        String t1 = "CREATE TABLE `test3` (\n" +
+                "  `k1` tinyint(4) NULL DEFAULT \"0\",\n" +
+                "  `k2` varchar(64) NULL DEFAULT \"\",\n" +
+                "  `k3` bigint NULL DEFAULT \"0\",\n" +
+                "  `k4` varchar(64) NULL DEFAULT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "        DUPLICATE KEY(`k1`)\n" +
+                "        DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
+                "        PROPERTIES (\n" +
+                "                \"replication_num\" = \"1\"\n" +
+                "        )";
+        String t2 = "CREATE TABLE `target3` (\n" +
+                "  `k1` tinyint(4) NULL DEFAULT \"0\",\n" +
+                "  `k11` tinyint(4) NULL DEFAULT \"0\",\n" +
+                "  `k2` int NULL DEFAULT \"0\",\n" +
+                "  `k4` bigint sum DEFAULT \"0\",\n" +
+                "  `k5` hll hll_union\n" +
+                ") ENGINE=OLAP\n" +
+                "        AGGREGATE KEY(`k1`, `k11`, `k2`)\n" +
+                "        DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
+                "        PROPERTIES (\n" +
+                "                \"replication_num\" = \"1\"\n" +
+                "        );";
+        String mv1 = "CREATE MATERIALIZED VIEW test_mv3\n" +
+                "        PROPERTIES ( \"enable_populate\" = \"false\" )\n" +
+                "        to target3\n" +
+                "        as\n" +
+                "        select k1, k1 * 2 as k1, length(k2) as k2, sum(k3), hll_union(hll_hash(k4)) as k5 " +
+                "from test3 group by k1, k2;";
+        starRocksAssert.withTable(t1)
+                .withTable(t2)
+                .withMaterializedView(mv1);
+        starRocksAssert.query("select k1 * 2, length(k2), sum(k3), hll_union(hll_hash(k4)) as k5 from test3 group by k1, k2;")
+                .explainWithout("target1");
+    }
 }
