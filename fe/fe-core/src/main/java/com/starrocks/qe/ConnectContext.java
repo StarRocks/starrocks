@@ -176,6 +176,8 @@ public class ConnectContext {
 
     protected SSLContext sslContext;
 
+    private ConnectContext parent;
+
     public StmtExecutor getExecutor() {
         return executor;
     }
@@ -466,7 +468,7 @@ public class ConnectContext {
     }
 
     public boolean isKilled() {
-        return isKilled;
+        return (parent != null && parent.isKilled()) || isKilled;
     }
 
     // Set kill flag to true;
@@ -564,6 +566,14 @@ public class ConnectContext {
 
     public void setStatisticsConnection(boolean statisticsConnection) {
         isStatisticsConnection = statisticsConnection;
+    }
+
+    public void setParentConnectContext(ConnectContext parent) {
+        this.parent = parent;
+    }
+
+    public ConnectContext getParent() {
+        return parent;
     }
 
     // kill operation with no protect.
