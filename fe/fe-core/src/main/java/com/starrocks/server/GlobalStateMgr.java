@@ -107,6 +107,7 @@ import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.cluster.Cluster;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigRefreshDaemon;
@@ -734,9 +735,9 @@ public class GlobalStateMgr {
 
         this.binlogManager = new BinlogManager();
 
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+        if (!RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
-        } else if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        } else {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
         }
 
@@ -1257,6 +1258,14 @@ public class GlobalStateMgr {
             LOG.warn("transfer to leader failed with error", t);
             feType = oldType;
             throw t;
+        }
+
+        if (RunMode.allowCreateLakeTable()) {
+            try {
+                ((SharedDataStorageVolumeMgr) storageVolumeMgr).createOrUpdateBuiltinStorageVolume();
+            } catch (DdlException | AnalysisException | AlreadyExistsException e) {
+                LOG.warn("Failed to create or update builtin storage volume", e);
+            }
         }
     }
 

@@ -17,6 +17,7 @@ package com.starrocks.server;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
@@ -26,6 +27,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -37,14 +39,23 @@ import java.util.Optional;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_REGION;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 
 public class SharedDataStorageVolumeMgrTest {
     @Mocked
     private StarOSAgent starOSAgent;
 
-    @Test
-    public void testStorageVolumeCRUD() throws AnalysisException, AlreadyExistsException, DdlException {
+    @Before
+    public void setUp() {
+        Config.cloud_native_storage_type = "s3";
+        Config.aws_s3_access_key = "access_key";
+        Config.aws_s3_secret_key = "secret_key";
+        Config.aws_s3_region = "region";
+        Config.aws_s3_endpoint = "endpoint";
+        Config.cloud_native_storage_type = "s3";
+        Config.aws_s3_path = "default-bucket/1";
+
         new MockUp<GlobalStateMgr>() {
             @Mock
             public StarOSAgent getStarOSAgent() {
@@ -87,7 +98,10 @@ public class SharedDataStorageVolumeMgrTest {
                 fileStores.put(fsInfo.getFsKey(), fileStoreInfo.toBuilder().mergeFrom(fsInfo).build());
             }
         };
+    }
 
+    @Test
+    public void testStorageVolumeCRUD() throws AnalysisException, AlreadyExistsException, DdlException {
         String svKey = "test";
         String svKey1 = "test1";
         // create
@@ -152,13 +166,13 @@ public class SharedDataStorageVolumeMgrTest {
         svm.bindDbToStorageVolume(sv.getId(), 1L);
         svm.bindTableToStorageVolume(sv.getId(), 1L);
         try {
-            svm.unbindDbToStorageVolume(-1L, 1L);
+            svm.unbindDbToStorageVolume("-1", 1L);
             Assert.fail();
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("Storage volume does not exist"));
         }
         try {
-            svm.unbindTableToStorageVolume(-1L, 1L);
+            svm.unbindTableToStorageVolume("-1", 1L);
             Assert.fail();
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("Storage volume does not exist"));
@@ -195,5 +209,51 @@ public class SharedDataStorageVolumeMgrTest {
         svm.unbindTableToStorageVolume(sv.getId(), 1L);
         svm.removeStorageVolume(svKey);
         Assert.assertFalse(svm.exists(svKey));
+    }
+
+    @Test
+    public void testParseParamsFromConfig() throws AnalysisException {
+        SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
+        Map<String, String> params = sdsvm.parseParamsFromConfig();
+        Assert.assertEquals("access_key", params.get(AWS_S3_ACCESS_KEY));
+        Assert.assertEquals("secret_key", params.get(AWS_S3_SECRET_KEY));
+        Assert.assertEquals("region", params.get(AWS_S3_REGION));
+        Assert.assertEquals("endpoint", params.get(AWS_S3_ENDPOINT));
+
+        Config.cloud_native_storage_type = "aaa";
+        params = sdsvm.parseParamsFromConfig();
+        Assert.assertEquals(0, params.size());
+    }
+
+    @Test
+    public void testParseLocationsFromConfig() throws AnalysisException {
+        SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
+        List<String> locations = sdsvm.parseLocationsFromConfig();
+        Assert.assertEquals(1, locations.size());
+        Assert.assertEquals("s3://default-bucket/1", locations.get(0));
+
+        Config.cloud_native_storage_type = "hdfs";
+        Config.cloud_native_hdfs_url = "url";
+        locations = sdsvm.parseLocationsFromConfig();
+        Assert.assertEquals(1, locations.size());
+        Assert.assertEquals("hdfs://url", locations.get(0));
+    }
+
+    @Test
+    public void testCreateOrUpdateBuiltinStorageVolume() throws AnalysisException, DdlException, AlreadyExistsException {
+        SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
+        Assert.assertFalse(sdsvm.exists(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
+        sdsvm.createOrUpdateBuiltinStorageVolume();
+        Assert.assertTrue(sdsvm.exists(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
+        StorageVolume sv = sdsvm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        Assert.assertEquals("region", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getRegion());
+        Assert.assertEquals("endpoint", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getEndpoint());
+
+        Config.aws_s3_region = "region1";
+        Config.aws_s3_endpoint = "endpoint1";
+        sdsvm.createOrUpdateBuiltinStorageVolume();
+        sv = sdsvm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
+        Assert.assertEquals("region1", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getRegion());
+        Assert.assertEquals("endpoint1", sv.getCloudConfiguration().toFileStoreInfo().getS3FsInfo().getEndpoint());
     }
 }

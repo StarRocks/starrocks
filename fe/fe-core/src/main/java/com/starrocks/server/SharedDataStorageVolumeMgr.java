@@ -19,9 +19,13 @@ import com.staros.proto.FileStoreInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.storagevolume.StorageVolume;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -29,16 +33,17 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
-    @Override
-    public Long createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
-                                    Optional<Boolean> enabled, String comment)
+    public static final String BUILTIN_STORAGE_VOLUME = "builtin_storage_volume";
+
+    public String createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
+                                      Optional<Boolean> enabled, String comment)
             throws AlreadyExistsException, AnalysisException, DdlException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             if (exists(name)) {
                 throw new AlreadyExistsException(String.format("Storage volume '%s' already exists", name));
             }
-            StorageVolume sv = new StorageVolume(0, name, svType, locations, params, enabled.orElse(true), comment);
-            return Long.valueOf(GlobalStateMgr.getCurrentState().getStarOSAgent().addFileStore(sv.toFileStoreInfo()));
+            StorageVolume sv = new StorageVolume("", name, svType, locations, params, enabled.orElse(true), comment);
+            return GlobalStateMgr.getCurrentState().getStarOSAgent().addFileStore(sv.toFileStoreInfo());
         }
     }
 
@@ -48,7 +53,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             StorageVolume sv = getStorageVolumeByName(name);
             Preconditions.checkState(sv != null,
                     "Storage volume '%s' does not exist", name);
-            Preconditions.checkState(defaultStorageVolumeId != sv.getId(),
+            Preconditions.checkState(!defaultStorageVolumeId.equals(sv.getId()),
                     "default storage volume can not be removed");
             Set<Long> dbs = storageVolumeToDbs.get(sv.getId());
             Set<Long> tables = storageVolumeToTables.get(sv.getId());
@@ -69,7 +74,8 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             if (enabled.isPresent()) {
                 boolean enabledValue = enabled.get();
                 if (!enabledValue) {
-                    Preconditions.checkState(sv.getId() != defaultStorageVolumeId, "Default volume can not be disabled");
+                    Preconditions.checkState(!sv.getId().equals(defaultStorageVolumeId),
+                            "Default volume can not be disabled");
                 }
                 sv.setEnabled(enabledValue);
             }
@@ -124,7 +130,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public StorageVolume getStorageVolume(long storageVolumeId) throws AnalysisException {
+    public StorageVolume getStorageVolume(String storageVolumeId) throws AnalysisException {
         // TODO: should be supported by staros. We use id for persistence, storage volume needs to be get by id.
         return null;
     }
@@ -135,5 +141,62 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             return GlobalStateMgr.getCurrentState().getStarOSAgent().listFileStore()
                     .stream().map(FileStoreInfo::getFsName).collect(Collectors.toList());
         }
+    }
+
+    public void createOrUpdateBuiltinStorageVolume() throws DdlException, AnalysisException, AlreadyExistsException {
+        if (Config.cloud_native_storage_type.isEmpty()) {
+            return;
+        }
+
+        List<String> locations = parseLocationsFromConfig();
+        Map<String, String> params = parseParamsFromConfig();
+
+        if (exists(BUILTIN_STORAGE_VOLUME)) {
+            updateStorageVolume(BUILTIN_STORAGE_VOLUME, params, Optional.empty(), "");
+        } else {
+            createStorageVolume(BUILTIN_STORAGE_VOLUME,
+                    Config.cloud_native_storage_type, locations, params, Optional.of(true), "");
+            if (getDefaultStorageVolumeId().isEmpty()) {
+                setDefaultStorageVolume(BUILTIN_STORAGE_VOLUME);
+            }
+        }
+    }
+
+    public List<String> parseLocationsFromConfig() {
+        List<String> locations = new ArrayList<>();
+        switch (Config.cloud_native_storage_type.toLowerCase()) {
+            case "s3":
+                locations.add("s3://" + Config.aws_s3_path);
+                break;
+            case "hdfs":
+                locations.add("hdfs://" + Config.cloud_native_hdfs_url);
+                break;
+            case "azblob":
+                // TODO
+            default:
+                return locations;
+        }
+        return locations;
+    }
+
+    public Map<String, String> parseParamsFromConfig() {
+        Map<String, String> params = new HashMap<>();
+        switch (Config.cloud_native_storage_type.toLowerCase()) {
+            case "s3":
+                params.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, Config.aws_s3_access_key);
+                params.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, Config.aws_s3_secret_key);
+                params.put(CloudConfigurationConstants.AWS_S3_REGION, Config.aws_s3_region);
+                params.put(CloudConfigurationConstants.AWS_S3_ENDPOINT, Config.aws_s3_endpoint);
+                params.put(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID, Config.aws_s3_external_id);
+                params.put(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN, Config.aws_s3_iam_role_arn);
+                break;
+            case "hdfs":
+                // TODO
+            case "azblob":
+                // TODO
+            default:
+                return params;
+        }
+        return params;
     }
 }

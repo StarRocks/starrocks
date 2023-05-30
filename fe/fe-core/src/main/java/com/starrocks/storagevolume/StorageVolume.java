@@ -35,6 +35,8 @@ import java.util.List;
 import java.util.Map;
 
 public class StorageVolume {
+    public static final String S3_PREFIX = "s3://";
+
     public enum StorageVolumeType {
         UNKNOWN,
         S3,
@@ -43,7 +45,7 @@ public class StorageVolume {
 
     // Without id, the scenario like "create storage volume 'a', drop storage volume 'a', create storage volume 'a'"
     // can not be handled. They will be treated as the same storage volume.
-    private long id;
+    private String id;
 
     private String name;
 
@@ -59,7 +61,7 @@ public class StorageVolume {
 
     private boolean enabled;
 
-    public StorageVolume(long id, String name, String svt, List<String> locations,
+    public StorageVolume(String id, String name, String svt, List<String> locations,
                          Map<String, String> params, boolean enabled, String comment) throws AnalysisException {
         this.id = id;
         this.name = name;
@@ -99,7 +101,7 @@ public class StorageVolume {
         return cloudConfiguration;
     }
 
-    public long getId() {
+    public String getId() {
         return id;
     }
 
@@ -145,7 +147,8 @@ public class StorageVolume {
         Gson gson = new Gson();
         result.addRow(Lists.newArrayList(name,
                 String.valueOf(svt.name()),
-                String.valueOf(GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getDefaultStorageVolumeId() == id),
+                String.valueOf(GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                        .getDefaultStorageVolumeId().equals(id)),
                 String.valueOf(Strings.join(locations, ", ")),
                 String.valueOf(gson.toJson(params)),
                 String.valueOf(enabled),
@@ -155,7 +158,7 @@ public class StorageVolume {
     public FileStoreInfo toFileStoreInfo() {
         FileStoreInfo fsInfo = cloudConfiguration.toFileStoreInfo();
         FileStoreInfo.Builder builder = fsInfo.toBuilder();
-        builder.setFsName(this.name).setComment(this.comment).setEnabled(this.enabled);
+        builder.setFsKey(id).setFsName(this.name).setComment(this.comment).setEnabled(this.enabled);
         switch (svt) {
             case S3:
                 S3FileStoreInfo s3FileStoreInfo = fsInfo.getS3FsInfo();
@@ -170,9 +173,6 @@ public class StorageVolume {
             case UNKNOWN:
                 break;
         }
-        if (this.id > 0) {
-            builder.setFsKey(String.valueOf(this.id));
-        }
         return builder.build();
     }
 
@@ -180,9 +180,8 @@ public class StorageVolume {
         String svt = fsInfo.getFsType().toString();
         Map<String, String> params = getParamsFromFileStoreInfo(fsInfo);
         List<String> locations = getLocationsFromFileStoreInfo(fsInfo);
-        StorageVolume sv = new StorageVolume(Long.valueOf(fsInfo.getFsKey()), fsInfo.getFsName(), svt,
+        return new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
                 locations, params, fsInfo.getEnabled(), fsInfo.getComment());
-        return sv;
     }
 
     public static List<String> getLocationsFromFileStoreInfo(FileStoreInfo fsInfo) {
@@ -239,7 +238,7 @@ public class StorageVolume {
 
     private String[] getBucketAndPrefix() {
         // path pattern: s3://default-bucket/1/12003/
-        String path = locations.get(0).substring(4);
+        String path = locations.get(0).substring(S3_PREFIX.length());
         int index = path.indexOf('/');
         if (index < 0) {
             return new String[] {path, ""};
