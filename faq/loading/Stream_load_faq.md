@@ -1,16 +1,20 @@
 # Stream Load 常见问题
 
-## 1. Stream Load 是否支持识别文本文件中首行的列名？或者是否支持指定不读取首行？
+## 1. Stream Load 是否支持识别 CSV 格式文件开头前几行的列名？或者是否支持在数据读取过程中跳过开头前几行数据？
 
-Stream Load 不支持识别文本中首行的列名，首行对 Stream Load 来说也只是普通数据。Stream Load 当前也不支持指定不读取首行。如果需要导入的文本文件的首行为列名，可以使用如下四种方式处理：
+Stream Load 不支持识别 CSV 格式文件开头前几行的列名，列名对 Stream Load 来说跟其他行一样，只是普通数据。
 
-- 在导出工具中修改设置，重新导出不带列名的文本文件。
+在 2.5 及以前版本，Stream Load 不支持在数据读取过程中跳过 CSV 格式文件开头前几行数据。如果需要导入的 CSV 格式文件开头前几行为列名，可以使用如下四种方式处理：
 
-- 使用 `sed -i '1d' filename` 等命令删除文本文件的首行。
+- 在导出工具中修改设置，重新导出不带列名的 CSV 格式文件。
 
-- 在 Stream Load 执行命令或语句中，使用 `-H "where: <column_name> != '<column_name>'"` 把首行过滤掉。其中，`<column_name>` 是文本文件首行里的任意一个列名。需要注意的是，当前 StarRocks 会先转换、然后再做过滤，因此如果首行中的列值转其他数据类型失败的话，会返回 `NULL`。所以，这种导入方式要求 StarRocks 表中的列不能有设置为 `NOT NULL` 的。
+- 使用 `sed -i '1d' filename` 等命令删除 CSV 格式文件的前几行。
 
-- 在Stream Load 执行命令或语句中加入 `-H "max_filter_ratio:0.01"`，这样可以给导入作业设置一个 1% 或者更小、但能容错超过 1 行的容错率，从而将首行的错误忽视掉。设置容错率后，返回结果的 `ErrorURL` 依旧会提示有错误，但导入作业整体会成功。容错率不宜设置过大，避免漏掉其他数据问题。
+- 在 Stream Load 执行命令或语句中，使用 `-H "where: <column_name> != '<column_name>'"` 把前几行过滤掉。其中，`<column_name>` 是 CSV 格式文件开头前几行里的任意一个列名。需要注意的是，当前 StarRocks 会先转换、然后再做过滤，因此如果前几行中的列值转其他数据类型失败的话，会返回 `NULL`。所以，这种导入方式要求 StarRocks 表中的列不能有设置为 `NOT NULL` 的。
+
+- 在Stream Load 执行命令或语句中加入 `-H "max_filter_ratio:0.01"`，这样可以给导入作业设置一个 1% 或者更小、但能容错数行的容错率，从而将前几行的错误忽视掉。设置容错率后，返回结果的 `ErrorURL` 依旧会提示有错误，但导入作业整体会成功。容错率不宜设置过大，避免漏掉其他数据问题。
+
+从 3.0 版本起，Stream Load 支持 `skip_header` 参数，用于指定跳过 CSV 文件开头的前几行数据。参见 [CSV 适用参数](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md#csv-适用参数)。
 
 ## 2. 当前业务的分区键对应的数据不是标准的 DATE 和 INT 类型，比如是 202106.00 的格式，如果需要使用 Stream Load 把这些数据导入到 StarRocks 中，需要如何转换？
 
