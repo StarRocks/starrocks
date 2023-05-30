@@ -1244,6 +1244,12 @@ public class Config extends ConfigBase {
     public static boolean enable_replicated_storage_as_default_engine = true;
 
     /**
+     * enable schedule insert query by row count
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_schedule_insert_query_by_row_count = true;
+
+    /**
      * FOR DiskAndTabletLoadBalancer:
      * upper limit of the difference in disk usage of all backends, exceeding this threshold will cause
      * disk balance

@@ -394,6 +394,7 @@ public class OlapScanNode extends ScanNode {
             internalRange.setVersion_hash("0");
             internalRange.setTablet_id(tabletId);
             internalRange.setPartition_id(partition.getId());
+            internalRange.setRow_count(selectedTablet.getRowCount(0));
 
             List<Replica> replicas = allQueryableReplicas;
 
@@ -448,6 +449,7 @@ public class OlapScanNode extends ScanNode {
             internalRange.setVersion_hash("0");
             internalRange.setTablet_id(tabletId);
             internalRange.setPartition_id(partition.getId());
+            internalRange.setRow_count(tablet.getRowCount(0));
 
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();

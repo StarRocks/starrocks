@@ -125,6 +125,7 @@ struct TInternalScanRange {
   8: optional string index_name
   9: optional string table_name 
   10: optional i64 partition_id
+  11: optional i64 row_count
 }
 
 enum TFileFormatType {
