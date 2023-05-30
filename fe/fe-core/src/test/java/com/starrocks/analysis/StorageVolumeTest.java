@@ -14,7 +14,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
@@ -110,7 +110,7 @@ public class StorageVolumeTest {
 
     @Test
     public void testDescStorageVolumeParserAndAnalyzer() {
-        new MockUp<StorageVolumeMgr>() {
+        new MockUp<SharedNothingStorageVolumeMgr>() {
             @Mock
             public boolean exists(String svKey) {
                 if (svKey.equals("storage_volume1")) {

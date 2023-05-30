@@ -24,9 +24,11 @@ import com.staros.proto.CreateShardGroupInfo;
 import com.staros.proto.CreateShardInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
+import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
@@ -48,6 +50,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -476,4 +479,88 @@ public class StarOSAgentTest {
         Assert.assertEquals(2, nodes.size());
     }
 
+    @Test
+    public void testAddFileStore() throws StarClientException, DdlException {
+        S3FileStoreInfo s3FsInfo = S3FileStoreInfo.newBuilder()
+                .setRegion("region").setEndpoint("endpoint").build();
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsKey("test-fskey")
+                .setFsName("test-fsname").setFsType(FileStoreType.S3).setS3FsInfo(s3FsInfo).build();
+        new Expectations() {
+            {
+                client.addFileStore(fsInfo, "1");
+                result = fsInfo.getFsKey();
+                minTimes = 0;
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assert.assertEquals("test-fskey", starosAgent.addFileStore(fsInfo));
+    }
+
+    @Test
+    public void testListFileStore() throws StarClientException, DdlException {
+        S3FileStoreInfo s3FsInfo = S3FileStoreInfo.newBuilder()
+                .setRegion("region").setEndpoint("endpoint").build();
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsKey("test-fskey")
+                .setFsName("test-fsname").setFsType(FileStoreType.S3).setS3FsInfo(s3FsInfo).build();
+        new Expectations() {
+            {
+                client.listFileStore("1");
+                result = new ArrayList<>(Arrays.asList(fsInfo));
+                minTimes = 0;
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assert.assertEquals(1, starosAgent.listFileStore().size());
+        Assert.assertEquals("test-fskey", starosAgent.listFileStore().get(0).getFsKey());
+    }
+
+    @Test
+    public void testUpdateFileStore() throws StarClientException, DdlException {
+        S3FileStoreInfo s3FsInfo = S3FileStoreInfo.newBuilder()
+                .setRegion("region").setEndpoint("endpoint").build();
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsKey("test-fskey")
+                .setFsName("test-fsname").setFsType(FileStoreType.S3).setS3FsInfo(s3FsInfo).build();
+        new Expectations() {
+            {
+                client.updateFileStore(fsInfo, "1");
+                result = new DdlException("Failed to update file store");
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        ExceptionChecker.expectThrows(DdlException.class, () -> starosAgent.updateFileStore(fsInfo));
+    }
+
+    @Test
+    public void testRemoveFileStoreByName() throws StarClientException, DdlException {
+        new Expectations() {
+            {
+                client.removeFileStoreByName("test-fsname", "1");
+                result = new DdlException("Failed to remove file store");
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        ExceptionChecker.expectThrows(DdlException.class, () -> starosAgent.removeFileStoreByName("test-fsname"));
+    }
+
+    @Test
+    public void testGetFileStoreByName() throws StarClientException, DdlException {
+        S3FileStoreInfo s3FsInfo = S3FileStoreInfo.newBuilder()
+                .setRegion("region").setEndpoint("endpoint").build();
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsKey("test-fskey")
+                .setFsName("test-fsname").setFsType(FileStoreType.S3).setS3FsInfo(s3FsInfo).build();
+        new Expectations() {
+            {
+                client.getFileStore("test-fsname", "1");
+                result = fsInfo;
+                minTimes = 0;
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assert.assertEquals("test-fskey", starosAgent.getFileStoreByName("test-fsname").getFsKey());
+    }
 }

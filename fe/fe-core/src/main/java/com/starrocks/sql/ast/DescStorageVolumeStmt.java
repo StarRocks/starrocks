@@ -16,6 +16,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.StorageVolumeProcNode;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
@@ -47,7 +48,7 @@ public class DescStorageVolumeStmt extends ShowStmt {
         return storageVolumeName;
     }
 
-    public List<List<String>> getResultRows() {
+    public List<List<String>> getResultRows() throws AnalysisException {
         return node.fetchResult().getRows();
     }
 

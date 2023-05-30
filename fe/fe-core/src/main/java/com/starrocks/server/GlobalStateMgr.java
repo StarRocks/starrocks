@@ -734,7 +734,11 @@ public class GlobalStateMgr {
 
         this.binlogManager = new BinlogManager();
 
-        this.storageVolumeMgr = new StorageVolumeMgr();
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+            this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
+        } else if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
+        }
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {

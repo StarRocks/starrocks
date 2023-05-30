@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
@@ -92,8 +93,12 @@ public class StorageVolumeAnalyzer {
             }
 
             StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-            if (!storageVolumeMgr.exists(svName)) {
-                throw new SemanticException("Unknown storage volume: %s", svName);
+            try {
+                if (!storageVolumeMgr.exists(svName)) {
+                    throw new SemanticException("Unknown storage volume: %s", svName);
+                }
+            } catch (DdlException e) {
+                throw new SemanticException("Failed to get storage volume", e);
             }
 
             return null;

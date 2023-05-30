@@ -2496,7 +2496,7 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
-    private void handleShowStorageVolumes() {
+    private void handleShowStorageVolumes() throws DdlException {
         ShowStorageVolumesStmt showStmt = (ShowStorageVolumesStmt) stmt;
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         StorageVolumeMgr storageVolumeMgr = globalStateMgr.getStorageVolumeMgr();
@@ -2518,7 +2518,7 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
-    private void handleDescStorageVolume() {
+    private void handleDescStorageVolume() throws AnalysisException {
         DescStorageVolumeStmt desc = (DescStorageVolumeStmt) stmt;
         resultSet = new ShowResultSet(desc.getMetaData(), desc.getResultRows());
     }
