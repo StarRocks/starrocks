@@ -864,4 +864,27 @@ public class ReplayFromDumpTest {
         Assert.assertEquals(new CTEProperty(1), expression.getLogicalProperty().getUsedCTEs());
         Assert.assertEquals(4, result.second.getCteProduceFragments().size());
     }
+
+    @Test
+    public void testProjectionRewrite() throws Exception {
+        FeConstants.USE_MOCK_DICT_MANAGER = true;
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/test"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("15:Project\n" +
+                "  |  <slot 47> : '2023-03-26'\n" +
+                "  |  <slot 48> : if(32 = '01', '部', '户部')\n" +
+                "  |  <slot 49> : '门'\n" +
+                "  |  <slot 50> : '3'\n" +
+                "  |  <slot 51> : '入'\n" +
+                "  |  <slot 52> : '2'\n" +
+                "  |  <slot 53> : 'KPI2'\n" +
+                "  |  <slot 54> : ifnull(round(46: sum / 100000000, 5), 0)\n" +
+                "  |  <slot 55> : 32\n" +
+                "  |  <slot 56> : 32\n" +
+                "  |  <slot 57> : 32\n" +
+                "  |  \n" +
+                "  14:Decode\n" +
+                "  |  <dict id 74> : <string id 32>"));
+        FeConstants.USE_MOCK_DICT_MANAGER = false;
+    }
 }
