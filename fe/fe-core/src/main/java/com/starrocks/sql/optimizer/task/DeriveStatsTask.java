@@ -45,20 +45,25 @@ public class DeriveStatsTask extends OptimizerTask {
 
         Statistics currentStatistics = groupExpression.getGroup().getStatistics();
         // choose best statistics
+        // do set group statistics when the groupExpression is a materialized view scan
         if (currentStatistics == null ||
-                (expressionContext.getStatistics().getOutputRowCount() < currentStatistics.getOutputRowCount())) {
+                (expressionContext.getStatistics().getOutputRowCount() < currentStatistics.getOutputRowCount() &&
+                        !isMaterializedView())) {
             groupExpression.getGroup().setStatistics(expressionContext.getStatistics());
         }
         if (currentStatistics != null && !currentStatistics.equals(expressionContext.getStatistics())) {
-            if (groupExpression.getOp() instanceof LogicalOlapScanOperator) {
+            if (isMaterializedView()) {
                 LogicalOlapScanOperator scan = groupExpression.getOp().cast();
-                if (scan.getTable().isMaterializedView()) {
-                    MaterializedView mv = (MaterializedView) scan.getTable();
-                    groupExpression.getGroup().setMvStatistics(mv.getId(), expressionContext.getStatistics());
-                }
+                MaterializedView mv = (MaterializedView) scan.getTable();
+                groupExpression.getGroup().setMvStatistics(mv.getId(), expressionContext.getStatistics());
             }
         }
 
         groupExpression.setStatsDerived();
+    }
+
+    private boolean isMaterializedView() {
+        return groupExpression.getOp() instanceof LogicalOlapScanOperator
+                && ((LogicalOlapScanOperator) groupExpression.getOp()).getTable().isMaterializedView();
     }
 }
