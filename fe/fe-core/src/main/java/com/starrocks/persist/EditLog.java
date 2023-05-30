@@ -395,7 +395,8 @@ public class EditLog {
                     globalStateMgr.replayRenameRollup(info);
                     break;
                 }
-                case OperationType.OP_EXPORT_CREATE: {
+                case OperationType.OP_EXPORT_CREATE:
+                case OperationType.OP_EXPORT_CREATE_V2: {
                     ExportJob job = (ExportJob) journal.getData();
                     ExportMgr exportMgr = globalStateMgr.getExportMgr();
                     exportMgr.replayCreateExportJob(job);
@@ -406,6 +407,7 @@ public class EditLog {
                     ExportMgr exportMgr = globalStateMgr.getExportMgr();
                     exportMgr.replayUpdateJobState(op.getJobId(), op.getState());
                     break;
+                case OperationType.OP_EXPORT_UPDATE_INFO_V2:
                 case OperationType.OP_EXPORT_UPDATE_INFO:
                     ExportJob.ExportUpdateInfo exportUpdateInfo = (ExportJob.ExportUpdateInfo) journal.getData();
                     globalStateMgr.getExportMgr().replayUpdateJobInfo(exportUpdateInfo);
@@ -1374,15 +1376,25 @@ public class EditLog {
     }
 
     public void logExportCreate(ExportJob job) {
-        logEdit(OperationType.OP_EXPORT_CREATE, job);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_EXPORT_CREATE_V2, job);
+        } else {
+            logEdit(OperationType.OP_EXPORT_CREATE, job);
+        }
     }
 
     public void logExportUpdateState(long jobId, ExportJob.JobState newState,
                                      List<Pair<TNetworkAddress, String>> snapshotPaths, String exportTempPath,
                                      Set<String> exportedFiles, ExportFailMsg failMsg) {
-        ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState,
-                snapshotPaths, exportTempPath, exportedFiles, failMsg);
-        logEdit(OperationType.OP_EXPORT_UPDATE_INFO, updateInfo);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState,
+                    snapshotPaths, exportTempPath, exportedFiles, failMsg);
+            logJsonObject(OperationType.OP_EXPORT_UPDATE_INFO_V2, updateInfo);
+        } else {
+            ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState,
+                    snapshotPaths, exportTempPath, exportedFiles, failMsg);
+            logEdit(OperationType.OP_EXPORT_UPDATE_INFO, updateInfo);
+        }
     }
 
     public void logUpdateClusterAndBackendState(BackendIdsUpdateInfo info) {

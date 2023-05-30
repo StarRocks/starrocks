@@ -331,6 +331,10 @@ public class OperationType {
     public static final short OP_UPSERT_TRANSACTION_STATE_V2 = 12110;
     public static final short OP_SAVE_TRANSACTION_ID_V2 = 12112;
 
+    //Export json format log
+    public static final short OP_EXPORT_CREATE_V2 = 12120;
+    public static final short OP_EXPORT_UPDATE_INFO_V2 = 12121;
+
     // small files json format log
     public static final short OP_CREATE_SMALL_FILE_V2 = 12140;
     public static final short OP_DROP_SMALL_FILE_V2 = 12141;

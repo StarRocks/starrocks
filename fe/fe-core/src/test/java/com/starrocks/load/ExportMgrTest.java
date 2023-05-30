@@ -17,6 +17,7 @@ package com.starrocks.load;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -95,5 +96,22 @@ public class ExportMgrTest {
         Assert.assertEquals(saveChecksum, loadChecksum);
 
         tempFile.delete();
+    }
+
+    @Test
+    public void testLoadSaveImageJsonFormat() throws Exception {
+        ExportMgr leaderMgr = new ExportMgr();
+        UtFrameUtils.setUpForPersistTest();
+        ExportJob job = new ExportJob(3, new UUID(3, 3));
+        job.setTableName(new TableName("dummy", "dummy"));
+        leaderMgr.replayCreateExportJob(job);
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        leaderMgr.saveExportJobV2(image.getDataOutputStream());
+
+        ExportMgr followerMgr = new ExportMgr();
+        followerMgr.loadExportJobV2(image.getDataInputStream());
+
+        Assert.assertEquals(1, followerMgr.getIdToJob().size());
     }
 }
