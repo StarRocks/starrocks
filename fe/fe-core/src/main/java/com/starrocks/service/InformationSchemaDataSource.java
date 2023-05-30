@@ -55,7 +55,7 @@ public class InformationSchemaDataSource {
     private static final String DEF = "def";
     private static final String DEFAULT_EMPTY_STRING = "";
     private static final long DEFAULT_EMPTY_NUM = -1L;
-    private static final String UTF8_GENERAL_CI = "utf8_general_ci";
+    public static final String UTF8_GENERAL_CI = "utf8_general_ci";
 
     @NotNull
     private static AuthDbRequestResult getAuthDbRequestResult(TAuthInfo authInfo) throws TException {
@@ -350,6 +350,7 @@ public class InformationSchemaDataSource {
         return response;
     }
 
+<<<<<<< HEAD
     private static String transferTableTypeToAdaptMysql(TableType tableType) {
         // 'BASE TABLE','SYSTEM VERSIONED','PARTITIONED TABLE','VIEW','FOREIGN TABLE','MATERIALIZED VIEW','EXTERNAL TABLE'
         switch (tableType) {
@@ -375,6 +376,9 @@ public class InformationSchemaDataSource {
                 return "BASE TABLE";
         }
     }
+=======
+    public static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
+>>>>>>> e29f50c48 ([BugFix] Fix bug show table status from missing information (#24360))
 
     private static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
         
@@ -405,7 +409,7 @@ public class InformationSchemaDataSource {
         return info;
     }
 
-    private static TTableInfo genDefaultConfigInfo(TTableInfo info) {
+    public static TTableInfo genDefaultConfigInfo(TTableInfo info) {
         info.setTable_rows(DEFAULT_EMPTY_NUM);
         info.setAvg_row_length(DEFAULT_EMPTY_NUM);
         info.setData_length(DEFAULT_EMPTY_NUM);
