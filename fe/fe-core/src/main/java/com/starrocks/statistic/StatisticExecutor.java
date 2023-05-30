@@ -286,7 +286,7 @@ public class StatisticExecutor {
         context.setQueryId(UUIDUtil.genUUID());
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
-            throw new SemanticException("Statistics query fail | Error Message [%s] | {} | SQL [%s]",
+            throw new SemanticException("Statistics query fail | Error Message [%s] | QueryId [%s] | SQL [%s]",
                     context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
         } else {
             return sqlResult.first;
