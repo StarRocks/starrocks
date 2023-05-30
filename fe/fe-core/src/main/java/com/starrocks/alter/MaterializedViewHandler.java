@@ -254,6 +254,16 @@ public class MaterializedViewHandler extends AlterHandler {
             throw new DdlException("Cannot populate history data if target table is set.");
         }
 
+        Set<String> baseColumnNames = baseTable.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
+
+        /// When create logic MV, we should always get different mv column name with base column name
+        for (Column column : mvColumns) {
+            if (baseColumnNames.contains(column.getName())) {
+                throw new DdlException("Mv column name should not same as base table's column name when" +
+                        " create logical materialized view failed. ");
+            }
+        }
+
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TableName target = stmt.getTargetTableName();
         Table targetTable = db.getTable(target.getTbl());
@@ -309,13 +319,36 @@ public class MaterializedViewHandler extends AlterHandler {
                 throw new DdlException("Target table:" + baseTable + " should be " +
                         " partitioned table");
             }
-            if (baseTable.getPartitionInfo().equals(targetOlapTable.getPartitionInfo())) {
-                throw new DdlException("Target table:" + targetOlapTable + " should be " +
+            if (baseTable.getPartitionInfo().getType() != targetOlapTable.getPartitionInfo().getType()) {
+                throw new DdlException("The partition type of target table:" + targetOlapTable + " should be " +
                         " the same with the base table");
             }
+
             try {
-                List<Column> partitionColumns = targetOlapTable.getPartitionInfo().getPartitionColumns();
-                for (Column partColumn : partitionColumns) {
+                List<Column> basePartitionColumns = baseTable.getPartitionInfo().getPartitionColumns();
+                List<Column> targetPartitionColumns = targetOlapTable.getPartitionInfo().getPartitionColumns();
+
+                if (basePartitionColumns.size() != targetPartitionColumns.size()) {
+                    throw new DdlException("Target table should have same partition columns with base table");
+                }
+
+                for (int i = 0; i < basePartitionColumns.size(); ++i) {
+                    Column basePartitionColumn = basePartitionColumns.get(i);
+                    Column targetPartitionColumn = targetPartitionColumns.get(i);
+                    if (!basePartitionColumn.getName().equals(targetPartitionColumn.getName())) {
+                        throw new DdlException("Partition column" + targetPartitionColumns.get(i) +
+                                " of target table should have same name as " +
+                                basePartitionColumns.get(i) + "of base table");
+                    }
+                    if (!basePartitionColumn.getPrimitiveType().name().equals(targetPartitionColumn.getPrimitiveType().
+                            name())) {
+                        throw new DdlException("Partition column" + targetPartitionColumns.get(i) +
+                                " of target table should have same type as " +
+                                basePartitionColumns.get(i) + "of base table");
+                    }
+                }
+
+                for (Column partColumn : targetPartitionColumns) {
                     if (!mvColumns.contains(partColumn)) {
                         throw new DdlException("Materialized view should contain" +
                                 " the partition column: " + partColumn.toString());
@@ -657,7 +690,8 @@ public class MaterializedViewHandler extends AlterHandler {
                 List<String> baseColumnNames = mvColumnItem.getBaseColumnNames();
                 for (String baseColumnName : baseColumnNames) {
                     if (partitionOrDistributedColumnName.contains(baseColumnName.toLowerCase())
-                            && mvColumnItem.getAggregationType() != null) {
+                            && mvColumnItem.getAggregationType() != null
+                            && mvColumnItem.getAggregationType() != AggregateType.NONE) {
                         throw new DdlException("The partition columns " + baseColumnName
                                 + " must be key column in mv");
                     }
