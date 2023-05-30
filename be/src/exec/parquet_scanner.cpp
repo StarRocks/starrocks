@@ -372,7 +372,8 @@ Status ParquetScanner::open_next_reader() {
         Status st = create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
                                               CompressionTypePB::NO_COMPRESSION, &file);
         if (!st.ok()) {
-            LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string();
+            LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string()
+                         << " file: " << range_desc.path;
             return st;
         }
         _conv_ctx.current_file = file->filename();
@@ -402,7 +403,8 @@ Status ParquetScanner::get_schema(std::vector<SlotDescriptor>* schema) {
     Status st = create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
                                           CompressionTypePB::NO_COMPRESSION, &file);
     if (!st.ok()) {
-        LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string();
+        LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string()
+                     << " file: " << range_desc.path;
         return st;
     }
     _conv_ctx.current_file = file->filename();
