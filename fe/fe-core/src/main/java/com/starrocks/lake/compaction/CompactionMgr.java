@@ -19,12 +19,18 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collection;
@@ -36,18 +42,18 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
-public class CompactionManager {
-    private static final Logger LOG = LogManager.getLogger(CompactionManager.class);
+public class CompactionMgr {
+    private static final Logger LOG = LogManager.getLogger(CompactionMgr.class);
 
     @SerializedName(value = "partitionStatisticsHashMap")
-    private final ConcurrentHashMap<PartitionIdentifier, PartitionStatistics> partitionStatisticsHashMap =
+    private ConcurrentHashMap<PartitionIdentifier, PartitionStatistics> partitionStatisticsHashMap =
             new ConcurrentHashMap<>();
 
     private Selector selector;
     private Sorter sorter;
     private CompactionScheduler compactionScheduler;
 
-    public CompactionManager() {
+    public CompactionMgr() {
         try {
             init();
         } catch (Exception e) {
@@ -57,7 +63,7 @@ public class CompactionManager {
 
     void init() throws ClassNotFoundException, NoSuchMethodException, InvocationTargetException, InstantiationException,
             IllegalAccessException {
-        String packageName = CompactionManager.class.getPackage().getName();
+        String packageName = CompactionMgr.class.getPackage().getName();
         Class<?> selectorClazz = Class.forName(packageName + "." + Config.lake_compaction_selector);
         selector = (Selector) selectorClazz.getConstructor().newInstance();
 
@@ -167,14 +173,30 @@ public class CompactionManager {
         return compactionScheduler.getHistory();
     }
 
-    public static CompactionManager loadCompactionManager(DataInput in) throws IOException {
+    public static CompactionMgr loadCompactionManager(DataInput in) throws IOException {
         String json = Text.readString(in);
-        CompactionManager compactionManager = GsonUtils.GSON.fromJson(json, CompactionManager.class);
+        CompactionMgr compactionManager = GsonUtils.GSON.fromJson(json, CompactionMgr.class);
         try {
             compactionManager.init();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
         return compactionManager;
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, CompactionMgr.class.getName(), 1);
+        writer.writeJson(this);
+        writer.close();
+    }
+
+    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, CompactionMgr.class.getName());
+        try {
+            CompactionMgr compactionManager = reader.readJson(CompactionMgr.class);
+            partitionStatisticsHashMap = compactionManager.partitionStatisticsHashMap;
+        } finally {
+            reader.close();
+        }
     }
 }

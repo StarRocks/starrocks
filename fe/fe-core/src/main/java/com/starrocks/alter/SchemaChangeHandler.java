@@ -1248,7 +1248,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
 
-            if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().hasRunningOverwriteJob(olapTable.getId())) {
+            if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr().hasRunningOverwriteJob(olapTable.getId())) {
                 // because insert overwrite will create tmp partitions
                 throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
                         "please start schema change after insert overwrite finished");

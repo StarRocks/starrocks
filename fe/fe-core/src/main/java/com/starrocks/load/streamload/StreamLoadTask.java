@@ -71,7 +71,7 @@ import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Writable {
-    private static final Logger LOG = LogManager.getLogger(StreamLoadManager.class);
+    private static final Logger LOG = LogManager.getLogger(StreamLoadMgr.class);
 
     public enum State {
         BEGIN,

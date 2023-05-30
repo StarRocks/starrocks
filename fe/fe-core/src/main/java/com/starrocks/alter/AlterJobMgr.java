@@ -90,7 +90,7 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.mv.MVManager;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
@@ -197,7 +197,7 @@ public class AlterJobMgr {
                 throw new DdlException(
                         "Do not support create materialized view on primary key table[" + tableName + "]");
             }
-            if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().hasRunningOverwriteJob(olapTable.getId())) {
+            if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr().hasRunningOverwriteJob(olapTable.getId())) {
                 throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
                         "please start to create materialized view after insert overwrite");
             }
@@ -303,7 +303,7 @@ public class AlterJobMgr {
                         + "Do not allow to do ALTER ops");
             }
 
-            MVManager.getInstance().stopMaintainMV(materializedView);
+            MaterializedViewMgr.getInstance().stopMaintainMV(materializedView);
 
             // rename materialized view
             if (newMvName != null) {
@@ -344,7 +344,7 @@ public class AlterJobMgr {
                 throw new DdlException("Unsupported modification for materialized view");
             }
 
-            MVManager.getInstance().rebuildMaintainMV(materializedView);
+            MaterializedViewMgr.getInstance().rebuildMaintainMV(materializedView);
         } finally {
             db.writeUnlock();
         }

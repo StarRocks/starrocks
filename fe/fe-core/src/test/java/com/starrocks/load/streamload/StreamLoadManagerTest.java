@@ -116,7 +116,7 @@ public class StreamLoadManagerTest {
 
     @Test
     public void testBeginStreamLoadTask() throws UserException {
-        StreamLoadManager streamLoadManager = new StreamLoadManager();
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
         
         String dbName = "test_db";
         String tableName = "test_tbl";
@@ -145,7 +145,7 @@ public class StreamLoadManagerTest {
 
     @Test
     public void testChannelIdEqualChannelNum() throws UserException {
-        StreamLoadManager streamLoadManager = new StreamLoadManager();
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
         
         String dbName = "test_db";
         String tableName = "test_tbl";
@@ -165,7 +165,7 @@ public class StreamLoadManagerTest {
 
     @Test
     public void testGetTaskByName() throws UserException {
-        StreamLoadManager streamLoadManager = new StreamLoadManager();
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
         String tableName = "test_tbl";

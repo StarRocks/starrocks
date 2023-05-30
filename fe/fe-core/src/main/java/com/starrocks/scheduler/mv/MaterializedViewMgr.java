@@ -22,6 +22,10 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.server.GlobalStateMgr;
@@ -50,16 +54,16 @@ import java.util.stream.Collectors;
  * Manage lifetime of MV, including create, build, refresh, destroy
  * TODO(Murphy) refactor all MV management code into here
  */
-public class MVManager {
-    private static final Logger LOG = LogManager.getLogger(MVManager.class);
-    private static final MVManager INSTANCE = new MVManager();
+public class MaterializedViewMgr {
+    private static final Logger LOG = LogManager.getLogger(MaterializedViewMgr.class);
+    private static final MaterializedViewMgr INSTANCE = new MaterializedViewMgr();
 
     private final Map<MvId, MVMaintenanceJob> jobMap = new ConcurrentHashMap<>();
 
-    private MVManager() {
+    private MaterializedViewMgr() {
     }
 
-    public static MVManager getInstance() {
+    public static MaterializedViewMgr getInstance() {
         return INSTANCE;
     }
 
@@ -290,4 +294,30 @@ public class MVManager {
         List<MVMaintenanceJob> jobList;
     }
 
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        int numJson = 1 + jobMap.size();
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, MaterializedViewMgr.class.getName(), numJson);
+        writer.writeJson(jobMap.size());
+        for (MVMaintenanceJob mvMaintenanceJob : jobMap.values()) {
+            writer.writeJson(mvMaintenanceJob);
+        }
+
+        writer.close();
+    }
+
+    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, MaterializedViewMgr.class.getName());
+        try {
+            int numJson = reader.readInt();
+            for (int i = 0; i < numJson; ++i) {
+                MVMaintenanceJob mvMaintenanceJob = reader.readJson(MVMaintenanceJob.class);
+                // NOTE: job's view is not serialized, cannot use it directly!
+                MvId mvId = new MvId(mvMaintenanceJob.getDbId(), mvMaintenanceJob.getViewId());
+                mvMaintenanceJob.restore();
+                jobMap.put(mvId, mvMaintenanceJob);
+            }
+        } finally {
+            reader.close();
+        }
+    }
 }
