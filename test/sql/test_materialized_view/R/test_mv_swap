@@ -22,14 +22,14 @@ CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day,
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv1 with sync mode ;
 -- result:
-67318362-fe9a-11ed-ba33-02762d81431e
+0861e5cc-fe9c-11ed-b904-02762d81431e
 -- !result
 CREATE MATERIALIZED VIEW mv2 DISTRIBUTED BY hash(event_day) AS SELECT event_day, count(pv) FROM ss GROUP BY event_day;
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv2 with sync mode ;
 -- result:
-67bfb8b3-fe9a-11ed-ba33-02762d81431e
+08c6e93d-fe9c-11ed-b904-02762d81431e
 -- !result
 SELECT * FROM mv1 ORDER BY event_day;
 -- result:
@@ -69,11 +69,11 @@ INSERT INTO ss values('2020-01-15', 2);
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
 -- result:
-6882bac7-fe9a-11ed-ba33-02762d81431e
+0983cfc4-fe9c-11ed-b904-02762d81431e
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv2 with sync mode;
 -- result:
-68effb92-fe9a-11ed-ba33-02762d81431e
+09f6dcef-fe9c-11ed-b904-02762d81431e
 -- !result
 SELECT * FROM mv1 ORDER BY event_day;
 -- result:
@@ -84,4 +84,16 @@ SELECT * FROM mv2 ORDER BY event_day;
 -- result:
 2020-01-14	5
 2020-01-15	4
+-- !result
+ALTER MATERIALIZED VIEW mv1 SWAP WITH ss;
+-- result:
+E: (1064, 'Unexpected exception: Materialized view can only SWAP WITH materialized view')
+-- !result
+ALTER TABLE ss SWAP WITH mv1;
+-- result:
+E: (1064, 'Unexpected exception: Materialized view can only SWAP WITH materialized view')
+-- !result
+ALTER MATERIALIZED VIEW mv1 SWAP WITH mv1;
+-- result:
+E: (1064, 'Unexpected exception: New name conflicts with rollup index name: mv1')
 -- !result
