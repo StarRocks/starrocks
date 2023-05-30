@@ -196,7 +196,7 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
         auto physical_type = column->physical_type();
         auto logical_type = column->logical_type();
 
-        // See detail in https://github.com/apache/parquet-format/blob/master/LogicalTypes.md.
+        // See detail in https://arrow.apache.org/docs/cpp/parquet.html
         TypeDescriptor tp;
         switch (physical_type) {
         case parquet::Type::BOOLEAN:
@@ -209,15 +209,27 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
             tp = TypeDescriptor(TYPE_DOUBLE);
             break;
         case parquet::Type::INT32:
-            if (logical_type->is_date()) {
+            if (logical_type->is_int()) {
+                tp = TypeDescriptor(TYPE_INT);
+            } else if (logical_type->is_date()) {
                 tp = TypeDescriptor(TYPE_DATE);
+            } else if (logical_type->is_time()) {
+                tp = TypeDescriptor(TYPE_TIME);
+            } else if (logical_type->is_decimal()) {
+                tp = TypeDescriptor(TYPE_DECIMAL);
             } else {
                 tp = TypeDescriptor(TYPE_INT);
             }
             break;
         case parquet::Type::INT64:
-            if (logical_type->is_timestamp()) {
+            if (logical_type->is_int()) {
+                tp = TypeDescriptor(TYPE_BIGINT);
+            } else if (logical_type->is_time()) {
+                tp = TypeDescriptor(TYPE_TIME);
+            } else if (logical_type->is_timestamp()) {
                 tp = TypeDescriptor(TYPE_DATETIME);
+            } else if (logical_type->is_decimal()) {
+                tp = TypeDescriptor(TYPE_DECIMAL);
             } else {
                 tp = TypeDescriptor(TYPE_BIGINT);
             }
@@ -226,9 +238,22 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
             tp = TypeDescriptor(TYPE_DATETIME);
             break;
         case parquet::Type::BYTE_ARRAY:
-        case parquet::Type::FIXED_LEN_BYTE_ARRAY:
-            tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            if (logical_type->is_string()) {
+                tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            } else if (logical_type->is_decimal()) {
+                tp = TypeDescriptor(TYPE_DATETIME);
+            } else {
+                tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            }
             break;
+        case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
+            if (logical_type->is_decimal()) {
+                tp = TypeDescriptor(TYPE_DATETIME);
+            } else {
+                tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            }
+            break;
+        }
         default:
             return Status::NotSupported(
                     fmt::format("Unkown supported parquet physical type: {}, column name: {}", physical_type, name));
