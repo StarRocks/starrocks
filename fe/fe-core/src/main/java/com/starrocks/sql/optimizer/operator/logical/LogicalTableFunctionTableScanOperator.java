@@ -34,7 +34,7 @@ public class LogicalTableFunctionTableScanOperator extends LogicalScanOperator {
                                            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                            long limit,
                                            ScalarOperator predicate) {
-        super(OperatorType.LOGICAL_TEMP_EXT_TABLE_SCAN,
+        super(OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN,
                 table,
                 colRefToColumnMetaMap,
                 columnMetaToColRefMap,
@@ -45,7 +45,7 @@ public class LogicalTableFunctionTableScanOperator extends LogicalScanOperator {
     }
 
     private LogicalTableFunctionTableScanOperator() {
-        super(OperatorType.LOGICAL_TEMP_EXT_TABLE_SCAN);
+        super(OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN);
     }
 
     @Override

@@ -50,8 +50,8 @@ public class MergeLimitDirectRule extends TransformationRule {
     public static final MergeLimitDirectRule FILTER = new MergeLimitDirectRule(OperatorType.LOGICAL_FILTER);
     public static final MergeLimitDirectRule TABLE_FUNCTION =
             new MergeLimitDirectRule(OperatorType.LOGICAL_TABLE_FUNCTION);
-    public static final MergeLimitDirectRule TEMP_EXT_TABLE_SCAN =
-            new MergeLimitDirectRule(OperatorType.LOGICAL_TEMP_EXT_TABLE_SCAN);
+    public static final MergeLimitDirectRule TABLE_FUNCTION_TABLE_SCAN =
+            new MergeLimitDirectRule(OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN);
 
     private MergeLimitDirectRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_MERGE_LIMIT_DIRECT, Pattern.create(OperatorType.LOGICAL_LIMIT)

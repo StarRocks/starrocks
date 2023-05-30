@@ -222,7 +222,7 @@ public class RuleSet {
                 MergeLimitDirectRule.VALUES,
                 MergeLimitDirectRule.FILTER,
                 MergeLimitDirectRule.TABLE_FUNCTION,
-                MergeLimitDirectRule.TEMP_EXT_TABLE_SCAN
+                MergeLimitDirectRule.TABLE_FUNCTION_TABLE_SCAN
         ));
 
         REWRITE_RULES.put(RuleSetType.PARTITION_PRUNE, ImmutableList.of(
@@ -246,7 +246,7 @@ public class RuleSet {
                 PruneHDFSScanColumnRule.DELTALAKE_SCAN,
                 PruneHDFSScanColumnRule.FILE_SCAN,
                 PruneHDFSScanColumnRule.HUDI_SCAN,
-                PruneHDFSScanColumnRule.TEMP_EXT_TABLE_SCAN,
+                PruneHDFSScanColumnRule.TABLE_FUNCTION_TABLE_SCAN,
                 PruneScanColumnRule.JDBC_SCAN,
                 PruneScanColumnRule.BINLOG_SCAN,
                 new PruneProjectColumnsRule(),
@@ -279,7 +279,7 @@ public class RuleSet {
                 PushDownPredicateScanRule.ES_SCAN,
                 PushDownPredicateScanRule.META_SCAN,
                 PushDownPredicateScanRule.BINLOG_SCAN,
-                PushDownPredicateScanRule.TEMP_EXT_TABLE_SCAN,
+                PushDownPredicateScanRule.TABLE_FUNCTION_TABLE_SCAN,
                 new PushDownPredicateAggRule(),
                 new PushDownPredicateWindowRule(),
                 new PushDownPredicateJoinRule(),

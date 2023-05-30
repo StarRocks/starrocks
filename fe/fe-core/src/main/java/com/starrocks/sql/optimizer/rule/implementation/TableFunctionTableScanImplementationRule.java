@@ -29,8 +29,8 @@ import java.util.List;
 
 public class TableFunctionTableScanImplementationRule extends ImplementationRule {
     public TableFunctionTableScanImplementationRule() {
-        super(RuleType.IMP_TEMP_EXT_TABLE_LSCAN_TO_PSCAN,
-                Pattern.create(OperatorType.LOGICAL_TEMP_EXT_TABLE_SCAN));
+        super(RuleType.IMP_TABLE_FUNCTION_TABLE_LSCAN_TO_PSCAN,
+                Pattern.create(OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN));
     }
 
     @Override

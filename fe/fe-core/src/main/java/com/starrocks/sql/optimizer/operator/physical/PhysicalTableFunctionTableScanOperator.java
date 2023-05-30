@@ -38,7 +38,7 @@ public class PhysicalTableFunctionTableScanOperator extends PhysicalScanOperator
                                             long limit,
                                             ScalarOperator predicate,
                                             Projection projection) {
-        super(OperatorType.PHYSICAL_TEMP_EXT_TABLE_SCAN, table, columnRefMap, limit, predicate, projection);
+        super(OperatorType.PHYSICAL_TABLE_FUNCTION_TABLE_SCAN, table, columnRefMap, limit, predicate, projection);
         this.predicates = predicates;
     }
 
