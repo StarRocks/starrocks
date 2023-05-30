@@ -458,10 +458,10 @@ public class PlanTestNoneDBBase {
 
     private void checkWithIgnoreTabletListAndColRefIds(String expect, String actual) {
         expect = Stream.of(expect.split("\n")).filter(s -> !s.contains("tabletList"))
-                .map(str -> str.replaceAll("\\d+", ""))
+                .map(str -> str.replaceAll("\\d+", "").trim())
                 .collect(Collectors.joining("\n"));
         actual = Stream.of(actual.split("\n")).filter(s -> !s.contains("tabletList"))
-                .map(str -> str.replaceAll("\\d+", ""))
+                .map(str -> str.replaceAll("\\d+", "").trim())
                 .collect(Collectors.joining("\n"));
         Assert.assertEquals(expect, actual);
     }
