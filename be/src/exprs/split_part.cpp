@@ -49,9 +49,8 @@ static void split_index(const Slice& haystack, const Slice& delimiter, int32_t p
             }
 
             if (num == part_number) {
-                res = Slice(haystack.data + pre_offset + 1, offset - pre_offset - 1);
-            } else {
-                res;
+                res.data = haystack.data + pre_offset + 1;
+                res.size = offset - pre_offset - 1;
             }
         } else {
             // if delimiter is a string, use memmem to split
@@ -74,9 +73,8 @@ static void split_index(const Slice& haystack, const Slice& delimiter, int32_t p
             }
 
             if (num == part_number) {
-                res = Slice(haystack.data + pre_offset + delimiter.size, offset - pre_offset - delimiter.size);
-            } else {
-                res;
+                res.data = haystack.data + pre_offset + delimiter.size;
+                res.size = offset - pre_offset - delimiter.size;
             }
         }
     } else {
@@ -87,6 +85,7 @@ static void split_index(const Slice& haystack, const Slice& delimiter, int32_t p
         int32_t num = 0;
         auto substr = haystack_str;
         while (num <= part_number && offset >= 0) {
+        // TODO benchmarking rfind vs memrchr.
             offset = (int)substr.rfind(delimiter, offset);
             if (offset != -1) {
                 if (++num == part_number) {
@@ -102,12 +101,12 @@ static void split_index(const Slice& haystack, const Slice& delimiter, int32_t p
         num = (offset == -1 && num != 0) ? num + 1 : num;
         if (num == part_number) {
             if (offset == -1) {
-                res = Slice(haystack.data, pre_offset);
+                res.data = haystack.data;
+                res.size = pre_offset;
             } else {
-                res = Slice(haystack.data + offset + delimiter.size, pre_offset - offset - delimiter.size);
+                res.data = haystack.data + offset + delimiter.size;
+                res.size = pre_offset - offset - delimiter.size;
             }
-        } else {
-            res;
         }
     }
 }
@@ -121,6 +120,7 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
     DCHECK_EQ(columns.size(), 3);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
+    // TODO use SIMD algorithm to optimize
     if (columns[2]->is_constant()) {
         // if part_number is 0, return NULL.
         int32_t part_number = ColumnHelper::get_const_value<TYPE_INT>(columns[2]);
