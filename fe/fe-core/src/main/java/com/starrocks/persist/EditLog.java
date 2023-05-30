@@ -384,7 +384,8 @@ public class EditLog {
                     globalStateMgr.replayRenameRollup(info);
                     break;
                 }
-                case OperationType.OP_EXPORT_CREATE: {
+                case OperationType.OP_EXPORT_CREATE:
+                case OperationType.OP_EXPORT_CREATE_V2: {
                     ExportJob job = (ExportJob) journal.getData();
                     ExportMgr exportMgr = globalStateMgr.getExportMgr();
                     exportMgr.replayCreateExportJob(job);
@@ -395,6 +396,7 @@ public class EditLog {
                     ExportMgr exportMgr = globalStateMgr.getExportMgr();
                     exportMgr.replayUpdateJobState(op.getJobId(), op.getState());
                     break;
+                case OperationType.OP_EXPORT_UPDATE_INFO_V2:
                 case OperationType.OP_EXPORT_UPDATE_INFO:
                     ExportJob.ExportUpdateInfo exportUpdateInfo = (ExportJob.ExportUpdateInfo) journal.getData();
                     globalStateMgr.getExportMgr().replayUpdateJobInfo(exportUpdateInfo);
