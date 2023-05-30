@@ -85,7 +85,7 @@ static void split_index(const Slice& haystack, const Slice& delimiter, int32_t p
         int32_t num = 0;
         auto substr = haystack_str;
         while (num <= part_number && offset >= 0) {
-        // TODO benchmarking rfind vs memrchr.
+            // TODO benchmarking rfind vs memrchr.
             offset = (int)substr.rfind(delimiter, offset);
             if (offset != -1) {
                 if (++num == part_number) {
