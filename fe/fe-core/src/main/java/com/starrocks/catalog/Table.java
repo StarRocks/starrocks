@@ -665,12 +665,6 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return relatedMaterializedViews;
     }
 
-    public void replaceRelatedMaterializedView(MvId oldId, MvId newId) {
-        if (relatedMaterializedViews.remove(oldId)) {
-            relatedMaterializedViews.add(newId);
-        }
-    }
-
     public boolean isUnPartitioned() {
         return true;
     }
