@@ -193,20 +193,15 @@ Status LikePredicate::regex_prepare(FunctionContext* context, FunctionContext::F
     if (!context->is_notnull_constant_column(1)) {
         return Status::OK();
     }
-    if (context->get_num_args() == 3 && context->is_notnull_constant_column(2)) {
-        ColumnPtr column_ignore_case = context->get_constant_column(2);
-        Slice ignore_case_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_ignore_case);
+    if (context->is_notnull_constant_column(2)) {
+        Slice ignore_case_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(2));
         auto ignore_case = ignore_case_slice.to_string();
         if (ignore_case == "i") {
             state->set_ignore_case(true);
         } else if (ignore_case == "c"){
             state->set_ignore_case(false);
-        } else {
-            return Status::InternalError(
-                    "The case-insensitive parameter in regular expression matching functions must be either 'i' for case-insensitive or 'c' for case-sensitive.");
         }
     }
-
 
     auto column = context->get_constant_column(1);
     auto pattern = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
