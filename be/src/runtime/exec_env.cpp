@@ -289,13 +289,13 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                                 workgroup::WorkGroupScanTaskQueue::SchedEntityType::OLAP));
     _scan_executor_with_workgroup->initialize(num_io_threads);
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
-    if (!store_paths.empty()) {
-        Status status = _load_path_mgr->init();
-        if (!status.ok()) {
-            LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
-            exit(-1);
-        }
+    // if (!store_paths.empty()) {
+    Status status = _load_path_mgr->init();
+    if (!status.ok()) {
+        LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
+        exit(-1);
     }
+    //}
 
 #if defined(USE_STAROS) && !defined(BE_TEST)
     _lake_location_provider = new lake::StarletLocationProvider();
