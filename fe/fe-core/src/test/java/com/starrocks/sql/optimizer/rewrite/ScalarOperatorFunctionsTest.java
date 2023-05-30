@@ -570,6 +570,45 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void makeDate() {
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setThreadLocalInfo();
+        ctx.setStartTime();
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createNull(Type.INT),
+                        ConstantOperator.createNull(Type.INT)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createNull(Type.INT),
+                        ConstantOperator.createInt(1)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(1),
+                        ConstantOperator.createNull(Type.INT)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(2000), ConstantOperator.createInt(0)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(2000), ConstantOperator.createInt(367)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(-1), ConstantOperator.createInt(1)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(10000), ConstantOperator.createInt(1)));
+
+        assertEquals(ConstantOperator.createDate(LocalDateTime.of(2000, 1, 1, 0, 0, 0)),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(2000), ConstantOperator.createInt(1)));
+
+        assertEquals(ConstantOperator.createDate(LocalDateTime.of(2000, 12, 31, 0, 0, 0)),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(2000), ConstantOperator.createInt(366)));
+
+        assertEquals(ConstantOperator.createDate(LocalDateTime.of(0, 1, 1, 0, 0, 0)),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(0), ConstantOperator.createInt(1)));
+    }
+    @Test
     public void floor() {
         assertEquals(100, ScalarOperatorFunctions.floor(O_FLOAT_100).getBigint());
     }

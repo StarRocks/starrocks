@@ -705,4 +705,100 @@ select week_iso(NULL);
 None
 -- !result
 
+-- name: test_makedate
+CREATE TABLE IF NOT EXISTS `makedate_test` (
+  `id` int,
+  `col_year` int,
+  `col_day` int
+)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `makedate_test`(id, col_year, col_day)
+VALUES (1, NUll, NUll),
+       (2, 1, NUll),
+       (3, NULL, 1),
+       (4, 0, 1),
+       (5, 2023, 0),
+       (6, 2023, 32),
+       (7, 2023, 365),
+       (8, 2023, 366),
+       (9, 9999, 1),
+       (10, 9999, 365),
+       (11, 9999, 366),
+       (12, 10000, 1),
+       (13, 1, -1);
+-- result:
+-- !result
+select makedate(NUll,NUll);
+-- result:
+None
+-- !result
+select makedate(1,NUll);
+-- result:
+None
+-- !result
+select makedate(NUll,1);
+-- result:
+None
+-- !result
+select makedate(0,1);
+-- result:
+0000-01-01
+-- !result
+select makedate(2023, 0);
+-- result:
+None
+-- !result
+select makedate(2023, 32);
+-- result:
+2023-02-01
+-- !result
+select makedate(2023, 365);
+-- result:
+2023-12-31
+-- !result
+select makedate(2023, 366);
+-- result:
+None
+-- !result
+select makedate(9999, 1);
+-- result:
+9999-01-01
+-- !result
+select makedate(9999, 365);
+-- result:
+9999-12-31
+-- !result
+select makedate(9999, 366);
+-- result:
+None
+-- !result
+select makedate(10000, 1);
+-- result:
+None
+-- !result
+select makedate(1, -1);
+-- result:
+None
+-- !result
+select makedate(col_year, col_day) from makedate_test order by id;
+-- result:
+None
+None
+None
+0000-01-01
+None
+2023-02-01
+2023-12-31
+None
+9999-01-01
+9999-12-31
+None
+None
+None
+-- !result
 

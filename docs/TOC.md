@@ -488,6 +488,7 @@
       + [hours_add](./sql-reference/sql-functions/date-time-functions/hours_add.md)
       + [hours_diff](./sql-reference/sql-functions/date-time-functions/hours_diff.md)
       + [hours_sub](./sql-reference/sql-functions/date-time-functions/hours_sub.md)
+      + [makedate](./sql-reference/sql-functions/date-time-functions/makedate.md)
       + [microseconds_add](./sql-reference/sql-functions/date-time-functions/microseconds_add.md)
       + [microseconds_sub](./sql-reference/sql-functions/date-time-functions/microseconds_sub.md)
       + [minute](./sql-reference/sql-functions/date-time-functions/minute.md)
