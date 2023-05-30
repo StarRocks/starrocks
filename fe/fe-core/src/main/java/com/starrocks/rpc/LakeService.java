@@ -16,6 +16,8 @@
 package com.starrocks.rpc;
 
 import com.baidu.jprotobuf.pbrpc.ProtobufRPC;
+import com.starrocks.proto.AbortCompactionRequest;
+import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
 import com.starrocks.proto.CompactRequest;
@@ -79,5 +81,8 @@ public interface LakeService {
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "restore_snapshots", onceTalkTimeout = 5000)
     Future<RestoreSnapshotsResponse> restoreSnapshots(RestoreSnapshotsRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "abort_compaction", onceTalkTimeout = 5000)
+    Future<AbortCompactionResponse> abortCompaction(AbortCompactionRequest request);
 }
 
