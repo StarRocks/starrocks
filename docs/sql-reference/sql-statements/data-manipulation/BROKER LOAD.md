@@ -226,7 +226,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
     | kerberos_keytab                 | The save path of the Kerberos keytab file. |
     | kerberos_keytab_content         | The Base64-encoded content of the the Kerberos keytab file. You can choose to specify either `kerberos_keytab` or `kerberos_keytab_content`. |
 
-    If you load data from a single HDFS cluster and you have configured multiple Kerberos users, you must [deploy at least one independent broker group](../../../deployment/deploy_broker.md) (in most cases, one broker group is sufficient) and in the load statement you must input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. Additionally, you must open the broker startup script file **start_broker.sh** and modify line 42 of the file to enable the brokers to read the **krb5.conf** file. Example:
+    If you load data from a single HDFS cluster and you have configured multiple Kerberos users, you need to [deploy only one independent broker group](../../../deployment/deploy_broker.md) and in the load statement you must input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. Additionally, you must open the broker startup script file **start_broker.sh** and modify line 42 of the file to enable the brokers to read the **krb5.conf** file. Example:
 
     ```Plain
     export JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx1024m -Dfile.encoding=UTF-8 -Djava.security.krb5.conf=/etc/krb5.conf"
@@ -234,7 +234,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
 
     > **NOTE**
     >
-    > - In the preceding example, `/etc/krb5.conf` can be replaced with your actual save path of the **krb5.conf** file. Make sure that the broker has read permissions on that file. If multiple brokers are deployed, you must modify the **start_broker.sh** file for each of these brokers and then restart the nodes that host the brokers to make the modifications take effect.
+    > - In the preceding example, `/etc/krb5.conf` can be replaced with your actual save path of the **krb5.conf** file. Make sure that the broker has read permissions on that file. If the broker group consists of multiple brokers, you must modify the **start_broker.sh** file on each broker node and then restart the broker nodes to make the modifications take effect.
     > - You can use the [SHOW BROKER](../Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster.
 
 - HA configuration
@@ -243,15 +243,15 @@ Open-source HDFS supports two authentication methods: simple authentication and 
 
   - If you load data from a single HDFS cluster and you have configured one Kerberos user, both load-based loading and load-free loading are supported.
   
-    - To perform load-based loading, you must [deploy at least one independent broker group](../../../deployment/deploy_broker.md) (in most cases, one broker group is sufficient), and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the node that hosts the broker group for your HDFS cluster.
+    - To perform load-based loading, you need to [deploy only one independent broker group](../../../deployment/deploy_broker.md), and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves your HDFS cluster.
   
-    - To perform load-free loading, you must place the `hdfs-site.xml` file to the `{deploy}/conf` paths of each FE node and each BE node.
+    - To perform load-free loading, you need to place the `hdfs-site.xml` file to the `{deploy}/conf` paths of each FE node and each BE node.
   
-  - If you load data from a single HDFS cluster and you have configured multiple Kerberos users, only broker-based loading is supported. You must [deploy at least one independent broker group](../../../deployment/deploy_broker.md) (in most cases, one broker group is sufficient), and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the node that hosts the broker group for your HDFS cluster.
+  - If you load data from a single HDFS cluster and you have configured multiple Kerberos users, only broker-based loading is supported. You need to [deploy only one independent broker group](../../../deployment/deploy_broker.md), and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves your HDFS cluster.
 
-  - If you load data from multiple HDFS clusters, only broker-based loading is supported. You must [deploy one independent broker group](../../../deployment/deploy_broker.md) for each of these HDFS clusters, and take one of the following actions to enable the brokers to read information about the HDFS cluster nodes:
+  - If you load data from multiple HDFS clusters, only broker-based loading is supported. You need to [deploy one independent broker group](../../../deployment/deploy_broker.md) for each of these HDFS clusters, and take one of the following actions to enable the brokers to read information about the HDFS cluster nodes:
 
-    - Place the `hdfs-site.xml` file to the `{deploy}/conf` path on the node that hosts the broker group for each HDFS cluster. As such, StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the nodes in that HDFS cluster.
+    - Place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves each HDFS cluster. As such, StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the nodes in that HDFS cluster.
 
     - Add the following HA configuration at job creation:
 
