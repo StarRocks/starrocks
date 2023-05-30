@@ -1436,6 +1436,7 @@ public class GlobalStateMgr {
                     streamLoadMgr.load(dis);
                     MaterializedViewMgr.getInstance().load(dis);
                     globalFunctionMgr.load(dis);
+                    backupHandler.loadBackupHandlerV2(dis);
                 } catch (SRMetaBlockException | SRMetaBlockEOFException e) {
                     LOG.error("load image failed", e);
                     throw new IOException("load image failed", e);
@@ -1453,7 +1454,6 @@ public class GlobalStateMgr {
                 checksum = localMetastore.loadCluster(dis, checksum);
                 checksum = loadResources(dis, checksum);
                 checksum = exportMgr.loadExportJob(dis, checksum);
-                checksum = backupHandler.loadBackupHandler(dis, checksum, this);
                 checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
                 checksum = taskManager.loadTasks(dis, checksum);
                 checksum = localMetastore.loadAutoIncrementId(dis, checksum);
@@ -1823,6 +1823,7 @@ public class GlobalStateMgr {
                     streamLoadMgr.save(dos);
                     MaterializedViewMgr.getInstance().save(dos);
                     globalFunctionMgr.save(dos);
+                    backupHandler.saveBackupHandlerV2(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("save image failed", e);
                     throw new IOException("save image failed", e);
@@ -1835,7 +1836,6 @@ public class GlobalStateMgr {
                 checksum = localMetastore.saveCluster(dos, checksum);
                 checksum = resourceMgr.saveResources(dos, checksum);
                 checksum = exportMgr.saveExportJob(dos, checksum);
-                checksum = backupHandler.saveBackupHandler(dos, checksum);
                 checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
                 checksum = taskManager.saveTasks(dos, checksum);
                 checksum = localMetastore.saveAutoIncrementId(dos, checksum);
