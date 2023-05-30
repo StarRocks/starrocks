@@ -108,11 +108,11 @@ import java.util.stream.Collectors;
 
 /**
  * Core logic of materialized view refresh task run
- * PartitionBasedMaterializedViewRefreshProcessor is not thread safe for concurrent runs of the same materialized view
+ * PartitionBasedMvRefreshProcessor is not thread safe for concurrent runs of the same materialized view
  */
-public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunProcessor {
+public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
-    private static final Logger LOG = LogManager.getLogger(PartitionBasedMaterializedViewRefreshProcessor.class);
+    private static final Logger LOG = LogManager.getLogger(PartitionBasedMvRefreshProcessor.class);
 
     public static final String MV_ID = "mvId";
 
@@ -123,6 +123,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     private MvTaskRunContext mvContext;
     // table id -> <base table info, snapshot table>
     private Map<Long, Pair<BaseTableInfo, Table>> snapshotBaseTables;
+
+    private long oldTransactionVisibleWaitTimeout;
 
     @VisibleForTesting
     public MvTaskRunContext getMvContext() {
@@ -142,7 +144,14 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     @Override
     public void processTaskRun(TaskRunContext context) throws Exception {
         prepare(context);
+        try {
+            doMvRefresh(context);
+        } finally {
+            postProcess();
+        }
+    }
 
+    private void doMvRefresh(TaskRunContext context) throws Exception {
         InsertStmt insertStmt = null;
         ExecPlan execPlan = null;
         int retryNum = 0;
@@ -228,6 +237,10 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         if (mvContext.hasNextBatchPartition()) {
             generateNextTaskRun();
         }
+    }
+
+    private void postProcess() {
+        mvContext.ctx.getSessionVariable().setTransactionVisibleWaitTimeout(oldTransactionVisibleWaitTimeout);
     }
 
     public MVTaskRunExtraMessage getMVTaskRunExtraMessage() {
@@ -452,6 +465,11 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             LOG.warn(errorMsg);
             throw new DmlException(errorMsg);
         }
+        // wait util transaction is visible for mv refresh task
+        // because mv will update base tables' visible version after insert, the mv's visible version
+        // should keep up with the base tables, or it will return outdated result.
+        oldTransactionVisibleWaitTimeout = context.ctx.getSessionVariable().getTransactionVisibleWaitTimeout();
+        context.ctx.getSessionVariable().setTransactionVisibleWaitTimeout(Long.MAX_VALUE / 1000);
         mvContext = new MvTaskRunContext(context);
     }
 
@@ -950,6 +968,10 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         ConnectContext ctx = mvContext.getCtx();
         StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
         ctx.setExecutor(executor);
+        if (ctx.getParent() != null && ctx.getParent().getExecutor() != null) {
+            StmtExecutor parentStmtExecutor = ctx.getParent().getExecutor();
+            parentStmtExecutor.registerSubStmtExecutor(executor);
+        }
         ctx.setStmtId(new AtomicInteger().incrementAndGet());
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
         try {

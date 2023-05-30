@@ -68,7 +68,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static com.starrocks.scheduler.TaskRun.PARTITION_END;
 import static com.starrocks.scheduler.TaskRun.PARTITION_START;
 
-public class PartitionBasedMaterializedViewRefreshProcessorTest {
+public class PartitionBasedMvRefreshProcessorTest {
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -287,7 +287,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
             new StmtExecutor(connectContext, insertSql).execute();
 
             taskRun.executeTaskRun();
-            PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                     taskRun.getProcessor();
 
             MvTaskRunContext mvContext = processor.getMvContext();
@@ -608,7 +608,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
 
         MvTaskRunContext mvContext = processor.getMvContext();
@@ -684,7 +684,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
 
         MvTaskRunContext mvContext = processor.getMvContext();
@@ -696,7 +696,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         mockedHiveMetadata.addPartition("partitioned_db", "lineitem_par", "l_shipdate=1998-01-06");
 
         taskRun.executeTaskRun();
-        processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
+        processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
 
@@ -728,7 +728,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
 
         MvTaskRunContext mvContext = processor.getMvContext();
@@ -741,7 +741,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 ImmutableList.of("par_col=0/par_date=2020-01-03"));
 
         taskRun.executeTaskRun();
-        processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
+        processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan, "par_date >= '2020-01-03', 9: par_date < '2020-01-04'", "partitions=2/6");
@@ -750,7 +750,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 ImmutableList.of("par_col=0"));
 
         taskRun.executeTaskRun();
-        processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
+        processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan, "partitions=6/6", "partitions=3/3");
@@ -776,7 +776,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
 
         MvTaskRunContext mvContext = processor.getMvContext();
@@ -789,7 +789,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 ImmutableList.of("l_shipdate=1998-01-04"));
 
         taskRun.executeTaskRun();
-        processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
+        processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
 
@@ -799,7 +799,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         mockedHiveMetadata.updateTable("tpch", "orders");
 
         taskRun.executeTaskRun();
-        processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
+        processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan, "partitions=6/6", "partitions=1/1");
@@ -823,7 +823,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
 
         MvTaskRunContext mvContext = processor.getMvContext();
@@ -835,7 +835,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         mockedHiveMetadata.updateTable("tpch", "nation");
 
         taskRun.executeTaskRun();
-        processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
+        processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan, "partitions=1/1");
@@ -866,7 +866,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
 
         MvTaskRunContext mvContext = processor.getMvContext();
@@ -881,7 +881,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 ImmutableList.of("l_shipdate=1998-01-02", "l_shipdate=1998-01-03"));
 
         taskRun.executeTaskRun();
-        processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
+        processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan, "PARTITION PREDICATES: 16: l_shipdate >= '1998-01-02', 16: l_shipdate < '1998-01-04'",
@@ -915,7 +915,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
 
         MvTaskRunContext mvContext = processor.getMvContext();
@@ -928,7 +928,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 ImmutableList.of("l_shipdate=1998-01-02", "l_shipdate=1998-01-03"));
 
         taskRun.executeTaskRun();
-        processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
+        processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan, "partitions=6/6");
@@ -960,7 +960,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
 
         MvTaskRunContext mvContext = processor.getMvContext();
@@ -973,7 +973,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 ImmutableList.of("l_shipdate=1998-01-02", "l_shipdate=1998-01-03"));
 
         taskRun.executeTaskRun();
-        processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
+        processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan, "partitions=6/6");
@@ -1004,7 +1004,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
 
         MvTaskRunContext mvContext = processor.getMvContext();
@@ -1017,7 +1017,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 ImmutableList.of("l_shipdate=1998-01-02", "l_shipdate=1998-01-03"));
 
         taskRun.executeTaskRun();
-        processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
+        processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan, "PARTITION PREDICATES: 16: l_shipdate >= '1998-01-02', 16: l_shipdate < '1998-01-04'",
@@ -1053,7 +1053,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
 
         MvTaskRunContext mvContext = processor.getMvContext();
@@ -1066,7 +1066,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 ImmutableList.of("l_shipdate=1998-01-02", "l_shipdate=1998-01-03"));
 
         taskRun.executeTaskRun();
-        processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
+        processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan, "PARTITION PREDICATES: 16: l_shipdate >= '1998-01-02', 16: l_shipdate < '1998-01-04'",
@@ -1102,7 +1102,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
 
         MvTaskRunContext mvContext = processor.getMvContext();
@@ -1115,7 +1115,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 ImmutableList.of("par_col=0"));
 
         taskRun.executeTaskRun();
-        processor = (PartitionBasedMaterializedViewRefreshProcessor) taskRun.getProcessor();
+        processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan, "par_col >= 0, 4: par_col < 1", "partitions=1/3");
@@ -1166,7 +1166,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         Assert.assertEquals(1, materializedView.getPartition("p19980104").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p19980105").getVisibleVersion());
 
-        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -1205,7 +1205,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(mvProperties).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
 
         MvTaskRunContext mvContext = processor.getMvContext();
@@ -1244,7 +1244,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(mvProperties).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-        PartitionBasedMaterializedViewRefreshProcessor processor = (PartitionBasedMaterializedViewRefreshProcessor)
+        PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
                 taskRun.getProcessor();
 
         MvTaskRunContext mvContext = processor.getMvContext();
@@ -1347,7 +1347,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         String insertSql = "insert into tbl1 partition(p0) values('2021-12-01', 2, 10);";
         new StmtExecutor(connectContext, insertSql).execute();
 
-        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
+        new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public void processTaskRun(TaskRunContext context) throws Exception {
                 throw new RuntimeException("new exception");
@@ -1367,7 +1367,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
     public void testBaseTablePartitionRename(TaskRun taskRun)
             throws Exception {
         // mv need refresh with base table partition p1, p1 renamed with p10 after collect and before insert overwrite
-        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
+        new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             private Map<Long, Pair<BaseTableInfo, Table>> collectBaseTables(MaterializedView materializedView) {
                 Map<Long, Pair<BaseTableInfo, Table>> olapTables = Maps.newHashMap();
@@ -1419,7 +1419,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
             throws Exception {
         // mv need refresh with base table partition p2, p2 replace with tp2 after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
-        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
+        new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public Map<Long, Pair<BaseTableInfo, Table>> collectBaseTables(MaterializedView materializedView) {
                 Map<Long, Pair<BaseTableInfo, Table>> olapTables = Maps.newHashMap();
@@ -1478,7 +1478,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
             throws Exception {
         // mv need refresh with base table partition p3, add partition p99 after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
-        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
+        new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public Map<Long, Pair<BaseTableInfo, Table>> collectBaseTables(MaterializedView materializedView) {
                 Map<Long, Pair<BaseTableInfo, Table>> olapTables = Maps.newHashMap();
@@ -1531,7 +1531,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
             throws Exception {
         // mv need refresh with base table partition p3, add partition p99 after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
-        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
+        new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan,
                                                 InsertStmt insertStmt) throws Exception {
@@ -1569,7 +1569,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
             throws Exception {
         // mv need refresh with base table partition p4, drop partition p4 after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
-        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
+        new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             private Map<Long, Pair<BaseTableInfo, Table>> collectBaseTables(MaterializedView materializedView) {
                 Map<Long, Pair<BaseTableInfo, Table>> olapTables = Maps.newHashMap();
@@ -1618,7 +1618,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
             throws Exception {
         // drop partition p4 after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
-        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
+        new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan,
                                                 InsertStmt insertStmt) throws Exception {
@@ -1670,7 +1670,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
         materializedView.getTableProperty().setPartitionRefreshNumber(3);
-        PartitionBasedMaterializedViewRefreshProcessor processor = new PartitionBasedMaterializedViewRefreshProcessor();
+        PartitionBasedMvRefreshProcessor processor = new PartitionBasedMvRefreshProcessor();
 
         MvTaskRunContext mvContext = new MvTaskRunContext(new TaskRunContext());
 

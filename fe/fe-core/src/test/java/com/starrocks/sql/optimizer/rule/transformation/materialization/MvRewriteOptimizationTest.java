@@ -32,9 +32,6 @@ import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.TaskBuilder;
-import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.QueryRelation;
@@ -2415,21 +2412,13 @@ public class MvRewriteOptimizationTest {
         return mv;
     }
 
-    private void refreshMaterializedView(String dbName, String mvName) throws Exception {
-        MaterializedView mv = getMv(dbName, mvName);
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
-        if (!taskManager.containTask(mvTaskName)) {
-            Task task = TaskBuilder.buildMvTask(mv, "test");
-            TaskBuilder.updateTaskInfo(task, mv);
-            taskManager.createTask(task, false);
-        }
-        taskManager.executeTaskSync(mvTaskName);
+    private void refreshMaterializedView(String dbName, String mvName) throws SQLException {
+        cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
     }
 
     private void createAndRefreshMv(String dbName, String mvName, String sql) throws Exception {
         starRocksAssert.withMaterializedView(sql);
-        refreshMaterializedView(dbName, mvName);
+        cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
     }
 
     private void dropMv(String dbName, String mvName) throws Exception {

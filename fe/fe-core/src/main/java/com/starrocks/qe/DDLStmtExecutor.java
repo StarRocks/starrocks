@@ -303,9 +303,8 @@ public class DDLStmtExecutor {
             List<String> info = Lists.newArrayList();
             ErrorReport.wrapWithRuntimeException(() -> {
                 // The priority of manual refresh is higher than that of general refresh
-                String taskId = context.getGlobalStateMgr().getLocalMetastore()
-                        .refreshMaterializedView(stmt, Constants.TaskRunPriority.HIGH.value());
-                info.add(taskId);
+                String taskRunId = context.getGlobalStateMgr().getLocalMetastore().refreshMaterializedView(stmt);
+                info.add(taskRunId);
             });
 
             return new ShowResultSet(RefreshMaterializedViewStatement.META_DATA, Arrays.asList(info));
