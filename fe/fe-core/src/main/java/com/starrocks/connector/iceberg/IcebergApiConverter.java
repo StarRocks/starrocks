@@ -109,6 +109,8 @@ public class IcebergApiConverter {
             switch (primitiveType) {
                 case BOOLEAN:
                     return Types.BooleanType.get();
+                case TINYINT:
+                case SMALLINT:
                 case INT:
                     return Types.IntegerType.get();
                 case BIGINT:
@@ -124,6 +126,8 @@ public class IcebergApiConverter {
                 case VARCHAR:
                 case CHAR:
                     return Types.StringType.get();
+                case VARBINARY:
+                    return Types.BinaryType.get();
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:
