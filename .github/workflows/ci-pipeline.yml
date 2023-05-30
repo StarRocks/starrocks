@@ -274,6 +274,7 @@ jobs:
               - 'run-fe-ut.sh'
               - 'java-extensions/**'
               - 'build.sh'
+              - 'test/**'
 
       - run: echo ${{ steps.changes.outputs.fe }}
 

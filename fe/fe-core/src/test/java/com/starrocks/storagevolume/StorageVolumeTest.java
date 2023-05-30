@@ -15,6 +15,9 @@
 package com.starrocks.storagevolume;
 
 import com.staros.proto.AwsAssumeIamRoleCredentialInfo;
+import com.staros.proto.AwsCredentialInfo;
+import com.staros.proto.AwsDefaultCredentialInfo;
+import com.staros.proto.AwsInstanceProfileCredentialInfo;
 import com.staros.proto.AwsSimpleCredentialInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
@@ -239,5 +242,42 @@ public class StorageVolumeTest {
         } catch (AnalysisException e) {
             Assert.assertTrue(e.getMessage().contains("Storage params is not valid"));
         }
+    }
+
+    @Test
+    public void testFromFileStoreInfo() throws AnalysisException {
+        AwsSimpleCredentialInfo simpleCredentialInfo = AwsSimpleCredentialInfo.newBuilder()
+                .setAccessKey("ak").setAccessKeySecret("sk").build();
+        AwsCredentialInfo credentialInfo = AwsCredentialInfo.newBuilder().setSimpleCredential(simpleCredentialInfo).build();
+        S3FileStoreInfo s3fs = S3FileStoreInfo.newBuilder().setBucket("/bucket")
+                .setEndpoint("endpoint").setRegion("region").setCredential(credentialInfo).build();
+        FileStoreInfo fs = FileStoreInfo.newBuilder().setS3FsInfo(s3fs).setFsKey("0").setFsType(FileStoreType.S3).build();
+        StorageVolume sv = StorageVolume.fromFileStoreInfo(fs);
+        Assert.assertEquals(CloudType.AWS, sv.getCloudConfiguration().getCloudType());
+
+        AwsAssumeIamRoleCredentialInfo assumeIamRoleCredentialInfo = AwsAssumeIamRoleCredentialInfo.newBuilder()
+                .setIamRoleArn("role-Arn").setExternalId("externId").build();
+        credentialInfo = AwsCredentialInfo.newBuilder().setAssumeRoleCredential(assumeIamRoleCredentialInfo).build();
+        s3fs = S3FileStoreInfo.newBuilder().setBucket("/bucket")
+                .setEndpoint("endpoint").setRegion("region").setCredential(credentialInfo).build();
+        fs = FileStoreInfo.newBuilder().setS3FsInfo(s3fs).setFsKey("0").setFsType(FileStoreType.S3).build();
+        sv = StorageVolume.fromFileStoreInfo(fs);
+        Assert.assertEquals(CloudType.AWS, sv.getCloudConfiguration().getCloudType());
+
+        AwsDefaultCredentialInfo defaultCredentialInfo = AwsDefaultCredentialInfo.newBuilder().build();
+        credentialInfo = AwsCredentialInfo.newBuilder().setDefaultCredential(defaultCredentialInfo).build();
+        s3fs = S3FileStoreInfo.newBuilder().setBucket("/bucket")
+                .setEndpoint("endpoint").setRegion("region").setCredential(credentialInfo).build();
+        fs = FileStoreInfo.newBuilder().setS3FsInfo(s3fs).setFsKey("0").setFsType(FileStoreType.S3).build();
+        sv = StorageVolume.fromFileStoreInfo(fs);
+        Assert.assertEquals(CloudType.AWS, sv.getCloudConfiguration().getCloudType());
+
+        AwsInstanceProfileCredentialInfo instanceProfileCredentialInfo = AwsInstanceProfileCredentialInfo.newBuilder().build();
+        credentialInfo = AwsCredentialInfo.newBuilder().setProfileCredential(instanceProfileCredentialInfo).build();
+        s3fs = S3FileStoreInfo.newBuilder().setBucket("/bucket")
+                .setEndpoint("endpoint").setRegion("region").setCredential(credentialInfo).build();
+        fs = FileStoreInfo.newBuilder().setS3FsInfo(s3fs).setFsKey("0").setFsType(FileStoreType.S3).build();
+        sv = StorageVolume.fromFileStoreInfo(fs);
+        Assert.assertEquals(CloudType.AWS, sv.getCloudConfiguration().getCloudType());
     }
 }

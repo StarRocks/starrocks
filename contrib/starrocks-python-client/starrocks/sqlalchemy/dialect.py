@@ -12,9 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from sqlalchemy import exc, log
+import logging
+from typing import Any, Dict, List
+
+from sqlalchemy import log, exc
 from sqlalchemy.dialects.mysql.mysqldb import MySQLDialect_mysqldb
-from sqlalchemy.engine import reflection
+from sqlalchemy.engine import Connection
+
+from starrocks.sqlalchemy import datatype
+
+logger = logging.getLogger(__name__)
 
 
 @log.class_logger
@@ -29,11 +36,6 @@ class StarRocksDialect(MySQLDialect_mysqldb):
     def __init__(self, *args, **kw):
         super(StarRocksDialect, self).__init__(*args, **kw)
 
-    @reflection.cache
-    def _get_default_schema_name(self, connection):
-        return connection.exec_driver_sql("SELECT DATABASE()").scalar()
-
-    @reflection.cache
     def has_table(self, connection, table_name, schema=None, **kw):
         self._ensure_has_table_connection(connection)
 
@@ -42,49 +44,18 @@ class StarRocksDialect(MySQLDialect_mysqldb):
 
         assert schema is not None
 
-        full_name = ".".join(
-            self.identifier_preparer._quote_free_identifiers(
-                schema, table_name
-            )
-        )
+        quote = self.identifier_preparer.quote_identifier
+        full_name = quote(table_name)
+        if schema:
+            full_name = "{}.{}".format(quote(schema), full_name)
 
-        # DESCRIBE *must* be used because there is no information schema
-        # table that returns information on temp tables that is consistently
-        # available on MariaDB / MySQL / engine-agnostic etc.
-        # therefore we have no choice but to use DESCRIBE and an error catch
-        # to detect "False".  See issue #9058
+        res = connection.execute(f"DESCRIBE {full_name}")
+        return res.first() is not None
 
-        try:
-            with connection.exec_driver_sql(
-                    f"DESCRIBE {full_name}",
-                    execution_options={"skip_user_error_events": True},
-            ) as rs:
-                return rs.fetchone() is not None
-        except exc.DBAPIError as e:
-            # https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html  # noqa: E501
-            # there are a lot of codes that *may* pop up here at some point
-            # but we continue to be fairly conservative.  We include:
-            # 1146: Table '%s.%s' doesn't exist - what every MySQL has emitted
-            # for decades
-            #
-            # mysql 8 suddenly started emitting:
-            # 1049: Unknown database '%s'  - for nonexistent schema
-            #
-            # also added:
-            # 1051: Unknown table '%s' - not known to emit
-            #
-            # there's more "doesn't exist" kinds of messages but they are
-            # less clear if mysql 8 would suddenly start using one of those
-            if self._extract_error_code(e.orig) in (1146, 1049, 1051):
-                return False
-            raise
-
-    @reflection.cache
     def get_schema_names(self, connection, **kw):
         rp = connection.exec_driver_sql("SHOW schemas")
         return [r[0] for r in rp]
 
-    @reflection.cache
     def get_table_names(self, connection, schema=None, **kw):
         """Return a Unicode SHOW TABLES from a given schema."""
         if schema is not None:
@@ -105,7 +76,6 @@ class StarRocksDialect(MySQLDialect_mysqldb):
             if row[1] == "BASE TABLE"
         ]
 
-    @reflection.cache
     def get_view_names(self, connection, schema=None, **kw):
         if schema is None:
             schema = self.default_schema_name
@@ -120,88 +90,71 @@ class StarRocksDialect(MySQLDialect_mysqldb):
             if row[1] in ("VIEW", "SYSTEM VIEW")
         ]
 
-    def _fetch_setting(self, connection, setting_name):
-        charset = self._connection_charset
+    def get_columns(self, connection: Connection, table_name: str, schema: str = None, **kw) -> List[Dict[str, Any]]:
+        if not self.has_table(connection, table_name, schema):
+            raise exc.NoSuchTableError(f"schema={schema}, table={table_name}")
+        schema = schema or self._get_default_schema_name(connection)
 
-        if self.server_version_info and self.server_version_info < (5, 6):
-            sql = "SHOW VARIABLES LIKE '%s'" % setting_name
-            fetch_col = 1
-        else:
-            sql = "SELECT @@%s" % setting_name
-            fetch_col = 0
+        quote = self.identifier_preparer.quote_identifier
+        full_name = quote(table_name)
+        if schema:
+            full_name = "{}.{}".format(quote(schema), full_name)
 
-        show_var = connection.exec_driver_sql(sql)
-        row = self._compat_first(show_var, charset=charset)
-        if not row:
-            return None
-        else:
-            return row[fetch_col]
+        res = connection.execute(f"SHOW COLUMNS FROM {full_name}")
+        columns = []
+        for record in res:
+            column = dict(
+                name=record.Field,
+                type=datatype.parse_sqltype(record.Type),
+                nullable=record.Null == "YES",
+                default=record.Default,
+            )
+            columns.append(column)
+        return columns
 
-    def _detect_collations(self, connection):
-        """Pull the active COLLATIONS list from the server.
 
-        Cached per-connection.
-        """
+    def get_pk_constraint(self, connection, table_name, schema=None, **kw):
+        return {  # type: ignore  # pep-655 not supported
+            "name": None,
+            "constrained_columns": [],
+        }
 
-        collations = {}
-        charset = self._connection_charset
-        rs = connection.exec_driver_sql("SHOW COLLATION")
-        for row in self._compat_fetchall(rs, charset):
-            collations[row[0]] = row[1]
-        return collations
+    def get_unique_constraints(
+            self, connection: Connection, table_name: str, schema: str = None, **kw
+    ) -> List[Dict[str, Any]]:
+        return []
 
-    def _show_create_table(
-            self, connection, table, charset=None, full_name=None
-    ):
-        """Run SHOW CREATE TABLE for a ``Table``."""
+    def get_check_constraints(
+            self, connection: Connection, table_name: str, schema: str = None, **kw
+    ) -> List[Dict[str, Any]]:
+        return []
 
-        if full_name is None:
-            full_name = self.identifier_preparer.format_table(table)
-        st = "SHOW CREATE TABLE %s" % full_name
+    def get_foreign_keys(
+            self, connection: Connection, table_name: str, schema: str = None, **kw
+    ) -> List[Dict[str, Any]]:
+        return []
 
-        rp = None
-        try:
-            rp = connection.execution_options(
-                skip_user_error_events=True
-            ).exec_driver_sql(st)
-        except exc.DBAPIError as e:
-            if self._extract_error_code(e.orig) == 1146:
-                raise exc.NoSuchTableError(full_name) from e
-            else:
-                raise
-        row = self._compat_first(rp, charset=charset)
-        if not row:
-            raise exc.NoSuchTableError(full_name)
-        return row[1].strip()
+    def get_primary_keys(self, connection: Connection, table_name: str, schema: str = None, **kw) -> List[str]:
+        pk = self.get_pk_constraint(connection, table_name, schema)
+        return pk.get("constrained_columns")  # type: ignore
 
-    def _describe_table(self, connection, table, charset=None, full_name=None):
-        """Run DESCRIBE for a ``Table`` and return processed rows."""
+    def get_indexes(self, connection, table_name, schema=None, **kw):
+        return []
 
-        if full_name is None:
-            full_name = self.identifier_preparer.format_table(table)
-        st = "DESCRIBE %s" % full_name
+    def has_sequence(self, connection: Connection, sequence_name: str, schema: str = None, **kw) -> bool:
+        return False
 
-        rp, rows = None, None
-        try:
-            try:
-                rp = connection.execution_options(
-                    skip_user_error_events=True
-                ).exec_driver_sql(st)
-            except exc.DBAPIError as e:
-                code = self._extract_error_code(e.orig)
-                if code == 1146:
-                    raise exc.NoSuchTableError(full_name) from e
+    def get_sequence_names(self, connection: Connection, schema: str = None, **kw) -> List[str]:
+        return []
 
-                elif code == 1356:
-                    raise exc.UnreflectableTableError(
-                        "Table or view named %s could not be "
-                        "reflected: %s" % (full_name, e)
-                    ) from e
+    def get_temp_view_names(self, connection: Connection, schema: str = None, **kw) -> List[str]:
+        return []
 
-                else:
-                    raise
-            rows = self._compat_fetchall(rp, charset=charset)
-        finally:
-            if rp:
-                rp.close()
-        return rows
+    def get_temp_table_names(self, connection: Connection, schema: str = None, **kw) -> List[str]:
+        return []
+
+    def get_table_options(self, connection, table_name, schema=None, **kw):
+        return {}
+
+    def get_table_comment(self, connection: Connection, table_name: str, schema: str = None, **kw) -> Dict[str, Any]:
+        return dict(text=None)

@@ -157,13 +157,13 @@ import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.lake.compaction.CompactionManager;
+import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.leader.Checkpoint;
 import com.starrocks.leader.TaskRunStateSynchronizer;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
-import com.starrocks.load.InsertOverwriteJobManager;
+import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadEtlChecker;
 import com.starrocks.load.loadv2.LoadJobScheduler;
@@ -173,7 +173,7 @@ import com.starrocks.load.loadv2.LoadTimeoutChecker;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
-import com.starrocks.load.streamload.StreamLoadManager;
+import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
@@ -220,7 +220,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
-import com.starrocks.scheduler.mv.MVManager;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -359,7 +359,7 @@ public class GlobalStateMgr {
     private Load load;
     private LoadMgr loadMgr;
     private RoutineLoadMgr routineLoadMgr;
-    private StreamLoadManager streamLoadManager;
+    private StreamLoadMgr streamLoadMgr;
     private ExportMgr exportMgr;
 
     private ConsistencyChecker consistencyChecker;
@@ -497,7 +497,7 @@ public class GlobalStateMgr {
     private ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
 
     private TaskManager taskManager;
-    private InsertOverwriteJobManager insertOverwriteJobManager;
+    private InsertOverwriteJobMgr insertOverwriteJobMgr;
 
     private LocalMetastore localMetastore;
     private GlobalFunctionMgr globalFunctionMgr;
@@ -512,7 +512,7 @@ public class GlobalStateMgr {
     private BinlogManager binlogManager;
 
     // For LakeTable
-    private CompactionManager compactionManager;
+    private CompactionMgr compactionMgr;
 
     private WarehouseManager warehouseMgr;
 
@@ -604,8 +604,8 @@ public class GlobalStateMgr {
         return localMetastore;
     }
 
-    public CompactionManager getCompactionManager() {
-        return compactionManager;
+    public CompactionMgr getCompactionMgr() {
+        return compactionMgr;
     }
 
     public ConfigRefreshDaemon getConfigRefreshDaemon() {
@@ -638,7 +638,7 @@ public class GlobalStateMgr {
         this.alterJobMgr = new AlterJobMgr();
 
         this.load = new Load();
-        this.streamLoadManager = new StreamLoadManager();
+        this.streamLoadMgr = new StreamLoadMgr();
         this.routineLoadMgr = new RoutineLoadMgr();
         this.exportMgr = new ExportMgr();
 
@@ -726,15 +726,19 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
 
         this.taskManager = new TaskManager();
-        this.insertOverwriteJobManager = new InsertOverwriteJobManager();
+        this.insertOverwriteJobMgr = new InsertOverwriteJobMgr();
         this.shardManager = new ShardManager();
-        this.compactionManager = new CompactionManager();
+        this.compactionMgr = new CompactionMgr();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
         this.shardDeleter = new ShardDeleter();
 
         this.binlogManager = new BinlogManager();
 
-        this.storageVolumeMgr = new StorageVolumeMgr();
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+            this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
+        } else if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
+        }
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -949,8 +953,8 @@ public class GlobalStateMgr {
         return binlogManager;
     }
 
-    public InsertOverwriteJobManager getInsertOverwriteJobManager() {
-        return insertOverwriteJobManager;
+    public InsertOverwriteJobMgr getInsertOverwriteJobMgr() {
+        return insertOverwriteJobMgr;
     }
 
     public WarehouseManager getWarehouseMgr() {
@@ -1219,7 +1223,7 @@ public class GlobalStateMgr {
             startLeaderOnlyDaemonThreads();
             // start other daemon threads that should run on all FEs
             startAllNodeTypeDaemonThreads();
-            insertOverwriteJobManager.cancelRunningJobs();
+            insertOverwriteJobMgr.cancelRunningJobs();
 
             if (!isDefaultWarehouseCreated) {
                 initDefaultWarehouse();
@@ -1354,7 +1358,7 @@ public class GlobalStateMgr {
         // domain resolver
         domainResolver.start();
         if (RunMode.allowCreateLakeTable()) {
-            compactionManager.start();
+            compactionMgr.start();
         }
         configRefreshDaemon.start();
     }
@@ -1425,6 +1429,13 @@ public class GlobalStateMgr {
                     auth.load(dis);
                     authenticationMgr.loadV2(dis);
                     authorizationMgr.loadV2(dis);
+                    smallFileMgr.loadSmallFilesV2(dis);
+                    catalogMgr.load(dis);
+                    insertOverwriteJobMgr.load(dis);
+                    compactionMgr.load(dis);
+                    streamLoadMgr.load(dis);
+                    MaterializedViewMgr.getInstance().load(dis);
+                    globalFunctionMgr.load(dis);
                 } catch (SRMetaBlockException | SRMetaBlockEOFException e) {
                     LOG.error("load image failed", e);
                     throw new IOException("load image failed", e);
@@ -1443,29 +1454,9 @@ public class GlobalStateMgr {
                 checksum = loadResources(dis, checksum);
                 checksum = exportMgr.loadExportJob(dis, checksum);
                 checksum = backupHandler.loadBackupHandler(dis, checksum, this);
-
-                // global transaction must be replayed before load jobs v2
                 checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
-                checksum = smallFileMgr.loadSmallFiles(dis, checksum);
-                remoteChecksum = dis.readLong();
-
                 checksum = taskManager.loadTasks(dis, checksum);
-                remoteChecksum = dis.readLong();
-                checksum = catalogMgr.loadCatalogs(dis, checksum);
-                remoteChecksum = dis.readLong();
-                checksum = loadInsertOverwriteJobs(dis, checksum);
-                remoteChecksum = dis.readLong();
-
-                checksum = loadCompactionManager(dis, checksum);
-                remoteChecksum = dis.readLong();
-                checksum = loadStreamLoadManager(dis, checksum);
-                remoteChecksum = dis.readLong();
-                checksum = MVManager.getInstance().reload(dis, checksum);
-                remoteChecksum = dis.readLong();
-                globalFunctionMgr.loadGlobalFunctions(dis, checksum);
                 checksum = localMetastore.loadAutoIncrementId(dis, checksum);
-                remoteChecksum = dis.readLong();
-                // ** NOTICE **: always add new code at the end
             } else {
                 checksum = loadHeaderV1(dis, checksum);
                 checksum = nodeMgr.loadLeaderInfo(dis, checksum);
@@ -1517,7 +1508,7 @@ public class GlobalStateMgr {
                 remoteChecksum = dis.readLong();
                 checksum = loadStreamLoadManager(dis, checksum);
                 remoteChecksum = dis.readLong();
-                checksum = MVManager.getInstance().reload(dis, checksum);
+                checksum = MaterializedViewMgr.getInstance().reload(dis, checksum);
                 remoteChecksum = dis.readLong();
                 globalFunctionMgr.loadGlobalFunctions(dis, checksum);
                 loadRBACPrivilege(dis);
@@ -1737,7 +1728,7 @@ public class GlobalStateMgr {
 
     public long loadInsertOverwriteJobs(DataInputStream dis, long checksum) throws IOException {
         try {
-            this.insertOverwriteJobManager = InsertOverwriteJobManager.read(dis);
+            this.insertOverwriteJobMgr = InsertOverwriteJobMgr.read(dis);
         } catch (EOFException e) {
             LOG.warn("no InsertOverwriteJobManager to replay.", e);
         }
@@ -1745,7 +1736,7 @@ public class GlobalStateMgr {
     }
 
     public long saveInsertOverwriteJobs(DataOutputStream dos, long checksum) throws IOException {
-        getInsertOverwriteJobManager().write(dos);
+        getInsertOverwriteJobMgr().write(dos);
         return checksum;
     }
 
@@ -1766,14 +1757,14 @@ public class GlobalStateMgr {
     }
 
     public long loadCompactionManager(DataInputStream in, long checksum) throws IOException {
-        compactionManager = CompactionManager.loadCompactionManager(in);
-        checksum ^= compactionManager.getChecksum();
+        compactionMgr = CompactionMgr.loadCompactionManager(in);
+        checksum ^= compactionMgr.getChecksum();
         return checksum;
     }
 
     public long loadStreamLoadManager(DataInputStream in, long checksum) throws IOException {
-        streamLoadManager = StreamLoadManager.loadStreamLoadManager(in);
-        checksum ^= streamLoadManager.getChecksum();
+        streamLoadMgr = StreamLoadMgr.loadStreamLoadManager(in);
+        checksum ^= streamLoadMgr.getChecksum();
         return checksum;
     }
 
@@ -1825,6 +1816,13 @@ public class GlobalStateMgr {
                     auth.save(dos);
                     authenticationMgr.saveV2(dos);
                     authorizationMgr.saveV2(dos);
+                    smallFileMgr.saveSmallFilesV2(dos);
+                    catalogMgr.save(dos);
+                    insertOverwriteJobMgr.save(dos);
+                    compactionMgr.save(dos);
+                    streamLoadMgr.save(dos);
+                    MaterializedViewMgr.getInstance().save(dos);
+                    globalFunctionMgr.save(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("save image failed", e);
                     throw new IOException("save image failed", e);
@@ -1839,25 +1837,9 @@ public class GlobalStateMgr {
                 checksum = exportMgr.saveExportJob(dos, checksum);
                 checksum = backupHandler.saveBackupHandler(dos, checksum);
                 checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
-                checksum = smallFileMgr.saveSmallFiles(dos, checksum);
-
-                dos.writeLong(checksum);
                 checksum = taskManager.saveTasks(dos, checksum);
-                dos.writeLong(checksum);
-                checksum = catalogMgr.saveCatalogs(dos, checksum);
-                dos.writeLong(checksum);
-                checksum = saveInsertOverwriteJobs(dos, checksum);
-                dos.writeLong(checksum);
-                checksum = compactionManager.saveCompactionManager(dos, checksum);
-                dos.writeLong(checksum);
-                checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
-                dos.writeLong(checksum);
-                checksum = MVManager.getInstance().store(dos, checksum);
-                dos.writeLong(checksum);
-                globalFunctionMgr.saveGlobalFunctions(dos, checksum);
                 checksum = localMetastore.saveAutoIncrementId(dos, checksum);
-                dos.writeLong(checksum);
-                // ** NOTICE **: always add new code at the end
+
             } else {
                 checksum = saveVersion(dos, checksum);
                 checksum = saveHeader(dos, replayedJournalId, checksum);
@@ -1898,11 +1880,11 @@ public class GlobalStateMgr {
                 // ShardManager Deprecated, keep it for backward compatible
                 checksum = shardManager.saveShardManager(dos, checksum);
                 dos.writeLong(checksum);
-                checksum = compactionManager.saveCompactionManager(dos, checksum);
+                checksum = compactionMgr.saveCompactionManager(dos, checksum);
                 dos.writeLong(checksum);
-                checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
+                checksum = streamLoadMgr.saveStreamLoadManager(dos, checksum);
                 dos.writeLong(checksum);
-                checksum = MVManager.getInstance().store(dos, checksum);
+                checksum = MaterializedViewMgr.getInstance().store(dos, checksum);
                 dos.writeLong(checksum);
                 globalFunctionMgr.saveGlobalFunctions(dos, checksum);
                 saveRBACPrivilege(dos);
@@ -2178,7 +2160,7 @@ public class GlobalStateMgr {
                     toJournalId, replayedJournalId.get()));
         }
 
-        streamLoadManager.cancelUnDurableTaskAfterRestart();
+        streamLoadMgr.cancelUnDurableTaskAfterRestart();
 
         long replayInterval = System.currentTimeMillis() - replayStartTime;
         LOG.info("finish replay from {} to {} in {} msec", startJournalId, toJournalId, replayInterval);
@@ -3048,8 +3030,8 @@ public class GlobalStateMgr {
         return routineLoadMgr;
     }
 
-    public StreamLoadManager getStreamLoadManager() {
-        return streamLoadManager;
+    public StreamLoadMgr getStreamLoadMgr() {
+        return streamLoadMgr;
     }
 
     public RoutineLoadTaskScheduler getRoutineLoadTaskScheduler() {
@@ -3929,7 +3911,7 @@ public class GlobalStateMgr {
             LOG.warn("backup handler clean old jobs failed", t);
         }
         try {
-            streamLoadManager.cleanOldStreamLoadTasks();
+            streamLoadMgr.cleanOldStreamLoadTasks();
         } catch (Throwable t) {
             LOG.warn("delete handler remove old delete info failed", t);
         }

@@ -30,6 +30,7 @@
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "testutil/sync_point.h"
 #include "util/threadpool.h"
 
 namespace starrocks::lake {
@@ -115,6 +116,7 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
         }
         _task_queues[idx].put(std::move(context));
     }
+    TEST_SYNC_POINT("CompactionScheduler::compact:return");
 }
 
 void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
@@ -202,6 +204,7 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
         auto task_or = _tablet_mgr->compact(tablet_id, version, txn_id);
         if (task_or.ok()) {
             auto should_cancel = [&]() { return context->callback->has_error(); };
+            TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
             status.update(task_or.value()->execute(&context->progress, std::move(should_cancel)));
         } else {
             status.update(task_or.status());
@@ -244,6 +247,19 @@ bool CompactionScheduler::txn_log_exists(int64_t tablet_id, int64_t txn_id) cons
     auto txn_log = _tablet_mgr->txn_log_location(tablet_id, txn_id);
     auto fs_or = FileSystem::CreateSharedFromString(txn_log);
     return fs_or.ok() && fs_or.value()->path_exists(txn_log).ok();
+}
+
+Status CompactionScheduler::abort(int64_t txn_id) {
+    std::lock_guard l(_contexts_lock);
+    for (butil::LinkNode<CompactionTaskContext>* node = _contexts.head(); node != _contexts.end();
+         node = node->next()) {
+        CompactionTaskContext* context = node->value();
+        if (context->txn_id == txn_id) {
+            context->callback->update_status(Status::Aborted("aborted on demand"));
+            return Status::OK();
+        }
+    }
+    return Status::NotFound(fmt::format("no compaction task with txn id {}", txn_id));
 }
 
 } // namespace starrocks::lake

@@ -64,6 +64,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class KafkaUtil {
     private static final Logger LOG = LogManager.getLogger(KafkaUtil.class);
@@ -210,16 +211,23 @@ public class KafkaUtil {
                 while (true) {
                     request.timeout = Config.routine_load_kafka_timeout_second;
                     Future<PProxyResult> future = BackendServiceClient.getInstance().getInfo(address, request);
-                    PProxyResult result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
-                    TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
-                    if (code != TStatusCode.OK) {
-                        LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
+                    PProxyResult result;
+                    try {
+                        result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
+                    } catch (TimeoutException e) {
+                        LOG.warn("failed to send proxy request to " + address + " err " + e.getMessage());
                         // When getting kafka info timed out, we tried again three times.
                         if (++retryTimes > 3 || (retryTimes + 1) * Config.routine_load_kafka_timeout_second >
                                                                         Config.routine_load_task_timeout_second) {
-                            throw new UserException(
-                                    "failed to send proxy request to " + address + " err " + result.status.errorMsgs);
+                            throw e;
                         }
+                        continue;
+                    }
+                    TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
+                    if (code != TStatusCode.OK) {
+                        LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
+                        throw new UserException(
+                                "failed to send proxy request to " + address + " err " + result.status.errorMsgs);
                     } else {
                         return result;
                     }
