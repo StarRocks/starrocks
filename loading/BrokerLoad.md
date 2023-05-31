@@ -14,14 +14,11 @@ Broker Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 DE
 
 自 v2.5 起，StarRocks 在执行 Broker Load 时不需要借助 Broker 即可访问外部存储系统，称为“无 Broker 的导入”。导入语句中也不再需要指定 `broker_name`，但继续保留 `WITH BROKER` 关键字。
 
-需要注意的是，无 Broker 的导入在数据源为 HDFS 的某些场景下会受限，这时您可以继续执行有 Broker 的导入，包括：
-
-- 在配置了多 HDFS 集群时，您需要为每一个 HDFS 集群配置一个独立的 Broker。
-- 在配置了单 HDFS 集群、但是多 Kerberos 用户时，您只需要部署一个独立的 Broker。
+需要注意的是，无 Broker 的导入在数据源为 HDFS 的某些场景下会受限，例如，在多 HDFS 集群或者多 Kerberos 用户的场景。在这些场景下，可以继续采用有 Broker 的导入，需要确保至少部署了一组独立的 Broker。有关各种场景下如何指定认证方式和 HA 配置，参见 [HDFS](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md##hdfs)。
 
 > **说明**
 >
-> 您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/deployment/deploy_broker.md)完成 Broker 部署。
+> 您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/deployment/deploy_broker.md)完成 Broker 部署。
 
 ## 支持的数据文件格式
 
