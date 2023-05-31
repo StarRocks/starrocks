@@ -214,7 +214,7 @@ public class KafkaUtil {
                     PProxyResult result;
                     try {
                         result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
-                    } catch (TimeoutException e) {
+                    } catch (Exception e) {
                         LOG.warn("failed to send proxy request to " + address + " err " + e.getMessage());
                         // When getting kafka info timed out, we tried again three times.
                         if (++retryTimes > 3 || (retryTimes + 1) * Config.routine_load_kafka_timeout_second >
