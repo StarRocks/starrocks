@@ -2,7 +2,7 @@
 
 ## 测试结论
 
-Star Schema Benchmark（以下简称 SSB）是学术界和工业界广泛使用的一个星型模型测试集（来源[论文](https://www.cs.umb.edu/~poneil/StarSchemaB.PDF)），通过这个测试集合可以方便的对比各种 OLAP 产品的基础性能指标。ClickHouse 通过改写 SSB，将星型模型打平转化成宽表，改造成了一个单表测试 benchmark（参考[链接](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/)）。本报告记录了 StarRocks、ClickHouse 和 Apache Druid 在SSB 单表数据集上的性能对比结果，测试结论如下：
+Star Schema Benchmark（以下简称 SSB）是学术界和工业界广泛使用的一个星型模型测试集（来源[论文](https://www.cs.umb.edu/~poneil/StarSchemaB.PDF)），通过这个测试集合可以方便的对比各种 OLAP 产品的基础性能指标。ClickHouse 通过改写 SSB，将星型模型打平转化成宽表 (flat table)，改造成了一个单表测试 benchmark（参考[链接](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/)）。本报告记录了 StarRocks、ClickHouse 和 Apache Druid 在 SSB 单表数据集上的性能对比结果，测试结论如下：
 
 - 在标准测试数据集的 13 个查询上，StarRocks 整体查询性能是 ClickHouse 的 2.1 倍，Apache Druid 的 8.7 倍。
 - StarRocks 启用 Bitmap Index 后整体查询性能是未启用的 1.3 倍，此时整体查询性能是 ClickHouse 的 2.8 倍，Apache Druid 的 11.4 倍。
@@ -26,7 +26,7 @@ Star Schema Benchmark（以下简称 SSB）是学术界和工业界广泛使用�
 
 StarRocks，ClickHouse 和 Apache Druid 部署在相同配置的机器上分别进行测试。
 
-- StarRocks 部署 1 个 FE 和 3 个 BE。
+- StarRocks 部署 1 个 FE 和 3 个 BE。FE 可以单独部署也可以和 BE 混合部署。
 - ClickHouse 部署三个节点后建立分布式表。
 - Apache Druid 三个节点都部署 Data Servers，同时选择一个节点混合部署 Master Servers，另一个节点混合部署 Query Servers。
 
