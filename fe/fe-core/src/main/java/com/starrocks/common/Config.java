@@ -1953,6 +1953,12 @@ public class Config extends ConfigBase {
     public static boolean enable_shuffle_load = true;
 
     /**
+     * Eliminate shuffle load by replicated storage
+     */
+    @ConfField(mutable = true)
+    public static boolean eliminate_shuffle_load_by_replicated_storage = true;
+
+    /**
      * Unused config field, leave it here for backward compatibility
      */
     @Deprecated

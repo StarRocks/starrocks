@@ -123,6 +123,7 @@ public class LoadingTaskPlannerTest {
 
         loadParallelInstanceNum = Config.load_parallel_instance_num;
         maxBrokerConcurrency = Config.max_broker_concurrency;
+        Config.eliminate_shuffle_load_by_replicated_storage = false;
 
         // backends
         Map<Long, Backend> idToBackendTmp = Maps.newHashMap();
@@ -140,6 +141,7 @@ public class LoadingTaskPlannerTest {
     public void tearDown() {
         Config.load_parallel_instance_num = loadParallelInstanceNum;
         Config.max_broker_concurrency = maxBrokerConcurrency;
+        Config.eliminate_shuffle_load_by_replicated_storage = true;
     }
 
     @Test
@@ -1023,13 +1025,27 @@ public class LoadingTaskPlannerTest {
         fileStatusesList.add(fileStatusList);
 
         // plan
-        LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
-                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "", 
-                TPartialUpdateMode.UNKNOWN_MODE);
-        planner.plan(loadId, fileStatusesList, 1);
+        {
+            LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
+                    false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "", 
+                    TPartialUpdateMode.UNKNOWN_MODE);
+            planner.plan(loadId, fileStatusesList, 1);
 
-        // check fragment
-        List<PlanFragment> fragments = planner.getFragments();
-        Assert.assertEquals(2, fragments.size());
+            // check fragment
+            List<PlanFragment> fragments = planner.getFragments();
+            Assert.assertEquals(2, fragments.size());
+        }
+
+        {
+            Config.eliminate_shuffle_load_by_replicated_storage = true;
+            LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
+                    false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false, Maps.newHashMap(), "", 
+                    TPartialUpdateMode.UNKNOWN_MODE);
+            planner.plan(loadId, fileStatusesList, 1);
+
+            // check fragment
+            List<PlanFragment> fragments = planner.getFragments();
+            Assert.assertEquals(1, fragments.size());
+        }
     }
 }
