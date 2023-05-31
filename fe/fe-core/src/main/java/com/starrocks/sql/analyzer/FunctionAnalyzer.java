@@ -81,7 +81,21 @@ public class FunctionAnalyzer {
                 }
             }
         }
-
+        
+        if (fnName.getFunction().equals(FunctionSet.REGEXP)) {
+            if (functionCallExpr.getChildren().size() > 2) {
+                if (!(functionCallExpr.getChild(2) instanceof StringLiteral)) {
+                    throw new SemanticException("regexp requires third parameter must be a string constant",
+                            functionCallExpr.getChild(2).getPos());
+                }
+                final String param = ((StringLiteral) functionCallExpr.getChild(2)).getValue();
+                if (!Lists.newArrayList("i", "c").contains(param)) {
+                    throw new SemanticException("regexp function can't support argument other than " +
+                            "i|c", functionCallExpr.getChild(2).getPos());
+                }
+            }
+        }
+        
         if (fnName.getFunction().equals(FunctionSet.ARRAY_MAP)) {
             Preconditions.checkState(functionCallExpr.getChildren().size() > 1,
                     "array_map should have at least two inputs", functionCallExpr.getPos());

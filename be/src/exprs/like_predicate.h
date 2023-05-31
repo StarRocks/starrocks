@@ -171,6 +171,11 @@ private:
     struct LikePredicateState {
         char escape_char{'\\'};
 
+        // Holds optional parameter : whether case-sensitive matches
+        // Default c: Case-sensitive matching
+        //         i: Case-insensitive matching.
+        bool ignore_case = false;
+
         std::shared_ptr<re2::RE2> re2 = nullptr;
         /// This is the function, set in the prepare function, that will be used to determine
         /// the value of the predicate. It will be set depending on whether the expression is
@@ -216,6 +221,10 @@ private:
             search_string = search_string_arg;
             search_string_sv = Slice(search_string);
             _search_string_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(search_string_sv, 1);
+        }
+
+        void set_ignore_case(const bool ignore_case_arg) {
+            ignore_case = ignore_case_arg;
         }
     };
 };
