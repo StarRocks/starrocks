@@ -182,8 +182,8 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
     const auto& file_schema = _file_metadata->schema();
 
     for (auto i = 0; i < file_schema->group_node()->field_count(); i++) {
-        const auto &field = file_schema->group_node()->field(i);
-        const auto &name = field->name();
+        const auto& field = file_schema->group_node()->field(i);
+        const auto& name = field->name();
 
         if (!field->is_primitive()) {
             // Now, we treat all nested types as VARCHAR.
