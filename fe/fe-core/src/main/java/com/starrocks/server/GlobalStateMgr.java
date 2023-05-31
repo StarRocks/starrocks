@@ -1427,18 +1427,20 @@ public class GlobalStateMgr {
                 try {
                     checksum = loadHeaderV2(dis, checksum);
                     nodeMgr.load(dis);
-                    loadMgr.loadLoadJobsV2JsonFormat(dis);
                     alterJobMgr.load(dis);
                     pluginMgr.load(dis);
                     deleteMgr.load(dis);
                     analyzeMgr.load(dis);
                     resourceGroupMgr.load(dis);
                     routineLoadMgr.loadRoutineLoadJobsV2(dis);
+                    // global transaction must be replayed before load jobs v2
                     globalTransactionMgr.loadTransactionStateV2(dis);
+                    loadMgr.loadLoadJobsV2JsonFormat(dis);
                     auth.load(dis);
                     authenticationMgr.loadV2(dis);
                     authorizationMgr.loadV2(dis);
                     exportMgr.loadExportJobV2(dis);
+                    colocateTableIndex.loadColocateTableIndexV2(dis);
                     smallFileMgr.loadSmallFilesV2(dis);
                     catalogMgr.load(dis);
                     insertOverwriteJobMgr.load(dis);
@@ -1463,7 +1465,6 @@ public class GlobalStateMgr {
                 checksum = VariableMgr.loadGlobalVariable(dis, checksum);
                 checksum = localMetastore.loadCluster(dis, checksum);
                 checksum = loadResources(dis, checksum);
-                checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
                 checksum = taskManager.loadTasks(dis, checksum);
                 checksum = localMetastore.loadAutoIncrementId(dis, checksum);
             } else {
@@ -1826,6 +1827,7 @@ public class GlobalStateMgr {
                     authenticationMgr.saveV2(dos);
                     authorizationMgr.saveV2(dos);
                     exportMgr.saveExportJobV2(dos);
+                    colocateTableIndex.saveColocateTableIndexV2(dos);
                     smallFileMgr.saveSmallFilesV2(dos);
                     catalogMgr.save(dos);
                     insertOverwriteJobMgr.save(dos);
@@ -1845,7 +1847,6 @@ public class GlobalStateMgr {
                 checksum = VariableMgr.saveGlobalVariable(dos, checksum);
                 checksum = localMetastore.saveCluster(dos, checksum);
                 checksum = resourceMgr.saveResources(dos, checksum);
-                checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
                 checksum = taskManager.saveTasks(dos, checksum);
                 checksum = localMetastore.saveAutoIncrementId(dos, checksum);
 

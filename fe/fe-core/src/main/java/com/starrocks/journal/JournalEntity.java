@@ -529,9 +529,22 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_COLOCATE_ADD_TABLE_V2:
+            case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2:
+            case OperationType.OP_COLOCATE_MARK_UNSTABLE_V2:
+            case OperationType.OP_COLOCATE_MARK_STABLE_V2: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), ColocatePersistInfo.class);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_MODIFY_TABLE_COLOCATE: {
                 data = new TablePropertyInfo();
                 ((TablePropertyInfo) data).readFields(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_MODIFY_TABLE_COLOCATE_V2: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), TablePropertyInfo.class);
                 isRead = true;
                 break;
             }

@@ -325,11 +325,17 @@ public class OperationType {
     public static final short OP_END_LOAD_JOB_V2 = 12101;
     public static final short OP_CREATE_ROUTINE_LOAD_JOB_V2 = 12102;
     public static final short OP_CHANGE_ROUTINE_LOAD_JOB_V2 = 12103;
-    public static final short OP_REMOVE_ROUTINE_LOAD_JOB_V2 = 12104;
 
     //Txn json format log
     public static final short OP_UPSERT_TRANSACTION_STATE_V2 = 12110;
-    public static final short OP_SAVE_TRANSACTION_ID_V2 = 12112;
+    public static final short OP_SAVE_TRANSACTION_ID_V2 = 12111;
+
+    //colocate table json format log
+    public static final short OP_COLOCATE_ADD_TABLE_V2 = 12130;
+    public static final short OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2 = 12131;
+    public static final short OP_COLOCATE_MARK_UNSTABLE_V2 = 12132;
+    public static final short OP_COLOCATE_MARK_STABLE_V2 = 12133;
+    public static final short OP_MODIFY_TABLE_COLOCATE_V2 = 12134;
 
     //Export json format log
     public static final short OP_EXPORT_CREATE_V2 = 12120;
