@@ -24,7 +24,7 @@ This SQL statement can：
 ## Syntax
 
 ```SQL
-ALTER MATERIALIZED VIEW [db_name.]<mv_name> { [db_name.]<new_mv_name> | REFRESH <new_refresh_scheme_desc> | SET ( "<key>" = "<value>"[,...]) }
+ALTER MATERIALIZED VIEW [db_name.]<mv_name> { RENAME [db_name.]<new_mv_name> | REFRESH <new_refresh_scheme_desc> | SET ( "<key>" = "<value>"[,...]) }
 ```
 
 Parameters in brackets [] is optional.
