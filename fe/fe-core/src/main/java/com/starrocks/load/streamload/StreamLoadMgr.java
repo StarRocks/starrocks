@@ -30,6 +30,7 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
@@ -542,7 +543,7 @@ public class StreamLoadMgr {
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         int numJson = 1 + idToStreamLoadTask.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, StreamLoadMgr.class.getName(), numJson);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.STREAM_LOAD_MGR, numJson);
         writer.writeJson(idToStreamLoadTask.size());
         for (StreamLoadTask streamLoadTask : idToStreamLoadTask.values()) {
             writer.writeJson(streamLoadTask);
@@ -553,7 +554,7 @@ public class StreamLoadMgr {
 
     public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         long currentMs = System.currentTimeMillis();
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, StreamLoadMgr.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.STREAM_LOAD_MGR);
         try {
             int numJson = reader.readInt();
             for (int i = 0; i < numJson; ++i) {
