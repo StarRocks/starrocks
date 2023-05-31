@@ -93,7 +93,7 @@ AS
 
 **PROPERTIES**（选填）
 
-物化视图的属性。
+物化视图的属性。您可以使用 [ALTER MATERIALIZED VIEW](./ALTER%20MATERIALIZED%20VIEW.md) 修改现有物化视图的属性。
 
 - `replication_num`：创建物化视图副本数量。
 - `storage_medium`：存储介质类型。
@@ -101,6 +101,13 @@ AS
 - `partition_refresh_number`：单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。仅当前一批分区刷新成功时，StarRocks 会继续刷新下一批分区，直至所有分区刷新完成。如果其中有分区刷新失败，将不会产生后续的刷新任务。默认值：`-1`。当值为 `-1` 时，将不会拆分刷新任务。
 - `excluded_trigger_tables`：在此项属性中列出的基表，其数据产生变化时不会触发对应物化视图自动刷新。该参数仅针对导入触发式刷新，通常需要与属性 `auto_refresh_partitions_limit` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
 - `auto_refresh_partitions_limit`：当触发物化视图刷新时，需要刷新的最近的物化视图分区数量。您可以通过该属性限制刷新的范围，降低刷新代价，但因为仅有部分分区刷新，有可能导致物化视图数据与基表无法保持一致。默认值：`-1`。当参数值为 `-1` 时，StarRocks 将刷新所有分区。当参数值为正整数 N 时，StarRocks 会将已存在的分区按时间先后排序，并从最近分区开始刷新 N 个分区。如果分区数不足 N，则刷新所有已存在的分区。如果您的动态分区物化视图中存在预创建的未来时段动态分区，StarRocks 会优先刷新这些未来时段的分区，然后刷新已有的分区。因此设定此参数时请确保已为预创建的未来时段动态分区保留余量。
+- `mv_rewrite_staleness_second`：如果当前物化视图的上一次刷新在此属性指定的时间间隔内，则此物化视图可用于查询重写。否则，该物化视图无法作为查询重写的候选物化视图。单位：秒。该属性自 v3.0 起支持。
+- `colocate_with`：异步物化视图的 Colocation Group。更多信息请参阅 [Colocate Join](../../../using_starrocks/Colocate_join.md)。该属性自 v3.0 起支持。
+- `unique_constraints` 和 `foreign_key_constraints`：创建 View Delta Join 查询改写的异步物化视图时的 Unique Key 约束和外键约束。更多信息请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/Materialized_view.md#基于-view-delta-join-场景改写查询)。该属性自 v3.0 起支持。
+
+  > **注意**
+  >
+  > Unique Key 约束和外键约束仅用于查询重写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
 
 **query_statement**（必填）
 
@@ -220,13 +227,6 @@ SELECT select_expr[, select_expr ...]
 | count                                                  | count                    |
 | bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union             |
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                |
-
-## 相关 Session 变量
-
-以下变量控制物化视图的行为：
-
-- `analyze_mv`：刷新后是否以及如何分析物化视图。有效值为空字符串（即不分析）、`sample`（抽样采集）或 `full`（全量采集）。默认为 `sample`。
-- `enable_materialized_view_rewrite`：是否开启物化视图的自动改写。有效值为 `true`（自 2.5 版本起为默认值）和 `false`。
 
 ## 注意事项
 
