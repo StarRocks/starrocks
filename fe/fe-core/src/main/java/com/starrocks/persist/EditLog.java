@@ -589,7 +589,8 @@ public class EditLog {
                     globalStateMgr.replayTruncateTable(info);
                     break;
                 }
-                case OperationType.OP_COLOCATE_ADD_TABLE: {
+                case OperationType.OP_COLOCATE_ADD_TABLE:
+                case OperationType.OP_COLOCATE_ADD_TABLE_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayAddTableToGroup(info);
                     break;
@@ -599,22 +600,26 @@ public class EditLog {
                     globalStateMgr.getColocateTableIndex().replayRemoveTable(info);
                     break;
                 }
-                case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ: {
+                case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ:
+                case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayAddBackendsPerBucketSeq(info);
                     break;
                 }
-                case OperationType.OP_COLOCATE_MARK_UNSTABLE: {
+                case OperationType.OP_COLOCATE_MARK_UNSTABLE:
+                case OperationType.OP_COLOCATE_MARK_UNSTABLE_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayMarkGroupUnstable(info);
                     break;
                 }
-                case OperationType.OP_COLOCATE_MARK_STABLE: {
+                case OperationType.OP_COLOCATE_MARK_STABLE:
+                case OperationType.OP_COLOCATE_MARK_STABLE_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayMarkGroupStable(info);
                     break;
                 }
-                case OperationType.OP_MODIFY_TABLE_COLOCATE: {
+                case OperationType.OP_MODIFY_TABLE_COLOCATE:
+                case OperationType.OP_MODIFY_TABLE_COLOCATE_V2: {
                     final TablePropertyInfo info = (TablePropertyInfo) journal.getData();
                     globalStateMgr.replayModifyTableColocate(info);
                     break;
