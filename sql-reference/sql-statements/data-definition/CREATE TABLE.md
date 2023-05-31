@@ -574,12 +574,13 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 [PROPERTIES ("key" = "value", ...)],...)
 ```
 
-#### 为 View Delta Join 查询改写定义外键约束
+#### 为 View Delta Join 查询改写定义 Unique Key 和外键约束
 
-要在 View Delta Join 场景中启用查询重写，您必须为 Delta Join 中的表定义外键约束 `foreign_key_constraints`。详细信息，请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/Materialized_view.md#基于-view-delta-join-场景改写查询)。
+要在 View Delta Join 场景中启用查询重写，您必须为 Delta Join 中的表定义 Unique Key 约束 `foreign_key_constraints` 和外键约束 `foreign_key_constraints`。详细信息，请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/Materialized_view.md#基于-view-delta-join-场景改写查询)。
 
 ```SQL
 PROPERTIES (
+    "unique_constraints" = "<unique_key>[, ...]",
     "foreign_key_constraints" = "
     (<child_column>[, ...]) 
     REFERENCES 
@@ -597,6 +598,9 @@ PROPERTIES (
 
 > **注意**
 >
+> * Unique Key 约束和外键约束仅用于查询重写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
+> * 主键模型表的 Primary Key 或更新模型表的 Unique Key 默认是其 `unique_constraints`，您无需手动设置。
+> * `foreign_key_constraints` 中的 `child_column` 必须对应另一个表的 `unique_constraints` 中的 `unique_key`。
 > * `child_column` 和 `parent_column` 的数量必须一致。
 > * `child_column` 和对应的 `parent_column` 的数据类型必须匹配。
 

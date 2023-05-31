@@ -257,11 +257,11 @@ View Delta Join 查询只有在满足以下要求时才能被重写：
 
   例如，物化视图的形式为 `A INNER JOIN B ON (A.a1 = B.b1) LEFT OUTER JOIN C ON (B.b2 = C.c1)`，查询的形式为 `A INNER JOIN B ON (A.a1 = B.b1)`。 在这种情况下，`B LEFT OUTER JOIN C ON (B.b2 = C.c1)` 是 Delta Join。`B.b2` 必须是 B 的 Foreign Key，`C.c1` 必须是 C 的 Primary Key 或 Unique Key。
 
-要实现上述约束，您必须在创建表时通过 Property `foreign_key_constraints` 定义表的外键约束。详细信息，请参阅 [CREATE TABLE - PROPERTIES](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md#参数说明)。
+要实现上述约束，您必须在创建表时通过 Property `unique_constraints` 和 `foreign_key_constraints` 定义表的 Unique Key 和外键约束。详细信息，请参阅 [CREATE TABLE - PROPERTIES](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md#参数说明)。
 
 > **注意**
 >
-> 外键约束仅用于查询重写。 导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
+> Unique Key 和外键约束仅用于查询重写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
 
 以下示例在创建表 `lineorder` 时定义了多个外键：
 
@@ -289,6 +289,8 @@ DUPLICATE KEY(`lo_orderkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 192
 PROPERTIES (
+-- Define Unique Keys in unique_constraints.
+"unique_constraints" = "lo_orderkey,lo_linenumber",
 -- Define Foreign Keys in foreign_key_constraints.
 "foreign_key_constraints" = "
     (lo_custkey) REFERENCES customer(c_custkey);
@@ -450,3 +452,10 @@ SHOW CREATE MATERIALIZED VIEW order_mv;
 ```SQL
 DROP MATERIALIZED VIEW order_mv;
 ```
+
+### 相关 Session 变量
+
+以下变量控制物化视图的行为：
+
+- `analyze_mv`：刷新后是否以及如何分析物化视图。有效值为空字符串（即不分析）、`sample`（抽样采集）或 `full`（全量采集）。默认为 `sample`。
+- `enable_materialized_view_rewrite`：是否开启物化视图的自动改写。有效值为 `true`（自 2.5 版本起为默认值）和 `false`。
