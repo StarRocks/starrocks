@@ -249,6 +249,13 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "  |  order by: 3: v3 ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
+        sql = "select cume_dist() over(partition by v2 order by v3) from t0";
+        assertPlanContains(sql, " 2:ANALYTIC\n" +
+                "  |  functions: [, cume_dist(), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
         sql =
                 "select sum(v1) over(partition by v2 order by v3 range between unbounded preceding and unbounded following) " +
                         "from t0";

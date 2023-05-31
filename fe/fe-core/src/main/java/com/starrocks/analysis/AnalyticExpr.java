@@ -97,6 +97,7 @@ public class AnalyticExpr extends Expr {
     public static String RANK = "RANK";
     public static String DENSERANK = "DENSE_RANK";
     public static String ROWNUMBER = "ROW_NUMBER";
+    public static String CUMEDIST = "CUME_DIST";
     public static String NTILE = "NTILE";
     public static String MIN = "MIN";
     public static String MAX = "MAX";
@@ -246,6 +247,14 @@ public class AnalyticExpr extends Expr {
         }
 
         return fn.functionName().equalsIgnoreCase(NTILE);
+    }
+
+    public static boolean isCumeFn(Function fn) {
+        if (!isAnalyticFn(fn)) {
+            return false;
+        }
+
+        return fn.functionName().equalsIgnoreCase(CUMEDIST);
     }
 
     public static boolean isRowNumberFn(Function fn) {

@@ -185,6 +185,8 @@ public:
 
     static AggregateFunctionPtr MakeRowNumberWindowFunction();
 
+    static AggregateFunctionPtr MakeCumeDistWindowFunction();
+
     static AggregateFunctionPtr MakeNtileWindowFunction();
 
     template <LogicalType LT, bool ignoreNulls>

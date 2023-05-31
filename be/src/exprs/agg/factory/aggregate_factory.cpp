@@ -78,6 +78,7 @@ AggregateFunctionPtr AggregateFactory::MakePercentileApproxAggregateFunction() {
 AggregateFunctionPtr AggregateFactory::MakePercentileUnionAggregateFunction() {
     return std::make_shared<PercentileUnionAggregateFunction>();
 }
+
 AggregateFunctionPtr AggregateFactory::MakeDenseRankWindowFunction() {
     return std::make_shared<DenseRankWindowFunction>();
 }
@@ -88,6 +89,10 @@ AggregateFunctionPtr AggregateFactory::MakeRankWindowFunction() {
 
 AggregateFunctionPtr AggregateFactory::MakeRowNumberWindowFunction() {
     return std::make_shared<RowNumberWindowFunction>();
+}
+
+AggregateFunctionPtr AggregateFactory::MakeCumeDistWindowFunction() {
+    return std::make_shared<CumeDistWindowFunction>();
 }
 
 AggregateFunctionPtr AggregateFactory::MakeNtileWindowFunction() {

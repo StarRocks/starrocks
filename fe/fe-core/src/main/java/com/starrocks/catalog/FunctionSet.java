@@ -393,6 +393,7 @@ public class FunctionSet {
     public static final String LAST_VALUE = "last_value";
     public static final String DENSE_RANK = "dense_rank";
     public static final String RANK = "rank";
+    public static final String CUME_DIST = "cume_dist";
     public static final String NTILE = "ntile";
     public static final String ROW_NUMBER = "row_number";
 
@@ -532,6 +533,7 @@ public class FunctionSet {
     public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
             .add(FunctionSet.DENSE_RANK)
             .add(FunctionSet.RANK)
+            .add(FunctionSet.CUME_DIST)
             .add(FunctionSet.NTILE)
             .add(FunctionSet.ROW_NUMBER)
             .add(FunctionSet.FIRST_VALUE)
@@ -938,8 +940,13 @@ public class FunctionSet {
         // Dense rank
         addBuiltin(AggregateFunction.createAnalyticBuiltin(DENSE_RANK,
                 Collections.emptyList(), Type.BIGINT, Type.VARBINARY));
+        // Row number
         addBuiltin(AggregateFunction.createAnalyticBuiltin(ROW_NUMBER,
                 Collections.emptyList(), Type.BIGINT, Type.BIGINT));
+        // Cume dist
+        addBuiltin(AggregateFunction.createAnalyticBuiltin(CUME_DIST,
+                Collections.emptyList(), Type.DOUBLE, Type.VARBINARY));
+        // Ntile
         addBuiltin(AggregateFunction.createAnalyticBuiltin(NTILE,
                 Lists.newArrayList(Type.BIGINT), Type.BIGINT, Type.BIGINT));
 
