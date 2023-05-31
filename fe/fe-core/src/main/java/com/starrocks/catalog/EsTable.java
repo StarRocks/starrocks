@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
@@ -42,6 +43,7 @@ import com.starrocks.connector.elasticsearch.EsMajorVersion;
 import com.starrocks.connector.elasticsearch.EsMetaStateTracker;
 import com.starrocks.connector.elasticsearch.EsRestClient;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TEsTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -61,7 +63,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.zip.Adler32;
 
-public class EsTable extends Table {
+public class EsTable extends Table implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(EsTable.class);
 
     public static final Set<String> DEFAULT_DOCVALUE_DISABLED_FIELDS = new HashSet<>(Arrays.asList("text"));
@@ -86,6 +88,15 @@ public class EsTable extends Table {
     public static final String KEY_ES_NET_SSL = "es.net.ssl";
     public static final String KEY_TIME_ZONE = "time_zone";
 
+    // tableContext is used for being convenient to persist some configuration parameters uniformly
+    @SerializedName(value = "tc")
+    private Map<String, String> tableContext = new HashMap<>();
+
+    // only save the partition definition, save the partition key,
+    // partition list is got from es cluster dynamically and is saved in esTableState
+    @SerializedName(value = "p")
+    private PartitionInfo partitionInfo;
+
     private String hosts;
     private String[] seeds;
     private String userName = "";
@@ -96,9 +107,7 @@ public class EsTable extends Table {
     // which type used for `indexName`
     private String mappingType = null;
     private String transport = "http";
-    // only save the partition definition, save the partition key,
-    // partition list is got from es cluster dynamically and is saved in esTableState
-    private PartitionInfo partitionInfo;
+
     private EsTablePartitions esTablePartitions;
 
     // Whether to enable docvalues scan optimization for fetching fields more fast, default to true
@@ -126,9 +135,6 @@ public class EsTable extends Table {
     // version would be used to be compatible with different ES Cluster
     public EsMajorVersion majorVersion = null;
 
-    // tableContext is used for being convenient to persist some configuration parameters uniformly
-    private Map<String, String> tableContext = new HashMap<>();
-
     // record the latest and recently exception when sync ES table metadata (mapping, shard location)
     private Throwable lastMetaDataSyncException = null;
     // used for catalog to identify the remote table.
@@ -147,7 +153,7 @@ public class EsTable extends Table {
     }
 
     public EsTable(long id, String catalogName, String dbName, String name, List<Column> schema, Map<String, String> properties,
-                    PartitionInfo partitionInfo) throws DdlException {
+                   PartitionInfo partitionInfo) throws DdlException {
         super(id, name, TableType.ELASTICSEARCH, schema);
         this.partitionInfo = partitionInfo;
         this.catalogName = catalogName;
@@ -427,6 +433,50 @@ public class EsTable extends Table {
             partitionInfo = RangePartitionInfo.read(in);
         } else {
             throw new IOException("invalid partition type: " + partType);
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
+
+        hosts = tableContext.get("hosts");
+        seeds = hosts.split(",");
+        userName = tableContext.get("userName");
+        passwd = tableContext.get("passwd");
+        indexName = tableContext.get("indexName");
+        mappingType = tableContext.get("mappingType");
+        transport = tableContext.get("transport");
+        if (tableContext.containsKey("majorVersion")) {
+            try {
+                majorVersion = EsMajorVersion.parse(tableContext.get("majorVersion"));
+            } catch (Exception e) {
+                majorVersion = EsMajorVersion.V_5_X;
+            }
+        }
+
+        enableDocValueScan = Boolean.parseBoolean(tableContext.get("enableDocValueScan"));
+        if (tableContext.containsKey("enableKeywordSniff")) {
+            enableKeywordSniff = Boolean.parseBoolean(tableContext.get("enableKeywordSniff"));
+        } else {
+            enableKeywordSniff = true;
+        }
+        if (tableContext.containsKey("maxDocValueFields")) {
+            try {
+                maxDocValueFields = Integer.parseInt(tableContext.get("maxDocValueFields"));
+            } catch (Exception e) {
+                maxDocValueFields = DEFAULT_MAX_DOCVALUE_FIELDS;
+            }
+        }
+        if (tableContext.containsKey(KEY_WAN_ONLY)) {
+            wanOnly = Boolean.parseBoolean(tableContext.get(KEY_WAN_ONLY));
+        } else {
+            wanOnly = false;
+        }
+        if (tableContext.containsKey(KEY_ES_NET_SSL)) {
+            sslEnabled = Boolean.parseBoolean(tableContext.get(KEY_ES_NET_SSL));
+        } else {
+            sslEnabled = false;
         }
     }
 

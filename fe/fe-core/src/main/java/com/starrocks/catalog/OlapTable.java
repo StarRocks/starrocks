@@ -954,8 +954,7 @@ public class OlapTable extends Table {
                             rangePartitionInfo.getDataProperty(partition.getId()),
                             rangePartitionInfo.getReplicationNum(partition.getId()),
                             rangePartitionInfo.getIsInMemory(partition.getId()),
-                            rangePartitionInfo.getStorageCacheInfo(partition.getId()),
-                            isCloudNativeTable());
+                            rangePartitionInfo.getStorageCacheInfo(partition.getId()));
                 } else if (!reserveTablets) {
                     GlobalStateMgr.getCurrentState().onErasePartition(partition);
                 }

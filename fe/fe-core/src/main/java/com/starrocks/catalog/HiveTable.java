@@ -47,6 +47,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
@@ -102,14 +103,21 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
 
     private String catalogName;
+    @SerializedName(value = "dn")
     private String hiveDbName;
+    @SerializedName(value = "tn")
     private String hiveTableName;
+    @SerializedName(value = "rn")
     private String resourceName;
+    @SerializedName(value = "tl")
     private String tableLocation;
+    @SerializedName(value = "pcn")
     private List<String> partColumnNames = Lists.newArrayList();
     // dataColumnNames stores all the non-partition columns of the hive table,
     // consistent with the order defined in the hive table
+    @SerializedName(value = "dcn")
     private List<String> dataColumnNames = Lists.newArrayList();
+    @SerializedName(value = "prop")
     private Map<String, String> hiveProperties = Maps.newHashMap();
 
     // For `insert into target_table select from hive_table, we set it to false when executing this kind of insert query.
