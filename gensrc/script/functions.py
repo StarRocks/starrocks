@@ -575,6 +575,7 @@ vectorized_functions = [
     [100017, 'assert_true', 'BOOLEAN', ['BOOLEAN'], 'UtilityFunctions::assert_true'],
     [100019, 'assert_true', 'BOOLEAN', ['BOOLEAN', "VARCHAR"], 'UtilityFunctions::assert_true'],
     [100018, 'host_name', 'VARCHAR', [], "UtilityFunctions::host_name"],
+    [100020, 'get_query_profile', 'VARCHAR', ['VARCHAR'], "UtilityFunctions::get_query_profile"],
 
     # json string function
     [110000, "get_json_int", "INT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_int",

@@ -1264,6 +1264,15 @@ struct TGetGrantsToRolesOrUserResponse {
     1: optional list<TGetGrantsToRolesOrUserItem> grants_to
 }
 
+struct TGetProfileRequest {
+    1: optional list<string> query_id
+}
+
+struct TGetProfileResponse {
+    1: optional Status.TStatus status
+    2: optional list<string> query_result
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1277,6 +1286,7 @@ service FrontendService {
     TGetTablePrivsResult getTablePrivs(1:TGetTablePrivsParams params)
 
     TGetLoadsResult getLoads(1:TGetLoadsParams params)
+    TGetProfileResponse getQueryProfile(1:TGetProfileRequest request)
 
     TDescribeTableResult describeTable(1:TDescribeTableParams params)
     TShowVariableResult showVariables(1:TShowVariableRequest params)
