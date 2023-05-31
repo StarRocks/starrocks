@@ -155,29 +155,31 @@ private:
                 res = ColumnHelper::cast_to_nullable_column(res);
             }
 
+            for (int i = 0; i < then_columns.size(); ++i) {
+                then_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, then_columns[i]);
+            }
+            for (int i = 0; i < when_columns.size(); ++i) {
+                when_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, when_columns[i]);
+            }
+            case_column = ColumnHelper::unpack_and_duplicate_const_column(size, case_column);
+
             // case_column equals to when_columns[i] or not?
             auto when_num = when_columns.size();
-            if (!case_column->is_nullable()) {
-                for (auto row = 0; row < size; ++row) {
-                    int i = 0;
-                    while ((i < when_num) && !when_columns[i]->equals(row, *case_column, row)) {
-                        ++i;
-                    }
-                    res->append(*then_columns[i], row, 1);
-                }
-            } else {
-                NullColumnPtr case_nulls = down_cast<NullableColumn*>(case_column.get())->null_column();
-                auto case_data = down_cast<NullableColumn*>(case_column.get())->data_column();
-
-                for (auto row = 0; row < size; ++row) {
-                    int i = 0;
-                    while ((i < when_num) && ((case_nulls != nullptr && case_nulls->get_data()[row]) ||
-                                              !when_columns[i]->equals(row, *case_data, row))) {
-                        ++i;
-                    }
-                    res->append(*then_columns[i], row, 1);
-                }
+            NullColumnPtr case_nulls = nullptr;
+            if (case_column->is_nullable()) {
+                case_nulls = down_cast<NullableColumn*>(case_column.get())->null_column();
             }
+            auto case_data = ColumnHelper::get_data_column(case_column.get());
+
+            for (auto row = 0; row < size; ++row) {
+                int i = 0;
+                while ((i < when_num) && ((case_nulls != nullptr && case_nulls->get_data()[row]) ||
+                                          !when_columns[i]->equals(row, *case_data, row))) {
+                    ++i;
+                }
+                res->append(*then_columns[i], row, 1);
+            }
+
             return res;
         } else {
             std::vector<ColumnViewer<WhenType>> when_viewers;
