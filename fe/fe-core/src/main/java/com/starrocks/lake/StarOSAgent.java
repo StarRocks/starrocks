@@ -19,7 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.protobuf.Descriptors.EnumDescriptor;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.manager.StarManagerServer;
@@ -110,11 +109,70 @@ public class StarOSAgent {
         LOG.info("get serviceId {} from starMgr", serviceId);
     }
 
+<<<<<<< HEAD
+=======
+    public String addFileStore(FileStoreInfo fsInfo) throws DdlException {
+        try {
+            return client.addFileStore(fsInfo, serviceId);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to add file store", e);
+        }
+    }
+
+    public void removeFileStoreByName(String fsName) throws DdlException {
+        try {
+            client.removeFileStoreByName(fsName, serviceId);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to remove file store", e);
+        }
+    }
+
+    public void updateFileStore(FileStoreInfo fsInfo) throws DdlException {
+        try {
+            client.updateFileStore(fsInfo, serviceId);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to update file store", e);
+        }
+    }
+
+    public FileStoreInfo getFileStoreByName(String fsName) throws DdlException {
+        try {
+            return client.getFileStore(fsName, serviceId);
+        } catch (StarClientException e) {
+            if (e.getCode() == StatusCode.NOT_EXIST) {
+                return null;
+            }
+            throw new DdlException("Failed to get file store", e);
+        }
+    }
+
+    public List<FileStoreInfo> listFileStore() throws DdlException {
+        try {
+            return client.listFileStore(serviceId);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to list file store", e);
+        }
+    }
+
+    private FileStoreType getFileStoreType(String storageType) {
+        if (storageType == null) {
+            return null;
+        }
+        for (FileStoreType type : FileStoreType.values()) {
+            if (type.name().equalsIgnoreCase(storageType)) {
+                return type;
+            }
+        }
+        return null;
+    }
+
+>>>>>>> f35a284b6 ([BugFix] Use case-insensitive comparison of storage type when allocating file path (#24424))
     public FilePathInfo allocateFilePath(long tableId) throws DdlException {
         try {
-            EnumDescriptor enumDescriptor = FileStoreType.getDescriptor();
-            FileStoreType fsType = FileStoreType.valueOf(
-                    enumDescriptor.findValueByName(Config.cloud_native_storage_type).getNumber());
+            FileStoreType fsType = getFileStoreType(Config.cloud_native_storage_type);
+            if (fsType == null || fsType == FileStoreType.INVALID) {
+                throw new DdlException("Invalid cloud native storage type: " + Config.cloud_native_storage_type);
+            }
             FilePathInfo pathInfo = client.allocateFilePath(serviceId, fsType, Long.toString(tableId));
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;

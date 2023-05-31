@@ -32,6 +32,7 @@ import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
@@ -67,6 +68,7 @@ public class StarOSAgentTest {
     public void setUp() throws Exception {
         starosAgent = new StarOSAgent();
         starosAgent.init(null);
+        Config.cloud_native_storage_type = "S3";
     }
 
     @Test
@@ -140,16 +142,23 @@ public class StarOSAgentTest {
     }
 
     @Test
-    public void testAllocateFilePath() throws StarClientException, DdlException {
+    public void testAllocateFilePath() throws StarClientException {
+        long tableId = 123;
+
         new Expectations() {
             {
-                FilePathInfo pathInfo = client.allocateFilePath("1", FileStoreType.S3, "123");
-                result = pathInfo;
+                client.allocateFilePath("1", FileStoreType.S3, Long.toString(tableId));
+                result = FilePathInfo.newBuilder().build();
                 minTimes = 0;
             }
         };
 
-        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Config.cloud_native_storage_type = "s3";
+        ExceptionChecker.expectThrowsNoException(() -> starosAgent.allocateFilePath(tableId));
+
+        Config.cloud_native_storage_type = "ss";
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Invalid cloud native storage type: ss",
+                () -> starosAgent.allocateFilePath(tableId));
     }
 
     @Test
@@ -338,7 +347,6 @@ public class StarOSAgentTest {
         // test delete shard group
         ExceptionChecker.expectThrowsNoException(() -> starosAgent.deleteShardGroup(Lists.newArrayList(1L, 2L)));
     }
-
 
     @Test
     public void testGetBackendByShard() throws StarClientException, UserException {
