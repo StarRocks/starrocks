@@ -171,6 +171,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             }
         }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rewrite/AddDecodeNodeForDictStringRule.java
         private boolean projectionNeedDecode(OptExpression optExpression, DecodeContext context,
                                              Projection projection) {
             Set<Integer> stringColumnIds = context.stringColumnIdToDictColumnIds.keySet();
@@ -184,6 +185,35 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             final ColumnRefSet projectOutputs = new ColumnRefSet(projection.getOutputColumns());
             final Set<Integer> globalDictIds =
                     context.globalDicts.stream().map(a -> a.first).collect(Collectors.toSet());
+=======
+        // exist any scalarOperator if used encoded string cols and cannot apply dict optimize
+        // means we cannot optimize this projection and need add a decodeNode before this projection.
+        // scalarOperators can be optimized are:
+        // 1. if it's a pass-through entry like col1 -> col1, we don't care it.
+        // 2. scalarOperator don't ref cols from encoded string cols, we don't care it.
+        // 3. exists multiple columnRef to one dict col, we cannot rewrite this projection.
+        // 4. scalarOperator ref cols from encoded string cols should meet these requirements:
+        //    a. all these dict cols of these string cols exist in the global dict
+        //    b. can gain benefit from the optimization
+        private boolean couldApplyStringDict(DecodeContext context, Projection projection) {
+            final Set<Integer> globalDictIds =
+                    context.globalDicts.stream().map(a -> a.first).collect(Collectors.toSet());
+            Set<Integer> encodedStringCols = context.getEncodedStringCols();
+            Map<ColumnRefOperator, ColumnRefOperator> memo = Maps.newHashMap();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
+                if (entry.getValue().isColumnRef()) {
+                    ColumnRefOperator key = entry.getKey();
+                    ColumnRefOperator value = (ColumnRefOperator) entry.getValue();
+                    if (globalDictIds.contains(context.stringColumnIdToDictColumnIds.get(value.getId()))) {
+                        if (memo.containsKey(value)) {
+                            return false;
+                        } else {
+                            memo.put(value, key);
+                        }
+                    }
+                }
+            }
+>>>>>>> cf2c387a5 ([BugFix] forbid rewrite projection with one dict col mapping to multiple output col (#24425)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/AddDecodeNodeForDictStringRule.java
 
             // for each input in Projection,
             // if input was dict column ,but we couldn't find it in global dict keys and input column
