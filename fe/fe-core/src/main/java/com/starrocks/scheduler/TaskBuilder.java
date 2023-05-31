@@ -22,7 +22,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
