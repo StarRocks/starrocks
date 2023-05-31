@@ -754,7 +754,7 @@ Make sure that StarRocks has permissions to access the metadata service (such as
 ### Precautions
 
 * Iceberg external tables can be used to query only the following types of data:
-  * Iceberg v1 (Analytic Data Tables) tables. From v3.0 onwards, Iceberg v2 (Row-level Deletes) tables are supported. For the differences between Versions 1 tables and Versions 2 tables, see [Iceberg Table Spec](https://iceberg.apache.org/spec/).
+  * Iceberg v1 (Analytic Data Tables) tables. From v3.0 onwards, ORC-formatted Iceberg v2 (Row-level Deletes) tables are supported. For the differences between Versions 1 tables and Versions 2 tables, see [Iceberg Table Spec](https://iceberg.apache.org/spec/).
   * Tables that are compressed in gzip (default format), Zstd, LZ4, or Snappy format.
   * Files that are stored in Parquet or ORC format.
 
