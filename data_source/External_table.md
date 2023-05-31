@@ -594,6 +594,8 @@ StarRocks 支持对目标表进行谓词下推，把过滤条件推给目标表�
 
 ## Hive 外表
 
+使用 Hive 外部表前，确保服务器上已安装 JDK 1.8。
+
 ### 创建 Hive 资源
 
 StarRocks 使用 Hive 资源来管理使用到的 Hive 集群相关配置，如 Hive Metastore 地址等，一个 Hive 资源对应一个 Hive 集群。创建 Hive 外表的时候需要指定使用哪个 Hive 资源。
