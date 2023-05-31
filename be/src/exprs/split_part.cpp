@@ -24,7 +24,7 @@
 
 namespace starrocks {
 
-static void split_index(const Slice& haystack, const Slice& delimiter, int32_t part_number, Slice& res) {
+static bool split_index(const Slice& haystack, const Slice& delimiter, int32_t part_number, Slice& res) {
     if (part_number > 0) {
         if (delimiter.size == 1) {
             // if delimiter is a char, use memchr to split
@@ -51,6 +51,7 @@ static void split_index(const Slice& haystack, const Slice& delimiter, int32_t p
             if (num == part_number) {
                 res.data = haystack.data + pre_offset + 1;
                 res.size = offset - pre_offset - 1;
+                return true;
             }
         } else {
             // if delimiter is a string, use memmem to split
@@ -75,6 +76,7 @@ static void split_index(const Slice& haystack, const Slice& delimiter, int32_t p
             if (num == part_number) {
                 res.data = haystack.data + pre_offset + delimiter.size;
                 res.size = offset - pre_offset - delimiter.size;
+                return true;
             }
         }
     } else {
@@ -107,8 +109,10 @@ static void split_index(const Slice& haystack, const Slice& delimiter, int32_t p
                 res.data = haystack.data + offset + delimiter.size;
                 res.size = pre_offset - offset - delimiter.size;
             }
+            return true;
         }
     }
+    return false;
 }
 
 /**
@@ -135,6 +139,7 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
 
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> res(size);
+    Slice slice;
     for (int i = 0; i < size; ++i) {
         if (haystack_viewer.is_null(i) || delimiter_viewer.is_null(i) || part_number_viewer.is_null(i)) {
             res.append_null();
@@ -162,12 +167,10 @@ StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context, const 
                 }
             }
         } else {
-            Slice slice;
-            split_index(haystack, delimiter, part_number, slice);
-            if (slice.empty()) {
-                res.append_null();
-            } else {
+            if (split_index(haystack, delimiter, part_number, slice)) {
                 res.append(slice);
+            } else {
+                res.append_null();
             }
         }
     }
