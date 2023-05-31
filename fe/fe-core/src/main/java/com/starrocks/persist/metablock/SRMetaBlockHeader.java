@@ -20,8 +20,15 @@ import com.google.gson.annotations.SerializedName;
 public class SRMetaBlockHeader {
     @SerializedName(value = "n")
     private String name;
+    @SerializedName(value = "i")
+    private SRMetaBlockID id;
     @SerializedName(value = "nj")
     private int numJson;
+
+    public SRMetaBlockHeader(SRMetaBlockID id, int numJson) {
+        this.id = id;
+        this.numJson = numJson;
+    }
 
     public SRMetaBlockHeader(String name, int numJson) {
         this.name = name;
@@ -34,5 +41,13 @@ public class SRMetaBlockHeader {
 
     public String getName() {
         return name;
+    }
+
+    public SRMetaBlockID getId() {
+        if (id == null) {
+            return SRMetaBlockID.INVALID;
+        } else {
+            return id;
+        }
     }
 }

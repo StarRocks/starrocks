@@ -145,6 +145,7 @@ import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.PrivilegeActions;
@@ -4704,7 +4705,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         int cnt = 1 + idToDbNormal.size() + tableSize + 1;
 
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, LocalMetastore.class.getName(), cnt);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.LOCAL_META_STORE, cnt);
 
         writer.writeJson(idToDbNormal.size());
         for (Database database : idToDbNormal.values()) {
@@ -4722,7 +4723,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, LocalMetastore.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.LOCAL_META_STORE);
         try {
             int dbSize = reader.readJson(int.class);
             for (int i = 0; i < dbSize; ++i) {

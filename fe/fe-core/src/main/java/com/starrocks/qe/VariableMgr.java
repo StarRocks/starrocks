@@ -50,6 +50,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
@@ -397,7 +398,7 @@ public class VariableMgr {
             throw new IOException("failed to write session variable: " + e.getMessage());
         }
 
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, VariableMgr.class.getName(), 1 + m.size() + 1 + g.size());
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.VARIABLE_MGR, 1 + m.size() + 1 + g.size());
 
         writer.writeJson(m.size());
         for (Map.Entry<String, String> e : m.entrySet()) {
@@ -412,7 +413,7 @@ public class VariableMgr {
     }
 
     public static void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException, DdlException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, VariableMgr.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.VARIABLE_MGR);
         try {
             int sessionVarSize = reader.readInt();
             for (int i = 0; i < sessionVarSize; ++i) {

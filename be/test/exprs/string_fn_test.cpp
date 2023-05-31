@@ -934,6 +934,26 @@ PARALLEL_TEST(VecStringFunctionsTest, splitPart) {
     delim->append("");
     field->append(10);
 
+    // 25
+    str->append("hello word");
+    delim->append(" ");
+    field->append(-1);
+
+    // 26
+    str->append("hello word");
+    delim->append(" ");
+    field->append(-2);
+
+    // 27
+    str->append("hello word");
+    delim->append(" ");
+    field->append(-3);
+
+    // 28
+    str->append("2019年9月8日");
+    delim->append("月");
+    field->append(-1);
+
     columns.emplace_back(str);
     columns.emplace_back(delim);
     columns.emplace_back(field);
@@ -966,6 +986,10 @@ PARALLEL_TEST(VecStringFunctionsTest, splitPart) {
     ASSERT_EQ("9", v->get(22).get<Slice>().to_string());
     ASSERT_EQ("日", v->get(23).get<Slice>().to_string());
     ASSERT_TRUE(v->get(24).is_null());
+    ASSERT_EQ("word", v->get(25).get<Slice>().to_string());
+    ASSERT_EQ("hello", v->get(26).get<Slice>().to_string());
+    ASSERT_TRUE(v->get(27).is_null());
+    ASSERT_EQ("8日", v->get(28).get<Slice>().to_string());
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, leftTest) {

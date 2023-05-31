@@ -59,6 +59,7 @@ import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
@@ -1196,7 +1197,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         int numJson = 1 + idToDatabase.size() + 1 + idToTableInfo.size()
                 + 1 + idToPartition.size() + 1;
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, CatalogRecycleBin.class.getName(), numJson);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.CATALOG_RECYCLE_BIN, numJson);
 
         writer.writeJson(idToDatabase.size());
         for (RecycleDatabaseInfo recycleDatabaseInfo : idToDatabase.values()) {
@@ -1230,7 +1231,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, CatalogRecycleBin.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.CATALOG_RECYCLE_BIN);
         try {
             int idToDatabaseSize = reader.readInt();
             for (int i = 0; i < idToDatabaseSize; ++i) {
