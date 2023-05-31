@@ -2850,7 +2850,7 @@ static StatusOr<ColumnPtr> regexp_replace_use_hyperscan(StringFunctionsState* st
         if (scratch != nullptr) {
             hs_error_t st;
             if ((st = hs_free_scratch(scratch)) != HS_SUCCESS) {
-                return Status::InternalError(strings::Substitute("free scratch space failure. status: %0", st));
+                LOG(ERROR) << "free scratch space failure. status: " << st;
             }
         }
     });
