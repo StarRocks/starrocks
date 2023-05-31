@@ -204,43 +204,54 @@ StarRocks 访问存储系统的认证配置。
     | kerberos_keytab                 | 用于指定 Kerberos 的 Key Table（简称为“keytab”）文件的路径。 |
     | kerberos_keytab_content         | 用于指定 Kerberos 中 keytab 文件的内容经过 Base64 编码之后的内容。该参数跟 `kerberos_keytab` 参数二选一配置。 |
 
-   需要注意的是，在多 Kerberos 用户场景下，您必须部署一个独立的 Broker，并且在导入语句中通过 `WITH BROKER "<broker_name>"` 来指定使用哪个 Broker。另外还需要打开 Broker 进程的启动脚本文件 **start_broker.sh**，在文件 42 行附近修改如下信息让 Broker 进程读取 **krb5.conf** 文件信息：
+    需要注意的是，在多 Kerberos 用户的场景下，您需要确保至少部署了一组独立的 [Broker](../../../deployment/deploy_broker.md)，并且在导入语句中通过 `WITH BROKER "<broker_name>"` 来指定使用哪组 Broker。另外还需要打开 Broker 进程的启动脚本文件 **start_broker.sh**，在文件 42 行附近修改如下信息让 Broker 进程读取 **krb5.conf** 文件信息：
 
     ```Plain
     export JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx1024m -Dfile.encoding=UTF-8 -Djava.security.krb5.conf=/etc/krb5.conf"
     ```
 
-   > **说明**
-   >
-   > **/etc/krb5.conf** 文件路径根据实际情况进行修改，Broker 需要有权限读取该文件。部署多个 Broker 时，每个 Broker 均需要修改如上信息，然后重启各 Broker 所在的节点使配置生效。
+    > **说明**
+    >
+    > - **/etc/krb5.conf** 文件路径根据实际情况进行修改，Broker 需要有权限读取该文件。部署多个 Broker 时，每个 Broker 节点均需要修改如上信息，然后重启各 Broker 节点使配置生效。
+    > - 您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。
 
 - HA 配置
 
-  可以为 HDFS 集群中的 NameNode 节点配置 HA 机制，从而确保发生 NameNode 节点切换时，StarRocks 能够自动识别新切换到的 NameNode 节点，包括如下两种场景：
+  可以为 HDFS 集群中的 NameNode 节点配置 HA 机制，从而确保发生 NameNode 节点切换时，StarRocks 能够自动识别新切换到的 NameNode 节点，包括如下几种场景：
 
-  - 在单 HDFS 集群场景下，执行的是无 Broker 的导入，您需要将 `hdfs-site.xml` 文件放在每个 FE 节点和每个 BE 节点的 `{deploy}/conf` 目录下。
-
-  - 在多 HDFS 集群场景下，执行的是有 Broker 的导入，Broker 支持使用如下两种方式读取 HDFS 集群中节点的信息：
+  - 在单 HDFS 集群、并且配置了单 Kerberos 用户的场景下，可以采用有 Broker 的导入，也可以采用无 Broker 的导入。
   
-    - 将 `hdfs-site.xml` 文件放在每个 HDFS 集群对应的 Broker 所在节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy_dir}/conf/` 目录添加到 `CLASSPATH` 环境变量的方式读取文件信息。
+    - 如果采用有 Broker 的导入，您需要确保至少部署了一组独立的 [Broker](../../../deployment/deploy_broker.md)，并将 `hdfs-site.xml` 文件放在 HDFS 集群对应的 Broker 节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy}/conf` 目录添加到 `CLASSPATH` 环境变量，使 Broker 能够读取 HDFS 集群中各节点的信息。
+  
+    - 如果采用无 Broker 的导入，您需要将 `hdfs-site.xml` 文件放在每个 FE 节点和每个 BE 节点的 `{deploy}/conf` 目录下。
+
+  - 在单 HDFS 集群、并且配置了多 Kerberos 用户的场景下，只支持有 Broker 的导入。您需要确保至少部署了一组独立的 [Broker](../../../deployment/deploy_broker.md)，并将 `hdfs-site.xml` 文件放在 HDFS 集群对应的 Broker 节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy}/conf` 目录添加到 `CLASSPATH` 环境变量，使 Broker 能够读取 HDFS 集群中各节点的信息。
+
+  - 在多 HDFS 集群场景下（不管是单 Kerberos 用户、还是多 Kerberos 用户），只支持有 Broker 的导入。您需要确保至少部署了一组独立的 [Broker](../../../deployment/deploy_broker.md)，并且采取如下方法之一来配置 Broker 读取 HDFS 集群中各节点的信息：
+  
+    - 将 `hdfs-site.xml` 文件放在每个 HDFS 集群对应的 Broker 节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy}/conf` 目录添加到 `CLASSPATH` 环境变量，使 Broker 能够读取 HDFS 集群中各节点的信息。
     - 在创建 Broker Load 作业时增加如下 HA 配置：
 
-     ```Plain
-     "dfs.nameservices" = "ha_cluster",
-     "dfs.ha.namenodes.ha_cluster" = "ha_n1,ha_n2",
-     "dfs.namenode.rpc-address.ha_cluster.ha_n1" = "<hdfs_host>:<hdfs_port>",
-     "dfs.namenode.rpc-address.ha_cluster.ha_n2" = "<hdfs_host>:<hdfs_port>",
-     "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
-     ```
+      ```Plain
+      "dfs.nameservices" = "ha_cluster",
+      "dfs.ha.namenodes.ha_cluster" = "ha_n1,ha_n2",
+      "dfs.namenode.rpc-address.ha_cluster.ha_n1" = "<hdfs_host>:<hdfs_port>",
+      "dfs.namenode.rpc-address.ha_cluster.ha_n2" = "<hdfs_host>:<hdfs_port>",
+      "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
+      ```
 
-  上述配置中的参数说明如下表所述：
+      上述配置中的参数说明如下表所述：
 
-  | **参数名称**                         | **参数说明**                                                 |
-  | ------------------------------------------------------- | --------------------------- |
-  | dfs.nameservices                  | 自定义 HDFS 集群的名称。                                     |
-  | dfs.ha.namenodes.XXX              | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。  <br>其中 `xxx` 为 `dfs.nameservices` 中自定义的HDFS 服务的名称。 |
-  | dfs.namenode.rpc-address.XXX.NN    | 指定 NameNode 的 RPC 地址信息。  <br>其中 `NN` 表示 `dfs.ha.namenodes.XXX` 中自定义 NameNode 的名称。 |
-  | dfs.client.failover.proxy.provider | 指定客户端连接的 NameNode 的提供者，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。 |
+      | **参数名称**                         | **参数说明**                                                 |
+      | ------------------------------------------------------- | --------------------------- |
+      | dfs.nameservices                  | 自定义 HDFS 集群的名称。                                     |
+      | dfs.ha.namenodes.XXX              | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。  <br>其中 `xxx` 为 `dfs.nameservices` 中自定义的HDFS 服务的名称。 |
+      | dfs.namenode.rpc-address.XXX.NN    | 指定 NameNode 的 RPC 地址信息。  <br>其中 `NN` 表示 `dfs.ha.namenodes.XXX` 中自定义 NameNode 的名称。 |
+      | dfs.client.failover.proxy.provider | 指定客户端连接的 NameNode 的提供者，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。 |
+
+  > **说明**
+  >
+  > 您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。
 
 #### AWS S3
 
