@@ -358,7 +358,8 @@ public class ResourceMgr implements Writable {
         writer.close();
     }
 
-    public void loadResourcesV2(DataInputStream dis, CatalogMgr catalogMgr) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+    public void loadResourcesV2(DataInputStream dis, CatalogMgr catalogMgr)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.RESOURCE_MGR);
         try {
             ResourceMgr data = reader.readJson(ResourceMgr.class);
