@@ -26,6 +26,7 @@ import org.apache.paimon.catalog.CatalogFactory;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.options.Options;
+import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.table.Table;
 import org.apache.paimon.table.source.ReadBuilder;
@@ -53,6 +54,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
     private final String databaseName;
     private final String tableName;
     private final String splitInfo;
+    private final String predicateInfo;
     private final String[] requiredFields;
     private ColumnType[] requiredTypes;
     private DataType[] logicalTypes;
@@ -71,6 +73,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
         this.tableName = params.get("table_name");
         this.requiredFields = params.get("required_fields").split(",");
         this.splitInfo = params.get("split_info");
+        this.predicateInfo = params.get("predicate_info");
         this.classLoader = this.getClass().getClassLoader();
         for (Map.Entry<String, String> kv : params.entrySet()) {
             LOG.debug("key = " + kv.getKey() + ", value = " + kv.getValue());
@@ -121,8 +124,8 @@ public class PaimonSplitScanner extends ConnectorScanner {
             int[] projected = Arrays.stream(requiredFields).mapToInt(fieldNames::indexOf).toArray();
             readBuilder.withProjection(projected);
         }
-        // TODO(wangriyu): readBuilder.withFilter()
-        // TODO(wangriyu): table.copy() tableWithDynamicOptions()
+        List<Predicate> predicates = PaimonScannerUtils.decodeStringToObject(predicateInfo);
+        readBuilder.withFilter(predicates);
         Split split = PaimonScannerUtils.decodeStringToObject(splitInfo);
         reader = readBuilder.newRead().createReader(split);
     }

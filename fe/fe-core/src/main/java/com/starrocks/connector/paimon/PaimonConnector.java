@@ -39,7 +39,7 @@ public class PaimonConnector implements Connector  {
     private static final String PAIMON_CATALOG_WAREHOUSE = "paimon.catalog.warehouse";
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private final CloudConfiguration cloudConfiguration;
-    private Catalog paimonCatalog;
+    private Catalog paimonNativeCatalog;
     private final String catalogType;
     private final String metastoreUris;
     private final String warehousePath;
@@ -55,31 +55,34 @@ public class PaimonConnector implements Connector  {
         this.warehousePath = properties.get(PAIMON_CATALOG_WAREHOUSE);
 
         this.paimonOptions = new Options();
-        if (catalogType.isEmpty()) {
+        if (catalogType == null || catalogType.isEmpty()) {
             throw new StarRocksConnectorException("The property %s must be set.", PAIMON_CATALOG_TYPE);
         }
         paimonOptions.setString(METASTORE.key(), catalogType);
-        if (catalogType.equals("hive") && !metastoreUris.isEmpty()) {
-            paimonOptions.setString(URI.key(), metastoreUris);
-        } else {
-            throw new StarRocksConnectorException("The property %s must be set if paimon catalog is hive.", HIVE_METASTORE_URIS);
+        if (catalogType.equals("hive")) {
+            if (metastoreUris != null && !metastoreUris.isEmpty()) {
+                paimonOptions.setString(URI.key(), metastoreUris);
+            } else {
+                throw new StarRocksConnectorException("The property %s must be set if paimon catalog is hive.",
+                        HIVE_METASTORE_URIS);
+            }
         }
-        if (warehousePath.isEmpty()) {
+        if (warehousePath == null || warehousePath.isEmpty()) {
             throw new StarRocksConnectorException("The property %s must be set.", PAIMON_CATALOG_WAREHOUSE);
         }
         paimonOptions.setString(WAREHOUSE.key(), warehousePath);
     }
 
-    public Catalog getPaimonCatalog() {
-        if (paimonCatalog == null) {
-            this.paimonCatalog = CatalogFactory.createCatalog(CatalogContext.create(paimonOptions));
+    public Catalog getPaimonNativeCatalog() {
+        if (paimonNativeCatalog == null) {
+            this.paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(paimonOptions));
         }
-        return paimonCatalog;
+        return paimonNativeCatalog;
     }
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return new PaimonMetadata(catalogName, getPaimonCatalog(), catalogType, metastoreUris, warehousePath);
+        return new PaimonMetadata(catalogName, getPaimonNativeCatalog(), catalogType, metastoreUris, warehousePath);
     }
 
     @Override
