@@ -76,16 +76,27 @@ import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
+import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveResource;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiResource;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergResource;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCResource;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OdbcCatalogResource;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.PseudoType;
@@ -97,6 +108,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.View;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -200,7 +212,8 @@ public class GsonUtils {
                     .registerSubtype(RangePartitionInfo.class, "RangePartitionInfo")
                     .registerSubtype(ListPartitionInfo.class, "ListPartitionInfo")
                     .registerSubtype(SinglePartitionInfo.class, "SinglePartitionInfo")
-                    .registerSubtype(ExpressionRangePartitionInfo.class, "ExpressionRangePartitionInfo");
+                    .registerSubtype(ExpressionRangePartitionInfo.class, "ExpressionRangePartitionInfo")
+                    .registerSubtype(ExpressionRangePartitionInfoV2.class, "ExpressionRangePartitionInfoV2");
 
     // runtime adapter for class "Resource"
     private static final RuntimeTypeAdapterFactory<Resource> RESOURCE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
@@ -252,8 +265,19 @@ public class GsonUtils {
 
     private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Table> TABLE_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(com.starrocks.catalog.Table.class, "clazz")
+            .registerSubtype(EsTable.class, "EsTable")
+            .registerSubtype(ExternalOlapTable.class, "ExternalOlapTable")
+            .registerSubtype(FileTable.class, "FileTable")
+            .registerSubtype(HiveTable.class, "HiveTable")
+            .registerSubtype(HudiTable.class, "HudiTable")
+            .registerSubtype(IcebergTable.class, "IcebergTable")
+            .registerSubtype(JDBCTable.class, "JDBCTable")
+            .registerSubtype(LakeMaterializedView.class, "LakeMaterializedView")
             .registerSubtype(LakeTable.class, "LakeTable")
-            .registerSubtype(LakeMaterializedView.class, "LakeMaterializedView");
+            .registerSubtype(MaterializedView.class, "MaterializedView")
+            .registerSubtype(MysqlTable.class, "MysqlTable")
+            .registerSubtype(OlapTable.class, "OlapTable")
+            .registerSubtype(View.class, "View");
 
     private static final RuntimeTypeAdapterFactory<SnapshotInfo> SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(SnapshotInfo.class, "clazz")

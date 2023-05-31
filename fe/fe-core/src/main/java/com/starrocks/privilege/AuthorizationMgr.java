@@ -1752,6 +1752,13 @@ public class AuthorizationMgr {
             try {
                 // 1 json for myself
                 ret = reader.readJson(AuthorizationMgr.class);
+                ret.globalStateMgr = globalStateMgr;
+                if (provider == null) {
+                    ret.provider = new DefaultAuthorizationProvider();
+                } else {
+                    ret.provider = provider;
+                }
+                ret.initBuiltinRolesAndUsers();
 
                 // 1 json for num user
                 int numUser = reader.readJson(int.class);

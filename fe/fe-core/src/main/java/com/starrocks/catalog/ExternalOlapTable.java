@@ -20,6 +20,7 @@ import com.google.common.collect.Range;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -228,8 +229,11 @@ public class ExternalOlapTable extends OlapTable {
         }
     }
 
+
     private long dbId;
     private TTableMeta lastExternalMeta;
+
+    @SerializedName(value = "ef")
     private ExternalTableInfo externalTableInfo;
 
     public ExternalOlapTable() {

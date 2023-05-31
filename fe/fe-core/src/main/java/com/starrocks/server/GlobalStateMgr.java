@@ -1427,7 +1427,18 @@ public class GlobalStateMgr {
                 try {
                     checksum = loadHeaderV2(dis, checksum);
                     nodeMgr.load(dis);
+                    localMetastore.load(dis);
+
+                    // ATTN: this should be done after load Db, and before loadAlterJob
+                    localMetastore.recreateTabletInvertIndex();
+                    // rebuild es state state
+                    esRepository.loadTableFromCatalog();
+                    starRocksRepository.loadTableFromCatalog();
+                    recycleBin.load(dis);
+
+                    loadMgr.loadLoadJobsV2JsonFormat(dis);
                     alterJobMgr.load(dis);
+                    VariableMgr.load(dis);
                     pluginMgr.load(dis);
                     deleteMgr.load(dis);
                     analyzeMgr.load(dis);
@@ -1455,18 +1466,9 @@ public class GlobalStateMgr {
                 }
 
                 //TODO: The following parts have not been refactored, and they are added for the convenience of testing
-                checksum = localMetastore.loadDb(dis, checksum);
-                // ATTN: this should be done after load Db, and before loadAlterJob
-                localMetastore.recreateTabletInvertIndex();
-                // rebuild es state state
-                esRepository.loadTableFromCatalog();
-                starRocksRepository.loadTableFromCatalog();
-                checksum = recycleBin.loadRecycleBin(dis, checksum);
-                checksum = VariableMgr.loadGlobalVariable(dis, checksum);
-                checksum = localMetastore.loadCluster(dis, checksum);
+
                 checksum = loadResources(dis, checksum);
                 checksum = taskManager.loadTasks(dis, checksum);
-                checksum = localMetastore.loadAutoIncrementId(dis, checksum);
             } else {
                 checksum = loadHeaderV1(dis, checksum);
                 checksum = nodeMgr.loadLeaderInfo(dis, checksum);
@@ -1527,14 +1529,14 @@ public class GlobalStateMgr {
                 checksum = localMetastore.loadAutoIncrementId(dis, checksum);
                 remoteChecksum = dis.readLong();
                 // ** NOTICE **: always add new code at the end
+
+                Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
             }
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
             dis.close();
         }
-
-        Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
 
         if (isUsingNewPrivilege() && needUpgradedToNewPrivilege() && !isLeader() && !isCheckpointThread()) {
             LOG.warn(
@@ -1815,8 +1817,11 @@ public class GlobalStateMgr {
                 try {
                     checksum = saveHeaderV2(dos, checksum);
                     nodeMgr.save(dos);
+                    localMetastore.save(dos);
+                    recycleBin.save(dos);
                     loadMgr.saveLoadJobsV2JsonFormat(dos);
                     alterJobMgr.save(dos);
+                    VariableMgr.save(dos);
                     pluginMgr.save(dos);
                     deleteMgr.save(dos);
                     analyzeMgr.save(dos);
@@ -1842,14 +1847,9 @@ public class GlobalStateMgr {
                 }
 
                 //TODO: The following parts have not been refactored, and they are added for the convenience of testing
-                checksum = localMetastore.saveDb(dos, checksum);
-                checksum = recycleBin.saveRecycleBin(dos, checksum);
-                checksum = VariableMgr.saveGlobalVariable(dos, checksum);
-                checksum = localMetastore.saveCluster(dos, checksum);
+
                 checksum = resourceMgr.saveResources(dos, checksum);
                 checksum = taskManager.saveTasks(dos, checksum);
-                checksum = localMetastore.saveAutoIncrementId(dos, checksum);
-
             } else {
                 checksum = saveVersion(dos, checksum);
                 checksum = saveHeader(dos, replayedJournalId, checksum);
@@ -1872,6 +1872,7 @@ public class GlobalStateMgr {
                 checksum = routineLoadMgr.saveRoutineLoadJobs(dos, checksum);
                 checksum = loadMgr.saveLoadJobsV2(dos, checksum);
                 checksum = smallFileMgr.saveSmallFiles(dos, checksum);
+
                 checksum = pluginMgr.savePlugins(dos, checksum);
                 checksum = deleteMgr.saveDeleteHandler(dos, checksum);
                 dos.writeLong(checksum);
