@@ -125,21 +125,12 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  `c_user` varchar(50) ,\n" +
                 "  `c_dept` varchar(50) ,\n" +
                 "  `c_par` varchar(50) ,\n" +
-                "  `vst` varchar(3) ,\n" +
-                "  `vc_busness_sec_type` varchar(5) ,\n" +
                 "  `c_nodevalue` varchar(50) ,\n" +
                 "  `c_brokername` varchar(50) ,\n" +
-                "  `is_neworold` varchar(3) ,\n" +
                 "  `f_asset` decimal128(20, 5) ,\n" +
                 "  `f_asset_zb` decimal128(20, 5) ,\n" +
                 "  `f_managerfee` decimal128(20, 5) ,\n" +
                 "  `fee_zb` decimal128(20, 5) ,\n" +
-                "  `f_icapital` decimal128(20, 5) ,\n" +
-                "  `f_ocapital` decimal128(20, 5) ,\n" +
-                "  `net_cap` decimal128(20, 5) ,\n" +
-                "  `vc_custno_c` int(11) ,\n" +
-                "  `c_fundacco_c` int(11) ,\n" +
-                "  `c_new` int(11) ,\n" +
                 "  `cpc` int(11) \n" +
                 ") ENGINE=OLAP \n" +
                 "DUPLICATE KEY(`d_date`, `c_user`, `c_dept`, `c_par`)\n" +
@@ -155,17 +146,7 @@ public class LowCardinalityTest extends PlanTestBase {
         starRocksAssert.withTable("CREATE TABLE `low_card_t2` (\n" +
                 "  `d_date` date ,\n" +
                 "  `c_mr` varchar(40) ,\n" +
-                "  `vst` varchar(3) ,\n" +
-                "  `vc_busness_sec_type` varchar(5) ,\n" +
-                "  `f_asset` decimal128(20, 5) ,\n" +
-                "  `f_asset_zb` decimal128(20, 5) ,\n" +
-                "  `f_managerfee` decimal128(20, 5) ,\n" +
                 "  `fee_zb` decimal128(20, 5) ,\n" +
-                "  `f_icapital` decimal128(20, 5) ,\n" +
-                "  `f_ocapital` decimal128(20, 5) ,\n" +
-                "  `net_cap` decimal128(20, 5) ,\n" +
-                "  `vc_custno_c` int(11) ,\n" +
-                "  `c_fundacco_c` int(11) ,\n" +
                 "  `c_new` int(11) ,\n" +
                 "  `cpc` int(11)\n" +
                 ") ENGINE=OLAP \n" +
@@ -1861,7 +1842,7 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testProjectionRewrite() throws Exception {
         String sql = "SELECT '2023-03-26' D_DATE, c_user, concat(C_NODEVALUE, '-', C_BROKERNAME) AS C_NAME, c_dept, " +
                 "c_par, '人', '1', '规', '1', 'KPI1' C_KPICODE, round(sum(if(c_par='01', F_ASSET_zb, F_ASSET))/100000000, 5) " +
-                "F_CURRENTDAta FROM low_card_t1 WHERE c_par IN ( '02', '01' ) AND D_DATE='2023-03-26' " +
+                "F_CURRENTDATA FROM low_card_t1 WHERE c_par IN ( '02', '01' ) AND D_DATE='2023-03-26' " +
                 "GROUP BY C_BROKERNAME, c_dept, c_par, c_user, C_NODEVALUE " +
                 "union all " +
                 "SELECT '2023-03-26' D_DATE, c_mr AS C_CODE, CASE WHEN c_mr = '01' THEN '部' ELSE '户部' END C_NAME, " +
@@ -1871,10 +1852,10 @@ public class LowCardinalityTest extends PlanTestBase {
                 "AND d_date<='2023-03-26' GROUP BY c_mr;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "10:Decode\n" +
-                "  |  <dict id 74> : <string id 32>\n" +
+                "  |  <dict id 55> : <string id 23>\n" +
                 "  |  \n" +
                 "  9:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(38: fee_zb)\n" +
-                "  |  group by: 74: c_mr");
+                "  |  output: sum(24: fee_zb)\n" +
+                "  |  group by: 55: c_mr");
     }
 }
