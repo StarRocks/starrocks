@@ -1495,19 +1495,58 @@ public class MvRewriteOptimizationTest {
 
         dropMv("test", "union_mv_1");
 
-        // multi tables query
-        createAndRefreshMv("test", "join_union_mv_1", "create materialized view join_union_mv_1" +
-                " distributed by hash(empid)" +
-                " as" +
-                " select emps2.empid, emps2.salary, depts2.deptno, depts2.name" +
-                " from emps2 join depts2 using (deptno) where depts2.deptno < 100");
-        MaterializedView mv2 = getMv("test", "join_union_mv_1");
-        PlanTestBase.setTableStatistics(mv2, 1);
-        String query2 = "select emps2.empid, emps2.salary, depts2.deptno, depts2.name" +
-                " from emps2 join depts2 using (deptno) where depts2.deptno < 120";
-        String plan2 = getFragmentPlan(query2);
-        PlanTestBase.assertContains(plan2, "join_union_mv_1");
-        dropMv("test", "join_union_mv_1");
+        {
+            // multi tables query
+            createAndRefreshMv("test", "join_union_mv_1", "create materialized view join_union_mv_1" +
+                    " distributed by hash(empid)" +
+                    " as" +
+                    " select emps2.empid, emps2.salary, depts2.deptno, depts2.name" +
+                    " from emps2 join depts2 using (deptno) where depts2.deptno < 100");
+            MaterializedView mv2 = getMv("test", "join_union_mv_1");
+            PlanTestBase.setTableStatistics(mv2, 1);
+            String query2 = "select emps2.empid, emps2.salary, depts2.deptno, depts2.name" +
+                    " from emps2 join depts2 using (deptno) where depts2.deptno < 120";
+            String plan2 = getFragmentPlan(query2);
+            PlanTestBase.assertContains(plan2, "join_union_mv_1");
+            PlanTestBase.assertContains(plan2, "4:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 15: deptno = 12: deptno\n" +
+                    "  |  \n" +
+                    "  |----3:EXCHANGE");
+            dropMv("test", "join_union_mv_1");
+        }
+
+        {
+            // multi tables query
+            createAndRefreshMv("test", "join_union_mv_1", "create materialized view join_union_mv_1" +
+                    " distributed by hash(empid)" +
+                    " as" +
+                    " select emps2.empid, emps2.salary, d1.deptno, d1.name name1, d2.name name2" +
+                    " from emps2 join depts2 d1 on emps2.deptno = d1.deptno" +
+                    " join depts2 d2 on emps2.deptno = d2.deptno where d1.deptno < 100");
+            MaterializedView mv2 = getMv("test", "join_union_mv_1");
+            PlanTestBase.setTableStatistics(mv2, 1);
+            String query2 = "select emps2.empid, emps2.salary, d1.deptno, d1.name name1, d2.name name2" +
+                    " from emps2 join depts2 d1 on emps2.deptno = d1.deptno" +
+                    " join depts2 d2 on emps2.deptno = d2.deptno where d1.deptno < 120";
+            String plan2 = getFragmentPlan(query2);
+            PlanTestBase.assertContains(plan2, "join_union_mv_1");
+            PlanTestBase.assertContains(plan2, "6:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (COLOCATE)\n" +
+                    "  |  colocate: true\n" +
+                    "  |  equal join conjunct: 15: deptno = 20: deptno");
+            PlanTestBase.assertContains(plan2, "2:OlapScanNode\n" +
+                    "     TABLE: emps2\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 15: deptno < 120, 15: deptno > 99\n" +
+                    "     partitions=1/1");
+            PlanTestBase.assertContains(plan2, "1:OlapScanNode\n" +
+                    "     TABLE: depts2\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 18: deptno < 120, 18: deptno > 99");
+            dropMv("test", "join_union_mv_1");
+        }
 
         starRocksAssert.withTable("CREATE TABLE `test_all_type2` (\n" +
                 "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
@@ -1551,6 +1590,7 @@ public class MvRewriteOptimizationTest {
         Table testAllTypeTable = getTable("test", "test_all_type2");
         PlanTestBase.setTableStatistics((OlapTable) testAllTypeTable, 1000000);
         // aggregate querys
+
         createAndRefreshMv("test", "join_agg_union_mv_1", "create materialized view join_agg_union_mv_1" +
                 " distributed by hash(v1)" +
                 " as " +
@@ -1572,6 +1612,44 @@ public class MvRewriteOptimizationTest {
         String plan3 = getFragmentPlan(query3);
         PlanTestBase.assertContains(plan3, "join_agg_union_mv_1");
         dropMv("test", "join_agg_union_mv_1");
+
+        {
+            createAndRefreshMv("test", "join_agg_union_mv_2", "create materialized view join_agg_union_mv_2" +
+                    " distributed by hash(v1)" +
+                    " as " +
+                    " SELECT t02.v1 as v1, test_all_type2.t1d," +
+                    " sum(test_all_type2.t1c) as total_sum, count(test_all_type2.t1c) as total_num" +
+                    " from t02 left join test_all_type2" +
+                    " on t02.v1 = test_all_type2.t1d" +
+                    " where t02.v1 < 100" +
+                    " group by v1, test_all_type2.t1d");
+            MaterializedView mv4 = getMv("test", "join_agg_union_mv_2");
+            PlanTestBase.setTableStatistics(mv4, 1);
+
+            String query8 = " SELECT t02.v1 as v1, test_all_type2.t1d," +
+                    " sum(test_all_type2.t1c) as total_sum, count(test_all_type2.t1c) as total_num" +
+                    " from t02 left join test_all_type2" +
+                    " on t02.v1 = test_all_type2.t1d" +
+                    " where t02.v1 < 120" +
+                    " group by v1, test_all_type2.t1d";
+            String plan8 = getFragmentPlan(query8);
+            PlanTestBase.assertContains(plan8, "join_agg_union_mv_2");
+            PlanTestBase.assertContains(plan8, "4:HASH JOIN\n" +
+                    "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 20: v1 = 24: t1d\n" +
+                    "  |  \n" +
+                    "  |----3:EXCHANGE");
+            PlanTestBase.assertContains(plan8, "2:OlapScanNode\n" +
+                    "     TABLE: test_all_type2\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 24: t1d > 99, 24: t1d < 120");
+            PlanTestBase.assertContains(plan8, "1:OlapScanNode\n" +
+                    "     TABLE: t02\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 20: v1 > 99, 20: v1 < 120");
+            dropMv("test", "join_agg_union_mv_2");
+        }
 
         cluster.runSql("test", "insert into test_base_part values(1, 1, 2, 3)");
         cluster.runSql("test", "insert into test_base_part values(100, 1, 2, 3)");

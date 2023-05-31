@@ -50,6 +50,7 @@ import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -60,6 +61,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.MvNormalizePredicateRule;
 import org.apache.logging.log4j.LogManager;
@@ -800,12 +802,25 @@ public class MaterializedViewRewriter {
         final PredicateSplit targetJoinOnPredicateSplit =
                 PredicateSplit.splitPredicate(Utils.compoundAnd(targetJoinOnPredicates));
 
-        final EquivalenceClasses sourceEquivalenceClasses =
-                createEquivalenceClasses(srcJoinOnPredicateSplit.getEqualPredicates());
-        final EquivalenceClasses targetEquivalenceClasses = createQueryBasedEquivalenceClasses(columnRewriter,
-                targetJoinOnPredicateSplit.getEqualPredicates());
-        if (targetEquivalenceClasses == null) {
-            return null;
+        EquivalenceClasses sourceEquivalenceClasses;
+        EquivalenceClasses targetEquivalenceClasses;
+        if (isQueryToMV) {
+            sourceEquivalenceClasses =
+                    createEquivalenceClasses(srcJoinOnPredicateSplit.getEqualPredicates());
+            targetEquivalenceClasses = createQueryBasedEquivalenceClasses(columnRewriter,
+                    targetJoinOnPredicateSplit.getEqualPredicates());
+            if (targetEquivalenceClasses == null) {
+                return null;
+            }
+        } else {
+            sourceEquivalenceClasses =
+                    createQueryBasedEquivalenceClasses(columnRewriter,
+                            srcJoinOnPredicateSplit.getEqualPredicates());
+            targetEquivalenceClasses =
+                    createEquivalenceClasses(targetJoinOnPredicateSplit.getEqualPredicates());
+            if (sourceEquivalenceClasses == null) {
+                return null;
+            }
         }
 
         // NOTE: For view-delta mode, we still need add extra join-compensations equal predicates.
@@ -1013,16 +1028,47 @@ public class MaterializedViewRewriter {
                 return null;
             }
 
-            // add filter to op
-            Operator.Builder builder = OperatorBuilderFactory.build(queryExpression.getOp());
-            builder.withOperator(queryExpression.getOp());
-            builder.setPredicate(queryCompensationPredicate);
-            Operator newQueryOp = builder.build();
-            OptExpression newQueryExpr = OptExpression.create(newQueryOp, queryExpression.getInputs());
+            OptExpression newQueryExpr = pushdownPredicatesForJoin(queryExpression, queryCompensationPredicate);
             deriveLogicalProperty(newQueryExpr);
             return newQueryExpr;
+
         }
         return null;
+    }
+
+    // pushdown predicates on join nodes
+    // the OptExpression will be modified in place
+    private OptExpression pushdownPredicatesForJoin(OptExpression optExpression, ScalarOperator predicate) {
+        if (!(optExpression.getOp() instanceof LogicalJoinOperator)) {
+            if (predicate != null) {
+                // predicate can not be pushdown, we should add it it optExpression
+                Operator.Builder builder = OperatorBuilderFactory.build(optExpression.getOp());
+                builder.withOperator(optExpression.getOp());
+                builder.setPredicate(Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
+                Operator newQueryOp = builder.build();
+                return OptExpression.create(newQueryOp, optExpression.getInputs());
+            } else {
+                return optExpression;
+            }
+        }
+        OptExpression newJoin = doPushdownPredicate(optExpression, predicate);
+        // pushdown predicates in children
+        List<OptExpression> children = Lists.newArrayList();
+        for (int i = 0; i < 2; i++) {
+            if (optExpression.inputAt(i).getOp() instanceof LogicalJoinOperator) {
+                children.add(pushdownPredicatesForJoin(optExpression.inputAt(i), null));
+            } else {
+                children.add(optExpression.inputAt(i));
+            }
+        }
+        return OptExpression.create(newJoin.getOp(), children);
+    }
+
+    private OptExpression doPushdownPredicate(OptExpression joinOptExpression, ScalarOperator predicate) {
+        Preconditions.checkState(joinOptExpression.getOp() instanceof LogicalJoinOperator);
+        JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(joinOptExpression,
+                false, true, materializationContext.getQueryRefFactory());
+        return joinPredicatePushdown.pushdown(predicate);
     }
 
     private List<ScalarOperator> getPartitionRelatedPredicates(ScalarOperator predicate, MaterializedView mv) {
@@ -1679,7 +1725,12 @@ public class MaterializedViewRewriter {
         if (srcPu == null) {
             return null;
         } else if (targetPu == null) {
-            compensationPu = srcPu;
+            if (isQueryToMV) {
+                // src is query
+                compensationPu = columnRewriter.rewriteByQueryEc(srcPu.clone());
+            } else {
+                compensationPu = columnRewriter.rewriteViewToQueryWithViewEc(srcPu.clone());
+            }
         } else {
             Pair<ScalarOperator, ScalarOperator> rewrittenSrcTarget =
                     columnRewriter.rewriteSrcTargetWithEc(srcPu.clone(), targetPu.clone(), isQueryToMV);
