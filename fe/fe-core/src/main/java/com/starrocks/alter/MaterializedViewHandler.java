@@ -55,6 +55,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -254,15 +255,14 @@ public class MaterializedViewHandler extends AlterHandler {
             throw new DdlException("Cannot populate history data if target table is set.");
         }
 
-        Set<String> baseColumnNames = baseTable.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
-
+        // Set<String> baseColumnNames = baseTable.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
         /// When create logic MV, we should always get different mv column name with base column name
-        for (Column column : mvColumns) {
-            if (baseColumnNames.contains(column.getName())) {
-                throw new DdlException("Mv column name should not same as base table's column name when" +
-                        " create logical materialized view failed. ");
-            }
-        }
+        //        for (Column column : mvColumns) {
+        //            if (baseColumnNames.contains(column.getName())) {
+        //                throw new DdlException("Mv column name should not same as base table's column name when" +
+        //                        " create logical materialized view failed. ");
+        //            }
+        //        }
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TableName target = stmt.getTargetTableName();
@@ -314,8 +314,10 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         // partition keys must be the same with the base table
-        if (targetOlapTable.isPartitioned()) {
-            if (!baseTable.isPartitioned()) {
+        PartitionInfo baseTablePartitionInfo = baseTable.getPartitionInfo();
+        PartitionInfo targetTablePartitionInfo = targetOlapTable.getPartitionInfo();
+        if (targetTablePartitionInfo.isPartitioned()) {
+            if (!baseTablePartitionInfo.isPartitioned()) {
                 throw new DdlException("Target table:" + baseTable + " should be " +
                         " partitioned table");
             }
@@ -355,17 +357,18 @@ public class MaterializedViewHandler extends AlterHandler {
                     }
                 }
             } catch (NotImplementedException e) {
-                throw new DdlException("Materialized view should contain" +
-                        " the partition column");
+                throw new DdlException("Logical Materialized view don't support the partition type");
             }
         }
-        // distribution keys must be the same with the base table: only need to check the colum name is the same
-        if (!baseTable.getDefaultDistributionInfo().equals(targetOlapTable.getDefaultDistributionInfo())) {
-            throw new DdlException("Base table's distribution keys should be the" +
-                    " same with the target table: " + targetOlapTable);
-        }
+
         DistributionInfo distributionInfo = targetOlapTable.getDefaultDistributionInfo();
         if (!(distributionInfo instanceof RandomDistributionInfo)) {
+            // distribution keys must be the same with the base table: only need to check the colum name is the same
+            if (!baseTable.getDefaultDistributionInfo().equals(targetOlapTable.getDefaultDistributionInfo())) {
+                throw new DdlException("Base table's distribution keys should be the" +
+                        " same with the target table: " + targetOlapTable);
+            }
+
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
             List<Column> distributionColumns = hashDistributionInfo.getDistributionColumns();
             for (Column distColumn : distributionColumns) {
