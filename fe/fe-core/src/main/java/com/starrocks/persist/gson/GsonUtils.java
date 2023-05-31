@@ -429,8 +429,23 @@ public class GsonUtils {
             TypeAdapter<T> delegate = gson.getDelegateAdapter(this, type);
 
             return new TypeAdapter<T>() {
+<<<<<<< HEAD
                 public void write(JsonWriter out, T value) throws IOException {
                     delegate.write(out, value);
+=======
+                public void write(JsonWriter out, T obj) throws IOException {
+                    // Use Object lock to protect its properties from changed by other serialize thread.
+                    // But this will only take effect when all threads uses GSONUtils to serialize object,
+                    // because other methods of changing properties do not necessarily require the acquisition of the object lock
+                    if (obj instanceof GsonPreProcessable) {
+                        synchronized (obj) {
+                            ((GsonPreProcessable) obj).gsonPreProcess();
+                            delegate.write(out, obj);
+                        }
+                    } else {
+                        delegate.write(out, obj);
+                    }
+>>>>>>> e0a385149 ([BugFix] Fix GSON Util concurrent bug  (#24441))
                 }
 
                 public T read(JsonReader reader) throws IOException {
