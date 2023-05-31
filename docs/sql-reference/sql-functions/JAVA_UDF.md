@@ -8,7 +8,9 @@ Currently, StarRocks supports scalar UDFs, user-defined aggregate functions (UDA
 
 ## Prerequisites
 
-You have installed [Apache Maven](https://maven.apache.org/download.cgi), so you can create and compile Java projects.
+- You have installed [Apache Maven](https://maven.apache.org/download.cgi), so you can create and compile Java projects.
+
+- You have installed JDK 1.8 on your servers.
 
 ## Enable UDFs
 
@@ -204,7 +206,7 @@ The user-defined class must implement the methods described in the following tab
 | void merge(State, ByteBuffer)     | Deserializes a state from the byte buffer, and merges the byte buffer into the state as the first parameter. |
 | TYPE finalize(State)              | Obtains the final result of the UDF from a state.            |
 
-During compilation, you must also use the buffer class `java.nio.ByteBuffer` and the local variable `serializeLengthh`, which are described in the following table.
+During compilation, you must also use the buffer class `java.nio.ByteBuffer` and the local variable `serializeLength`, which are described in the following table.
 
 | Class and local variable | Description                                                  |
 | ------------------------ | ------------------------------------------------------------ |
