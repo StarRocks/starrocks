@@ -251,14 +251,13 @@ void LoadChannel::abort() {
 }
 
 void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids) {
-    auto channel = get_tablets_channel(index_id);
-    if (channel != nullptr) {
-        auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(channel.get());
+    std::lock_guard l(_lock);
+    auto it = _tablets_channels.find(index_id);
+    if (it != _tablets_channels.end()) {
+        auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(it->second.get());
+        // only use for replicated storage
         if (local_tablets_channel != nullptr) {
-            local_tablets_channel->incr_num_ref_senders();
             local_tablets_channel->abort(tablet_ids);
-        } else {
-            channel->abort();
         }
     }
 }

@@ -573,7 +573,6 @@ void LocalTabletsChannel::abort() {
     LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << _key.id
               << " index_id: " << _key.index_id << " #tablet:" << _delta_writers.size()
               << " tablet_ids:" << tablet_id_list_str;
-    _num_ref_senders.fetch_sub(1);
 }
 
 void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids) {
