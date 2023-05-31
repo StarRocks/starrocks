@@ -1870,6 +1870,11 @@ public class LowCardinalityTest extends PlanTestBase {
                 "WHERE c_mr IN ('02', '03') AND D_DATE>concat(year(str_to_date('2023-03-26', '%Y-%m-%d'))-1, '1231') " +
                 "AND d_date<='2023-03-26' GROUP BY c_mr;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
+        assertContains(plan, "10:Decode\n" +
+                "  |  <dict id 74> : <string id 32>\n" +
+                "  |  \n" +
+                "  9:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(38: fee_zb)\n" +
+                "  |  group by: 74: c_mr");
     }
 }
