@@ -141,7 +141,7 @@ If you want to find out the female employees whose salary is in the `level_1`, y
 
 ```SQL
  SELECT xxx FROM employee 
- WHERE Gender = female AND Income_level = Level_1;
+ WHERE Gender = female AND Income_level = level_1;
 ```
 
 After the query is sent, StarRocks search for the dictionaries of `Gender` and `Income_level` at the same time to get the following information:
