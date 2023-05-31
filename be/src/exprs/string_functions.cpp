@@ -2848,9 +2848,11 @@ static ColumnPtr regexp_replace_use_hyperscan(StringFunctionsState* state, const
                      << " status: " << status;
     }
     DeferOp op([&] {
-        hs_error_t st;
-        if ((st = hs_free_scratch(scratch)) != HS_SUCCESS) {
-            CHECK(false) << "ERROR: free scratch space failure. status: " << st;
+        if (scratch != nullptr) {
+            hs_error_t st;
+            if ((st = hs_free_scratch(scratch)) != HS_SUCCESS) {
+                CHECK(false) << "ERROR: free scratch space failure. status: " << st;
+            }
         }
     });
 
