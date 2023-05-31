@@ -239,7 +239,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
 
 - HA configuration
 
-  You can configure an HA mechanism for the NameNode of the HDFS cluster. This way, if the NameNode is switched over to another node, StarRocks can automatically identify the new node that serves as the NameNode. This includes the following two scenarios:
+  You can configure an HA mechanism for the NameNode of the HDFS cluster. This way, if the NameNode is switched over to another node, StarRocks can automatically identify the new node that serves as the NameNode. This includes the following scenarios:
 
   - If you load data from a single HDFS cluster that has one Kerberos user configured, both load-based loading and load-free loading are supported.
   
