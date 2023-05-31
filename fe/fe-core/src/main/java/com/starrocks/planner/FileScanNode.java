@@ -69,7 +69,9 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
@@ -85,6 +87,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -143,9 +146,8 @@ public class FileScanNode extends LoadScanNode {
     private List<List<TBrokerFileStatus>> fileStatusesList;
     // file num
     private int filesAdded;
-
-    // Only used for external table in select statement
-    private List<Backend> backends;
+    
+    private List<ComputeNode> nodes;
     private int nextBe = 0;
 
     private Analyzer analyzer;
@@ -419,8 +421,8 @@ public class FileScanNode extends LoadScanNode {
 
     private TScanRangeLocations newLocations(TBrokerScanRangeParams params, String brokerName, boolean hasBroker)
             throws UserException {
-        Backend selectedBackend = backends.get(nextBe++);
-        nextBe = nextBe % backends.size();
+        ComputeNode selectedBackend = nodes.get(nextBe++);
+        nextBe = nextBe % nodes.size();
 
         // Generate on broker scan range
         TBrokerScanRange brokerScanRange = new TBrokerScanRange();
@@ -501,7 +503,7 @@ public class FileScanNode extends LoadScanNode {
         //     backends_size * parallelInstanceNum,
         //     max_broker_concurrency)
         numInstances = (int) (totalBytes / Config.min_bytes_per_broker_scanner);
-        numInstances = Math.min(backends.size() * parallelInstanceNum, numInstances);
+        numInstances = Math.min(nodes.size() * parallelInstanceNum, numInstances);
         numInstances = Math.min(numInstances, Config.max_broker_concurrency);
         numInstances = Math.max(1, numInstances);
 
@@ -509,16 +511,29 @@ public class FileScanNode extends LoadScanNode {
     }
 
     private void assignBackends() throws UserException {
-        backends = Lists.newArrayList();
-        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
-            if (be.isAvailable()) {
-                backends.add(be);
+        nodes = Lists.newArrayList();
+
+        // TODO: need to refactor after be split into cn + dn
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            for (long cnId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(cnId);
+                if (cn != null && cn.isAvailable()) {
+                    nodes.add(cn);
+                }
+            }
+        } else {
+            for (ComputeNode be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+                if (be.isAvailable()) {
+                    nodes.add(be);
+                }
             }
         }
-        if (backends.isEmpty()) {
+
+        if (nodes.isEmpty()) {
             throw new UserException("No available backends");
         }
-        Collections.shuffle(backends, random);
+        Collections.shuffle(nodes, random);
     }
 
     private TFileFormatType formatType(String fileFormat, String path) {
@@ -696,7 +711,7 @@ public class FileScanNode extends LoadScanNode {
             return;
         }
 
-        Set<Long> aliveBes = backends.stream().map(Backend::getId).collect(Collectors.toSet());
+        Set<Long> aliveBes = nodes.stream().map(ComputeNode::getId).collect(Collectors.toSet());
         nextBe = 0;
         for (TScanRangeLocations locations : locationsList) {
             TScanRangeLocation scanRangeLocation = locations.getLocations().get(0);

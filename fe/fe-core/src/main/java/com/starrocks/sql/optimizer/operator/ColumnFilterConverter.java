@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
@@ -31,6 +32,7 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -38,6 +40,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.PartitionColumnFilter;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -48,11 +52,14 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -67,6 +74,54 @@ public class ColumnFilterConverter {
 
     private static final ColumnFilterVisitor COLUMN_FILTER_VISITOR = new ColumnFilterVisitor();
 
+    // replaces a field in an expression with a constant
+    private static class ExprRewriter extends AstVisitor<Boolean, Void> {
+
+        private final ColumnRefOperator columnRef;
+        private final ConstantOperator constant;
+
+        public ExprRewriter(ColumnRefOperator columnRef, ConstantOperator constant) {
+            this.columnRef = columnRef;
+            this.constant = constant;
+        }
+
+        @Override
+        public Boolean visitCastExpr(CastExpr node, Void context) {
+            ArrayList<Expr> children = node.getChildren();
+            boolean success = false;
+            for (Expr child : children) {
+                if (visit(child)) {
+                    success = true;
+                }
+            }
+            return success;
+        }
+
+        @Override
+        public Boolean visitFunctionCall(FunctionCallExpr node, Void context) {
+            if (FunctionSet.SUBSTRING.equalsIgnoreCase(node.getFnName().getFunction()) ||
+                    FunctionSet.SUBSTR.equalsIgnoreCase(node.getFnName().getFunction())) {
+                Expr firstExpr = node.getChild(0);
+                if (firstExpr instanceof SlotRef) {
+                    SlotRef slotRef = (SlotRef) node.getChild(0);
+                    if (columnRef.getName().equals(slotRef.getColumnName())) {
+                        node.setChild(0, new StringLiteral(constant.getVarchar()));
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+    }
+
+    public static boolean rewritePredicate(Expr expr, ColumnRefOperator columnRef, ConstantOperator constant) {
+        Boolean success = new ExprRewriter(columnRef, constant).visit(expr);
+        if (success == null) {
+            return false;
+        } else {
+            return success;
+        }
+    }
 
     public static Map<String, PartitionColumnFilter> convertColumnFilter(List<ScalarOperator> predicates) {
         return convertColumnFilter(predicates, null);
@@ -81,10 +136,35 @@ public class ColumnFilterConverter {
         return result;
     }
 
+    public static void convertColumnFilterWithoutExpr(ScalarOperator predicate, Map<String,
+            PartitionColumnFilter> result, Table table) {
+        if (predicate.getChildren().size() <= 0) {
+            return;
+        }
+
+        if (!checkColumnRefCanPartition(predicate.getChild(0), table)) {
+            return;
+        }
+
+        // rewrite invalid date cast expr to NullLiteral
+        ScalarOperator rewritePredicate = rewriteInvalidDateCast(predicate);
+
+        if (!rewritePredicate.isConstant()) {
+            return;
+        }
+
+        rewritePredicate.accept(COLUMN_FILTER_VISITOR, result);
+    }
+
     public static void convertColumnFilter(ScalarOperator predicate, Map<String, PartitionColumnFilter> result,
                                            Table table) {
         if (predicate.getChildren().size() <= 0) {
             return;
+        }
+
+        if (table != null && table.isExprPartitionTable()) {
+            OlapTable olapTable = (OlapTable) table;
+            predicate = convertPredicate(predicate, (ExpressionRangePartitionInfoV2) olapTable.getPartitionInfo());
         }
 
         if (!checkColumnRefCanPartition(predicate.getChild(0), table)) {
@@ -99,6 +179,47 @@ public class ColumnFilterConverter {
         }
 
         rewritePredicate.accept(COLUMN_FILTER_VISITOR, result);
+    }
+
+    // Replace the predicate of the query with the predicate of the partition expression and evaluate.
+    // If the condition is not met, there will be no change to the predicate.
+    public static ScalarOperator convertPredicate(ScalarOperator predicate,
+                                                  ExpressionRangePartitionInfoV2 exprRangePartitionInfo) {
+        // Currently only one partition column is supported
+        if (exprRangePartitionInfo.getPartitionExprs().size() != 1) {
+            return predicate;
+        }
+        Expr firstPartitionExpr = exprRangePartitionInfo.getPartitionExprs().get(0);
+        Expr predicateExpr = firstPartitionExpr.clone();
+
+        // only support binary predicate
+        if (predicate instanceof BinaryPredicateOperator && predicate.getChildren().size() == 2) {
+            List<ScalarOperator> argument = predicate.getChildren();
+            ColumnRefOperator columnRef = (ColumnRefOperator) argument.get(0);
+            ConstantOperator constant = (ConstantOperator) argument.get(1);
+            boolean success = rewritePredicate(predicateExpr, columnRef, constant);
+            if (!success) {
+                return predicate;
+            }
+            ScalarOperator translate = SqlToScalarOperatorTranslator.translate(predicateExpr);
+            CallOperator callOperator = AnalyzerUtils.getCallOperator(translate);
+            if (callOperator == null) {
+                return predicate;
+            }
+            ScalarOperator evaluation = ScalarOperatorEvaluator.INSTANCE.evaluation(callOperator);
+            if (!(evaluation instanceof ConstantOperator)) {
+                return predicate;
+            }
+            predicate = predicate.clone();
+            ConstantOperator result = (ConstantOperator) evaluation;
+            try {
+                result = result.castTo(predicateExpr.getType());
+            } catch (Exception e) {
+                return predicate;
+            }
+            predicate.setChild(1, result);
+        }
+        return predicate;
     }
 
     private static boolean checkColumnRefCanPartition(ScalarOperator right, Table table) {

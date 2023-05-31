@@ -19,8 +19,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
@@ -48,9 +49,7 @@ public class IcebergResourceTest {
     public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
         new Expectations() {
             {
-                globalStateMgr.getAuth();
-                result = auth;
-                auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
+                PrivilegeActions.checkSystemAction(connectContext, PrivilegeType.CREATE_RESOURCE);
                 result = true;
             }
         };
@@ -81,9 +80,7 @@ public class IcebergResourceTest {
     public void testCustomStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
         new Expectations() {
             {
-                globalStateMgr.getAuth();
-                result = auth;
-                auth.checkGlobalPriv((ConnectContext) any, PrivPredicate.ADMIN);
+                PrivilegeActions.checkSystemAction(connectContext, PrivilegeType.CREATE_RESOURCE);
                 result = true;
             }
         };
@@ -91,7 +88,7 @@ public class IcebergResourceTest {
         String name = "iceberg1";
         String type = "iceberg";
         String catalogType = "CUSTOM";
-        String catalogImpl = "org.apache.iceberg.hive.IcebergHiveCatalog";
+        String catalogImpl = "com.starrocks.connector.iceberg.hive.IcebergHiveCatalog";
         Map<String, String> properties = Maps.newHashMap();
         properties.put("type", type);
         properties.put("iceberg.catalog.type", catalogType);

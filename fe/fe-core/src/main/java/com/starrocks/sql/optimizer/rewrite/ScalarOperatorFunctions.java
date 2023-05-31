@@ -94,6 +94,11 @@ public class ScalarOperatorFunctions {
     private static final BigInteger INT_128_OPENER = BigInteger.ONE.shiftLeft(CONSTANT_128 + 1);
     private static final BigInteger[] INT_128_MASK1_ARR1 = new BigInteger[CONSTANT_128];
 
+    private static final int YEAR_MIN = 0;
+    private static final int YEAR_MAX = 9999;
+    private static final int DAY_OF_YEAR_MIN = 1;
+    private static final int DAY_OF_YEAR_MAX = 366;
+
     static {
         for (int shiftBy = 0; shiftBy < CONSTANT_128; ++shiftBy) {
             INT_128_MASK1_ARR1[shiftBy] = INT_128_OPENER.subtract(BigInteger.ONE).shiftRight(shiftBy + 1);
@@ -483,6 +488,32 @@ public class ScalarOperatorFunctions {
             default:
                 throw new IllegalArgumentException(dow + " not supported in previous_day dow_string");
         }
+    }
+
+    @ConstantFunction(name = "makedate", argTypes = {INT, INT}, returnType = DATETIME)
+    public static ConstantOperator makeDate(ConstantOperator year, ConstantOperator dayOfYear) {
+        if (year.isNull() || dayOfYear.isNull()) {
+            return ConstantOperator.createNull(Type.DATE);
+        }
+
+        int yearInt = year.getInt();
+        if (yearInt < YEAR_MIN || yearInt > YEAR_MAX) {
+            return ConstantOperator.createNull(Type.DATE);
+        }
+
+        int dayOfYearInt = dayOfYear.getInt();
+        if (dayOfYearInt < DAY_OF_YEAR_MIN || dayOfYearInt > DAY_OF_YEAR_MAX) {
+            return ConstantOperator.createNull(Type.DATE);
+        }
+
+        LocalDate ld = LocalDate.of(yearInt, 1, 1)
+                .plusDays(dayOfYearInt - 1);
+
+        if (ld.getYear() != year.getInt()) {
+            return ConstantOperator.createNull(Type.DATE);
+        }
+
+        return ConstantOperator.createDate(ld.atTime(0, 0, 0));
     }
 
     /**
@@ -890,6 +921,29 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "version", argTypes = {}, returnType = VARCHAR)
     public static ConstantOperator version() {
         return ConstantOperator.createVarchar(Config.mysql_server_version);
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "substring", argTypes = {VARCHAR, INT}, returnType = VARCHAR),
+            @ConstantFunction(name = "substring", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR),
+            @ConstantFunction(name = "substr", argTypes = {VARCHAR, INT}, returnType = VARCHAR),
+            @ConstantFunction(name = "substr", argTypes = {VARCHAR, INT, INT}, returnType = VARCHAR)
+    })
+    public static ConstantOperator substring(ConstantOperator value, ConstantOperator... index) {
+        Preconditions.checkArgument(index.length == 1 || index.length == 2);
+
+        String string = value.getVarchar();
+        /// If index out of bounds, the substring method will throw exception, we need avoid it,
+        /// otherwise, the Constant Evaluation will fail.
+        /// Besides, the implementation of `substring` function in starrocks includes beginIndex and length,
+        /// and the index is start from 1 and can negative, so we need carefully handle it.
+        int beginIndex = index[0].getInt() >= 0 ? index[0].getInt() - 1 : string.length() + index[0].getInt();
+        int endIndex = (index.length == 2) ? Math.min(beginIndex + index[1].getInt(), string.length()) : string.length();
+
+        if (beginIndex < 0 || beginIndex > endIndex) {
+            return ConstantOperator.createVarchar("");
+        }
+        return ConstantOperator.createVarchar(string.substring(beginIndex, endIndex));
     }
 
     private static ConstantOperator createDecimalConstant(BigDecimal result) {

@@ -570,6 +570,45 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void makeDate() {
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setThreadLocalInfo();
+        ctx.setStartTime();
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createNull(Type.INT),
+                        ConstantOperator.createNull(Type.INT)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createNull(Type.INT),
+                        ConstantOperator.createInt(1)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(1),
+                        ConstantOperator.createNull(Type.INT)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(2000), ConstantOperator.createInt(0)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(2000), ConstantOperator.createInt(367)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(-1), ConstantOperator.createInt(1)));
+
+        assertEquals(ConstantOperator.createNull(Type.DATE),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(10000), ConstantOperator.createInt(1)));
+
+        assertEquals(ConstantOperator.createDate(LocalDateTime.of(2000, 1, 1, 0, 0, 0)),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(2000), ConstantOperator.createInt(1)));
+
+        assertEquals(ConstantOperator.createDate(LocalDateTime.of(2000, 12, 31, 0, 0, 0)),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(2000), ConstantOperator.createInt(366)));
+
+        assertEquals(ConstantOperator.createDate(LocalDateTime.of(0, 1, 1, 0, 0, 0)),
+                ScalarOperatorFunctions.makeDate(ConstantOperator.createInt(0), ConstantOperator.createInt(1)));
+    }
+    @Test
     public void floor() {
         assertEquals(100, ScalarOperatorFunctions.floor(O_FLOAT_100).getBigint());
     }
@@ -1106,6 +1145,79 @@ public class ScalarOperatorFunctionsTest {
         LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime())
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         assertEquals(expected, ScalarOperatorFunctions.now(new ConstantOperator(6, Type.INT)).getDatetime());
+    }
+
+    @Test
+    public void testSubString() {
+        assertEquals("ab", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(1), ConstantOperator.createInt(2)).getVarchar());
+        assertEquals("abcd", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(1)).getVarchar());
+        assertEquals("cd", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(-2)).getVarchar());
+        assertEquals("c", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(-2), ConstantOperator.createInt(1)).getVarchar());
+        assertEquals("abcd", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(1), ConstantOperator.createInt(4)).getVarchar());
+        assertEquals("abcd", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(1), ConstantOperator.createInt(10)).getVarchar());
+        assertEquals("cd", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(3), ConstantOperator.createInt(4)).getVarchar());
+        assertEquals("", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(0), ConstantOperator.createInt(2)).getVarchar());
+        assertEquals("", ScalarOperatorFunctions.substring(ConstantOperator.createVarchar("abcd"),
+                ConstantOperator.createInt(5), ConstantOperator.createInt(2)).getVarchar());
+
+        assertEquals("starrocks", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrockscluster", Type.VARCHAR),
+                new ConstantOperator(1, Type.INT),
+                new ConstantOperator(9, Type.INT)).getVarchar());
+
+        assertEquals("rocks", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(-5, Type.INT),
+                new ConstantOperator(5, Type.INT)).getVarchar());
+
+        assertEquals("s", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(-1, Type.INT),
+                new ConstantOperator(8, Type.INT)).getVarchar());
+
+        assertEquals("", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(-100, Type.INT),
+                new ConstantOperator(5, Type.INT)).getVarchar());
+
+        assertEquals("", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(0, Type.INT),
+                new ConstantOperator(5, Type.INT)).getVarchar());
+
+        assertEquals("", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(-1, Type.INT),
+                new ConstantOperator(0, Type.INT)).getVarchar());
+
+        assertEquals("apple", ScalarOperatorFunctions.substring(
+                new ConstantOperator("apple", Type.VARCHAR),
+                new ConstantOperator(-5, Type.INT),
+                new ConstantOperator(5, Type.INT)).getVarchar());
+
+        assertEquals("", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(0, Type.INT)).getVarchar());
+
+        assertEquals("starrocks", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(1, Type.INT)).getVarchar());
+
+        assertEquals("s", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(9, Type.INT)).getVarchar());
+
+        assertEquals("", ScalarOperatorFunctions.substring(
+                new ConstantOperator("starrocks", Type.VARCHAR),
+                new ConstantOperator(10, Type.INT)).getVarchar());
     }
 
 }

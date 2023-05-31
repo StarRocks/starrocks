@@ -35,8 +35,10 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
-import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -46,7 +48,6 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.LeaderOpExecutor;
 import com.starrocks.qe.OriginStatement;
@@ -58,6 +59,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 // Format:
 //   http://username:password@192.168.1.1:8030/api/show_proc?path=/
@@ -76,11 +78,7 @@ public class ShowProcAction extends RestBaseAction {
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         // check authority
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            checkUserOwnsAdminRole(currentUser);
-        } else {
-            checkGlobalAuth(currentUser, PrivPredicate.ADMIN);
-        }
+        checkUserOwnsAdminRole(currentUser);
 
         String path = request.getSingleParameter("path");
         String forward = request.getSingleParameter("forward");
@@ -114,9 +112,12 @@ public class ShowProcAction extends RestBaseAction {
                 return;
             }
 
-            Gson gson = new Gson();
+            List<String> columnNames = resultSet.getMetaData().getColumns()
+                    .stream().map(Column::getName).collect(Collectors.toList());
+            List<List<String>> rows = resultSet.getResultRows();
+
             response.setContentType("application/json");
-            response.getContent().append(gson.toJson(resultSet.getResultRows()));
+            response.getContent().append(formatResultToJson(columnNames, rows));
 
         } else {
             ProcNodeInterface procNode = null;
@@ -136,11 +137,11 @@ public class ShowProcAction extends RestBaseAction {
                 ProcResult result;
                 try {
                     result = procNode.fetchResult();
+                    List<String> columnNames = result.getColumnNames();
                     List<List<String>> rows = result.getRows();
 
-                    Gson gson = new Gson();
                     response.setContentType("application/json");
-                    response.getContent().append(gson.toJson(rows));
+                    response.getContent().append(formatResultToJson(columnNames, rows));
                 } catch (AnalysisException e) {
                     LOG.warn(e.getMessage());
                     response.getContent().append("[]");
@@ -149,5 +150,17 @@ public class ShowProcAction extends RestBaseAction {
         }
 
         sendResult(request, response);
+    }
+
+    public String formatResultToJson(List<String> columnNames, List<List<String>> rows) {
+        JsonArray jarray = new JsonArray();
+        for (List<String> row : rows) {
+            JsonObject jobject = new JsonObject();
+            for (int i = 0; i < columnNames.size(); i++) {
+                jobject.addProperty(columnNames.get(i), row.get(i));
+            }
+            jarray.add(jobject);
+        }
+        return jarray.toString();
     }
 }

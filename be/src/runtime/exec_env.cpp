@@ -241,8 +241,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
     _wg_driver_executor->initialize(_max_executor_threads);
 
-    int connector_num_io_threads =
-            config::pipeline_connector_scan_thread_num_per_cpu * std::thread::hardware_concurrency();
+    int connector_num_io_threads = config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores();
     CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
 
     std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_without_workgroup;
@@ -349,10 +348,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
 #endif
 
-#if defined(USE_STAROS) && !defined(BE_TEST)
-    _lake_tablet_manager->start_gc();
-#endif
-
     _agent_server = new AgentServer(this, false);
     _agent_server->init_or_die();
 
@@ -367,6 +362,10 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init());
+
+#if defined(USE_STAROS) && !defined(BE_TEST)
+    _lake_tablet_manager->start_gc();
+#endif
     return Status::OK();
 }
 

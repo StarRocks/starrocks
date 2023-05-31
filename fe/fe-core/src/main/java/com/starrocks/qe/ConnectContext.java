@@ -195,6 +195,8 @@ public class ConnectContext {
 
     protected SSLContext sslContext;
 
+    private ConnectContext parent;
+
     public StmtExecutor getExecutor() {
         return executor;
     }
@@ -313,9 +315,9 @@ public class ConnectContext {
         try {
             Set<Long> defaultRoleIds;
             if (GlobalVariable.isActivateAllRolesOnLogin()) {
-                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(user);
+                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdsByUser(user);
             } else {
-                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationManager().getDefaultRoleIdsByUser(user);
+                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationMgr().getDefaultRoleIdsByUser(user);
             }
             this.currentRoleIds = defaultRoleIds;
         } catch (PrivilegeException e) {
@@ -492,7 +494,7 @@ public class ConnectContext {
     }
 
     public boolean isKilled() {
-        return isKilled;
+        return (parent != null && parent.isKilled()) || isKilled;
     }
 
     // Set kill flag to true;
@@ -593,6 +595,14 @@ public class ConnectContext {
 
     public void setCurrentWarehouse(String currentWarehouse) {
         this.currentWarehouse = currentWarehouse;
+    }
+
+    public void setParentConnectContext(ConnectContext parent) {
+        this.parent = parent;
+    }
+
+    public ConnectContext getParent() {
+        return parent;
     }
 
     // kill operation with no protect.

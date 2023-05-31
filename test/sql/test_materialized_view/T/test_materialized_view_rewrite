@@ -9,8 +9,8 @@ insert into user_tags values('2023-04-13', 2, 'e', 5);
 insert into user_tags values('2023-04-13', 3, 'e', 6);
 
 -- TEST BITMAP: NO ROLLUP
-create materialized view user_tags_mv1  distributed by hash(user_id) as select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id order by user_id;
-select sleep(2);
+create materialized view user_tags_mv1  distributed by hash(user_id) as select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;
+refresh materialized view user_tags_mv1 with sync mode;
 set enable_materialized_view_rewrite = off;
 select user_id, count(distinct tag_id) from user_tags group by user_id order by user_id;
 select user_id, bitmap_union_count(to_bitmap(tag_id)) from user_tags group by user_id order by user_id;
@@ -24,7 +24,7 @@ drop materialized view user_tags_mv1;
 
 -- TEST BITMAP: ROLLUP
 create materialized view user_tags_mv2  distributed by hash(user_id) as select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time;
-select sleep(2);
+refresh materialized view user_tags_mv2 with sync mode;
 set enable_materialized_view_rewrite = on;
 explain logical select user_id, count(distinct tag_id) from user_tags group by user_id order by user_id;
 select user_id, count(distinct tag_id) from user_tags group by user_id order by user_id;
@@ -33,8 +33,8 @@ select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags g
 drop materialized view user_tags_mv2;
 
 -- TEST HLL: NO ROLLUP
-create materialized view user_tags_hll_mv1  distributed by hash(user_id) as select user_id, time, hll_union(hll_hash(tag_id)) a  from user_tags group by user_id, time;
-select sleep(2);
+create materialized view user_tags_hll_mv1  distributed by hash(user_id) as select user_id, time, hll_union(hll_hash(tag_id)) a  from user_tags group by user_id;
+refresh materialized view user_tags_hll_mv1 with sync mode;
 set enable_materialized_view_rewrite = off;
 select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id order by user_id;
 select user_id, ndv(tag_id) x from user_tags group by user_id order by user_id;
@@ -49,7 +49,7 @@ drop materialized view user_tags_hll_mv1;
 
 -- TEST HLL: ROLLUP
 create materialized view user_tags_hll_mv2  distributed by hash(user_id) as select user_id, time, hll_union(hll_hash(tag_id)) from user_tags group by user_id, time;
-select sleep(2);
+refresh materialized view user_tags_hll_mv2 with sync mode;
 set enable_materialized_view_rewrite = on;
 select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id order by user_id;
 select user_id, ndv(tag_id) x from user_tags group by user_id order by user_id;
@@ -59,7 +59,7 @@ drop materialized view user_tags_hll_mv2;
 
 -- TEST PERCENTILE: NO ROLLUP
 create materialized view user_tags_percential_mv1 distributed by hash(user_id) as select user_id, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id order by user_id;
-select sleep(2);
+refresh materialized view user_tags_percential_mv1 with sync mode;
 set enable_materialized_view_rewrite = off;
 select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id order by user_id;
 select user_id, percentile_approx(tag_id, 0) x from user_tags group by user_id order by user_id;
@@ -73,6 +73,7 @@ drop materialized view user_tags_percential_mv1;
 
 -- TEST PERCENTILE: ROLLUP
 create materialized view user_tags_percential_mv2 distributed by hash(user_id) as select user_id, time, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id, time;
+refresh materialized view user_tags_percential_mv2 with sync mode;
 set enable_materialized_view_rewrite = on;
 select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id order by user_id;
 select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id order by user_id;
@@ -82,7 +83,7 @@ drop materialized view user_tags_percential_mv2;
 
 -- TEST BITMAP : UNOION
 create materialized view user_tags_mv3  distributed by hash(user_id) as select user_id, tag_id from user_tags where user_id > 2;
-select sleep(2);
+refresh materialized view user_tags_mv3 with sync mode;
 set enable_materialized_view_rewrite = off;
 select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id order by user_id;
 select user_id, ndv(tag_id) x from user_tags group by user_id order by user_id;

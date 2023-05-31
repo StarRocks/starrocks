@@ -197,7 +197,7 @@ public class TypeManager {
     public static Type getCompatibleType(List<Type> types, String kind) {
         Type compatibleType = types.get(0);
         for (int i = 1; i < types.size(); i++) {
-            compatibleType = Type.getAssignmentCompatibleType(compatibleType, types.get(i), false);
+            compatibleType = getCommonSuperType(compatibleType, types.get(i));
             if (!compatibleType.isValid()) {
                 throw new SemanticException("Failed to get compatible type for %s with %s and %s",
                         kind, types.get(i), types.get(i - 1));

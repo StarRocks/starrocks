@@ -58,6 +58,8 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private ConnectContext runCtx;
 
+    private ConnectContext parentRunCtx;
+
     private TaskRunProcessor processor;
 
     private TaskRunStatus status;
@@ -96,6 +98,10 @@ public class TaskRun implements Comparable<TaskRun> {
         this.task = task;
     }
 
+    public void setConnectContext(ConnectContext context) {
+        this.parentRunCtx = context;
+    }
+
     public TaskRunProcessor getProcessor() {
         return processor;
     }
@@ -119,7 +125,7 @@ public class TaskRun implements Comparable<TaskRun> {
 
         try {
             // NOTE: mvId is set in Task's properties when creating
-            long mvId = Long.parseLong(properties.get(PartitionBasedMaterializedViewRefreshProcessor.MV_ID));
+            long mvId = Long.parseLong(properties.get(PartitionBasedMvRefreshProcessor.MV_ID));
             Database database = GlobalStateMgr.getCurrentState().getDb(ctx.getDatabase());
             if (database == null) {
                 LOG.warn("database {} do not exist when refreshing materialized view:{}", ctx.getDatabase(), mvId);
@@ -147,6 +153,9 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setDefinition(status.getDefinition());
         taskRunContext.setPostRun(status.getPostRun());
         runCtx = new ConnectContext(null);
+        if (parentRunCtx != null) {
+            runCtx.setParentConnectContext(parentRunCtx);
+        }
         runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         runCtx.setDatabase(task.getDbName());
         runCtx.setQualifiedUser(status.getUser());
@@ -216,7 +225,7 @@ public class TaskRun implements Comparable<TaskRun> {
                         long jobId = executor.getCoordinator().getJobId();
                         if (jobId != -1) {
                             InsertLoadJob job = (InsertLoadJob) GlobalStateMgr.getCurrentState()
-                                    .getLoadManager().getLoadJob(jobId);
+                                    .getLoadMgr().getLoadJob(jobId);
                             int progress = job.getProgress();
                             if (progress == 100) {
                                 progress = 99;

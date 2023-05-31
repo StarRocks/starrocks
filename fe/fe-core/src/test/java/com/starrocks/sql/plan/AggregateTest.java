@@ -1944,15 +1944,14 @@ public class AggregateTest extends PlanTestBase {
         sql = "select sum(id_decimal + 1 + 2) from test_all_type";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  3:Project\n" +
-                "  |  <slot 12> : 14: sum + CAST(15: count AS DECIMAL128(18,0)) * 2\n" +
+                "  |  <slot 12> : 16: sum + CAST(17: count AS DECIMAL128(18,0)) * 1 + CAST(15: count AS DECIMAL128(18,0)) * 2\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(13: cast), count(13: cast)\n" +
+                "  |  output: count(10: id_decimal), count(CAST(10: id_decimal AS DECIMAL64(12,2)) + 1), sum(10: id_decimal)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 13> : " +
-                "CAST(CAST(CAST(10: id_decimal AS DECIMAL64(12,2)) AS DECIMAL64(15,2)) + 1 AS DECIMAL64(13,2))\n" +
+                "  |  <slot 10> : 10: id_decimal\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
         // 1.2 not null
@@ -2281,5 +2280,34 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "11:Project\n" +
                 "  |  <slot 10> : 61\n" +
                 "  |  limit: 1");
+    }
+
+    @Test
+    public void testPercentileFunctionConst() throws Exception {
+        // For compatibility
+        String sql = "select percentile_approx(1, cast(0.4 as DOUBLE));";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "percentile_approx[(1.0, 0.4); args: DOUBLE,DOUBLE");
+
+        sql = "select percentile_approx(1, cast(1.3 as DOUBLE));";
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("Getting analyzing error. " +
+                "Detail message: percentile_approx second parameter'value must be between 0 and 1.");
+        getCostExplain(sql);
+        plan = getCostExplain(sql);
+
+
+        sql = "select percentile_cont(1, cast(0.4 as DOUBLE));";
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("Getting analyzing error. " +
+                "Detail message: percentile_cont 's second parameter's data type is wrong .");
+        getCostExplain(sql);
+
+
+        sql = "select PERCENTILE_DISC(1, cast(0.4 as DOUBLE));";
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("Getting analyzing error. " +
+                "Detail message: percentile_disc 's second parameter's data type is wrong .");
+        getCostExplain(sql);
     }
 }

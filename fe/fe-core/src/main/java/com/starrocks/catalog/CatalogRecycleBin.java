@@ -807,10 +807,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     public void removeInvalidateReference() {
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            // privilege object can be invalidated after gc
-            GlobalStateMgr.getCurrentState().getAuthorizationManager().removeInvalidObject();
-        }
+        // privilege object can be invalidated after gc
+        GlobalStateMgr.getCurrentState().getAuthorizationMgr().removeInvalidObject();
     }
 
     @Override
@@ -1135,8 +1133,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         private byte[] serializedRange;
 
         public RecycleRangePartitionInfo(long dbId, long tableId, Partition partition, Range<PartitionKey> range,
-                                      DataProperty dataProperty, short replicationNum, boolean isInMemory,
-                                      StorageCacheInfo storageCacheInfo) {
+                                         DataProperty dataProperty, short replicationNum, boolean isInMemory,
+                                         StorageCacheInfo storageCacheInfo) {
             super(dbId, tableId, partition, dataProperty, replicationNum,
                     isInMemory, storageCacheInfo);
             this.range = range;

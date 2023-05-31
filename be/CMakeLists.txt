@@ -214,9 +214,10 @@ set_target_properties(hdfs PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/li
 # Allow FindOpenSSL() to find correct static libraries
 set(OPENSSL_ROOT_DIR ${THIRDPARTY_DIR} CACHE STRING "root directory of an OpenSSL installation")
 message(STATUS "Using OpenSSL Root Dir: ${OPENSSL_ROOT_DIR}")
-add_library(crypto STATIC IMPORTED)
+add_library(crypto STATIC IMPORTED GLOBAL)
 set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
 
+add_library(AWS::crypto ALIAS crypto)
 set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
 set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n;aws-c-sdkutils")
 foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
@@ -415,6 +416,9 @@ if ("${USE_STAROS}" STREQUAL "ON")
     find_package(azure-storage-common-cpp CONFIG REQUIRED)
     set(AZURE_SDK_LIB Azure::azure-identity Azure::azure-storage-blobs Azure::azure-core Azure::azure-storage-common)
 
+    add_library(starcachelib STATIC IMPORTED GLOBAL)
+    set_target_properties(starcachelib PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarcache.a)
+
     add_library(starlet_fslib_all STATIC IMPORTED GLOBAL)
     set_target_properties(starlet_fslib_all PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet_fslib_all.a)
 
@@ -424,6 +428,7 @@ if ("${USE_STAROS}" STREQUAL "ON")
        gRPC::grpc++_reflection
        gRPC::grpc++
        starlet_fslib_all
+       starcachelib
        prometheus-cpp::core
        ${AZURE_SDK_LIB}
        )

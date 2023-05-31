@@ -86,6 +86,7 @@ statement
 
     // Task Statement
     | submitTaskStatement
+    | dropTaskStatement
 
     // Materialized View Statement
     | createMaterializedViewStatement
@@ -207,6 +208,7 @@ statement
     | showAuthenticationStatement
     | executeAsStatement
     | createRoleStatement
+    | alterRoleStatement
     | dropRoleStatement
     | showRolesStatement
     | grantRoleStatement
@@ -555,6 +557,10 @@ submitTaskStatement
     AS (createTableAsSelectStatement | insertStatement )
     ;
 
+dropTaskStatement
+    : DROP TASK qualifiedName
+    ;
+
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
 
 createMaterializedViewStatement
@@ -583,10 +589,11 @@ dropMaterializedViewStatement
 
 alterMaterializedViewStatement
     : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause | modifyTablePropertiesClause)
+    | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
     ;
 
 refreshMaterializedViewStatement
-    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION partitionRangeDesc)? FORCE?
+    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION partitionRangeDesc)? FORCE? (WITH (SYNC | ASYNC) MODE)?
     ;
 
 cancelRefreshMaterializedViewStatement
@@ -1085,7 +1092,7 @@ killAnalyzeStatement
 
 createResourceGroupStatement
     : CREATE RESOURCE GROUP (IF NOT EXISTS)? (OR REPLACE)? identifier
-        TO classifier (',' classifier)*  WITH '(' property (',' property)* ')'
+        (TO classifier (',' classifier)*)?  WITH '(' property (',' property)* ')'
     ;
 
 dropResourceGroupStatement
@@ -1352,7 +1359,11 @@ executeAsStatement
     ;
 
 createRoleStatement
-    : CREATE ROLE (IF NOT EXISTS)? roleList
+    : CREATE ROLE (IF NOT EXISTS)? roleList comment?
+    ;
+
+alterRoleStatement
+    : ALTER ROLE (IF EXISTS)? roleList SET COMMENT '=' string
     ;
 
 dropRoleStatement
@@ -2251,6 +2262,11 @@ refreshSchemeDesc
     | MANUAL)
     ;
 
+statusDesc
+    : ACTIVE
+    | INACTIVE
+    ;
+
 properties
     : PROPERTIES '(' property (',' property)* ')'
     ;
@@ -2437,7 +2453,7 @@ number
     ;
 
 nonReserved
-    : ACCESS | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
+    : ACCESS | ACTIVE | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
     | BUILTIN | BASE
     | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
@@ -2449,7 +2465,7 @@ nonReserved
     | FUNCTIONS
     | GLOBAL | GRANTS
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HUB
-    | IDENTIFIED | IMAGE | IMPERSONATE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
+    | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS

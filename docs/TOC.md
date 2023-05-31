@@ -443,6 +443,7 @@
       + [to_binary](/sql-reference/sql-functions/binary-functions/to_binary.md)
       + [from_binary](/sql-reference/sql-functions/binary-functions/from_binary.md)
     + Conditional Functions
+      + [case_when](./sql-reference/sql-functions/condition-functions/case_when.md)
       + [coalesce](./sql-reference/sql-functions/condition-functions/coalesce.md)
       + [if](./sql-reference/sql-functions/condition-functions/if.md)
       + [ifnull](./sql-reference/sql-functions/condition-functions/ifnull.md)
@@ -487,6 +488,7 @@
       + [hours_add](./sql-reference/sql-functions/date-time-functions/hours_add.md)
       + [hours_diff](./sql-reference/sql-functions/date-time-functions/hours_diff.md)
       + [hours_sub](./sql-reference/sql-functions/date-time-functions/hours_sub.md)
+      + [makedate](./sql-reference/sql-functions/date-time-functions/makedate.md)
       + [microseconds_add](./sql-reference/sql-functions/date-time-functions/microseconds_add.md)
       + [microseconds_sub](./sql-reference/sql-functions/date-time-functions/microseconds_sub.md)
       + [minute](./sql-reference/sql-functions/date-time-functions/minute.md)
@@ -644,6 +646,7 @@
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
       + [host_name](./sql-reference/sql-functions/utility-functions/host_name.md)
       + [isnull](./sql-reference/sql-functions/utility-functions/isnull.md)
+      + [isnotnull](./sql-reference/sql-functions/utility-functions/isnotnull.md)
       + [last_query_id](./sql-reference/sql-functions/utility-functions/last_query_id.md)
       + [sleep](./sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)

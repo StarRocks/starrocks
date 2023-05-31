@@ -51,7 +51,7 @@ import java.io.IOException;
 
 public abstract class TxnCommitAttachment implements Writable {
 
-    @SerializedName("sourceType")
+    @SerializedName("s")
     protected TransactionState.LoadJobSourceType sourceType;
     protected boolean isTypeRead = false;
 

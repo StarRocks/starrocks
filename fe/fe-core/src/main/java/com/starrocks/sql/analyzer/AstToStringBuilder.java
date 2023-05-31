@@ -50,11 +50,9 @@ import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PrintableMap;
-import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
@@ -170,48 +168,27 @@ public class AstToStringBuilder {
             } else {
                 sb.append("REVOKE ");
             }
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                List<String> privList = new ArrayList<>();
-                for (PrivilegeType privilegeType : stmt.getPrivilegeTypes()) {
-                    privList.add(privilegeType.name().replace("_", " "));
-                }
+            List<String> privList = new ArrayList<>();
+            for (PrivilegeType privilegeType : stmt.getPrivilegeTypes()) {
+                privList.add(privilegeType.name().replace("_", " "));
+            }
 
-                sb.append(Joiner.on(", ").join(privList));
-                sb.append(" ON ");
+            sb.append(Joiner.on(", ").join(privList));
+            sb.append(" ON ");
 
-                if (stmt.getObjectType() == ObjectType.SYSTEM) {
-                    sb.append(stmt.getObjectType().name());
-                } else {
-                    if (stmt.getObjectList().stream().anyMatch(PEntryObject::isFuzzyMatching)) {
-                        sb.append(stmt.getObjectList().get(0).toString());
-                    } else {
-                        sb.append(stmt.getObjectType().name()).append(" ");
-
-                        List<String> objectString = new ArrayList<>();
-                        for (PEntryObject tablePEntryObject : stmt.getObjectList()) {
-                            objectString.add(tablePEntryObject.toString());
-                        }
-                        sb.append(Joiner.on(", ").join(objectString));
-                    }
-                }
-
+            if (stmt.getObjectType() == ObjectType.SYSTEM) {
+                sb.append(stmt.getObjectType().name());
             } else {
-                boolean firstLine = true;
-                for (Privilege privilege : stmt.getPrivBitSet().toPrivilegeList()) {
-                    if (firstLine) {
-                        firstLine = false;
-                    } else {
-                        sb.append(", ");
-                    }
-                    String priv = privilege.toString().toUpperCase();
-                    sb.append(priv, 0, priv.length() - 5);
-                }
-                if (stmt.getObjectTypeUnResolved().equals("TABLE") || stmt.getObjectTypeUnResolved().equals("DATABASE")) {
-                    sb.append(" ON ").append(stmt.getTblPattern());
-                } else if (stmt.getObjectTypeUnResolved().equals("RESOURCE")) {
-                    sb.append(" ON RESOURCE ").append(stmt.getResourcePattern());
+                if (stmt.getObjectList().stream().anyMatch(PEntryObject::isFuzzyMatching)) {
+                    sb.append(stmt.getObjectList().get(0).toString());
                 } else {
-                    sb.append(" ON USER ").append(stmt.getUserPrivilegeObject());
+                    sb.append(stmt.getObjectType().name()).append(" ");
+
+                    List<String> objectString = new ArrayList<>();
+                    for (PEntryObject tablePEntryObject : stmt.getObjectList()) {
+                        objectString.add(tablePEntryObject.toString());
+                    }
+                    sb.append(Joiner.on(", ").join(objectString));
                 }
             }
             if (stmt instanceof GrantPrivilegeStmt) {

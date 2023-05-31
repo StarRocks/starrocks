@@ -83,7 +83,6 @@ import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.WriteQuorum;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -136,7 +135,7 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void processAddColumn(AddColumnClause alterClause, OlapTable olapTable,
-                             Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
+                                  Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
         Column column = alterClause.getColumn();
         ColumnPosition columnPos = alterClause.getColPos();
         String targetIndexName = alterClause.getRollupName();
@@ -273,7 +272,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
     // User can modify column type and column position
     private void processModifyColumn(ModifyColumnClause alterClause, OlapTable olapTable,
-                                Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
+                                     Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
         Column modColumn = alterClause.getColumn();
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             if (olapTable.getBaseColumn(modColumn.getName()).isKey()) {
@@ -327,7 +326,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 for (SlotRef slot : slots) {
                     if (slot.getColumnName().equals(modColumn.getName())) {
                         throw new DdlException("Do not support modify column: " + modColumn.getName() +
-                                               ", because it associates with the materialized column");
+                                ", because it associates with the materialized column");
                     }
                 }
             }
@@ -400,7 +399,7 @@ public class SchemaChangeHandler extends AlterHandler {
         if (oriColumn.isAutoIncrement()) {
             throw new DdlException("Can't not modify a AUTO_INCREMENT column");
         }
-    
+
         // retain old column name
         modColumn.setName(oriColumn.getName());
 
@@ -432,7 +431,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     }
                     MaterializedIndexMeta meta = entry.getValue();
                     List<Column> schema = meta.getSchema();
-    
+
                     for (Column rollupCol : schema) {
                         if (rollupCol.getName().equals(oriColumn.getName())) {
                             throw new DdlException("Can not modify a materialized column, because there are MVs ref to it");
@@ -577,11 +576,12 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void processReorderColumnOfPrimaryKey(ReorderColumnsClause alterClause, OlapTable olapTable,
-                            Map<Long, LinkedList<Column>> indexSchemaMap, List<Integer> sortKeyIdxes) throws DdlException {
+                                                  Map<Long, LinkedList<Column>> indexSchemaMap, List<Integer> sortKeyIdxes)
+            throws DdlException {
         LinkedList<Column> targetIndexSchema = indexSchemaMap.get(olapTable.getIndexIdByName(olapTable.getName()));
         // check sort key column list
         Set<String> colNameSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        
+
         for (String colName : alterClause.getColumnsByPos()) {
             Optional<Column> oneCol = targetIndexSchema.stream().filter(c -> c.getName().equalsIgnoreCase(colName)).findFirst();
             if (!oneCol.isPresent()) {
@@ -1092,7 +1092,8 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private AlterJobV2 createJobForProcessReorderColumnOfPrimaryKey(long dbId, OlapTable olapTable,
-                Map<Long, LinkedList<Column>> indexSchemaMap, List<Integer> sortKeyIdxes) throws UserException {
+                                                                    Map<Long, LinkedList<Column>> indexSchemaMap,
+                                                                    List<Integer> sortKeyIdxes) throws UserException {
         if (olapTable.getState() == OlapTableState.ROLLUP) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
         }
@@ -1160,14 +1161,6 @@ public class SchemaChangeHandler extends AlterHandler {
         for (AlterJobV2 alterJob : alterJobsV2) {
             if (alterJob.getDbId() != db.getId()) {
                 continue;
-            }
-            if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (ctx != null) {
-                    if (!GlobalStateMgr.getCurrentState().getAuth()
-                            .checkTblPriv(ctx, db.getFullName(), alterJob.getTableName(), PrivPredicate.ALTER)) {
-                        continue;
-                    }
-                }
             }
             alterJob.getInfo(schemaChangeJobInfos);
         }
@@ -1255,7 +1248,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
 
-            if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().hasRunningOverwriteJob(olapTable.getId())) {
+            if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr().hasRunningOverwriteJob(olapTable.getId())) {
                 // because insert overwrite will create tmp partitions
                 throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
                         "please start schema change after insert overwrite finished");
@@ -1458,7 +1451,7 @@ public class SchemaChangeHandler extends AlterHandler {
             LOG.info("table {} binlog config is same as the previous version, so nothing need to do", olapTable.getName());
             return true;
         }
-        
+
         db.writeLock();
         // check for concurrent modifications by version
         if (olapTable.getBinlogVersion() != newBinlogConfig.getVersion()) {
@@ -1475,7 +1468,7 @@ public class SchemaChangeHandler extends AlterHandler {
             GlobalStateMgr.getCurrentState().modifyBinlogMeta(db, olapTable, newBinlogConfig);
             if (oldBinlogConfig != null) {
                 LOG.info("update binlog config of table {} successfully, the binlog config after modified is : {}, " +
-                        "previous is {}",
+                                "previous is {}",
                         olapTable.getName(),
                         olapTable.getCurBinlogConfig().toString(),
                         oldBinlogConfig.toString());

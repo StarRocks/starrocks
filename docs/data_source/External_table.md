@@ -463,8 +463,8 @@ create external table jdbc_tbl (
     `data` varchar(200) NULL 
 ) ENGINE=jdbc 
 properties (
-    "resource"="jdbc0",
-    "table"="dest_tbl"
+    "resource" = "jdbc0",
+    "table" = "dest_tbl"
 );
 ~~~
 
@@ -694,7 +694,16 @@ Query the total number of rows of `profile_wos_p7`.
 select count(*) from profile_wos_p7;
 ~~~
 
-### Configuration
+### Update cached Hive table metadata
+
+* Hive partition information and the related file information are cached in StarRocks. The cache is refreshed at intervals specified by `hive_meta_cache_refresh_interval_s`. The default value is 7200.  `hive_meta_cache_ttl_s` specifies the timeout duration of the cache and the default value is 86400.
+  * The cached data can also be refreshed manually.
+    1. If a partition is added or deleted from a table in Hive, you must run the `REFRESH EXTERNAL TABLE hive_t` command to refresh the table metadata cached in StarRocks. `hive_t` is the name of the Hive external table in StarRocks.
+    2. If data in some Hive partitions is updated, you must refresh the cached data in StarRocks by running the `REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')` command. `hive_t` is the name of the Hive external table in StarRocks. `'k1=01/k2=02'` and `'k1=03/k2=04'` are the names of Hive partitions whose data is updated.
+    3. When you run `REFRESH EXTERNAL TABLE hive_t`, StarRocks first checks if the column information of the Hive external table is the same as the column information of the Hive table returned by the Hive Metastore. If the schema of the Hive table changes, such as adding columns or removing columns, StarRocks synchronizes the changes to the Hive external table. After synchronization, the column order of the Hive external table remains the same as the column order of the Hive table, with the partition column being the last column.
+* When Hive data is stored in the Parquet, ORC, and CSV format, you can synchronize schema changes (such as ADD COLUMN and REPLACE COLUMN) of a Hive table to a Hive external table in StarRocks 2.3 and later versions.
+
+### Access object storage
 
 * The path of the FE configuration file is `fe/conf`, to which the configuration file can be added if you need to customize the Hadoop cluster. For example: If the HDFS cluster uses a highly available nameservice, you need to put `hdfs-site.xml` under `fe/conf`. If HDFS is configured with ViewFs, you need to put the `core-site.xml` under `fe/conf`.
 * The path of the BE configuration file is `be/conf`, to which the configuration file can be added if you need to customize the Hadoop cluster. For example, if the HDFS cluster using a highly available nameservice, you need to put `hdfs-site.xml` under `be/conf`. If HDFS is configured with ViewFs, you need to put `core-site.xml` under `be/conf`.
@@ -734,15 +743,6 @@ select count(*) from profile_wos_p7;
    3. `fs.s3a.endpoint`: the AWS S3 endpoint to connect to.
    4. `fs.s3a.connection.maximu``m`: the maximum number of concurrent connections from StarRocks to S3. If an error `Timeout waiting for connection from poll` occurs during a query, you can set this parameter to a larger value.
 
-### Metadata caching strategy
-
-* Hive partitions information and the related file information are cached in StarRocks. The cache is refreshed at intervals specified by `hive_meta_cache_refresh_interval_s`. The default value is 7200.  `hive_meta_cache_ttl_s` specifies the timeout duration of the cache and the default value is 86400.
-  * The cached data can also be refreshed manually.
-    1. If a partition is added or deleted from a table in Hive, you must run the `REFRESH EXTERNAL TABLE hive_t` command to refresh the table metadata cached in StarRocks. `hive_t` is the name of the Hive external table in StarRocks.
-    2. If data in some Hive partitions is updated, you must refresh the cached data in StarRocks by running the `REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')` command. `hive_t` is the name of the Hive external table in StarRocks. `'k1=01/k2=02'` and `'k1=03/k2=04'` are the names of Hive partitions whose data is updated.
-    3. When you run `REFRESH EXTERNAL TABLE hive_t`, StarRocks first checks if the column information of the Hive external table is the same as the column information of the Hive table returned by the Hive Metastore. If the schema of the Hive table changes, such as adding columns or remove columns, StarRocks synchronizes the changes to the Hive external table. After synchronization, the column order of the Hive external table remains the same as the column order of the Hive table, with the partition column being the last column.
-* When Hive data is stored in the Parquet, ORC, and CSV format, you can synchronize schema changes (such as ADD COLUMN and REPLACE COLUMN) of a Hive table to a Hive external table in StarRocks 2.3 and later versions.
-
 ## (Deprecated) Iceberg external table
 
 From v2.1.0, StarRocks allows you to query data from Apache Iceberg by using external tables. To query data in Iceberg, you need to create an Iceberg external table in StarRocks. When you create the table, you need to establish mapping between the external table and the Iceberg table you want to query.
@@ -776,7 +776,10 @@ For example, create a resource named `iceberg0` and set the catalog type to `HIV
 
 ~~~SQL
 CREATE EXTERNAL RESOURCE "iceberg0" 
-PROPERTIES ( "type" = "iceberg", "iceberg.catalog.type"="HIVE", "iceberg.catalog.hive.metastore.uris"="thrift://192.168.0.81:9083" 
+PROPERTIES (
+   "type" = "iceberg",
+   "iceberg.catalog.type" = "HIVE",
+   "iceberg.catalog.hive.metastore.uris" = "thrift://192.168.0.81:9083" 
 );
 ~~~
 
@@ -796,7 +799,10 @@ For example, create a resource named `iceberg1` and set the catalog type to `CUS
 
 ~~~SQL
 CREATE EXTERNAL RESOURCE "iceberg1" 
-PROPERTIES ( "type" = "iceberg", "iceberg.catalog.type"="CUSTOM", "iceberg.catalog-impl"="com.starrocks.IcebergCustomCatalog" 
+PROPERTIES (
+   "type" = "iceberg",
+   "iceberg.catalog.type" = "CUSTOM",
+   "iceberg.catalog-impl" = "com.starrocks.IcebergCustomCatalog" 
 );
 ~~~
 
@@ -805,7 +811,7 @@ The following table describes the related parameters.
 | **Parameter**          | **Description**                                              |
 | ---------------------- | ------------------------------------------------------------ |
 | type                   | The resource type. Set the value to `iceberg`.               |
-| iceberg.catalog.type | The catalog type of the resource. Both Hive catalog and custom catalog are supported. If you specify a Hive catalog, set the value to `HIVE`.If you specify a custom catalog, set the value to `CUSTOM`. |
+| iceberg.catalog.type | The catalog type of the resource. Both Hive catalog and custom catalog are supported. If you specify a Hive catalog, set the value to `HIVE`. If you specify a custom catalog, set the value to `CUSTOM`. |
 | iceberg.catalog-impl   | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg external table. |
 
 You can modify `hive.metastore.uris` and `iceberg.catalog-impl`of a Iceberg resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md).

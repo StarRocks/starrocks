@@ -15,7 +15,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -25,7 +24,11 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollection;
@@ -62,8 +65,6 @@ import java.util.stream.Collectors;
 // WorkGroupMgr is employed by GlobalStateMgr to manage WorkGroup in FE.
 public class ResourceGroupMgr implements Writable {
     private static final Logger LOG = LogManager.getLogger(ResourceGroupMgr.class);
-
-    private final GlobalStateMgr globalStateMgr;
     private final Map<String, ResourceGroup> resourceGroupMap = new HashMap<>();
 
     // Record the current short_query resource group.
@@ -76,10 +77,6 @@ public class ResourceGroupMgr implements Writable {
     private final Map<Long, Map<Long, TWorkGroup>> activeResourceGroupsPerBe = new HashMap<>();
     private final Map<Long, Long> minVersionPerBe = new HashMap<>();
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-
-    public ResourceGroupMgr(GlobalStateMgr globalStateMgr) {
-        this.globalStateMgr = globalStateMgr;
-    }
 
     private void readLock() {
         lock.readLock().lock();
@@ -116,6 +113,16 @@ public class ResourceGroupMgr implements Writable {
                 throw new DdlException(
                         String.format("There can be only one short_query RESOURCE_GROUP (%s)",
                                 shortQueryResourceGroup.getName()));
+            }
+
+            if (wg.getClassifiers() != null && !wg.getClassifiers().isEmpty() &&
+                    wg.getResourceGroupType().equals(TWorkGroupType.WG_MV)) {
+                throw new DdlException("MV Resource Group not support classifiers.");
+            }
+
+            if (wg.getClassifiers() == null || wg.getClassifiers().isEmpty() &&
+                    !wg.getResourceGroupType().equals(TWorkGroupType.WG_MV)) {
+                throw new DdlException("This type Resource Group need define classifiers.");
             }
 
             wg.setId(GlobalStateMgr.getCurrentState().getNextId());
@@ -160,41 +167,29 @@ public class ResourceGroupMgr implements Writable {
     private List<String> getUnqualifiedRole(ConnectContext ctx) {
         Preconditions.checkArgument(ctx != null);
 
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            try {
-                AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
-                List<String> validRoles = new ArrayList<>();
+        try {
+            AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+            List<String> validRoles = new ArrayList<>();
 
-                Set<Long> activeRoles = ctx.getCurrentRoleIds();
-                if (activeRoles == null) {
-                    activeRoles = manager.getRoleIdsByUser(ctx.getCurrentUserIdentity());
-                }
-
-                for (Long roleId : activeRoles) {
-                    RolePrivilegeCollection rolePrivilegeCollection =
-                            manager.getRolePrivilegeCollectionUnlocked(roleId, false);
-                    if (rolePrivilegeCollection != null) {
-                        validRoles.add(rolePrivilegeCollection.getName());
-                    }
-                }
-
-                return validRoles.stream().filter(r -> !PrivilegeBuiltinConstants.BUILT_IN_ROLE_NAMES.contains(r))
-                        .collect(Collectors.toList());
-            } catch (PrivilegeException e) {
-                LOG.info("getUnqualifiedRole failed for resource group, error message: " + e.getMessage());
-                return null;
+            Set<Long> activeRoles = ctx.getCurrentRoleIds();
+            if (activeRoles == null) {
+                activeRoles = manager.getRoleIdsByUser(ctx.getCurrentUserIdentity());
             }
-        }
 
-        String roleName = null;
-        String qualifiedRoleName = GlobalStateMgr.getCurrentState().getAuth()
-                .getRoleName(ctx.getCurrentUserIdentity());
-        if (qualifiedRoleName != null) {
-            //default_cluster:role
-            String[] roleParts = qualifiedRoleName.split(":");
-            roleName = roleParts[roleParts.length - 1];
+            for (Long roleId : activeRoles) {
+                RolePrivilegeCollection rolePrivilegeCollection =
+                        manager.getRolePrivilegeCollectionUnlocked(roleId, false);
+                if (rolePrivilegeCollection != null) {
+                    validRoles.add(rolePrivilegeCollection.getName());
+                }
+            }
+
+            return validRoles.stream().filter(r -> !PrivilegeBuiltinConstants.BUILT_IN_ROLE_NAMES.contains(r))
+                    .collect(Collectors.toList());
+        } catch (PrivilegeException e) {
+            LOG.info("getUnqualifiedRole failed for resource group, error message: " + e.getMessage());
+            return null;
         }
-        return Lists.newArrayList(roleName);
     }
 
     public List<List<String>> showAllResourceGroups(ConnectContext ctx, Boolean isListAll) {
@@ -312,6 +307,10 @@ public class ResourceGroupMgr implements Writable {
             }
             ResourceGroup wg = resourceGroupMap.get(name);
             AlterResourceGroupStmt.SubCommand cmd = stmt.getCmd();
+            if (wg.getResourceGroupType() == TWorkGroupType.WG_MV &&
+                    !(cmd instanceof AlterResourceGroupStmt.AlterProperties)) {
+                throw new DdlException("MV Resource Group not support classifiers.");
+            }
             if (cmd instanceof AlterResourceGroupStmt.AddClassifiers) {
                 List<ResourceGroupClassifier> newAddedClassifiers = stmt.getNewAddedClassifiers();
                 for (ResourceGroupClassifier classifier : newAddedClassifiers) {
@@ -565,5 +564,32 @@ public class ResourceGroupMgr implements Writable {
     private static class SerializeData {
         @SerializedName("WorkGroups")
         public List<ResourceGroup> resourceGroups;
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        int numJson = 1 + resourceGroupMap.size();
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, ResourceGroupMgr.class.getName(), numJson);
+        writer.writeJson(resourceGroupMap.size());
+        for (ResourceGroup resourceGroup : resourceGroupMap.values()) {
+            writer.writeJson(resourceGroup);
+        }
+
+        writer.close();
+    }
+
+    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, ResourceGroupMgr.class.getName());
+        try {
+            int numJson = reader.readInt();
+            List<ResourceGroup> resourceGroups = new ArrayList<>();
+            for (int i = 0; i < numJson; ++i) {
+                ResourceGroup resourceGroup = reader.readJson(ResourceGroup.class);
+                resourceGroups.add(resourceGroup);
+            }
+            resourceGroups.sort(Comparator.comparing(ResourceGroup::getVersion));
+            resourceGroups.forEach(this::replayAddResourceGroup);
+        } finally {
+            reader.close();
+        }
     }
 }

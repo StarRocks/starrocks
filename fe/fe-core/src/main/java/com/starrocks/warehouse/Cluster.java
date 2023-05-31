@@ -16,19 +16,21 @@ package com.starrocks.warehouse;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Cluster implements Writable {
     private static final Logger LOG = LogManager.getLogger(Cluster.class);
@@ -37,8 +39,6 @@ public class Cluster implements Writable {
     private long id;
     @SerializedName(value = "wgid")
     private long workerGroupId;
-    @SerializedName(value = "computeNodeIds")
-    private Set<Long> computeNodeIds = new HashSet<>();
 
     public Cluster(long id) {
         this.id = id;
@@ -62,20 +62,22 @@ public class Cluster implements Writable {
 
     public void getProcNodeData(BaseProcResult result) {
         result.addRow(Lists.newArrayList(String.valueOf(this.getId()),
+                String.valueOf(this.getWorkerGroupId()),
+                String.valueOf(this.getComputeNodeIds()),
                 String.valueOf(this.getPendingSqls()),
                 String.valueOf(this.getRunningSqls())));
     }
 
-    public void addNode(long cnId) {
-        computeNodeIds.add(cnId);
-    }
-
-    public void dropNode(long cnId) {
-        computeNodeIds.remove(cnId);
-    }
-
-    public Set<Long> getComputeNodeIds() {
-        return computeNodeIds;
+    public List<Long> getComputeNodeIds() {
+        // ask starMgr for node lists
+        List<Long> nodeIds = new ArrayList<>();
+        try {
+            nodeIds = GlobalStateMgr.getCurrentStarOSAgent().
+                    getWorkersByWorkerGroup(workerGroupId);
+        } catch (UserException e) {
+            LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
+        }
+        return nodeIds;
     }
 
     @Override

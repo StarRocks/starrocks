@@ -48,9 +48,13 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TColumn;
 
 import java.io.DataInput;
@@ -67,7 +71,7 @@ import static com.starrocks.common.util.DateUtils.DATE_TIME_FORMATTER;
 /**
  * This class represents the column-related metadata.
  */
-public class Column implements Writable {
+public class Column implements Writable, GsonPreProcessable, GsonPostProcessable {
 
     public static final String CAN_NOT_CHANGE_DEFAULT_VALUE = "Can not change default value";
 
@@ -105,7 +109,9 @@ public class Column implements Writable {
     // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob must be analyzed.
     // In other cases, such as define expr in `MaterializedIndexMeta`, it may not be analyzed after being relayed.
     private Expr defineExpr; // use to define column in materialize view
+
     @SerializedName(value = "materializedColumnExpr")
+    private GsonUtils.ExpressionSerializedObject generatedColumnExprSerialized;
     private Expr materializedColumnExpr;
 
     public Column() {
@@ -591,15 +597,22 @@ public class Column implements Writable {
         } else {
             sb.append("NOT NULL ");
         }
-        if (isAutoIncrement) {
+        if (defaultExpr == null && isAutoIncrement) {
             sb.append("AUTO_INCREMENT ");
-        }
-        if (isMaterializedColumn()) {
-            sb.append("AS " + materializedColumnExpr.toSql() + " ");
+        } else if (defaultExpr != null) {
+            if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+                // compatible with mysql
+                sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
+            } else {
+                sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
+            }
         }
         if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
                 getPrimitiveType() != PrimitiveType.BITMAP) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
+        }
+        if (isMaterializedColumn()) {
+            sb.append("AS " + materializedColumnExpr.toSql() + " ");
         }
         sb.append("COMMENT \"").append(comment).append("\"");
 
@@ -681,5 +694,20 @@ public class Column implements Writable {
     public static Column read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, Column.class);
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (generatedColumnExprSerialized != null && generatedColumnExprSerialized.expressionSql != null) {
+            materializedColumnExpr = SqlParser.parseSqlToExpr(generatedColumnExprSerialized.expressionSql,
+                    SqlModeHelper.MODE_DEFAULT);
+        }
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        if (materializedColumnExpr != null) {
+            generatedColumnExprSerialized = new GsonUtils.ExpressionSerializedObject(materializedColumnExpr.toSql());
+        }
     }
 }

@@ -389,7 +389,7 @@ public class PartitionsProcDir implements ProcDirInterface {
 
     private List<Comparable> getLakePartitionInfo(PartitionInfo tblPartitionInfo, Partition partition) {
         PartitionIdentifier identifier = new PartitionIdentifier(db.getId(), table.getId(), partition.getId());
-        PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionManager().getStatistics(identifier);
+        PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionMgr().getStatistics(identifier);
         Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
         StorageCacheInfo cacheInfo = tblPartitionInfo.getStorageCacheInfo(partition.getId());
         List<Comparable> partitionInfo = new ArrayList<Comparable>();

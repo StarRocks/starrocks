@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include <optional>
 #include <string_view>
 
 #include "gutil/strings/util.h"
@@ -27,7 +28,6 @@ namespace starrocks::lake {
 constexpr static const int kTabletMetadataFilenameLength = 38;
 constexpr static const int kTxnLogFilenameLength = 37;
 constexpr static const int kTabletMetadataLockFilenameLength = 55;
-constexpr static const int kSegmentFileNameLength = 40;
 
 constexpr static const char* const kGCFileName = "GC.json";
 
@@ -63,8 +63,8 @@ inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) 
     return fmt::format("{:016X}_{:016X}.meta", tablet_id, version);
 }
 
-inline std::string random_tablet_delvec_filename() {
-    return fmt::format("{}.delvec", generate_uuid_string());
+inline std::string gen_delvec_filename(int64_t txn_id) {
+    return fmt::format("{:016x}_{}.delvec", txn_id, generate_uuid_string());
 }
 
 inline std::string txn_log_filename(int64_t tablet_id, int64_t txn_id) {
@@ -79,10 +79,29 @@ inline std::string tablet_metadata_lock_filename(int64_t tablet_id, int64_t vers
     return fmt::format("{:016X}_{:016X}_{:016X}.lock", tablet_id, version, expire_time);
 }
 
-inline std::string random_segment_filename() {
-    auto name = fmt::format("{}.dat", generate_uuid_string());
-    DCHECK_EQ(kSegmentFileNameLength, name.size());
-    return name;
+inline std::string gen_segment_filename(int64_t txn_id) {
+    return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
+}
+
+inline std::string gen_del_filename(int64_t txn_id) {
+    return fmt::format("{:016x}_{}.del", txn_id, generate_uuid_string());
+}
+
+inline std::optional<int64_t> extract_txn_id_prefix(std::string_view file_name) {
+    constexpr static int kBase = 16;
+    if (UNLIKELY(file_name.size() < 17 || file_name[16] != '_')) {
+        return {};
+    }
+    StringParser::ParseResult res;
+    auto txn_id = StringParser::string_to_int<int64_t>(file_name.data(), 16, kBase, &res);
+    if (UNLIKELY(res != StringParser::PARSE_SUCCESS)) {
+        return {};
+    }
+    return txn_id;
+}
+
+inline std::string schema_filename(int64_t schema_id) {
+    return fmt::format("SCHEMA_{:016X}", schema_id);
 }
 
 // Return value: <tablet id, tablet version>

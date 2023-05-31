@@ -65,7 +65,7 @@ import java.util.Set;
 public class InsertLoadJob extends LoadJob {
     private static final Logger LOG = LogManager.getLogger(LoadJob.class);
 
-    @SerializedName("tableId")
+    @SerializedName("tid")
     private long tableId;
     private long estimateScanRow;
     private TLoadJobType loadType;
@@ -145,10 +145,10 @@ public class InsertLoadJob extends LoadJob {
     }
 
     @Override
-    public void updateProgess(TReportExecStatusParams params) {
+    public void updateProgress(TReportExecStatusParams params) {
         writeLock();
         try {
-            super.updateProgess(params);
+            super.updateProgress(params);
             if (!loadingStatus.getLoadStatistic().getLoadFinish()) {
                 if (this.loadType == TLoadJobType.INSERT_QUERY) {
                     progress = (int) ((double) loadingStatus.getLoadStatistic().totalSourceLoadRows() 

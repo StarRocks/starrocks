@@ -19,7 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.load.DeleteHandler;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.qe.ConnectContext;
@@ -119,7 +119,7 @@ public class RestrictOpMaterializedViewTest {
         String sql1 = "delete from db1.mv1 where k2 = 3;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
-            DeleteHandler deleteHandler = new DeleteHandler();
+            DeleteMgr deleteHandler = new DeleteMgr();
             deleteHandler.process((DeleteStmt) statementBase);
             Assert.fail();
         } catch (Exception e) {

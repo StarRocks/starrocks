@@ -248,6 +248,7 @@ public:
     }
 
     // hash table param.
+    // this function only valid in hash_joiner_builder
     const HashTableParam& hash_table_param() const { return _hash_table_param; }
 
     void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
@@ -299,6 +300,8 @@ public:
         }
         return Status::OK();
     }
+
+    const TJoinOp::type& join_type() const { return _join_type; }
 
 private:
     static bool _has_null(const ColumnPtr& column);

@@ -47,6 +47,11 @@
 #include "util/lru_cache.h"
 #include "util/raw_container.h"
 
+// TODO: Eliminate the explicit dependency on staros worker
+#ifdef USE_STAROS
+#include "service/staros_worker.h"
+#endif
+
 namespace starrocks::lake {
 
 static void* gc_checker(void* arg);
@@ -108,12 +113,16 @@ std::string TabletManager::tablet_metadata_lock_location(int64_t tablet_id, int6
     return _location_provider->tablet_metadata_lock_location(tablet_id, version, expire_time);
 }
 
-std::string TabletManager::tablet_schema_cache_key(int64_t tablet_id) {
-    return fmt::format("schema_{}", tablet_id);
+std::string TabletManager::global_schema_cache_key(int64_t schema_id) {
+    return fmt::format("GS{}", schema_id);
 }
 
-std::string TabletManager::tablet_latest_metadata_key(int64_t tablet_id) {
-    return fmt::format("meta_latest_{}", tablet_id);
+std::string TabletManager::tablet_schema_cache_key(int64_t tablet_id) {
+    return fmt::format("TS{}", tablet_id);
+}
+
+std::string TabletManager::tablet_latest_metadata_cache_key(int64_t tablet_id) {
+    return fmt::format("TL{}", tablet_id);
 }
 
 bool TabletManager::fill_metacache(std::string_view key, CacheValue* ptr, int size) {
@@ -151,7 +160,7 @@ TabletMetadataPtr TabletManager::lookup_tablet_latest_metadata(std::string_view 
 
 void TabletManager::cache_tablet_latest_metadata(TabletMetadataPtr metadata) {
     auto value_ptr = std::make_unique<CacheValue>(metadata);
-    fill_metacache(tablet_latest_metadata_key(metadata->id()), value_ptr.release(),
+    fill_metacache(tablet_latest_metadata_cache_key(metadata->id()), value_ptr.release(),
                    static_cast<int>(metadata->SpaceUsedLong()));
 }
 
@@ -267,6 +276,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
                 req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb->mutable_schema(),
                 req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     }
+    RETURN_IF_ERROR(create_schema_file(req.tablet_id, tablet_metadata_pb->schema()));
     return put_tablet_metadata(std::move(tablet_metadata_pb));
 }
 
@@ -338,7 +348,7 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& me
 }
 
 TabletMetadataPtr TabletManager::get_latest_cached_tablet_metadata(int64_t tablet_id) {
-    return lookup_tablet_latest_metadata(tablet_latest_metadata_key(tablet_id));
+    return lookup_tablet_latest_metadata(tablet_latest_metadata_cache_key(tablet_id));
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version) {
@@ -492,6 +502,44 @@ StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_
 }
 
 StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, int64_t* version_hint) {
+// TODO: Eliminate the explicit dependency on staros worker
+#ifdef USE_STAROS
+    if (g_worker != nullptr) {
+        auto shard_info_or = g_worker->get_shard_info(tablet_id);
+        if (shard_info_or.ok()) {
+            const auto& shard_info = shard_info_or.value();
+            const auto& properties = shard_info.properties;
+            auto index_id_iter = properties.find("indexId");
+            if (index_id_iter != properties.end()) {
+                auto schema_id = std::atol(index_id_iter->second.data());
+                auto cache_key = global_schema_cache_key(schema_id);
+                auto schema = lookup_tablet_schema(cache_key);
+                if (schema != nullptr) {
+                    return schema;
+                }
+                // else: Cache miss, read the schema file
+                auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(schema_id));
+                auto schema_or = load_and_parse_schema_file(schema_file_path);
+                if (schema_or.ok()) {
+                    VLOG(3) << "Got tablet schema of id " << schema_id << " for tablet " << tablet_id;
+                    schema = std::move(schema_or).value();
+                    // Save the schema into the in-memory cache, use the schema id as the cache key
+                    auto cache_value = std::make_unique<CacheValue>(schema);
+                    (void)fill_metacache(cache_key, cache_value.release(), 0);
+                    return std::move(schema);
+                } else if (schema_or.status().is_not_found()) {
+                    // version 3.0 will not generate the tablet schema file, ignore the not found error and
+                    // try to extract the tablet schema from the tablet metadata.
+                } else {
+                    return schema_or.status();
+                }
+            } else {
+                // no "indexId" property, will extract the tablet schema from the tablet metadata.
+            }
+        }
+    }
+#endif // USE_STAROS
+
     // Check in-memory cache first
     auto cache_key = tablet_schema_cache_key(tablet_id);
     auto ptr = lookup_tablet_schema(cache_key);
@@ -757,6 +805,57 @@ Status TabletManager::delete_tablet_metadata_lock(int64_t tablet_id, int64_t ver
     return st.is_not_found() ? Status::OK() : st;
 }
 
+Status TabletManager::create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb) {
+    auto cache_key = global_schema_cache_key(schema_pb.id());
+    auto handle = _metacache->lookup(CacheKey(cache_key));
+    if (handle != nullptr) {
+        // If there is a cache entry, it means that the current process has successfully
+        // created the file already, and there is no need to create it again.
+        _metacache->release(handle);
+        VLOG(3) << "Skipped creating schema file of id " << schema_pb.id() << " for tablet " << tablet_id;
+    } else {
+        VLOG(3) << "Creating schema file of id " << schema_pb.id() << " for tablet " << tablet_id;
+        // The absence of a cache entry does not necessarily mean that the schema file does
+        // not exist. It may also be that the cache has been evicted. In addition, other
+        // processes may have already created or are creating the schema file. It is allowed
+        // for this to happen, because the schema files created by all processes are the
+        // same, as long as the final file exists, it is fine.
+        auto options = WritableFileOptions{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(schema_pb.id()));
+        ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(options, schema_file_path));
+        RETURN_IF_ERROR(wf->append(schema_pb.SerializeAsString()));
+        RETURN_IF_ERROR(wf->close());
+
+        // Save the schema into the in-memory cache
+        auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(schema_pb);
+        if (UNLIKELY(schema == nullptr)) {
+            return Status::InternalError("failed to emplace the schema hash map");
+        }
+        auto cache_value = std::make_unique<CacheValue>(schema);
+        auto cache_size = inserted ? (int)schema->mem_usage() : 0;
+        (void)fill_metacache(cache_key, cache_value.release(), cache_size);
+    }
+    return Status::OK();
+}
+
+StatusOr<TabletSchemaPtr> TabletManager::load_and_parse_schema_file(const std::string& path) {
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(path));
+    ASSIGN_OR_RETURN(auto file_size, rf->get_size());
+    std::string buffer;
+    raw::stl_string_resize_uninitialized(&buffer, file_size);
+    RETURN_IF_ERROR(rf->read_at_fully(0, buffer.data(), file_size));
+    TabletSchemaPB schema_pb;
+    bool parsed = schema_pb.ParseFromArray(buffer.data(), static_cast<int>(file_size));
+    if (!parsed) {
+        return Status::Corruption(fmt::format("failed to parse schema file {}", rf->filename()));
+    }
+    auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(schema_pb);
+    if (UNLIKELY(schema == nullptr)) {
+        return Status::InternalError("failed to emplace the schema hash map");
+    }
+    return std::move(schema);
+}
+
 std::set<int64_t> TabletManager::owned_tablets() {
     return _location_provider->owned_tablets();
 }
@@ -764,6 +863,15 @@ std::set<int64_t> TabletManager::owned_tablets() {
 void TabletManager::start_gc() {
     int r = bthread_start_background(&_gc_checker_tid, nullptr, gc_checker, this);
     PLOG_IF(FATAL, r != 0) << "Fail to call bthread_start_background";
+}
+
+void TabletManager::update_metacache_limit(size_t new_capacity) {
+    size_t old_capacity = _metacache->get_capacity();
+    int64_t delta = (int64_t)new_capacity - (int64_t)old_capacity;
+    if (delta != 0) {
+        (void)_metacache->adjust_capacity(delta);
+        VLOG(5) << "Changed metadache capacity from " << old_capacity << " to " << _metacache->get_capacity();
+    }
 }
 
 static void metadata_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots, int64_t min_active_txn_id) {
@@ -795,13 +903,13 @@ static void metadata_gc(TabletManager* tablet_mgr, const std::set<std::string>& 
     }
 }
 
-static void data_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots) {
+static void data_gc(TabletManager* tablet_mgr, const std::set<std::string>& roots, int64_t min_active_txn_id) {
     auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
     auto num_running = std::atomic<int>(roots.size());
     for (const auto& root : roots) {
         auto st = thread_pool->submit_func([&, root]() {
             auto t1 = std::chrono::steady_clock::now();
-            auto r = datafile_gc(root, tablet_mgr);
+            auto r = datafile_gc(root, tablet_mgr, min_active_txn_id);
             auto t2 = std::chrono::steady_clock::now();
             auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
             if (r.ok()) {
@@ -842,12 +950,12 @@ void* gc_checker(void* arg) {
         std::set<std::string> roots;
         (void)lp->list_root_locations(&roots);
 
+        auto master_info = get_master_info();
         if (min_gc_time == gc_time[0]) {
-            auto master_info = get_master_info();
             metadata_gc(tablet_mgr, roots, master_info.min_active_txn_id);
             gc_time[0] = butil::gettimeofday_s() + config::lake_gc_metadata_check_interval;
         } else {
-            data_gc(tablet_mgr, roots);
+            data_gc(tablet_mgr, roots, master_info.min_active_txn_id);
             gc_time[1] = butil::gettimeofday_s() + config::lake_gc_segment_check_interval;
         }
     }

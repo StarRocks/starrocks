@@ -26,7 +26,6 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
-import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergSchema;
@@ -47,15 +46,15 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
-import static org.apache.iceberg.hive.IcebergHiveCatalog.LOCATION_PROPERTY;
 
 public class IcebergApiConverter {
     private static final Logger LOG = LogManager.getLogger(IcebergApiConverter.class);
@@ -63,8 +62,7 @@ public class IcebergApiConverter {
     private static final int FAKE_FIELD_ID = -1;
 
     public static IcebergTable toIcebergTable(Table nativeTbl, String catalogName, String remoteDbName,
-                                              String remoteTableName, String nativeCatalogType,
-                                              Optional<IcebergMetricsReporter> metricsReporter) {
+                                              String remoteTableName, String nativeCatalogType) {
         IcebergTable.Builder tableBuilder = IcebergTable.builder()
                 .setId(CONNECTOR_ID_GENERATOR.getNextId().asInt())
                 .setSrTableName(remoteTableName)
@@ -74,8 +72,7 @@ public class IcebergApiConverter {
                 .setRemoteTableName(remoteTableName)
                 .setNativeTable(nativeTbl)
                 .setFullSchema(toFullSchemas(nativeTbl))
-                .setIcebergProperties(toIcebergProps(nativeCatalogType))
-                .setMetricsReporter(metricsReporter);
+                .setIcebergProperties(toIcebergProps(nativeCatalogType));
 
         return tableBuilder.build();
     }
@@ -105,10 +102,6 @@ public class IcebergApiConverter {
         return builder.build();
     }
 
-    public static Optional<String> getTableLocation(Map<String, String> tableProperties) {
-        return Optional.ofNullable(tableProperties.get(LOCATION_PROPERTY));
-    }
-
     public static org.apache.iceberg.types.Type toIcebergColumnType(Type type) {
         if (type.isScalarType()) {
             PrimitiveType primitiveType = type.getPrimitiveType();
@@ -116,6 +109,8 @@ public class IcebergApiConverter {
             switch (primitiveType) {
                 case BOOLEAN:
                     return Types.BooleanType.get();
+                case TINYINT:
+                case SMALLINT:
                 case INT:
                     return Types.IntegerType.get();
                 case BIGINT:
@@ -131,6 +126,8 @@ public class IcebergApiConverter {
                 case VARCHAR:
                 case CHAR:
                     return Types.StringType.get();
+                case VARBINARY:
+                    return Types.BinaryType.get();
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:
@@ -187,6 +184,7 @@ public class IcebergApiConverter {
                 srType = Type.UNKNOWN_TYPE;
             }
             Column column = new Column(field.name(), srType, true);
+            column.setComment(field.doc());
             fullSchema.add(column);
         }
         return fullSchema;
@@ -266,16 +264,24 @@ public class IcebergApiConverter {
     public static Map<String, String> rebuildCreateTableProperties(Map<String, String> createProperties) {
         ImmutableMap.Builder<String, String> tableProperties = ImmutableMap.builder();
         createProperties.entrySet().forEach(tableProperties::put);
-
         String fileFormat = createProperties.getOrDefault("file_format", TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
+        String compressionCodec = null;
+
         if ("parquet".equalsIgnoreCase(fileFormat)) {
             tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "parquet");
+            compressionCodec = createProperties.getOrDefault("compression_codec", TableProperties.PARQUET_COMPRESSION_DEFAULT);
         } else if ("avro".equalsIgnoreCase(fileFormat)) {
             tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "avro");
+            compressionCodec = createProperties.getOrDefault("compression_codec", TableProperties.AVRO_COMPRESSION_DEFAULT);
         } else if ("orc".equalsIgnoreCase(fileFormat)) {
             tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "orc");
+            compressionCodec = createProperties.getOrDefault("compression_codec", TableProperties.ORC_COMPRESSION_DEFAULT);
         } else if (fileFormat != null) {
             throw new IllegalArgumentException("Unsupported format in USING: " + fileFormat);
+        }
+
+        if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionCodec.toLowerCase(Locale.ROOT))) {
+            throw new IllegalArgumentException("Unsupported compression codec in USING: " + compressionCodec);
         }
 
         return tableProperties.build();

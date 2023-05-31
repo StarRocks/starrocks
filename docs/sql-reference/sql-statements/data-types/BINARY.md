@@ -33,7 +33,7 @@ DUPLICATE KEY(`id`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id`) BUCKETS 1
 PROPERTIES (
-    "replication_num" = "1",
+    "replication_num" = "3",
     "storage_format" = "DEFAULT"
 );
 
@@ -99,7 +99,7 @@ StarRocks supports the following ways to load data and store it as BINARY type.
     0,0,ab
 
     -- Load CSV file using Stream Load.
-    curl --location-trusted -u root: -T temp_data -XPUT -H column_separator:, -H label:xx http://172.17.0.1:8131/api/test_mv/t1/_stream_load
+    curl --location-trusted -u <username>:<password> -T temp_data -XPUT -H column_separator:, -H label:xx http://172.17.0.1:8131/api/test_mv/t1/_stream_load
 
     -- Query the loaded data.
     mysql> select * from t1;

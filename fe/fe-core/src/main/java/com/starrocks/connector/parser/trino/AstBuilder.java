@@ -146,6 +146,7 @@ import io.trino.sql.tree.Table;
 import io.trino.sql.tree.TableSubquery;
 import io.trino.sql.tree.TimestampLiteral;
 import io.trino.sql.tree.Trim;
+import io.trino.sql.tree.TryExpression;
 import io.trino.sql.tree.Union;
 import io.trino.sql.tree.WhenClause;
 import io.trino.sql.tree.Window;
@@ -685,6 +686,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         }
     }
 
+    @Override
+    protected ParseNode visitTryExpression(TryExpression node, ParseTreeContext context) {
+        return visit(node.getInnerExpression(), context);
+    }
+
     private static final BigInteger LONG_MAX = new BigInteger("9223372036854775807");
 
     private static final BigInteger LARGEINT_MAX_ABS =
@@ -752,6 +758,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             } catch (AnalysisException e) {
                 throw new ParsingException(e.getMessage());
             }
+        } else if (node.getType().equalsIgnoreCase("json")) {
+            return new com.starrocks.analysis.StringLiteral(node.getValue());
         }
         throw new ParsingException("Parse Error : unknown type " + node.getType());
     }

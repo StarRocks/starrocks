@@ -110,6 +110,16 @@ public class StatisticExecutor {
         }
     }
 
+    public void dropTableStatistics(ConnectContext statsConnectCtx, String tableUUID) {
+        String sql = StatisticSQLBuilder.buildDropExternalStatSQL(tableUUID);
+        LOG.debug("Expire statistic SQL: {}", sql);
+
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute statistic table expire fail.");
+        }
+    }
+
     public boolean dropPartitionStatistics(ConnectContext statsConnectCtx, List<Long> pids) {
         String sql = StatisticSQLBuilder.buildDropPartitionSQL(pids);
         LOG.debug("Expire partition statistic SQL: {}", sql);
@@ -203,7 +213,8 @@ public class StatisticExecutor {
                 || version == StatsConstants.STATISTIC_DICT_VERSION
                 || version == StatsConstants.STATISTIC_HISTOGRAM_VERSION
                 || version == StatsConstants.STATISTIC_TABLE_VERSION
-                || version == StatsConstants.STATISTIC_BATCH_VERSION) {
+                || version == StatsConstants.STATISTIC_BATCH_VERSION
+                || version == StatsConstants.STATISTIC_EXTERNAL_VERSION) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {
@@ -297,7 +308,7 @@ public class StatisticExecutor {
         context.setQueryId(UUIDUtil.genUUID());
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
-            throw new SemanticException("Statistics query fail | Error Message [%s] | {} | SQL [%s]",
+            throw new SemanticException("Statistics query fail | Error Message [%s] | QueryId [%s] | SQL [%s]",
                     context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
         } else {
             return sqlResult.first;

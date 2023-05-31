@@ -266,6 +266,7 @@ public class OperationType {
     public static final short OP_CREATE_MATERIALIZED_VIEW = 10094;
     public static final short OP_CREATE_INSERT_OVERWRITE = 10095;
     public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10096;
+    public static final short OP_ALTER_MATERIALIZED_VIEW_STATUS = 10097;
 
     // manage system node info 10101 ~ 10120
     public static final short OP_UPDATE_FRONTEND = 10101;
@@ -325,4 +326,20 @@ public class OperationType {
     public static final short OP_CREATE_ROUTINE_LOAD_JOB_V2 = 12102;
     public static final short OP_CHANGE_ROUTINE_LOAD_JOB_V2 = 12103;
     public static final short OP_REMOVE_ROUTINE_LOAD_JOB_V2 = 12104;
+
+    //Txn json format log
+    public static final short OP_UPSERT_TRANSACTION_STATE_V2 = 12110;
+    public static final short OP_SAVE_TRANSACTION_ID_V2 = 12112;
+
+    //Export json format log
+    public static final short OP_EXPORT_CREATE_V2 = 12120;
+    public static final short OP_EXPORT_UPDATE_INFO_V2 = 12121;
+
+    // small files json format log
+    public static final short OP_CREATE_SMALL_FILE_V2 = 12140;
+    public static final short OP_DROP_SMALL_FILE_V2 = 12141;
+
+    //Backup/Restore json format log
+    public static final short OP_BACKUP_JOB_V2 = 12150;
+    public static final short OP_RESTORE_JOB_V2 = 12151;
 }

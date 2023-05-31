@@ -144,6 +144,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_PARALLEL_SCAN_INSTANCE_NUM = "max_parallel_scan_instance_num";
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
     public static final String ENABLE_SPILL = "enable_spill";
+    public static final String SPILLABLE_OPERATOR_MASK = "spillable_operator_mask";
     // spill mode: auto, force
     public static final String SPILL_MODE = "spill_mode";
     // if set to true, some of stmt will be forwarded to leader FE to get result
@@ -268,6 +269,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
+    public static final String CBO_PRUNE_SUBFIELD = "cbo_prune_subfield";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
 
@@ -423,6 +425,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PLAN_VALIDATION = "enable_plan_validation";
 
     public static final String ENABLE_STRICT_TYPE = "enable_strict_type";
+
+    public static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -590,8 +594,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long sqlSelectLimit = DEFAULT_SELECT_LIMIT;
 
     // this is used to make c3p0 library happy
+    // Max packet length to send to or receive from the server,
+    // try to set it to a higher value if `PacketTooBigException` is thrown at client
     @VariableMgr.VarAttr(name = MAX_ALLOWED_PACKET)
-    private int maxAllowedPacket = 1048576;
+    private int maxAllowedPacket = 33554432; // 32MB
     @VariableMgr.VarAttr(name = AUTO_INCREMENT_INCREMENT)
     private int autoIncrementIncrement = 1;
 
@@ -659,6 +665,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_CTE_MAX_LIMIT, flag = VariableMgr.INVISIBLE)
     private int cboCTEMaxLimit = 10;
 
+    @VarAttr(name = CBO_PRUNE_SUBFIELD, flag = VariableMgr.INVISIBLE)
+    private boolean cboPruneSubfield = true;
+
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
 
@@ -703,6 +712,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_SPILL)
     private boolean enableSpill = false;
+
+    // this is used to control which operators can spill, only meaningful when enable_spill=true
+    // it uses a bit to identify whether the spill of each operator is in effect, 0 means no, 1 means yes
+    // at present, only the lowest 4 bits are meaningful, corresponding to the four operators
+    // HASH_JOIN, AGG, AGG_DISTINCT and SORT respectively (see TSpillableOperatorType in InternalService.thrift)
+    // e.g.
+    // if spillable_operator_mask & 1 != 0, hash join operator can spill
+    // if spillable_operator_mask & 2 != 0, agg operator can spill
+    // if spillable_operator_mask & 4 != 0, agg distinct operator can spill
+    // if spillable_operator_mask & 8 != 0, sort operator can spill
+    // ...
+    // default value is -1, means all operators can spill
+    @VariableMgr.VarAttr(name = SPILLABLE_OPERATOR_MASK, flag = VariableMgr.INVISIBLE)
+    private long spillableOperatorMask = -1;
 
     @VariableMgr.VarAttr(name = SPILL_MODE)
     private String spillMode = "auto";
@@ -930,6 +953,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN)
     private boolean enableRewriteSimpleAggToMetaScan = false;
+
+    // support auto|row|column
+    @VariableMgr.VarAttr(name = PARTIAL_UPDATE_MODE)
+    private String partialUpdateMode = "auto";
+
+    public void setPartialUpdateMode(String mode) {
+        this.partialUpdateMode = mode;
+    }
+
+    public String getPartialUpdateMode() {
+        return this.partialUpdateMode;
+    }
 
     public boolean isEnableSortAggregate() {
         return enableSortAggregate;
@@ -1507,6 +1542,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getTransactionVisibleWaitTimeout() {
         return transactionVisibleWaitTimeout;
+    }
+
+    public void setTransactionVisibleWaitTimeout(long transactionVisibleWaitTimeout) {
+        this.transactionVisibleWaitTimeout = transactionVisibleWaitTimeout;
     }
 
     public boolean getForceScheduleLocal() {
@@ -2104,6 +2143,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnablePlanValidation(boolean val) {
         this.enablePlanValidation = val;
     }
+
+    public boolean isCboPruneSubfield() {
+        return cboPruneSubfield;
+    }
+
+    public void setCboPruneSubfield(boolean cboPruneSubfield) {
+        this.cboPruneSubfield = cboPruneSubfield;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -2135,6 +2183,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setSpill_operator_min_bytes(spillOperatorMinBytes);
             tResult.setSpill_operator_max_bytes(spillOperatorMaxBytes);
             tResult.setSpill_encode_level(spillEncodeLevel);
+            tResult.setSpillable_operator_mask(spillableOperatorMask);
         }
 
         // Compression Type

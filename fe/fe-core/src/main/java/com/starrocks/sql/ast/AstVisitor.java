@@ -235,7 +235,13 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    // ---------------------------------------- Task Statement ---------------------------------------------------------
+
     public R visitSubmitTaskStatement(SubmitTaskStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropTaskStmt(DropTaskStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -592,6 +598,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateRoleStatement(CreateRoleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterRoleStatement(AlterRoleStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

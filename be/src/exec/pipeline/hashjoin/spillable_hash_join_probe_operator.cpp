@@ -39,7 +39,7 @@
 namespace starrocks::pipeline {
 Status SpillableHashJoinProbeOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(HashJoinProbeOperator::prepare(state));
-    _need_post_probe = has_post_probe(_join_prober->hash_table_param().join_type);
+    _need_post_probe = has_post_probe(_join_prober->join_type());
     _probe_spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get()));
     metrics.hash_partitions = ADD_COUNTER(_unique_metrics.get(), "SpillPartitions", TUnit::UNIT);
     RETURN_IF_ERROR(_probe_spiller->prepare(state));
@@ -197,7 +197,7 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
                                                                    const std::vector<uint32_t>& selection, int32_t from,
                                                                    int32_t size) {
         // nothing to do for empty partition
-        if (could_short_circuit(_join_prober->hash_table_param().join_type)) {
+        if (could_short_circuit(_join_prober->join_type())) {
             // For left semi join and inner join we can just skip the empty partition
             auto build_partition_iter = _pid_to_build_partition.find(probe_partition->partition_id);
             if (build_partition_iter != _pid_to_build_partition.end()) {
@@ -225,8 +225,9 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
         }
         probe_partition->num_rows += size;
     };
-    RETURN_IF_ERROR(_probe_spiller->partitioned_spill(state, chunk, hash_column.get(), partition_processer, executor,
-                                                      spill::MemTrackerGuard(tls_mem_tracker)));
+    RETURN_IF_ERROR(_probe_spiller->partitioned_spill(
+            state, chunk, hash_column.get(), partition_processer, executor,
+            spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this())));
 
     return Status::OK();
 }
@@ -265,11 +266,13 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(RuntimeState* 
 Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeState* state) {
     auto spill_readers = _join_builder->spiller()->get_partition_spill_readers(_processing_partitions);
     _latch.reset(_processing_partitions.size());
+    int32_t driver_id = CurrentThread::current().get_driver_id();
     auto query_ctx = state->query_ctx()->weak_from_this();
     for (size_t i = 0; i < _processing_partitions.size(); ++i) {
         std::shared_ptr<spill::SpillerReader> reader = std::move(spill_readers[i]);
-        auto task = [this, state, reader, i, query_ctx]() {
+        auto task = [this, state, reader, i, query_ctx, driver_id]() {
             if (auto acquired = query_ctx.lock()) {
+                SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
                 _update_status(_load_partition_build_side(state, reader, i));
                 _latch.count_down();
             }
@@ -295,20 +298,20 @@ void SpillableHashJoinProbeOperator::_check_partitions() {
     if (_is_finishing) {
 #ifndef NDEBUG
         auto partitioned_writer = down_cast<spill::PartitionedSpillerWriter*>(_probe_spiller->writer().get());
+        size_t build_rows = 0;
         for (const auto& [level, partitions] : partitioned_writer->level_to_partitions()) {
             auto writer = down_cast<spill::PartitionedSpillerWriter*>(_join_builder->spiller()->writer().get());
             auto& build_partitions = writer->level_to_partitions().find(level)->second;
             DCHECK_EQ(build_partitions.size(), partitions.size());
-            size_t build_rows = 0;
             for (size_t i = 0; i < partitions.size(); ++i) {
                 build_rows += build_partitions[i]->num_rows;
             }
-            DCHECK_EQ(build_rows, _join_builder->spiller()->spilled_append_rows());
             // CHECK if left table is the same as right table
             // for (size_t i = 0; i < partitions.size(); ++i) {
             //     DCHECK_EQ(partitions[i]->num_rows, build_partitions[i]->num_rows);
             // }
         }
+        DCHECK_EQ(build_rows, _join_builder->spiller()->spilled_append_rows());
 #endif
     }
 }
@@ -472,7 +475,9 @@ bool SpillableHashJoinProbeOperator::_all_loaded_partition_data_ready() {
 }
 
 bool SpillableHashJoinProbeOperator::_all_partition_finished() const {
-    return _processed_partitions.size() == _build_partitions.size();
+    // In some cases has_output may be skipped.
+    // So we call build_partitions.empty() first to make sure the parition loads
+    return !_build_partitions.empty() && _processed_partitions.size() == _build_partitions.size();
 }
 
 Status SpillableHashJoinProbeOperatorFactory::prepare(RuntimeState* state) {
@@ -493,7 +498,7 @@ OperatorPtr SpillableHashJoinProbeOperatorFactory::create(int32_t degree_of_para
     auto spiller = _spill_factory->create(*_spill_options);
 
     auto prober = std::make_shared<SpillableHashJoinProbeOperator>(
-            this, _id, _name, _plan_node_id, driver_sequence,
+            this, _id, "spillable_hash_join_probe", _plan_node_id, driver_sequence,
             _hash_joiner_factory->create_prober(degree_of_parallelism, driver_sequence),
             _hash_joiner_factory->get_builder(degree_of_parallelism, driver_sequence));
 

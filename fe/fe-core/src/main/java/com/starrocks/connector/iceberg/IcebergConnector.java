@@ -16,22 +16,18 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Strings;
-import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.iceberg.CatalogProperties;
-import org.apache.iceberg.CatalogUtil;
-import org.apache.iceberg.hive.IcebergGlueCatalog;
-import org.apache.iceberg.hive.IcebergHiveCatalog;
 import org.apache.iceberg.util.ThreadPools;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -47,7 +43,6 @@ public class IcebergConnector implements Connector {
     @Deprecated
     public static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
-    public static final String ICEBERG_IMPL = "iceberg.catalog-impl";
 
     private final Map<String, String> properties;
     private final CloudConfiguration cloudConfiguration;
@@ -66,40 +61,22 @@ public class IcebergConnector implements Connector {
         IcebergCatalogType nativeCatalogType = getNativeCatalogType();
         Configuration conf = hdfsEnvironment.getConfiguration();
 
-        String catalogImpl;
-        Map<String, String> copiedProperties = Maps.newHashMap(properties);
-        switch (nativeCatalogType) {
-            case HIVE_CATALOG:
-                String metastoreURI = properties.get(HIVE_METASTORE_URIS);
-                if (metastoreURI == null) {
-                    metastoreURI = properties.get(ICEBERG_METASTORE_URIS);
-                }
-                Util.validateMetastoreUris(metastoreURI);
-                copiedProperties.put(CatalogProperties.URI, metastoreURI);
-                catalogImpl = IcebergHiveCatalog.class.getName();
-                break;
-            case GLUE_CATALOG:
-                catalogImpl = IcebergGlueCatalog.class.getName();
-                break;
-            case REST_CATALOG:
-                catalogImpl = IcebergRESTCatalog.class.getName();
-                break;
-            case CUSTOM_CATALOG:
-                catalogImpl = properties.get(ICEBERG_IMPL);
-                break;
-            default:
-                throw new StarRocksConnectorException("Property %s is missing or not supported now.", ICEBERG_CATALOG_TYPE);
-        }
-        copiedProperties.put(CatalogProperties.CATALOG_IMPL, catalogImpl);
-        copiedProperties.remove(CatalogUtil.ICEBERG_CATALOG_TYPE);
-
         if (Config.enable_iceberg_custom_worker_thread) {
             LOG.info("Default iceberg worker thread number changed " + Config.iceberg_worker_num_threads);
             Properties props = System.getProperties();
             props.setProperty(ThreadPools.WORKER_THREAD_POOL_SIZE_PROP, String.valueOf(Config.iceberg_worker_num_threads));
         }
 
-        return (IcebergCatalog) CatalogUtil.buildIcebergCatalog(catalogName, copiedProperties, conf);
+        switch (nativeCatalogType) {
+            case HIVE_CATALOG:
+                return new IcebergHiveCatalog(catalogName, conf, properties);
+            case GLUE_CATALOG:
+                return new IcebergGlueCatalog(catalogName, conf, properties);
+            case REST_CATALOG:
+                return new IcebergRESTCatalog(catalogName, conf, properties);
+            default:
+                throw new StarRocksConnectorException("Property %s is missing or not supported now.", ICEBERG_CATALOG_TYPE);
+        }
     }
 
     private IcebergCatalogType getNativeCatalogType() {

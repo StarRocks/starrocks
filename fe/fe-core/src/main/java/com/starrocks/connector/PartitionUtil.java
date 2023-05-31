@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
@@ -52,7 +53,6 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.spark_project.guava.collect.Sets;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

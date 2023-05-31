@@ -155,7 +155,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
-import com.starrocks.scheduler.mv.MVManager;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -2661,7 +2661,7 @@ public class LocalMetastore implements ConnectorMetadata {
      */
     @Override
     public void alterTable(AlterTableStmt stmt) throws UserException {
-        stateMgr.getAlterInstance().processAlterTable(stmt);
+        stateMgr.getAlterJobMgr().processAlterTable(stmt);
     }
 
     /**
@@ -2669,13 +2669,13 @@ public class LocalMetastore implements ConnectorMetadata {
      */
     @Override
     public void alterView(AlterViewStmt stmt) throws UserException {
-        stateMgr.getAlterInstance().processAlterView(stmt, ConnectContext.get());
+        stateMgr.getAlterJobMgr().processAlterView(stmt, ConnectContext.get());
     }
 
     @Override
     public void createMaterializedView(CreateMaterializedViewStmt stmt)
             throws AnalysisException, DdlException {
-        stateMgr.getAlterInstance().processCreateMaterializedView(stmt);
+        stateMgr.getAlterJobMgr().processCreateMaterializedView(stmt);
     }
 
     // TODO(murphy) refactor it into MVManager
@@ -2760,7 +2760,7 @@ public class LocalMetastore implements ConnectorMetadata {
         MaterializedView materializedView;
         if (RunMode.getCurrentRunMode().isAllowCreateOlapTable()) {
             if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
-                materializedView = MVManager.getInstance().createSinkTable(stmt, partitionInfo, mvId, db.getId());
+                materializedView = MaterializedViewMgr.getInstance().createSinkTable(stmt, partitionInfo, mvId, db.getId());
                 materializedView.setMaintenancePlan(stmt.getMaintenancePlan());
             } else {
                 materializedView =
@@ -2859,7 +2859,7 @@ public class LocalMetastore implements ConnectorMetadata {
             materializedView.addPartition(partition);
         }
 
-        MVManager.getInstance().prepareMaintenanceWork(stmt, materializedView);
+        MaterializedViewMgr.getInstance().prepareMaintenanceWork(stmt, materializedView);
 
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
@@ -2959,6 +2959,16 @@ public class LocalMetastore implements ConnectorMetadata {
                         .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb.toString());
                 materializedView.getTableProperty().setExcludedTriggerTables(tables);
             }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
+                String resourceGroup = PropertyAnalyzer.analyzeResourceGroup(properties);
+                if (GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(resourceGroup) == null) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP
+                            + " " + resourceGroup + " does not exist.");
+                }
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP, resourceGroup);
+                materializedView.getTableProperty().setResourceGroup(resourceGroup);
+            }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
                 boolean forceExternalTableQueryReWrite = PropertyAnalyzer.
                         analyzeForceExternalTableQueryRewrite(properties);
@@ -3033,7 +3043,7 @@ public class LocalMetastore implements ConnectorMetadata {
         MaterializedView.RefreshMoment refreshMoment = materializedView.getRefreshScheme().getMoment();
 
         if (refreshType.equals(MaterializedView.RefreshType.INCREMENTAL)) {
-            MVManager.getInstance().startMaintainMV(materializedView);
+            MaterializedViewMgr.getInstance().startMaintainMV(materializedView);
             return;
         }
 
@@ -3071,18 +3081,16 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
         if (table instanceof MaterializedView) {
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkMaterializedViewAction(ConnectContext.get(),
-                        stmt.getDbName(),
-                        stmt.getMvName(),
-                        PrivilegeType.DROP)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                            "DROP MATERIALIZED VIEW");
-                }
+            if (!PrivilegeActions.checkMaterializedViewAction(ConnectContext.get(),
+                    stmt.getDbName(),
+                    stmt.getMvName(),
+                    PrivilegeType.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "DROP MATERIALIZED VIEW");
             }
 
             MaterializedView view = (MaterializedView) table;
-            MVManager.getInstance().stopMaintainMV(view);
+            MaterializedViewMgr.getInstance().stopMaintainMV(view);
 
             MvId mvId = new MvId(db.getId(), table.getId());
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
@@ -3110,20 +3118,20 @@ public class LocalMetastore implements ConnectorMetadata {
                 taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
             }
         } else {
-            stateMgr.getAlterInstance().processDropMaterializedView(stmt);
+            stateMgr.getAlterJobMgr().processDropMaterializedView(stmt);
         }
     }
 
     @Override
     public void alterMaterializedView(AlterMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
-        stateMgr.getAlterInstance().processAlterMaterializedView(stmt);
+        stateMgr.getAlterJobMgr().processAlterMaterializedView(stmt);
     }
 
     private String executeRefreshMvTask(String dbName, MaterializedView materializedView, ExecuteOption executeOption)
             throws DdlException {
         MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
         if (refreshType.equals(MaterializedView.RefreshType.INCREMENTAL)) {
-            MVManager.getInstance().onTxnPublish(materializedView);
+            MaterializedViewMgr.getInstance().onTxnPublish(materializedView);
         } else if (refreshType != MaterializedView.RefreshType.SYNC) {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
@@ -3159,9 +3167,14 @@ public class LocalMetastore implements ConnectorMetadata {
         return materializedView;
     }
 
-    @Override
     public String refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
                                           int priority, boolean mergeRedundant, boolean isManual)
+            throws DdlException, MetaNotFoundException {
+        return refreshMaterializedView(dbName, mvName, force, range, priority, mergeRedundant, isManual, false);
+    }
+
+    public String refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
+                                          int priority, boolean mergeRedundant, boolean isManual, boolean isSync)
             throws DdlException, MetaNotFoundException {
         MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
 
@@ -3174,12 +3187,12 @@ public class LocalMetastore implements ConnectorMetadata {
         if (isManual) {
             executeOption.setManual();
         }
+        executeOption.setSync(isSync);
         return executeRefreshMvTask(dbName, materializedView, executeOption);
     }
 
     @Override
-    public String refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement,
-                                          int priority)
+    public String refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement)
             throws DdlException, MetaNotFoundException {
         String dbName = refreshMaterializedViewStatement.getMvName().getDb();
         String mvName = refreshMaterializedViewStatement.getMvName().getTbl();
@@ -3187,7 +3200,8 @@ public class LocalMetastore implements ConnectorMetadata {
         PartitionRangeDesc range =
                 refreshMaterializedViewStatement.getPartitionRangeDesc();
 
-        return refreshMaterializedView(dbName, mvName, force, range, priority, false, true);
+        return refreshMaterializedView(dbName, mvName, force, range, Constants.TaskRunPriority.HIGH.value(),
+                false, true, refreshMaterializedViewStatement.isSync());
     }
 
     @Override
@@ -3261,7 +3275,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (mv != null) {
                 LOG.warn("Setting the materialized view {}({}) to invalid because " +
                         "the table {} was renamed.", mv.getName(), mv.getId(), olapTable.getName());
-                mv.setActive(false);
+                mv.setInactiveAndReason("base table renamed: " + olapTable.getName());
             } else {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
             }

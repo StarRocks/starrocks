@@ -63,11 +63,9 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.Util;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.EditLog;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -973,18 +971,9 @@ public class MaterializedViewHandler extends AlterHandler {
     }
 
     private void getAlterJobV2Infos(Database db, List<List<Comparable>> rollupJobInfos) {
-        ConnectContext ctx = ConnectContext.get();
         for (AlterJobV2 alterJob : alterJobsV2.values()) {
             if (alterJob.getDbId() != db.getId()) {
                 continue;
-            }
-            if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (ctx != null) {
-                    if (!GlobalStateMgr.getCurrentState().getAuth()
-                            .checkTblPriv(ctx, db.getFullName(), alterJob.getTableName(), PrivPredicate.ALTER)) {
-                        continue;
-                    }
-                }
             }
             alterJob.getInfo(rollupJobInfos);
         }
@@ -999,7 +988,7 @@ public class MaterializedViewHandler extends AlterHandler {
         if (olapTable.existTempPartitions()) {
             throw new DdlException("Can not alter table when there are temp partitions in table");
         }
-        if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().hasRunningOverwriteJob(olapTable.getId())) {
+        if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr().hasRunningOverwriteJob(olapTable.getId())) {
             throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
                     "please create materialized view after insert overwrite");
         }

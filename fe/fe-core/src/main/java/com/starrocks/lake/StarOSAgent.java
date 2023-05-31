@@ -28,6 +28,7 @@ import com.staros.proto.CreateShardGroupInfo;
 import com.staros.proto.CreateShardInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.JoinMetaGroupInfo;
 import com.staros.proto.PlacementPolicy;
@@ -41,6 +42,7 @@ import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateMetaGroupInfo;
+import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
@@ -112,6 +114,49 @@ public class StarOSAgent {
         LOG.info("get serviceId {} from starMgr", serviceId);
     }
 
+    public String addFileStore(FileStoreInfo fsInfo) throws DdlException {
+        try {
+            return client.addFileStore(fsInfo, serviceId);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to add file store", e);
+        }
+    }
+
+    public void removeFileStoreByName(String fsName) throws DdlException {
+        try {
+            client.removeFileStoreByName(fsName, serviceId);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to remove file store", e);
+        }
+    }
+
+    public void updateFileStore(FileStoreInfo fsInfo) throws DdlException {
+        try {
+            client.updateFileStore(fsInfo, serviceId);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to update file store", e);
+        }
+    }
+
+    public FileStoreInfo getFileStoreByName(String fsName) throws DdlException {
+        try {
+            return client.getFileStore(fsName, serviceId);
+        } catch (StarClientException e) {
+            if (e.getCode() == StatusCode.NOT_EXIST) {
+                return null;
+            }
+            throw new DdlException("Failed to get file store", e);
+        }
+    }
+
+    public List<FileStoreInfo> listFileStore() throws DdlException {
+        try {
+            return client.listFileStore(serviceId);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to list file store", e);
+        }
+    }
+
     public FilePathInfo allocateFilePath(long tableId) throws DdlException {
         try {
             EnumDescriptor enumDescriptor = FileStoreType.getDescriptor();
@@ -124,7 +169,6 @@ public class StarOSAgent {
             throw new DdlException("Failed to allocate file path from StarMgr", e);
         }
     }
-
 
     public boolean registerAndBootstrapService() {
         try {
@@ -264,6 +308,16 @@ public class StarOSAgent {
             workerToId.remove(workerIpPort);
         }
 
+        LOG.info("remove worker {} success from StarMgr", workerIpPort);
+    }
+
+    public void removeWorkerFromMap(String workerIpPort) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Long workerId = workerToId.remove(workerIpPort);
+            if (workerId != null) {
+                workerToBackend.remove(workerId);
+            }
+        }
         LOG.info("remove worker {} success from StarMgr", workerIpPort);
     }
 
@@ -563,5 +617,39 @@ public class StarOSAgent {
             LOG.warn("Failed to query meta group {} whether stable. error:{}", metaGroupId, e.getMessage());
         }
         return false; // return false if any error happens
+    }
+
+    public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+        List<Long> nodeIds = new ArrayList<>();
+        prepare();
+        try {
+            List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.
+                    listWorkerGroup(serviceId, Collections.singletonList(workerGroupId), true);
+            for (WorkerGroupDetailInfo detailInfo : workerGroupDetailInfos) {
+                List<WorkerInfo> workerInfos = detailInfo.getWorkersInfoList();
+                for (WorkerInfo workerInfo : workerInfos) {
+                    if (workerToBackend.containsKey(workerInfo.getWorkerId())) {
+                        nodeIds.add(workerToBackend.get(workerInfo.getWorkerId()));
+                    } else {
+                        // workerToBackend may not container this worker, so need to get it from systemInfoSerivce
+                        // and fill it
+                        long workerId = workerInfo.getWorkerId();
+                        String workerAddr = workerInfo.getIpPort();
+                        String[] pair = workerAddr.split(":");
+                        long nodeId = getAvailableBackendId(pair[0], Integer.parseInt(pair[1]));
+                        if (nodeId != -1L) {
+                            nodeIds.add(nodeId);
+
+                            // put it into map
+                            workerToId.put(workerAddr, workerId);
+                            workerToBackend.put(workerId, nodeId);
+                        }
+                    }
+                }
+            }
+            return nodeIds;
+        } catch (StarClientException e) {
+            throw new UserException("Failed to get workers by group id. error: " + e.getMessage());
+        }
     }
 }

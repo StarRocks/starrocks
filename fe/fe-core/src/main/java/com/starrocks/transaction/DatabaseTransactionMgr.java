@@ -54,8 +54,6 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
@@ -64,11 +62,12 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
-import com.starrocks.qe.ConnectContext;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
 import org.apache.commons.collections4.CollectionUtils;
@@ -84,6 +83,7 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -1050,6 +1050,9 @@ public class DatabaseTransactionMgr {
             db.writeUnlock();
             finishSpan.end();
         }
+
+        collectStatisticsForStreamLoadOnFirstLoad(transactionState, db);
+
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
@@ -1458,28 +1461,6 @@ public class DatabaseTransactionMgr {
                 throw new AnalysisException("transaction with id " + txnId + " does not exist");
             }
 
-            if (ConnectContext.get() != null) {
-                // check auth
-                Set<Long> tblIds = txnState.getIdToTableCommitInfos().keySet();
-                for (Long tblId : tblIds) {
-                    Table tbl = db.getTable(tblId);
-                    if (tbl != null) {
-                        // won't check privilege in new RBAC framework
-                        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                            if (!GlobalStateMgr.getCurrentState().getAuth()
-                                    .checkTblPriv(ConnectContext.get(), db.getFullName(),
-                                            tbl.getName(), PrivPredicate.SHOW)) {
-                                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
-                                        "SHOW TRANSACTION",
-                                        ConnectContext.get().getQualifiedUser(),
-                                        ConnectContext.get().getRemoteIP(),
-                                        tbl.getName());
-                            }
-                        }
-                    }
-                }
-            }
-
             List<String> info = Lists.newArrayList();
             getTxnStateInfo(txnState, info);
             infos.add(info);
@@ -1643,12 +1624,23 @@ public class DatabaseTransactionMgr {
     }
 
     public void unprotectWriteAllTransactionStates(DataOutput out) throws IOException {
-        for (Map.Entry<Long, TransactionState> entry : idToRunningTransactionState.entrySet()) {
-            entry.getValue().write(out);
+        for (TransactionState transactionState : idToRunningTransactionState.values()) {
+            transactionState.write(out);
         }
 
         for (TransactionState transactionState : finalStatusTransactionStateDeque) {
             transactionState.write(out);
+        }
+    }
+
+    public void unprotectWriteAllTransactionStatesV2(SRMetaBlockWriter writer)
+            throws IOException, SRMetaBlockException {
+        for (TransactionState transactionState : idToRunningTransactionState.values()) {
+            writer.writeJson(transactionState);
+        }
+
+        for (TransactionState transactionState : finalStatusTransactionStateDeque) {
+            writer.writeJson(transactionState);
         }
     }
 
@@ -1700,7 +1692,30 @@ public class DatabaseTransactionMgr {
             db.writeUnlock();
             finishSpan.end();
         }
+
+        collectStatisticsForStreamLoadOnFirstLoad(transactionState, db);
+
         LOG.info("finish transaction {} successfully", transactionState);
+    }
+
+    private void collectStatisticsForStreamLoadOnFirstLoad(TransactionState txnState, Database db) {
+        TransactionState.LoadJobSourceType sourceType = txnState.getSourceType();
+        if (!TransactionState.LoadJobSourceType.FRONTEND_STREAMING.equals(sourceType)
+                && !TransactionState.LoadJobSourceType.BACKEND_STREAMING.equals(sourceType)) {
+            return;
+        }
+        List<Table> tables = txnState.getIdToTableCommitInfos().values().stream()
+                .map(TableCommitInfo::getTableId)
+                .distinct()
+                .map(db::getTable)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        StatisticUtils.CountedListener counteredListener =
+                StatisticUtils.createCounteredListener(tables.size(), null);
+        for (Table table : tables) {
+            StatisticUtils.triggerCollectionOnFirstLoad(txnState, db, table, false, counteredListener);
+        }
     }
 
     public String getTxnPublishTimeoutDebugInfo(long txnId) {

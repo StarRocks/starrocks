@@ -10,6 +10,10 @@ In this figure, `StarRocks-2.5.1.tar.gz` is the installation package, you can cl
 
 This change does not affect your download behavior or use of StarRocks. You can download only the installation package for cluster deployment and upgrade. The debuginfo package is only for developers to debug programs using GDB.
 
+## Precautions
+
+GDB 12.1 or later is recommended for debugging.
+
 ## How to use the debuginfo file
 
 1. Download and decompress the debuginfo package.

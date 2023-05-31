@@ -57,7 +57,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
@@ -87,6 +86,9 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.parser.ParsingException;
 import org.apache.commons.lang3.StringUtils;
 
@@ -167,18 +169,11 @@ public class AnalyzerUtils {
             db.readLock();
             Function search = new Function(fnName, argTypes, Type.INVALID, false);
             Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (fn != null && !PrivilegeActions.checkFunctionAction(context, db, fn, PrivilegeType.USAGE)) {
-                    throw new StarRocksPlannerException(String.format("Access denied. " +
-                            "Found UDF: %s and need the USAGE privilege for FUNCTION", fn.getFunctionName()),
-                            ErrorType.USER_ERROR);
-                }
-            } else {
-                if (!context.getGlobalStateMgr().getAuth().checkDbPriv(context, dbName, PrivPredicate.SELECT)) {
-                    throw new StarRocksPlannerException(String.format("Access denied. " +
-                            "Found UDF: %s and need the SELECT priv for %s", fnName, dbName),
-                            ErrorType.USER_ERROR);
-                }
+
+            if (fn != null && !PrivilegeActions.checkFunctionAction(context, db, fn, PrivilegeType.USAGE)) {
+                throw new StarRocksPlannerException(String.format("Access denied. " +
+                        "Found UDF: %s and need the USAGE privilege for FUNCTION", fn.getFunctionName()),
+                        ErrorType.USER_ERROR);
             }
 
             return fn;
@@ -220,6 +215,15 @@ public class AnalyzerUtils {
         Map<String, Database> dbs = Maps.newHashMap();
         new AnalyzerUtils.DBCollector(dbs, context).visit(statementBase);
         return dbs;
+    }
+
+    public static CallOperator getCallOperator(ScalarOperator operator) {
+        if (operator instanceof CastOperator) {
+            return getCallOperator(operator.getChild(0));
+        } else if (operator instanceof CallOperator) {
+            return (CallOperator) operator;
+        }
+        return null;
     }
 
     private static class DBCollector extends AstVisitor<Void, Void> {

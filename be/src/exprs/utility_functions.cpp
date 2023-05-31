@@ -52,7 +52,7 @@ StatusOr<ColumnPtr> UtilityFunctions::version(FunctionContext* context, const Co
 }
 
 StatusOr<ColumnPtr> UtilityFunctions::current_version(FunctionContext* context, const Columns& columns) {
-    static std::string version = std::string(STARROCKS_VERSION) + " " + STARROCKS_COMMIT_HASH;
+    static std::string version = std::string(STARROCKS_VERSION) + "-" + STARROCKS_COMMIT_HASH;
     return ColumnHelper::create_const_column<TYPE_VARCHAR>(version, 1);
 }
 

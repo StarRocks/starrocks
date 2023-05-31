@@ -771,6 +771,13 @@ CONF_Double(connector_scan_use_query_mem_ratio, "0.3");
 CONF_mBool(aws_sdk_logging_trace_enabled, "false");
 CONF_String(aws_sdk_logging_trace_level, "trace");
 
+// Enable RFC-3986 encoding.
+// When Querying data on Google Cloud Storage, if the objects key contain special characters like '=', '$', it will fail
+// to Authenticate because the request URL does not translate these special characters.
+// This is critical for Hive partitioned tables. The object key usually contains '=' like 'dt=20230101'.
+// Enabling RFC-3986 encoding will make sure these characters are properly encoded.
+CONF_mBool(aws_sdk_enable_compliant_rfc3986_encoding, "false");
+
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
 // default: 16MB
@@ -818,7 +825,7 @@ CONF_Int32(starlet_cache_dir_allocate_policy, "0");
 CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
 #endif
 
-CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
+CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mBool(lake_print_delete_log, "true");
 CONF_mInt64(lake_gc_metadata_max_versions, "10");
 CONF_mInt64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
@@ -828,7 +835,7 @@ CONF_mInt64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
 CONF_mInt64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
 CONF_mBool(lake_compaction_check_txn_log_first, "false");
 CONF_mInt64(experimental_lake_segment_gc_max_retries, "3");
-CONF_mBool(experimental_lake_enable_fast_gc, "false");
+CONF_mBool(experimental_lake_enable_fast_gc, "true");
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 

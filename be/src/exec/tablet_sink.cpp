@@ -82,7 +82,7 @@ namespace stream_load {
 
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental)
         : _parent(parent), _node_id(node_id), _is_incremental(is_incremental) {
-    // restrict the chunk memory usage of send queue
+    // restrict the chunk memory usage of send queue & brpc write buffer
     _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
 }
 
@@ -247,7 +247,9 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
 
     // This ref is for RPC's reference
     open_closure->ref();
-    open_closure->cntl.set_timeout_ms(config::tablet_writer_open_rpc_timeout_sec * 1000);
+    open_closure->cntl.set_timeout_ms(_rpc_timeout_ms);
+    open_closure->cntl.ignore_eovercrowded();
+
     if (request.ByteSizeLong() > _parent->_rpc_http_min_size) {
         TNetworkAddress brpc_addr;
         brpc_addr.hostname = _node_info->host;
@@ -575,6 +577,10 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
     _add_batch_closures[_current_request_index]->ref();
     _add_batch_closures[_current_request_index]->reset();
     _add_batch_closures[_current_request_index]->cntl.set_timeout_ms(_rpc_timeout_ms);
+    _add_batch_closures[_current_request_index]->cntl.ignore_eovercrowded();
+    _add_batch_closures[_current_request_index]->request_size = request.ByteSizeLong();
+
+    _mem_tracker->consume(_add_batch_closures[_current_request_index]->request_size);
 
     if (_enable_colocate_mv_index) {
         request.set_is_repeated_chunk(true);
@@ -629,6 +635,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     if (!closure->join()) {
         return Status::OK();
     }
+    _mem_tracker->release(closure->request_size);
 
     _parent->_client_rpc_timer->update(closure->latency());
 
@@ -856,6 +863,7 @@ void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
 
     closure->ref();
     closure->cntl.set_timeout_ms(_rpc_timeout_ms);
+    closure->cntl.ignore_eovercrowded();
     _stub->tablet_writer_cancel(&closure->cntl, &request, &closure->result, closure);
     request.release_id();
 }

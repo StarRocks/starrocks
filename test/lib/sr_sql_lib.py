@@ -121,6 +121,12 @@ class StarrocksSQLApiLib(object):
         for (rep_key, rep_value) in config_parser.items("replace"):
             self.__setattr__(rep_key, rep_value)
 
+        # read env info
+        for (env_key, env_value) in config_parser.items("env"):
+            if not env_value:
+                env_value = os.environ.get(env_key, "")
+            self.__setattr__(env_key, env_value)
+
     def connect_starrocks(self):
         mysql_dict = {
             "host": self.mysql_host,
@@ -445,7 +451,7 @@ class StarrocksSQLApiLib(object):
                 tools.assert_equal(0, act[0], "shell %s error: %s" % (sql, act))
             elif not sql.startswith(FUNCTION_FLAG):
                 # SQL, without error msg
-                tools.assert_false(str(act).startswith("E: "), "sql result not match: actual result with E")
+                tools.assert_false(str(act).startswith("E: "), "sql result not match: actual with E(%s)" % str(act))
             return
 
         if any(re.compile(condition).search(sql) is not None for condition in skip.skip_res_cmd) or any(

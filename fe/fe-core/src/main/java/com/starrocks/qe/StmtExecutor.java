@@ -72,7 +72,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.InsertOverwriteJob;
-import com.starrocks.load.InsertOverwriteJobManager;
+import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.metric.MetricRepo;
@@ -100,7 +100,6 @@ import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
-import com.starrocks.sql.analyzer.PrivilegeCheckerV2;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
@@ -138,8 +137,9 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.statistic.AnalyzeManager;
+import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticExecutor;
@@ -205,6 +205,7 @@ public class StmtExecutor {
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
+    private List<StmtExecutor> subStmtExecutors;
 
     // this constructor is mainly for proxy
     public StmtExecutor(ConnectContext context, OriginStatement originStmt, boolean isProxy) {
@@ -702,15 +703,27 @@ public class StmtExecutor {
 
     }
 
+    public void registerSubStmtExecutor(StmtExecutor subStmtExecutor) {
+        if (subStmtExecutors == null) {
+            subStmtExecutors = Lists.newArrayList();
+        }
+        subStmtExecutors.add(subStmtExecutor);
+    }
+
     // Because this is called by other thread
     public void cancel() {
         if (parsedStmt instanceof DeleteStmt && ((DeleteStmt) parsedStmt).shouldHandledByDeleteHandler()) {
             DeleteStmt deleteStmt = (DeleteStmt) parsedStmt;
             long jobId = deleteStmt.getJobId();
             if (jobId != -1) {
-                GlobalStateMgr.getCurrentState().getDeleteHandler().killJob(jobId);
+                GlobalStateMgr.getCurrentState().getDeleteMgr().killJob(jobId);
             }
         } else {
+            if (subStmtExecutors != null && !subStmtExecutors.isEmpty()) {
+                for (StmtExecutor sub : subStmtExecutors) {
+                    sub.cancel();
+                }
+            }
             Coordinator coordRef = coord;
             if (coordRef != null) {
                 coordRef.cancel();
@@ -874,18 +887,26 @@ public class StmtExecutor {
             }
         }
 
+        AnalyzeStatus analyzeStatus;
         if (analyzeStmt.isExternal()) {
-            // deal later
-            return;
+            String catalogName = analyzeStmt.getTableName().getCatalog();
+            analyzeStatus = new ExternalAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                    catalogName, db.getOriginName(), table.getName(),
+                    table.getUUID(),
+                    analyzeStmt.getColumnNames(),
+                    analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+            GlobalStateMgr.getCurrentAnalyzeMgr().addOrUpdateAnalyzeStatus(analyzeStatus);
+        } else {
+            //Only for send sync command to client
+            analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                    db.getId(), table.getId(), analyzeStmt.getColumnNames(),
+                    analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+            GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
         }
-        //Only for send sync command to client
-        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), table.getId(), analyzeStmt.getColumnNames(),
-                analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
-        GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
         try {
             Future<?> future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
@@ -897,11 +918,19 @@ public class StmtExecutor {
         } catch (RejectedExecutionException e) {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
-            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            if (analyzeStmt.isExternal()) {
+                GlobalStateMgr.getCurrentAnalyzeMgr().addOrUpdateAnalyzeStatus(analyzeStatus);
+            } else {
+                GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            }
         } catch (ExecutionException | InterruptedException e) {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setReason("The statistics tasks running failed");
-            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            if (analyzeStmt.isExternal()) {
+                GlobalStateMgr.getCurrentAnalyzeMgr().addOrUpdateAnalyzeStatus(analyzeStatus);
+            } else {
+                GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            }
         }
 
         ShowResultSet resultSet = analyzeStatus.toShowResult();
@@ -927,7 +956,18 @@ public class StmtExecutor {
                                 Database db, Table table) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         if (analyzeStmt.isExternal()) {
-            // deal later
+            StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
+                    StatsConstants.AnalyzeType.FULL;
+            // TODO: we should check old statistic and confirm paritionlist
+            statisticExecutor.collectStatistics(statsConnectCtx,
+                    StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
+                            analyzeStmt.getTableName().getCatalog(),
+                            db, table,
+                            analyzeStmt.getColumnNames(),
+                            analyzeType,
+                            StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
+                    analyzeStatus,
+                    false);
         } else {
             if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
                 statisticExecutor.collectStatistics(statsConnectCtx,
@@ -956,7 +996,7 @@ public class StmtExecutor {
         DropStatsStmt dropStatsStmt = (DropStatsStmt) parsedStmt;
         Table table = MetaUtils.getTable(context, dropStatsStmt.getTableName());
         if (dropStatsStmt.isExternal()) {
-            // deal later
+            GlobalStateMgr.getCurrentAnalyzeMgr().dropExternalStats(table.getUUID());
         } else {
             List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                     .collect(Collectors.toList());
@@ -983,10 +1023,8 @@ public class StmtExecutor {
     private void handleKillAnalyzeStmt() {
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) parsedStmt;
         long analyzeId = killAnalyzeStmt.getAnalyzeId();
-        AnalyzeManager analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
-        }
+        AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
+        PrivilegeChecker.checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
         // Try to kill the job anyway.
         analyzeManager.killConnection(analyzeId);
     }
@@ -1006,7 +1044,7 @@ public class StmtExecutor {
         }
     }
 
-    private void handleExecAsStmt() throws PrivilegeException, UserException {
+    private void handleExecAsStmt() throws UserException {
         ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
     }
 
@@ -1293,7 +1331,7 @@ public class StmtExecutor {
             database.writeUnlock();
         }
         insertStmt.setOverwriteJobId(job.getJobId());
-        InsertOverwriteJobManager manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager();
+        InsertOverwriteJobMgr manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr();
         manager.executeJob(context, this, job);
     }
 
@@ -1309,7 +1347,7 @@ public class StmtExecutor {
         // special handling for delete of non-primary key table, using old handler
         if (stmt instanceof DeleteStmt && ((DeleteStmt) stmt).shouldHandledByDeleteHandler()) {
             try {
-                context.getGlobalStateMgr().getDeleteHandler().process((DeleteStmt) stmt);
+                context.getGlobalStateMgr().getDeleteMgr().process((DeleteStmt) stmt);
                 context.getState().setOk();
             } catch (QueryStateException e) {
                 if (e.getQueryState().getStateType() != MysqlStateType.OK) {
@@ -1350,6 +1388,7 @@ public class StmtExecutor {
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
         long transactionId = -1;
+        TransactionState txnState = null;
         if (targetTable instanceof ExternalOlapTable) {
             ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
             TAuthenticateParams authenticateParams = new TAuthenticateParams();
@@ -1382,9 +1421,8 @@ public class StmtExecutor {
                     context.getSessionVariable().getQueryTimeoutS());
 
             // add table indexes to transaction state
-            TransactionState txnState =
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                            .getTransactionState(database.getId(), transactionId);
+            txnState = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                    .getTransactionState(database.getId(), transactionId);
             if (txnState == null) {
                 throw new DdlException("txn does not exist: " + transactionId);
             }
@@ -1441,7 +1479,7 @@ public class StmtExecutor {
             }
 
             if (!targetTable.isIcebergTable()) {
-                jobId = context.getGlobalStateMgr().getLoadManager().registerLoadJob(
+                jobId = context.getGlobalStateMgr().getLoadMgr().registerLoadJob(
                         label,
                         database.getFullName(),
                         targetTable.getId(),
@@ -1653,7 +1691,7 @@ public class StmtExecutor {
             // cancel insert load job
             try {
                 if (jobId != -1) {
-                    context.getGlobalStateMgr().getLoadManager()
+                    context.getGlobalStateMgr().getLoadMgr()
                             .recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
                                     "Cancelled, msg: " + t.getMessage(), coord.getTrackingUrl());
                     jobId = -1;
@@ -1666,7 +1704,7 @@ public class StmtExecutor {
             if (insertError) {
                 try {
                     if (jobId != -1) {
-                        context.getGlobalStateMgr().getLoadManager()
+                        context.getGlobalStateMgr().getLoadMgr()
                                 .recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
                                         "Cancelled", coord.getTrackingUrl());
                         jobId = -1;
@@ -1674,6 +1712,9 @@ public class StmtExecutor {
                 } catch (Exception abortTxnException) {
                     LOG.warn("errors when cancel insert load job {}", jobId);
                 }
+            } else {
+                StatisticUtils.triggerCollectionOnFirstLoad(txnState, database, targetTable, true,
+                        StatisticUtils.createCounteredListener(1, null));
             }
         }
 
@@ -1689,7 +1730,7 @@ public class StmtExecutor {
         }
         try {
             if (jobId != -1) {
-                context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId,
+                context.getGlobalStateMgr().getLoadMgr().recordFinishedOrCacnelledLoadJob(jobId,
                         EtlJobType.INSERT,
                         "",
                         coord.getTrackingUrl());

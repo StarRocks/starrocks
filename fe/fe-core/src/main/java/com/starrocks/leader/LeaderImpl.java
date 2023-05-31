@@ -228,12 +228,26 @@ public class LeaderImpl {
                 String errMsg = "task type: " + taskType + ", status_code: " + taskStatus.getStatus_code().toString() +
                         ", backendId: " + backendId + ", signature: " + signature;
                 task.setErrorMsg(errMsg);
+                LOG.warn(errMsg);
                 // We start to let FE perceive the task's error msg
                 if (taskType != TTaskType.MAKE_SNAPSHOT && taskType != TTaskType.UPLOAD
                         && taskType != TTaskType.DOWNLOAD && taskType != TTaskType.MOVE
                         && taskType != TTaskType.CLONE && taskType != TTaskType.PUBLISH_VERSION
                         && taskType != TTaskType.CREATE && taskType != TTaskType.UPDATE_TABLET_META_INFO
                         && taskType != TTaskType.DROP_AUTO_INCREMENT_MAP) {
+                    if (taskType == TTaskType.REALTIME_PUSH) {
+                        PushTask pushTask = (PushTask) task;
+                        if (pushTask.getPushType() == TPushType.DELETE) {
+                            LOG.info("remove push replica. tabletId: {}, backendId: {}", task.getSignature(),
+                                     pushTask.getBackendId());
+
+                            String failMsg = "Backend: " + task.getBackendId() + "Tablet: " + pushTask.getTabletId() +
+                                             " error msg: " + taskStatus.getError_msgs().toString();
+                            pushTask.countDownLatch(pushTask.getBackendId(), pushTask.getTabletId(), failMsg);
+                            AgentTaskQueue.removeTask(pushTask.getBackendId(), TTaskType.REALTIME_PUSH, 
+                                                      task.getSignature());
+                        }
+                    }
                     return result;
                 }
             }
@@ -472,7 +486,7 @@ public class LeaderImpl {
             if (pushTask.getPushType() == TPushType.LOAD || pushTask.getPushType() == TPushType.LOAD_DELETE) {
                 Preconditions.checkArgument(false, "LOAD and LOAD_DELETE not supported");
             } else if (pushTask.getPushType() == TPushType.DELETE) {
-                DeleteJob deleteJob = GlobalStateMgr.getCurrentState().getDeleteHandler().getDeleteJob(transactionId);
+                DeleteJob deleteJob = GlobalStateMgr.getCurrentState().getDeleteMgr().getDeleteJob(transactionId);
                 if (deleteJob == null) {
                     throw new MetaNotFoundException("cannot find delete job, job[" + transactionId + "]");
                 }
@@ -491,7 +505,7 @@ public class LeaderImpl {
             } else if (pushTask.getPushType() == TPushType.LOAD_V2) {
                 long loadJobId = pushTask.getLoadJobId();
                 com.starrocks.load.loadv2.LoadJob job =
-                        GlobalStateMgr.getCurrentState().getLoadManager().getLoadJob(loadJobId);
+                        GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJob(loadJobId);
                 if (job == null) {
                     throw new MetaNotFoundException("cannot find load job, job[" + loadJobId + "]");
                 }

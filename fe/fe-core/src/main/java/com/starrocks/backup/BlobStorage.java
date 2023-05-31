@@ -37,6 +37,7 @@ package com.starrocks.backup;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.FsBroker;
@@ -103,7 +104,9 @@ import java.util.Map;
 public class BlobStorage implements Writable {
     private static final Logger LOG = LogManager.getLogger(BlobStorage.class);
 
+    @SerializedName("bn")
     private String brokerName;
+    @SerializedName("pt")
     private Map<String, String> properties = Maps.newHashMap();
     private boolean hasBroker;
     private BrokerDesc brokerDesc; // for non broker operation only

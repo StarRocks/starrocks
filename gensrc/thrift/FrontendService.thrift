@@ -384,6 +384,7 @@ struct TMaterializedViewStatus {
 
     23: optional string task_id
     24: optional string task_name
+    25: optional string inactive_reason
 }
 
 struct TListMaterializedViewStatusResult {
@@ -758,6 +759,7 @@ struct TManualLoadTxnCommitAttachment {
     3: optional string errorLogUrl
     4: optional i64 receivedBytes
     5: optional i64 loadedBytes
+    6: optional i64 unselectedRows
 }
 
 struct TTxnCommitAttachment {
@@ -1150,6 +1152,7 @@ struct TTableConfigInfo {
     9: optional i32 distribute_bucket
     10: optional string sort_key
     11: optional string properties
+    12: optional i64 table_id
 }
 
 struct TGetTablesInfoRequest {

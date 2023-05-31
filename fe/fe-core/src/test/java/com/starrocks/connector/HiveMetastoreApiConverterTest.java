@@ -145,9 +145,8 @@ public class HiveMetastoreApiConverterTest {
 
         try {
             HiveMetastoreApiConverter.validateHiveTableType("VIRTUAL_VIEW");
-            Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof  StarRocksConnectorException);
+            Assert.fail();
         }
     }
 }

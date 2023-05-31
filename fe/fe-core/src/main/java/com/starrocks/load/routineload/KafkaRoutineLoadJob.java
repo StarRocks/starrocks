@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -67,10 +68,13 @@ import com.starrocks.load.Load;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -95,16 +99,20 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     private static final String PROPERTY_KAFKA_GROUP_ID = "group.id";
 
+    @SerializedName("bkl")
     private String brokerList;
+    @SerializedName("tpc")
     private String topic;
 
     // optional, user want to load partitions.
+    @SerializedName("ckp")
     private List<Integer> customKafkaPartitions = Lists.newArrayList();
     // current kafka partitions is the actually partition which will be fetched
     private List<Integer> currentKafkaPartitions = Lists.newArrayList();
     // optional, user want to set default offset when new partition add or offset not set.
     private Long kafkaDefaultOffSet = null;
     // kafka properties, property prefix will be mapped to kafka custom parameters, which can be extended in the future
+    @SerializedName("cpr")
     private Map<String, String> customProperties = Maps.newHashMap();
     private Map<String, String> convertedCustomProperties = Maps.newHashMap();
     private String confluentSchemaRegistryUrl = null;
@@ -226,7 +234,18 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     @Override
     public int calculateCurrentConcurrentTaskNum() throws MetaNotFoundException {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        int aliveBeNum = systemInfoService.getAliveBackendNumber();
+        // TODO: need to refactor after be split into cn + dn
+        int aliveNodeNum = systemInfoService.getAliveBackendNumber();
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            aliveNodeNum = 0;
+            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                if (node != null && node.isAlive()) {
+                    ++aliveNodeNum;
+                }
+            }
+        }
         int partitionNum = currentKafkaPartitions.size();
         if (desireTaskConcurrentNum == 0) {
             desireTaskConcurrentNum = Config.max_routine_load_task_concurrent_num;
@@ -234,8 +253,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
         LOG.debug("current concurrent task number is min"
                         + "(partition num: {}, desire task concurrent num: {}, alive be num: {}, config: {})",
-                partitionNum, desireTaskConcurrentNum, aliveBeNum, Config.max_routine_load_task_concurrent_num);
-        currentTaskConcurrentNum = Math.min(Math.min(partitionNum, Math.min(desireTaskConcurrentNum, aliveBeNum)),
+                partitionNum, desireTaskConcurrentNum, aliveNodeNum, Config.max_routine_load_task_concurrent_num);
+        currentTaskConcurrentNum = Math.min(Math.min(partitionNum, Math.min(desireTaskConcurrentNum, aliveNodeNum)),
                 Config.max_routine_load_task_concurrent_num);
         return currentTaskConcurrentNum;
     }

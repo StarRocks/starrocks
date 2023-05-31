@@ -150,6 +150,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
+    public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
 
     public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
 
@@ -394,6 +395,15 @@ public class PropertyAnalyzer {
         short replicationNum = Short.parseShort(properties.get(key));
         checkReplicationNum(replicationNum);
         return replicationNum;
+    }
+
+    public static String analyzeResourceGroup(Map<String, String> properties) {
+        String resourceGroup = null;
+        if (properties != null && properties.containsKey(PROPERTIES_RESOURCE_GROUP)) {
+            resourceGroup = properties.get(PROPERTIES_RESOURCE_GROUP);
+            properties.remove(PROPERTIES_RESOURCE_GROUP);
+        }
+        return resourceGroup;
     }
 
     private static void checkReplicationNum(short replicationNum) throws AnalysisException {

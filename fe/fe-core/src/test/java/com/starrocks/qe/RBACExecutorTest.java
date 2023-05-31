@@ -18,10 +18,11 @@ import com.starrocks.analysis.InformationFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzerV2;
+import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzer;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
@@ -40,7 +41,6 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.spark.sql.AnalysisException;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -73,7 +73,7 @@ public class RBACExecutorTest {
         for (int i = 0; i < 5; i++) {
             String sql = "create user u" + i;
             CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-            globalStateMgr.getAuthenticationManager().createUser(createUserStmt);
+            globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
         }
         for (int i = 0; i < 5; i++) {
             String sql = "create role r" + i;
@@ -126,12 +126,25 @@ public class RBACExecutorTest {
 
     @Test
     public void testShowRoles() throws Exception {
+        String sql = "create role test_role comment \"yi shan yi shan, liang jing jing\"";
+        StatementBase createRoleStmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(createRoleStmt, ctx);
+
         ShowRolesStmt stmt = new ShowRolesStmt();
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
-        Assert.assertEquals("[[root], [db_admin], [cluster_admin], [user_admin], [public], " +
-                "[r0], [r1], [r2], [r3], [r4]]", resultSet.getResultRows().toString());
+        String resultString = resultSet.getResultRows().toString();
+        // sampling test a some of the result rows
+        Assert.assertTrue(
+                resultString.contains("[root, true, built-in root role which has all privileges on all objects]"));
+        Assert.assertTrue(
+                resultString.contains("[db_admin, true, built-in database administration role]"));
+        Assert.assertTrue(
+                resultString.contains("[test_role, false, yi shan yi shan, liang jing jing]"));
+
+        // clean
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop role test_role", ctx), ctx);
     }
 
     @Test
@@ -153,8 +166,8 @@ public class RBACExecutorTest {
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(stmt, ctx);
 
-        Long roleId1 = ctx.getGlobalStateMgr().getAuthorizationManager().getRoleIdByNameAllowNull("drop_role1");
-        Long roleId2 = ctx.getGlobalStateMgr().getAuthorizationManager().getRoleIdByNameAllowNull("drop_role2");
+        Long roleId1 = ctx.getGlobalStateMgr().getAuthorizationMgr().getRoleIdByNameAllowNull("drop_role1");
+        Long roleId2 = ctx.getGlobalStateMgr().getAuthorizationMgr().getRoleIdByNameAllowNull("drop_role2");
         HashSet roleIds = new HashSet<>();
         roleIds.add(roleId1);
         roleIds.add(roleId2);
@@ -223,7 +236,7 @@ public class RBACExecutorTest {
             }
         };
 
-        new MockUp<PrivilegeStmtAnalyzerV2>() {
+        new MockUp<PrivilegeStmtAnalyzer>() {
             @Mock
             public void analyze(ConnectContext context) throws AnalysisException {
             }

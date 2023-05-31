@@ -47,7 +47,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -91,7 +91,7 @@ import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.streamload.StreamLoadInfo;
-import com.starrocks.load.streamload.StreamLoadManager;
+import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
@@ -118,7 +118,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.mv.MVManager;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -294,14 +294,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
         for (String fullName : dbNames) {
-            if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
-                    continue;
-                }
-            } else {
-                if (!globalStateMgr.getAuth().checkDbPriv(currentUser, fullName, PrivPredicate.SHOW)) {
-                    continue;
-                }
+            if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
+                continue;
             }
 
             final String db = ClusterNamespace.getNameFromFullName(fullName);
@@ -342,16 +336,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (db != null) {
             for (String tableName : db.getTableNamesViewWithLock()) {
                 LOG.debug("get table: {}, wait to check", tableName);
-                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    Table tbl = db.getTable(tableName);
-                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, tbl)) {
-                        continue;
-                    }
-                } else {
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
-                            tableName, PrivPredicate.SHOW)) {
-                        continue;
-                    }
+                Table tbl = db.getTable(tableName);
+                if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, tbl)) {
+                    continue;
                 }
 
                 if (matcher != null && !matcher.match(tableName)) {
@@ -395,13 +382,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
                 List<Table> tables = listingViews ? db.getViews() : db.getTables();
                 for (Table table : tables) {
-                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
-                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, table)) {
-                            continue;
-                        }
-                    } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
-                            table.getName(), PrivPredicate.SHOW)) {
+                    // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
+                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, table)) {
                         continue;
                     }
                     if (matcher != null && !matcher.match(table.getName())) {
@@ -420,7 +402,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         QueryStatement queryStatement = view.getQueryStatement();
 
                         ConnectContext connectContext = new ConnectContext();
-                        connectContext.setQualifiedUser(AuthenticationManager.ROOT_USER);
+                        connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
                         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
                         connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
@@ -428,18 +410,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             Analyzer.analyze(queryStatement, connectContext);
                             Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(queryStatement);
                             for (TableName tableName : allTables.keySet()) {
-                                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                                    Table tbl = db.getTable(tableName.getTbl());
-                                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
-                                            tableName.getDb(), tbl)) {
-                                        break;
-                                    }
-                                } else {
-                                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
-                                            currentUser, tableName.getDb(), tableName.getTbl(), PrivPredicate.SHOW)) {
-                                        ddlSql = "";
-                                        break;
-                                    }
+                                Table tbl = db.getTable(tableName.getTbl());
+                                if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
+                                        tableName.getDb(), tbl)) {
+                                    break;
                                 }
                             }
                         } catch (SemanticException e) {
@@ -503,24 +477,25 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setName(rowSet.get(2));
             status.setRefresh_type(rowSet.get(3));
             status.setIs_active(rowSet.get(4));
-            status.setPartition_type(rowSet.get(5));
+            status.setInactive_reason(rowSet.get(5));
+            status.setPartition_type(rowSet.get(6));
 
-            status.setTask_id(rowSet.get(6));
-            status.setTask_name(rowSet.get(7));
-            status.setLast_refresh_start_time(rowSet.get(8));
-            status.setLast_refresh_finished_time(rowSet.get(9));
-            status.setLast_refresh_duration(rowSet.get(10));
-            status.setLast_refresh_state(rowSet.get(11));
-            status.setLast_refresh_force_refresh(rowSet.get(12));
-            status.setLast_refresh_start_partition(rowSet.get(13));
-            status.setLast_refresh_end_partition(rowSet.get(14));
-            status.setLast_refresh_base_refresh_partitions(rowSet.get(15));
-            status.setLast_refresh_mv_refresh_partitions(rowSet.get(16));
+            status.setTask_id(rowSet.get(7));
+            status.setTask_name(rowSet.get(8));
+            status.setLast_refresh_start_time(rowSet.get(9));
+            status.setLast_refresh_finished_time(rowSet.get(10));
+            status.setLast_refresh_duration(rowSet.get(11));
+            status.setLast_refresh_state(rowSet.get(12));
+            status.setLast_refresh_force_refresh(rowSet.get(13));
+            status.setLast_refresh_start_partition(rowSet.get(14));
+            status.setLast_refresh_end_partition(rowSet.get(15));
+            status.setLast_refresh_base_refresh_partitions(rowSet.get(16));
+            status.setLast_refresh_mv_refresh_partitions(rowSet.get(17));
 
-            status.setLast_refresh_error_code(rowSet.get(17));
-            status.setLast_refresh_error_message(rowSet.get(18));
-            status.setRows(rowSet.get(19));
-            status.setText(rowSet.get(20));
+            status.setLast_refresh_error_code(rowSet.get(18));
+            status.setLast_refresh_error_message(rowSet.get(19));
+            status.setRows(rowSet.get(20));
+            status.setText(rowSet.get(21));
             tablesResult.add(status);
         }
         return result;
@@ -536,12 +511,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             for (Table table : db.getTables()) {
                 if (table.isMaterializedView()) {
                     MaterializedView mvTable = (MaterializedView) table;
-                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, dbName, mvTable)) {
-                            continue;
-                        }
-                    } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
-                            mvTable.getName(), PrivPredicate.SHOW)) {
+                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, dbName, mvTable)) {
                         continue;
                     }
                     if (matcher != null && !matcher.match(mvTable.getName())) {
@@ -596,11 +566,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 LOG.warn("Ignore the task db because information is incorrect: " + task);
                 continue;
             }
-            if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, task.getDbName())) {
-                    continue;
-                }
-            } else if (!globalStateMgr.getAuth().checkDbPriv(currentUser, task.getDbName(), PrivPredicate.SHOW)) {
+            if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, task.getDbName())) {
                 continue;
             }
 
@@ -644,14 +610,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 LOG.warn("Ignore the task status because db information is incorrect: " + status);
                 continue;
             }
-            if (globalStateMgr.isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, status.getDbName())) {
-                    continue;
-                }
-            } else {
-                if (!globalStateMgr.getAuth().checkDbPriv(currentUser, status.getDbName(), PrivPredicate.SHOW)) {
-                    continue;
-                }
+            if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, status.getDbName())) {
+                continue;
             }
 
             TTaskRunInfo info = new TTaskRunInfo();
@@ -852,13 +812,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         if (db != null) {
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db,
-                        db.getTable(params.getTable_name()))) {
-                    return result;
-                }
-            } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
-                    params.getTable_name(), PrivPredicate.SHOW)) {
+            if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db,
+                    db.getTable(params.getTable_name()))) {
                 return result;
             }
 
@@ -880,30 +835,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<String> dbNames = globalStateMgr.getDbNames();
         boolean reachLimit;
         for (String fullName : dbNames) {
-            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
-                    continue;
-                }
-            } else {
-                if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(currentUser, fullName,
-                        PrivPredicate.SHOW)) {
-                    continue;
-                }
+            if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, fullName)) {
+                continue;
             }
             Database db = GlobalStateMgr.getCurrentState().getDb(fullName);
             if (db != null) {
                 for (String tableName : db.getTableNamesViewWithLock()) {
                     LOG.debug("get table: {}, wait to check", tableName);
-                    if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                        if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
-                                fullName, db.getTable(tableName))) {
-                            continue;
-                        }
-                    } else {
-                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, fullName,
-                                tableName, PrivPredicate.SHOW)) {
-                            continue;
-                        }
+                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
+                            fullName, db.getTable(tableName))) {
+                        continue;
                     }
 
                     try {
@@ -1062,31 +1003,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
                                           String clientIp) throws AuthenticationException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        if (globalStateMgr.isUsingNewPrivilege()) {
-            UserIdentity currentUser =
-                    globalStateMgr.getAuthenticationManager().checkPlainPassword(user, clientIp, passwd);
-            if (currentUser == null) {
-                throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
-            }
-            // check INSERT action on table
-            // TODO(yiming): set role ids for ephemeral user
-            if (!PrivilegeActions.checkTableAction(currentUser, null, db, tbl, PrivilegeType.INSERT)) {
-                throw new AuthenticationException(
-                        "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
-            }
-        } else {
-            List<UserIdentity> currentUser = Lists.newArrayList();
-            if (!GlobalStateMgr.getCurrentState().getAuth()
-                    .checkPlainPassword(user, clientIp, passwd, currentUser)) {
-                throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
-            }
-
-            Preconditions.checkState(currentUser.size() == 1);
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser.get(0), db, tbl,
-                    PrivPredicate.LOAD)) {
-                throw new AuthenticationException(
-                        "Access denied; you need (at least one of) the LOAD privilege(s) for this operation");
-            }
+        UserIdentity currentUser =
+                globalStateMgr.getAuthenticationMgr().checkPlainPassword(user, clientIp, passwd);
+        if (currentUser == null) {
+            throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
+        }
+        // check INSERT action on table
+        // TODO(yiming): set role ids for ephemeral user
+        if (!PrivilegeActions.checkTableAction(currentUser, null, db, tbl, PrivilegeType.INSERT)) {
+            throw new AuthenticationException(
+                    "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
         }
     }
 
@@ -1160,10 +1086,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         ConnectContext connectContext = new ConnectContext();
         if (connectContext.getSessionVariable().isEnableLoadProfile()) {
             TransactionResult resp = new TransactionResult();
-            StreamLoadManager streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadManager();
-            streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), timeoutSecond, resp);
+            StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+            streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), timeoutSecond, resp, false);
+            if (!resp.stateOK()) {
+                LOG.warn(resp.msg);
+                throw new UserException(resp.msg);
+            }
 
-            StreamLoadTask task = streamLoadManager.getSyncSteamLoadTaskByLabel(request.getLabel());
+            StreamLoadTask task = streamLoadManager.getTaskByLabel(request.getLabel());
+            // this should't open
             if (task == null || task.getTxnId() == -1) {
                 throw new UserException(String.format("Load label: {} begin transacton failed", request.getLabel()));
             }
@@ -1260,6 +1191,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return;
         }
         TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tbl.getId());
+        StreamLoadTask streamLoadtask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
+                getSyncSteamLoadTaskByTxnId(request.getTxnId());
+
         switch (request.txnCommitAttachment.getLoadType()) {
             case ROUTINE_LOAD:
                 if (!(attachment instanceof RLTaskTxnCommitAttachment)) {
@@ -1271,6 +1205,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 entity.counterRoutineLoadRowsTotal.increase(routineAttachment.getLoadedRows());
                 entity.counterRoutineLoadErrorRowsTotal.increase(routineAttachment.getFilteredRows());
                 entity.counterRoutineLoadUnselectedRowsTotal.increase(routineAttachment.getUnselectedRows());
+
+                if (streamLoadtask != null) {
+                    streamLoadtask.setLoadState(routineAttachment.getLoadedBytes(),
+                            routineAttachment.getLoadedRows(),
+                            routineAttachment.getFilteredRows(),
+                            routineAttachment.getUnselectedRows(),
+                            routineAttachment.getErrorLogUrl(), "");
+                }
+
                 break;
             case MANUAL_LOAD:
                 if (!(attachment instanceof ManualLoadTxnCommitAttachment)) {
@@ -1280,6 +1223,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 entity.counterStreamLoadFinishedTotal.increase(1L);
                 entity.counterStreamLoadBytesTotal.increase(streamAttachment.getReceivedBytes());
                 entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
+
+                if (streamLoadtask != null) {
+                    streamLoadtask.setLoadState(streamAttachment.getLoadedBytes(),
+                            streamAttachment.getLoadedRows(),
+                            streamAttachment.getFilteredRows(),
+                            streamAttachment.getUnselectedRows(),
+                            streamAttachment.getErrorLogUrl(), "");
+                }
 
                 break;
             default:
@@ -1342,6 +1293,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
                 TabletFailInfo.fromThrift(request.getFailInfos()),
                 attachment);
+
     }
 
     @Override
@@ -1398,6 +1350,46 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(dbId, request.getTxnId(),
                 request.isSetReason() ? request.getReason() : "system cancel",
                 TxnCommitAttachment.fromThrift(request.getTxnCommitAttachment()));
+
+        TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
+        StreamLoadTask streamLoadtask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
+                getSyncSteamLoadTaskByTxnId(request.getTxnId());
+
+        switch (request.txnCommitAttachment.getLoadType()) {
+            case ROUTINE_LOAD:
+                if (!(attachment instanceof RLTaskTxnCommitAttachment)) {
+                    break;
+                }
+                RLTaskTxnCommitAttachment routineAttachment = (RLTaskTxnCommitAttachment) attachment;
+
+                if (streamLoadtask != null) {
+                    streamLoadtask.setLoadState(routineAttachment.getLoadedBytes(),
+                            routineAttachment.getLoadedRows(),
+                            routineAttachment.getFilteredRows(),
+                            routineAttachment.getUnselectedRows(),
+                            routineAttachment.getErrorLogUrl(), request.getReason());
+
+                }
+
+                break;
+            case MANUAL_LOAD:
+                if (!(attachment instanceof ManualLoadTxnCommitAttachment)) {
+                    break;
+                }
+                ManualLoadTxnCommitAttachment streamAttachment = (ManualLoadTxnCommitAttachment) attachment;
+
+                if (streamLoadtask != null) {
+                    streamLoadtask.setLoadState(streamAttachment.getLoadedBytes(),
+                            streamAttachment.getLoadedRows(),
+                            streamAttachment.getFilteredRows(),
+                            streamAttachment.getUnselectedRows(),
+                            streamAttachment.getErrorLogUrl(), request.getReason());
+                }
+
+                break;
+            default:
+                break;
+        }
     }
 
     @Override
@@ -1461,7 +1453,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TExecPlanFragmentParams plan = planner.plan(streamLoadInfo.getId());
 
             if (plan.query_options.enable_profile) {
-                StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadManager().
+                StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
                         getSyncSteamLoadTaskByTxnId(request.getTxnId());
                 if (streamLoadTask == null) {
                     throw new UserException("can not find stream load task by txnId " + request.getTxnId());
@@ -1580,20 +1572,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             String dbName = authParams.getDb_name();
             for (String tableName : authParams.getTable_names()) {
-                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                    // TODO(yiming): set role ids for ephemeral user
-                    if (!PrivilegeActions.checkTableAction(userIdentity, null, dbName,
-                            tableName, PrivilegeType.INSERT)) {
-                        throw new UnauthorizedException(String.format(
-                                "Access denied; user '%s'@'%s' need INSERT action on %s.%s for this operation",
-                                userIdentity.getQualifiedUser(), userIdentity.getHost(), dbName, tableName));
-                    }
-                } else if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
-                        userIdentity, dbName, tableName, PrivPredicate.LOAD)) {
-                    String errMsg = String.format("Access denied; user '%s'@'%s' need (at least one of) the " +
-                                    "privilege(s) in [%s] for table '%s' in database '%s'", userIdentity.getQualifiedUser(),
-                            userIdentity.getHost(), PrivPredicate.LOAD.getPrivs().toString().trim(), tableName, dbName);
-                    throw new UnauthorizedException(errMsg);
+                // TODO(yiming): set role ids for ephemeral user
+                if (!PrivilegeActions.checkTableAction(userIdentity, null, dbName,
+                        tableName, PrivilegeType.INSERT)) {
+                    throw new UnauthorizedException(String.format(
+                            "Access denied; user '%s'@'%s' need INSERT action on %s.%s for this operation",
+                            userIdentity.getQualifiedUser(), userIdentity.getHost(), dbName, tableName));
                 }
             }
             return new TStatus(TStatusCode.OK);
@@ -1919,7 +1903,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TGetTablesInfoResponse getTablesInfo(TGetTablesInfoRequest request) throws TException {
-
         return InformationSchemaDataSource.generateTablesInfoResponse(request);
     }
 
@@ -1942,7 +1925,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (!request.getTask_type().equals(MVTaskType.REPORT_EPOCH)) {
             throw new TException("Only support report_epoch task");
         }
-        MVManager.getInstance().onReportEpoch(request);
+        MaterializedViewMgr.getInstance().onReportEpoch(request);
         return new TMVReportEpochResponse();
     }
 
@@ -1954,25 +1937,25 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TLoadInfo> loads = Lists.newArrayList();
         try {
             if (request.isSetJob_id()) {
-                LoadJob job = GlobalStateMgr.getCurrentState().getLoadManager().getLoadJob(request.getJob_id());
+                LoadJob job = GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJob(request.getJob_id());
                 if (job != null) {
                     loads.add(job.toThrift());
                 }
             } else if (request.isSetDb()) {
                 long dbId = GlobalStateMgr.getCurrentState().getDb(request.getDb()).getId();
                 if (request.isSetLabel()) {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobsByDb(
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
                             dbId, request.getLabel(), true).stream().map(LoadJob::toThrift).collect(Collectors.toList()));
                 } else {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobsByDb(
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
                             dbId, null, false).stream().map(LoadJob::toThrift).collect(Collectors.toList()));
                 }
             } else {
                 if (request.isSetLabel()) {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobs(request.getLabel())
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobs(request.getLabel())
                             .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
                 } else {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadManager().getLoadJobs(null)
+                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobs(null)
                             .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
                 }
             }

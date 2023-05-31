@@ -622,19 +622,21 @@ public class InsertPlanner {
         Table targetTable = insertStatement.getTargetTable();
         LogicalProjectOperator projectOperator = (LogicalProjectOperator) root.getRoot().getOp();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = projectOperator.getColumnRefMap();
+        List<String> partitionColNames = insertStatement.getTargetPartitionNames().getPartitionColNames();
         List<Expr> partitionColValues = insertStatement.getTargetPartitionNames().getPartitionColValues();
-        List<String> partitionColNames = targetTable.getPartitionColumnNames();
-        List<Column> partitionColumns = partitionColNames.stream()
-                .map(targetTable::getColumn).collect(Collectors.toList());
+        List<String> tablePartitionColumnNames = targetTable.getPartitionColumnNames();
 
-        for (int i = 0; i < partitionColumns.size(); i++) {
-            Column column = partitionColumns.get(i);
-            LiteralExpr expr = (LiteralExpr) partitionColValues.get(i);
-            ScalarOperator scalarOperator = ConstantOperator.createObject(expr.getRealObjectValue(), column.getType());
-            ColumnRefOperator col = columnRefFactory
-                    .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
-            outputColumns.add(col);
-            columnRefMap.put(col, scalarOperator);
+        for (Column column : targetTable.getColumns()) {
+            String columnName = column.getName();
+            if (tablePartitionColumnNames.contains(columnName)) {
+                int index = partitionColNames.indexOf(columnName);
+                LiteralExpr expr = (LiteralExpr) partitionColValues.get(index);
+                ScalarOperator scalarOperator = ConstantOperator.createObject(expr.getRealObjectValue(), column.getType());
+                ColumnRefOperator col = columnRefFactory
+                        .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+                outputColumns.add(col);
+                columnRefMap.put(col, scalarOperator);
+            }
         }
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
     }
@@ -665,7 +667,6 @@ public class InsertPlanner {
 
         SelectRelation selectRelation = (SelectRelation) queryRelation;
         List<SelectListItem> listItems = selectRelation.getSelectList().getItems();
-        List<Integer> partitionIndexes = icebergTable.partitionColumnIndexes();
 
         for (SelectListItem item : listItems) {
             if (item.isStar()) {
@@ -673,10 +674,21 @@ public class InsertPlanner {
             }
         }
 
-        for (int partitionIndex : partitionIndexes) {
-            Expr expr = listItems.get(partitionIndex).getExpr();
-            if (!expr.isConstant()) {
-                return false;
+        List<String> targetColumnNames;
+        if (insertStmt.getTargetColumnNames() == null) {
+            targetColumnNames = icebergTable.getColumns().stream()
+                    .map(Column::getName).collect(Collectors.toList());
+        } else {
+            targetColumnNames = Lists.newArrayList(insertStmt.getTargetColumnNames());
+        }
+
+        for (int i = 0; i < targetColumnNames.size(); i++) {
+            String columnName = targetColumnNames.get(i);
+            if (icebergTable.getPartitionColumnNames().contains(columnName)) {
+                Expr expr = listItems.get(i).getExpr();
+                if (!expr.isConstant()) {
+                    return false;
+                }
             }
         }
         return true;

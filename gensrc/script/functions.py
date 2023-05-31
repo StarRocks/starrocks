@@ -440,12 +440,11 @@ vectorized_functions = [
     [50373, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
     [50400, 'next_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::next_day', 'TimeFunctions::next_day_prepare', 'TimeFunctions::next_day_close'],
     [50401, 'previous_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::previous_day', 'TimeFunctions::previous_day_prepare', 'TimeFunctions::previous_day_close'],
-
+    [50501, 'makedate', 'DATE', ['INT','INT'], 'TimeFunctions::make_date'],
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
     [60010, 'LIKE', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'LikePredicate::like', 'LikePredicate::like_prepare',
      'LikePredicate::like_close'],
-    [60011, 'ILIKE', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'nullptr'],
     [60020, 'REGEXP', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'LikePredicate::regex', 'LikePredicate::regex_prepare',
      'LikePredicate::regex_close'],
 
@@ -475,6 +474,11 @@ vectorized_functions = [
     [70113, 'if', 'PERCENTILE', ['BOOLEAN', 'PERCENTILE', 'PERCENTILE'], 'nullptr'],
     [70114, 'if', 'HLL', ['BOOLEAN', 'HLL', 'HLL'], 'nullptr'],
     [70115, 'if', 'TIME', ['BOOLEAN', 'TIME', 'TIME'], 'nullptr'],
+    [70116, 'if', 'ANY_ARRAY', ['BOOLEAN', 'ANY_ARRAY', 'ANY_ARRAY'], 'nullptr'],
+    [70117, 'if', 'ANY_MAP', ['BOOLEAN', 'ANY_MAP', 'ANY_MAP'], 'nullptr'],
+    [70118, 'if', 'ANY_STRUCT', ['BOOLEAN', 'ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
+    [70119, 'if', 'JSON', ['BOOLEAN', 'JSON', 'JSON'], 'nullptr'],
+
 
     [70200, 'ifnull', 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70201, 'ifnull', 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -495,6 +499,10 @@ vectorized_functions = [
     [70213, 'ifnull', 'PERCENTILE', ['PERCENTILE', 'PERCENTILE'], 'nullptr'],
     [70214, 'ifnull', 'HLL', ['HLL', 'HLL'], 'nullptr'],
     [70215, 'ifnull', 'TIME', ['TIME', 'TIME'], 'nullptr'],
+    [70216, 'ifnull', 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ARRAY'], 'nullptr'],
+    [70217, 'ifnull', 'ANY_MAP', ['ANY_MAP', 'ANY_MAP'], 'nullptr'],
+    [70218, 'ifnull', 'ANY_STRUCT', ['ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
+    [70219, 'ifnull', 'JSON', ['JSON', 'JSON'], 'nullptr'],
 
     [70300, 'nullif', 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70301, 'nullif', 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -515,6 +523,10 @@ vectorized_functions = [
     [70313, 'nullif', 'PERCENTILE', ['PERCENTILE', 'PERCENTILE'], 'nullptr'],
     [70314, 'nullif', 'HLL', ['HLL', 'HLL'], 'nullptr'],
     [70315, 'nullif', 'TIME', ['TIME', 'TIME'], 'nullptr'],
+    [70316, 'nullif', 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ARRAY'], 'nullptr'],
+    [70317, 'nullif', 'ANY_MAP', ['ANY_MAP', 'ANY_MAP'], 'nullptr'],
+    [70318, 'nullif', 'ANY_STRUCT', ['ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
+    [70319, 'nullif', 'JSON', ['JSON', 'JSON'], 'nullptr'],
 
     [70400, 'coalesce', 'BOOLEAN', ['BOOLEAN', '...'], 'nullptr'],
     [70401, 'coalesce', 'TINYINT', ['TINYINT', '...'], 'nullptr'],
@@ -535,6 +547,10 @@ vectorized_functions = [
     [70413, 'coalesce', 'PERCENTILE', ['PERCENTILE', '...'], 'nullptr'],
     [70414, 'coalesce', 'HLL', ['HLL', '...'], 'nullptr'],
     [70416, 'coalesce', 'TIME', ['TIME', '...'], 'nullptr'],
+    [70417, 'coalesce', 'ANY_ARRAY', ['ANY_ARRAY', '...'], 'nullptr'],
+    [70418, 'coalesce', 'ANY_MAP', ['ANY_MAP', '...'], 'nullptr'],
+    [70419, 'coalesce', 'ANY_STRUCT', ['ANY_STRUCT', '...'], 'nullptr'],
+    [70420, 'coalesce', 'JSON', ['JSON', '...'], 'nullptr'],
 
     [70415, 'esquery', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'ESFunctions::match'],
 

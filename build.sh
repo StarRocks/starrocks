@@ -32,14 +32,33 @@
 # compiled and installed correctly.
 ##############################################################
 
-set -eo pipefail
-
 ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
 MACHINE_TYPE=$(uname -m)
 
 export STARROCKS_HOME=${ROOT}
 
+if [ -z $BUILD_TYPE ]; then
+    export BUILD_TYPE=Release
+fi
+
+if [ -z $STARROCKS_VERSION ]; then
+    tag_name=$(git describe --tags --exact-match 2>/dev/null)
+    branch_name=$(git symbolic-ref -q --short HEAD)
+    if [ ! -z $tag_name ]; then
+        export STARROCKS_VERSION=$tag_name
+    elif [ ! -z $branch_name ]; then
+        export STARROCKS_VERSION=$branch_name
+    else
+        export STARROCKS_VERSION=$(git rev-parse --short HEAD)
+    fi
+fi
+
+if [ -z $STARROCKS_COMMIT_HASH]; then
+    export STARROCKS_COMMIT_HASH=$(git rev-parse --short HEAD)
+fi
+
+set -eo pipefail
 . ${STARROCKS_HOME}/env.sh
 
 if [[ $OSTYPE == darwin* ]] ; then
@@ -274,7 +293,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
         exit 1
     fi
 
-    CMAKE_BUILD_TYPE=${BUILD_TYPE:-Release}
+    CMAKE_BUILD_TYPE=$BUILD_TYPE
     echo "Build Backend: ${CMAKE_BUILD_TYPE}"
     CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}
     if [ "${WITH_GCOV}" = "ON" ]; then
@@ -401,6 +420,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/fe/lib/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler/* ${STARROCKS_OUTPUT}/fe/bin/
         MSG="${MSG} √ ${MSG_FE}"
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/spark-dpp/

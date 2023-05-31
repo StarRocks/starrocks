@@ -641,6 +641,14 @@ public:
     static uint week_mode(uint mode);
     static int32_t compute_week(uint year, uint month, uint day, uint week_behaviour);
 
+    /**
+     * calculate a date by year and day of year
+     * @param: [year, dayOfYear]
+     * @paramType columns:[IntColumn,IntColumn]
+     * @return DateColumn
+     */
+    DEFINE_VECTORIZED_FN(make_date);
+
     /** Flags for calc_week() function.  */
     constexpr static const unsigned int WEEK_MONDAY_FIRST = 1;
     constexpr static const unsigned int WEEK_YEAR = 2;

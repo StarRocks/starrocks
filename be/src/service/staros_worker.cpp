@@ -15,6 +15,7 @@
 #ifdef USE_STAROS
 #include "service/staros_worker.h"
 
+#include <fslib/fslib_all_initializer.h>
 #include <starlet.h>
 #include <worker.h>
 
@@ -320,6 +321,8 @@ void init_staros_worker() {
     if (g_starlet.get() != nullptr) {
         return;
     }
+    // skip staros reinit aws sdk
+    staros::starlet::fslib::skip_aws_init_api = true;
 
     FLAGS_cachemgr_threadpool_size = config::starlet_cache_thread_num;
     FLAGS_cachemgr_check_interval = config::starlet_cache_check_interval;

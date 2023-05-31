@@ -16,7 +16,8 @@ To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster 
 
 ## Usage notes
 
-The file format of Hudi that StarRocks supports is Parquet. Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
+- The file format of Hudi that StarRocks supports is Parquet. Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
+- StarRocks provides complete support for Copy On Write (COW) tables and Merge On Read (MOR) tables from Hudi.
 
 ## Integration preparations
 
@@ -334,7 +335,7 @@ If you choose Data Lake Storage Gen2 as storage for your Hudi cluster, take one 
   ```SQL
   "azure.adls2.oauth2_client_id" = "<service_client_id>",
   "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
   The following table describes the parameters you need to configure `in StorageCredentialParams`.
@@ -657,7 +658,7 @@ PROPERTIES
       "hive.metastore.uris" = "thrift://34.132.15.127:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-      "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint> 
+      "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   );
   ```
 

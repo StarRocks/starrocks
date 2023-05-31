@@ -67,7 +67,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.qe.ConnectContext;
@@ -591,22 +591,21 @@ public class ExpressionAnalyzer {
                 Type t1 = node.getChild(0).getType().getNumResultType();
                 Type t2 = node.getChild(1).getType().getNumResultType();
                 if (t1.isDecimalV3() || t2.isDecimalV3()) {
+                    ArithmeticExpr.TypeTriple typeTriple = null;
                     try {
-                        node.rewriteDecimalOperation();
+                        typeTriple = node.rewriteDecimalOperation();
                     } catch (AnalysisException ex) {
                         throw new SemanticException(ex.getMessage());
                     }
-                    Type lhsType = node.getChild(0).getType();
-                    Type rhsType = node.getChild(1).getType();
-                    Type resultType = node.getType();
-                    Type[] args = {lhsType, rhsType};
+                    Preconditions.checkArgument(typeTriple != null);
+                    Type[] args = {typeTriple.lhsTargetType, typeTriple.rhsTargetType};
                     Function fn = Expr.getBuiltinFunction(op.getName(), args, Function.CompareMode.IS_IDENTICAL);
                     // In resolved function instance, it's argTypes and resultType are wildcard decimal type
                     // (both precision and and scale are -1, only used in function instance resolution), it's
                     // illegal for a function and expression to has a wildcard decimal type as its type in BE,
                     // so here substitute wildcard decimal types with real decimal types.
-                    Function newFn = new ScalarFunction(fn.getFunctionName(), args, resultType, fn.hasVarArgs());
-                    node.setType(resultType);
+                    Function newFn = new ScalarFunction(fn.getFunctionName(), args, typeTriple.returnType, fn.hasVarArgs());
+                    node.setType(typeTriple.returnType);
                     node.setFn(newFn);
                     return null;
                 }
@@ -1105,11 +1104,6 @@ public class ExpressionAnalyzer {
                                 " should be an array or a lambda function", node.getPos());
                     }
                     break;
-                case FunctionSet.ARRAY_CONCAT:
-                    if (node.getChildren().size() < 2) {
-                        throw new SemanticException(fnName + " should have at least two inputs", node.getPos());
-                    }
-                    break;
                 case FunctionSet.ARRAY_GENERATE:
                     if (node.getChildren().size() < 1 || node.getChildren().size() > 3) {
                         throw new SemanticException(fnName + " has wrong input numbers");
@@ -1263,11 +1257,6 @@ public class ExpressionAnalyzer {
                 end--;
             }
 
-            // check is scalar type
-            if (node.getChildren().stream().anyMatch(d -> !d.getType().isScalarType())) {
-                throw new SemanticException("case-when only support scalar type", node.getPos());
-            }
-
             // check when type
             List<Type> whenTypes = Lists.newArrayList();
 
@@ -1361,7 +1350,7 @@ public class ExpressionAnalyzer {
                 node.setStrValue(session.getCurrentUserIdentity().toString());
             } else if (funcType.equalsIgnoreCase("CURRENT_ROLE")) {
                 node.setType(Type.VARCHAR);
-                AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
+                AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
                 List<String> roleName = new ArrayList<>();
 
                 try {

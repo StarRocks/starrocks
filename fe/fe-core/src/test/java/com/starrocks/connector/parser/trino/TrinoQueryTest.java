@@ -685,6 +685,21 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testRegexp() throws Exception {
+        String sql = "select regexp_like('1a 2b 14m', '\\d+b')";
+        assertPlanContains(sql, "regexp('1a 2b 14m', '\\\\d+b')");
+
+        sql = "select regexp_like('abc123','abc*');";
+        assertPlanContains(sql, "regexp('abc123', 'abc*')");
+
+        sql = "select regexp_extract('1a 2b 14m', '\\d+');";
+        assertPlanContains(sql, "regexp_extract('1a 2b 14m', '\\\\d+', 0)");
+
+        sql = "select regexp_extract('1abb 2b 14m', '[a-z]+');";
+        assertPlanContains(sql, "regexp_extract('1abb 2b 14m', '[a-z]+', 0)");
+    }
+
+    @Test
     public void testLimit() throws Exception {
         String sql = "select * from t0 limit 10";
         assertPlanContains(sql, "limit: 10");
@@ -884,5 +899,26 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select trim(trailing from '  abcd');";
         assertPlanContains(sql, "<slot 2> : rtrim('  abcd')");
+    }
+
+    @Test
+    public void testTry() throws Exception {
+        String sql = "select try_cast('aa' as int)";
+        assertPlanContains(sql, "<slot 2> : CAST('aa' AS INT)");
+
+        sql = "select try_cast(ta as bigint) + 1 from tall";
+        assertPlanContains(sql, "CAST(1: ta AS BIGINT) + 1");
+
+        sql = "select try(cast ('aa' as int))";
+        assertPlanContains(sql, "<slot 2> : CAST('aa' AS INT)");
+
+        sql = "select try(2 / 0)";
+        assertPlanContains(sql, "<slot 2> : NULL");
+
+        sql = "select try(100 / v1) from t0 where v1 = 0";
+        assertPlanContains(sql, "100.0 / CAST(1: v1 AS DOUBLE)");
+
+        sql = "select coalesce(try(100 / v1), 1) from t0 where v1 = 0";
+        assertPlanContains(sql, "coalesce(100.0 / CAST(1: v1 AS DOUBLE), 1.0)");
     }
 }

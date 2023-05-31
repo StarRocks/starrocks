@@ -326,6 +326,17 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return isOlapTable() || isCloudNativeTable();
     }
 
+    public boolean isExprPartitionTable() {
+        if (this instanceof OlapTable) {
+            OlapTable olapTable = (OlapTable) this;
+            if (olapTable.getPartitionInfo().getType() == PartitionType.EXPR_RANGE_V2) {
+                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+                return partitionInfo instanceof ExpressionRangePartitionInfoV2;
+            }
+        }
+        return false;
+    }
+
     public List<Column> getFullSchema() {
         return fullSchema;
     }

@@ -24,6 +24,8 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.proto.AbortCompactionRequest;
+import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
 import com.starrocks.proto.CompactRequest;
@@ -1079,6 +1081,11 @@ public class PseudoBackend {
 
         @Override
         public Future<RestoreSnapshotsResponse> restoreSnapshots(RestoreSnapshotsRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<AbortCompactionResponse> abortCompaction(AbortCompactionRequest request) {
             return CompletableFuture.completedFuture(null);
         }
     }

@@ -31,7 +31,7 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -43,9 +43,11 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -61,6 +63,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
@@ -74,6 +77,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -84,7 +88,7 @@ import java.util.stream.Collectors;
 /**
  * meta structure for materialized view
  */
-public class MaterializedView extends OlapTable implements GsonPostProcessable {
+public class MaterializedView extends OlapTable implements GsonPreProcessable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(MaterializedView.class);
 
     public enum RefreshType {
@@ -175,6 +179,11 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         public Map<BaseTableInfo, Map<String, BasePartitionInfo>> getBaseTableInfoVisibleVersionMap() {
             return baseTableInfoVisibleVersionMap;
+        }
+
+        public void clearVisibleVersionMap() {
+            this.baseTableInfoVisibleVersionMap.clear();
+            this.baseTableVisibleVersionMap.clear();
         }
 
         public boolean isDefineStartTime() {
@@ -292,6 +301,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "active")
     private boolean active;
 
+    @SerializedName(value = "inactiveReason")
+    private String inactiveReason;
+
     // TODO: now it is original definition sql
     // for show create mv, constructing refresh job(insert into select)
     @SerializedName(value = "viewDefineSql")
@@ -302,6 +314,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     // record expression table column
     @SerializedName(value = "partitionRefTableExprs")
+    private List<GsonUtils.ExpressionSerializedObject> serializedPartitionRefTableExprs;
     private List<Expr> partitionRefTableExprs;
 
     // Maintenance plan for this MV
@@ -412,6 +425,15 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setActive(boolean active) {
         this.active = active;
+    }
+
+    public void setInactiveAndReason(String reason) {
+        this.active = false;
+        this.inactiveReason = reason;
+    }
+
+    public String getInactiveReason() {
+        return inactiveReason;
     }
 
     public String getViewDefineSql() {
@@ -585,7 +607,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 BasePartitionInfo basePartitionInfo = versionEntry.getValue();
                 if (basePartitionInfo == null) {
                     result.add(basePartitionName);
-                } else  {
+                } else {
                     // Ignore partitions if mv's partition is the same with the basic table.
                     if (basePartitionVersion == basePartitionInfo.getVersion()) {
                         continue;
@@ -660,7 +682,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
-            active = false;
+            setInactiveAndReason("db not exists: " + dbId);
             return;
         }
         if (baseTableInfos == null) {
@@ -683,7 +705,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 if (table.isMaterializedView() && !((MaterializedView) table).isActive()) {
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
-                    active = false;
+                    setInactiveAndReason("base mv is not active: " + baseTableInfo.getTableName());
                     continue;
                 }
                 MvId mvId = new MvId(db.getId(), id);
@@ -712,7 +734,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setDatabase(db.getFullName());
         // set privilege
-        connectContext.setQualifiedUser(AuthenticationManager.ROOT_USER);
+        connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
@@ -939,6 +961,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             sb.append(colocateGroup).append("\"");
         }
 
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
+                    PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP).append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)).append("\"");
+        }
+
         appendUniqueProperties(sb);
 
         sb.append("\n)");
@@ -1056,8 +1084,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Pair<Table, Column> partitionInfo = getPartitionTableAndColumn();
         // if non-partition-by table has changed, should refresh all mv partitions
         if (partitionInfo == null) {
-            // mark it inactive
-            setActive(false);
+            setInactiveAndReason("partition configuration changed");
             LOG.warn("mark mv:{} inactive for get partition info failed", name);
             throw new RuntimeException(String.format("getting partition info failed for mv: %s", name));
         }
@@ -1194,5 +1221,30 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             }
         }
         return properties;
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        this.serializedPartitionRefTableExprs = new ArrayList<>();
+        if (partitionRefTableExprs != null) {
+            for (Expr partitionExpr : partitionRefTableExprs) {
+                if (partitionExpr != null) {
+                    serializedPartitionRefTableExprs.add(new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
+                }
+            }
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
+        partitionRefTableExprs = new ArrayList<>();
+        if (serializedPartitionRefTableExprs != null) {
+            for (GsonUtils.ExpressionSerializedObject expressionSql : serializedPartitionRefTableExprs) {
+                if (expressionSql != null) {
+                    partitionRefTableExprs.add(SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
+                }
+            }
+        }
     }
 }
