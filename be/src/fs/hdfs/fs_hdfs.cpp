@@ -461,7 +461,11 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
 
     hdfsFile file = hdfsOpenFile(hdfs_client->hdfs_fs, path.c_str(), flags, hdfs_write_buffer_size, 0, 0);
     if (file == nullptr) {
-        return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+        if (errno == ENOENT) {
+            return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, file={}", path));
+        } else {
+            return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+        }
     }
     return std::make_unique<HDFSWritableFile>(hdfs_client->hdfs_fs, file, path, 0);
 }
@@ -483,7 +487,11 @@ StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(co
     }
     hdfsFile file = hdfsOpenFile(hdfs_client->hdfs_fs, path.c_str(), O_RDONLY, hdfs_read_buffer_size, 0, 0);
     if (file == nullptr) {
-        return Status::InternalError("hdfsOpenFile failed, path={}"_format(path));
+        if (errno == ENOENT) {
+            return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, file={}", path));
+        } else {
+            return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+        }
     }
     auto stream = std::make_shared<HdfsInputStream>(hdfs_client->hdfs_fs, file, path);
     return std::make_unique<SequentialFile>(std::move(stream), path);
@@ -505,7 +513,11 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
     }
     hdfsFile file = hdfsOpenFile(hdfs_client->hdfs_fs, path.c_str(), O_RDONLY, hdfs_read_buffer_size, 0, 0);
     if (file == nullptr) {
-        return Status::InternalError("hdfsOpenFile failed, path={}"_format(path));
+        if (errno == ENOENT) {
+            return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, file={}", path));
+        } else {
+            return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+        }
     }
     auto stream = std::make_shared<HdfsInputStream>(hdfs_client->hdfs_fs, file, path);
     return std::make_unique<RandomAccessFile>(std::move(stream), path);
