@@ -54,6 +54,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.qe.ConnectContext;
@@ -453,7 +454,7 @@ public class ExportMgr {
 
     public void loadExportJobV2(DataInputStream dis)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, ExportMgr.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.EXPORT_MGR);
         try {
             int size = reader.readInt();
             long currentTimeMs = System.currentTimeMillis();

@@ -305,17 +305,22 @@ public class SRMetaBlockTest {
     }
 
     @Test
-    public void testReadBadBlockBadName() throws Exception {
-        String name = "badReaderBadName";
-        write2String(name);
-        DataInputStream dis = openInput(name);
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, "xxx");
+    public void testReadBadBlockBadID() throws Exception {
+        DataOutputStream dos = openOutput("blockid");
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.CATALOG_MGR, 2);
+        writer.writeJson("Muchos años después");
+        writer.writeJson("frente al pelotón de fusilamiento");
+        writer.close();
+        dos.close();
+
+        DataInputStream dis = openInput("blockid");
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.COMPACTION_MGR);
         Assert.assertTrue(true);
         try {
             reader.readJson(String.class);
             Assert.fail();
         } catch (SRMetaBlockException e) {
-            Assert.assertTrue(e.getMessage().contains("Invalid meta block header, expect badReaderBadName actual xxx"));
+            Assert.assertTrue(e.getMessage().contains("Invalid meta block header, expect CATALOG_MGR actual COMPACTION_MGR"));
         } finally {
             dis.close();
         }

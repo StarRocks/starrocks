@@ -57,6 +57,7 @@ import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -698,7 +699,7 @@ public class RoutineLoadMgr implements Writable {
 
     public void loadRoutineLoadJobsV2(DataInputStream dis) throws IOException,
             SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, RoutineLoadMgr.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.ROUTINE_LOAD_MGR);
 
         try {
             int size = reader.readInt();

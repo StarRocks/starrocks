@@ -58,6 +58,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AbstractBackupStmt;
@@ -681,7 +682,7 @@ public class BackupHandler extends LeaderDaemon implements Writable {
 
     public void loadBackupHandlerV2(DataInputStream dis) throws IOException, SRMetaBlockException,
             SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, BackupHandler.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.BACKUP_MGR);
         try {
             BackupHandler data = reader.readJson(BackupHandler.class);
             this.repoMgr = data.repoMgr;

@@ -61,6 +61,7 @@ import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
@@ -1990,7 +1991,7 @@ public class Auth implements Writable {
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, Auth.class.getName(), 2);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.AUTH, 2);
 
         DataOutputBuffer buffer = new DataOutputBuffer();
         write(buffer);
@@ -2005,7 +2006,7 @@ public class Auth implements Writable {
     }
 
     public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, Auth.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.AUTH);
         try {
             byte[] s = reader.readJson(byte[].class);
             DataInputStream dataInputStream = new DataInputStream(new ByteArrayInputStream(s));

@@ -48,6 +48,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
@@ -755,7 +756,7 @@ public class GlobalTransactionMgr implements Writable {
     public void loadTransactionStateV2(DataInputStream dis)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         long now = System.currentTimeMillis();
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, GlobalTransactionMgr.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.GLOBAL_TRANSACTION_MGR);
         try {
             idGenerator = reader.readJson(TransactionIdGenerator.class);
             int numTransactions = reader.readInt();
