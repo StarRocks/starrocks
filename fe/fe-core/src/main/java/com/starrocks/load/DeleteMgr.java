@@ -81,6 +81,7 @@ import com.starrocks.lake.delete.LakeDeleteJob;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.planner.PartitionColumnFilter;
@@ -816,7 +817,7 @@ public class DeleteMgr implements Writable {
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         int numJson = 1 + dbToDeleteInfos.size() * 2;
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, DeleteMgr.class.getName(), numJson);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.DELETE_MGR, numJson);
 
         writer.writeJson(dbToDeleteInfos.size());
         for (Map.Entry<Long, List<MultiDeleteInfo>> deleteInfoEntry : dbToDeleteInfos.entrySet()) {
@@ -827,7 +828,7 @@ public class DeleteMgr implements Writable {
     }
 
     public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, DeleteMgr.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.DELETE_MGR);
         try {
             int analyzeJobSize = reader.readInt();
             for (int i = 0; i < analyzeJobSize; ++i) {

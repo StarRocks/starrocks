@@ -20,7 +20,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -34,6 +33,7 @@ import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
@@ -580,7 +580,7 @@ public class AnalyzeMgr implements Writable {
                 + 1 + basicStatsMetaMap.size()
                 + 1 + histogramStatsMetaMap.size();
 
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, ResourceGroupMgr.class.getName(), numJson);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.ANALYZE_MGR, numJson);
 
         writer.writeJson(analyzeJobMap.size());
         for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {
@@ -606,7 +606,7 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, AnalyzeMgr.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.ANALYZE_MGR);
         try {
             int analyzeJobSize = reader.readInt();
             for (int i = 0; i < analyzeJobSize; ++i) {

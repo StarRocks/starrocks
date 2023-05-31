@@ -49,6 +49,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.PrivilegeActions;
@@ -425,7 +426,7 @@ public class ExportMgr {
 
     public void saveExportJobV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
         int numJson = 1 + idToJob.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, ExportMgr.class.getName(), numJson);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.EXPORT_MGR, numJson);
         writer.writeJson(idToJob.size());
         for (ExportJob job : idToJob.values()) {
             writer.writeJson(job);
@@ -435,7 +436,7 @@ public class ExportMgr {
 
     public void loadExportJobV2(DataInputStream dis)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, ExportMgr.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.EXPORT_MGR);
         try {
             int size = reader.readInt();
             long currentTimeMs = System.currentTimeMillis();

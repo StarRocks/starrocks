@@ -43,6 +43,7 @@ import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -396,7 +397,7 @@ public class CatalogMgr {
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
         int numJson = 1 + serializedCatalogs.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, CatalogMgr.class.getName(), numJson);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.CATALOG_MGR, numJson);
 
         writer.writeJson(serializedCatalogs.size());
         for (Catalog catalog : serializedCatalogs.values()) {
@@ -407,7 +408,7 @@ public class CatalogMgr {
     }
 
     public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, CatalogMgr.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.CATALOG_MGR);
         try {
             int serializedCatalogsSize = reader.readInt();
             for (int i = 0; i < serializedCatalogsSize; ++i) {

@@ -28,7 +28,7 @@ import java.util.zip.CheckedInputStream;
 
 /**
  * Load object from input stream as the following format.
- *
+ * <p>
  * +------------------+
  * |     header       | {"numJson": 10, "name": "AuthenticationManager"}
  * +------------------+
@@ -42,21 +42,29 @@ import java.util.zip.CheckedInputStream;
  * +------------------+
  * |      footer      | {"checksum": xxx}
  * +------------------+
- *
+ * <p>
  * Usage see com.starrocks.persist.metablock.SRMetaBlockTest#testSimple()
  */
 public class SRMetaBlockReader {
     private static final Logger LOG = LogManager.getLogger(SRMetaBlockReader.class);
-    private CheckedInputStream checkedInputStream;
+    private final CheckedInputStream checkedInputStream;
     private SRMetaBlockHeader header;
-    private String name;
+    private final SRMetaBlockID id;
     private int numJsonRead;
     // For backward compatibility reason
     private final String oldManagerClassName = "com.starrocks.privilege.PrivilegeManager";
 
+    public SRMetaBlockReader(DataInputStream dis, SRMetaBlockID id) {
+        this.checkedInputStream = new CheckedInputStream(dis, new CRC32());
+        this.id = id;
+        this.header = null;
+        this.numJsonRead = 0;
+    }
+
+    @Deprecated
     public SRMetaBlockReader(DataInputStream dis, String name) {
         this.checkedInputStream = new CheckedInputStream(dis, new CRC32());
-        this.name = name;
+        this.id = SRMetaBlockID.INVALID;
         this.header = null;
         this.numJsonRead = 0;
     }
@@ -66,9 +74,9 @@ public class SRMetaBlockReader {
             // read header and check for name
             String s = Text.readStringWithChecksum(checkedInputStream);
             header = GsonUtils.GSON.fromJson(s, SRMetaBlockHeader.class);
-            if (!header.getName().equals(name) && !header.getName().equals(oldManagerClassName)) {
+            if (!header.getId().equals(id)) {
                 throw new SRMetaBlockException(
-                        "Invalid meta block header, expect " + header.getName() + " actual " + name);
+                        "Invalid meta block header, expect " + header.getId().name() + " actual " + id.name());
             }
         } else if (numJsonRead >= header.getNumJson()) {
             throw new SRMetaBlockEOFException(String.format(
@@ -102,7 +110,7 @@ public class SRMetaBlockReader {
             int rest = header.getNumJson() - numJsonRead;
             LOG.warn("Meta block for {} read {} json < total {} json, will skip the rest {} json",
                     header.getName(), numJsonRead, header.getNumJson(), rest);
-            for (int i = 0; i != rest; ++ i) {
+            for (int i = 0; i != rest; ++i) {
                 LOG.warn("skip {} json: {}", i, Text.readStringWithChecksum(checkedInputStream));
             }
         }

@@ -57,6 +57,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
@@ -679,7 +680,7 @@ public class BackupHandler extends FrontendDaemon implements Writable {
 
     public void saveBackupHandlerV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos,
-                BackupHandler.class.getName(), 2 + dbIdToBackupOrRestoreJob.size());
+                SRMetaBlockID.BACKUP_MGR, 2 + dbIdToBackupOrRestoreJob.size());
         writer.writeJson(this);
         writer.writeJson(dbIdToBackupOrRestoreJob.size());
         for (AbstractJob job : dbIdToBackupOrRestoreJob.values()) {
@@ -690,7 +691,7 @@ public class BackupHandler extends FrontendDaemon implements Writable {
 
     public void loadBackupHandlerV2(DataInputStream dis) throws IOException, SRMetaBlockException,
             SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, BackupHandler.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.BACKUP_MGR);
         try {
             BackupHandler data = reader.readJson(BackupHandler.class);
             this.repoMgr = data.repoMgr;
