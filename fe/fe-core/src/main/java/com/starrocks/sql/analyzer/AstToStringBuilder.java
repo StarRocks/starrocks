@@ -493,7 +493,10 @@ public class AstToStringBuilder {
                 values.add(rowBuilder.toString());
             }
             sqlBuilder.append(Joiner.on(", ").join(values));
-            sqlBuilder.append(") ").append(node.getAlias().getTbl());
+            sqlBuilder.append(")");
+            if (node.getAlias() != null) {
+                sqlBuilder.append(" ").append(node.getAlias().getTbl());
+            }
 
             return sqlBuilder.toString();
         }
