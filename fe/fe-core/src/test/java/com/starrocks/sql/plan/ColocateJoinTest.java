@@ -202,6 +202,8 @@ class ColocateJoinTest extends PlanTestBase {
 
         sqls.add("select * from colocate_t0 right join colocate_t1 on v4 = v1 left join colocate_t2_1 on v1 = v7");
         sqls.add("select * from colocate_t0 full outer join colocate_t1 on v1 = v4 left join colocate_t2_1 on v4 = v7");
+        sqls.add("select * from colocate_t0 t0 left join (select v7 from colocate_t1 left join colocate_t2_1 " +
+                "on v4 = v7 group by v7)t on t0.v1 = t.v7");
         return sqls.stream().map(e -> Arguments.of(e));
     }
 
