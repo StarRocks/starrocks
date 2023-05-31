@@ -149,15 +149,15 @@ public class MVColumnItem {
         if (baseColumn == null) {
             result = new Column(name, type, isKey, aggregationType, isAllowNull,
                     ColumnDef.DefaultValueDef.EMPTY_VALUE, "");
-            if (defineExpr != null) {
-                result.setDefineExpr(defineExpr);
-            }
         } else {
             result = new Column(baseColumn);
         }
         result.setIsKey(isKey);
         result.setName(name);
         result.setAggregationType(aggregationType, isAggregationTypeImplicit);
+        if (defineExpr != null) {
+            result.setDefineExpr(defineExpr);
+        }
         /// FIXME One Mv column can reference multiple base columns
         result.setBaseColumnName(baseColumnNames.get(0));
         return result;

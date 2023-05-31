@@ -241,7 +241,7 @@ public class Partition extends MetaObject implements Writable {
         OlapTable targetTable = (OlapTable) db.getTable(associatedTableId);
         Preconditions.checkNotNull(targetTable);
         Partition targetPartition;
-        if (targetTable.isPartitioned()) {
+        if (targetTable.getPartitionInfo().isPartitioned()) {
             Preconditions.checkNotNull(partName);
             targetPartition = targetTable.getPartition(partName);
             if (targetPartition == null) {

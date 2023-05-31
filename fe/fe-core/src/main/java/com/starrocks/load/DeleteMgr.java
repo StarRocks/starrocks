@@ -262,7 +262,7 @@ public class DeleteMgr implements Writable {
         stmt.setJobId(jobId);
         // begin txn here and generate txn id
         long transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
-                Lists.newArrayList(olapTable.getId()), label, null,
+                olapTable.getAssociatedTableIds(), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.DELETE, jobId, Config.stream_load_default_timeout_second);
 

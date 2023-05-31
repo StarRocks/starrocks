@@ -869,8 +869,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
     }
 
     public void unprotectedBeginTxn(boolean replay) throws UserException {
+        if (table == null) {
+            getTable();
+        }
+        List<Long> txnTableIds = table.getAssociatedTableIds();
         this.txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
-                dbId, Lists.newArrayList(tableId), label, null,
+                dbId, txnTableIds, label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.FRONTEND_STREAMING, id,
                 timeoutMs / 1000);

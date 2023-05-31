@@ -1102,7 +1102,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
-                db.getId(), Lists.newArrayList(table.getId()), request.getLabel(), request.getRequest_id(),
+                db.getId(), table.getAssociatedTableIds(), request.getLabel(), request.getRequest_id(),
                 new TxnCoordinator(TxnSourceType.BE, clientIp),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, timeoutSecond);
     }
