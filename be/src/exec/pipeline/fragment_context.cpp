@@ -17,6 +17,7 @@
 #include "exec/data_sink.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
@@ -175,6 +176,7 @@ FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragme
         auto&& ctx = std::make_unique<FragmentContext>();
         auto* raw_ctx = ctx.get();
         _fragment_contexts.emplace(fragment_id, std::move(ctx));
+        raw_ctx->set_workgroup(workgroup::WorkGroupManager::instance()->get_default_workgroup());
         return raw_ctx;
     }
 }
