@@ -1855,10 +1855,10 @@ public class LowCardinalityTest extends PlanTestBase {
                 "AND d_date<='2023-03-26' GROUP BY c_mr;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "10:Decode\n" +
-                "  |  <dict id 55> : <string id 23>\n" +
+                "  |  <dict id 54> : <string id 23>\n" +
                 "  |  \n" +
                 "  9:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(24: fee_zb)\n" +
-                "  |  group by: 55: c_mr");
+                "  |  group by: 54: c_mr");
     }
 }
