@@ -31,7 +31,7 @@ std::string string_2_asc(const std::string& input) {
     }
     std::string output;
     for (int i = 0; i < input.size(); i++) {
-        output += to_string(int(input[i]));
+        output += std::to_string(int(input[i]));
         if (i != input.size() - 1) {
             output += " ";
         }
