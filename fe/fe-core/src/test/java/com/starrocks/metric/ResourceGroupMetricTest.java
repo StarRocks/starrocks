@@ -37,7 +37,6 @@ public class ResourceGroupMetricTest {
     public void testResourceGroupMetrics() {
         ConnectContext ctx = new ConnectContext();
         SessionVariable sessionVariable = new SessionVariable();
-        sessionVariable.setEnableResourceGroup(true);
         ctx.setSessionVariable(sessionVariable);
 
         ResourceGroup wg1 = new ResourceGroup();
