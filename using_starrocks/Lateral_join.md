@@ -42,7 +42,7 @@ FROM tests, UNNEST(scores) AS t;
 >
 > 多列 Unnest 操作需要指定别名。例如：`select v1, t1.unnest as v2, t2.unnest as v3 from lateral_test, unnest(v2) t1 ,unnest(v3) t2;`。
 
-StarRocks 支持的 Bitmap、String、Array、Column 之间的类型转化关系如下。
+StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系如下。
 
 ![Lateral Join 中数据类型间的转化](../assets/lateral_join_type_conversion.png)
 
