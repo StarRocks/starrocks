@@ -46,6 +46,7 @@ Status LocalExchangeSinkOperator::set_finishing(RuntimeState* state) {
 
 Status LocalExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     auto res = _exchanger->accept(chunk, _driver_sequence);
+    // @TODO duplicate compute
     _peak_memory_usage_counter->set(_exchanger->get_memory_usage());
     return res;
 }

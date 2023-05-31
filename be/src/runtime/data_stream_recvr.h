@@ -223,6 +223,8 @@ private:
     RuntimeProfile::Counter* _sender_wait_lock_timer = nullptr;
 
     RuntimeProfile::Counter* _buffer_unplug_counter = nullptr;
+    // @TODO peak memory usage
+    RuntimeProfile::HighWaterMarkCounter* _peak_buffer_mem_bytes = nullptr;
 
     // Sub plan query statistics receiver.
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr;
