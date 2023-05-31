@@ -382,8 +382,8 @@ public class ExpressionTest extends PlanTestBase {
                         "count(case when SUBSTR(DATE_FORMAT('2020-09-02 23:59:59', '%Y-%m'), 6) > 0 then v3 else v2 "
                         + "end) from t0";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("<slot 10> : substr('2020-09', 6)"));
-        Assert.assertTrue(planFragment.contains("  |  <slot 4> : if(12: expr, 1: v1, 2: v2)"));
+        assertContains(planFragment, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: max(1: v1), min(2: v2), count(3: v3)");
     }
 
     @Test

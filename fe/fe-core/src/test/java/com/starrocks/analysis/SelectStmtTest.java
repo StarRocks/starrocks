@@ -98,8 +98,7 @@ public class SelectStmtTest {
                 .withTable(createBaseAllStmtStr)
                 .withTable(createPratitionTableStr)
                 .withTable(createTable1)
-                .withTable(createDateTblStmtStr)
-                .withTable(createPratitionTableStr);
+                .withTable(createDateTblStmtStr);
     }
 
     @Test
