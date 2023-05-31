@@ -735,10 +735,10 @@ public class GlobalStateMgr {
 
         this.binlogManager = new BinlogManager();
 
-        if (!RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
-            this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
-        } else {
+        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
+        } else {
+            this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
 
         GlobalStateMgr gsm = this;

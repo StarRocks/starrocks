@@ -155,6 +155,13 @@ public class StorageVolume {
                 String.valueOf(comment)));
     }
 
+    public static FileStoreInfo createFileStoreInfo(String name, String svt,
+                                                    List<String> locations, Map<String, String> params,
+                                                    boolean enabled, String comment) throws AnalysisException {
+        StorageVolume sv = new StorageVolume("", name, svt, locations, params, enabled, comment);
+        return sv.toFileStoreInfo();
+    }
+
     public FileStoreInfo toFileStoreInfo() {
         FileStoreInfo fsInfo = cloudConfiguration.toFileStoreInfo();
         FileStoreInfo.Builder builder = fsInfo.toBuilder();

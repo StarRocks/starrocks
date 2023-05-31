@@ -42,8 +42,9 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             if (exists(name)) {
                 throw new AlreadyExistsException(String.format("Storage volume '%s' already exists", name));
             }
-            StorageVolume sv = new StorageVolume("", name, svType, locations, params, enabled.orElse(true), comment);
-            return GlobalStateMgr.getCurrentState().getStarOSAgent().addFileStore(sv.toFileStoreInfo());
+            FileStoreInfo fileStoreInfo = StorageVolume.createFileStoreInfo(name, svType,
+                    locations, params, enabled.orElse(true), comment);
+            return GlobalStateMgr.getCurrentState().getStarOSAgent().addFileStore(fileStoreInfo);
         }
     }
 
