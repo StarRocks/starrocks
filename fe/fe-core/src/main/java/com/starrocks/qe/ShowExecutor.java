@@ -68,6 +68,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetadataViewer;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Replica;
@@ -1052,9 +1053,11 @@ public class ShowExecutor {
         if (table.isHiveTable() || table.isHudiTable()) {
             location = ((HiveMetaStoreTable) table).getTableLocation();
         } else if (table.isIcebergTable()) {
-            location = ((IcebergTable) table).getTableLocation();
+            location = table.getTableLocation();
         } else if (table.isDeltalakeTable()) {
-            location = ((DeltaLakeTable) table).getTableLocation();
+            location = table.getTableLocation();
+        } else if (table.isPaimonTable()) {
+            location = table.getTableLocation();
         }
 
         if (!Strings.isNullOrEmpty(location)) {
