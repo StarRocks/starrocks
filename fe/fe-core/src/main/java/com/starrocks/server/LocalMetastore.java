@@ -153,6 +153,11 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
@@ -4538,12 +4543,11 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public long loadCluster(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
-            int clusterCount = dis.readInt();
-            checksum ^= clusterCount;
-            for (long i = 0; i < clusterCount; ++i) {
-                final Cluster cluster = Cluster.read(dis);
-                checksum ^= cluster.getId();
+        int clusterCount = dis.readInt();
+        checksum ^= clusterCount;
+        for (long i = 0; i < clusterCount; ++i) {
+            final Cluster cluster = Cluster.read(dis);
+            checksum ^= cluster.getId();
 
                 Preconditions.checkState(cluster.isDefaultCluster(), "Cluster must be default_cluster");
                 List<Long> latestBackendIds = stateMgr.getClusterInfo().getBackendIds();
@@ -4589,6 +4593,7 @@ public class LocalMetastore implements ConnectorMetadata {
         return checksum;
     }
 
+    // TODO [meta-format-change] deprecated
     public void initDefaultCluster() {
         final List<Long> backendList = Lists.newArrayList();
         final List<Backend> defaultClusterBackends = systemInfoService.getBackends();
@@ -5325,6 +5330,84 @@ public class LocalMetastore implements ConnectorMetadata {
         Long oldId = tableIdToIncrementId.putIfAbsent(tableId, id);
         if (oldId != null) {
             tableIdToIncrementId.replace(tableId, id);
+        }
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        // Don't write system db meta
+        Map<Long, Database> idToDbNormal = idToDb.entrySet().stream().filter(entry -> entry.getKey() > NEXT_ID_INIT_VALUE)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        int tableSize = 0;
+        for (Database database : idToDbNormal.values()) {
+            tableSize += database.getTableNumber();
+        }
+        int cnt = 1 + idToDbNormal.size() + tableSize + 1;
+
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.LOCAL_META_STORE, cnt);
+
+        writer.writeJson(idToDbNormal.size());
+        for (Database database : idToDbNormal.values()) {
+            writer.writeJson(database);
+            List<Table> tables = database.getTables();
+            for (Table table : tables) {
+                writer.writeJson(table);
+            }
+        }
+
+        AutoIncrementInfo info = new AutoIncrementInfo(tableIdToIncrementId);
+        writer.writeJson(info);
+
+        writer.close();
+    }
+
+    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.LOCAL_META_STORE);
+        try {
+            int dbSize = reader.readJson(int.class);
+            for (int i = 0; i < dbSize; ++i) {
+                Database db = reader.readJson(Database.class);
+                int tableSize = reader.readInt();
+                for (int j = 0; j < tableSize; ++j) {
+                    Table table = reader.readJson(Table.class);
+                    db.createTableWithLock(table, true);
+                }
+
+                idToDb.put(db.getId(), db);
+                fullNameToDb.put(db.getFullName(), db);
+                stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
+                db.getMaterializedViews().forEach(Table::onCreate);
+                db.getHiveTables().forEach(Table::onCreate);
+            }
+
+
+            // put built-in database into local metastore
+            InfoSchemaDb infoSchemaDb = new InfoSchemaDb();
+            Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
+                    "InfoSchemaDb id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+            idToDb.put(infoSchemaDb.getId(), infoSchemaDb);
+            fullNameToDb.put(infoSchemaDb.getFullName(), infoSchemaDb);
+
+            if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
+                LOG.warn("Since the the database of starrocks already exists, " +
+                        "the system will not automatically create the database of starrocks for system.");
+            } else {
+                StarRocksDb starRocksDb = new StarRocksDb();
+                Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
+                        "starocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+                idToDb.put(starRocksDb.getId(), starRocksDb);
+                fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
+            }
+
+            AutoIncrementInfo autoIncrementInfo = reader.readJson(AutoIncrementInfo.class);
+            for (Map.Entry<Long, Long> entry : autoIncrementInfo.tableIdToIncrementId().entrySet()) {
+                Long tableId = entry.getKey();
+                Long id = entry.getValue();
+
+                tableIdToIncrementId.put(tableId, id);
+            }
+
+        } finally {
+            reader.close();
         }
     }
 }

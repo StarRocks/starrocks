@@ -1429,14 +1429,14 @@ public class GlobalStateMgr {
                 checksum = localMetastore.loadAutoIncrementId(dis, checksum);
                 remoteChecksum = dis.readLong();
                 // ** NOTICE **: always add new code at the end
+
+                Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
             }
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
             dis.close();
         }
-
-        Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
 
         if (isUsingNewPrivilege() && needUpgradedToNewPrivilege() && !isLeader() && !isCheckpointThread()) {
             LOG.warn(

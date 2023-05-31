@@ -59,7 +59,15 @@ public enum SRMetaBlockID {
 
     GLOBAL_FUNCTION_MGR(20),
 
-    BACKUP_MGR(21);
+    BACKUP_MGR(21),
+
+    LOCAL_META_STORE(22),
+
+    CATALOG_RECYCLE_BIN(23),
+
+    COLOCATE_TABLE_INDEX(24),
+
+    VARIABLE_MGR(25);
 
     @SerializedName("i")
     private final int id;

@@ -667,8 +667,6 @@ public class AuthenticationMgr {
                 }
             } catch (AuthenticationException e) {
                 throw new RuntimeException(e);
-            } finally {
-                reader.close();
             }
             LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
 
