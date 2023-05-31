@@ -281,6 +281,12 @@ statement
     | descStorageVolumeStatement
     | setDefaultStorageVolumeStatement
 
+    // Pipe Statement
+    | createPipeStatement
+    | dropPipeStatement
+    | alterPipeStatement
+    | showPipeStatement
+
     //Unsupported Statement
     | unsupportedStatement
     ;
@@ -1694,6 +1700,25 @@ dropFileStatement
 showSmallFilesStatement
     : SHOW FILE ((FROM | IN) catalog=qualifiedName)?
     ;
+// -------------------------------------------- Pipe Statement ---------------------------------------------------------
+
+createPipeStatement
+    : CREATE PIPE (IF NOT EXISTS)? identifier
+        AS queryStatement
+    ;
+
+dropPipeStatement
+    : DROP PIPE (IF EXISTS)? identifier
+    ;
+
+alterPipeStatement
+    : ALTER PIPE identifier
+    ;
+
+showPipeStatement
+    : SHOW PIPES
+    ;
+
 
 // ------------------------------------------- Set Statement -----------------------------------------------------------
 

@@ -166,6 +166,7 @@ import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.Load;
+import com.starrocks.load.PipeManager;
 import com.starrocks.load.loadv2.LoadEtlChecker;
 import com.starrocks.load.loadv2.LoadJobScheduler;
 import com.starrocks.load.loadv2.LoadLoadingChecker;
@@ -526,6 +527,8 @@ public class GlobalStateMgr {
 
     private StorageVolumeMgr storageVolumeMgr;
 
+    private PipeManager pipeManager;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -738,6 +741,7 @@ public class GlobalStateMgr {
         this.shardDeleter = new ShardDeleter();
 
         this.binlogManager = new BinlogManager();
+        this.pipeManager = new PipeManager();
 
         if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
@@ -968,6 +972,10 @@ public class GlobalStateMgr {
 
     public StorageVolumeMgr getStorageVolumeMgr() {
         return storageVolumeMgr;
+    }
+
+    public PipeManager getPipeManager() {
+        return pipeManager;
     }
 
     public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {

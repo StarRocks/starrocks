@@ -64,6 +64,7 @@ import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreatePipeStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -81,6 +82,7 @@ import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
+import com.starrocks.sql.ast.DropPipeStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
@@ -890,6 +892,22 @@ public class DDLStmtExecutor {
                                                                    ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() ->
                     context.getGlobalStateMgr().getStorageVolumeMgr().setDefaultStorageVolume(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreatePipeStatement(CreatePipeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getPipeManager().createPipe(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropPipeStatement(DropPipeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getPipeManager().dropPipe(stmt)
             );
             return null;
         }

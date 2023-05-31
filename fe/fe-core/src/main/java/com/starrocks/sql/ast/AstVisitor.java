@@ -776,6 +776,23 @@ public abstract class AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    // -------------------------------------------- Pipe Statement -----------------------------------------------------
+    public R visitCreatePipeStatement(CreatePipeStmt statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitDropPipeStatement(DropPipeStmt statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitAlterPipeStatement(AlterPipeStmt statement, C context) {
+        return visitNode(statement, context);
+    }
+
+    public R visitShowPipeStatement(ShowPipeStmt statement, C context) {
+        return visitNode(statement, context);
+    }
+
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------
 
     public R visitUnsupportedStatement(UnsupportedStmt statement, C context) {

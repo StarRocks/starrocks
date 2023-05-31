@@ -163,6 +163,7 @@ import com.starrocks.sql.ast.CreateImageClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreatePipeStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -197,6 +198,7 @@ import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropObserverClause;
 import com.starrocks.sql.ast.DropPartitionClause;
+import com.starrocks.sql.ast.DropPipeStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
@@ -3710,6 +3712,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String newPartitionName = ((Identifier) visit(context.newParName)).getValue();
 
         return new PartitionRenameClause(partitionName, newPartitionName, createPos(context));
+    }
+
+    // -------------------------------------------- Pipe Statement -----------------------------------------------------
+    @Override
+    public ParseNode visitCreatePipeStatement(StarRocksParser.CreatePipeStatementContext context) {
+        String pipeName = String.valueOf((Identifier) visit(context.identifier()));
+        boolean ifNotExists = context.IF() != null;
+        ParseNode insertNode = visit(context.queryStatement());
+        if (!(insertNode instanceof InsertStmt)) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedStatement(insertNode.toSql()),
+                    context.queryStatement());
+        }
+
+        return new CreatePipeStmt(ifNotExists, pipeName, (InsertStmt) insertNode, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropPipeStatement(StarRocksParser.DropPipeStatementContext context) {
+        String pipeName = String.valueOf((Identifier) visit(context.identifier()));
+        return new DropPipeStmt(pipeName, createPos(context));
     }
 
     // ------------------------------------------- Query Statement -----------------------------------------------------
