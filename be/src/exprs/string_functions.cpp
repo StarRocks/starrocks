@@ -1750,10 +1750,10 @@ static inline const char* skip_leading_spaces(const char* begin, const char* end
 #endif
     if constexpr (trim_single) {
         if (remove[0] == ' ') {
-            for (; p < end && * p == ' '; ++p) {
+            for (; p < end && *p == ' '; ++p) {
             }
         } else {
-            for (; p < end && * p == remove[0]; ++p) {
+            for (; p < end && *p == remove[0]; ++p) {
             }
         }
     } else if constexpr (!trim_utf8) {
