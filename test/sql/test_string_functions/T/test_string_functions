@@ -42,3 +42,33 @@ select rpad(c0, c1, ' ') from t0;
 select rpad(c0, c1, '中文，') from t0;
 select rpad(c0, c1, '') from t0;
 select rpad(c0, c1) from t0;
+
+-- function: split_part
+select split_part("hello world", " ", 1);
+select split_part("hello world", " ", 2);
+select split_part("hello world", " ", -1);
+select split_part("hello world", " ", -2);
+select split_part("2023年5月23号", "月", 1);
+select split_part("2023年5月23号", "月", -1);
+select split_part("abc##567###234", "##", 1);
+select split_part("abc##567###234", "##", 2);
+select split_part("abc##567###234", "##", -1);
+select split_part("abc##567###234", "##", -2);
+
+create table t1(c0 varchar(20), c1 varchar(20))
+        DUPLICATE KEY(c0)
+        DISTRIBUTED BY HASH(c0)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- insert 1 rows
+insert into t1 values ('hello world', 'abc##567###234');
+select split_part(c0, " ", 1) from t1;
+select split_part(c0, " ", 2) from t1;
+select split_part(c0, " ", -1) from t1;
+select split_part(c0, " ", -2) from t1;
+select split_part(c1, "##", 1) from t1;
+select split_part(c1, "##", 2) from t1;
+select split_part(c1, "##", 3) from t1;
+select split_part(c1, "##", -1) from t1;
+select split_part(c1, "##", -2) from t1;
+select split_part(c1, "##", -3) from t1;
