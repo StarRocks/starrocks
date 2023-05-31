@@ -640,14 +640,18 @@ TimestampValue timestamp_add(TimestampValue tsv, int count) {
     return tsv.add<UNIT>(count);
 }
 
-#define DEFINE_TIME_ADD_FN(FN, UNIT)                                                                               \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { return timestamp_add<UNIT>(timestamp, value); } \
-                                                                                                                   \
+#define DEFINE_TIME_ADD_FN(FN, UNIT)                               \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { \
+        return timestamp_add<UNIT>(timestamp, value);              \
+    }                                                              \
+                                                                   \
     DEFINE_TIME_CALC_FN(FN, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
-#define DEFINE_TIME_SUB_FN(FN, UNIT)                                                                                \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { return timestamp_add<UNIT>(timestamp, -value); } \
-                                                                                                                    \
+#define DEFINE_TIME_SUB_FN(FN, UNIT)                               \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { \
+        return timestamp_add<UNIT>(timestamp, -value);             \
+    }                                                              \
+                                                                   \
     DEFINE_TIME_CALC_FN(FN, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
 #define DEFINE_TIME_ADD_AND_SUB_FN(FN_PREFIX, UNIT) \
@@ -2371,11 +2375,11 @@ StatusOr<ColumnPtr> TimeFunctions::last_day(FunctionContext* context, const Colu
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
             result.append_null();
-            continue ;
+            continue;
         }
 
         DateValue date = (DateValue)data_column.value(row);
-        date.set_end_of_month();                // default month
+        date.set_end_of_month(); // default month
         result.append(date);
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -2390,7 +2394,7 @@ StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format_const(std::string& form
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
             result.append_null();
-            continue ;
+            continue;
         }
 
         DateValue date = (DateValue)data_column.value(row);
@@ -2406,8 +2410,7 @@ StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format_const(std::string& form
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format_optional(FunctionContext* context,
-                                                                  const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format_optional(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_DATETIME> data_column(columns[0]);
     ColumnViewer<TYPE_VARCHAR> format_column(columns[1]);
     auto size = columns[0]->size();
@@ -2416,13 +2419,14 @@ StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format_optional(FunctionContex
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row) || format_column.is_null(row)) {
             result.append_null();
-            continue ;
+            continue;
         }
 
         DateValue date = (DateValue)data_column.value(row);
         Slice format_content = format_column.value(row);
         if (!(format_content == "year" || format_content == "month" || format_content == "quarter")) {
-            Status::InvalidArgument( "last day optional in {month, quarter, year}, but optional is " + format_content.to_string());
+            Status::InvalidArgument("last day optional in {month, quarter, year}, but optional is " +
+                                    format_content.to_string());
         }
 
         if (format_content == "year") {
@@ -2463,11 +2467,11 @@ Status TimeFunctions::last_day_prepare(FunctionContext* context, FunctionContext
     ColumnPtr column = context->get_constant_column(1);
     Slice optional = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
     if (!(optional == "year" || optional == "month" || optional == "quarter")) {
-        return Status::InvalidArgument("last day optional in {month, quarter, year}, but optional is " + optional.to_string());
+        return Status::InvalidArgument("last day optional in {month, quarter, year}, but optional is " +
+                                       optional.to_string());
     }
     state->optional_content = optional;
     return Status::OK();
-
 }
 
 Status TimeFunctions::last_day_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
@@ -2481,5 +2485,5 @@ Status TimeFunctions::last_day_close(FunctionContext* context, FunctionContext::
     }
     return Status::OK();
 }
-// last_day end
+
 } // namespace starrocks

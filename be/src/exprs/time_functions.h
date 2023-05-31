@@ -697,10 +697,9 @@ private:
     static StatusOr<ColumnPtr> convert_tz_const(FunctionContext* context, const Columns& columns,
                                                 const cctz::time_zone& from, const cctz::time_zone& to);
 
-    static StatusOr<ColumnPtr> _last_day_with_format_optional(FunctionContext* context,
-                                                                      const Columns& columns);
+    static StatusOr<ColumnPtr> _last_day_with_format_optional(FunctionContext* context, const Columns& columns);
     static StatusOr<ColumnPtr> _last_day_with_format_const(std::string& format_content, FunctionContext* context,
-                                                                   const Columns& columns);
+                                                           const Columns& columns);
 
 public:
     static TimestampValue start_of_time_slice;
