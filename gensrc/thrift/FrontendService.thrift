@@ -1095,6 +1095,15 @@ struct TTableInfo {
     21: optional string table_comment
 }
 
+struct TGetProfileRequest {
+    1: optional list<string> query_id
+}
+
+struct TGetProfileResponse {
+    1: optional Status.TStatus status
+    2: optional list<string> query_result
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1106,6 +1115,8 @@ service FrontendService {
     TGetUserPrivsResult getUserPrivs(1:TGetUserPrivsParams params)
     TGetDBPrivsResult getDBPrivs(1:TGetDBPrivsParams params)
     TGetTablePrivsResult getTablePrivs(1:TGetTablePrivsParams params)
+
+    TGetProfileResponse getQueryProfile(1:TGetProfileRequest request)
 
     TDescribeTableResult describeTable(1:TDescribeTableParams params)
     TShowVariableResult showVariables(1:TShowVariableRequest params)
