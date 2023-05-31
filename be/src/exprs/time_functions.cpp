@@ -641,7 +641,7 @@ TimestampValue timestamp_add(TimestampValue tsv, int count) {
 }
 
 #define DEFINE_TIME_ADD_FN(FN, UNIT)                               \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value) { \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, timestamp, value ) { \
         return timestamp_add<UNIT>(timestamp, value);              \
     }                                                              \
                                                                    \
