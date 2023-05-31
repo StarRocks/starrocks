@@ -33,7 +33,9 @@ import mockit.Mocked;
 import org.apache.commons.collections.map.HashedMap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -42,6 +44,17 @@ import java.util.Map;
 
 public class ColocateTableIndexTest {
     private static final Logger LOG = LogManager.getLogger(ColocateTableIndexTest.class);
+
+    @Before
+    public void setUp() {
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @After
+    public void teardown() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
 
     /**
      * [
@@ -64,7 +77,6 @@ public class ColocateTableIndexTest {
 
     @Test
     public void testDropTable() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
 
         // create db1
@@ -192,7 +204,6 @@ public class ColocateTableIndexTest {
 
     @Test
     public void testCleanUp() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
 
@@ -283,5 +294,37 @@ public class ColocateTableIndexTest {
 
         colocateTableIndex.removeTable(tableId, null, false /* isReplay */);
         Assert.assertFalse(colocateTableIndex.isLakeColocateTable(tableId));
+    }
+
+    @Test
+    public void testSaveLoadJsonFormatImage() throws Exception {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        // create goodDb
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils
+                .parseStmtWithNewParser("create database db_image;", connectContext);
+        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getDb("db_image");
+        // create goodtable
+        String sql = "CREATE TABLE " +
+                "db_image.tbl1 (k1 int, k2 int, k3 varchar(32))\n" +
+                "PRIMARY KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1)\n" +
+                "BUCKETS 4\n" +
+                "PROPERTIES(\"colocate_with\"=\"goodGroup\", \"replication_num\" = \"1\");\n";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        OlapTable table = (OlapTable) db.getTable("tbl1");
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        colocateTableIndex.saveColocateTableIndexV2(image.getDataOutputStream());
+
+        ColocateTableIndex followerIndex = new ColocateTableIndex();
+        followerIndex.loadColocateTableIndexV2(image.getDataInputStream());
+        Assert.assertEquals(colocateTableIndex.getAllGroupIds(), followerIndex.getAllGroupIds());
+        Assert.assertEquals(colocateTableIndex.getGroup(table.getId()), followerIndex.getGroup(table.getId()));
+
+        UtFrameUtils.tearDownForPersisTest();
     }
 }

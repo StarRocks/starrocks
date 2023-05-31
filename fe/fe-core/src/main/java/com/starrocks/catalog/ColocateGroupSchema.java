@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -51,9 +52,13 @@ import java.util.stream.Collectors;
  * This class saves the schema of a colocation group
  */
 public class ColocateGroupSchema implements Writable {
+    @SerializedName("gi")
     private GroupId groupId;
+    @SerializedName("ct")
     private List<Type> distributionColTypes = Lists.newArrayList();
+    @SerializedName("bn")
     private int bucketsNum;
+    @SerializedName("rn")
     private short replicationNum;
 
     private ColocateGroupSchema() {

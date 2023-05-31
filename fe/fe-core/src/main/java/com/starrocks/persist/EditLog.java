@@ -585,7 +585,8 @@ public class EditLog {
                     globalStateMgr.replayTruncateTable(info);
                     break;
                 }
-                case OperationType.OP_COLOCATE_ADD_TABLE: {
+                case OperationType.OP_COLOCATE_ADD_TABLE:
+                case OperationType.OP_COLOCATE_ADD_TABLE_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayAddTableToGroup(info);
                     break;
@@ -595,22 +596,26 @@ public class EditLog {
                     globalStateMgr.getColocateTableIndex().replayRemoveTable(info);
                     break;
                 }
-                case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ: {
+                case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ:
+                case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayAddBackendsPerBucketSeq(info);
                     break;
                 }
-                case OperationType.OP_COLOCATE_MARK_UNSTABLE: {
+                case OperationType.OP_COLOCATE_MARK_UNSTABLE:
+                case OperationType.OP_COLOCATE_MARK_UNSTABLE_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayMarkGroupUnstable(info);
                     break;
                 }
-                case OperationType.OP_COLOCATE_MARK_STABLE: {
+                case OperationType.OP_COLOCATE_MARK_STABLE:
+                case OperationType.OP_COLOCATE_MARK_STABLE_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayMarkGroupStable(info);
                     break;
                 }
-                case OperationType.OP_MODIFY_TABLE_COLOCATE: {
+                case OperationType.OP_MODIFY_TABLE_COLOCATE:
+                case OperationType.OP_MODIFY_TABLE_COLOCATE_V2: {
                     final TablePropertyInfo info = (TablePropertyInfo) journal.getData();
                     globalStateMgr.replayModifyTableColocate(info);
                     break;
@@ -1447,7 +1452,11 @@ public class EditLog {
     }
 
     public void logColocateAddTable(ColocatePersistInfo info) {
-        logEdit(OperationType.OP_COLOCATE_ADD_TABLE, info);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_COLOCATE_ADD_TABLE_V2, info);
+        } else {
+            logEdit(OperationType.OP_COLOCATE_ADD_TABLE, info);
+        }
     }
 
     public void logColocateRemoveTable(ColocatePersistInfo info) {
@@ -1455,19 +1464,35 @@ public class EditLog {
     }
 
     public void logColocateBackendsPerBucketSeq(ColocatePersistInfo info) {
-        logEdit(OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ, info);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2, info);
+        } else {
+            logEdit(OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ, info);
+        }
     }
 
     public void logColocateMarkUnstable(ColocatePersistInfo info) {
-        logEdit(OperationType.OP_COLOCATE_MARK_UNSTABLE, info);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_COLOCATE_MARK_UNSTABLE_V2, info);
+        } else {
+            logEdit(OperationType.OP_COLOCATE_MARK_UNSTABLE, info);
+        }
     }
 
     public void logColocateMarkStable(ColocatePersistInfo info) {
-        logEdit(OperationType.OP_COLOCATE_MARK_STABLE, info);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_COLOCATE_MARK_STABLE_V2, info);
+        } else {
+            logEdit(OperationType.OP_COLOCATE_MARK_STABLE, info);
+        }
     }
 
     public void logModifyTableColocate(TablePropertyInfo info) {
-        logEdit(OperationType.OP_MODIFY_TABLE_COLOCATE, info);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_MODIFY_TABLE_COLOCATE_V2, info);
+        } else {
+            logEdit(OperationType.OP_MODIFY_TABLE_COLOCATE, info);
+        }
     }
 
     public void logHeartbeat(HbPackage hbPackage) {
