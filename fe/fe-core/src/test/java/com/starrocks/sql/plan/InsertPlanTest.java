@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
@@ -581,6 +582,7 @@ public class InsertPlanTest extends PlanTestBase {
     public void testInsertExchange() throws Exception {
         FeConstants.runningUnitTest = true;
         InsertPlanner.enableSingleReplicationShuffle = true;
+        Config.eliminate_shuffle_load_by_replicated_storage = false;
         {
             // keysType is DUP_KEYS
             String sql = "explain insert into t0 select * from t0";
@@ -701,6 +703,7 @@ public class InsertPlanTest extends PlanTestBase {
         }
         InsertPlanner.enableSingleReplicationShuffle = false;
         FeConstants.runningUnitTest = false;
+        Config.eliminate_shuffle_load_by_replicated_storage = true;
     }
 
     @Test
