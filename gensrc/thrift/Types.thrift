@@ -387,7 +387,7 @@ enum TTableType {
     MATERIALIZED_VIEW,
     FILE_TABLE,
     DELTALAKE_TABLE,
-    TEMP_EXT_TABLE
+    TABLE_FUNCTION_TABLE
 }
 
 enum TKeysType {

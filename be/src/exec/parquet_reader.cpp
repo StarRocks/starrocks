@@ -241,14 +241,14 @@ Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
             if (logical_type->is_string()) {
                 tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
             } else if (logical_type->is_decimal()) {
-                tp = TypeDescriptor(TYPE_DATETIME);
+                tp = TypeDescriptor(TYPE_DECIMAL);
             } else {
                 tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
             }
             break;
         case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
             if (logical_type->is_decimal()) {
-                tp = TypeDescriptor(TYPE_DATETIME);
+                tp = TypeDescriptor(TYPE_DECIMAL);
             } else {
                 tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
             }
