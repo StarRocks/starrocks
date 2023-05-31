@@ -2847,6 +2847,12 @@ static ColumnPtr regexp_replace_use_hyperscan(StringFunctionsState* state, const
         CHECK(false) << "ERROR: Unable to clone scratch space."
                      << " status: " << status;
     }
+    DeferOp op([&] {
+        hs_error_t st;
+        if ((st = hs_free_scratch(scratch)) != HS_SUCCESS) {
+            CHECK(false) << "ERROR: free scratch space failure. status: " << st;
+        }
+    });
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
@@ -2868,7 +2874,7 @@ static ColumnPtr regexp_replace_use_hyperscan(StringFunctionsState* state, const
         const char* data =
                 (value_size) ? str_viewer.value(row).data : &StringFunctions::_DUMMY_STRING_FOR_EMPTY_PATTERN;
 
-        auto status = hs_scan(
+        auto st = hs_scan(
                 // Use &_DUMMY_STRING_FOR_EMPTY_PATTERN instead of nullptr to avoid crash.
                 state->database, data, value_size, 0, scratch,
                 [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
@@ -2885,7 +2891,7 @@ static ColumnPtr regexp_replace_use_hyperscan(StringFunctionsState* state, const
                     return 0;
                 },
                 &match_info_chain);
-        DCHECK(status == HS_SUCCESS || status == HS_SCAN_TERMINATED) << " status: " << status;
+        DCHECK(st == HS_SUCCESS || st == HS_SCAN_TERMINATED) << " status: " << st;
 
         std::string result_str;
         result_str.reserve(value_size);
