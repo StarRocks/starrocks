@@ -46,7 +46,7 @@ public class SharedNothingStorageVolumeMgrTest {
         storageParams.put(AWS_S3_REGION, "region");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
-        long storageVolumeId = svm.createStorageVolume(svKey, "S3", locations, storageParams, Optional.empty(), "");
+        String storageVolumeId = svm.createStorageVolume(svKey, "S3", locations, storageParams, Optional.empty(), "");
         Assert.assertEquals(true, svm.exists(svKey));
         StorageVolume sv = svm.getStorageVolumeByName(svKey);
         Assert.assertEquals(sv.getId(), svm.getStorageVolume(storageVolumeId).getId());
@@ -102,13 +102,13 @@ public class SharedNothingStorageVolumeMgrTest {
         svm.bindDbToStorageVolume(sv.getId(), 1L);
         svm.bindTableToStorageVolume(sv.getId(), 1L);
         try {
-            svm.unbindDbToStorageVolume(-1L, 1L);
+            svm.unbindDbToStorageVolume("-1", 1L);
             Assert.fail();
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("Storage volume does not exist"));
         }
         try {
-            svm.unbindTableToStorageVolume(-1L, 1L);
+            svm.unbindTableToStorageVolume("-1", 1L);
             Assert.fail();
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("Storage volume does not exist"));

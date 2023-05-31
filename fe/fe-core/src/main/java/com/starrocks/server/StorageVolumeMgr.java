@@ -39,19 +39,19 @@ public abstract class StorageVolumeMgr {
     private static final String ENABLED = "enabled";
 
     @SerializedName("defaultStorageVolumeId")
-    protected long defaultStorageVolumeId = -1;
+    protected String defaultStorageVolumeId = "";
 
     protected final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     // volume id to dbs
     @SerializedName("storageVolumeToDbs")
-    protected Map<Long, Set<Long>> storageVolumeToDbs = new HashMap<>();
+    protected Map<String, Set<Long>> storageVolumeToDbs = new HashMap<>();
 
     // volume id to tables
     @SerializedName("storageVolumeToTables")
-    protected Map<Long, Set<Long>> storageVolumeToTables = new HashMap<>();
+    protected Map<String, Set<Long>> storageVolumeToTables = new HashMap<>();
 
-    public Long createStorageVolume(CreateStorageVolumeStmt stmt)
+    public String createStorageVolume(CreateStorageVolumeStmt stmt)
             throws AlreadyExistsException, AnalysisException, DdlException {
         Map<String, String> params = new HashMap<>();
         Optional<Boolean> enabled = parseProperties(stmt.getProperties(), params);
@@ -59,7 +59,7 @@ public abstract class StorageVolumeMgr {
                 enabled, stmt.getComment());
     }
 
-    public abstract Long createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
+    public abstract String createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
                                     Optional<Boolean> enabled, String comment)
             throws AlreadyExistsException, AnalysisException, DdlException;
 
@@ -84,7 +84,7 @@ public abstract class StorageVolumeMgr {
 
     public abstract void setDefaultStorageVolume(String svKey) throws AnalysisException, DdlException;
 
-    public long getDefaultStorageVolumeId() {
+    public String getDefaultStorageVolumeId() {
         return defaultStorageVolumeId;
     }
 
@@ -92,7 +92,7 @@ public abstract class StorageVolumeMgr {
 
     public abstract StorageVolume getStorageVolumeByName(String svKey) throws AnalysisException;
 
-    public abstract StorageVolume getStorageVolume(long storageVolumeId) throws AnalysisException;
+    public abstract StorageVolume getStorageVolume(String storageVolumeId) throws AnalysisException;
 
     public abstract List<String> listStorageVolumeNames() throws DdlException;
 
@@ -106,7 +106,7 @@ public abstract class StorageVolumeMgr {
         return enabled;
     }
 
-    public void bindDbToStorageVolume(long svId, long dbId) {
+    public void bindDbToStorageVolume(String svId, long dbId) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Set<Long> dbs = storageVolumeToDbs.getOrDefault(svId, new HashSet<>());
             dbs.add(dbId);
@@ -114,7 +114,7 @@ public abstract class StorageVolumeMgr {
         }
     }
 
-    public void unbindDbToStorageVolume(long svId, long dbId) {
+    public void unbindDbToStorageVolume(String svId, long dbId) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(storageVolumeToDbs.containsKey(svId), "Storage volume does not exist");
             Set<Long> dbs = storageVolumeToDbs.get(svId);
@@ -125,7 +125,7 @@ public abstract class StorageVolumeMgr {
         }
     }
 
-    public void bindTableToStorageVolume(long svId, long tableId) {
+    public void bindTableToStorageVolume(String svId, long tableId) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Set<Long> tables = storageVolumeToTables.getOrDefault(svId, new HashSet<>());
             tables.add(tableId);
@@ -133,7 +133,7 @@ public abstract class StorageVolumeMgr {
         }
     }
 
-    public void unbindTableToStorageVolume(long svId, long tableId) {
+    public void unbindTableToStorageVolume(String svId, long tableId) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(storageVolumeToTables.containsKey(svId), "Storage volume does not exist");
             Set<Long> tables = storageVolumeToTables.get(svId);

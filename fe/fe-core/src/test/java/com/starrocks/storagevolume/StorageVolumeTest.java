@@ -62,7 +62,7 @@ public class StorageVolumeTest {
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
 
-        StorageVolume sv = new StorageVolume(1L, "test", "s3", Arrays.asList("s3://abc"),
+        StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
                 storageParams, true, "");
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
@@ -86,7 +86,7 @@ public class StorageVolumeTest {
         storageParams.put(AWS_S3_SECRET_KEY, "secret_key");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
 
-        StorageVolume sv = new StorageVolume(1L, "test", "s3", Arrays.asList("s3://abc"),
+        StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
                 storageParams, true, "");
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
@@ -112,7 +112,7 @@ public class StorageVolumeTest {
         storageParams.put(AWS_S3_USE_INSTANCE_PROFILE, "true");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
 
-        StorageVolume sv = new StorageVolume(1L, "test", "s3", Arrays.asList("s3://abc"),
+        StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
                 storageParams, true, "");
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
@@ -137,7 +137,7 @@ public class StorageVolumeTest {
         storageParams.put(AWS_S3_IAM_ROLE_ARN, "iam_role_arn");
         storageParams.put(AWS_S3_EXTERNAL_ID, "iam_role_arn");
 
-        StorageVolume sv = new StorageVolume(1L, "test", "s3", Arrays.asList("s3://abc"),
+        StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
                 storageParams, true, "");
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
@@ -167,7 +167,7 @@ public class StorageVolumeTest {
         storageParams.put(AWS_S3_EXTERNAL_ID, "iam_role_arn");
 
         try {
-            StorageVolume sv = new StorageVolume(1L, "test", "s3", Arrays.asList("s3://abc"),
+            StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
                     storageParams, true, "");
         } catch (AnalysisException e) {
             Assert.assertTrue(e.getMessage().contains("Storage params is not valid"));
@@ -187,7 +187,7 @@ public class StorageVolumeTest {
         storageParams.put("dfs.client.failover.proxy.provider",
                 "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
 
-        StorageVolume sv = new StorageVolume(1L, "test", "hdfs", Arrays.asList("hdfs://abc"),
+        StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
                 storageParams, true, "");
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
@@ -199,7 +199,7 @@ public class StorageVolumeTest {
         storageParams1.put("hadoop.security.authentication", "simple");
         storageParams1.put("username", "username");
         storageParams1.put("password", "password");
-        sv = new StorageVolume(2L, "test", "hdfs", Arrays.asList("hdfs://abc"),
+        sv = new StorageVolume("2", "test", "hdfs", Arrays.asList("hdfs://abc"),
                 storageParams1, true, "");
         cloudConfiguration = sv.getCloudConfiguration();
         Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
@@ -221,7 +221,7 @@ public class StorageVolumeTest {
         storageParams.put("dfs.client.failover.proxy.provider",
                 "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
 
-        StorageVolume sv = new StorageVolume(1L, "test", "hdfs", Arrays.asList("hdfs://abc"),
+        StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
                 storageParams, true, "");
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
@@ -237,7 +237,7 @@ public class StorageVolumeTest {
         storageParams.put("kerberos_principal", "nn/abc@ABC.COM");
 
         try {
-            StorageVolume sv = new StorageVolume(1L, "test", "hdfs", Arrays.asList("hdfs://abc"),
+            StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
                     storageParams, true, "");
         } catch (AnalysisException e) {
             Assert.assertTrue(e.getMessage().contains("Storage params is not valid"));
