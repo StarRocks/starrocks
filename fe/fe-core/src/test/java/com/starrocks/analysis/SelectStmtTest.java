@@ -439,6 +439,7 @@ public class SelectStmtTest {
         }
     }
 
+    @Test
     public void testAnalyzeDecimalArithmeticExprIdempotently()
             throws Exception {
         {
@@ -467,16 +468,13 @@ public class SelectStmtTest {
             String sql = " select c0, sum(1/(1+cast(substr('1.12',1,4) as decimal(24,4)))) as a, " +
                     "sum(1/(1+cast(substr('1.12',1,4) as decimal(24,4)))) as b from t0 group by c0;";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-            Assert.assertTrue(plan, plan.contains("PLAN FRAGMENT 0(F00)\n" +
-                    "  Output Exprs:1: c0 | 4: sum | 4: sum\n" +
+            Assert.assertTrue(plan, plan.contains("  Output Exprs:1: c0 | 4: sum | 4: sum\n" +
                     "  Input Partition: RANDOM\n" +
                     "  RESULT SINK\n" +
                     "\n" +
                     "  1:AGGREGATE (update finalize)\n" +
-                    "  |  aggregate: sum[(1 / 1 + cast(substr[('1.12', 1, 4); " +
-                    "args: VARCHAR,INT,INT; result: VARCHAR; args nullable: false; " +
-                    "result nullable: true] as DECIMAL128(24,4))); args: DECIMAL128; " +
-                    "result: DECIMAL128(38,6); args nullable: true; result nullable: true]\n" +
+                    "  |  aggregate: sum[(1 / 2.12); args: DECIMAL128; result: DECIMAL128(38,6);" +
+                    " args nullable: true; result nullable: true]\n" +
                     "  |  group by: [1: c0, VARCHAR, false]\n" +
                     "  |  cardinality: 1"));
         }
