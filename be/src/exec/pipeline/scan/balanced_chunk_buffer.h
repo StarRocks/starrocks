@@ -46,8 +46,6 @@ public:
     ChunkBufferLimiter* limiter() { return _limiter.get(); }
     void update_limiter(Chunk* chunk);
 
-    // @TODO memory_usage()
-
 private:
     struct LimiterContext {
         // ========================
