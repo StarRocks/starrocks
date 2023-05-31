@@ -8,7 +8,7 @@
 
 ## 前提条件
 
-如需使用 StarRocks 的 Java UDF 功能，您需要[安装 Apache Maven](https://maven.apache.org/download.cgi) 以创建并编写相关 Java 项目。
+如需使用 StarRocks 的 Java UDF 功能，您需要[安装 Apache Maven](https://maven.apache.org/download.cgi) 以创建并编写相关 Java 项目。同时，必须在服务器上安装 JDK 1.8。
 
 ## 开启 UDF
 

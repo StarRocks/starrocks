@@ -18,7 +18,7 @@ SHOW VARIABLES LIKE '%time_zone%';
 
 ### 设置变量
 
-变量一般可以设置为**全局**生效或**仅当前会话**生效。设置为全局生效后，**后续新的会话**连接中会使用新设置的值，而不影响当前会话；设置为仅当前会话生效时，变量仅对当前会话产生作用。
+变量一般可以设置为**全局**生效或**仅当前会话**生效。设置为全局生效后，**后续新的会话**连接中会使用新设置的值，当前会话还会继续使用之前设置的值；设置为仅当前会话生效时，变量仅对当前会话产生作用。
 
 通过 `SET <var_name>=xxx;` 语句设置的变量仅在当前会话生效。如：
 
@@ -291,7 +291,7 @@ SELECT /*+ SET_VAR
 
 * max_allowed_packet
 
-  用于兼容 JDBC 连接池 C3P0。该变量值决定了服务端发送给客户端或客户端发送给服务端的最大 packet 大小，默认为 32 MB。当客户端报 `PacketTooBigException` 异常时，可以考虑调大该值。
+  用于兼容 JDBC 连接池 C3P0。该变量值决定了服务端发送给客户端或客户端发送给服务端的最大 packet 大小，单位为 Byte，默认值为 32 MB。当客户端报 `PacketTooBigException` 异常时，可以考虑调大该值。
 
 * max_pushdown_conditions_per_column
 
@@ -347,7 +347,7 @@ SELECT /*+ SET_VAR
 
 * query_cache_type
 
-   用于兼容 JDBC 连接池 C3P0。 无实际作用。
+   用于兼容 JDBC 连接池 C3P0。无实际作用。
 
 * query_mem_limit
 
@@ -375,7 +375,7 @@ SELECT /*+ SET_VAR
 
 * query_timeout
 
-   用于设置查询超时，单位是「秒」。该变量会作用于当前连接中所有的查询语句，以及 INSERT 语句。默认为 300 秒，即 5 分钟。取值范围：1 ~ 259200。
+   用于设置查询超时时间，单位为秒。该变量会作用于当前连接中所有的查询语句，以及 INSERT 语句。默认为 300 秒，即 5 分钟。取值范围：1 ~ 259200。
 
 * resource_group
 
@@ -445,7 +445,7 @@ SELECT /*+ SET_VAR
 
 * wait_timeout
 
-  用于设置空闲连接的连接时长。当一个空闲连接在该时长内与 StarRocks 没有任何交互，则 StarRocks 会主动断开这个链接。默认为 8 小时，单位是「秒」。
+  用于设置空闲连接的连接时长，单位为秒。当一个空闲连接在该时长内与 StarRocks 没有任何交互，则 StarRocks 会主动断开这个链接。默认为 8 小时。
 
 * enable_global_runtime_filter
 
