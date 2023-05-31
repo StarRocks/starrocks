@@ -351,7 +351,6 @@ public class MaterializedViewAnalyzer {
             List<String> columnNames = statement.getQueryStatement().getQueryRelation()
                     .getRelationFields().getAllFields().stream()
                     .map(Field::getName).collect(Collectors.toList());
-            // List<Expr> outputExpressions = statement.getQueryStatement().getQueryRelation().getOutputExpression();
             Scope queryScope = statement.getQueryStatement().getQueryRelation().getScope();
             List<Field> relationFields = queryScope.getRelationFields().getAllFields();
 
