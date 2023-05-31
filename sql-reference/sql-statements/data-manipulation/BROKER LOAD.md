@@ -251,7 +251,7 @@ StarRocks 访问存储系统的认证配置。
 
 - HA 配置
 
-  可以为 HDFS 集群中的 NameNode 节点配置 HA 机制，从而确保发生 NameNode 节点切换时，StarRocks 能够自动识别新切换到的 NameNode 节点，包括如下两种场景：
+  可以为 HDFS 集群中的 NameNode 节点配置 HA 机制，从而确保发生 NameNode 节点切换时，StarRocks 能够自动识别新切换到的 NameNode 节点，包括如下几种场景：
 
   - 在单 HDFS 集群、并且配置了单 Kerberos 用户的场景下，可以采用有 Broker 的导入，也可以采用无 Broker 的导入。
   
