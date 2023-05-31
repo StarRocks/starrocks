@@ -14,10 +14,7 @@ In v2.4 and earlier, StarRocks depends on brokers to set up connections between 
 
 From v2.5 onwards, StarRocks no longer depends on brokers to set up connections between your StarRocks cluster and your external storage system when it runs a Broker Load job. Therefore, you no longer need to specify a broker in the load statement, but you still need to retain the `WITH BROKER` keyword. This is called "broker-free loading."
 
-When your data is stored in HDFS, however, broker-free loading may not work and you can resort to broker-based loading:
-
-- If you load data from multiple HDFS clusters, you need to deploy an independent broker group for each of these HDFS clusters.
-- If you load data from a single HDFS cluster and you have configured multiple Kerberos users, you need to deploy only one independent broker group for your HDFS cluster.
+When your data is stored in HDFS, you may encounter situations where broker-free loading does not work. This can happen when your data is stored across multiple HDFS clusters or within a single HDFS cluster that has multiple Kerberos users configured. In these situations, you can resort to using broker-based loading instead. To do this successfully, make sure that at least one independent broker group is deployed. For information about how to specify authentication configuration and HA configuration in these situations, see [HDFS](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#hdfs).
 
 > **NOTE**
 >
