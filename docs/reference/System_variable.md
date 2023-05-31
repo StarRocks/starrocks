@@ -36,7 +36,7 @@ A variable set by `SET GLOBAL var_name=xxx;` takes effect globally. Example:
 SET GLOBAL exec_mem_limit = 137438953472;
 ```
 
-> Note: Only users with the SYSTEM-level OPERATE privilege can set variables to be globally effective. Globally effective variables do not affect the current session, only subsequent new sessions.
+> Note: Only users with the ADMIN_PRIV privilege can set variables to be globally effective. Globally effective variables do not affect the current session, only subsequent new sessions.
 
 Variables that can take effect both globally and at the session level include:
 
