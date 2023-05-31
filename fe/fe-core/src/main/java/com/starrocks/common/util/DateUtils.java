@@ -3,9 +3,12 @@ package com.starrocks.common.util;
 
 import com.starrocks.common.AnalysisException;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.SignStyle;
@@ -43,6 +46,11 @@ public class DateUtils {
         } else {
             throw new AnalysisException("can not probe datetime format:" + dateTimeStr);
         }
+    }
+
+    public static String formatTimeStampInSeconds(long timestampInSeconds, ZoneId timeZoneId) {
+        ZonedDateTime createTime = Instant.ofEpochMilli(timestampInSeconds * 1000).atZone(timeZoneId);
+        return DATE_TIME_FORMATTER_UNIX.format(createTime);
     }
 
     /*

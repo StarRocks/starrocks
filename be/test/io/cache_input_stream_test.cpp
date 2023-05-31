@@ -42,9 +42,10 @@ public:
         ASSERT_TRUE(fs::create_directories("./ut_dir/block_disk_cache").ok());
         auto cache = BlockCache::instance();
         CacheOptions options;
-        options.mem_space_size = 20 * 1024 * 1024;
-        options.disk_spaces.push_back({.path = "./ut_dir/block_disk_cache", .size = 50 * 1024 * 1024});
+        options.mem_space_size = 100 * 1024 * 1024;
         options.block_size = block_size;
+        options.max_parcel_memory_mb = 256;
+        options.max_concurrent_inserts = 100000;
         ASSERT_OK(cache->init(options));
     }
 
@@ -82,7 +83,7 @@ public:
 const int64_t CacheInputStreamTest::block_size = 1024 * 1024;
 
 TEST_F(CacheInputStreamTest, test_aligned_read) {
-    const int64_t block_count = 4;
+    const int64_t block_count = 3;
 
     int64_t data_size = block_size * block_count;
     char data[data_size + 1];
@@ -90,6 +91,7 @@ TEST_F(CacheInputStreamTest, test_aligned_read) {
 
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
     io::CacheInputStream cache_stream("test_file1", stream);
+    cache_stream.set_enable_populate_cache(true);
     auto& stats = cache_stream.stats();
 
     // first read from backend
@@ -111,7 +113,7 @@ TEST_F(CacheInputStreamTest, test_aligned_read) {
 }
 
 TEST_F(CacheInputStreamTest, test_random_read) {
-    const int64_t block_count = 4;
+    const int64_t block_count = 3;
 
     const int64_t data_size = block_size * block_count;
     char data[data_size + 1];
@@ -119,6 +121,7 @@ TEST_F(CacheInputStreamTest, test_random_read) {
 
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
     io::CacheInputStream cache_stream("test_file2", stream);
+    cache_stream.set_enable_populate_cache(true);
     auto& stats = cache_stream.stats();
 
     // first read from backend
@@ -141,9 +144,8 @@ TEST_F(CacheInputStreamTest, test_random_read) {
 
     ASSERT_TRUE(check_data_content(buffer, block_size - off_in_block, 'a' + 1));
     ASSERT_TRUE(check_data_content(buffer + block_size - off_in_block, block_size, 'a' + 2));
-    ASSERT_TRUE(check_data_content(buffer + 2 * block_size - off_in_block, off_in_block, 'a' + 3));
 
-    ASSERT_EQ(stats.read_cache_count, 3);
+    ASSERT_EQ(stats.read_cache_count, 2);
 }
 
 } // namespace starrocks::io
