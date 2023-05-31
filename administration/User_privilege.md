@@ -342,15 +342,15 @@ SHOW USERS;
 
 举例来说，在人员架构上包含平台方和业务方。业务方涉及业务线 A 和业务线 B，业务线内包含不同角色的岗位，例如分析师和业务员。分析师日常需要产出报表、分析报告，业务员日常需要查询分析师产出的报表。
 
-![User Privileges](../assets/user_privilege_1.jpg)
+![User Privileges](../assets/user_privilege_1.png)
 
 在数据结构上，业务 A 和业务 B 均有自己的数据库 `DB_A` 和 `DB_B`。在数据库 `DB_C` 中，业务 A 和业务 B 均需要用到部分表。并且公司中所有人都可以访问公共数据库 `DB_PUBLIC`。
 
-![User Privileges](../assets/user_privilege_2.jpg)
+![User Privileges](../assets/user_privilege_2.png)
 
 由于不同业务、不同岗位的日常操作与涉及库表不同，StarRocks 建议您按照业务、岗位来创建角色，将所需权限赋予给对应角色后再分配给用户。具体来说：
 
-![User Privileges](../assets/user_privilege_3.jpg)
+![User Privileges](../assets/user_privilege_3.png)
 
 1. 将系统预置角色 `db_admin`、`user_admin` 以及 `cluster_admin` 赋予给平台运维角色。同时将 `db_admin` 和 `user_admin` 作为默认角色，用于日常的基础运维。当确认需要进行节点操作时，再手动激活 `cluster_admin` 角色。
 
