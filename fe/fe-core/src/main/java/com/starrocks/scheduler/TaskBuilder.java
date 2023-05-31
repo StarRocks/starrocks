@@ -88,7 +88,6 @@ public class TaskBuilder {
         Map<String, String> taskProperties = Maps.newHashMap();
         taskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID,
                 String.valueOf(materializedView.getId()));
-        taskProperties.put(SessionVariable.ENABLE_INSERT_STRICT, "false");
         taskProperties.putAll(materializedView.getProperties());
 
         task.setProperties(taskProperties);
