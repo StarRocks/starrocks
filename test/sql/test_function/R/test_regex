@@ -1,4 +1,4 @@
--- name: test regex
+-- name: test_regex
 CREATE TABLE `ts` (
   `str` varchar(65533) NULL COMMENT "",
   `regex` varchar(65533) NULL COMMENT "",
@@ -46,6 +46,10 @@ abcxxdef
 select regexp_replace('abc中文def', '[\\p{Han}]+', 'xx');
 -- result:
 abcxxdef
+-- !result
+SELECT regexp_replace('a b c', " ", "-");
+-- result:
+a-b-c
 -- !result
 select str, regex, replaced, regexp_replace(str, regex, replaced) from ts order by str, regex, replaced;
 -- result:
