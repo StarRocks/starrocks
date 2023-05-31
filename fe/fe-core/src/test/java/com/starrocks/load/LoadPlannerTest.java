@@ -112,6 +112,7 @@ public class LoadPlannerTest {
 
         loadParallelInstanceNum = Config.load_parallel_instance_num;
         maxBrokerConcurrency = Config.max_broker_concurrency;
+        Config.eliminate_shuffle_load_by_replicated_storage = false;
 
         // backends
         Map<Long, Backend> idToBackendTmp = Maps.newHashMap();
@@ -129,6 +130,7 @@ public class LoadPlannerTest {
     public void tearDown() {
         Config.load_parallel_instance_num = loadParallelInstanceNum;
         Config.max_broker_concurrency = maxBrokerConcurrency;
+        Config.eliminate_shuffle_load_by_replicated_storage = true;
     }
 
     @Test
@@ -931,15 +933,29 @@ public class LoadPlannerTest {
         fileStatusList.add(new TBrokerFileStatus("path/k2=1/file1", false, 268435456, true));
         fileStatusesList.add(fileStatusList);
 
-        // plan
-        LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
-                timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
-                brokerDesc, fileGroups, fileStatusesList, 1);
-        planner.plan();
+        {
+            // plan
+            LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                    timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusesList, 1);
+            planner.plan();
 
-        // check fragment
-        List<PlanFragment> fragments = planner.getFragments();
-        Assert.assertEquals(2, fragments.size());
+            // check fragment
+            List<PlanFragment> fragments = planner.getFragments();
+            Assert.assertEquals(2, fragments.size());
+        }
+        {
+            Config.eliminate_shuffle_load_by_replicated_storage = true;
+            // plan
+            LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                    timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusesList, 1);
+            planner.plan();
+
+            // check fragment
+            List<PlanFragment> fragments = planner.getFragments();
+            Assert.assertEquals(1, fragments.size());
+        }
     }
 
     @Test
@@ -1033,14 +1049,28 @@ public class LoadPlannerTest {
         fileStatusList.add(new TBrokerFileStatus("path/k2=1/file1", false, 268435456, true));
         fileStatusesList.add(fileStatusList);
 
-        // plan
-        LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
-                timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
-                brokerDesc, fileGroups, fileStatusesList, 1);
-        planner.plan();
+        {
+            // plan
+            LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                    timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusesList, 1);
+            planner.plan();
 
-        // check fragment
-        List<PlanFragment> fragments = planner.getFragments();
-        Assert.assertEquals(2, fragments.size());
+            // check fragment
+            List<PlanFragment> fragments = planner.getFragments();
+            Assert.assertEquals(2, fragments.size());
+        }
+        {
+            Config.eliminate_shuffle_load_by_replicated_storage = true;
+            // plan
+            LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                    timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusesList, 1);
+            planner.plan();
+
+            // check fragment
+            List<PlanFragment> fragments = planner.getFragments();
+            Assert.assertEquals(1, fragments.size());
+        }
     }
 }
