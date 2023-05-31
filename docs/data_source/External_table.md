@@ -579,6 +579,8 @@ The mapping between the target database and StarRocks varies based on the type o
 
 ## (Deprecated) Hive external table
 
+Before using Hive external tables, make sure JDK 1.8 has been installed on your servers.
+
 ### Create a Hive resource
 
 A Hive resource corresponds to a Hive cluster. You must configure the Hive cluster used by StarRocks, such as the Hive metastore address. You must specify the Hive resource that is used by the Hive external table.
