@@ -111,6 +111,46 @@ public class LowCardinalityTest extends PlanTestBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+        starRocksAssert.withTable("CREATE TABLE `low_card_t1` (\n" +
+                "  `d_date` date ,\n" +
+                "  `c_user` varchar(50) ,\n" +
+                "  `c_dept` varchar(50) ,\n" +
+                "  `c_par` varchar(50) ,\n" +
+                "  `c_nodevalue` varchar(50) ,\n" +
+                "  `c_brokername` varchar(50) ,\n" +
+                "  `f_asset` decimal128(20, 5) ,\n" +
+                "  `f_asset_zb` decimal128(20, 5) ,\n" +
+                "  `f_managerfee` decimal128(20, 5) ,\n" +
+                "  `fee_zb` decimal128(20, 5) ,\n" +
+                "  `cpc` int(11) \n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`d_date`, `c_user`, `c_dept`, `c_par`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`d_date`, `c_user`, `c_dept`, `c_par`) BUCKETS 16 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE `low_card_t2` (\n" +
+                "  `d_date` date ,\n" +
+                "  `c_mr` varchar(40) ,\n" +
+                "  `fee_zb` decimal128(20, 5) ,\n" +
+                "  `c_new` int(11) ,\n" +
+                "  `cpc` int(11)\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`d_date`, `c_mr`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`d_date`, `c_mr`) BUCKETS 16 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");");
 
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
@@ -1776,5 +1816,26 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  \n" +
                 "  4:Decode\n" +
                 "  |  <dict id 40> : <string id 22>");
+    }
+
+    @Test
+    public void testProjectionRewrite() throws Exception {
+        String sql = "SELECT '2023-03-26' D_DATE, c_user, concat(C_NODEVALUE, '-', C_BROKERNAME) AS C_NAME, c_dept, " +
+                "c_par, '人', '1', '规', '1', 'KPI1' C_KPICODE, round(sum(if(c_par='01', F_ASSET_zb, F_ASSET))/100000000, 5) " +
+                "F_CURRENTDATA FROM low_card_t1 WHERE c_par IN ( '02', '01' ) AND D_DATE='2023-03-26' " +
+                "GROUP BY C_BROKERNAME, c_dept, c_par, c_user, C_NODEVALUE " +
+                "union all " +
+                "SELECT '2023-03-26' D_DATE, c_mr AS C_CODE, CASE WHEN c_mr = '01' THEN '部' ELSE '户部' END C_NAME, " +
+                "c_mr c_dept, c_mr c_par, '门' AS C_ROLE, '3' AS F_ROLERANK, '入' AS C_KPITYPE, '2' AS F_KPIRANK, " +
+                "'KPI2' C_KPICODE, ifnull(ROUND(SUM(fee_zb)/100000000, 5), 0) AS F_CURRENTDATA FROM low_card_t2 " +
+                "WHERE c_mr IN ('02', '03') AND D_DATE>concat(year(str_to_date('2023-03-26', '%Y-%m-%d'))-1, '1231') " +
+                "AND d_date<='2023-03-26' GROUP BY c_mr;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "10:Decode\n" +
+                "  |  <dict id 54> : <string id 23>\n" +
+                "  |  \n" +
+                "  9:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(24: fee_zb)\n" +
+                "  |  group by: 54: c_mr");
     }
 }
