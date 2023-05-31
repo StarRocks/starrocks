@@ -262,9 +262,9 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
     }
 }
 
-Status ColumnReader::new_bitmap_index_iterator(BitmapIndexIterator** iterator, bool skip_fill_local_cache) {
-    RETURN_IF_ERROR(_load_bitmap_index(skip_fill_local_cache));
-    RETURN_IF_ERROR(_bitmap_index->new_iterator(iterator));
+Status ColumnReader::new_bitmap_index_iterator(const IndexReadOptions& options, BitmapIndexIterator** iterator) {
+    RETURN_IF_ERROR(_load_bitmap_index(options));
+    RETURN_IF_ERROR(_bitmap_index->new_iterator(iterator, options));
     return Status::OK();
 }
 
@@ -383,17 +383,11 @@ Status ColumnReader::_load_zonemap_index(bool skip_fill_local_cache) {
     return Status::OK();
 }
 
-Status ColumnReader::_load_bitmap_index(bool skip_fill_local_cache) {
+Status ColumnReader::_load_bitmap_index(const IndexReadOptions& options) {
     if (_bitmap_index == nullptr || _bitmap_index->loaded()) return Status::OK();
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
-    IndexReadOptions opts;
-    opts.fs = file_system();
-    opts.file_name = file_name();
-    opts.use_page_cache = !config::disable_storage_page_cache;
-    opts.kept_in_memory = keep_in_memory();
-    opts.skip_fill_local_cache = skip_fill_local_cache;
     auto meta = _bitmap_index_meta.get();
-    ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(opts, *meta));
+    ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(options, *meta));
     if (UNLIKELY(first_load)) {
         MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bitmap_index_mem_tracker(),
                                  _bitmap_index_meta->SpaceUsedLong());

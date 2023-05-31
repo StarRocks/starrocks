@@ -57,6 +57,11 @@ class TypeInfo;
 class EncodingInfo;
 class IndexedColumnReader;
 
+struct IndexedColumnIteratorOptions {
+    std::unique_ptr<RandomAccessFile> read_file;
+    OlapReaderStatistics* stats = nullptr;
+};
+
 class IndexedColumnIterator {
     friend class IndexedColumnReader;
 
@@ -86,12 +91,13 @@ public:
     Status next_batch(size_t* n, Column* column);
 
 private:
-    IndexedColumnIterator(const IndexedColumnReader* reader, std::unique_ptr<RandomAccessFile> read_file);
+    IndexedColumnIterator(const IndexedColumnReader* reader, IndexedColumnIteratorOptions opts);
 
     Status _read_data_page(const PagePointer& pp);
 
     const IndexedColumnReader* _reader = nullptr;
-    std::unique_ptr<RandomAccessFile> _read_file;
+    IndexedColumnIteratorOptions _opts;
+
     // iterator for ordinal index page
     IndexPageIterator _ordinal_iter;
     // iterator for value index page
@@ -104,7 +110,6 @@ private:
     std::unique_ptr<ParsedPage> _data_page;
     // next_batch() will read from this position
     ordinal_t _current_ordinal = 0;
-    // open file handle
 };
 
 // thread-safe reader for IndexedColumn (see comments of `IndexedColumnWriter` to understand what IndexedColumn is)
@@ -123,7 +128,7 @@ public:
 
     Status load();
 
-    Status new_iterator(std::unique_ptr<IndexedColumnIterator>* iter);
+    Status new_iterator(std::unique_ptr<IndexedColumnIterator>* iter, const IndexReadOptions& opts);
 
     int64_t num_values() const { return _num_values; }
     const EncodingInfo* encoding_info() const { return _encoding_info; }
@@ -143,7 +148,7 @@ private:
 
     // read a page specified by `pp' from `file' into `handle'
     Status read_page(RandomAccessFile* read_file, const PagePointer& pp, PageHandle* handle, Slice* body,
-                     PageFooterPB* footer) const;
+                     PageFooterPB* footer, OlapReaderStatistics* stats) const;
 
     FileSystem* _fs;
     std::string _file_name;

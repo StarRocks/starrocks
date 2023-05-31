@@ -279,7 +279,8 @@ Status ZoneMapIndexReader::_do_load(const IndexReadOptions& opts, const ZoneMapI
     IndexedColumnReader reader(opts, meta.page_zone_maps());
     RETURN_IF_ERROR(reader.load());
     std::unique_ptr<IndexedColumnIterator> iter;
-    RETURN_IF_ERROR(reader.new_iterator(&iter));
+    IndexReadOptions options;
+    RETURN_IF_ERROR(reader.new_iterator(&iter, options));
 
     _page_zone_maps.resize(reader.num_values());
 

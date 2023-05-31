@@ -1510,8 +1510,16 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
                 segment_ptr = _segment;
                 col_index = cid;
             }
-            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(col_index, &_bitmap_index_iterators[cid],
-                                                                   _skip_fill_local_cache()));
+
+            IndexReadOptions options;
+            options.fs = segment_ptr->file_system();
+            options.file_name = segment_ptr->file_name();
+            options.use_page_cache = config::enable_bitmap_memory_page_cache || !config::disable_storage_page_cache;
+            options.kept_in_memory = config::enable_bitmap_memory_page_cache;
+            options.skip_fill_local_cache = _skip_fill_local_cache();
+            options.stats = _opts.stats;
+
+            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(col_index, options, &_bitmap_index_iterators[cid]));
             _has_bitmap_index |= (_bitmap_index_iterators[cid] != nullptr);
         }
     }
