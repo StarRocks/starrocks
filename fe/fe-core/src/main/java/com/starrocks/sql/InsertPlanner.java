@@ -33,6 +33,7 @@ import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.IcebergTableSink;
@@ -162,6 +163,15 @@ public class InsertPlanner {
 
             Optimizer optimizer = new Optimizer();
             PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
+
+            boolean forceReplicatedStorage = false;
+            if (!requiredPropertySet.equals(PhysicalPropertySet.EMPTY)) {
+                if (Config.eliminate_shuffle_load_by_replicated_storage) {
+                    requiredPropertySet = PhysicalPropertySet.EMPTY;
+                    forceReplicatedStorage = true;
+                }
+            }
+
             LOG.debug("property {}", requiredPropertySet);
             OptExpression optimizedPlan;
 
@@ -215,7 +225,8 @@ public class InsertPlanner {
                     enableAutomaticPartition = olapTable.supportedAutomaticPartition();
                 }
                 dataSink = new OlapTableSink(olapTable, tupleDesc, insertStmt.getTargetPartitionIds(),
-                        canUsePipeline, olapTable.writeQuorum(), olapTable.enableReplicatedStorage(),
+                        canUsePipeline, olapTable.writeQuorum(),
+                        forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
                         false, enableAutomaticPartition);
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) targetTable);

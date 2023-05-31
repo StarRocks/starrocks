@@ -107,6 +107,7 @@ import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.cluster.Cluster;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigRefreshDaemon;
@@ -734,10 +735,10 @@ public class GlobalStateMgr {
 
         this.binlogManager = new BinlogManager();
 
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-            this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
-        } else if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
+        } else {
+            this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
 
         GlobalStateMgr gsm = this;
@@ -1258,6 +1259,14 @@ public class GlobalStateMgr {
             feType = oldType;
             throw t;
         }
+
+        if (RunMode.allowCreateLakeTable()) {
+            try {
+                ((SharedDataStorageVolumeMgr) storageVolumeMgr).createOrUpdateBuiltinStorageVolume();
+            } catch (DdlException | AnalysisException | AlreadyExistsException e) {
+                LOG.warn("Failed to create or update builtin storage volume", e);
+            }
+        }
     }
 
     // start all daemon threads only running on Master
@@ -1435,10 +1444,14 @@ public class GlobalStateMgr {
                     analyzeMgr.load(dis);
                     resourceGroupMgr.load(dis);
                     routineLoadMgr.loadRoutineLoadJobsV2(dis);
+                    // global transaction must be replayed before load jobs v2
                     globalTransactionMgr.loadTransactionStateV2(dis);
+                    loadMgr.loadLoadJobsV2JsonFormat(dis);
                     auth.load(dis);
                     authenticationMgr.loadV2(dis);
                     authorizationMgr.loadV2(dis);
+                    exportMgr.loadExportJobV2(dis);
+                    colocateTableIndex.loadColocateTableIndexV2(dis);
                     smallFileMgr.loadSmallFilesV2(dis);
                     catalogMgr.load(dis);
                     insertOverwriteJobMgr.load(dis);
@@ -1455,8 +1468,6 @@ public class GlobalStateMgr {
                 //TODO: The following parts have not been refactored, and they are added for the convenience of testing
 
                 checksum = loadResources(dis, checksum);
-                checksum = exportMgr.loadExportJob(dis, checksum);
-                checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
                 checksum = taskManager.loadTasks(dis, checksum);
             } else {
                 checksum = loadHeaderV1(dis, checksum);
@@ -1820,6 +1831,8 @@ public class GlobalStateMgr {
                     auth.save(dos);
                     authenticationMgr.saveV2(dos);
                     authorizationMgr.saveV2(dos);
+                    exportMgr.saveExportJobV2(dos);
+                    colocateTableIndex.saveColocateTableIndexV2(dos);
                     smallFileMgr.saveSmallFilesV2(dos);
                     catalogMgr.save(dos);
                     insertOverwriteJobMgr.save(dos);
@@ -1836,8 +1849,6 @@ public class GlobalStateMgr {
                 //TODO: The following parts have not been refactored, and they are added for the convenience of testing
 
                 checksum = resourceMgr.saveResources(dos, checksum);
-                checksum = exportMgr.saveExportJob(dos, checksum);
-                checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
                 checksum = taskManager.saveTasks(dos, checksum);
             } else {
                 checksum = saveVersion(dos, checksum);

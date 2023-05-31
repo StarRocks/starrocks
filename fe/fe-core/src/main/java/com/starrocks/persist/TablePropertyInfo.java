@@ -36,6 +36,7 @@ package com.starrocks.persist;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -49,8 +50,11 @@ import java.util.Map;
  * PersistInfo for Table properties
  */
 public class TablePropertyInfo implements Writable {
+    @SerializedName("tb")
     private long tableId;
+    @SerializedName("pm")
     private Map<String, String> propertyMap;
+    @SerializedName("gp")
     private GroupId groupId;
 
     public TablePropertyInfo() {

@@ -106,6 +106,9 @@ public class WindowTransformer {
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
+        } else if (AnalyticExpr.isCumeFn(callExpr.getFn())) {
+            Preconditions.checkState(windowFrame == null, "Unexpected window set for CUME_DIST()");
+            windowFrame = AnalyticWindow.DEFAULT_WINDOW;
         } else if (AnalyticExpr.isOffsetFn(callExpr.getFn())) {
             try {
                 Preconditions.checkState(windowFrame == null);

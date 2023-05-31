@@ -1244,6 +1244,12 @@ public class Config extends ConfigBase {
     public static boolean enable_replicated_storage_as_default_engine = true;
 
     /**
+     * enable schedule insert query by row count
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_schedule_insert_query_by_row_count = true;
+
+    /**
      * FOR DiskAndTabletLoadBalancer:
      * upper limit of the difference in disk usage of all backends, exceeding this threshold will cause
      * disk balance
@@ -1947,6 +1953,12 @@ public class Config extends ConfigBase {
     public static boolean enable_shuffle_load = true;
 
     /**
+     * Eliminate shuffle load by replicated storage
+     */
+    @ConfField(mutable = true)
+    public static boolean eliminate_shuffle_load_by_replicated_storage = true;
+
+    /**
      * Unused config field, leave it here for backward compatibility
      */
     @Deprecated
@@ -2014,7 +2026,7 @@ public class Config extends ConfigBase {
     public static int cloud_native_meta_port = 6090;
     // remote storage related configuration
     /**
-     * storage type for cloud native table. Available options: "S3", "HDFS", case-sensitive
+     * storage type for cloud native table. Available options: "S3", "HDFS", "AZBLOB". case-insensitive
      */
     @ConfField
     public static String cloud_native_storage_type = "S3";
