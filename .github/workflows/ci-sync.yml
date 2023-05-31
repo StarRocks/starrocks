@@ -29,14 +29,14 @@ jobs:
           commit_sha=$(echo ${commit_sha//\"})
           echo "commit_sha=${commit_sha:0:7}" >> $GITHUB_OUTPUT
 
-      - name: sync
-        uses: benc-uk/workflow-dispatch@v1
-        with:
-          workflow: repo-sync.yml
-          repo: CelerData/celerdata-enterprise
-          inputs: '{ "PR_ID": "${{ github.event.number }}", "COMMIT_ID": "${{ steps.commit_sha.outputs.commit_sha }}", "BRANCH": "${{ github.base_ref }}" }'
-          ref: ${{ github.base_ref }}
-          token: ${{ secrets.PAT }}
+#      - name: sync
+#        uses: benc-uk/workflow-dispatch@v1
+#        with:
+#          workflow: repo-sync.yml
+#          repo: CelerData/celerdata-enterprise
+#          inputs: '{ "PR_ID": "${{ github.event.number }}", "COMMIT_ID": "${{ steps.commit_sha.outputs.commit_sha }}", "BRANCH": "${{ github.base_ref }}" }'
+#          ref: ${{ github.base_ref }}
+#          token: ${{ secrets.PAT }}
 
       - name: sync test
         uses: benc-uk/workflow-dispatch@v1
