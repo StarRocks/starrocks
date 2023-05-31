@@ -68,7 +68,6 @@ Status RawSpillerWriter::flush_task(RuntimeState* state, const MemTablePtr& mem_
     opts.query_id = state->query_id();
     opts.plan_node_id = options().plan_node_id;
     opts.name = options().name;
-    // @TODO peak memory usage by block?
     ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
 
     // TODO: reuse io context

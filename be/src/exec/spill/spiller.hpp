@@ -75,7 +75,7 @@ Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, Sp
         writer->shuffle(indexs, hash_column);
         writer->process_partition_data(chunk, indexs, std::forward<Processer>(processer));
     }
-    _metrics.partition_writer_peak_memory_usage->set(writer->mem_consumption());
+    COUNTER_SET(_metrics.partition_writer_peak_memory_usage, writer->mem_consumption());
     RETURN_IF_ERROR(writer->flush_if_full(state, executor, guard));
     return Status::OK();
 }
@@ -96,7 +96,6 @@ StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, TaskExecutor&& executor
 
     ASSIGN_OR_RETURN(auto chunk, _reader->restore(state, executor, guard));
     chunk->check_or_die();
-    // COUNTER_UPDATE(_metrics.restore_rows, chunk->num_rows());
     _restore_read_rows += chunk->num_rows();
 
     RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));
