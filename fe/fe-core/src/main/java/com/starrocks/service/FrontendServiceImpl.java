@@ -83,6 +83,7 @@ import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.UnauthorizedException;
 import com.starrocks.http.rest.TransactionResult;
@@ -164,6 +165,8 @@ import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGetLoadsParams;
 import com.starrocks.thrift.TGetLoadsResult;
+import com.starrocks.thrift.TGetProfileRequest;
+import com.starrocks.thrift.TGetProfileResponse;
 import com.starrocks.thrift.TGetRoleEdgesRequest;
 import com.starrocks.thrift.TGetRoleEdgesResponse;
 import com.starrocks.thrift.TGetTableMetaRequest;
@@ -723,6 +726,24 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }).collect(Collectors.toList()));
             }
             tTablePrivs.addAll(tPrivs);
+        }
+        return result;
+    }
+
+    @Override
+    public TGetProfileResponse getQueryProfile(TGetProfileRequest params) throws TException {
+        LOG.debug("get query profile request: {}", params);
+        List<String> queryIds = params.query_id;
+        TGetProfileResponse result = new TGetProfileResponse();
+        if (queryIds != null) {
+            for (String queryId : queryIds) {
+                String profile = ProfileManager.getInstance().getProfile(queryId);
+                if (profile != null && !profile.isEmpty()) {
+                    result.addToQuery_result(profile);
+                } else {
+                    result.addToQuery_result("");
+                }
+            }
         }
         return result;
     }
