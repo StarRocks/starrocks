@@ -58,6 +58,8 @@ void AggregateFuncResolver::register_window() {
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>("dense_rank", true,
                                                             AggregateFactory::MakeDenseRankWindowFunction());
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>("rank", true, AggregateFactory::MakeRankWindowFunction());
+    add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_DOUBLE>("cume_dist", true,
+                                                            AggregateFactory::MakeCumeDistWindowFunction());
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>("row_number", true,
                                                             AggregateFactory::MakeRowNumberWindowFunction());
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>("ntile", true, AggregateFactory::MakeNtileWindowFunction());
