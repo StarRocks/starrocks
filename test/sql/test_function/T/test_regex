@@ -1,0 +1,25 @@
+-- name: test_regex
+
+CREATE TABLE `ts` (
+  `str` varchar(65533) NULL COMMENT "",
+  `regex` varchar(65533) NULL COMMENT "",
+  `replaced` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`str`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`str`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+insert into ts values ('abcd', '.*', 'xx'), ('abcd', 'a.*', 'xx'), ('abcd', '.*abc.*', 'xx'), ('abcd', '.*cd', 'xx'), ('abcd', 'bc', 'xx'), ('', '', 'xx'), (NULL, '', 'xx'), ('abc中文def', '[\\p{Han}]+', 'xx');
+
+select regexp_replace('abcd', '.*', 'xx');
+select regexp_replace('abcd', 'a.*', 'xx');
+select regexp_replace('abcd', '.*abc.*', 'xx');
+select regexp_replace('abcd', '.*cd', 'xx');
+select regexp_replace('abcd', 'bc', 'xx');
+select regexp_replace('', '', 'xx');
+select regexp_replace(NULL, '', 'xx');
+select regexp_replace('abc中文def', '中文', 'xx');
+select regexp_replace('abc中文def', '[\\p{Han}]+', 'xx');
+select regexp_replace('a b c', " ", "-");
+
+select str, regex, replaced, regexp_replace(str, regex, replaced) from ts order by str, regex, replaced;

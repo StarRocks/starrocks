@@ -2748,7 +2748,86 @@ static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/string_functions.cpp
 ColumnPtr StringFunctions::regexp_replace(FunctionContext* context, const Columns& columns) {
+=======
+static StatusOr<ColumnPtr> regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns) {
+    auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
+
+    hs_scratch_t* scratch = nullptr;
+    hs_error_t status;
+    if ((status = hs_clone_scratch(state->scratch, &scratch)) != HS_SUCCESS) {
+        return Status::InternalError(strings::Substitute("Unable to clone scratch space. status: $0", status));
+    }
+    DeferOp op([&] {
+        if (scratch != nullptr) {
+            hs_error_t st;
+            if ((st = hs_free_scratch(scratch)) != HS_SUCCESS) {
+                LOG(ERROR) << "free scratch space failure. status: " << st;
+            }
+        }
+    });
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+
+    MatchInfoChain match_info_chain;
+    match_info_chain.info_chain.reserve(64);
+
+    for (int row = 0; row < size; ++row) {
+        if (str_viewer.is_null(row) || rpl_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        match_info_chain.info_chain.clear();
+        match_info_chain.last_to = 0;
+
+        auto rpl_value = rpl_viewer.value(row);
+
+        auto value_size = str_viewer.value(row).size;
+        const char* data =
+                (value_size) ? str_viewer.value(row).data : &StringFunctions::_DUMMY_STRING_FOR_EMPTY_PATTERN;
+
+        auto st = hs_scan(
+                // Use &_DUMMY_STRING_FOR_EMPTY_PATTERN instead of nullptr to avoid crash.
+                state->database, data, value_size, 0, scratch,
+                [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
+                   void* ctx) -> int {
+                    auto* value = (MatchInfoChain*)ctx;
+                    if (value->info_chain.empty()) {
+                        value->info_chain.emplace_back(MatchInfo{.from = from, .to = to});
+                    } else if (value->info_chain.back().from == from) {
+                        value->info_chain.back().to = to;
+                    } else {
+                        value->info_chain.emplace_back(MatchInfo{.from = from, .to = to});
+                    }
+                    value->last_to = to;
+                    return 0;
+                },
+                &match_info_chain);
+        DCHECK(st == HS_SUCCESS || st == HS_SCAN_TERMINATED) << " status: " << st;
+
+        std::string result_str;
+        result_str.reserve(value_size);
+
+        const char* start = str_viewer.value(row).data;
+        size_t last_to = 0;
+        for (const auto& info : match_info_chain.info_chain) {
+            result_str.append(start + last_to, info.from - last_to);
+            result_str.append(rpl_value.data, rpl_value.size);
+            last_to = info.to;
+        }
+        result_str.append(start + last_to, value_size - last_to);
+
+        result.append(Slice(result_str.data(), result_str.size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, const Columns& columns) {
+>>>>>>> ee8c12fb3 ([BugFix] Fix the mem_leak of regex_replace (#24475)):be/src/exprs/string_functions.cpp
     auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     if (state->const_pattern) {
