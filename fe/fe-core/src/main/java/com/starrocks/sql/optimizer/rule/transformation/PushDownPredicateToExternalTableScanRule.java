@@ -62,8 +62,8 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
         ScalarOperator predicate = Utils.compoundAnd(lfo.getPredicate(), operator.getPredicate());
         ScalarOperator scanPredicate = operator.getPredicate();
         ScalarOperator filterPredicate = lfo.getPredicate();
-
-        ExternalTablePredicateExtractor extractor = new ExternalTablePredicateExtractor();
+        ExternalTablePredicateExtractor extractor = new ExternalTablePredicateExtractor(
+                operator.getOpType() == OperatorType.LOGICAL_MYSQL_SCAN);
         extractor.extract(predicate);
         ScalarOperator pushedPredicate = extractor.getPushPredicate();
         ScalarOperator reservedPredicate = extractor.getReservePredicate();
