@@ -594,9 +594,13 @@ public class GsonUtils {
             return new TypeAdapter<T>() {
                 public void write(JsonWriter out, T obj) throws IOException {
                     if (obj instanceof GsonPreProcessable) {
-                        ((GsonPreProcessable) obj).gsonPreProcess();
+                        synchronized (obj) {
+                            ((GsonPreProcessable) obj).gsonPreProcess();
+                            delegate.write(out, obj);
+                        }
+                    } else {
+                        delegate.write(out, obj);
                     }
-                    delegate.write(out, obj);
                 }
 
                 public T read(JsonReader reader) throws IOException {
