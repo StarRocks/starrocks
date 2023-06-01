@@ -19,7 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.protobuf.Descriptors.EnumDescriptor;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.manager.StarManagerServer;
@@ -110,11 +109,24 @@ public class StarOSAgent {
         LOG.info("get serviceId {} from starMgr", serviceId);
     }
 
+    private FileStoreType getFileStoreType(String storageType) {
+        if (storageType == null) {
+            return null;
+        }
+        for (FileStoreType type : FileStoreType.values()) {
+            if (type.name().equalsIgnoreCase(storageType)) {
+                return type;
+            }
+        }
+        return null;
+    }
+
     public FilePathInfo allocateFilePath(long tableId) throws DdlException {
         try {
-            EnumDescriptor enumDescriptor = FileStoreType.getDescriptor();
-            FileStoreType fsType = FileStoreType.valueOf(
-                    enumDescriptor.findValueByName(Config.cloud_native_storage_type).getNumber());
+            FileStoreType fsType = getFileStoreType(Config.cloud_native_storage_type);
+            if (fsType == null || fsType == FileStoreType.INVALID) {
+                throw new DdlException("Invalid cloud native storage type: " + Config.cloud_native_storage_type);
+            }
             FilePathInfo pathInfo = client.allocateFilePath(serviceId, fsType, Long.toString(tableId));
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
@@ -122,7 +134,6 @@ public class StarOSAgent {
             throw new DdlException("Failed to allocate file path from StarMgr", e);
         }
     }
-
 
     public boolean registerAndBootstrapService() {
         try {
