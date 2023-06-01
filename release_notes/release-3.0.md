@@ -6,7 +6,7 @@
 
 ### 新增特性
 
-- [公测中] 支持大查询的算子落盘（Spill to disk），通过将中间结果落盘来降低大查询的内存消耗。更多信息，参见[中间结果落盘](../administration/spill_to_disk.md)。
+- [公测中] 支持大查询算子落盘 ([Spill to disk](../administration/spill_to_disk.md))，通过将中间结果落盘来降低大查询的内存消耗。
 - [Routine Load](../loading/RoutineLoad.md#导入-avro-数据) 支持导入 Avro 格式的数据。
 - 支持 [Microsoft Azure Storage](../integrations/authenticate_to_azure_storage.md) (包括 Azure Blob Storage 和 Azure Data Lake Storage)。
 
@@ -20,8 +20,8 @@
 
 修复了如下问题：
 
-- 主键模型表 SHOW CREATE TABLE 返回的建表信息错误。[#24237](https://github.com/StarRocks/starrocks/issues/24237)
-- Routine Load 过程中 BE crash。[#24237](https://github.com/StarRocks/starrocks/issues/24237)
+- SHOW CREATE TABLE 返回的**主键模型表**建表信息错误。[#24237](https://github.com/StarRocks/starrocks/issues/24237)
+- Routine Load 过程中 BE crash。[#20677](https://github.com/StarRocks/starrocks/issues/20677)
 - 创建分区表时指定不支持的 Properties 导致 NPE。[#21374](https://github.com/StarRocks/starrocks/issues/21374)
 - SHOW TABLE STATUS 结果展示不全。[#24279](https://github.com/StarRocks/starrocks/issues/24279)
 
