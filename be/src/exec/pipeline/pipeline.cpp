@@ -90,17 +90,9 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
             scan_operator->set_workgroup(workgroup);
             scan_operator->set_query_ctx(query_ctx->get_shared_ptr());
             if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
-                if (workgroup != nullptr) {
-                    scan_operator->set_scan_executor(state->exec_env()->connector_scan_executor_with_workgroup());
-                } else {
-                    scan_operator->set_scan_executor(state->exec_env()->connector_scan_executor_without_workgroup());
-                }
+                scan_operator->set_scan_executor(state->exec_env()->connector_scan_executor_with_workgroup());
             } else {
-                if (workgroup != nullptr) {
-                    scan_operator->set_scan_executor(state->exec_env()->scan_executor_with_workgroup());
-                } else {
-                    scan_operator->set_scan_executor(state->exec_env()->scan_executor_without_workgroup());
-                }
+                scan_operator->set_scan_executor(state->exec_env()->scan_executor_with_workgroup());
             }
         }
     }

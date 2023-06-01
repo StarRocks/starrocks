@@ -111,11 +111,7 @@ Status StreamPipelineTest::execute() {
     DCHECK(prepare_status.ok());
     bool enable_resource_group = _fragment_ctx->enable_resource_group();
     _fragment_ctx->iterate_drivers([exec_env = _exec_env, enable_resource_group](const DriverPtr& driver) {
-        if (enable_resource_group) {
-            exec_env->wg_driver_executor()->submit(driver.get());
-        } else {
-            exec_env->driver_executor()->submit(driver.get());
-        }
+        exec_env->wg_driver_executor()->submit(driver.get());
         return Status::OK();
     });
     return Status::OK();
@@ -198,17 +194,10 @@ Status StreamPipelineTest::wait_until_epoch_finished(const EpochInfo& epoch_info
     auto are_all_drivers_parked_func = [=]() {
         size_t num_parked_drivers = 0;
         auto query_id = _fragment_ctx->query_id();
-        if (_fragment_ctx->enable_resource_group()) {
-            num_parked_drivers = _exec_env->wg_driver_executor()->calculate_parked_driver(
-                    [query_id](const pipeline::PipelineDriver* driver) {
-                        return driver->query_ctx()->query_id() == query_id;
-                    });
-        } else {
-            num_parked_drivers = _exec_env->driver_executor()->calculate_parked_driver(
-                    [query_id](const pipeline::PipelineDriver* driver) {
-                        return driver->query_ctx()->query_id() == query_id;
-                    });
-        }
+        num_parked_drivers = _exec_env->wg_driver_executor()->calculate_parked_driver(
+                [query_id](const pipeline::PipelineDriver* driver) {
+                    return driver->query_ctx()->query_id() == query_id;
+                });
         return num_parked_drivers == _fragment_ctx->num_drivers();
     };
 

@@ -178,7 +178,7 @@ void StreamEpochManager::count_down_fragment_ctx(RuntimeState* state, FragmentCo
 
     // do epoch report stats
     auto* query_ctx = state->query_ctx();
-    state->exec_env()->driver_executor()->report_epoch(state->exec_env(), query_ctx, _finished_fragment_ctxs);
+    state->exec_env()->wg_driver_executor()->report_epoch(state->exec_env(), query_ctx, _finished_fragment_ctxs);
 }
 
 const BinlogOffset* StreamEpochManager::_get_epoch_unlock(const TabletId2BinlogOffset& tablet_id_scan_ranges_mapping,
@@ -193,18 +193,8 @@ const BinlogOffset* StreamEpochManager::_get_epoch_unlock(const TabletId2BinlogO
 
 Status StreamEpochManager::activate_parked_driver(ExecEnv* exec_env, const TUniqueId& query_id,
                                                   int64_t expected_num_drivers, bool enable_resource_group) {
-    int64_t num_drivers = 0;
-    if (enable_resource_group) {
-        num_drivers = exec_env->wg_driver_executor()->activate_parked_driver(
-                [query_id](const pipeline::PipelineDriver* driver) {
-                    return driver->query_ctx()->query_id() == query_id;
-                });
-    } else {
-        num_drivers =
-                exec_env->driver_executor()->activate_parked_driver([query_id](const pipeline::PipelineDriver* driver) {
-                    return driver->query_ctx()->query_id() == query_id;
-                });
-    }
+    int64_t num_drivers = exec_env->wg_driver_executor()->activate_parked_driver(
+            [query_id](const pipeline::PipelineDriver* driver) { return driver->query_ctx()->query_id() == query_id; });
     if (num_drivers != expected_num_drivers) {
         return Status::InternalError(
                 fmt::format("Update epoch failed: num activated drivers {} not equal to num drivers {}", num_drivers,

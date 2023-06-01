@@ -696,8 +696,8 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
             [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); }));
     prepare_success = true;
 
-    auto* executor =
-            _fragment_ctx->enable_resource_group() ? exec_env->wg_driver_executor() : exec_env->driver_executor();
+    DCHECK(_fragment_ctx->enable_resource_group());
+    auto* executor = exec_env->wg_driver_executor();
     _fragment_ctx->iterate_drivers([executor, fragment_ctx = _fragment_ctx.get()](const DriverPtr& driver) {
         DCHECK(!fragment_ctx->enable_resource_group() || driver->workgroup() != nullptr);
         executor->submit(driver.get());

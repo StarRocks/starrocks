@@ -17,6 +17,7 @@
 #include "exec/data_sink.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/stream_load_context.h"
@@ -98,7 +99,7 @@ void FragmentContext::count_down_pipeline(RuntimeState* state, size_t val) {
 
     finish();
     auto status = final_status();
-    state->exec_env()->driver_executor()->report_exec_state(query_ctx, this, status, true);
+    state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, status, true);
 
     destroy_pass_through_chunk_buffer();
 
@@ -122,8 +123,7 @@ void FragmentContext::set_final_status(const Status& status) {
             } else {
                 LOG(WARNING) << ss.str();
             }
-            DriverExecutor* executor = enable_resource_group() ? _runtime_state->exec_env()->wg_driver_executor()
-                                                               : _runtime_state->exec_env()->driver_executor();
+            DriverExecutor* executor = _runtime_state->exec_env()->wg_driver_executor();
             iterate_drivers([executor](const DriverPtr& driver) {
                 executor->cancel(driver.get());
                 return Status::OK();
@@ -176,6 +176,7 @@ FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragme
         auto&& ctx = std::make_unique<FragmentContext>();
         auto* raw_ctx = ctx.get();
         _fragment_contexts.emplace(fragment_id, std::move(ctx));
+        raw_ctx->set_workgroup(workgroup::WorkGroupManager::instance()->get_default_workgroup());
         return raw_ctx;
     }
 }

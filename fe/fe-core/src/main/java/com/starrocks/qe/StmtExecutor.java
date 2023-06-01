@@ -1231,12 +1231,10 @@ public class StmtExecutor {
     private String buildExplainString(ExecPlan execPlan, ResourceGroupClassifier.QueryType queryType) {
         String explainString = "";
         if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
-            if (context.getSessionVariable().isEnableResourceGroup()) {
-                TWorkGroup resourceGroup = CoordinatorPreprocessor.prepareResourceGroup(context, queryType);
-                String resourceGroupStr =
-                        resourceGroup != null ? resourceGroup.getName() : ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME;
-                explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
-            }
+            TWorkGroup resourceGroup = CoordinatorPreprocessor.prepareResourceGroup(context, queryType);
+            String resourceGroupStr =
+                    resourceGroup != null ? resourceGroup.getName() : ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME;
+            explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
         }
         // marked delete will get execPlan null
         if (execPlan == null) {

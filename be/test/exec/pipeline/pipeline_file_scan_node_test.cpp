@@ -251,7 +251,7 @@ void PipeLineFileScanNodeTest::execute_pipeline() {
     ASSERT_TRUE(prepare_status.ok());
 
     _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
-        exec_env->driver_executor()->submit(driver.get());
+        exec_env->wg_driver_executor()->submit(driver.get());
         return Status::OK();
     });
 }
