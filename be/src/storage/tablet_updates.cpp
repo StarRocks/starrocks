@@ -2394,7 +2394,7 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
     root.AddMember("rowsets_count", rowsets_count, root.GetAllocator());
 
     rapidjson::Value last_version_value;
-    std::string last_version_str = strings::Substitute("$1_$2", last_version.major(), last_version.minor());
+    std::string last_version_str = strings::Substitute("$0_$1", last_version.major(), last_version.minor());
     rowsets_count.SetString(last_version_str.c_str(), last_version_str.size(), root.GetAllocator());
     root.AddMember("last_version", last_version_value, root.GetAllocator());
 
