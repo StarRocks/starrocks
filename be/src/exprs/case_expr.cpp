@@ -163,7 +163,7 @@ private:
             }
             case_column = ColumnHelper::unpack_and_duplicate_const_column(size, case_column);
 
-            // case_column equals to when_columns[i] or not?
+            // then_columns.size >= when_columns.size as else_column maybe exist.
             auto when_num = when_columns.size();
             NullColumnPtr case_nulls = nullptr;
             if (case_column->is_nullable()) {
@@ -177,7 +177,11 @@ private:
                                           !when_columns[i]->equals(row, *case_data, row))) {
                     ++i;
                 }
-                res->append(*then_columns[i], row, 1);
+                if (then_columns[i]->is_null(row)) {
+                    res->append_nulls(1);
+                } else {
+                    res->append(*then_columns[i], row, 1);
+                }
             }
 
             return res;
@@ -324,7 +328,9 @@ private:
             if (res_nullable) {
                 res = ColumnHelper::cast_to_nullable_column(res);
             }
-
+            for (int i = 0; i < then_columns.size(); ++i) {
+                then_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, then_columns[i]);
+            }
             // when_columns[i] is true or not
             auto when_num = when_columns.size();
             if (!when_columns_has_null) {
@@ -333,7 +339,11 @@ private:
                     while (i < when_num && !(when_viewers[i].value(row))) {
                         ++i;
                     }
-                    res->append(*then_columns[i], row, 1);
+                    if (then_columns[i]->is_null(i)) {
+                        res->append_nulls(1);
+                    } else {
+                        res->append(*then_columns[i], row, 1);
+                    }
                 }
             } else {
                 for (auto row = 0; row < size; ++row) {
@@ -341,7 +351,11 @@ private:
                     while ((i < when_num) && (when_viewers[i].is_null(row) || !when_viewers[i].value(row))) {
                         ++i;
                     }
-                    res->append(*then_columns[i], row, 1);
+                    if (then_columns[i]->is_null(i)) {
+                        res->append_nulls(1);
+                    } else {
+                        res->append(*then_columns[i], row, 1);
+                    }
                 }
             }
             return res;
