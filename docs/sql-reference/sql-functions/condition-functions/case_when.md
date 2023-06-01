@@ -66,23 +66,22 @@ Suppose table `test_case` has the following data:
 CREATE TABLE test_case(
     name          STRING,
     gender         INT,
-    score          FLOAT
     ) DISTRIBUTED BY HASH(name);
 
 INSERT INTO test_case VALUES
-    ("Andy",1,75.5),
-    ("Jules",0,80.0),
-    ("Angel",-1,92.2),
-    ("Sam",null,86.0);
+    ("Andy",1),
+    ("Jules",0),
+    ("Angel",-1),
+    ("Sam",null);
 
 SELECT * FROM test_case;
-+-------+--------+-------+
-| name  | gender | score |
-+-------+--------+-------+
-| Angel |     -1 |  92.2 |
-| Andy  |      1 |  75.5 |
-| Sam   |   NULL |    86 |
-| Jules |      0 |    80 |
++-------+--------+
+| name  | gender |
++-------+--------+
+| Angel |     -1 |
+| Andy  |      1 |
+| Sam   |   NULL |
+| Jules |      0 |
 +-------+--------+-------+
 ```
 
