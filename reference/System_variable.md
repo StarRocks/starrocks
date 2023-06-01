@@ -153,13 +153,9 @@ SELECT /*+ SET_VAR
 
   是否开启基于规则的物化视图查询改写功能，主要用于处理单表查询改写。默认值：`true`。
 
-* enable_spilling
+* enable_spill
 
-  用于设置是否开启大数据量落盘排序。默认为 false，即关闭该功能。当用户未指定 ORDER BY 子句的 LIMIT 条件，同时设置 enable_spilling 为 true 时，才会开启落盘排序。该功能启用后，会使用 BE 数据目录下 `starrocks-scratch/` 目录存放临时的落盘数据，并在查询结束后清空临时数据。
-  
-  该功能主要用于使用有限的内存进行大数据量的排序操作。
-
-  > 注：该功能为实验性质，不保证稳定性，请谨慎开启。
+  是否启用中间结果落盘。默认值：`false`。如果将其设置为 `true`，StarRocks 会将中间结果落盘，以减少在查询中处理聚合、排序或连接算子时的内存使用量。
 
 * event_scheduler
 
@@ -396,6 +392,13 @@ SELECT /*+ SET_VAR
 * sql_select_limit
 
   用于兼容 MySQL 客户端。无实际作用。
+
+* 中间结果落盘的执行方式。默认值：`auto`。有效值包括：
+
+  * `auto`：达到内存使用阈值时，会自动触发落盘。
+  * `force`：无论内存使用情况如何，StarRocks 都会强制落盘所有相关算子的中间结果。
+
+  此变量仅在变量 `enable_spill` 设置为 `true` 时生效。
 
 * storage_engine
 
