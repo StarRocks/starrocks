@@ -46,6 +46,8 @@ struct SpillProcessMetrics {
     SpillProcessMetrics() = default;
     SpillProcessMetrics(RuntimeProfile* profile);
 
+    std::shared_ptr<RuntimeProfile> _spiller_metrics;
+
     RuntimeProfile::Counter* spill_timer = nullptr;
     RuntimeProfile::Counter* spill_rows = nullptr;
     RuntimeProfile::Counter* flush_timer = nullptr;
