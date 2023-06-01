@@ -351,13 +351,13 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-            TxnCommitAttachment txnCommitAttachment)
+                                                TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         return commitTransaction(dbId, transactionId, tabletCommitInfos, Lists.newArrayList(), txnCommitAttachment);
     }
 
     public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-            List<TabletFailInfo> tabletFailInfos)
+                                                List<TabletFailInfo> tabletFailInfos)
             throws UserException {
         return commitTransaction(dbId, transactionId, tabletCommitInfos, tabletFailInfos, null);
     }
@@ -373,8 +373,8 @@ public class GlobalTransactionMgr implements Writable {
      */
     @NotNull
     public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-            List<TabletFailInfo> tabletFailInfos,
-            TxnCommitAttachment txnCommitAttachment)
+                                                List<TabletFailInfo> tabletFailInfos,
+                                                TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         if (Config.disable_load_job) {
             throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
@@ -386,8 +386,8 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public void prepareTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-            List<TabletFailInfo> tabletFailInfos,
-            TxnCommitAttachment txnCommitAttachment)
+                                   List<TabletFailInfo> tabletFailInfos,
+                                   TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         if (Config.disable_load_job) {
             throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
@@ -399,7 +399,7 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public void commitPreparedTransaction(long dbId, long transactionId, long timeoutMillis)
-            throws UserException  {
+            throws UserException {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
@@ -443,15 +443,15 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public boolean commitAndPublishTransaction(Database db, long transactionId,
-            List<TabletCommitInfo> tabletCommitInfos, List<TabletFailInfo> tabletFailInfos, long timeoutMillis)
-            throws UserException {
+                                               List<TabletCommitInfo> tabletCommitInfos,
+                                               List<TabletFailInfo> tabletFailInfos, long timeoutMillis) throws UserException {
         return commitAndPublishTransaction(db, transactionId, tabletCommitInfos, tabletFailInfos, timeoutMillis, null);
     }
 
     public boolean commitAndPublishTransaction(Database db, long transactionId,
-            List<TabletCommitInfo> tabletCommitInfos, List<TabletFailInfo> tabletFailInfos, long timeoutMillis,
-            TxnCommitAttachment txnCommitAttachment)
-            throws UserException {
+                                               List<TabletCommitInfo> tabletCommitInfos,
+                                               List<TabletFailInfo> tabletFailInfos, long timeoutMillis,
+                                               TxnCommitAttachment txnCommitAttachment) throws UserException {
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
         if (!db.tryWriteLock(timeoutMillis, TimeUnit.MILLISECONDS)) {
@@ -496,7 +496,7 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public void abortTransaction(long dbId, long transactionId, String reason, List<TabletFailInfo> failedTablets,
-            TxnCommitAttachment txnCommitAttachment)
+                                 TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         dbTransactionMgr.abortTransaction(transactionId, reason, txnCommitAttachment, failedTablets);
@@ -614,7 +614,6 @@ public class GlobalTransactionMgr implements Writable {
      *
      * @return the min txn id of running transactions. If there are no running transactions, return the next transaction id
      * that will be assigned.
-     *
      */
     public long getMinActiveTxnId() {
         long minId = idGenerator.peekNextTransactionId();
@@ -760,29 +759,24 @@ public class GlobalTransactionMgr implements Writable {
         return newChecksum;
     }
 
-    public void loadTransactionStateV2(DataInputStream dis)
+    public void loadTransactionStateV2(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         long now = System.currentTimeMillis();
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.GLOBAL_TRANSACTION_MGR);
-        try {
-            idGenerator = reader.readJson(TransactionIdGenerator.class);
-            int numTransactions = reader.readInt();
-            List<TransactionState> transactionStates = new ArrayList<>(numTransactions);
-            for (int i = 0; i < numTransactions; ++i) {
-                TransactionState transactionState = reader.readJson(TransactionState.class);
-                if (transactionState.isExpired(now)) {
-                    LOG.info("discard expired transaction state: {}", transactionState);
-                    continue;
-                } else if (transactionState.getTransactionStatus() == TransactionStatus.UNKNOWN) {
-                    LOG.info("discard unknown transaction state: {}", transactionState);
-                    continue;
-                }
-                transactionStates.add(transactionState);
+        idGenerator = reader.readJson(TransactionIdGenerator.class);
+        int numTransactions = reader.readInt();
+        List<TransactionState> transactionStates = new ArrayList<>(numTransactions);
+        for (int i = 0; i < numTransactions; ++i) {
+            TransactionState transactionState = reader.readJson(TransactionState.class);
+            if (transactionState.isExpired(now)) {
+                LOG.info("discard expired transaction state: {}", transactionState);
+                continue;
+            } else if (transactionState.getTransactionStatus() == TransactionStatus.UNKNOWN) {
+                LOG.info("discard unknown transaction state: {}", transactionState);
+                continue;
             }
-            putTransactionStats(transactionStates);
-        } finally {
-            reader.close();
+            transactionStates.add(transactionState);
         }
+        putTransactionStats(transactionStates);
     }
 
     private void putTransactionStats(List<TransactionState> transactionStates) throws IOException {

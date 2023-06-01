@@ -38,6 +38,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -208,6 +209,8 @@ import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -309,6 +312,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -1403,6 +1407,10 @@ public class GlobalStateMgr {
         feType = newType;
     }
 
+    public interface ImageLoader {
+        void apply(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException;
+    }
+
     public void loadImage(String imageDir) throws IOException, DdlException {
         Storage storage = new Storage(imageDir);
         nodeMgr.setClusterId(storage.getClusterID());
@@ -1421,46 +1429,77 @@ public class GlobalStateMgr {
         long checksum = 0;
         long remoteChecksum = -1;  // in case of empty image file checksum match
         try {
-            // ** NOTICE **: always add new code at the end
             checksum = loadVersion(dis, checksum);
             if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
+                Map<SRMetaBlockID, ImageLoader> loadImages = ImmutableMap.<SRMetaBlockID, ImageLoader>builder()
+                        .put(SRMetaBlockID.NODE_MGR, nodeMgr::load)
+                        .put(SRMetaBlockID.LOCAL_META_STORE, localMetastore::load)
+                        .put(SRMetaBlockID.CATALOG_RECYCLE_BIN, recycleBin::load)
+                        .put(SRMetaBlockID.LOAD_MGR, loadMgr::loadLoadJobsV2JsonFormat)
+                        .put(SRMetaBlockID.ALTER_MGR, alterJobMgr::load)
+                        .put(SRMetaBlockID.VARIABLE_MGR, VariableMgr::load)
+                        .put(SRMetaBlockID.PLUGIN_MGR, pluginMgr::load)
+                        .put(SRMetaBlockID.DELETE_MGR, deleteMgr::load)
+                        .put(SRMetaBlockID.ANALYZE_MGR, analyzeMgr::load)
+                        .put(SRMetaBlockID.RESOURCE_GROUP_MGR, resourceGroupMgr::load)
+                        .put(SRMetaBlockID.ROUTINE_LOAD_MGR, routineLoadMgr::loadRoutineLoadJobsV2)
+                        .put(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, globalTransactionMgr::loadTransactionStateV2)
+                        .put(SRMetaBlockID.AUTH, auth::load)
+                        .put(SRMetaBlockID.AUTHENTICATION_MGR, authenticationMgr::loadV2)
+                        .put(SRMetaBlockID.AUTHORIZATION_MGR, authorizationMgr::loadV2)
+                        .put(SRMetaBlockID.EXPORT_MGR, exportMgr::loadExportJobV2)
+                        .put(SRMetaBlockID.COLOCATE_TABLE_INDEX, colocateTableIndex::loadColocateTableIndexV2)
+                        .put(SRMetaBlockID.SMALL_FILE_MGR, smallFileMgr::loadSmallFilesV2)
+                        .put(SRMetaBlockID.CATALOG_MGR, catalogMgr::load)
+                        .put(SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, insertOverwriteJobMgr::load)
+                        .put(SRMetaBlockID.COMPACTION_MGR, compactionMgr::load)
+                        .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
+                        .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
+                        .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
+                        .put(SRMetaBlockID.BACKUP_MGR, backupHandler::loadBackupHandlerV2)
+                        .build();
                 try {
                     checksum = loadHeaderV2(dis, checksum);
-                    nodeMgr.load(dis);
-                    localMetastore.load(dis);
 
-                    // ATTN: this should be done after load Db, and before loadAlterJob
-                    localMetastore.recreateTabletInvertIndex();
-                    // rebuild es state state
-                    esRepository.loadTableFromCatalog();
-                    starRocksRepository.loadTableFromCatalog();
-                    recycleBin.load(dis);
+                    Iterator<Map.Entry<SRMetaBlockID, ImageLoader>> iterator = loadImages.entrySet().iterator();
+                    Map.Entry<SRMetaBlockID, ImageLoader> entry = iterator.next();
+                    while (true) {
+                        SRMetaBlockID srMetaBlockID = entry.getKey();
+                        SRMetaBlockReader reader = new SRMetaBlockReader(dis, srMetaBlockID);
+                        if (reader.getHeader().getId() != srMetaBlockID) {
+                            /*
+                              The expected read module does not match the module stored in the image,
+                              and the json chunk is skipped directly. This usually occurs in several situations.
+                              1. When the obsolete image code is deleted.
+                              2. When the new version rolls back to the old version,
+                                 the old version ignores the functions of the new version
+                             */
+                            reader.close();
+                            continue;
+                        }
 
-                    loadMgr.loadLoadJobsV2JsonFormat(dis);
-                    alterJobMgr.load(dis);
-                    VariableMgr.load(dis);
-                    pluginMgr.load(dis);
-                    deleteMgr.load(dis);
-                    analyzeMgr.load(dis);
-                    resourceGroupMgr.load(dis);
-                    routineLoadMgr.loadRoutineLoadJobsV2(dis);
-                    // global transaction must be replayed before load jobs v2
-                    globalTransactionMgr.loadTransactionStateV2(dis);
-                    loadMgr.loadLoadJobsV2JsonFormat(dis);
-                    auth.load(dis);
-                    authenticationMgr.loadV2(dis);
-                    authorizationMgr.loadV2(dis);
-                    exportMgr.loadExportJobV2(dis);
-                    colocateTableIndex.loadColocateTableIndexV2(dis);
-                    smallFileMgr.loadSmallFilesV2(dis);
-                    catalogMgr.load(dis);
-                    insertOverwriteJobMgr.load(dis);
-                    compactionMgr.load(dis);
-                    streamLoadMgr.load(dis);
-                    MaterializedViewMgr.getInstance().load(dis);
-                    globalFunctionMgr.load(dis);
-                    backupHandler.loadBackupHandlerV2(dis);
-                } catch (SRMetaBlockException | SRMetaBlockEOFException e) {
+                        try {
+                            ImageLoader imageLoader = entry.getValue();
+                            imageLoader.apply(reader);
+                        } catch (SRMetaBlockEOFException srMetaBlockEOFException) {
+                            /*
+                              The number of json expected to be read is more than the number of json actually stored
+                              in the image, which usually occurs when the module adds new functions.
+                             */
+                            LOG.warn("got EOF exception, ignore, ", srMetaBlockEOFException);
+                        } catch (SRMetaBlockException srMetaBlockException) {
+                            LOG.error("load image failed", srMetaBlockException);
+                            throw new IOException("load image failed", srMetaBlockException);
+                        } finally {
+                            reader.close();
+                        }
+                        if (iterator.hasNext()) {
+                            entry = iterator.next();
+                        } else {
+                            break;
+                        }
+                    }
+                } catch (SRMetaBlockException e) {
                     LOG.error("load image failed", e);
                     throw new IOException("load image failed", e);
                 }

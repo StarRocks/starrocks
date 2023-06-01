@@ -605,34 +605,29 @@ public class AnalyzeMgr implements Writable {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.ANALYZE_MGR);
-        try {
-            int analyzeJobSize = reader.readInt();
-            for (int i = 0; i < analyzeJobSize; ++i) {
-                AnalyzeJob analyzeJob = reader.readJson(AnalyzeJob.class);
-                replayAddAnalyzeJob(analyzeJob);
-            }
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int analyzeJobSize = reader.readInt();
+        for (int i = 0; i < analyzeJobSize; ++i) {
+            AnalyzeJob analyzeJob = reader.readJson(AnalyzeJob.class);
+            replayAddAnalyzeJob(analyzeJob);
+        }
 
-            int analyzeStatusSize = reader.readInt();
-            for (int i = 0; i < analyzeStatusSize; ++i) {
-                NativeAnalyzeStatus analyzeStatus = reader.readJson(NativeAnalyzeStatus.class);
-                replayAddAnalyzeStatus(analyzeStatus);
-            }
+        int analyzeStatusSize = reader.readInt();
+        for (int i = 0; i < analyzeStatusSize; ++i) {
+            NativeAnalyzeStatus analyzeStatus = reader.readJson(NativeAnalyzeStatus.class);
+            replayAddAnalyzeStatus(analyzeStatus);
+        }
 
-            int basicStatsMetaSize = reader.readInt();
-            for (int i = 0; i < basicStatsMetaSize; ++i) {
-                BasicStatsMeta basicStatsMeta = reader.readJson(BasicStatsMeta.class);
-                replayAddBasicStatsMeta(basicStatsMeta);
-            }
+        int basicStatsMetaSize = reader.readInt();
+        for (int i = 0; i < basicStatsMetaSize; ++i) {
+            BasicStatsMeta basicStatsMeta = reader.readJson(BasicStatsMeta.class);
+            replayAddBasicStatsMeta(basicStatsMeta);
+        }
 
-            int histogramStatsMetaSize = reader.readInt();
-            for (int i = 0; i < histogramStatsMetaSize; ++i) {
-                HistogramStatsMeta histogramStatsMeta = reader.readJson(HistogramStatsMeta.class);
-                replayAddHistogramStatsMeta(histogramStatsMeta);
-            }
-        } finally {
-            reader.close();
+        int histogramStatsMetaSize = reader.readInt();
+        for (int i = 0; i < histogramStatsMetaSize; ++i) {
+            HistogramStatsMeta histogramStatsMeta = reader.readJson(HistogramStatsMeta.class);
+            replayAddHistogramStatsMeta(histogramStatsMeta);
         }
     }
 

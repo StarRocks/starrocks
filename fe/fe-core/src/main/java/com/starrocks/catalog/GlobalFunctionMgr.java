@@ -190,16 +190,11 @@ public class GlobalFunctionMgr {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.GLOBAL_FUNCTION_MGR);
-        try {
-            int numJson = reader.readInt();
-            for (int i = 0; i < numJson; ++i) {
-                Function function = reader.readJson(Function.class);
-                replayAddFunction(function);
-            }
-        } finally {
-            reader.close();
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int numJson = reader.readInt();
+        for (int i = 0; i < numJson; ++i) {
+            Function function = reader.readJson(Function.class);
+            replayAddFunction(function);
         }
     }
 }

@@ -4722,55 +4722,53 @@ public class LocalMetastore implements ConnectorMetadata {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.LOCAL_META_STORE);
-        try {
-            int dbSize = reader.readJson(int.class);
-            for (int i = 0; i < dbSize; ++i) {
-                Database db = reader.readJson(Database.class);
-                int tableSize = reader.readInt();
-                for (int j = 0; j < tableSize; ++j) {
-                    Table table = reader.readJson(Table.class);
-                    db.createTableWithLock(table, true);
-                }
-
-                idToDb.put(db.getId(), db);
-                fullNameToDb.put(db.getFullName(), db);
-                stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-                db.getMaterializedViews().forEach(Table::onCreate);
-                db.getHiveTables().forEach(Table::onCreate);
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int dbSize = reader.readJson(int.class);
+        for (int i = 0; i < dbSize; ++i) {
+            Database db = reader.readJson(Database.class);
+            int tableSize = reader.readInt();
+            for (int j = 0; j < tableSize; ++j) {
+                Table table = reader.readJson(Table.class);
+                db.createTableWithLock(table, true);
             }
 
-
-            // put built-in database into local metastore
-            InfoSchemaDb infoSchemaDb = new InfoSchemaDb();
-            Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
-                    "InfoSchemaDb id shouldn't larger than " + NEXT_ID_INIT_VALUE);
-            idToDb.put(infoSchemaDb.getId(), infoSchemaDb);
-            fullNameToDb.put(infoSchemaDb.getFullName(), infoSchemaDb);
-
-            if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
-                LOG.warn("Since the the database of starrocks already exists, " +
-                        "the system will not automatically create the database of starrocks for system.");
-            } else {
-                StarRocksDb starRocksDb = new StarRocksDb();
-                Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
-                        "starocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
-                idToDb.put(starRocksDb.getId(), starRocksDb);
-                fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
-            }
-
-            AutoIncrementInfo autoIncrementInfo = reader.readJson(AutoIncrementInfo.class);
-            for (Map.Entry<Long, Long> entry : autoIncrementInfo.tableIdToIncrementId().entrySet()) {
-                Long tableId = entry.getKey();
-                Long id = entry.getValue();
-
-                tableIdToIncrementId.put(tableId, id);
-            }
-
-        } finally {
-            reader.close();
+            idToDb.put(db.getId(), db);
+            fullNameToDb.put(db.getFullName(), db);
+            stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
+            db.getMaterializedViews().forEach(Table::onCreate);
+            db.getHiveTables().forEach(Table::onCreate);
         }
+
+
+        // put built-in database into local metastore
+        InfoSchemaDb infoSchemaDb = new InfoSchemaDb();
+        Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
+                "InfoSchemaDb id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+        idToDb.put(infoSchemaDb.getId(), infoSchemaDb);
+        fullNameToDb.put(infoSchemaDb.getFullName(), infoSchemaDb);
+
+        if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
+            LOG.warn("Since the the database of starrocks already exists, " +
+                    "the system will not automatically create the database of starrocks for system.");
+        } else {
+            StarRocksDb starRocksDb = new StarRocksDb();
+            Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
+                    "starocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+            idToDb.put(starRocksDb.getId(), starRocksDb);
+            fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
+        }
+
+        AutoIncrementInfo autoIncrementInfo = reader.readJson(AutoIncrementInfo.class);
+        for (Map.Entry<Long, Long> entry : autoIncrementInfo.tableIdToIncrementId().entrySet()) {
+            Long tableId = entry.getKey();
+            Long id = entry.getValue();
+
+            tableIdToIncrementId.put(tableId, id);
+        }
+
+        recreateTabletInvertIndex();
+        GlobalStateMgr.getCurrentState().getEsRepository().loadTableFromCatalog();
+        GlobalStateMgr.getCurrentState().getStarRocksRepository().loadTableFromCatalog();
     }
 }
 

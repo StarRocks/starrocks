@@ -1220,8 +1220,8 @@ public class NodeMgr {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.NODE_MGR);
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        //SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.NODE_MGR);
         try {
             NodeMgr nodeMgr = reader.readJson(NodeMgr.class);
 

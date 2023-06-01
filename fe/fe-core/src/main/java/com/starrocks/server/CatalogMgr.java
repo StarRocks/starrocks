@@ -407,8 +407,7 @@ public class CatalogMgr {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.CATALOG_MGR);
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         try {
             int serializedCatalogsSize = reader.readInt();
             for (int i = 0; i < serializedCatalogsSize; ++i) {
@@ -416,9 +415,7 @@ public class CatalogMgr {
                 replayCreateCatalog(catalog);
             }
         } catch (DdlException e) {
-            throw new RuntimeException(e);
-        } finally {
-            reader.close();
+            throw new IOException(e);
         }
     }
 }
