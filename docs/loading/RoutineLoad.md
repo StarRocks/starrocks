@@ -113,9 +113,9 @@ PROPERTIES
 )
 FROM KAFKA
 (
-    "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
     "kafka_topic" = "ordertest1",
-    "kafka_partitions" ="0,1,2,3,4",
+    "kafka_partitions" = "0,1,2,3,4",
     "property.kafka_default_offsets" = "OFFSET_BEGINNING"
 );
 ```
@@ -223,9 +223,9 @@ CREATE ROUTINE LOAD example_db.example_tbl2_ordertest2 ON example_tbl2
 COLUMNS(commodity_id, customer_name, country, pay_time, price, pay_dt=from_unixtime(pay_time, '%Y%m%d'))
 PROPERTIES
 (
-    "desired_concurrent_number"="5",
-    "format" ="json",
-    "jsonpaths" ="[\"$.commodity_id\",\"$.customer_name\",\"$.country\",\"$.pay_time\",\"$.price\"]"
+    "desired_concurrent_number" = "5",
+    "format" = "json",
+    "jsonpaths" = "[\"$.commodity_id\",\"$.customer_name\",\"$.country\",\"$.pay_time\",\"$.price\"]"
  )
 FROM KAFKA
 (
@@ -323,15 +323,15 @@ Execute the following statement to submit a Routine Load job named `sensor_log_l
 CREATE ROUTINE LOAD example_db.sensor_log_load_job ON sensor_log1  
 PROPERTIES  
 (  
-    "format" ="avro"  
+    "format" = "avro"  
 )  
 FROM KAFKA  
 (  
-    "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>,...",
-    "confluent.schema.registry.url"="http://172.xx.xxx.xxx:8081",  
-    "kafka_topic"="topic_0",  
-    "kafka_partitions"="0,1,2,3,4,5",  
-    "property.kafka_default_offsets"="OFFSET_BEGINNING"  
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>,...",
+    "confluent.schema.registry.url" = "http://172.xx.xxx.xxx:8081",  
+    "kafka_topic" = "topic_0",  
+    "kafka_partitions" = "0,1,2,3,4,5",  
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"  
 );
 ```
 

@@ -509,11 +509,11 @@ You can use the simple mode for the Routine Load job. That is, you do not need t
 CREATE ROUTINE LOAD example_db.example_tbl3_ordertest2 ON example_tbl3
 PROPERTIES
 (
-    "format" ="json"
+    "format" = "json"
  )
 FROM KAFKA
 (
-    "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
     "kafka_topic" = "ordertest2"
 );
 ```
@@ -564,12 +564,12 @@ CREATE ROUTINE LOAD example_db.example_tbl4_ordertest2 ON example_tbl4
 COLUMNS(commodity_id, customer_name, country, pay_time, pay_dt=from_unixtime(pay_time, '%Y%m%d'), price)
 PROPERTIES
 (
-    "format" ="json",
-    "jsonpaths" ="[\"$.commodity_id\",\"$.customer_name\",\"$.country\",\"$.pay_time\",\"$.price\"]"
+    "format" = "json",
+    "jsonpaths" = "[\"$.commodity_id\",\"$.customer_name\",\"$.country\",\"$.pay_time\",\"$.price\"]"
  )
 FROM KAFKA
 (
-    "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
     "kafka_topic" = "ordertest2"
 );
 ```
@@ -615,13 +615,13 @@ You can set `"json_root" = "$.RECORDS"` in `PROPERTIES` to specify the root elem
 CREATE ROUTINE LOAD example_db.example_tbl3_ordertest3 ON example_tbl3
 PROPERTIES
 (
-    "format" ="json",
+    "format" = "json",
     "json_root" = "$.RECORDS",
     "strip_outer_array" = "true"
  )
 FROM KAFKA
 (
-    "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
     "kafka_topic" = "ordertest2"
 );
 ```
@@ -685,15 +685,15 @@ You can use the simple mode for the Routine Load job. That is, you do not need t
 CREATE ROUTINE LOAD sensor.sensor_log_load_job1 ON sensor_log1  
 PROPERTIES  
 (  
-  "format" ="avro"  
+  "format" = "avro"  
 )  
 FROM KAFKA  
 (  
-  "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>,...",
-  "confluent.schema.registry.url"="http://172.xx.xxx.xxx:8081",  
-  "kafka_topic"="topic_1",  
-  "kafka_partitions"="0,1,2,3,4,5",  
-  "property.kafka_default_offsets"="OFFSET_BEGINNING"  
+  "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>,...",
+  "confluent.schema.registry.url" = "http://172.xx.xxx.xxx:8081",  
+  "kafka_topic"= "topic_1",  
+  "kafka_partitions" = "0,1,2,3,4,5",  
+  "property.kafka_default_offsets" = "OFFSET_BEGINNING"  
 );
 ```
 
@@ -705,7 +705,7 @@ Suppose the Avro schema contains a nested record-type field, and you need to loa
 
 **Avro schema**
 
-1. Create the following Avro schema file `avro_schema2.avsc`. The outer Avro record includes five fields which are `id`, `name`, `checked`, `sensor_type` and `data` in sequence. And the field `data` has a nested record `data_record`.
+1. Create the following Avro schema file `avro_schema2.avsc`. The outer Avro record includes five fields which are `id`, `name`, `checked`, `sensor_type`, and `data` in sequence. And the field `data` has a nested record `data_record`.
 
       ```JSON
       {
@@ -759,20 +759,20 @@ DISTRIBUTED BY HASH(`id`) BUCKETS 5;
 
 Submit the load job, use `jsonpaths` to specify the fields of the Avro data that need to be loaded. Note that for the subfield `data_y` in the nested Record, you need to specify its `jsonpath` as `"$.data.data_y"`.
 
-```Bash
+```sql
 CREATE ROUTINE LOAD sensor.sensor_log_load_job2 ON sensor_log2  
 PROPERTIES  
 (  
-  "format" ="avro",
-  "jsonpaths" ="[\"$.id\",\"$.name\",\"$.checked\",\"$.sensor_type\",\"$.data.data_y\"]"
+  "format" = "avro",
+  "jsonpaths" = "[\"$.id\",\"$.name\",\"$.checked\",\"$.sensor_type\",\"$.data.data_y\"]"
 )  
 FROM KAFKA  
 (  
-  "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>,...",
-  "confluent.schema.registry.url"="http://172.xx.xxx.xxx:8081",  
-  "kafka_topic"="topic_1",  
-  "kafka_partitions"="0,1,2,3,4,5",  
-  "property.kafka_default_offsets"="OFFSET_BEGINNING"  
+  "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>,...",
+  "confluent.schema.registry.url" = "http://172.xx.xxx.xxx:8081",  
+  "kafka_topic" = "topic_1",  
+  "kafka_partitions" = "0,1,2,3,4,5",  
+  "property.kafka_default_offsets" = "OFFSET_BEGINNING"  
 );
 ```
 
@@ -843,16 +843,16 @@ Submit the load job, use `jsonpaths` to specify the fields that need to be loade
 CREATE ROUTINE LOAD sensor.sensor_log_load_job3 ON sensor_log3  
 PROPERTIES  
 (  
-  "format" ="avro",
-  "jsonpaths" ="[\"$.id\",\"$.name\",\"$.checked\",\"$.sensor_type\",\"$.data.data_y\"]"
+  "format" = "avro",
+  "jsonpaths" = "[\"$.id\",\"$.name\",\"$.checked\",\"$.sensor_type\",\"$.data.data_y\"]"
 )  
 FROM KAFKA  
 (  
-  "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>,...",
-  "confluent.schema.registry.url"="http://172.xx.xxx.xxx:8081",  
-  "kafka_topic"="topic_1",  
-  "kafka_partitions"="0,1,2,3,4,5",  
-  "property.kafka_default_offsets"="OFFSET_BEGINNING"  
+  "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>,...",
+  "confluent.schema.registry.url" = "http://172.xx.xxx.xxx:8081",  
+  "kafka_topic" = "topic_1",  
+  "kafka_partitions" = "0,1,2,3,4,5",  
+  "property.kafka_default_offsets" = "OFFSET_BEGINNING"  
 );
 ```
 
