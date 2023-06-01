@@ -223,6 +223,8 @@ public class KafkaUtil {
                                 throw e;
                             }
                             continue;
+                        } else {
+                            throw e;
                         }
                     }
                     TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
