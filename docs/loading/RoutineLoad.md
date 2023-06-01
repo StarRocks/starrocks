@@ -337,9 +337,10 @@ FROM KAFKA
 
 - Data Format
 
-  You need to specify `"format"="avro"` in the clause `PROPERTIES` to define that the data format is Avro.
+  You need to specify `"format = "avro"` in the clause `PROPERTIES` to define that the data format is Avro.
 
-- Schema Registry `confluent.schema.registry.url`: the URL of the Schema Registry where the Avro schema is registered. StarRocks retrieves the Avro schema by using this URL. The format is as follows:
+- Schema Registry
+You need to configure `confluent.schema.registry.url` to specify the URL of the Schema Registry where the Avro schema is registered. StarRocks retrieves the Avro schema by using this URL. The format is as follows:
 
     ```Plaintext
     confluent.schema.registry.url = http[s]://[<schema-registry-api-key>:<schema-registry-api-secret>@]<hostname|ip address>[:<port>]
