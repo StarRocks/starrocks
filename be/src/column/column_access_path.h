@@ -26,6 +26,14 @@ class Field;
 class ObjectPool;
 class RuntimeState;
 
+/*
+ * Used to describe the access path of the subfield, it's like a file path.
+ * e.g. 
+ *  column: structA STRUCT<a STRCUT<a1 INT, b STRUCT<c INT>>>
+ *  path: /structA/a/b/c
+ *  type: /ROOT/FIELD/FIELD/FIELD
+ *  index: /7/0/1/0
+ */
 class ColumnAccessPath {
 public:
     Status init(const TColumnAccessPath& column_path, RuntimeState* state, ObjectPool* pool);
@@ -53,6 +61,10 @@ private:
 
     std::string _path;
 
+    // column index in storage
+    // the root index is the offset of table schema
+    // the FIELD index is the offset of struct schema
+    // it's unused for MAP/JSON now
     uint32_t _column_index;
 
     std::vector<std::unique_ptr<ColumnAccessPath>> _children;

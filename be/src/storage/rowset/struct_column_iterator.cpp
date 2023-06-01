@@ -73,9 +73,10 @@ Status StructColumnIterator::init(const ColumnIteratorOptions& opts) {
         RETURN_IF_ERROR(_null_iter->init(opts));
     }
 
-    for (int i = 0; i < _field_iters.size(); ++i) {
-        RETURN_IF_ERROR(_field_iters[i]->init(opts));
+    for (auto& iter : _field_iters) {
+        RETURN_IF_ERROR(iter->init(opts));
     }
+
     return Status::OK();
 }
 
@@ -186,8 +187,8 @@ Status StructColumnIterator::seek_to_first() {
     if (_null_iter != nullptr) {
         RETURN_IF_ERROR(_null_iter->seek_to_first());
     }
-    for (int i = 0; i < _field_iters.size(); ++i) {
-        RETURN_IF_ERROR(_field_iters[i]->seek_to_first());
+    for (auto& iter : _field_iters) {
+        RETURN_IF_ERROR(iter->seek_to_first());
     }
     return Status::OK();
 }
@@ -196,8 +197,8 @@ Status StructColumnIterator::seek_to_ordinal(ordinal_t ord) {
     if (_null_iter != nullptr) {
         RETURN_IF_ERROR(_null_iter->seek_to_ordinal(ord));
     }
-    for (int i = 0; i < _field_iters.size(); ++i) {
-        RETURN_IF_ERROR(_field_iters[i]->seek_to_ordinal(ord));
+    for (auto& iter : _field_iters) {
+        RETURN_IF_ERROR(iter->seek_to_ordinal(ord));
     }
     return Status::OK();
 }

@@ -261,7 +261,7 @@ Status OlapChunkSource::_init_unused_output_columns(const std::vector<std::strin
 
 Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
     // column access paths
-    auto paths = _scan_ctx->column_access_paths();
+    auto* paths = _scan_ctx->column_access_paths();
     for (const auto& path : *paths) {
         auto& root = path->path();
         int32_t index = _tablet->field_index(root);
