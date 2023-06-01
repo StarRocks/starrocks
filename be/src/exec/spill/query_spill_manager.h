@@ -35,7 +35,7 @@ public:
 
 private:
     TUniqueId _uid;
-    std::atomic_size_t _spilled_bytes;
+    std::atomic_size_t _spilled_bytes = 0;
     std::unique_ptr<BlockManager> _block_manager;
 };
 } // namespace starrocks::spill
