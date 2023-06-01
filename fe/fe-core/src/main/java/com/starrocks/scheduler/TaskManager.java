@@ -30,6 +30,9 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.meta.LimitExceededException;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -473,6 +476,21 @@ public class TaskManager {
             LOG.info("no TaskManager to replay.");
         }
         return checksum;
+    }
+
+    public void loadTasksV2(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, "TaskManager");
+        int size = reader.readInt();
+        while (size-- > 0) {
+            Task task = reader.readJson(Task.class);
+            replayCreateTask(task);
+        }
+
+        size = reader.readInt();
+        while (size-- > 0) {
+            TaskRunStatus status = reader.readJson(TaskRunStatus.class);
+            replayCreateTaskRun(status);
+        }
     }
 
     public long saveTasks(DataOutputStream dos, long checksum) throws IOException {
