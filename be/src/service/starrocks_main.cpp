@@ -59,7 +59,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
-#include "runtime/load_channel_mgr.h"
 #include "service/backend_options.h"
 #include "service/service.h"
 #include "service/staros_worker.h"
