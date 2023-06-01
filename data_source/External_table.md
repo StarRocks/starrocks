@@ -892,7 +892,7 @@ Hive 表 (Hive Table) 的 Partition 统计信息以及 Partition 下面的文件
 ### 注意事项
 
 * Iceberg 外部表仅支持查询以下格式的数据：
-  * Versions 1 表(Analytic Data Tables) 。暂不支持查询 Versions 2 表 (Row-level Deletes) 。更多有关 Versions 1 和 Versions 2 的信息，参见 [Iceberg Table Spec](https://iceberg.apache.org/spec/)。
+  * Iceberg v1 表 (Analytic Data Tables) 。自 3.0 版本开始，支持查询 ORC 格式的 Iceberg v2 表 (Row-level Deletes) 。更多有关 Iceberg v1 表和 Iceberg v2 表的信息，参见 [Iceberg Table Spec](https://iceberg.apache.org/spec/)。
   * 压缩格式为 gzip（默认压缩格式）、Zstd、LZ4 和 Snappy 的表。
   * 格式为 Parquet 和 ORC 的文件。
 * StarRocks 2.3 及以上版本支持同步 Iceberg 表结构，但 StarRocks 2.3 以下版本不⽀持。如果 Iceberg 表结构发生变化，您需要在 StarRocks 中删除相应的外部表并重新创建。
