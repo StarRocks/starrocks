@@ -148,11 +148,9 @@ SELECT /*+ SET_VAR
 
   Used to enable the strict mode when loading data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md).
 
-* enable_spilling
+* enable_spill
 
-  Used to enable large data volume drop sorting. The default value is false, meaning it is not enabled. It is enabled when the user does not specify a `LIMIT` condition in the `ORDER BY` clause and sets `enable_spilling` to true. When enabled, the BE data directory `starrocks-scratch/` is used to store temporary spilling data that will be cleared after the query is completed.
-
-  This function is mainly used for sorting operations with large data volume using limited memory.
+  Whether to enable intermediate result spilling. Default: `false`. If it is set to `true`, StarRocks spills the intermediate results to disk to reduce the memory usage when processing aggregate, sort, or join operators in queries.
 
 * event_scheduler
 
@@ -474,6 +472,15 @@ SELECT /*+ SET_VAR
   The maximum number of rows allowed for the Hash table based on which Bloom filter Local RF is generated. Local RF will not be generated if this value is exceeded. This variable prevents the generation of an excessively long Local RF.
 
   The value is an integer. Default value: 1024000.
+
+* spill_mode
+
+  The execution mode of intermediate result spilling. Valid values:
+
+    * `auto`: Spilling is automatically triggered when the memory usage threshold is reached.
+    * `force`: StarRocks forcibly executes spilling for all relevant operators, regardless of memory usage.
+   
+  This variable takes effect only when the variable `enable_spill` is set to `true`.
 
 * sql_dialect  (v3.0 and later)
 

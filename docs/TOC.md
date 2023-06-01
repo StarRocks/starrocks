@@ -118,6 +118,7 @@
       + [Query queue](./administration/query_queues.md)
       + [Query management](./administration/Query_management.md)
       + [Memory management](./administration/Memory_management.md)
+      + [Spill to disk](./administration/spill_to_disk.md)
       + [Load balance](./administration/Load_balance.md)
       + [Replica](./administration/Replica.md)
       + [Blacklist](./administration/Blacklist.md)
