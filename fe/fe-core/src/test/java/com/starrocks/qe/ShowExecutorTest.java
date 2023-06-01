@@ -816,6 +816,9 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowComputeNodes() throws AnalysisException, DdlException {
+        SystemInfoService clusterInfo = AccessTestUtil.fetchSystemInfoService();
+        StarOSAgent starosAgent = new StarOSAgent();
+
         ComputeNode node = new ComputeNode(1L, "127.0.0.1", 80);
         node.updateResourceUsage(10, 100L, 1L, 30);
 
@@ -834,6 +837,18 @@ public class ShowExecutorTest {
             }
         };
 
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            SystemInfoService getCurrentSystemInfo() {
+                return clusterInfo;
+            }
+
+            @Mock
+            StarOSAgent getStarOSAgent() {
+                return starosAgent;
+            }
+        };
+
         new MockUp<BackendCoreStat>() {
             @Mock
             int getCoresOfBe(long beId) {
@@ -845,6 +860,13 @@ public class ShowExecutorTest {
             @Mock
             public RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            long getWorkerIdByBackendId(long backendId) {
+                return 5;
             }
         };
 
