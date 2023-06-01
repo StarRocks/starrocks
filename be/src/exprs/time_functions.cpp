@@ -2406,7 +2406,7 @@ StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format_const(std::string& form
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format_optional(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_DATETIME> data_column(columns[0]);
     ColumnViewer<TYPE_VARCHAR> format_column(columns[1]);
     auto size = columns[0]->size();
@@ -2444,7 +2444,7 @@ StatusOr<ColumnPtr> TimeFunctions::last_day_with_format(FunctionContext* context
         std::string format_content = state->optional_content;
         return _last_day_with_format_const(format_content, context, columns);
     }
-    return _last_day_with_format_optional(context, columns);
+    return _last_day_with_format(context, columns);
 }
 
 Status TimeFunctions::last_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
