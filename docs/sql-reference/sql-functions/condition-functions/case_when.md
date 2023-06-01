@@ -2,7 +2,7 @@
 
 ## Description
 
-Returns the result in the THEN clause if a condition in the WHEN clause evaluates to true. If none of the conditions evaluate to true, the result in the optional ELSE clause is returned. If ELSE is not present, NULL is returned.
+CASE is a conditional expression. It returns the result in the THEN clause if a condition in the WHEN clause evaluates to true. If none of the conditions evaluate to true, it returns the result in the optional ELSE clause. If ELSE is not present, NULL is returned.
 
 ## Syntax
 
@@ -20,7 +20,7 @@ CASE expression
 END
 ```
 
-For this syntax, `expression` is compared to each expression in the WHEN clause. If an equal expression is found, the result in the THEN clause is returned. If no equal expression is found, the result in the ELSE clause is returned, if ELSE is present.
+For this syntax, `expression` is compared to each expression in the WHEN clause. If an equal expression is found, the result in the THEN clause is returned. If no equal expression is found, the result in the ELSE clause is returned if ELSE is present.
 
 - Searched CASE
 
@@ -33,7 +33,7 @@ CASE WHEN condition1 THEN result1
 END
 ```
 
-For this syntax, each condition in the WHEN clause is evaluated until one is true and the corresponding result after THEN is returned. If no condition evaluates to true, the result after ELSE is returned, if ELSE is present.
+For this syntax, each condition in the WHEN clause is evaluated until one is true and the corresponding result in the THEN clause is returned. If no condition evaluates to true, the result in the ELSE clause is returned, if ELSE is present.
 
 The first CASE equals the second one as follows:
 
@@ -75,7 +75,7 @@ INSERT INTO test_case VALUES
     ("Angel",-1,92.2),
     ("Sam",null,86.0);
 
-select * from test_case;
+SELECT * FROM test_case;
 +-------+--------+-------+
 | name  | gender | score |
 +-------+--------+-------+
@@ -86,7 +86,9 @@ select * from test_case;
 +-------+--------+-------+
 ```
 
-Example 1: Use simple CASE with ELSE specified.
+### Use simple CASE
+
+- ELSE is specified and the result in ELSE is returned if no equal expression is found.
 
 ```plain
 mysql> select gender, case gender 
@@ -105,7 +107,7 @@ from test_case;
 +--------+------------+
 ```
 
-Example 2: Use simple CASE with no ELSE specified. NULL is returned if no condition evaluates to true.
+- ELSE is not specified and NULL is returned if no condition evaluates to true.
 
 ```plain
 select gender, case gender 
@@ -123,7 +125,7 @@ from test_case;
 +--------+------------+
 ```
 
-Example 3: Use searched CASE with no ELSE specified.
+### Use searched CASE with no ELSE specified
 
 ```plain
 mysql> select gender, case when gender = 1 then 'male'
