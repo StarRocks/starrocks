@@ -310,6 +310,7 @@ public class MaterializedViewHandler extends AlterHandler {
                 }
                 Expr newDefinedExpr = new CastExpr(targetCol.getType(), mvCol.getDefineExpr());
                 mvCol.setDefineExpr(newDefinedExpr);
+                mvCol.setType(targetCol.getType());
             }
         }
 
@@ -342,8 +343,7 @@ public class MaterializedViewHandler extends AlterHandler {
                                 " of target table should have same name as " +
                                 basePartitionColumns.get(i) + "of base table");
                     }
-                    if (!basePartitionColumn.getPrimitiveType().name().equals(targetPartitionColumn.getPrimitiveType().
-                            name())) {
+                    if (!basePartitionColumn.getType().equals(targetPartitionColumn.getType())) {
                         throw new DdlException("Partition column" + targetPartitionColumns.get(i) +
                                 " of target table should have same type as " +
                                 basePartitionColumns.get(i) + "of base table");
