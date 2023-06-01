@@ -105,7 +105,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 4: {
-                // state
+                // tables
                 Slice tables = Slice(info.tables);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&tables);
                 break;
