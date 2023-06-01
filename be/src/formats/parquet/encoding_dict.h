@@ -118,11 +118,7 @@ public:
     }
 
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
-        _indexes.reserve(count);
-        _index_batch_decoder.GetBatch(&_indexes[0], count);
-
-        FixedLengthColumn<T>* data_column = nullptr;
-
+        FixedLengthColumn<T>* data_column /* = nullptr */;
         if (dst->is_nullable()) {
             auto nullable_column = down_cast<NullableColumn*>(dst);
             nullable_column->null_column()->append_default(count);
@@ -135,18 +131,8 @@ public:
         data_column->resize_uninitialized(cur_size + count);
         T* __restrict__ data = data_column->get_data().data() + cur_size;
 
-        auto flag = 0;
-        size_t size = _dict.size();
-        for (int i = 0; i < count; i++) {
-            flag |= _indexes[i] >= size;
-        }
-        if (UNLIKELY(flag)) {
-            return Status::InternalError("Index not in dictionary bounds");
-        }
+        _index_batch_decoder.GetBatchWithDict(_dict.data(), _dict.size(), data, count);
 
-        for (int i = 0; i < count; i++) {
-            data[i] = _dict[_indexes[i]];
-        }
         return Status::OK();
     }
 

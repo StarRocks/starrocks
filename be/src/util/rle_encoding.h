@@ -707,6 +707,10 @@ public:
     // Returns the number of consumed values or 0 if an error occurred.
     int32_t GetBatch(T* values, int32_t batch_num);
 
+    // Like GetBatch but the values are then decoded using the provided dictionary
+    template<typename TV>
+    int GetBatchWithDict(const TV* dictionary, int32_t dictionary_length, TV* values, int32_t batch_num);
+
 private:
     // Called when both 'literal_count_' and 'repeat_count_' have been exhausted.
     // Sets either 'literal_count_' or 'repeat_count_' to the size of the next literal
@@ -864,6 +868,7 @@ inline bool RleBatchDecoder<T>::FillLiteralBuffer() {
 
 template <typename T>
 inline int32_t RleBatchDecoder<T>::GetBatch(T* values, int32_t batch_num) {
+    DCHECK_GE(bit_width_, 0);
     int32_t num_consumed = 0;
     while (num_consumed < batch_num) {
         // Add RLE encoded values by repeating the current value this number of times.
@@ -886,6 +891,49 @@ inline int32_t RleBatchDecoder<T>::GetBatch(T* values, int32_t batch_num) {
         int32_t num_literals_to_set = std::min(num_literals, batch_num - num_consumed);
         if (!GetLiteralValues(num_literals_to_set, values + num_consumed)) {
             return 0;
+        }
+        num_consumed += num_literals_to_set;
+    }
+    return num_consumed;
+}
+
+template <typename T>
+template <typename TV>
+inline int RleBatchDecoder<T>::GetBatchWithDict(const TV* dictionary, int32_t dictionary_length, TV* values,
+                                                int32_t batch_num) {
+    DCHECK_GE(bit_width_, 0);
+    int32_t num_consumed = 0;
+    while (num_consumed < batch_num) {
+        // Add RLE encoded values by repeating the current value this number of times.
+        int32_t num_repeats = NextNumRepeats();
+        if (num_repeats > 0) {
+            int32_t num_repeats_to_set = std::min(num_repeats, batch_num - num_consumed);
+            T repeated_value = GetRepeatedValue(num_repeats_to_set);
+            TV value = dictionary[repeated_value];
+            // TODO(@DorianZheng) Check if index out of dictionary bound here
+            for (int i = 0; i < num_repeats_to_set; ++i) {
+                values[num_consumed + i] = value;
+            }
+            num_consumed += num_repeats_to_set;
+            continue;
+        }
+
+        // Add remaining literal values, if any.
+        int32_t num_literals = NextNumLiterals();
+        if (num_literals == 0) {
+            break;
+        }
+        const int kBufferSize = 1024;
+        T indices[kBufferSize];
+
+        int32_t num_literals_to_set = std::min(num_literals, batch_num - num_consumed);
+        num_literals_to_set = std::min(num_literals_to_set, kBufferSize);
+        if (!GetLiteralValues(num_literals_to_set, indices)) {
+            return 0;
+        }
+        // TODO(@DorianZheng) Check if index out of dictionary bound here
+        for (int i = 0; i < num_literals_to_set; ++i) {
+            values[num_consumed + i] = dictionary[indices[i]];
         }
         num_consumed += num_literals_to_set;
     }
