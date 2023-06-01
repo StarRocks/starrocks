@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -53,7 +65,7 @@ public:
         int length = rle_encoder.Flush();
         _buffer.append(&bit_width, 1);
         _buffer.append(encoded_data.data(), length);
-        return Slice(_buffer.data(), _buffer.size());
+        return {_buffer.data(), _buffer.size()};
     }
 
     Status encode_dict(Encoder* dict_encoder, size_t* num_dicts) override {
@@ -96,12 +108,8 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, vectorized::Column* dst) override {
-        _indexes.reserve(count);
-        _index_batch_decoder.GetBatch(&_indexes[0], count);
-
-        vectorized::FixedLengthColumn<T>* data_column = nullptr;
-
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
+        vectorized::FixedLengthColumn<T>* data_column /* = nullptr */;
         if (dst->is_nullable()) {
             auto nullable_column = down_cast<vectorized::NullableColumn*>(dst);
             nullable_column->null_column()->append_default(count);
@@ -114,18 +122,8 @@ public:
         data_column->resize_uninitialized(cur_size + count);
         T* __restrict__ data = data_column->get_data().data() + cur_size;
 
-        auto flag = 0;
-        size_t size = _dict.size();
-        for (int i = 0; i < count; i++) {
-            flag |= _indexes[i] >= size;
-        }
-        if (UNLIKELY(flag)) {
-            return Status::InternalError("Index not in dictionary bounds");
-        }
+        _index_batch_decoder.GetBatchWithDict(_dict.data(), _dict.size(), data, count);
 
-        for (int i = 0; i < count; i++) {
-            data[i] = _dict[_indexes[i]];
-        }
         return Status::OK();
     }
 
