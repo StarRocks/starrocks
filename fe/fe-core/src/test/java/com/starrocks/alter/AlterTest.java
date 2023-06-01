@@ -2541,7 +2541,11 @@ public class AlterTest {
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertThrows("resource_group not_exist_rg does not exist.",
                 DdlException.class, () -> GlobalStateMgr.getCurrentState().alterMaterializedView(alterTableStmt2));
-
-        Assert.assertEquals("", mv.getTableProperty().getResourceGroup());
+        sql = "ALTER MATERIALIZED VIEW mv2\n" +
+                "set (\"resource_group\" =\"mv_rg\" )";
+        AlterMaterializedViewStmt alterTableStmt3 =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterMaterializedView(alterTableStmt3);
+        Assert.assertEquals("mv_rg", mv.getTableProperty().getResourceGroup());
     }
 }
