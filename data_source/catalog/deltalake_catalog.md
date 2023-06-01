@@ -227,6 +227,8 @@ StarRocks 访问 Delta Lake 集群文件存储的相关参数配置。
 
 ##### Microsoft Azure Storage
 
+Delta Lake Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
+
 ###### Azure Blob Storage
 
 如果选择 Blob Storage 作为 Delta Lake 集群的文件存储，请按如下配置 `StorageCredentialParams`：
@@ -344,6 +346,8 @@ StarRocks 访问 Delta Lake 集群文件存储的相关参数配置。
   | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
 ##### Google GCS
+
+Delta Lake Catalog 从 3.0 版本起支持 Google GCS。
 
 如果选择 Google GCS 作为 Delta Lake 集群的文件存储，请按如下配置 `StorageCredentialParams`：
 

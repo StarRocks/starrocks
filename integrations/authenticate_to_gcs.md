@@ -2,7 +2,7 @@
 
 ## 认证方式介绍
 
-StarRocks 支持通过以下认证方式访问 Google Cloud Storage（简称 GCS）：
+StarRocks 从 3.0 版本起支持通过以下认证方式访问 Google Cloud Storage（简称 GCS）：
 
 - 基于 VM 认证鉴权
 
