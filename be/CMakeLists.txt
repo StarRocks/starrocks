@@ -75,6 +75,8 @@ option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
 option(WITH_CACHELIB "Build binary with cachelib library" OFF)
 
+option(WITH_STARCACHE "Build binary with starcache library" OFF)
+
 option(WITH_BENCH "Build binary with bench" OFF)
 
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
@@ -490,6 +492,9 @@ endif()
 if (${WITH_CACHELIB} STREQUAL "ON")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_CACHELIB")
 endif()
+if (${WITH_STARCACHE} STREQUAL "ON")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_STARCACHE")
+endif()
 
 # When LLVM is used, should give GCC_HOME to get c++11 header to use new string and list
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -648,7 +653,6 @@ set(STARROCKS_LINK_LIBS
     Tools
     Geo
     BlockCache
-    starcache
     ${WL_END_GROUP}
 )
 
@@ -885,7 +889,6 @@ add_subdirectory(${SRC_DIR}/testutil)
 add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)
 add_subdirectory(${SRC_DIR}/block_cache)
-add_subdirectory(${SRC_DIR}/thirdparty/starcache)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)

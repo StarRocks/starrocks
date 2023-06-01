@@ -54,7 +54,11 @@ public:
         auto cache = BlockCache::instance();
         CacheOptions options;
         options.mem_space_size = 100 * 1024 * 1024;
+#ifdef WITH_STARCACHE
         options.engine = "starcache";
+#else
+        options.engine = "cachelib";
+#endif
         options.block_size = block_size;
         ASSERT_OK(cache->init(options));
     }
