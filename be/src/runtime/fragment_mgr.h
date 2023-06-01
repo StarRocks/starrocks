@@ -89,6 +89,8 @@ public:
     void receive_runtime_filter(const PTransmitRuntimeFilterParams& params,
                                 const std::shared_ptr<const JoinRuntimeFilter>& shared_rf);
 
+    void cancel_all();
+
     void cancel_worker();
 
     void debug(std::stringstream& ss) override;

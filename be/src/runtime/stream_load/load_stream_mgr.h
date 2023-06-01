@@ -55,7 +55,12 @@ public:
             return _stream_map.size();
         });
     }
-    ~LoadStreamMgr() = default;
+    ~LoadStreamMgr() {
+        std::lock_guard<std::mutex> l(_lock);
+        for (const auto& it : _stream_map) {
+            it.second->close();
+        }
+    }
 
     Status put(const UniqueId& id, const std::shared_ptr<StreamLoadPipe>& stream) {
         std::lock_guard<std::mutex> l(_lock);
