@@ -351,19 +351,6 @@ void RuntimeState::append_error_msg_to_file(const std::string& line, const std::
     if (_query_options.query_type != TQueryType::LOAD) {
         return;
     }
-    // If file havn't been opened, open it here
-    if (_error_log_file == nullptr) {
-        Status status = create_error_log_file();
-        if (!status.ok()) {
-            LOG(WARNING) << "Create error file log failed. because: " << status.get_error_msg();
-            if (_error_log_file != nullptr) {
-                _error_log_file->close();
-                delete _error_log_file;
-                _error_log_file = nullptr;
-            }
-            return;
-        }
-    }
 
     // if num of printed error row exceeds the limit, and this is not a summary message,
     // return
@@ -378,6 +365,22 @@ void RuntimeState::append_error_msg_to_file(const std::string& line, const std::
     } else {
         // Note: export reason first in case src line too long and be truncated.
         out << "Error: " << error_msg << ". Row: " << line;
+    }
+
+    // If file havn't been opened, open it here
+    if (_error_log_file == nullptr) {
+        Status status = create_error_log_file();
+        if (!status.ok()) {
+            LOG(WARNING) << "Create error file log failed. because: " << status.get_error_msg();
+            if (_error_log_file != nullptr) {
+                _error_log_file->close();
+                delete _error_log_file;
+                _error_log_file = nullptr;
+            }
+            // when can not store in local disk, output it to glog
+            LOG(ERROR) << out.str();
+            return;
+        }
     }
 
     if (!out.str().empty()) {
@@ -402,6 +405,8 @@ void RuntimeState::append_rejected_record_to_file(const std::string& record, con
                 _rejected_record_file->close();
                 _rejected_record_file.reset();
             }
+            // when can not store in local disk, output it to glog
+            LOG(ERROR) << record << "\t" << error_msg << "\t" << source;
             return;
         }
     }
