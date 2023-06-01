@@ -235,6 +235,8 @@ The following table describes the parameters you need to configure in `StorageCr
 
 ##### Microsoft Azure Storage
 
+Hive catalogs support Microsoft Azure Storage from v3.0 onwards.
+
 ###### Azure Blob Storage
 
 If you choose Blob Storage as storage for your Hive cluster, take one of the following actions:
@@ -352,6 +354,8 @@ If you choose Data Lake Storage Gen2 as storage for your Hive cluster, take one 
   | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
 
 ##### Google GCS
+
+Hive catalogs support Google GCS from v3.0 onwards.
 
 If you choose Google GCS as storage for your Hive cluster, take one of the following actions:
 

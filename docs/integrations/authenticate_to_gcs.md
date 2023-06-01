@@ -2,7 +2,7 @@
 
 ## Authentication methods
 
-StarRocks supports using one of the following authentication methods to access Google Cloud Storage (GCS):
+From v3.0 onwards, StarRocks supports using one of the following authentication methods to access Google Cloud Storage (GCS):
 
 - VM-based authentication
 
