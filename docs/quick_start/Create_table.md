@@ -52,10 +52,7 @@ PARTITION BY RANGE(reg_date)
     PARTITION p4 VALUES [('2022-03-16'), ('2022-03-17')),
     PARTITION p5 VALUES [('2022-03-17'), ('2022-03-18'))
 )
-DISTRIBUTED BY HASH(city_code)
-PROPERTIES(
-    "replication_num" = "3"
-);
+DISTRIBUTED BY HASH(city_code);
 ```
 
 > **NOTE**
