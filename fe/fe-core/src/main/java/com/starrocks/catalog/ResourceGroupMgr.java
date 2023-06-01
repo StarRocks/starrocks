@@ -578,19 +578,14 @@ public class ResourceGroupMgr implements Writable {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.RESOURCE_GROUP_MGR);
-        try {
-            int numJson = reader.readInt();
-            List<ResourceGroup> resourceGroups = new ArrayList<>();
-            for (int i = 0; i < numJson; ++i) {
-                ResourceGroup resourceGroup = reader.readJson(ResourceGroup.class);
-                resourceGroups.add(resourceGroup);
-            }
-            resourceGroups.sort(Comparator.comparing(ResourceGroup::getVersion));
-            resourceGroups.forEach(this::replayAddResourceGroup);
-        } finally {
-            reader.close();
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int numJson = reader.readInt();
+        List<ResourceGroup> resourceGroups = new ArrayList<>();
+        for (int i = 0; i < numJson; ++i) {
+            ResourceGroup resourceGroup = reader.readJson(ResourceGroup.class);
+            resourceGroups.add(resourceGroup);
         }
+        resourceGroups.sort(Comparator.comparing(ResourceGroup::getVersion));
+        resourceGroups.forEach(this::replayAddResourceGroup);
     }
 }

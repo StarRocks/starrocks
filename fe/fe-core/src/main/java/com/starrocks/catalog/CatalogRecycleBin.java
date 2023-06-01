@@ -1230,42 +1230,37 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.CATALOG_RECYCLE_BIN);
-        try {
-            int idToDatabaseSize = reader.readInt();
-            for (int i = 0; i < idToDatabaseSize; ++i) {
-                RecycleDatabaseInfo recycleDatabaseInfo = reader.readJson(RecycleDatabaseInfo.class);
-                idToDatabase.put(recycleDatabaseInfo.db.getId(), recycleDatabaseInfo);
-            }
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int idToDatabaseSize = reader.readInt();
+        for (int i = 0; i < idToDatabaseSize; ++i) {
+            RecycleDatabaseInfo recycleDatabaseInfo = reader.readJson(RecycleDatabaseInfo.class);
+            idToDatabase.put(recycleDatabaseInfo.db.getId(), recycleDatabaseInfo);
+        }
 
-            int idToTableInfoSize = reader.readInt();
-            for (int i = 0; i < idToTableInfoSize; ++i) {
-                RecycleTableInfo recycleTableInfo = reader.readJson(RecycleTableInfo.class);
-                idToTableInfo.put(recycleTableInfo.dbId, recycleTableInfo.table.getId(), recycleTableInfo);
-                nameToTableInfo.put(recycleTableInfo.getDbId(), recycleTableInfo.getTable().getName(), recycleTableInfo);
-            }
+        int idToTableInfoSize = reader.readInt();
+        for (int i = 0; i < idToTableInfoSize; ++i) {
+            RecycleTableInfo recycleTableInfo = reader.readJson(RecycleTableInfo.class);
+            idToTableInfo.put(recycleTableInfo.dbId, recycleTableInfo.table.getId(), recycleTableInfo);
+            nameToTableInfo.put(recycleTableInfo.getDbId(), recycleTableInfo.getTable().getName(), recycleTableInfo);
+        }
 
-            int idToPartitionSize = reader.readInt();
-            for (int i = 0; i < idToPartitionSize; ++i) {
-                RecycleRangePartitionInfo recycleRangePartitionInfo = reader.readJson(RecycleRangePartitionInfo.class);
-                idToPartition.put(recycleRangePartitionInfo.partition.getId(), recycleRangePartitionInfo);
-            }
+        int idToPartitionSize = reader.readInt();
+        for (int i = 0; i < idToPartitionSize; ++i) {
+            RecycleRangePartitionInfo recycleRangePartitionInfo = reader.readJson(RecycleRangePartitionInfo.class);
+            idToPartition.put(recycleRangePartitionInfo.partition.getId(), recycleRangePartitionInfo);
+        }
 
-            idToRecycleTime = (Map<Long, Long>) reader.readJson(new TypeToken<Map<Long, Long>>() {
-            }.getType());
+        idToRecycleTime = (Map<Long, Long>) reader.readJson(new TypeToken<Map<Long, Long>>() {
+        }.getType());
 
-            if (!isCheckpointThread()) {
-                // add tablet in Recycle bin to TabletInvertedIndex
-                addTabletToInvertedIndex();
-            }
-            // create DatabaseTransactionMgr for db in recycle bin.
-            // these dbs do not exist in `idToDb` of the globalStateMgr.
-            for (Long dbId : getAllDbIds()) {
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
-            }
-        } finally {
-            reader.close();
+        if (!isCheckpointThread()) {
+            // add tablet in Recycle bin to TabletInvertedIndex
+            addTabletToInvertedIndex();
+        }
+        // create DatabaseTransactionMgr for db in recycle bin.
+        // these dbs do not exist in `idToDb` of the globalStateMgr.
+        for (Long dbId : getAllDbIds()) {
+            GlobalStateMgr.getCurrentGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
         }
     }
 }

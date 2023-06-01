@@ -98,7 +98,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -827,18 +826,14 @@ public class DeleteMgr implements Writable {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.DELETE_MGR);
-        try {
-            int analyzeJobSize = reader.readInt();
-            for (int i = 0; i < analyzeJobSize; ++i) {
-                long dbId = reader.readJson(long.class);
-                List<MultiDeleteInfo> multiDeleteInfos =
-                        (List<MultiDeleteInfo>) reader.readJson(new TypeToken<List<MultiDeleteInfo>>() {}.getType());
-                dbToDeleteInfos.put(dbId, multiDeleteInfos);
-            }
-        } finally {
-            reader.close();
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int analyzeJobSize = reader.readInt();
+        for (int i = 0; i < analyzeJobSize; ++i) {
+            long dbId = reader.readJson(long.class);
+            List<MultiDeleteInfo> multiDeleteInfos =
+                    (List<MultiDeleteInfo>) reader.readJson(new TypeToken<List<MultiDeleteInfo>>() {
+                    }.getType());
+            dbToDeleteInfos.put(dbId, multiDeleteInfos);
         }
     }
 }
