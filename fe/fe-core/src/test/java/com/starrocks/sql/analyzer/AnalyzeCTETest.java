@@ -62,6 +62,16 @@ public class AnalyzeCTETest {
                 + "tbl2 as (select v4, v5 from t1)"
                 + "select a.*, tbl2.* from tbl1 a join tbl2 on a.v1 = tbl2.v4")).getQueryRelation();
         Assert.assertEquals("v1,v2,v4,v5", String.join(",", query.getColumnOutputNames()));
+        query = ((QueryStatement) analyzeSuccess("with "
+                + "tbl1 as (select v1, v2 from t0),"
+                + "tbl2 as (select column_0 v4, column_1 v5 from (values('c',281.91)\n" +
+                ",('1',111.78)\n" +
+                ",('1',281.91)\n" +
+                ",('1',111.78)\n" +
+                ",('1',281.91)\n" +
+                ",('1',281.91)))"
+                + " select a.*, tbl2.* from tbl1 a join tbl2 on a.v1 = tbl2.v4")).getQueryRelation();
+        Assert.assertEquals("v1,v2,v4,v5", String.join(",", query.getColumnOutputNames()));
     }
 
     @Test
