@@ -78,10 +78,7 @@ PARTITION BY RANGE(`recruit_date`)
     PARTITION p20220314 VALUES [('2022-03-14'), ('2022-03-15')),
     PARTITION p20220315 VALUES [('2022-03-15'), ('2022-03-16'))
 )
-DISTRIBUTED BY HASH(`recruit_date`, `region_num`) BUCKETS 8
-PROPERTIES (
-    "replication_num" = "3" 
-);
+DISTRIBUTED BY HASH(`recruit_date`, `region_num`);
 ```
 
 > 注意
