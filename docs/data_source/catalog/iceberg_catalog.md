@@ -21,7 +21,7 @@ To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster 
   - Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
   - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
 
-- Iceberg catalogs do not support Iceberg v2 tables.
+- From v3.0 onwards, Iceberg catalogs support ORC-formatted Iceberg v2 tables.
 
 ## Integration preparations
 
