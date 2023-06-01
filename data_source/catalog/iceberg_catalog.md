@@ -21,7 +21,7 @@ Iceberg Catalog 是一种 External Catalog。通过 Iceberg Catalog，您不需�
   - Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
   - ORC 文件支持 ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION 压缩格式。
 
-- Iceberg Catalog 不支持查询 Iceberg v2 表数据。
+- Iceberg Catalog 支持查询 v1 表数据。自 3.0 版本起支持查询 ORC 格式的 v2 表数据。
 
 ## 准备工作
 
@@ -242,6 +242,8 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
 
 ##### Microsoft Azure Storage
 
+Iceberg Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
+
 ###### Azure Blob Storage
 
 如果选择 Blob Storage 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
@@ -359,6 +361,8 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
   | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
 ##### Google GCS
+
+Iceberg Catalog 从 3.0 版本起支持 Google GCS。
 
 如果选择 Google GCS 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
 
