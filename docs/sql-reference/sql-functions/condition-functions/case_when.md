@@ -56,7 +56,7 @@ END
 
 ## Return value
 
-The return value is of the same type as the result in the THEN clause.
+The return value is of the common type of all types in the THEN clause.
 
 ## Examples
 
