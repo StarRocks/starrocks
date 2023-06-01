@@ -63,7 +63,7 @@ Routine Load now supports consuming CSV, JSON and Avro (supported since v3.0.1) 
 
 ## Create a Routine Load job
 
-The following two examples describe how to consume CSV-format and JSON-format data in Kafka, and load the data into StarRocks by creating a Routine Load job. For detailed instruction and reference, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
+The following three examples describe how to consume CSV-format, JSON-format and Avro-format data in Kafka, and load the data into StarRocks by creating a Routine Load job. For detailed instruction and reference, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 ### Load CSV-format data
 
