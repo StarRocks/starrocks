@@ -106,6 +106,40 @@ public class OuterJoinReorderTest extends PlanTestBase {
                 "  |  <slot 3> : 3: v3\n" +
                 "  |  \n" +
                 "  3:HASH JOIN");
+        sqlList.add("select t0.* from t0 left join t1 on t0.v1 = t1.v4 join t2 on t0.v1 = t2.v7 " +
+                "where t0.v2 in (select max(v10) from t3) and t1.v5 is null;");
+        planList.add("14:HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 13: max\n" +
+                "  |  \n" +
+                "  |----13:EXCHANGE\n" +
+                "  |    \n" +
+                "  8:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  \n" +
+                "  7:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  other predicates: 5: v5 IS NULL");
+        sqlList.add("select t0.*, t1.v5 from t0 join t1 on t0.v1 = t1.v4 left join t2 on t1.v5 = t2.v7 " +
+                "where t2.v8 <=> t0.v2 and t0.v3 in (select max(v10) from t3) and t1.v5 is null");
+        planList.add("15:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 5> : 5: v5\n" +
+                "  |  \n" +
+                "  14:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 5: v5 = 7: v7\n" +
+                "  |  other predicates: 8: v8 <=> 2: v2\n" +
+                "  |  \n" +
+                "  |----13:EXCHANGE");
         List<Pair<String, String>> zips = zipSqlAndPlan(sqlList, planList);
         return zips.stream().map(e -> Arguments.of(e));
     }
