@@ -10,7 +10,7 @@ Routine Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 D
 
 ## 支持的数据文件格式
 
-Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON 格式的数据。
+Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON、Avro (自 v3.0.1) 格式的数据。
 
 > **说明**
 >
@@ -70,7 +70,7 @@ Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON 格式的数据。
 
 ## 创建导入作业
 
-这里通过两个简单的示例，介绍如何通过 Routine Load 持续消费 Kafka 中 CSV 和 JSON 格式的数据，并导入至 StarRocks 中。有关创建 Routine Load 的详细语法和参数说明，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)。
+这里通过三个简单的示例，介绍如何通过 Routine Load 持续消费 Kafka 中 CSV、JSON 和 Avro 格式的数据，并导入至 StarRocks 中。有关创建 Routine Load 的详细语法和参数说明，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)。
 
 ### 导入 CSV 数据
 
@@ -120,9 +120,9 @@ PROPERTIES
 )
 FROM KAFKA
 (
-    "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
     "kafka_topic" = "ordertest1",
-    "kafka_partitions" ="0,1,2,3,4",
+    "kafka_partitions" = "0,1,2,3,4",
     "property.kafka_default_offsets" = "OFFSET_BEGINNING"
 );
 ```
@@ -224,15 +224,15 @@ CREATE ROUTINE LOAD example_db.example_tbl2_ordertest2 ON example_tbl2
 COLUMNS(commodity_id, customer_name, country, pay_time, price, pay_dt=from_unixtime(pay_time, '%Y%m%d'))
 PROPERTIES
 (
-    "desired_concurrent_number"="5",
-    "format" ="json",
-    "jsonpaths" ="[\"$.commodity_id\",\"$.customer_name\",\"$.country\",\"$.pay_time\",\"$.price\"]"
+    "desired_concurrent_number" = "5",
+    "format" = "json",
+    "jsonpaths" = "[\"$.commodity_id\",\"$.customer_name\",\"$.country\",\"$.pay_time\",\"$.price\"]"
  )
 FROM KAFKA
 (
-    "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
     "kafka_topic" = "ordertest2",
-    "kafka_partitions" ="0,1,2,3,4",
+    "kafka_partitions" = "0,1,2,3,4",
     "property.kafka_default_offsets" = "OFFSET_BEGINNING"
 );
 ```
@@ -241,11 +241,11 @@ FROM KAFKA
 
 - **数据格式**
 
-  需要`PROPERTIES`子句的`"format" ="json"`中指定数据格式为 JSON。
+  需要`PROPERTIES`子句的`"format" = "json"`中指定数据格式为 JSON。
 
 - **数据提取和转换**
 
-  如果需要指定源数据和目标表之间列的映射和转换关系，则可以配置 `COLUMNS` 和`jsonpaths`参数。`COLUMNS`中的列名对应**目标表**的列名，列的顺序对应**源数据**中的列顺序。`jsonpaths` 参数用于提取 JSON 数据中需要的字段数据，而后（就像新生成的 CSV 数据一样）被`COLUMNS`参数**按顺序**临时命名。
+  如果需要指定源数据和目标表之间列的映射和转换关系，则可以配置 `COLUMNS` 和 `jsonpaths` 参数。`COLUMNS` 中的列名对应**目标表**的列名，列的顺序对应**源数据**中的列顺序。`jsonpaths` 参数用于提取 JSON 数据中需要的字段数据，就像新生成的 CSV 数据一样。然后 `COLUMNS` 参数对 `jsonpaths` 中的字段**按顺序**进行临时命名。
 
   由于源数据中`pay_time` 键需要转换为 DATE 类型，导入到目标表的列`pay_dt`，因此`COLUMNS`中需要使用函数`from_unixtime`进行转换。其他字段都能直接映射至表`example_tbl2`中。
 
@@ -254,6 +254,131 @@ FROM KAFKA
   > **说明**
   >
   > 如果每行一个 JSON 对象中 key 的名称和数量（顺序不需要对应）都能对应目标表中列，则无需配置 `COLUMNS` 。
+
+### 导入 Avro 数据
+
+自 3.0.1 版本开始，StarRocks 支持使用 Routine Load 导入 Avro 数据。
+
+#### 数据集
+
+**Avro schema**
+
+1. 创建如下 Avro schema 文件 `avro_schema.avsc`：
+
+    ```JSON
+      {
+          "type": "record",
+          "name": "sensor_log",
+          "fields" : [
+              {"name": "id", "type": "long"},
+              {"name": "name", "type": "string"},
+              {"name": "checked", "type" : "boolean"},
+              {"name": "data", "type": "double"},
+              {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}}  
+          ]
+      }
+      ```
+
+2. 注册该 Avro schema 至 [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html)。
+
+**Avro 数据**
+
+构建 Avro 数据并且发送至 Kafka 集群的 topic `topic_0`。
+
+#### 目标数据库和表
+
+根据 Avro 数据中需要导入的字段，在 StarRocks 集群的目标数据库 `sensor` 中创建表 `sensor_log`。表的列名与 Avro 数据的字段名保持一致。两者的数据类型映射关系，请参见[数据类型映射](#数据类型映射)。
+
+```SQL
+CREATE TABLE sensor.sensor_log ( 
+    `id` bigint NOT NULL COMMENT "sensor id",
+    `name` varchar(26) NOT NULL COMMENT "sensor name", 
+    `checked` boolean NOT NULL COMMENT "checked", 
+    `data` double NULL COMMENT "sensor data", 
+    `sensor_type` varchar(26) NOT NULL COMMENT "sensor type"
+) 
+ENGINE=OLAP 
+PRIMARY KEY (id) 
+DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
+```
+
+#### 导入作业
+
+提交一个导入作业 `sensor_log_load_job`，持续消费 Kafka 集群中 Topic `topic_0` 的 Avro 消息，并将其导入到数据库 `sensor` 中的表 `sensor_log`。并且导入作业会从此 Topic 所指定分区的最早位点开始消费。
+
+```sql
+CREATE ROUTINE LOAD example_db.sensor_log_load_job ON sensor_log1  
+PROPERTIES  
+(  
+    "format" = "avro"  
+)  
+FROM KAFKA  
+(  
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>,...",
+    "confluent.schema.registry.url" = "http://172.xx.xxx.xxx:8081",  
+    "kafka_topic" = "topic_0",  
+    "kafka_partitions" = "0,1,2,3,4,5",  
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"  
+);
+```
+
+- 数据格式
+
+  在 `PROPERTIES` 子句中，通过配置 `"format" = "avro"` 指定数据格式为 Avro。
+
+- Schema Registry
+
+  通过 confluent.schema.registry.url 参数指定注册该 Avro schema 的 [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html) 的 URL，StarRocks 会从该 URL 获取 Avro schema。格式如下：
+
+  ```Plaintext
+  confluent.schema.registry.url = http[s]://[<schema-registry-api-key>:<schema-registry-api-secret>@]<hostname|ip address>[:<port>]
+  ```
+
+- 数据映射和转换
+
+  如果需要指定源数据和目标表之间列的映射和转换关系，则可以配置 `COLUMNS` 和 `jsonpaths` 参数。`COLUMNS` 中的列名对应目标表的列名，列的顺序对应 `jsonpaths` 中的字段顺序。`jsonpaths` 参数用于提取 Avro 数据中需要的字段数据，而后（就像新生成的 CSV 数据一样）被 `COLUMNS` 参数按顺序临时命名。
+
+  更多数据转换的说明，请参见[导入时实现数据转换](../loading/Etl_in_loading)。
+
+  > 说明
+  >
+  > 如果一条 Avro record 中字段的名称和数量（顺序不需要对应）都能对应目标表中列，则无需配置 `COLUMNS` 。
+
+提交导入作业后，您可以执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md)，查看导入作业执行情况。
+
+#### 数据类型映射
+
+StarRocks 支持导入所有类型的 Avro 数据。导入 Avro 数据至 StarRocks 时，其类型映射关系如下：
+
+**原始类型**
+
+| Avro    | StarRocks |
+| ------- | --------- |
+| null    | NULL      |
+| boolean | BOOLEAN   |
+| int     | INT       |
+| long    | BIGINT    |
+| float   | FLOAT     |
+| double  | DOUBLE    |
+| bytes   | STRING    |
+| string  | STRING    |
+
+**复杂类型**
+
+| Avro           |StarRocks                                        |
+| -------------- | ------------------------------------------------ |
+| record         | 将 RECORD 类型的字段或者其子字段中作为 JSON 导入 |
+| enums          | STRING                                           |
+| arrays         | ARRAY                                            |
+| maps           | JSON                                             |
+| union(T, null) | NULLABE(T)                                       |
+| fixed          | STRING                                           |
+
+#### 使用限制
+
+- StarRocks 暂时不支持 schema evolution，每次仅从 schema registry 服务获取最新版本的 schema 信息。
+
+- 每条 Kafka 消息中应仅包含单条 Avro 数据。
 
 ## 查看导入作业和任务
 
