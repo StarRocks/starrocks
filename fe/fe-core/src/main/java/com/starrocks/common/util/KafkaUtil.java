@@ -64,6 +64,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class KafkaUtil {
     private static final Logger LOG = LogManager.getLogger(KafkaUtil.class);
@@ -215,12 +216,14 @@ public class KafkaUtil {
                         result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
                     } catch (Exception e) {
                         LOG.warn("failed to send proxy request to " + address + " err " + e.getMessage());
-                        // When getting kafka info timed out, we tried again three times.
-                        if (++retryTimes > 3 || (retryTimes + 1) * Config.routine_load_kafka_timeout_second >
-                                                                        Config.routine_load_task_timeout_second) {
-                            throw e;
+                        if (e instanceof TimeoutException) {
+                            // When getting kafka info timed out, we tried again three times.
+                            if (++retryTimes > 3 || (retryTimes + 1) * Config.routine_load_kafka_timeout_second >
+                                                                            Config.routine_load_task_timeout_second) {
+                                throw e;
+                            }
+                            continue;
                         }
-                        continue;
                     }
                     TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                     if (code != TStatusCode.OK) {
