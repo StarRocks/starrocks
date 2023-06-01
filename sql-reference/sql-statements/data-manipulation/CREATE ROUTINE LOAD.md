@@ -4,7 +4,7 @@
 
 Routine Load 是一种基于 MySQL 协议的异步导入方式，支持持续消费 Apache Kafka® 的消息并导入至 StarRocks 中。
 
-Routine Load 支持消费 Kafka 中 CSV 或 JSON 格式数据。Routine Load 支持通过无安全认证、SSL 加密和认证、或者 SASL 认证机制访问 Kafka。
+Routine Load 支持消费 Kafka 中 CSV、JSON、Avro (自 v3.0.1) 格式数据。Routine Load 支持通过无安全认证、SSL 加密和认证、或者 SASL 认证机制访问 Kafka。
 
 本文介绍 CREATE ROUTINE LOAD 的语法、参数说明和示例。
 
@@ -112,7 +112,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 | strict_mode               | 否           | 是否开启严格模式。取值范围：`TRUE` 或者 `FALSE`。默认值：`FALSE`。开启后，如果源数据某列的值为 `NULL`，但是目标表中该列不允许为 `NULL`，则该行数据会被过滤掉。<br>关于该模式的介绍，参见[严格模式](../../../loading/load_concept/strict_mode.md)。|
 | timezone                  | 否           | 该参数的取值会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/timezone.md)。导入参数 `timezone` 设置的时区对应[设置时区](../../../administration/timezone.md)中所述的会话级时区。 |
 | merge_condition           | 否           | 用于指定作为更新生效条件的列名。这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。参见[通过导入实现数据变更](../../../loading/Load_to_Primary_Key_tables.md)。指定的列必须为非主键列，且仅主键模型表支持条件更新。 |
-| format                    | 否           | 源数据的格式，取值范围：`CSV` 或者 `JSON`。默认值：`CSV`。|
+| format                    | 否           | 源数据的格式，取值范围：`CSV`、`JSON` 或者 `Avro`（自 v3.0.1）。默认值：`CSV`。|
 | trim_space                | 否           | 用于指定是否去除 CSV 文件中列分隔符前后的空格。取值类型：BOOLEAN。默认值：`false`。<br>有些数据库在导出数据为 CSV 文件时，会在列分隔符的前后添加一些空格。根据位置的不同，这些空格可以称为“前导空格”或者“尾随空格”。通过设置该参数，可以使 StarRocks 在导入数据时删除这些不必要的空格。<br>需要注意的是，StarRocks 不会去除被 `enclose` 指定字符括起来的字段内的空格（包括字段的前导空格和尾随空格）。例如，列分隔符是竖线 (<code class="language-text">&#124;</code>)，`enclose` 指定的字符是双引号 (`"`)：<code class="language-text">&#124; "Love StarRocks" &#124;</code>。如果设置 trim_space 为 true，则 StarRocks 处理后的结果数据为 <code class="language-text">&#124;"Love StarRocks"&#124;</code>。|
 | enclose                   | 否           | 根据 [RFC4180](https://www.rfc-editor.org/rfc/rfc4180)，用于指定把 CSV 文件中的字段括起来的字符。取值类型：单字节字符。默认值：`NONE`。最常用 `enclose` 字符为单引号 (`'`) 或双引号 (`"`)。<br>被 `enclose` 指定字符括起来的字段内的所有特殊字符（包括行分隔符、列分隔符等）均看做是普通符号。比 RFC4180 标准更进一步的是，StarRocks 提供的 `enclose` 属性支持设置任意单个字节的字符。<br>如果一个字段内包含了 `enclose` 指定字符，则可以使用同样的字符对 `enclose` 指定字符进行转义。例如，在设置了`enclose` 为双引号 (`"`) 时，字段值 `a "quoted" c` 在 CSV 文件中应该写作 `"a ""quoted"" c"`。 |
 | escape                    | 否           | 指定用于转义的字符。用来转义各种特殊字符，比如行分隔符、列分隔符、转义符、`enclose` 指定字符等，使 StarRocks 把这些特殊字符当做普通字符而解析成字段值的一部分。取值类型：单字节字符。默认值：`NONE`。最常用的 `escape` 字符为斜杠 (`\`)，在 SQL 语句中应该写作双斜杠 (`\\`)。<br>`escape` 指定字符同时作用于 `enclose` 指定字符的内部和外部。<br>以下为两个示例：<br><ul><li>当设置 `enclose` 为双引号 (`"`) 、`escape` 为斜杠 (`\`) 时，StarRocks 会把 `"say \"Hello world\""` 解析成一个字段值 `say "Hello world"`。</li><li>假设列分隔符为逗号 (`,`) ，当设置 `escape` 为斜杠 (`\`) ，StarRocks 会把 `a, b\, c` 解析成 `a` 和 `b, c` 两个字段值。</li></ul> |
@@ -143,6 +143,7 @@ FROM <data_source>
 | kafka_topic       | Kafka Topic 名称。一个导入作业仅支持消费一个 Topic 的消息。  |
 | kafka_partitions  | 待消费的分区。如果不配置该参数，则默认消费所有分区。`"kafka_partitions" = "0, 1, 2, 3"` |
 | kafka_offsets     | 待消费分区的起始消费位点，必须完全对应 `kafka_partitions` 中指定分区。如果不配置该参数，则默认为从分区的末尾开始消费。取值为具体消费位点，或者：`OFFSET_BEGINNING`：从分区中有数据的位置开始消费。`OFFSET_END`：从分区的末尾开始消费。`"kafka_offsets" = "1000, OFFSET_BEGINNING, OFFSET_END, 2000"` |
+| confluent.schema.registry.url| 注册该 Avro schema 的 Schema Registry 的 URL，StarRocks 会从该 URL 获取 Avro schema。格式为 `confluent.schema.registry.url = http[s]://[<schema-registry-api-key>:<schema-registry-api-secret>@]<hostname or ip address>[:<port>]`。|
 
 **更多数据源相关参数**
 
@@ -217,7 +218,11 @@ Routine Load 相关配置项，请参见[配置参数](../../../administration/C
 
   有关操作示例，请参见[设置列的映射和转换关系](#设置列的映射和转换关系)。
 
-### 导入 JSON 数据
+### 导入 JSON 或 Avro 数据
+
+> **说明**
+>
+> 自 3.0.1 版本开始，StarRocks 支持使用 Routine Load 导入 Avro 数据。导入 JSON 或者 Avro 数据时，列映射和转换关系的配置方式相同。因此本小节以导入 Avro 数据为例进行说明。
 
 **如果 JSON 格式的数据中的 Key 名与目标表中的列名不一致**，则需要使用匹配模式导入 JSON 数据，即通过 `jsonpaths` 和 `COLUMNS` 两个参数来指定源数据和目标表之间的列映射和转换关系：
 
@@ -505,11 +510,11 @@ DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5;
 CREATE ROUTINE LOAD example_db.example_tbl3_ordertest2 ON example_tbl3
 PROPERTIES
 (
-    "format" ="json"
+    "format" = "json"
  )
 FROM KAFKA
 (
-    "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
     "kafka_topic" = "ordertest2"
 );
 ```
@@ -558,12 +563,12 @@ CREATE ROUTINE LOAD example_db.example_tbl4_ordertest2 ON example_tbl4
 COLUMNS(commodity_id, customer_name, country, pay_time, pay_dt=from_unixtime(pay_time, '%Y%m%d'), price)
 PROPERTIES
 (
-    "format" ="json",
-    "jsonpaths" ="[\"$.commodity_id\",\"$.customer_name\",\"$.country\",\"$.pay_time\",\"$.price\"]"
+    "format" = "json",
+    "jsonpaths" = "[\"$.commodity_id\",\"$.customer_name\",\"$.country\",\"$.pay_time\",\"$.price\"]"
  )
 FROM KAFKA
 (
-    "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
     "kafka_topic" = "ordertest2"
 );
 ```
@@ -608,7 +613,7 @@ DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5;
 CREATE ROUTINE LOAD example_db.example_tbl3_ordertest3 ON example_tbl3
 PROPERTIES
 (
-    "format" ="json",
+    "format" = "json",
     "strip_outer_array" = "true",
     "json_root" = "$.RECORDS"
  )
@@ -618,3 +623,235 @@ FROM KAFKA
     "kafka_topic" = "ordertest2"
 );
 ```
+
+### 导入 Avro 数据
+
+自 3.0.1 版本开始，StarRocks 支持使用 Routine Load 导入 Avro 数据。
+
+#### Avro schema 只包含简单数据类型
+
+假设 Avro schema 只包含简单数据类型，并且您需要导入 Avro 数据中的所有字段。
+
+**数据集**
+
+**Avro schema**
+
+1. 创建如下 Avro schema 文件 `avro_schema1.avsc`：
+
+      ```json
+      {
+          "type": "record",
+          "name": "sensor_log",
+          "fields" : [
+              {"name": "id", "type": "long"},
+              {"name": "name", "type": "string"},
+              {"name": "checked", "type" : "boolean"},
+              {"name": "data", "type": "double"},
+              {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}}  
+          ]
+      }
+      ```
+
+2. 注册该 Avro schema 至 [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html)。
+
+**Avro 数据**
+
+构建 Avro 数据并且发送至 Kafka 集群的 topic `topic_1`。
+
+**目标数据库和表**
+
+根据 Avro 数据中需要导入的字段，在 StarRocks 集群的目标数据库 `sensor` 中创建表 `sensor_log1`。表的列名与 Avro 数据的字段名保持一致。两者的数据类型映射关系，请参见xxx。
+
+```SQL
+CREATE TABLE sensor.sensor_log1 ( 
+    `id` bigint NOT NULL COMMENT "sensor id",
+    `name` varchar(26) NOT NULL COMMENT "sensor name", 
+    `checked` boolean NOT NULL COMMENT "checked", 
+    `data` double NULL COMMENT "sensor data", 
+    `sensor_type` varchar(26) NOT NULL COMMENT "sensor type"
+) 
+ENGINE=OLAP 
+PRIMARY KEY (id) 
+DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
+```
+
+**导入作业**
+
+提交导入作业时使用简单模式，即无需使用 `jsonpaths` 参数，就可以将 Kafka 集群的 Topic `topic_1` 中的 Avro 数据导入至数据库 `sensor` 中的表 `sensor_log1`。
+
+```sql
+CREATE ROUTINE LOAD sensor.sensor_log_load_job1 ON sensor_log1  
+PROPERTIES  
+(  
+  "format" = "avro"  
+)  
+FROM KAFKA  
+(  
+  "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>,...",
+  "confluent.schema.registry.url" = "http://172.xx.xxx.xxx:8081",  
+  "kafka_topic" = "topic_1",  
+  "kafka_partitions" = "0,1,2,3,4,5",  
+  "property.kafka_default_offsets" = "OFFSET_BEGINNING"  
+);
+```
+
+#### Avro schema 嵌套 Record 类型的字段
+
+假设 Avro schema 嵌套 Record 类型的字段，并且您需要导入嵌套 Record 字段中的子字段。
+
+**数据集**
+
+**Avro schema**
+
+1. 创建如下 Avro schema 文件 `avro_schema2.avsc`。其中最外层 Record 的字段依次是 `id`、 `name`、`checked`、`sensor_type` 和 `data`。并且字段 `data` 包含嵌套 Record `data_record`。
+
+      ```JSON
+      {
+          "type": "record",
+          "name": "sensor_log",
+          "fields" : [
+              {"name": "id", "type": "long"},
+              {"name": "name", "type": "string"},
+              {"name": "checked", "type" : "boolean"},
+              {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}},
+              {"name": "data", "type": 
+                  {
+                      "type": "record",
+                      "name": "data_record",
+                      "fields" : [
+                          {"name": "data_x", "type" : "boolean"},
+                          {"name": "data_y", "type": "long"}
+                      ]
+                  }
+              }
+          ]
+      }
+      ```
+
+2. 注册该 Avro schema 至 [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html)。
+
+**Avro 数据**
+
+构建 Avro 数据并且发送至 Kafka 集群的 topic `topic_2`。
+
+**目标数据库和表**
+
+根据 Avro 数据中需要导入的字段，在 StarRocks 集群的目标数据库 `sensor` 中创建表 `sensor_log2`。
+
+假设您除了需要导入最外层 Record 的 `id`、`name`、`checked`、`sensor_type` 字段之外，还需要导入嵌套 Record 中的字段 `data_y`。
+
+```sql
+CREATE TABLE sensor.sensor_log2 ( 
+    `id` bigint NOT NULL COMMENT "sensor id",
+    `name` varchar(26) NOT NULL COMMENT "sensor name", 
+    `checked` boolean NOT NULL COMMENT "checked", 
+    `sensor_type` varchar(26) NOT NULL COMMENT "sensor type",
+    `data_y` long NULL COMMENT "sensor data" 
+) 
+ENGINE=OLAP 
+PRIMARY KEY (id) 
+DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
+```
+
+**导入作业**
+
+提交导入作业，使用 `jsonpaths` 指定实际待导入的 Avro 数据的字段。其中对于嵌套 Record 中的字段 `data_y`，您需要指定 `jsonpaths` 为 `"$.data.data_y"`。
+
+```sql
+CREATE ROUTINE LOAD sensor.sensor_log_load_job2 ON sensor_log2  
+PROPERTIES  
+(  
+  "format" = "avro",
+  "jsonpaths" = "[\"$.id\",\"$.name\",\"$.checked\",\"$.sensor_type\",\"$.data.data_y\"]"
+)  
+FROM KAFKA  
+(  
+  "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>,...",
+  "confluent.schema.registry.url" = "http://172.xx.xxx.xxx:8081",  
+  "kafka_topic" = "topic_1",  
+  "kafka_partitions" = "0,1,2,3,4,5",  
+  "property.kafka_default_offsets" = "OFFSET_BEGINNING"  
+);
+```
+
+#### Avro schema 包含 Union 类型的字段
+
+**数据集**
+
+假设 Avro 数据包含 Union 类型的字段，并且您需要导入该 Union 字段。
+
+**Avro schema**
+
+1. 创建如下 Avro schema 文件 `avro_schema3.avsc`。其中最外层 Record 的字段依次是`id`、`name`、 `checked`、 `sensor_type` 和 `data`。并且字段 `data`为 Union 类型，包含两个元素，分别是 `null` 和嵌套 Record `data_record` 。
+
+      ```JSON
+      {
+          "type": "record",
+          "name": "sensor_log",
+          "fields" : [
+              {"name": "id", "type": "long"},
+              {"name": "name", "type": "string"},
+              {"name": "checked", "type" : "boolean"},
+              {"name": "sensor_type", "type": {"type": "enum", "name": "sensor_type_enum", "symbols" : ["TEMPERATURE", "HUMIDITY", "AIR-PRESSURE"]}},
+              {"name": "data", "type": [null,
+                    {
+                        "type": "record",
+                        "name": "data_record",
+                        "fields" : [
+                            {"name": "data_x", "type" : "boolean"},
+                            {"name": "data_y", "type": "long"}
+                        ]
+                    }
+                  ]
+              }
+          ]
+      }
+      ```
+
+2. 注册该 Avro schema 至 [Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html)。
+
+**Avro 数据**
+
+构建 Avro 数据并且发送至 Kafka 集群的 topic `topic_3`。
+
+**目标数据库和表**
+
+根据 Avro 数据中需要导入的字段，在 StarRocks 集群的目标数据库 `sensor` 中创建表 `sensor_log3` 。
+
+假设您除了需要导入最外层 Record 的 `id`、`name`、`checked`、`sensor_type` 字段之外，还需要导入 Union 类型的字段 `data` 中元素 `data_record` 包含的字段 `data_y`。
+
+```sql
+CREATE TABLE sensor.sensor_log3 ( 
+    `id` bigint NOT NULL COMMENT "sensor id",
+    `name` varchar(26) NOT NULL COMMENT "sensor name", 
+    `checked` boolean NOT NULL COMMENT "checked", 
+    `sensor_type` varchar(26) NOT NULL COMMENT "sensor type",
+    `data_y` long NULL COMMENT "sensor data" 
+) 
+ENGINE=OLAP 
+PRIMARY KEY (id) 
+DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
+```
+
+**导入作业**
+
+提交导入作业，使用 `jsonpaths` 指定实际待导入的 Avro 数据的字段。其中您需要指定字段 `data_y`的`jsonpaths` 为 `"$.data.data_y"`。
+
+```sql
+CREATE ROUTINE LOAD sensor.sensor_log_load_job3 ON sensor_log3  
+PROPERTIES  
+(  
+  "format" = "avro",
+  "jsonpaths" = "[\"$.id\",\"$.name\",\"$.checked\",\"$.sensor_type\",\"$.data.data_y\"]"
+)  
+FROM KAFKA  
+(  
+  "kafka_broker_list" = "<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>,...",
+  "confluent.schema.registry.url" = "http://172.xx.xxx.xxx:8081",  
+  "kafka_topic" = "topic_1",  
+  "kafka_partitions" = "0,1,2,3,4,5",  
+  "property.kafka_default_offsets" = "OFFSET_BEGINNING"  
+);
+```
+
+当 Union 类型的字段 `data` 的值为 `null` 时，则导入 `data_y` 列的值为 `null`。当 `data` 的值为一条 data record 时，则导入  `data_y` 列的值 Long 类型。
