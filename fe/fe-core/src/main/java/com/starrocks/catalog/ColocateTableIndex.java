@@ -179,15 +179,15 @@ public class ColocateTableIndex implements Writable {
         this.lock.writeLock().unlock();
     }
 
-    public void addTableToGroup(Database db,
+    public boolean addTableToGroup(Database db,
                                 OlapTable olapTable, String colocateGroup, boolean expectLakeTable)
             throws DdlException {
         if (Strings.isNullOrEmpty(colocateGroup)) {
-            return;
+            return false;
         }
 
         if (olapTable.isCloudNativeTableOrMaterializedView() != expectLakeTable) {
-            return;
+            return false;
         }
 
         String fullGroupName = db.getId() + "_" + colocateGroup;
@@ -211,6 +211,7 @@ public class ColocateTableIndex implements Writable {
                         new ColocateTableIndex.GroupId(db.getId(), colocateGrpIdInOtherDb.grpId),
                 false /* isReplay */);
         olapTable.setColocateGroup(colocateGroup);
+        return true;
     }
 
     // NOTICE: call 'addTableToGroup()' will not modify 'group2BackendsPerBucketSeq'
