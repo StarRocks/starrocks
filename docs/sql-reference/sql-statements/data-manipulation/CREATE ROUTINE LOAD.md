@@ -757,7 +757,7 @@ DISTRIBUTED BY HASH(`id`) BUCKETS 5;
 
 **Routine Load job**
 
-Submit the import job, use `jsonpaths` to specify the fields of the Avro data that need to be loaded. Note that for the subfield `data_y` in the nested Record, you need to specify its `jsonpath` as `"$.data.data_y"`.
+Submit the load job, use `jsonpaths` to specify the fields of the Avro data that need to be loaded. Note that for the subfield `data_y` in the nested Record, you need to specify its `jsonpath` as `"$.data.data_y"`.
 
 ```Bash
 CREATE ROUTINE LOAD sensor.sensor_log_load_job2 ON sensor_log2  
@@ -837,7 +837,7 @@ DISTRIBUTED BY HASH(`id`) BUCKETS 5;
 
 **Routine Load job**
 
-Submit the import job, use `jsonpaths` to specify the fields that need to be loaded in the Avro data. Note that for the field `data_y`, you need to specify its `jsonpath` as `"$.data.data_y"`.
+Submit the load job, use `jsonpaths` to specify the fields that need to be loaded in the Avro data. Note that for the field `data_y`, you need to specify its `jsonpath` as `"$.data.data_y"`.
 
 ```sql
 CREATE ROUTINE LOAD sensor.sensor_log_load_job3 ON sensor_log3  

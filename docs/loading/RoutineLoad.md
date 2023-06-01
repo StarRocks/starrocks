@@ -10,7 +10,7 @@ Routine Load supports data transformation at data loading and supports data chan
 
 ## Supported data formats
 
-Routine Load now supports consuming CSV, JSON and Avro (supported since v3.0.1) format data from a Kafka cluster.
+Routine Load now supports consuming CSV, JSON, and Avro (supported since v3.0.1) formatted data from a Kafka cluster.
 
 > **NOTE**
 >
@@ -63,7 +63,7 @@ Routine Load now supports consuming CSV, JSON and Avro (supported since v3.0.1) 
 
 ## Create a Routine Load job
 
-The following three examples describe how to consume CSV-format, JSON-format and Avro-format data in Kafka, and load the data into StarRocks by creating a Routine Load job. For detailed instruction and reference, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
+The following three examples describe how to consume CSV-format, JSON-format and Avro-format data in Kafka, and load the data into StarRocks by creating a Routine Load job. For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 ### Load CSV-format data
 
@@ -240,7 +240,7 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
 - **Data format**
 
-  You need to specify `"format"="json"` in the clause `PROPERTIES` to define that the data format is JSON.
+  You need to specify `"format" = "json"` in the clause `PROPERTIES` to define that the data format is JSON.
 
 - **Data mapping and transformation**
 
@@ -300,7 +300,7 @@ Prepare the Avro data and send it to the Kafka topic `topic_0`.
 
 #### Create a table
 
-According to the fields of Avro data, create a table `sensor_log` in the target database `sensor` in the StarRocks cluster. The column names of the table must match the field names in the Avro data. For the mapping of data types between the table columns and the Avro data fields, see [Data types mapping](#Data types mapping).
+According to the fields of Avro data, create a table `sensor_log` in the target database `sensor` in the StarRocks cluster. The column names of the table must match the field names in the Avro data. For the data type mapping between the table columns and the Avro data fields, see [Data types mapping](#Data types mapping).
 
 ```SQL
 CREATE TABLE sensor.sensor_log ( 
@@ -359,9 +359,9 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
 #### Data types mapping
 
-StarRocks supports loading Avro data of all types. When Avro data is loaded into StarRocks, the data type mapping is as follows:
+The data type mapping between the Avro data fields you want to load and the StarRocks table columns is as follows:
 
-**Primitive type**
+**Primitive types**
 
 | Avro    | StarRocks |
 | ------- | --------- |
@@ -374,7 +374,7 @@ StarRocks supports loading Avro data of all types. When Avro data is loaded into
 | bytes   | STRING    |
 | string  | STRING    |
 
-**Complex type**
+**Complex types**
 
 | Avro           | StarRocks                                                    |
 | -------------- | ------------------------------------------------------------ |
