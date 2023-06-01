@@ -2,7 +2,7 @@
 
 ## Description
 
-Routine Load is an asynchronous loading method based on the MySQL protocol. It continuously consumes messages from Apache Kafka® and loads data into StarRocks. Routine Load can consume CSV, JSON and Avro (supported since v3.0.1) data from a Kafka cluster and access Kafka via SSL encryption, SASL authentication, or unsecured authentication. This topic describes the syntax, parameters, and examples of the CREATE ROUTINE LOAD statement.
+Routine Load is an asynchronous loading method based on the MySQL protocol. It continuously consumes messages from Apache Kafka® and loads data into StarRocks. Routine Load can consume CSV, JSON, and Avro (supported since v3.0.1) data from a Kafka cluster and access Kafka via SSL encryption, SASL authentication, or unsecured authentication. This topic describes the syntax, parameters, and examples of the CREATE ROUTINE LOAD statement.
 
 > **NOTE**
 >
@@ -101,7 +101,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 | strict_mode               | No           | Specifies whether to enable the [strict mode](../../../loading/load_concept/strict_mode.md). Valid values: `true` and `false`. Default value: `false`. When the strict mode is enabled, if the value for a column in the loaded data is `NULL` but the target table does not allow a `NULL` value for this column, the data row will be filtered out. |
 | timezone                  | No           | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime(), alignment_timestamp(), and from_unixtime(). The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../administration/timezone.md). |
 | merge_condition           | No           | Specifies the name of the column you want to use as the condition to determine whether to update data. Data will be updated only when the value of the data to be loaded into this column is greater than or equal to the current value of this column. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md).<br>**NOTE**<br>Only Primary Key tables support conditional updates. The column that you specify cannot be a primary key column. |
-| format                    | No           | The format of the data to be loaded. Valid values: `CSV`, `JSON` and `Avro` (supported since v3.0.1). Default value: `CSV`. |
+| format                    | No           | The format of the data to be loaded. Valid values: `CSV`, `JSON`, and `Avro` (supported since v3.0.1). Default value: `CSV`. |
 | trim_space                | No           | Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br>For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable StarRocks to remove such unnecessary spaces during data loading.<br>Note that StarRocks does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (<code class="language-text">&#124;</code>) as the column separator and double quotation marks (`"`) as the `enclose`-specified character: <code class="language-text">&#124; "Love StarRocks" &#124;</code>. If you set `trim_space` to `true`, StarRocks processes the preceding field values as <code class="language-text">&#124;"Love StarRocks"&#124;</code>. |
 | enclose                   | No           | Specifies the character that is used to wrap the field values in the data file according to [RFC4180](https://www.rfc-editor.org/rfc/rfc4180) when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).<br>All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. StarRocks can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.<br>If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file. |
 | escape                    | No           | Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered by StarRocks to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br>**NOTE**<br>The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br>Two examples are as follows:<br><ul><li>When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.</li><li>Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.</li></ul> |
@@ -132,7 +132,7 @@ The properties of the data source.
 | kafka_topic       | Yes      | The  Kafka topic to be consumed. A Routine Load job can only consume messages from one topic. |
 | kafka_partitions  | No       | The Kafka partitions to be consumed. If this property is not specified, all partitions are consumed by default. |
 | kafka_offsets     | No       | The starting point from which to consume data in a Kafka partition as specified in `kafka_partitions`. If this property is not specified, the Routine Load job consumes data starting from the latest offsets for partitions in `kafka_partitions`. Valid values:<ul><li>A specific offset: consumes data starting from a specific offset.</li><li>`OFFSET_BEGINNING`: consumes data starting from the earliest offset possible.</li><li>`OFFSET_END`:  consumes data starting from the latest offset.</li></ul> |
-| confluent.schema.registry.url|No |the URL of the Schema Registry where the Avro schema is registered. StarRocks retrieves the Avro schema by using this URL. The format is `confluent.schema.registry.url = http[s]://[<schema-registry-api-key>:<schema-registry-api-secret>@]<hostname or ip address>[:<port>]`|
+| confluent.schema.registry.url|No |The URL of the Schema Registry where the Avro schema is registered. StarRocks retrieves the Avro schema by using this URL. The format is as follows:<br>`confluent.schema.registry.url = http[s]://[<schema-registry-api-key>:<schema-registry-api-secret>@]<hostname or ip address>[:<port>]`|
 
 **More data source-related properties**
 
@@ -626,7 +626,7 @@ FROM KAFKA
 );
 ```
 
-### Load Avro-format data
+### Load Avro-formatted data
 
 Since v3.0.1, StarRocks supports loading Avro data by using Routine Load.
 
@@ -679,7 +679,7 @@ DISTRIBUTED BY HASH(`id`) BUCKETS 5;
 
 **Routine Load job**
 
-You can use the simple mode for the Routine Load job. That is, you do not need to specify the parameter `jsonpaths`  when creating the Routine Load job. Execute the following statement to submit a Routine Load job named `sensor_log_load_job1` to consume the Avro messages in the Kafka topic `topic_1` and load the data into the table `sensor_log1` in the database `sensor`.
+You can use the simple mode for the Routine Load job. That is, you do not need to specify the parameter `jsonpaths` when creating the Routine Load job. Execute the following statement to submit a Routine Load job named `sensor_log_load_job1` to consume the Avro messages in the Kafka topic `topic_1` and load the data into the table `sensor_log1` in the database `sensor`.
 
 ```sql
 CREATE ROUTINE LOAD sensor.sensor_log_load_job1 ON sensor_log1  
@@ -697,15 +697,15 @@ FROM KAFKA
 );
 ```
 
-#### Avro schema contains a nested record field
+#### Avro schema contains a nested record-type field
 
-Suppose the Avro schema contains a nested record field, and you need to load the subfield in a nested record field into StarRocks.
+Suppose the Avro schema contains a nested record-type field, and you need to load the subfield in a nested record-type field into StarRocks.
 
 **Prepare a dataset**
 
 **Avro schema**
 
-1. Create the following Avro schema file `avro_schema2.avsc`. The outer Avro record includes five fields which are `id`, `name`, `checked`, `sensor_type` and `data` in sequence. And the field `data` has a nested record`data_record`.
+1. Create the following Avro schema file `avro_schema2.avsc`. The outer Avro record includes five fields which are `id`, `name`, `checked`, `sensor_type` and `data` in sequence. And the field `data` has a nested record `data_record`.
 
       ```JSON
       {
@@ -740,7 +740,7 @@ Prepare the Avro data and send it to the Kafka topic `topic_2`.
 
 According to the fields of Avro data, create a table `sensor_log2` in the target database `sensor` in the StarRocks cluster.
 
-Suppose that in addition to loading the fields `id`, `name`, `checked`, and `sensor_type` of the outer Record, you also need to load the subfield `data_y` in the nested record `data_record`.
+Suppose that in addition to loading the fields `id`, `name`, `checked`, and `sensor_type` of the outer Record, you also need to load the subfield `data_y` in the nested Record `data_record`.
 
 ```sql
 CREATE TABLE sensor.sensor_log2 ( 

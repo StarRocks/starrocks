@@ -386,7 +386,7 @@ The data type mapping between the Avro data fields you want to load and the Star
 | union(T, null) | NULLABLE(T)                                                  |
 | fixed          | STRING                                                       |
 
-#### Limitations
+#### Limits
 
 - Currently, StarRocks does not support schema evolution.
 - Each Kafka message must only contain a single Avro data record.
