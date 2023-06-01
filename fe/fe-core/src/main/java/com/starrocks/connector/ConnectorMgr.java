@@ -34,6 +34,9 @@ public class ConnectorMgr {
             connector = ConnectorFactory.createConnector(context);
             Preconditions.checkState(!connectors.containsKey(catalogName),
                     "Connector of catalog '%s' already exists", catalogName);
+            if (connector == null) {
+                return null;
+            }
         } finally {
             readUnlock();
         }
