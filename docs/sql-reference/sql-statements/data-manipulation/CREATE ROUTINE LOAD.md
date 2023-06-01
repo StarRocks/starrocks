@@ -132,7 +132,7 @@ The properties of the data source.
 | kafka_topic       | Yes      | The  Kafka topic to be consumed. A Routine Load job can only consume messages from one topic. |
 | kafka_partitions  | No       | The Kafka partitions to be consumed. If this property is not specified, all partitions are consumed by default. |
 | kafka_offsets     | No       | The starting point from which to consume data in a Kafka partition as specified in `kafka_partitions`. If this property is not specified, the Routine Load job consumes data starting from the latest offsets for partitions in `kafka_partitions`. Valid values:<ul><li>A specific offset: consumes data starting from a specific offset.</li><li>`OFFSET_BEGINNING`: consumes data starting from the earliest offset possible.</li><li>`OFFSET_END`:  consumes data starting from the latest offset.</li></ul> |
-| confluent.schema.registry.url|No |the URL of the Schema Registry where the Avro schema is registered. StarRocks retrieves the Avro schema by using this URL. The format is `confluent.schema.registry.url = http[s]://[<schema-registry-api-key>:<schema-registry-api-secret>@]<hostname|ip address>[:<port>]`| 
+| confluent.schema.registry.url|No |the URL of the Schema Registry where the Avro schema is registered. StarRocks retrieves the Avro schema by using this URL. The format is `confluent.schema.registry.url = http[s]://[<schema-registry-api-key>:<schema-registry-api-secret>@]<hostname or ip address>[:<port>]`|
 
 **More data source-related properties**
 
