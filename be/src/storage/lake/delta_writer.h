@@ -55,6 +55,12 @@ public:
                       const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
                       MemTracker* mem_tracker);
 
+    // for auto increment
+    // Does NOT take the ownership of |tablet_manager|、|slots| and |mem_tracker|
+    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                      const std::vector<SlotDescriptor*>* slots, const std::string& merge_condition,
+                      bool miss_auto_increment_column, int64_t table_id, MemTracker* mem_tracker);
+
     // for schema change
     // Does NOT take the ownership of |tablet_manager| and |mem_tracker|
     static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t max_buffer_size,
@@ -108,6 +114,8 @@ public:
 
     void TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
                                  const std::vector<int32_t>& referenced_column_ids);
+
+    void TEST_set_miss_auto_increment_column();
 
 private:
     DeltaWriterImpl* _impl;

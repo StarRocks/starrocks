@@ -304,11 +304,6 @@ public class OlapTableFactory implements AbstractTableFactory {
             throw new DdlException(e.getMessage());
         }
 
-        if (table.hasAutoIncrementColumn() && stmt.isOlapEngine()
-                && RunMode.allowCreateLakeTable()) {
-            throw new DdlException("Table with AUTO_INCREMENT column can not be lake table");
-        }
-
         // replicated storage
         table.setEnableReplicatedStorage(
                 PropertyAnalyzer.analyzeBooleanProp(

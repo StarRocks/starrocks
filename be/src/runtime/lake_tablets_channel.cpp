@@ -383,7 +383,10 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     tablet_ids.reserve(params.tablets_size());
     for (const PTabletWithPartition& tablet : params.tablets()) {
         std::unique_ptr<AsyncDeltaWriter> writer;
-        if (!params.merge_condition().empty()) {
+        if (params.miss_auto_increment_column()) {
+            writer = AsyncDeltaWriter::create(_tablet_manager, tablet.tablet_id(), _txn_id, tablet.partition_id(),
+                                              slots, params.merge_condition(), true, params.table_id(), _mem_tracker);
+        } else if (!params.merge_condition().empty()) {
             writer = AsyncDeltaWriter::create(_tablet_manager, tablet.tablet_id(), _txn_id, tablet.partition_id(),
                                               slots, params.merge_condition(), _mem_tracker);
         } else {

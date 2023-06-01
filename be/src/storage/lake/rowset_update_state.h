@@ -32,6 +32,24 @@ struct PartialUpdateState {
     std::vector<std::unique_ptr<Column>> write_columns;
 };
 
+struct AutoIncrementPartialUpdateState {
+    std::vector<uint64_t> src_rss_rowids;
+    std::unique_ptr<Column> write_column;
+    std::shared_ptr<TabletSchema> schema;
+    uint32_t id;
+    uint32_t segment_id;
+    std::vector<uint32_t> rowids;
+    bool skip_rewrite;
+
+    AutoIncrementPartialUpdateState() : schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
+
+    void init(std::shared_ptr<TabletSchema>& schema, uint32_t id, uint32_t segment_id) {
+        this->schema = schema;
+        this->id = id;
+        this->segment_id = segment_id;
+    }
+};
+
 class RowsetUpdateState {
 public:
     using ColumnUniquePtr = std::unique_ptr<Column>;
@@ -57,6 +75,8 @@ public:
                                    std::map<uint32_t, std::vector<uint32_t>>* rowids_by_rssid,
                                    std::vector<uint32_t>* idxes);
 
+    const std::vector<std::unique_ptr<Column>>& auto_increment_deletes() const;
+
 private:
     Status _do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet);
 
@@ -69,6 +89,19 @@ private:
     Status _resolve_conflict(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version,
                              Tablet* tablet, const MetaFileBuilder* builder);
 
+    Status _resolve_conflict_partial_update(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
+                                            Tablet* tablet, const std::vector<uint64_t>& new_rss_rowids,
+                                            std::vector<uint32_t>& read_column_ids, uint32_t segment_id,
+                                            size_t& total_conflicts, TabletSchema* tablet_schema);
+
+    Status _resolve_conflict_auto_increment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
+                                            Tablet* tablet, const std::vector<uint64_t>& new_rss_rowids,
+                                            uint32_t segment_id, size_t& total_conflicts, TabletSchema* tablet_schema);
+
+    Status _prepare_auto_increment_partial_update_states(const TxnLogPB_OpWrite& op_write,
+                                                         const TabletMetadata& metadata, Tablet* tablet,
+                                                         const TabletSchema& tablet_schema);
+
     std::once_flag _load_once_flag;
     Status _status;
     // one for each segment file
@@ -80,6 +113,10 @@ private:
 
     // TODO: dump to disk if memory usage is too large
     std::vector<PartialUpdateState> _partial_update_states;
+
+    std::vector<AutoIncrementPartialUpdateState> _auto_increment_partial_update_states;
+
+    std::vector<std::unique_ptr<Column>> _auto_increment_delete_pks;
 
     int64_t _base_version;
     const MetaFileBuilder* _builder;

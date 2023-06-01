@@ -805,9 +805,8 @@ public class OlapTable extends Table {
                     partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
             for (MaterializedIndex materializedIndex : allIndices) {
                 for (Tablet tablet : materializedIndex.getTablets()) {
-                    List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
-                    for (Replica replica : replicas) {
-                        long backendId = replica.getBackendId();
+                    Set<Long> backendIds = tablet.getBackendIds();
+                    for (long backendId : backendIds) {
                         fullBackendId.add(backendId);
                     }
                 }

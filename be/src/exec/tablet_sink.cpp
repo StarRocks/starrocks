@@ -214,6 +214,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_node_id(_node_id);
     request.set_write_quorum(_write_quorum_type);
     request.set_miss_auto_increment_column(_parent->_miss_auto_increment_column);
+    request.set_table_id(_parent->_schema->table_id());
     request.set_is_incremental(incremental_open);
     request.set_sender_id(_parent->_sender_id);
     for (auto& tablet : tablets) {

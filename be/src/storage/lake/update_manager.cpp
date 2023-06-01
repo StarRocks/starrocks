@@ -110,6 +110,9 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (const auto& one_delete : state.deletes()) {
         index.erase(*one_delete, &new_deletes);
     }
+    for (const auto& one_delete : state.auto_increment_deletes()) {
+        index.erase(*one_delete, &new_deletes);
+    }
     cost_str << " [update primary index] " << watch.elapsed_time();
     watch.reset();
     // 4. generate delvec
@@ -306,12 +309,13 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
                                         const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema,
                                         std::vector<uint32_t>& column_ids, bool with_default,
                                         std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                                        vector<std::unique_ptr<Column>>* columns) {
+                                        vector<std::unique_ptr<Column>>* columns,
+                                        AutoIncrementPartialUpdateState* auto_increment_state) {
     std::stringstream cost_str;
     MonotonicStopWatch watch;
     watch.start();
 
-    if (with_default) {
+    if (with_default && auto_increment_state == nullptr) {
         for (auto i = 0; i < column_ids.size(); ++i) {
             const TabletColumn& tablet_column = tablet_schema.column(column_ids[i]);
             if (tablet_column.has_default_value()) {
@@ -337,20 +341,19 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
     watch.reset();
 
     std::shared_ptr<FileSystem> fs;
-    for (const auto& [rssid, rowids] : rowids_by_rssid) {
-        if (fs == nullptr) {
-            auto root_path = tablet->metadata_root_location();
-            ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(root_path));
-        }
-        std::string path = tablet->segment_location(rssid_to_path[rssid]);
-        auto segment = Segment::open(fs, path, rssid, &tablet_schema);
+    auto fetch_values_from_segment = [&](std::string segment_name, uint32_t segment_id,
+                                         const TabletSchema* tablet_schema,
+                                         const std::vector<uint32_t>& rowids) -> Status {
+        std::string path = tablet->segment_location(segment_name);
+        auto segment = Segment::open(fs, path, segment_id, tablet_schema);
         if (!segment.ok()) {
-            LOG(WARNING) << "Fail to open rssid: " << rssid << " path: " << path << " : " << segment.status();
+            LOG(WARNING) << "Fail to open rssid: " << segment_id << " path: " << path << " : " << segment.status();
             return segment.status();
         }
         if ((*segment)->num_rows() == 0) {
-            continue;
+            return Status::OK();
         }
+
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
@@ -361,6 +364,28 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
         }
+        return Status::OK();
+    };
+
+    for (const auto& [rssid, rowids] : rowids_by_rssid) {
+        if (fs == nullptr) {
+            auto root_path = tablet->metadata_root_location();
+            ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(root_path));
+        }
+
+        // use 0 segment_id is safe, because we need not get either delvector or dcg here
+        RETURN_IF_ERROR(fetch_values_from_segment(rssid_to_path[rssid], 0, &tablet_schema, rowids));
+    }
+    if (auto_increment_state != nullptr && with_default) {
+        if (fs == nullptr) {
+            auto root_path = tablet->metadata_root_location();
+            ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(root_path));
+        }
+        uint32_t segment_id = auto_increment_state->segment_id;
+        const std::vector<uint32_t>& rowids = auto_increment_state->rowids;
+
+        RETURN_IF_ERROR(fetch_values_from_segment(op_write.rowset().segments(segment_id), segment_id,
+                                                  auto_increment_state->schema.get(), rowids));
     }
     cost_str << " [fetch vals by rowid] " << watch.elapsed_time();
     LOG(INFO) << "UpdateManager get_column_values " << cost_str.str();

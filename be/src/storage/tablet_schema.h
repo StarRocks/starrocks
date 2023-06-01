@@ -105,6 +105,7 @@ public:
     void set_is_nullable(bool value) { _set_flag(kIsNullableShift, value); }
 
     bool is_auto_increment() const { return _check_flag(kHasAutoIncrementShift); }
+    void set_is_auto_increment(bool value) { _set_flag(kHasAutoIncrementShift, value); }
 
     bool is_bf_column() const { return _check_flag(kIsBfColumnShift); }
     void set_is_bf_column(bool value) { _set_flag(kIsBfColumnShift, value); }

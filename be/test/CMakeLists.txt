@@ -203,6 +203,7 @@ set(EXEC_FILES
         ./storage/lake/schema_change_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/partial_update_test.cpp
+        ./storage/lake/auto_increment_partial_update_test.cpp
         ./storage/lake/tablet_reader_test.cpp
         ./storage/lake/tablet_writer_test.cpp
         ./storage/lake/condition_update_test.cpp
