@@ -888,7 +888,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                 txnId, commitInfos, failInfos, txnCommitAttachment);
     }
 
-    public boolean checkNeedRemove(long currentMs) {
+    public boolean checkNeedRemove(long currentMs, boolean isForce) {
         readLock();
         try {
             if (!isFinalState()) {
@@ -898,7 +898,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             readUnlock();
         }
         Preconditions.checkState(endTimeMs != -1, endTimeMs);
-        if ((currentMs - endTimeMs) > Config.label_keep_max_second * 1000) {
+        if (isForce || ((currentMs - endTimeMs) > Config.label_keep_max_second * 1000)) {
             return true;
         }
         return false;

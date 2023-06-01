@@ -3948,7 +3948,7 @@ public class GlobalStateMgr {
             LOG.warn("backup handler clean old jobs failed", t);
         }
         try {
-            streamLoadMgr.cleanOldStreamLoadTasks();
+            streamLoadMgr.cleanOldStreamLoadTasks(false);
         } catch (Throwable t) {
             LOG.warn("delete handler remove old delete info failed", t);
         }

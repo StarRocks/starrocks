@@ -240,13 +240,13 @@ public class StreamLoadMgr {
             // If enable_load_profile = true,
             // most stream load tasks are generated through flink-cdc and routine load generally,
             // so clearing the syncStreamLoadTask is preferred.
-            LOG.info("trigger cleanSyncStreamLoadTasks when add load task label:{}",task.getLabel());
+            LOG.info("trigger cleanSyncStreamLoadTasks when add load task label:{}", task.getLabel());
             cleanSyncStreamLoadTasks();
             // The size of idToStreamLoadTask is still huge, indicates that the type of most tasks is PARALLEL,
             // so clean all the streamLoadTasks manaully not waitting for Config.label_keep_max_second.
             if (idToStreamLoadTask.size() > Config.label_keep_max_num / 2) {
-                LOG.info("trigger cleanOldStreamLoadTasks when add load task label{}",task.getLabel());
-                cleanOldStreamLoadTasks();
+                LOG.info("trigger cleanOldStreamLoadTasks when add load task label{}", task.getLabel());
+                cleanOldStreamLoadTasks(true);
             }
         }
 
@@ -384,7 +384,7 @@ public class StreamLoadMgr {
     // Remove old stream load tasks from idToStreamLoadTask and dbToLabelToStreamLoadTask
     // This function is called periodically.
     // Cancelled and Committed task will be removed after Configure.label_keep_max_second seconds
-    public void cleanOldStreamLoadTasks() {
+    public void cleanOldStreamLoadTasks(boolean isForce) {
         LOG.debug("begin to clean old stream load tasks");
         writeLock();
         try {
@@ -392,7 +392,7 @@ public class StreamLoadMgr {
             long currentMs = System.currentTimeMillis();
             while (iterator.hasNext()) {
                 StreamLoadTask streamLoadTask = iterator.next().getValue();
-                if (streamLoadTask.checkNeedRemove(currentMs)) {
+                if (streamLoadTask.checkNeedRemove(currentMs, isForce)) {
                     unprotectedRemoveTaskFromDb(streamLoadTask);
                     iterator.remove();
                     if (streamLoadTask.isSyncStreamLoad()) {
@@ -580,7 +580,7 @@ public class StreamLoadMgr {
             StreamLoadTask loadTask = StreamLoadTask.read(in);
             loadTask.init();
             // discard expired task right away
-            if (loadTask.checkNeedRemove(currentMs)) {
+            if (loadTask.checkNeedRemove(currentMs, false)) {
                 LOG.info("discard expired task: {}", loadTask.getLabel());
                 continue;
             }
@@ -608,7 +608,7 @@ public class StreamLoadMgr {
             StreamLoadTask loadTask = reader.readJson(StreamLoadTask.class);
             loadTask.init();
             // discard expired task right away
-            if (loadTask.checkNeedRemove(currentMs)) {
+            if (loadTask.checkNeedRemove(currentMs, false)) {
                 LOG.info("discard expired task: {}", loadTask.getLabel());
                 continue;
             }
