@@ -11,6 +11,7 @@ You can submit an asynchronous INSERT task using [SUBMIT TASK](../data-manipulat
 ```Bash
 INSERT {INTO | OVERWRITE} table_name
 [ PARTITION (p1, ...) ]
+[ TEMPORARY_PARTITION (tp1, ...) ]
 [ WITH LABEL label]
 [ (column_name [, ...]) ]
 { VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
@@ -23,7 +24,8 @@ INSERT {INTO | OVERWRITE} table_name
 | INTO          | To append data to the table.                                 |
 | OVERWRITE     | To overwrite the table with data.                            |
 | table_name    | The name of the table into which you want to load data. It can be specified with the database the table resides as `db_name.table_name`. |
-| partitions    | The name of the target partition(s) to load data in. It must be set as partitions exist in the target table. If it is not specified, the data will be inserted into all partitions. Otherwise, the data will be inserted only into the specified partition(s). |
+| PARTITION    | The name of the target partition(s) to load data in. It must be set as partitions exist in the target table. If it is not specified, the data will be inserted into all partitions. Otherwise, the data will be inserted only into the specified partition(s). |
+| TEMPORARY_PARTITION|The name of the [temporary partition(s)](../../../table_design/Temporary_partition.md) to load data in. |
 | label         | The unique identification label for each data load transaction within the database. If it is not specified, the system automatically generates one for the transaction. We recommend you specify the label for the transaction. Otherwise, you cannot check the transaction status if a connection error occurs and no result is returned. You can check the transaction status via `SHOW LOAD WHERE label="label"` statement. For limitations on naming a label, see [System Limits](../reference/System_limit.md). |
 | column_name   | The name of the target column(s) to load data in. It must be set as columns exist in the target table. The order of columns specified in this property must match that of the data source, and the name of fields must match that of the target table. If no target column is specified, the default value is all columns in the target table. If the specified column in the source table does not exist in the target column, the default value will be written to this column, and the transaction will fail if the specified column does not have a default value. If the column type of the source table is inconsistent with that of the target table, the system will perform an implicit conversion on the mismatched column. If the conversion fails, a syntax parsing error will be returned. |
 | expression    | Expression that assigns values to the column.                |
