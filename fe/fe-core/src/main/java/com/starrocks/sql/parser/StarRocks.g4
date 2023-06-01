@@ -588,7 +588,11 @@ dropMaterializedViewStatement
     ;
 
 alterMaterializedViewStatement
-    : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause | modifyTablePropertiesClause)
+    : ALTER MATERIALIZED VIEW mvName=qualifiedName (
+        refreshSchemeDesc |
+        tableRenameClause |
+        modifyTablePropertiesClause |
+        swapTableClause )
     | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
     ;
 

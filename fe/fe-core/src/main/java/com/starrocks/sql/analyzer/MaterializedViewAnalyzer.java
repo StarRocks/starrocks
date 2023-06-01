@@ -877,6 +877,8 @@ public class MaterializedViewAnalyzer {
                 if (!AlterMaterializedViewStmt.SUPPORTED_MV_STATUS.contains(status)) {
                     throw new SemanticException("Unsupported modification for materialized view status:" + status);
                 }
+            } else if (statement.getSwapTable() != null) {
+                // skip
             } else {
                 throw new SemanticException("Unsupported modification for materialized view");
             }

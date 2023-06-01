@@ -194,4 +194,7 @@ public interface ParserErrorMsg {
 
     @BaseMessage("Invalid column name format ''{0}''")
     String invalidColFormat(String a0);
+
+    @BaseMessage("Conflicted options {0} and {1}")
+    String conflictedOptions(String a0, String a1);
 }

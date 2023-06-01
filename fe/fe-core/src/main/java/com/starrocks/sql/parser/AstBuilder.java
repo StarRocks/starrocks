@@ -1587,7 +1587,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException(PARSER_ERROR_MSG.feConfigDisable("enable_experimental_mv"), NodePosition.ZERO);
         }
 
-        return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments, comment, refreshSchemeDesc,
+        return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments, comment,
+                refreshSchemeDesc,
                 expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement, createPos(context));
     }
 
@@ -1642,7 +1643,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.statusDesc() != null) {
             status = context.statusDesc().getText();
         }
+        // swap table
+        SwapTableClause swapTableClause = null;
+        if (context.swapTableClause() != null) {
+            swapTableClause = (SwapTableClause) visit(context.swapTableClause());
+        }
         return new AlterMaterializedViewStmt(mvName, newMvName, refreshSchemeDesc, modifyTablePropertiesClause, status,
+                swapTableClause,
                 createPos(context));
     }
 

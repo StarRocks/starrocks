@@ -1,0 +1,34 @@
+-- name: test_mv_swap
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
+insert into ss values('2020-01-14', 2);
+insert into ss values('2020-01-14', 3);
+insert into ss values('2020-01-15', 2);
+
+CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day, sum(pv) FROM ss GROUP BY event_day;
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode ;
+CREATE MATERIALIZED VIEW mv2 DISTRIBUTED BY hash(event_day) AS SELECT event_day, count(pv) FROM ss GROUP BY event_day;
+[UC]REFRESH MATERIALIZED VIEW mv2 with sync mode ;
+SELECT * FROM mv1 ORDER BY event_day;
+SELECT * FROM mv2 ORDER BY event_day;
+
+ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
+SELECT * FROM mv1 ORDER BY event_day;
+SELECT * FROM mv2 ORDER BY event_day;
+DESC mv1;
+DESC mv2;
+
+-- refresh again
+INSERT INTO ss values('2020-01-15', 2);
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode;
+[UC]REFRESH MATERIALIZED VIEW mv2 with sync mode;
+SELECT * FROM mv1 ORDER BY event_day;
+SELECT * FROM mv2 ORDER BY event_day;
+
+-- Try to swap with a table
+ALTER MATERIALIZED VIEW mv1 SWAP WITH ss;
+ALTER TABLE ss SWAP WITH mv1;
+
+-- Try to swap with self
+ALTER MATERIALIZED VIEW mv1 SWAP WITH mv1;
