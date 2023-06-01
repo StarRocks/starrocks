@@ -1,0 +1,13 @@
+-- name: test oct function
+
+select oct(0);
+select oct(190);
+select oct(1234567);
+select oct(-22);
+select oct();
+
+select oct_length(0);
+select oct_length(190);
+select oct_length(1234567);
+select oct_length(-22);
+select oct_length();
