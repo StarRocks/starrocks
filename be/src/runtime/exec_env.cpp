@@ -218,14 +218,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     }
     _max_executor_threads = std::max<int64_t>(1, _max_executor_threads);
     LOG(INFO) << strings::Substitute("[PIPELINE] Exec thread pool: thread_num=$0", _max_executor_threads);
-    RETURN_IF_ERROR(ThreadPoolBuilder("pip_executor") // pipeline executor
-                            .set_min_threads(0)
-                            .set_max_threads(_max_executor_threads)
-                            .set_max_queue_size(1000)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                            .build(&driver_executor_thread_pool));
-    _driver_executor = new pipeline::GlobalDriverExecutor("pip_exe", std::move(driver_executor_thread_pool), false);
-    _driver_executor->initialize(_max_executor_threads);
 
     _driver_limiter =
             new pipeline::DriverLimiter(_max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread);
@@ -243,17 +235,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     int connector_num_io_threads = config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores();
     CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
-
-    std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_without_workgroup;
-    RETURN_IF_ERROR(ThreadPoolBuilder("con_scan_io")
-                            .set_min_threads(0)
-                            .set_max_threads(connector_num_io_threads)
-                            .set_max_queue_size(1000)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                            .build(&connector_scan_worker_thread_pool_without_workgroup));
-    _connector_scan_executor_without_workgroup = new workgroup::ScanExecutor(
-            std::move(connector_scan_worker_thread_pool_without_workgroup), workgroup::create_scan_task_queue());
-    _connector_scan_executor_without_workgroup->initialize(connector_num_io_threads);
 
     std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_with_workgroup;
     RETURN_IF_ERROR(ThreadPoolBuilder("con_wg_scan_io")
@@ -294,17 +275,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                  ? CpuInfo::num_cores()
                                  : config::pipeline_scan_thread_pool_thread_num;
-
-    std::unique_ptr<ThreadPool> scan_worker_thread_pool_without_workgroup;
-    RETURN_IF_ERROR(ThreadPoolBuilder("pip_scan_io")
-                            .set_min_threads(0)
-                            .set_max_threads(num_io_threads)
-                            .set_max_queue_size(1000)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                            .build(&scan_worker_thread_pool_without_workgroup));
-    _scan_executor_without_workgroup = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_without_workgroup),
-                                                                   workgroup::create_scan_task_queue());
-    _scan_executor_without_workgroup->initialize(num_io_threads);
 
     std::unique_ptr<ThreadPool> scan_worker_thread_pool_with_workgroup;
     RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_scan_io")
@@ -522,16 +492,13 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_broker_mgr);
     SAFE_DELETE(_bfd_parser);
     SAFE_DELETE(_load_path_mgr);
-    SAFE_DELETE(_driver_executor);
     SAFE_DELETE(_wg_driver_executor);
     SAFE_DELETE(_fragment_mgr);
     SAFE_DELETE(_udf_call_pool);
     SAFE_DELETE(_pipeline_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);
     SAFE_DELETE(_query_rpc_pool);
-    SAFE_DELETE(_scan_executor_without_workgroup);
     SAFE_DELETE(_scan_executor_with_workgroup);
-    SAFE_DELETE(_connector_scan_executor_without_workgroup);
     SAFE_DELETE(_connector_scan_executor_with_workgroup);
     SAFE_DELETE(_thread_pool);
 
