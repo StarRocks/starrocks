@@ -63,6 +63,8 @@ Status ColumnAccessPath::init(const TAccessPathType::type& type, const std::stri
     _type = type;
     _path = path;
     _column_index = index;
+
+    return Status::OK();
 }
 
 ColumnAccessPathPtr ColumnAccessPath::convert_by_index(const Field* filed, uint32_t index) {
