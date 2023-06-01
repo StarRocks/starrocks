@@ -7,7 +7,7 @@ Release date: June 1, 2023
 ### Improvements
 
 - Optimized the error message reported when INSERT INTO ... SELECT expires due to a small `thrift_server_max_worker_thread` value. [#21964](https://github.com/StarRocks/starrocks/pull/21964)
-- Reduced memory consumption and optimized performance for multi-table joins that use the `bitmap_contains` function.  [#20617](https://github.com/StarRocks/starrocks/pull/20617) [#20653](https://github.com/StarRocks/starrocks/pull/20653)
+- Reduced memory consumption and optimized performance for multi-table joins that use the `bitmap_contains` function. [#20617](https://github.com/StarRocks/starrocks/pull/20617) [#20653](https://github.com/StarRocks/starrocks/pull/20653)
 
 ### Bug Fixes
 
