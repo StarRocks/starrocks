@@ -1425,50 +1425,44 @@ public class GlobalStateMgr {
             checksum = loadVersion(dis, checksum);
             if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
                 try {
-                    checksum = loadHeaderV2(dis, checksum);
+                    loadHeaderV2(dis, checksum);
                     nodeMgr.load(dis);
                     localMetastore.load(dis);
-
                     // ATTN: this should be done after load Db, and before loadAlterJob
                     localMetastore.recreateTabletInvertIndex();
+                    alterJobMgr.load(dis);
                     // rebuild es state state
                     esRepository.loadTableFromCatalog();
                     starRocksRepository.loadTableFromCatalog();
                     recycleBin.load(dis);
-
-                    loadMgr.loadLoadJobsV2JsonFormat(dis);
-                    alterJobMgr.load(dis);
                     VariableMgr.load(dis);
+                    resourceMgr.loadResourcesV2(dis, catalogMgr);
+                    exportMgr.loadExportJobV2(dis);
+                    backupHandler.loadBackupHandlerV2(dis);
+                    auth.load(dis);
+                    // global transaction must be replayed before load jobs v2
+                    globalTransactionMgr.loadTransactionStateV2(dis);
+                    colocateTableIndex.loadColocateTableIndexV2(dis);
+                    routineLoadMgr.loadRoutineLoadJobsV2(dis);
+                    loadMgr.loadLoadJobsV2JsonFormat(dis);
+                    smallFileMgr.loadSmallFilesV2(dis);
                     pluginMgr.load(dis);
                     deleteMgr.load(dis);
                     analyzeMgr.load(dis);
                     resourceGroupMgr.load(dis);
-                    routineLoadMgr.loadRoutineLoadJobsV2(dis);
-                    // global transaction must be replayed before load jobs v2
-                    globalTransactionMgr.loadTransactionStateV2(dis);
-                    loadMgr.loadLoadJobsV2JsonFormat(dis);
-                    auth.load(dis);
                     authenticationMgr.loadV2(dis);
                     authorizationMgr.loadV2(dis);
-                    exportMgr.loadExportJobV2(dis);
-                    colocateTableIndex.loadColocateTableIndexV2(dis);
-                    smallFileMgr.loadSmallFilesV2(dis);
+                    taskManager.loadTasksV2(dis);
                     catalogMgr.load(dis);
                     insertOverwriteJobMgr.load(dis);
                     compactionMgr.load(dis);
                     streamLoadMgr.load(dis);
                     MaterializedViewMgr.getInstance().load(dis);
                     globalFunctionMgr.load(dis);
-                    backupHandler.loadBackupHandlerV2(dis);
                 } catch (SRMetaBlockException | SRMetaBlockEOFException e) {
                     LOG.error("load image failed", e);
                     throw new IOException("load image failed", e);
                 }
-
-                //TODO: The following parts have not been refactored, and they are added for the convenience of testing
-
-                checksum = loadResources(dis, checksum);
-                checksum = taskManager.loadTasks(dis, checksum);
             } else {
                 checksum = loadHeaderV1(dis, checksum);
                 checksum = nodeMgr.loadLeaderInfo(dis, checksum);
@@ -1818,38 +1812,35 @@ public class GlobalStateMgr {
                     checksum = saveHeaderV2(dos, checksum);
                     nodeMgr.save(dos);
                     localMetastore.save(dos);
-                    recycleBin.save(dos);
-                    loadMgr.saveLoadJobsV2JsonFormat(dos);
                     alterJobMgr.save(dos);
+                    recycleBin.save(dos);
                     VariableMgr.save(dos);
+                    resourceMgr.saveResourcesV2(dos);
+                    exportMgr.saveExportJobV2(dos);
+                    backupHandler.saveBackupHandlerV2(dos);
+                    auth.save(dos);
+                    globalTransactionMgr.saveTransactionStateV2(dos);
+                    colocateTableIndex.saveColocateTableIndexV2(dos);
+                    routineLoadMgr.saveRoutineLoadJobsV2(dos);
+                    loadMgr.saveLoadJobsV2JsonFormat(dos);
+                    smallFileMgr.saveSmallFilesV2(dos);
                     pluginMgr.save(dos);
                     deleteMgr.save(dos);
                     analyzeMgr.save(dos);
                     resourceGroupMgr.save(dos);
-                    routineLoadMgr.saveRoutineLoadJobsV2(dos);
-                    globalTransactionMgr.saveTransactionStateV2(dos);
-                    auth.save(dos);
                     authenticationMgr.saveV2(dos);
                     authorizationMgr.saveV2(dos);
-                    exportMgr.saveExportJobV2(dos);
-                    colocateTableIndex.saveColocateTableIndexV2(dos);
-                    smallFileMgr.saveSmallFilesV2(dos);
+                    taskManager.saveTasksV2(dos);
                     catalogMgr.save(dos);
                     insertOverwriteJobMgr.save(dos);
                     compactionMgr.save(dos);
                     streamLoadMgr.save(dos);
                     MaterializedViewMgr.getInstance().save(dos);
                     globalFunctionMgr.save(dos);
-                    backupHandler.saveBackupHandlerV2(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("save image failed", e);
                     throw new IOException("save image failed", e);
                 }
-
-                //TODO: The following parts have not been refactored, and they are added for the convenience of testing
-
-                checksum = resourceMgr.saveResources(dos, checksum);
-                checksum = taskManager.saveTasks(dos, checksum);
             } else {
                 checksum = saveVersion(dos, checksum);
                 checksum = saveHeader(dos, replayedJournalId, checksum);

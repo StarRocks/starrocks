@@ -45,8 +45,14 @@ import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -56,6 +62,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -87,7 +94,7 @@ public class ResourceMgr implements Writable {
             .build();
 
     @SerializedName(value = "nameToResource")
-    private final HashMap<String, Resource> nameToResource = new HashMap<>();
+    private HashMap<String, Resource> nameToResource = new HashMap<>();
     private final ResourceProcNode procNode = new ResourceProcNode();
     private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
 
@@ -343,5 +350,27 @@ public class ResourceMgr implements Writable {
     public long saveResources(DataOutputStream out, long checksum) throws IOException {
         write(out);
         return checksum;
+    }
+
+    public void saveResourcesV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.RESOURCE_MGR, 1);
+        writer.writeJson(this);
+        writer.close();
+    }
+
+    public void loadResourcesV2(DataInputStream dis, CatalogMgr catalogMgr)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.RESOURCE_MGR);
+        try {
+            ResourceMgr data = reader.readJson(ResourceMgr.class);
+            this.nameToResource = data.nameToResource;
+        } finally {
+            reader.close();
+        }
+        LOG.info("finished replay resources from image");
+
+        LOG.info("start to replay resource mapping catalog");
+        catalogMgr.loadResourceMappingCatalog();
+        LOG.info("finished replaying resource mapping catalogs from resources");
     }
 }
