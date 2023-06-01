@@ -33,6 +33,8 @@ public class AlterMaterializedViewStmt extends DdlStmt {
     private final RefreshSchemeDesc refreshSchemeDesc;
     private final ModifyTablePropertiesClause modifyTablePropertiesClause;
     private final String status;
+    private final SwapTableClause swapTable;
+
     public static final String ACTIVE = "active";
     public static final String INACTIVE = "inactive";
     public static final Set<String> SUPPORTED_MV_STATUS = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -45,7 +47,7 @@ public class AlterMaterializedViewStmt extends DdlStmt {
     public AlterMaterializedViewStmt(TableName mvName, String newMvName,
                                      RefreshSchemeDesc refreshSchemeDesc,
                                      ModifyTablePropertiesClause modifyTablePropertiesClause,
-                                     String status,
+                                     String status, SwapTableClause swapTable,
                                      NodePosition pos) {
         super(pos);
         this.mvName = mvName;
@@ -53,6 +55,7 @@ public class AlterMaterializedViewStmt extends DdlStmt {
         this.refreshSchemeDesc = refreshSchemeDesc;
         this.modifyTablePropertiesClause = modifyTablePropertiesClause;
         this.status = status;
+        this.swapTable = swapTable;
     }
 
     public TableName getMvName() {
@@ -73,6 +76,10 @@ public class AlterMaterializedViewStmt extends DdlStmt {
 
     public String getStatus() {
         return status;
+    }
+
+    public SwapTableClause getSwapTable() {
+        return swapTable;
     }
 
     @Override
