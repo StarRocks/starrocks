@@ -7,7 +7,7 @@ Release date: June 1, 2023
 ### New Features
 
 - [Preview] Supports spilling intermediate computation results of large operators to disks to reduce the memory consumption of large operators. For more information, see [Spill to disk](../administration/spill_to_disk.md).
-- [Routine Load](../loading/RoutineLoad.md#load-avro-format-data) supports loading Avro-formatted data.
+- [Routine Load](../loading/RoutineLoad.md#load-avro-format-data) supports loading Avro data.
 - Supports [Microsoft Azure Storage](../integrations/authenticate_to_azure_storage.md) (including Azure Blob Storage and Azure Data Lake Storage).
 
 ### Improvements
@@ -21,7 +21,7 @@ Release date: June 1, 2023
 Fixed the following issues:
 
 - Information returned by SHOW CREATE TABLE is incorrect for Primary Key tables. [#24237](https://github.com/StarRocks/starrocks/issues/24237)
-- BEs may crash during a Routine Load job. [#24237](https://github.com/StarRocks/starrocks/issues/24237)
+- BEs may crash during a Routine Load job. [#20677](https://github.com/StarRocks/starrocks/issues/20677)
 - Null pointer exception (NPE) occurs if you specify unsupported properties when creating a partitioned table. [#21374](https://github.com/StarRocks/starrocks/issues/21374)
 - Information returned by SHOW TABLE STATUS is incomplete. [#24279](https://github.com/StarRocks/starrocks/issues/24279)
 
