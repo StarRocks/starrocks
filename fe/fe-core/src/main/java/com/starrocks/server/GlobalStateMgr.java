@@ -1434,29 +1434,31 @@ public class GlobalStateMgr {
                 Map<SRMetaBlockID, ImageLoader> loadImages = ImmutableMap.<SRMetaBlockID, ImageLoader>builder()
                         .put(SRMetaBlockID.NODE_MGR, nodeMgr::load)
                         .put(SRMetaBlockID.LOCAL_META_STORE, localMetastore::load)
-                        .put(SRMetaBlockID.CATALOG_RECYCLE_BIN, recycleBin::load)
-                        .put(SRMetaBlockID.LOAD_MGR, loadMgr::loadLoadJobsV2JsonFormat)
                         .put(SRMetaBlockID.ALTER_MGR, alterJobMgr::load)
+                        .put(SRMetaBlockID.CATALOG_RECYCLE_BIN, recycleBin::load)
                         .put(SRMetaBlockID.VARIABLE_MGR, VariableMgr::load)
+                        .put(SRMetaBlockID.RESOURCE_MGR, resourceMgr::loadResourcesV2)
+                        .put(SRMetaBlockID.EXPORT_MGR, exportMgr::loadExportJobV2)
+                        .put(SRMetaBlockID.BACKUP_MGR, backupHandler::loadBackupHandlerV2)
+                        .put(SRMetaBlockID.AUTH, auth::load)
+                        .put(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, globalTransactionMgr::loadTransactionStateV2)
+                        .put(SRMetaBlockID.COLOCATE_TABLE_INDEX, colocateTableIndex::loadColocateTableIndexV2)
+                        .put(SRMetaBlockID.ROUTINE_LOAD_MGR, routineLoadMgr::loadRoutineLoadJobsV2)
+                        .put(SRMetaBlockID.LOAD_MGR, loadMgr::loadLoadJobsV2JsonFormat)
+                        .put(SRMetaBlockID.SMALL_FILE_MGR, smallFileMgr::loadSmallFilesV2)
                         .put(SRMetaBlockID.PLUGIN_MGR, pluginMgr::load)
                         .put(SRMetaBlockID.DELETE_MGR, deleteMgr::load)
                         .put(SRMetaBlockID.ANALYZE_MGR, analyzeMgr::load)
                         .put(SRMetaBlockID.RESOURCE_GROUP_MGR, resourceGroupMgr::load)
-                        .put(SRMetaBlockID.ROUTINE_LOAD_MGR, routineLoadMgr::loadRoutineLoadJobsV2)
-                        .put(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, globalTransactionMgr::loadTransactionStateV2)
-                        .put(SRMetaBlockID.AUTH, auth::load)
                         .put(SRMetaBlockID.AUTHENTICATION_MGR, authenticationMgr::loadV2)
                         .put(SRMetaBlockID.AUTHORIZATION_MGR, authorizationMgr::loadV2)
-                        .put(SRMetaBlockID.EXPORT_MGR, exportMgr::loadExportJobV2)
-                        .put(SRMetaBlockID.COLOCATE_TABLE_INDEX, colocateTableIndex::loadColocateTableIndexV2)
-                        .put(SRMetaBlockID.SMALL_FILE_MGR, smallFileMgr::loadSmallFilesV2)
+                        .put(SRMetaBlockID.TASK_MGR, taskManager::loadTasksV2)
                         .put(SRMetaBlockID.CATALOG_MGR, catalogMgr::load)
                         .put(SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, insertOverwriteJobMgr::load)
                         .put(SRMetaBlockID.COMPACTION_MGR, compactionMgr::load)
                         .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
                         .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
                         .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
-                        .put(SRMetaBlockID.BACKUP_MGR, backupHandler::loadBackupHandlerV2)
                         .build();
                 try {
                     checksum = loadHeaderV2(dis, checksum);
@@ -1481,6 +1483,7 @@ public class GlobalStateMgr {
                         try {
                             ImageLoader imageLoader = entry.getValue();
                             imageLoader.apply(reader);
+                            LOG.info("Success load StarRocks meta block " + srMetaBlockID.name() + " from image");
                         } catch (SRMetaBlockEOFException srMetaBlockEOFException) {
                             /*
                               The number of json expected to be read is more than the number of json actually stored
@@ -1503,11 +1506,6 @@ public class GlobalStateMgr {
                     LOG.error("load image failed", e);
                     throw new IOException("load image failed", e);
                 }
-
-                //TODO: The following parts have not been refactored, and they are added for the convenience of testing
-
-                checksum = loadResources(dis, checksum);
-                checksum = taskManager.loadTasks(dis, checksum);
             } else {
                 checksum = loadHeaderV1(dis, checksum);
                 checksum = nodeMgr.loadLeaderInfo(dis, checksum);
@@ -1857,38 +1855,35 @@ public class GlobalStateMgr {
                     checksum = saveHeaderV2(dos, checksum);
                     nodeMgr.save(dos);
                     localMetastore.save(dos);
-                    recycleBin.save(dos);
-                    loadMgr.saveLoadJobsV2JsonFormat(dos);
                     alterJobMgr.save(dos);
+                    recycleBin.save(dos);
                     VariableMgr.save(dos);
+                    resourceMgr.saveResourcesV2(dos);
+                    exportMgr.saveExportJobV2(dos);
+                    backupHandler.saveBackupHandlerV2(dos);
+                    auth.save(dos);
+                    globalTransactionMgr.saveTransactionStateV2(dos);
+                    colocateTableIndex.saveColocateTableIndexV2(dos);
+                    routineLoadMgr.saveRoutineLoadJobsV2(dos);
+                    loadMgr.saveLoadJobsV2JsonFormat(dos);
+                    smallFileMgr.saveSmallFilesV2(dos);
                     pluginMgr.save(dos);
                     deleteMgr.save(dos);
                     analyzeMgr.save(dos);
                     resourceGroupMgr.save(dos);
-                    routineLoadMgr.saveRoutineLoadJobsV2(dos);
-                    globalTransactionMgr.saveTransactionStateV2(dos);
-                    auth.save(dos);
                     authenticationMgr.saveV2(dos);
                     authorizationMgr.saveV2(dos);
-                    exportMgr.saveExportJobV2(dos);
-                    colocateTableIndex.saveColocateTableIndexV2(dos);
-                    smallFileMgr.saveSmallFilesV2(dos);
+                    taskManager.saveTasksV2(dos);
                     catalogMgr.save(dos);
                     insertOverwriteJobMgr.save(dos);
                     compactionMgr.save(dos);
                     streamLoadMgr.save(dos);
                     MaterializedViewMgr.getInstance().save(dos);
                     globalFunctionMgr.save(dos);
-                    backupHandler.saveBackupHandlerV2(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("save image failed", e);
                     throw new IOException("save image failed", e);
                 }
-
-                //TODO: The following parts have not been refactored, and they are added for the convenience of testing
-
-                checksum = resourceMgr.saveResources(dos, checksum);
-                checksum = taskManager.saveTasks(dos, checksum);
             } else {
                 checksum = saveVersion(dos, checksum);
                 checksum = saveHeader(dos, replayedJournalId, checksum);

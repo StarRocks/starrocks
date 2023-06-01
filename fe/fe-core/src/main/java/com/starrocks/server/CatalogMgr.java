@@ -252,6 +252,8 @@ public class CatalogMgr {
     }
 
     public void loadResourceMappingCatalog() {
+        LOG.info("start to replay resource mapping catalog");
+
         List<Resource> resources = GlobalStateMgr.getCurrentState().getResourceMgr().getNeedMappingCatalogResources();
         for (Resource resource : resources) {
             Map<String, String> properties = Maps.newHashMap(resource.getProperties());
@@ -269,6 +271,7 @@ public class CatalogMgr {
                 LOG.error("Failed to load resource mapping inside catalog {}", catalogName, e);
             }
         }
+        LOG.info("finished replaying resource mapping catalogs from resources");
     }
 
     public long saveCatalogs(DataOutputStream dos, long checksum) throws IOException {
@@ -414,6 +417,7 @@ public class CatalogMgr {
                 Catalog catalog = reader.readJson(Catalog.class);
                 replayCreateCatalog(catalog);
             }
+            loadResourceMappingCatalog();
         } catch (DdlException e) {
             throw new IOException(e);
         }
