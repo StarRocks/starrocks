@@ -925,10 +925,19 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
         }
     }
 
-    public Optional<OptExpression> rewrite(OptExpression optExpression) {
+    public List<OptExpression> rewrite(OptExpression optExpression) {
         if (prunedTables.isEmpty()) {
-            return Optional.empty();
+            return Collections.singletonList(optExpression);
         }
-        return new Rewriter(rewriteMapping, prunedTables).process(optExpression);
+
+        Optional<OptExpression> optNewOptExpr = new Rewriter(rewriteMapping, prunedTables).process(optExpression);
+        if (optNewOptExpr.isPresent()) {
+            Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
+            rewriteMapping.forEach((k, v) -> columnRefMap.put(v, k));
+            return Collections.singletonList(OptExpression.create(new LogicalProjectOperator(columnRefMap),
+                    Collections.singletonList(optNewOptExpr.get())));
+        } else {
+            return Collections.singletonList(optExpression);
+        }
     }
 }

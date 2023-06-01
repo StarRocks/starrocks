@@ -165,6 +165,7 @@ public class LosslessLogicalViewTest {
                 "select \n" +
                 "\tempid, \n" +
                 "\temps.deptno as deptno, \n" +
+                "\tdepts.deptno as deptno2, \n" +
                 "\temps.name as name, \n" +
                 "\tsalary, \n" +
                 "\tdepts.name as dept_name\n" +
@@ -182,7 +183,7 @@ public class LosslessLogicalViewTest {
             try {
                 return CharStreams.toString(
                         new InputStreamReader(
-                                Objects.requireNonNull(loader.getResourceAsStream("sql/ssb/" + n + ".sql")),
+                                Objects.requireNonNull(loader.getResourceAsStream("sql/ssb_pk_fk/" + n + ".sql")),
                                 Charsets.UTF_8));
             } catch (Throwable e) {
                 return null;
@@ -207,6 +208,13 @@ public class LosslessLogicalViewTest {
     public void testBasic() throws Exception {
         ctx.getSessionVariable().setQueryTimeoutS(100000000);
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, "select empid from emps_flat_view");
+        System.out.println(plan);
+    }
+
+    @Test
+    public void testBasic2() throws Exception {
+        ctx.getSessionVariable().setQueryTimeoutS(100000000);
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, "select empid, deptno2 from emps_flat_view");
         System.out.println(plan);
     }
 
