@@ -111,6 +111,7 @@ public:
     // Initial exec environment. must call this to init all
     static Status init(ExecEnv* env, const std::vector<StorePath>& store_paths);
     static bool is_init();
+    static void stop(ExecEnv* exec_env);
     static void destroy(ExecEnv* exec_env);
 
     /// Returns the first created exec env instance. In a normal starrocks, this is
@@ -241,6 +242,7 @@ public:
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
+    void _stop();
     void _destroy();
     void _reset_tracker();
     template <class... Args>
