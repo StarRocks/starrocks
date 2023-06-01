@@ -59,6 +59,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
+#include "runtime/load_channel_mgr.h"
 #include "service/backend_options.h"
 #include "service/service.h"
 #include "service/staros_worker.h"
@@ -366,6 +367,8 @@ int main(int argc, char** argv) {
     heartbeat_thrift_server->join();
 
     exec_env->agent_server()->stop();
+
+    starrocks::ExecEnv::stop(exec_env);
     engine->stop();
     delete engine;
     starrocks::ExecEnv::destroy(exec_env);
