@@ -82,6 +82,7 @@ import com.starrocks.sql.parser.ParsingException;
 import io.trino.sql.tree.AliasedRelation;
 import io.trino.sql.tree.AllColumns;
 import io.trino.sql.tree.ArithmeticBinaryExpression;
+import io.trino.sql.tree.ArithmeticUnaryExpression;
 import io.trino.sql.tree.ArrayConstructor;
 import io.trino.sql.tree.AstVisitor;
 import io.trino.sql.tree.BetweenPredicate;
@@ -814,6 +815,16 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         String fieldString = node.getField().toString();
         return new FunctionCallExpr(fieldString,
                 new FunctionParams(Lists.newArrayList((Expr) visit(node.getExpression(), context))));
+    }
+
+    @Override
+    protected ParseNode visitArithmeticUnary(ArithmeticUnaryExpression node, ParseTreeContext context) {
+        Expr child = (Expr) visit(node.getValue(), context);
+        if (node.getSign() == ArithmeticUnaryExpression.Sign.MINUS) {
+            return new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, new IntLiteral(-1), child);
+        } else  {
+            return child;
+        }
     }
 
     @Override
