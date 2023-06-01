@@ -2210,9 +2210,16 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
     std::string version_str = strings::Substitute("tablet:$0 #version:[$1_$2] rowsets:$3", _tablet.tablet_id(),
                                                   last_version.major(), last_version.minor(), rowsets.size());
 
+<<<<<<< HEAD
     rapidjson::Value rowset_version;
     rowset_version.SetString(version_str.c_str(), version_str.length(), root.GetAllocator());
     root.AddMember("rowset_version", rowset_version, root.GetAllocator());
+=======
+    rapidjson::Value last_version_value;
+    std::string last_version_str = strings::Substitute("$0_$1", last_version.major(), last_version.minor());
+    rowsets_count.SetString(last_version_str.c_str(), last_version_str.size(), root.GetAllocator());
+    root.AddMember("last_version", last_version_value, root.GetAllocator());
+>>>>>>> aca83bf74 ([BugFix] Fix show compaction asan crash (#24547))
 
     rapidjson::Document rowsets_arr;
     rowsets_arr.SetArray();
