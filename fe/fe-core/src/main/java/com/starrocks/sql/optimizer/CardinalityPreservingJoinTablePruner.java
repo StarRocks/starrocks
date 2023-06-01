@@ -781,7 +781,13 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
             return prunable;
         } else {
             // parent can not be pruned if any of its offsprings is can not be pruned
-            if (!root.getChildren().stream().allMatch(this::pruneTable)) {
+            // NOTICE: if (!root.getChildren().stream().allMatch(this::pruneTable)) can
+            // short-circuit.
+            boolean allChildPruned = true;
+            for (CPNode child: root.getChildren()) {
+                allChildPruned &= pruneTable(child);
+            }
+            if (!allChildPruned) {
                 return false;
             }
 

@@ -77,7 +77,7 @@ public class LosslessLogicalViewTest {
 
 
 
-        String view1 = "create view lineorder_flat_v1 as\n" +
+        String ssbViewFmt = "create view lineorder_flat_%s as\n" +
                 "select\n" +
                 "   `lo_orderdate`,\n" +
                 "   `lo_orderkey`,\n" +
@@ -117,12 +117,20 @@ public class LosslessLogicalViewTest {
                 "   `p_type`,\n" +
                 "   `p_size`,\n" +
                 "   `p_container`\n" +
-                "from\n" +
-                "   lineorder l\n" +
-                "   inner join customer [droppable] c on (c.c_custkey = l.lo_custkey)\n" +
-                "   inner join supplier [droppable] s  on (s.s_suppkey = l.lo_suppkey)\n" +
-                "   inner join part [droppable] p on (p.p_partkey = l.lo_partkey);";
-        starRocksAssert.withView(view1);
+                "from\n %s";
+
+        String v1JoinRel = "   lineorder l\n" +
+                "   inner join customer c on (c.c_custkey = l.lo_custkey)\n" +
+                "   inner join supplier s  on (s.s_suppkey = l.lo_suppkey)\n" +
+                "   inner join part p on (p.p_partkey = l.lo_partkey);";
+
+        String v2JoinRel = "   lineorder l\n" +
+                "   left join customer c on (c.c_custkey = l.lo_custkey)\n" +
+                "   left join supplier s  on (s.s_suppkey = l.lo_suppkey)\n" +
+                "   left join part p on (p.p_partkey = l.lo_partkey);";
+
+        starRocksAssert.withView(String.format(ssbViewFmt, "v1", v1JoinRel));
+        starRocksAssert.withView(String.format(ssbViewFmt, "v2", v2JoinRel));
 
 
         String createDeptsSql = "CREATE TABLE `depts` (\n" +
@@ -216,6 +224,25 @@ public class LosslessLogicalViewTest {
         ctx.getSessionVariable().setQueryTimeoutS(100000000);
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, "select empid, deptno2 from emps_flat_view");
         System.out.println(plan);
+    }
+
+    @Test
+    public void testBasic3() throws Exception {
+        ctx.getSessionVariable().setQueryTimeoutS(100000000);
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, "select lo_orderdate from lineorder_flat_v1");
+        System.out.println(plan);
+    }
+
+    @Test
+    public void testBasic4() throws Exception {
+        ctx.getSessionVariable().setQueryTimeoutS(100000000);
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(100000000);
+        //String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, "select lo_orderdate,c_address from lineorder_flat_v1");
+        for (int i=0; i < 100; ++i) {
+            String plan = UtFrameUtils.getVerboseFragmentPlan(ctx,
+                    "select lo_orderdate,c_address,s_name from lineorder_flat_v1");
+            Assert.assertFalse(plan.contains("partkey"));
+        }
     }
 
     @Test
