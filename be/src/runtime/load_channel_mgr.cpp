@@ -80,6 +80,15 @@ LoadChannelMgr::~LoadChannelMgr() {
     }
 }
 
+void LoadChannelMgr::clear() {
+    std::lock_guard l(_lock);
+    for (auto iter = _load_channels.begin(); iter != _load_channels.end();) {
+        iter->second->cancel();
+        iter->second->abort();
+        iter = _load_channels.erase(iter);
+    }
+}
+
 Status LoadChannelMgr::init(MemTracker* mem_tracker) {
     _mem_tracker = mem_tracker;
     RETURN_IF_ERROR(_start_bg_worker());

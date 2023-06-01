@@ -495,6 +495,13 @@ Status ExecEnv::_init_storage_page_cache() {
     return Status::OK();
 }
 
+void ExecEnv::_stop() {
+    // Clear load channel should be executed before stopping the storage engine,
+    // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
+    // so when the ThreadPool is destroyed, it will crash.
+    _load_channel_mgr->clear();
+}
+
 void ExecEnv::_destroy() {
     if (_automatic_partition_pool) {
         _automatic_partition_pool->shutdown();
@@ -569,6 +576,10 @@ std::shared_ptr<MemTracker> ExecEnv::regist_tracker(Args&&... args) {
 
 void ExecEnv::destroy(ExecEnv* env) {
     env->_destroy();
+}
+
+void ExecEnv::stop(ExecEnv* exec_env) {
+    exec_env->_stop();
 }
 
 int32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {
