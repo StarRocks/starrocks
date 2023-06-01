@@ -58,6 +58,7 @@ class TabletSchema;
 class ShortKeyIndexDecoder;
 
 class ChunkIterator;
+class IndexReadOptions;
 class Schema;
 class SegmentIterator;
 class SegmentReadOptions;
@@ -118,7 +119,7 @@ public:
     // TODO: remove this method, create `ColumnIterator` via `ColumnReader`.
     StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(uint32_t cid);
 
-    Status new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** iter, bool skip_fill_local_cache);
+    Status new_bitmap_index_iterator(uint32_t cid, const IndexReadOptions& options, BitmapIndexIterator** iter);
 
     size_t num_short_keys() const { return _tablet_schema->num_short_key_columns(); }
 
