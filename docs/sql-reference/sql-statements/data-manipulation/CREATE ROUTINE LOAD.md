@@ -44,6 +44,7 @@ Optional. The properties of the data. Syntax:
 [COLUMNS (<column1_name>[,<column2_name>,<column_assignment>,... ])],
 [WHERE <expr>],
 [PARTITION (<partition1_name>[,<partition2_name>,...])]
+[TEMPORARY PARTITION (<temporary_partition1_name>[,<temporary_partition2_name>,...])]
 ```
 
 `COLUMNS TERMINATED BY`
@@ -83,6 +84,10 @@ If a StarRocks table is distributed on partitions p0, p1, p2 and p3, and you wan
 ```SQL
 PARTITION (p1, p2, p3)
 ```
+
+`TEMPORARY PARTITION`
+
+The name of the [temporary partition(s)](../../../table_design/Temporary_partition.md) to load data in.
 
 ### `job_properties`
 

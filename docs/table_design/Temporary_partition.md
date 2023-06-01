@@ -205,14 +205,14 @@ You can use the [ALTER TABLE](../sql-reference/sql-statements/data-definition/AL
 >
 > The original formal partition and temporary partition that you operated in the ALTER TABLE statement are deleted and cannot be recovered.
 
-## Syntax
+### Syntax
 
 ```SQL
 ALTER TABLE table_name REPLACE PARTITION (partition_name) WITH TEMPORARY PARTITION (temporary_partition_name1, ...)
 PROPERTIES ("key" = "value");
 ```
 
-## Parameters
+### Parameters
 
 - **strict_range**
   
@@ -264,7 +264,7 @@ PROPERTIES ("key" = "value");
     ALTER TABLE site_access REPLACE PARTITION (p1, p2) WITH TEMPORARY PARTITION (tp1);
     ```
 
-## Examples
+### Examples
 
 Replace the original formal partition `p1` with the temporary partition `tp1`.
 
@@ -288,7 +288,7 @@ PROPERTIES (
 );
 ```
 
-### **Usage notes**
+### Usage notes
 
 - When a table has temporary partitions, you cannot use the `ALTER` command to perform Schema Change operations on the table.
 - When performing Schema Change operations on a table, you cannot add temporary partitions to the table.
@@ -297,7 +297,7 @@ PROPERTIES (
 
 Use the following command to delete the temporary partition tp1.
 
-```undefined
+```SQL
 ALTER TABLE site_access DROP TEMPORARY PARTITION tp1;
 ```
 

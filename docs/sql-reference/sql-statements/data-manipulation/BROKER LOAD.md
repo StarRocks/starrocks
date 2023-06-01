@@ -47,7 +47,8 @@ Broker Load supports loading multiple data files at a time. In one load job, you
 ```SQL
 DATA INFILE ("<file_path>"[, "<file_path>" ...])
 [NEGATIVE]INTO TABLE <table_name>
-[PARTITION (<partition_name>[, <partition_name> ...])]
+[PARTITION (<partition1_name>[, <partition2_name> ...])]
+[TEMPORARY PARTITION (<temporary_partition1_name>[, <temporary_partition2_name> ...])]
 [FORMAT AS "CSV | Parquet | ORC"]
 [(fomat_type_options)]
 [COLUMNS TERMINATED BY "<column_separator>"]
@@ -106,6 +107,10 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 - `PARTITION`
 
    Specifies the partitions into which you want to load data. By default, if you do not specify this parameter, the source data will be loaded into all partitions of the StarRocks table.
+
+- `TEMPORARY_PARTITION`
+
+  Specifies the [temporary partition(s)](../../../table_design/Temporary_partition.md) into which you want to load data.
 
 - `FORMAT AS`
 
