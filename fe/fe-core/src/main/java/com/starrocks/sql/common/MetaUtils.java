@@ -150,8 +150,8 @@ public class MetaUtils {
 
     public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatement originStmt) {
         CreateMaterializedViewStmt stmt;
-
         try {
+            LOG.info("Start to parse column name to define expr:" + originStmt.originStmt);
             List<StatementBase> stmts = SqlParser.parse(originStmt.originStmt, SqlModeHelper.MODE_DEFAULT);
             stmt = (CreateMaterializedViewStmt) stmts.get(originStmt.idx);
             stmt.setIsReplay(true);

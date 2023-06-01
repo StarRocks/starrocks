@@ -148,7 +148,7 @@ public class MVColumnItem {
         Column result;
         if (baseColumn == null) {
             result = new Column(name, type, isKey, aggregationType, isAllowNull,
-                    ColumnDef.DefaultValueDef.EMPTY_VALUE, "");
+                    null, "");
         } else {
             result = new Column(baseColumn);
         }

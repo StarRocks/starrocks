@@ -239,24 +239,19 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
             List<SlotRef> slots = new ArrayList<>();
             selectListItemExpr.collect(SlotRef.class, slots);
-
             List<String> baseColumnNames = slots.stream().map(slot -> slot.getColumnName().toLowerCase()).
                     collect(Collectors.toList());
 
+            // Other operator, like arithmetic operator
+            String mvColumnName;
+            Expr expr;
             if (selectListItemExpr instanceof SlotRef) {
-                SlotRef slotRef = (SlotRef) selectListItemExpr;
-                if (!Strings.isNullOrEmpty(alias)) {
-                    result.put(MVUtils.getMVColumnName(alias), selectListItemExpr);
-                } else {
-                    result.put(slotRef.getColumnName(), null);
-                }
+                mvColumnName = baseColumnNames.get(0);
+                expr = selectListItemExpr;
             } else if (selectListItemExpr instanceof FunctionCallExpr) {
+                // NOTE: cannot use `isAggregateFunction` method because expr is not analyzed.
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectListItemExpr;
-
                 String functionName = functionCallExpr.getFnName().getFunction();
-                String mvColumnName = Strings.isNullOrEmpty(alias) ?
-                        MVUtils.getMVColumnName(functionName, baseColumnNames) : MVUtils.getMVColumnName(alias);
-                Expr defineExpr = functionCallExpr.getChild(0);
                 switch (functionName.toLowerCase()) {
                     case "sum":
                     case "min":
@@ -264,24 +259,23 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     case FunctionSet.BITMAP_UNION:
                     case FunctionSet.HLL_UNION:
                     case FunctionSet.PERCENTILE_UNION:
-                        break;
                     case FunctionSet.COUNT:
-                        defineExpr = new CaseExpr(null, Lists.newArrayList(
-                                new CaseWhenClause(new IsNullPredicate(slots.get(0), false),
-                                        new IntLiteral(0, Type.BIGINT))), new IntLiteral(1, Type.BIGINT));
+                        MVColumnItem mvColumnItem = buildMVColumnItem(alias, functionCallExpr);
+                        mvColumnName = mvColumnItem.getName();
+                        expr = mvColumnItem.getDefineExpr();
                         break;
                     default:
-                        if (functionCallExpr.isAggregateFunction()) {
-                            throw new AnalysisException("Unsupported function:" + functionName);
-                        }
+                        mvColumnName = Strings.isNullOrEmpty(alias) ? MVUtils.getMVColumnName(selectListItemExpr.toSql(),
+                                baseColumnNames) : MVUtils.getMVColumnName(alias);
+                        expr = selectListItemExpr;
+                        break;
                 }
-                result.put(mvColumnName, defineExpr);
             } else {
-                // Other operator, like arithmetic operator
-                String mvColumnName = Strings.isNullOrEmpty(alias) ? MVUtils.getMVColumnName(selectListItemExpr.debugString(),
+                mvColumnName = Strings.isNullOrEmpty(alias) ? MVUtils.getMVColumnName(selectListItemExpr.toSql(),
                         baseColumnNames) : MVUtils.getMVColumnName(alias);
-                result.put(mvColumnName, selectListItemExpr);
+                expr = selectListItemExpr;
             }
+            result.put(mvColumnName, expr);
         }
         return result;
     }
@@ -411,16 +405,20 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 Type type = selectListItemExpr.getType();
                 List<String> baseColumnNames = slots.stream().map(slot -> slot.getColumnName().toLowerCase()).
                         collect(Collectors.toList());
+                if ((selectListItemExpr instanceof SlotRef) && !Strings.isNullOrEmpty(alias)) {
+                    throw new SemanticException("A column expression(slot-ref) no need have an alias name: %s",
+                            selectListItemExpr);
+                }
                 if (!(selectListItemExpr instanceof SlotRef) && Strings.isNullOrEmpty(alias)) {
                     throw new SemanticException("A column expression(non-slot-ref) must have an alias name: %s",
                             selectListItemExpr);
                 }
 
                 String columnName;
-                if ((selectListItemExpr instanceof SlotRef) && Strings.isNullOrEmpty(alias)) {
+                if (selectListItemExpr instanceof SlotRef) {
                     columnName = baseColumnNames.get(0);
                 } else {
-                    columnName = Strings.isNullOrEmpty(alias) ? MVUtils.getMVColumnName(selectListItemExpr.debugString(),
+                    columnName = Strings.isNullOrEmpty(alias) ? MVUtils.getMVColumnName(selectListItemExpr.toSql(),
                             baseColumnNames) : MVUtils.getMVColumnName(alias);
                 }
                 MVColumnItem mvColumnItem = new MVColumnItem(columnName, type, selectListItemExpr, baseColumnNames);
