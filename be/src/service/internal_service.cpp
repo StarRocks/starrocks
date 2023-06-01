@@ -577,7 +577,6 @@ void PInternalServiceImplBase<T>::_get_info_impl(
     DeferOp defer([latch] { latch->count_down(); });
 
     if (timeout_ms <= 0) {
-        LOG(WARNING) << "get kafka into timeout, Because timeout_ms is less than or equal to 0.";
         Status::TimedOut("get kafka info timeout").to_protobuf(response->mutable_status());
         return;
     }
@@ -638,9 +637,6 @@ void PInternalServiceImplBase<T>::_get_info_impl(
     if (!st.ok()) {
         LOG(WARNING) << "group id " << group_id << " get kafka info timeout. used time(ms) "
                      << watch.elapsed_time() / 1000 / 1000 << ". error: " << st.to_string();
-    } else {
-        LOG(INFO) << "group id " << group_id << " get kafka info successfully. used time(ms) "
-                  << watch.elapsed_time() / 1000 / 1000;
     }
 }
 
