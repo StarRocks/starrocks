@@ -184,6 +184,12 @@ public class Coordinator {
     private final ConnectContext connectContext;
     private final boolean needReport;
 
+    // True indicates that the profile has been reported
+    // When `enable_load_profile` is enabled,
+    // if the time costs of stream load is less than `stream_load_profile_collect_second`,
+    // the profile will not be reported to FE to reduce the overhead of profile under high-frequency import
+    private boolean profileAlreadyReported = false;
+
     private final CoordinatorPreprocessor coordinatorPreprocessor;
 
     private boolean thriftServerHighLoad;
@@ -1482,6 +1488,11 @@ public class Coordinator {
                     backendExecStates.keySet());
             return;
         }
+
+        if (params.isSetProfile()) {
+            profileAlreadyReported = true;
+        }
+
         lock();
         try {
             if (!execState.updateProfile(params)) {
@@ -1878,6 +1889,10 @@ public class Coordinator {
 
     public boolean isThriftServerHighLoad() {
         return this.thriftServerHighLoad;
+    }
+
+    public boolean isProfileAlreadyReported() {
+        return this.profileAlreadyReported;
     }
 
     // record backend execute state

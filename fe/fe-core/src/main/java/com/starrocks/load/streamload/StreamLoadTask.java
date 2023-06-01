@@ -984,7 +984,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         }
 
         // sync stream load collect profile
-        if (isSyncStreamLoad() && coord.isEnableLoadProfile()) {
+        if (isSyncStreamLoad() && coord.isProfileAlreadyReported()) {
             collectProfile();
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }

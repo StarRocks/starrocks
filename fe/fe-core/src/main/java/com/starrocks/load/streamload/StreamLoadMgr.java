@@ -21,6 +21,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
@@ -228,11 +229,27 @@ public class StreamLoadMgr {
         return db;
     }
 
-    // add load tasks and also add to to callback factory
+    // add load tasks and also add callback factory
     public void addLoadTask(StreamLoadTask task) {
         if (task.isSyncStreamLoad()) {
             txnIdToSyncStreamLoadTasks.put(task.getTxnId(), task);
         }
+
+        // Clear the stream load tasks manually
+        if (idToStreamLoadTask.size() > Config.label_keep_max_num) {
+            // If enable_load_profile = true,
+            // most stream load tasks are generated through flink-cdc and routine load generally,
+            // so clearing the syncStreamLoadTask is preferred.
+            LOG.info("trigger cleanSyncStreamLoadTasks when add load task label:{}",task.getLabel());
+            cleanSyncStreamLoadTasks();
+            // The size of idToStreamLoadTask is still huge, indicates that the type of most tasks is PARALLEL,
+            // so clean all the streamLoadTasks manaully not waitting for Config.label_keep_max_second.
+            if (idToStreamLoadTask.size() > Config.label_keep_max_num / 2) {
+                LOG.info("trigger cleanOldStreamLoadTasks when add load task label{}",task.getLabel());
+                cleanOldStreamLoadTasks();
+            }
+        }
+
         long dbId = task.getDBId();
         String label = task.getLabel();
         Map<String, StreamLoadTask> labelToStreamLoadTask = null;
@@ -366,7 +383,7 @@ public class StreamLoadMgr {
 
     // Remove old stream load tasks from idToStreamLoadTask and dbToLabelToStreamLoadTask
     // This function is called periodically.
-    // Cancelled and Committed task will be remove after Configure.label_keep_max_second seconds
+    // Cancelled and Committed task will be removed after Configure.label_keep_max_second seconds
     public void cleanOldStreamLoadTasks() {
         LOG.debug("begin to clean old stream load tasks");
         writeLock();
@@ -381,6 +398,34 @@ public class StreamLoadMgr {
                     if (streamLoadTask.isSyncStreamLoad()) {
                         txnIdToSyncStreamLoadTasks.remove(streamLoadTask.getTxnId());
                     }
+                    LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, streamLoadTask.getId())
+                            .add("label", streamLoadTask.getLabel())
+                            .add("end_timestamp", streamLoadTask.endTimeMs())
+                            .add("current_timestamp", currentMs)
+                            .add("task_state", streamLoadTask.getStateName())
+                            .add("msg", "old task has been cleaned")
+                    );
+                }
+            }
+
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    // There maybe many streamLoadTasks in memory when enable_load_profile = true,
+    // StreamLoadTask which type is SyncStreamLoad should be clean up firstly
+    public void cleanSyncStreamLoadTasks() {
+        writeLock();
+        try {
+            Iterator<Map.Entry<String, StreamLoadTask>> iterator = idToStreamLoadTask.entrySet().iterator();
+            long currentMs = System.currentTimeMillis();
+            while (iterator.hasNext()) {
+                StreamLoadTask streamLoadTask = iterator.next().getValue();
+                if (streamLoadTask.isSyncStreamLoad() && streamLoadTask.isFinalState()) {
+                    unprotectedRemoveTaskFromDb(streamLoadTask);
+                    iterator.remove();
+                    txnIdToSyncStreamLoadTasks.remove(streamLoadTask.getTxnId());
                     LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, streamLoadTask.getId())
                             .add("label", streamLoadTask.getLabel())
                             .add("end_timestamp", streamLoadTask.endTimeMs())
@@ -519,6 +564,11 @@ public class StreamLoadMgr {
 
     public synchronized long getChecksum() {
         return (long) idToStreamLoadTask.size() + (long) dbToLabelToStreamLoadTask.size();
+    }
+
+    // for ut
+    public Map<String, StreamLoadTask> getIdToStreamLoadTask() {
+        return idToStreamLoadTask;
     }
 
     public static StreamLoadMgr loadStreamLoadManager(DataInput in) throws IOException {
