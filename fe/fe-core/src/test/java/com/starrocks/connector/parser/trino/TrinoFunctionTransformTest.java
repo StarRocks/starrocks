@@ -231,4 +231,13 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select bitwise_right_shift(8, 3)";
         assertPlanContains(sql, "8 BITSHIFTRIGHT 3");
     }
+
+    @Test
+    public void testUnicodeFnTransform() throws Exception {
+        String sql = "select to_utf8('123')";
+        assertPlanContains(sql, "to_binary('123', 'utf8')");
+
+        sql = "select from_utf8(to_utf8('123'))";
+        assertPlanContains(sql, "from_binary(to_binary('123', 'utf8'), 'utf8')");
+    }
 }
