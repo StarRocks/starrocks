@@ -439,8 +439,6 @@ public class SelectStmtTest {
                     "\n" +
                     "  1:AGGREGATE (update finalize)\n" +
                     "  |  aggregate: sum[(1 / 2.12); " +
-                    "args: VARCHAR,INT,INT; result: VARCHAR; args nullable: false; " +
-                    "result nullable: true] as DECIMAL128(24,4))); args: DECIMAL128; " +
                     "result: DECIMAL128(38,6); args nullable: true; result nullable: true]\n" +
                     "  |  group by: [1: c0, VARCHAR, false]\n" +
                     "  |  cardinality: 1"));
