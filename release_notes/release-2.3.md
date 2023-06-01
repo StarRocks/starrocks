@@ -1,5 +1,29 @@
 # StarRocks version 2.3
 
+## 2.3.13
+
+发布日期： 2023 年 6 月 1 日
+
+### 功能优化
+
+- 优化了因 `thrift_server_max_worker_threads` 设置过小导致 INSERT INTO ... SELECT 超时场景下的报错信息。 [#21964](https://github.com/StarRocks/starrocks/pull/21964)
+- 降低多表关联时，使用 `bitmap_contains` 函数的内存消耗，并优化性能。 [#20617](https://github.com/StarRocks/starrocks/pull/20617)、[#20653](https://github.com/StarRocks/starrocks/pull/20653)
+
+### 问题修复
+
+修复了如下问题：
+
+- Truncate 操作对分区名大小写敏感导致 Truncate Partition 失败。 [#21809](https://github.com/StarRocks/starrocks/pull/21809)
+- 导入的 Parquet 格式文件中含 int96 timestamp 类型数据时，会导致数据溢出。[#22355](https://github.com/StarRocks/starrocks/issues/22355)
+- 删除物化视图后使用 DECOMMISSION 下线 BE 节点失败。[#22743](https://github.com/StarRocks/starrocks/issues/22743)
+- 当查询的执行计划包括从 BroadcastJoin 节点至 BucketShuffleJoin 节点，例如 `SELECT * FROM t1 JOIN [Broadcast] t2 ON t1.a = t2.b JOIN [Bucket] t3 ON t2.b = t3.c;`，并且 BroadcastJoin 左表等值 Join 的 Key 的数据在进行 BucketShuffleJoin 之前被删除掉了，则会导致 BE crash。[#23227](https://github.com/StarRocks/starrocks/pull/23227)
+- 当查询的执行计划包括从 CrossJoin 节点至 HashJoin 节点、并且一个 fragment instance 中 HashJoin 的右表为空，则返回结果会不正确。[#23877](https://github.com/StarRocks/starrocks/pull/23877)
+- 物化视图创建临时分区失败导致 BE 下线卡住。 [#22745](https://github.com/StarRocks/starrocks/pull/22745)
+- 如果 SQL 语句中 STRING 类型的值包含多个转义字符，则该 SQL 语句解析失败。[#23119](https://github.com/StarRocks/starrocks/issues/23119)
+- 无法查询分区列最大值的数据。[#23153](https://github.com/StarRocks/starrocks/issues/23153)
+- StarRocks 2.4 回退到 2.3 后导入作业报错。[#23642](https://github.com/StarRocks/starrocks/pull/23642)
+- 列裁剪复用问题。[#16624](https://github.com/StarRocks/starrocks/issues/16624)
+
 ## 2.3.12
 
 发布日期： 2023 年 4 月 25 日
