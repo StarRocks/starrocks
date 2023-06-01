@@ -662,7 +662,7 @@ Prepare the Avro data and send it to the Kafka topic `topic_1`.
 
 **Target database and table**
 
-According to the fields of Avro data, create a table `sensor_log1` in the target database `sensor` in the StarRocks cluster. The column names of the table must match the field names in the Avro data. For the mapping of data types when Avro data is loaded into StarRocks, see [Data types mapping](#Data types mapping).
+According to the fields of Avro data, create a table `sensor_log1` in the target database `sensor` in the StarRocks cluster. The column names of the table must match the field names in the Avro data. For the data types mapping when Avro data is loaded into StarRocks, see [Data types mapping](#Data types mapping).
 
 ```SQL
 CREATE TABLE sensor.sensor_log1 ( 
