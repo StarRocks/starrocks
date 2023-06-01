@@ -166,12 +166,14 @@ import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.Load;
-import com.starrocks.load.PipeManager;
 import com.starrocks.load.loadv2.LoadEtlChecker;
 import com.starrocks.load.loadv2.LoadJobScheduler;
 import com.starrocks.load.loadv2.LoadLoadingChecker;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.LoadTimeoutChecker;
+import com.starrocks.load.pipe.PipeListener;
+import com.starrocks.load.pipe.PipeManager;
+import com.starrocks.load.pipe.PipeScheduler;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
@@ -528,6 +530,8 @@ public class GlobalStateMgr {
     private StorageVolumeMgr storageVolumeMgr;
 
     private PipeManager pipeManager;
+    private PipeListener pipeListener;
+    private PipeScheduler pipeScheduler;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -742,6 +746,8 @@ public class GlobalStateMgr {
 
         this.binlogManager = new BinlogManager();
         this.pipeManager = new PipeManager();
+        this.pipeListener = new PipeListener(this.pipeManager);
+        this.pipeScheduler = new PipeScheduler(this.pipeManager);
 
         if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
@@ -1339,6 +1345,8 @@ public class GlobalStateMgr {
         taskManager.start();
         taskCleaner.start();
         mvMVJobExecutor.start();
+        pipeListener.start();
+        pipeScheduler.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();

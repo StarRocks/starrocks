@@ -30,6 +30,7 @@ import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterPipeStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
@@ -55,6 +56,7 @@ import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreatePipeStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -74,6 +76,7 @@ import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
+import com.starrocks.sql.ast.DropPipeStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
@@ -112,6 +115,7 @@ import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
+import com.starrocks.sql.ast.ShowPipeStmt;
 import com.starrocks.sql.ast.ShowResourcesStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
@@ -823,6 +827,30 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt statement, ConnectContext context) {
         StorageVolumeAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitCreatePipeStatement(CreatePipeStmt stmt, ConnectContext context) {
+        PipeAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDropPipeStatement(DropPipeStmt stmt, ConnectContext context) {
+        PipeAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterPipeStatement(AlterPipeStmt stmt, ConnectContext context) {
+        PipeAnalyzer.analyze(stmt, context);
+        return null;
+    }
+
+    @Override
+    public Void visitShowPipeStatement(ShowPipeStmt stmt, ConnectContext context) {
+        PipeAnalyzer.analyze(stmt, context);
         return null;
     }
 }

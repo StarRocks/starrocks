@@ -438,6 +438,7 @@ public class OperationType {
 
     //Table/Partition json format log
     public static final short OP_CREATE_TABLE_V2 = 13000;
+<<<<<<< HEAD
     public static final short OP_DROP_TABLE_V2 = 13001;
     public static final short OP_RECOVER_TABLE_V2 = 13002;
     public static final short OP_RECOVER_PARTITION_V2 = 13003;
@@ -482,6 +483,8 @@ public class OperationType {
     public static final short OP_UPDATE_STORAGE_VOLUME = 13102;
     public static final short OP_DROP_STORAGE_VOLUME = 13103;
 
+    // Pipe operations log
+    public static final short OP_PIPE = 12200;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds

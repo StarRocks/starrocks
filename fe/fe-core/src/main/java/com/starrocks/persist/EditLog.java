@@ -2028,6 +2028,10 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
     }
 
+    public void logPipeOp(PipeOpEntry opEntry) {
+        logEdit(OperationType.OP_PIPE, opEntry);
+    }
+
     private void logJsonObject(short op, Object obj) {
         logEdit(op, out -> Text.writeString(out, GsonUtils.GSON.toJson(obj)));
     }
