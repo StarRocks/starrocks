@@ -14,6 +14,10 @@
 
 package com.starrocks.load.pipe;
 
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.server.GlobalStateMgr;
+
 import java.util.Map;
 
 public class PipeTaskDesc {
@@ -23,6 +27,9 @@ public class PipeTaskDesc {
     private Map<String, String> properties;
     private Map<Long, Integer> beSlotRequirement;
     private PipeTaskState state = PipeTaskState.RUNNABLE;
+
+    // Execution state
+    private Task task;
 
     public PipeTaskDesc(String uniqueName, String sqlTask, Map<Long, Integer> beSlotRequirement) {
         this.uniqueName = uniqueName;
@@ -44,6 +51,18 @@ public class PipeTaskDesc {
 
     public boolean isRunnable() {
         return this.state.equals(PipeTaskState.RUNNABLE);
+    }
+
+    public boolean isRunning() {
+        return this.state.equals(PipeTaskState.RUNNING);
+    }
+
+    public void interrupt() {
+        if (!this.state.equals(PipeTaskState.RUNNING)) {
+            return;
+        }
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        taskManager.killTask(task.getName(), true);
     }
 
     public String getDbName() {

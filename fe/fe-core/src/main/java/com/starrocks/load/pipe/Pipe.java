@@ -14,21 +14,20 @@
 
 package com.starrocks.load.pipe;
 
-import com.google.common.collect.Lists;
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.fs.HdfsUtil;
-import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreatePipeStmt;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -44,19 +43,21 @@ import java.util.stream.Collectors;
  */
 public class Pipe implements Writable {
 
+    private static final Logger LOG = LogManager.getLogger(Pipe.class);
+
     @SerializedName(value = "name")
     private final String name;
     @SerializedName(value = "id")
     private final long id;
     @SerializedName(value = "targetTable")
     private Table targetTable;
+    @SerializedName(value = "type")
+    private Type type;
 
     // FIXME: refine these data structure according to implementation of table function
-    private TableFunctionRelation dataSource;
-    private List<BrokerFileGroup> fileGroups;
-    private List<List<TBrokerFileStatus>> fileStatusesList;
+    private PipeSource pipeSource;
+    private List<PipePiece> pipePieceList;
 
-    // Internal state
     private State state;
     private List<PipeTaskDesc> readyTasks = new ArrayList<>();
 
@@ -79,21 +80,17 @@ public class Pipe implements Writable {
      * TODO: getObjects from s3
      */
     public void poll() throws UserException {
-        if (CollectionUtils.isNotEmpty(fileStatusesList)) {
-            return;
-        }
-
-        // FIXME: get a broker desc
-        BrokerDesc brokerDesc = null;
-        List<List<TBrokerFileStatus>> fileStatusList = Lists.newArrayList();
-        for (BrokerFileGroup fileGroup : fileGroups) {
-            List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
-            for (String path : fileGroup.getFilePaths()) {
-                HdfsUtil.parseFile(path, brokerDesc, fileStatuses);
+        try {
+            lock.writeLock().lock();
+            if (CollectionUtils.isNotEmpty(pipePieceList)) {
+                return;
             }
-            fileStatusList.add(fileStatuses);
+
+            List<PipePiece> pieces = pipeSource.pollPiece();
+            this.pipePieceList.addAll(pieces);
+        } finally {
+            lock.writeLock().unlock();
         }
-        this.fileStatusesList = fileStatusList;
     }
 
     /**
@@ -120,26 +117,31 @@ public class Pipe implements Writable {
     }
 
     private void buildNewTasks() {
+        Preconditions.checkState(type == Type.FILE);
+
         StringBuilder sb = new StringBuilder();
         // FIXME: keep projection and filter
         sb.append("INSERT INTO " + targetTable.getName() + " SELECT * FROM TABLE(");
         sb.append("file_list='");
         long sumSize = 0;
-        for (List<TBrokerFileStatus> fileList : fileStatusesList) {
-            for (TBrokerFileStatus file : fileList) {
-                sb.append(file.getPath());
-                sumSize += file.getSize();
-                if (sumSize >= idealBatchSize()) {
-                    break;
+        for (PipePiece piece : pipePieceList) {
+            if (piece instanceof FilePipePiece) {
+                FilePipePiece filePipePiece = (FilePipePiece) piece;
+                for (TBrokerFileStatus file : filePipePiece.getFile()) {
+                    sb.append(file.getPath());
                 }
             }
         }
+
         sb.append("'");
         sb.append(")");
         String sqlTask = sb.toString();
         String uniqueName = String.format("pipe-%d-task-%d", id, GlobalStateMgr.getCurrentState().getNextId());
         PipeTaskDesc taskDesc = new PipeTaskDesc(uniqueName, sqlTask, null);
+
+        lock.writeLock().lock();
         readyTasks.add(taskDesc);
+        lock.writeLock().unlock();
     }
 
     private long idealBatchSize() {
@@ -147,9 +149,36 @@ public class Pipe implements Writable {
     }
 
     public void pause() {
+        try {
+            lock.writeLock().lock();
+
+            if (this.state == State.RUNNING) {
+                this.state = State.PAUSED;
+
+                for (PipeTaskDesc task : readyTasks) {
+                    task.interrupt();
+                }
+                LOG.info("Pause pipe " + toString());
+            }
+        } finally {
+            lock.writeLock().unlock();
+            ;
+        }
     }
 
     public void resume() {
+        try {
+            lock.writeLock().lock();
+
+            if (this.state == State.PAUSED || this.state == State.ERROR) {
+                this.state = State.RUNNING;
+                LOG.info("Resume pipe " + toString());
+            }
+
+        } finally {
+            lock.writeLock().unlock();
+            ;
+        }
     }
 
     public boolean isRunnable() {
@@ -172,12 +201,12 @@ public class Pipe implements Writable {
         this.targetTable = targetTable;
     }
 
-    public TableFunctionRelation getDataSource() {
-        return dataSource;
+    public PipeSource getDataSource() {
+        return pipeSource;
     }
 
-    public void setDataSource(TableFunctionRelation dataSource) {
-        this.dataSource = dataSource;
+    public void setDataSource(PipeSource dataSource) {
+        this.pipeSource = dataSource;
     }
 
     public static Pipe read(DataInput input) throws IOException {
@@ -207,11 +236,21 @@ public class Pipe implements Writable {
         return Objects.hash(name, id);
     }
 
+    @Override
+    public String toString() {
+        return "pipe-" + name;
+    }
+
     enum State {
         PAUSED,
         RUNNING,
         FINISHED,
         ERROR,
+    }
+
+    enum Type {
+        FILE,
+        KAFKA,
     }
 
 }
