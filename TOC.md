@@ -122,6 +122,7 @@
       + [查询队列](/administration/query_queues.md)
       + [查询管理](/administration/Query_management.md)
       + [内存管理](/administration/Memory_management.md)
+      + [中间结果落盘](/administration/spill_to_disk.md)
       + [负载均衡](/administration/Load_balance.md)
       + [副本管理](/administration/Replica.md)
       + [黑名单管理](/administration/Blacklist.md)
