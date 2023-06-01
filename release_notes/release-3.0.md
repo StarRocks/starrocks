@@ -1,5 +1,30 @@
 # StarRocks version 3.0
 
+## 3.0.1
+
+发布日期： 2023 年 6 月 1 日
+
+### 新增特性
+
+- [公测中] 支持大查询的算子落盘（Spill to disk），通过将中间结果落盘来降低大查询的内存消耗。更多信息，参见[中间结果落盘](../administration/spill_to_disk.md)。
+- [Routine Load](../loading/RoutineLoad.md#导入-avro-数据) 支持导入 Avro 格式的数据。
+- 支持 [Microsoft Azure Storage](../integrations/authenticate_to_azure_storage.md) (包括 Azure Blob Storage 和 Azure Data Lake Storage)。
+
+### 功能优化
+
+- 存算分离集群支持 StarRocks 外表。
+- [Information Schema](../administration/information_schema.md#load_tracking_logs) 增加 `load_tracking_logs` 来记录最近的导入错误信息。
+- 忽略建表语句中多余的特殊字符。[#23885](https://github.com/StarRocks/starrocks/pull/23885)
+
+### 问题修复
+
+修复了如下问题：
+
+- 主键模型表 SHOW CREATE TABLE 返回的建表信息错误。[#24237](https://github.com/StarRocks/starrocks/issues/24237)
+- Routine Load 过程中 BE crash。[#24237](https://github.com/StarRocks/starrocks/issues/24237)
+- 创建分区表时指定不支持的 Properties 导致 NPE。[#21374](https://github.com/StarRocks/starrocks/issues/21374)
+- SHOW TABLE STATUS 结果展示不全。[#24279](https://github.com/StarRocks/starrocks/issues/24279)
+
 ## 3.0.0
 
 发布日期： 2023 年 4 月 28 日
