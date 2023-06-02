@@ -15,11 +15,10 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -321,7 +320,9 @@ public class ColocateTableIndexTest {
         colocateTableIndex.saveColocateTableIndexV2(image.getDataOutputStream());
 
         ColocateTableIndex followerIndex = new ColocateTableIndex();
-        followerIndex.loadColocateTableIndexV2(image.getDataInputStream());
+        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream(), SRMetaBlockID.COLOCATE_TABLE_INDEX);
+        followerIndex.loadColocateTableIndexV2(reader);
+        reader.close();
         Assert.assertEquals(colocateTableIndex.getAllGroupIds(), followerIndex.getAllGroupIds());
         Assert.assertEquals(colocateTableIndex.getGroup(table.getId()), followerIndex.getGroup(table.getId()));
 

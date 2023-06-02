@@ -689,24 +689,18 @@ public class BackupHandler extends FrontendDaemon implements Writable {
         writer.close();
     }
 
-    public void loadBackupHandlerV2(DataInputStream dis) throws IOException, SRMetaBlockException,
-            SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.BACKUP_MGR);
-        try {
-            BackupHandler data = reader.readJson(BackupHandler.class);
-            this.repoMgr = data.repoMgr;
-            int size = reader.readInt();
-            long currentTimeMs = System.currentTimeMillis();
-            while (size-- > 0) {
-                AbstractJob job = reader.readJson(AbstractJob.class);
-                if (isJobExpired(job, currentTimeMs)) {
-                    LOG.warn("skip expired job {}", job);
-                    continue;
-                }
-                dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
+    public void loadBackupHandlerV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        BackupHandler data = reader.readJson(BackupHandler.class);
+        this.repoMgr = data.repoMgr;
+        int size = reader.readInt();
+        long currentTimeMs = System.currentTimeMillis();
+        while (size-- > 0) {
+            AbstractJob job = reader.readJson(AbstractJob.class);
+            if (isJobExpired(job, currentTimeMs)) {
+                LOG.warn("skip expired job {}", job);
+                continue;
             }
-        } finally {
-            reader.close();
+            dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
         }
     }
 

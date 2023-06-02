@@ -373,8 +373,7 @@ public class PluginMgr implements Writable {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.PLUGIN_MGR);
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         try {
             int pluginInfoSize = reader.readInt();
             for (int i = 0; i < pluginInfoSize; ++i) {
@@ -383,8 +382,6 @@ public class PluginMgr implements Writable {
             }
         } catch (UserException e) {
             throw new RuntimeException(e);
-        } finally {
-            reader.close();
         }
     }
 }

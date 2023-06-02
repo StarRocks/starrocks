@@ -796,20 +796,15 @@ public class ColocateTableIndex implements Writable {
         writer.close();
     }
 
-    public void loadColocateTableIndexV2(DataInputStream dis) throws IOException, SRMetaBlockException,
-            SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.COLOCATE_TABLE_INDEX);
-        try {
-            ColocateTableIndex data = reader.readJson(ColocateTableIndex.class);
-            this.groupName2Id = data.groupName2Id;
-            this.group2Tables = data.group2Tables;
-            this.table2Group = data.table2Group;
-            this.group2Schema = data.group2Schema;
-            this.group2BackendsPerBucketSeq = data.group2BackendsPerBucketSeq;
-            this.unstableGroups = data.unstableGroups;
-        } finally {
-            reader.close();
-        }
+    public void loadColocateTableIndexV2(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        ColocateTableIndex data = reader.readJson(ColocateTableIndex.class);
+        this.groupName2Id = data.groupName2Id;
+        this.group2Tables = data.group2Tables;
+        this.table2Group = data.table2Group;
+        this.group2Schema = data.group2Schema;
+        this.group2BackendsPerBucketSeq = data.group2BackendsPerBucketSeq;
+        this.unstableGroups = data.unstableGroups;
 
         constructLakeGroups(GlobalStateMgr.getCurrentState());
         LOG.info("finished replay colocateTableIndex from image");

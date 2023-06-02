@@ -38,6 +38,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -208,6 +209,9 @@ import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockLoader;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -303,12 +307,12 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -719,7 +723,7 @@ public class GlobalStateMgr {
         this.pluginMgr = new PluginMgr();
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeMgr = new AnalyzeMgr();
-        this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
+        this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
@@ -1403,6 +1407,7 @@ public class GlobalStateMgr {
         feType = newType;
     }
 
+
     public void loadImage(String imageDir) throws IOException, DdlException {
         Storage storage = new Storage(imageDir);
         nodeMgr.setClusterId(storage.getClusterID());
@@ -1416,52 +1421,89 @@ public class GlobalStateMgr {
         LOG.info("start load image from {}. is ckpt: {}", curFile.getAbsolutePath(),
                 GlobalStateMgr.isCheckpointThread());
         long loadImageStartTime = System.currentTimeMillis();
-        DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
+        DataInputStream dis = new DataInputStream(new BufferedInputStream(Files.newInputStream(curFile.toPath())));
 
         long checksum = 0;
         long remoteChecksum = -1;  // in case of empty image file checksum match
         try {
-            // ** NOTICE **: always add new code at the end
             checksum = loadVersion(dis, checksum);
             if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
+                Map<SRMetaBlockID, SRMetaBlockLoader> loadImages = ImmutableMap.<SRMetaBlockID, SRMetaBlockLoader>builder()
+                        .put(SRMetaBlockID.NODE_MGR, nodeMgr::load)
+                        .put(SRMetaBlockID.LOCAL_META_STORE, localMetastore::load)
+                        .put(SRMetaBlockID.ALTER_MGR, alterJobMgr::load)
+                        .put(SRMetaBlockID.CATALOG_RECYCLE_BIN, recycleBin::load)
+                        .put(SRMetaBlockID.VARIABLE_MGR, VariableMgr::load)
+                        .put(SRMetaBlockID.RESOURCE_MGR, resourceMgr::loadResourcesV2)
+                        .put(SRMetaBlockID.EXPORT_MGR, exportMgr::loadExportJobV2)
+                        .put(SRMetaBlockID.BACKUP_MGR, backupHandler::loadBackupHandlerV2)
+                        .put(SRMetaBlockID.AUTH, auth::load)
+                        .put(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, globalTransactionMgr::loadTransactionStateV2)
+                        .put(SRMetaBlockID.COLOCATE_TABLE_INDEX, colocateTableIndex::loadColocateTableIndexV2)
+                        .put(SRMetaBlockID.ROUTINE_LOAD_MGR, routineLoadMgr::loadRoutineLoadJobsV2)
+                        .put(SRMetaBlockID.LOAD_MGR, loadMgr::loadLoadJobsV2JsonFormat)
+                        .put(SRMetaBlockID.SMALL_FILE_MGR, smallFileMgr::loadSmallFilesV2)
+                        .put(SRMetaBlockID.PLUGIN_MGR, pluginMgr::load)
+                        .put(SRMetaBlockID.DELETE_MGR, deleteMgr::load)
+                        .put(SRMetaBlockID.ANALYZE_MGR, analyzeMgr::load)
+                        .put(SRMetaBlockID.RESOURCE_GROUP_MGR, resourceGroupMgr::load)
+                        .put(SRMetaBlockID.AUTHENTICATION_MGR, authenticationMgr::loadV2)
+                        .put(SRMetaBlockID.AUTHORIZATION_MGR, authorizationMgr::loadV2)
+                        .put(SRMetaBlockID.TASK_MGR, taskManager::loadTasksV2)
+                        .put(SRMetaBlockID.CATALOG_MGR, catalogMgr::load)
+                        .put(SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, insertOverwriteJobMgr::load)
+                        .put(SRMetaBlockID.COMPACTION_MGR, compactionMgr::load)
+                        .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
+                        .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
+                        .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
+                        .build();
                 try {
-                    loadHeaderV2(dis, checksum);
-                    nodeMgr.load(dis);
-                    localMetastore.load(dis);
-                    // ATTN: this should be done after load Db, and before loadAlterJob
-                    localMetastore.recreateTabletInvertIndex();
-                    alterJobMgr.load(dis);
-                    // rebuild es state state
-                    esRepository.loadTableFromCatalog();
-                    starRocksRepository.loadTableFromCatalog();
-                    recycleBin.load(dis);
-                    VariableMgr.load(dis);
-                    resourceMgr.loadResourcesV2(dis, catalogMgr);
-                    exportMgr.loadExportJobV2(dis);
-                    backupHandler.loadBackupHandlerV2(dis);
-                    auth.load(dis);
-                    // global transaction must be replayed before load jobs v2
-                    globalTransactionMgr.loadTransactionStateV2(dis);
-                    colocateTableIndex.loadColocateTableIndexV2(dis);
-                    routineLoadMgr.loadRoutineLoadJobsV2(dis);
-                    loadMgr.loadLoadJobsV2JsonFormat(dis);
-                    smallFileMgr.loadSmallFilesV2(dis);
-                    pluginMgr.load(dis);
-                    deleteMgr.load(dis);
-                    analyzeMgr.load(dis);
-                    resourceGroupMgr.load(dis);
-                    authenticationMgr.loadV2(dis);
-                    authorizationMgr.loadV2(dis);
-                    taskManager.loadTasksV2(dis);
-                    catalogMgr.load(dis);
-                    insertOverwriteJobMgr.load(dis);
-                    compactionMgr.load(dis);
-                    streamLoadMgr.load(dis);
-                    MaterializedViewMgr.getInstance().load(dis);
-                    globalFunctionMgr.load(dis);
-                } catch (SRMetaBlockException | SRMetaBlockEOFException e) {
-                    LOG.error("load image failed", e);
-                    throw new IOException("load image failed", e);
+                    loadHeaderV2(dis);
+
+                    Iterator<Map.Entry<SRMetaBlockID, SRMetaBlockLoader>> iterator = loadImages.entrySet().iterator();
+                    Map.Entry<SRMetaBlockID, SRMetaBlockLoader> entry = iterator.next();
+                    while (true) {
+                        SRMetaBlockID srMetaBlockID = entry.getKey();
+                        SRMetaBlockReader reader = new SRMetaBlockReader(dis, srMetaBlockID);
+                        if (reader.getHeader().getId() != srMetaBlockID) {
+                            /*
+                              The expected read module does not match the module stored in the image,
+                              and the json chunk is skipped directly. This usually occurs in several situations.
+                              1. When the obsolete image code is deleted.
+                              2. When the new version rolls back to the old version,
+                                 the old version ignores the functions of the new version
+                             */
+                            LOG.warn(String.format("Ignore this invalid meta block, sr meta block id mismatch" +
+                                    "(expect %s actual %s)", srMetaBlockID.name(), reader.getHeader().getId().name()));
+                            reader.close();
+                            continue;
+                        }
+
+                        try {
+                            SRMetaBlockLoader imageLoader = entry.getValue();
+                            imageLoader.apply(reader);
+                            LOG.info("Success load StarRocks meta block " + srMetaBlockID.name() + " from image");
+                        } catch (SRMetaBlockEOFException srMetaBlockEOFException) {
+                            /*
+                              The number of json expected to be read is more than the number of json actually stored
+                              in the image, which usually occurs when the module adds new functions.
+                             */
+                            LOG.warn("Got EOF exception, ignore, ", srMetaBlockEOFException);
+                        } catch (SRMetaBlockException srMetaBlockException) {
+                            LOG.error("Load meta block failed ", srMetaBlockException);
+                            throw new IOException("Load meta block failed ", srMetaBlockException);
+                        } finally {
+                            reader.close();
+                        }
+                        if (iterator.hasNext()) {
+                            entry = iterator.next();
+                        } else {
+                            break;
+                        }
+                    }
+                } catch (SRMetaBlockException e) {
+                    LOG.error("load meta block failed ", e);
+                    throw new IOException("load meta block failed ", e);
                 }
             } else {
                 checksum = loadHeaderV1(dis, checksum);
@@ -1633,7 +1675,8 @@ public class GlobalStateMgr {
 
     public long loadHeader(DataInputStream dis, long checksum) throws IOException {
         if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
-            return loadHeaderV2(dis, checksum);
+            loadHeaderV2(dis);
+            return checksum;
         } else {
             return loadHeaderV1(dis, checksum);
         }
@@ -1653,16 +1696,11 @@ public class GlobalStateMgr {
         return checksum;
     }
 
-    public long loadHeaderV2(DataInputStream dis, long checksum) throws IOException {
+    public void loadHeaderV2(DataInputStream dis) throws IOException {
         ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
-
-        checksum ^= header.getBatchEndId();
         idGenerator.setId(header.getBatchEndId());
-
         isDefaultClusterCreated = header.isDefaultClusterCreated();
-
         LOG.info("finished to replay header from image");
-        return checksum;
     }
 
     public long loadAlterJob(DataInputStream dis, long checksum) throws IOException {
@@ -1802,14 +1840,13 @@ public class GlobalStateMgr {
         // save image does not need any lock. because only checkpoint thread will call this method.
         LOG.info("start save image to {}. is ckpt: {}", curFile.getAbsolutePath(), GlobalStateMgr.isCheckpointThread());
 
-        long checksum = 0;
         long saveImageStartTime = System.currentTimeMillis();
-        try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(curFile))) {
+        try (DataOutputStream dos = new DataOutputStream(Files.newOutputStream(curFile.toPath()))) {
             // ** NOTICE **: always add new code at the end
             if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-                checksum = saveVersionV2(dos, checksum);
                 try {
-                    checksum = saveHeaderV2(dos, checksum);
+                    saveVersionV2(dos);
+                    saveHeaderV2(dos);
                     nodeMgr.save(dos);
                     localMetastore.save(dos);
                     alterJobMgr.save(dos);
@@ -1838,10 +1875,15 @@ public class GlobalStateMgr {
                     MaterializedViewMgr.getInstance().save(dos);
                     globalFunctionMgr.save(dos);
                 } catch (SRMetaBlockException e) {
-                    LOG.error("save image failed", e);
-                    throw new IOException("save image failed", e);
+                    LOG.error("Save meta block failed ", e);
+                    throw new IOException("Save meta block failed ", e);
                 }
+
+                long saveImageEndTime = System.currentTimeMillis();
+                LOG.info("Finished save meta block {} in {} ms.",
+                        curFile.getAbsolutePath(), (saveImageEndTime - saveImageStartTime));
             } else {
+                long checksum = 0;
                 checksum = saveVersion(dos, checksum);
                 checksum = saveHeader(dos, replayedJournalId, checksum);
                 checksum = nodeMgr.saveLeaderInfo(dos, checksum);
@@ -1895,12 +1937,12 @@ public class GlobalStateMgr {
                 checksum = localMetastore.saveAutoIncrementId(dos, checksum);
                 dos.writeLong(checksum);
                 // ** NOTICE **: always add new code at the end
+
+                long saveImageEndTime = System.currentTimeMillis();
+                LOG.info("finished save image {} in {} ms. checksum is {}",
+                        curFile.getAbsolutePath(), (saveImageEndTime - saveImageStartTime), checksum);
             }
         }
-
-        long saveImageEndTime = System.currentTimeMillis();
-        LOG.info("finished save image {} in {} ms. checksum is {}",
-                curFile.getAbsolutePath(), (saveImageEndTime - saveImageStartTime), checksum);
     }
 
     public long saveVersion(DataOutputStream dos, long checksum) throws IOException {
@@ -1915,10 +1957,8 @@ public class GlobalStateMgr {
     }
 
     // TODO [meta-format-change]
-    public long saveVersionV2(DataOutputStream dos, long checksum) throws IOException {
-        checksum ^= FeConstants.STARROCKS_META_VERSION;
+    public void saveVersionV2(DataOutputStream dos) throws IOException {
         dos.writeInt(FeConstants.STARROCKS_META_VERSION);
-        return checksum;
     }
 
     public long saveHeader(DataOutputStream dos, long replayedJournalId, long checksum) throws IOException {
@@ -1937,17 +1977,12 @@ public class GlobalStateMgr {
     }
 
     // TODO [meta-format-change]
-    public long saveHeaderV2(DataOutputStream dos, long checksum) throws IOException {
+    public void saveHeaderV2(DataOutputStream dos) throws IOException {
         ImageHeader header = new ImageHeader();
-
         long id = idGenerator.getBatchEndId();
-        checksum ^= id;
         header.setBatchEndId(id);
-
         header.setDefaultClusterCreated(isDefaultClusterCreated);
-
         Text.writeString(dos, GsonUtils.GSON.toJson(header));
-        return checksum;
     }
 
     public long saveAlterJob(DataOutputStream dos, long checksum) throws IOException {

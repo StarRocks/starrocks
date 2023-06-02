@@ -264,14 +264,12 @@ public class LocalMetastore implements ConnectorMetadata {
     private EditLog editLog;
     private final CatalogRecycleBin recycleBin;
     private ColocateTableIndex colocateTableIndex;
-    private final SystemInfoService systemInfoService;
 
     public LocalMetastore(GlobalStateMgr globalStateMgr, CatalogRecycleBin recycleBin,
-                          ColocateTableIndex colocateTableIndex, SystemInfoService systemInfoService) {
+                          ColocateTableIndex colocateTableIndex) {
         this.stateMgr = globalStateMgr;
         this.recycleBin = recycleBin;
         this.colocateTableIndex = colocateTableIndex;
-        this.systemInfoService = systemInfoService;
     }
 
     boolean tryLock(boolean mustLock) {
@@ -796,7 +794,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // only internal table should check quota and cluster capacity
         if (!stmt.isExternal()) {
             // check cluster capacity
-            systemInfoService.checkClusterCapacity();
+            GlobalStateMgr.getCurrentSystemInfo().checkClusterCapacity();
             // check db quota
             db.checkQuota();
         }
@@ -1711,9 +1709,9 @@ public class LocalMetastore implements ConnectorMetadata {
         if (partitions.isEmpty()) {
             return;
         }
-        int numAliveBackends = systemInfoService.getAliveBackendNumber();
+        int numAliveBackends = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            numAliveBackends += systemInfoService.getAliveComputeNodeNumber();
+            numAliveBackends += GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
         }
         int numReplicas = 0;
         for (Partition partition : partitions) {
@@ -2252,7 +2250,7 @@ public class LocalMetastore implements ConnectorMetadata {
     // create replicas for tablet with random chosen backends
     private List<Long> chosenBackendIdBySeq(int replicationNum, TStorageMedium storageMedium)
             throws DdlException {
-        List<Long> chosenBackendIds = systemInfoService.seqChooseBackendIdsByStorageMedium(replicationNum,
+        List<Long> chosenBackendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIdsByStorageMedium(replicationNum,
                 true, true, storageMedium);
         if (CollectionUtils.isEmpty(chosenBackendIds)) {
             throw new DdlException(
@@ -2268,7 +2266,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private List<Long> chosenBackendIdBySeq(int replicationNum) throws DdlException {
         List<Long> chosenBackendIds =
-                systemInfoService.seqChooseBackendIds(replicationNum, true, true);
+                GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(replicationNum, true, true);
         if (!CollectionUtils.isEmpty(chosenBackendIds)) {
             return chosenBackendIds;
         } else if (replicationNum > 1) {
@@ -3977,7 +3975,7 @@ public class LocalMetastore implements ConnectorMetadata {
     // TODO [meta-format-change] deprecated
     public void initDefaultCluster() {
         final List<Long> backendList = Lists.newArrayList();
-        final List<Backend> defaultClusterBackends = systemInfoService.getBackends();
+        final List<Backend> defaultClusterBackends = GlobalStateMgr.getCurrentSystemInfo().getBackends();
         for (Backend backend : defaultClusterBackends) {
             backendList.add(backend.getId());
         }
@@ -4717,17 +4715,18 @@ public class LocalMetastore implements ConnectorMetadata {
         // Don't write system db meta
         Map<Long, Database> idToDbNormal = idToDb.entrySet().stream().filter(entry -> entry.getKey() > NEXT_ID_INIT_VALUE)
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        int tableSize = 0;
+        int totalTableNum = 0;
         for (Database database : idToDbNormal.values()) {
-            tableSize += database.getTableNumber();
+            totalTableNum += database.getTableNumber();
         }
-        int cnt = 1 + idToDbNormal.size() + tableSize + 1;
+        int cnt = 1 + idToDbNormal.size() + idToDbNormal.size() /* record database table size */ + totalTableNum + 1;
 
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.LOCAL_META_STORE, cnt);
 
         writer.writeJson(idToDbNormal.size());
         for (Database database : idToDbNormal.values()) {
             writer.writeJson(database);
+            writer.writeJson(database.getTables().size());
             List<Table> tables = database.getTables();
             for (Table table : tables) {
                 writer.writeJson(table);
@@ -4740,55 +4739,54 @@ public class LocalMetastore implements ConnectorMetadata {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.LOCAL_META_STORE);
-        try {
-            int dbSize = reader.readJson(int.class);
-            for (int i = 0; i < dbSize; ++i) {
-                Database db = reader.readJson(Database.class);
-                int tableSize = reader.readInt();
-                for (int j = 0; j < tableSize; ++j) {
-                    Table table = reader.readJson(Table.class);
-                    db.createTableWithLock(table, true);
-                }
-
-                idToDb.put(db.getId(), db);
-                fullNameToDb.put(db.getFullName(), db);
-                stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-                db.getMaterializedViews().forEach(Table::onCreate);
-                db.getHiveTables().forEach(Table::onCreate);
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int dbSize = reader.readJson(int.class);
+        for (int i = 0; i < dbSize; ++i) {
+            Database db = reader.readJson(Database.class);
+            int tableSize = reader.readInt();
+            for (int j = 0; j < tableSize; ++j) {
+                Table table = reader.readJson(Table.class);
+                db.createTableWithLock(table, true);
             }
 
-
-            // put built-in database into local metastore
-            InfoSchemaDb infoSchemaDb = new InfoSchemaDb();
-            Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
-                    "InfoSchemaDb id shouldn't larger than " + NEXT_ID_INIT_VALUE);
-            idToDb.put(infoSchemaDb.getId(), infoSchemaDb);
-            fullNameToDb.put(infoSchemaDb.getFullName(), infoSchemaDb);
-
-            if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
-                LOG.warn("Since the the database of starrocks already exists, " +
-                        "the system will not automatically create the database of starrocks for system.");
-            } else {
-                StarRocksDb starRocksDb = new StarRocksDb();
-                Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
-                        "starocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
-                idToDb.put(starRocksDb.getId(), starRocksDb);
-                fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
-            }
-
-            AutoIncrementInfo autoIncrementInfo = reader.readJson(AutoIncrementInfo.class);
-            for (Map.Entry<Long, Long> entry : autoIncrementInfo.tableIdToIncrementId().entrySet()) {
-                Long tableId = entry.getKey();
-                Long id = entry.getValue();
-
-                tableIdToIncrementId.put(tableId, id);
-            }
-
-        } finally {
-            reader.close();
+            idToDb.put(db.getId(), db);
+            fullNameToDb.put(db.getFullName(), db);
+            stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
+            db.getMaterializedViews().forEach(Table::onCreate);
+            db.getHiveTables().forEach(Table::onCreate);
         }
+
+        // put built-in database into local metastore
+        InfoSchemaDb infoSchemaDb = new InfoSchemaDb();
+        Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
+                "InfoSchemaDb id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+        idToDb.put(infoSchemaDb.getId(), infoSchemaDb);
+        fullNameToDb.put(infoSchemaDb.getFullName(), infoSchemaDb);
+
+        if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
+            LOG.warn("Since the the database of starrocks already exists, " +
+                    "the system will not automatically create the database of starrocks for system.");
+        } else {
+            StarRocksDb starRocksDb = new StarRocksDb();
+            Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
+                    "starocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+            idToDb.put(starRocksDb.getId(), starRocksDb);
+            fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
+        }
+
+        AutoIncrementInfo autoIncrementInfo = reader.readJson(AutoIncrementInfo.class);
+        for (Map.Entry<Long, Long> entry : autoIncrementInfo.tableIdToIncrementId().entrySet()) {
+            Long tableId = entry.getKey();
+            Long id = entry.getValue();
+
+            tableIdToIncrementId.put(tableId, id);
+        }
+
+        recreateTabletInvertIndex();
+        GlobalStateMgr.getCurrentState().getEsRepository().loadTableFromCatalog();
+        GlobalStateMgr.getCurrentState().getStarRocksRepository().loadTableFromCatalog();
+
+        defaultCluster = new Cluster(SystemInfoService.DEFAULT_CLUSTER, 0);
     }
 }
 

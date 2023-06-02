@@ -92,13 +92,15 @@ public class GlobalStateMgrTestUtil {
         GlobalStateMgr globalStateMgr = constructor.newInstance();
         globalStateMgr.setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
+        GlobalStateMgr.getCurrentSystemInfo().clear();
+        globalStateMgr.initDefaultCluster();
+
         Backend backend1 = createBackend(testBackendId1, "host1", 123, 124, 125);
         Backend backend2 = createBackend(testBackendId2, "host2", 123, 124, 125);
         Backend backend3 = createBackend(testBackendId3, "host3", 123, 124, 125);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(backend1);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(backend2);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(backend3);
-        globalStateMgr.initDefaultCluster();
         Database db = createSimpleDb(testDbId1, testTableId1, testPartitionId1, testIndexId1, testTabletId1,
                 testStartVersion);
         LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();

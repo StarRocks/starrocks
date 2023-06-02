@@ -1744,62 +1744,55 @@ public class AuthorizationMgr {
         LOG.info("upgrade role {}[{}]", collection.getName(), roleId);
     }
 
-    public void loadV2(DataInputStream dis) throws IOException, DdlException {
+    public void loadV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        AuthorizationMgr ret = null;
+
         try {
-            SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.AUTHORIZATION_MGR);
-            AuthorizationMgr ret = null;
+            // 1 json for myself
+            ret = reader.readJson(AuthorizationMgr.class);
+            ret.globalStateMgr = globalStateMgr;
+            if (provider == null) {
+                ret.provider = new DefaultAuthorizationProvider();
+            } else {
+                ret.provider = provider;
+            }
+            ret.initBuiltinRolesAndUsers();
 
-            try {
-                // 1 json for myself
-                ret = reader.readJson(AuthorizationMgr.class);
-                ret.globalStateMgr = globalStateMgr;
-                if (provider == null) {
-                    ret.provider = new DefaultAuthorizationProvider();
-                } else {
-                    ret.provider = provider;
+            // 1 json for num user
+            int numUser = reader.readJson(int.class);
+            LOG.info("loading {} users", numUser);
+            for (int i = 0; i != numUser; ++i) {
+                // 2 json for each user(kv)
+                UserIdentity userIdentity = reader.readJson(UserIdentity.class);
+                UserPrivilegeCollection collection = reader.readJson(UserPrivilegeCollection.class);
+
+                if (userIdentity.equals(UserIdentity.ROOT)) {
+                    UserPrivilegeCollection rootUserPrivCollection =
+                            ret.getUserPrivilegeCollectionUnlocked(UserIdentity.ROOT);
+                    collection.grantRoles(rootUserPrivCollection.getAllRoles());
+                    collection.setDefaultRoleIds(rootUserPrivCollection.getDefaultRoleIds());
+                    collection.typeToPrivilegeEntryList = rootUserPrivCollection.typeToPrivilegeEntryList;
                 }
-                ret.initBuiltinRolesAndUsers();
 
-                // 1 json for num user
-                int numUser = reader.readJson(int.class);
-                LOG.info("loading {} users", numUser);
-                for (int i = 0; i != numUser; ++i) {
-                    // 2 json for each user(kv)
-                    UserIdentity userIdentity = reader.readJson(UserIdentity.class);
-                    UserPrivilegeCollection collection = reader.readJson(UserPrivilegeCollection.class);
+                ret.userToPrivilegeCollection.put(userIdentity, collection);
+            }
+            // 1 json for num roles
+            int numRole = reader.readJson(int.class);
+            LOG.info("loading {} roles", numRole);
+            for (int i = 0; i != numRole; ++i) {
+                // 2 json for each role(kv)
+                Long roleId = reader.readJson(Long.class);
+                RolePrivilegeCollection collection = reader.readJson(RolePrivilegeCollection.class);
 
-                    if (userIdentity.equals(UserIdentity.ROOT)) {
-                        UserPrivilegeCollection rootUserPrivCollection =
-                                ret.getUserPrivilegeCollectionUnlocked(UserIdentity.ROOT);
-                        collection.grantRoles(rootUserPrivCollection.getAllRoles());
-                        collection.setDefaultRoleIds(rootUserPrivCollection.getDefaultRoleIds());
-                        collection.typeToPrivilegeEntryList = rootUserPrivCollection.typeToPrivilegeEntryList;
-                    }
-
-                    ret.userToPrivilegeCollection.put(userIdentity, collection);
+                // Use hard-code PrivilegeCollection in the memory as the built-in role permission.
+                // The reason why need to replay from the image here
+                // is because the associated information of the role-id is stored in the image.
+                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                    RolePrivilegeCollection builtInRolePrivilegeCollection =
+                            ret.roleIdToPrivilegeCollection.get(roleId);
+                    collection.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
                 }
-                // 1 json for num roles
-                int numRole = reader.readJson(int.class);
-                LOG.info("loading {} roles", numRole);
-                for (int i = 0; i != numRole; ++i) {
-                    // 2 json for each role(kv)
-                    Long roleId = reader.readJson(Long.class);
-                    RolePrivilegeCollection collection = reader.readJson(RolePrivilegeCollection.class);
-
-                    // Use hard-code PrivilegeCollection in the memory as the built-in role permission.
-                    // The reason why need to replay from the image here
-                    // is because the associated information of the role-id is stored in the image.
-                    if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
-                        RolePrivilegeCollection builtInRolePrivilegeCollection =
-                                ret.roleIdToPrivilegeCollection.get(roleId);
-                        collection.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
-                    }
-                    ret.roleIdToPrivilegeCollection.put(roleId, collection);
-                }
-            } catch (SRMetaBlockEOFException eofException) {
-                LOG.warn("got EOF exception, ignore, ", eofException);
-            } finally {
-                reader.close();
+                ret.roleIdToPrivilegeCollection.put(roleId, collection);
             }
 
             assert ret != null; // can't be NULL
@@ -1810,8 +1803,8 @@ public class AuthorizationMgr {
             isLoaded = true;
             userToPrivilegeCollection = ret.userToPrivilegeCollection;
             roleIdToPrivilegeCollection = ret.roleIdToPrivilegeCollection;
-        } catch (SRMetaBlockException | PrivilegeException e) {
-            throw new DdlException("failed to load AuthorizationManager!", e);
+        } catch (PrivilegeException e) {
+            throw new IOException("failed to load AuthorizationManager!", e);
         }
     }
 

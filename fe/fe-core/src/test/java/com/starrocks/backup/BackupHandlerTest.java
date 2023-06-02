@@ -53,6 +53,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -590,7 +592,9 @@ public class BackupHandlerTest {
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
         handler.saveBackupHandlerV2(pseudoImage.getDataOutputStream());
         BackupHandler followerHandler = new BackupHandler(globalStateMgr);
-        followerHandler.loadBackupHandlerV2(pseudoImage.getDataInputStream());
+        SRMetaBlockReader reader = new SRMetaBlockReader(pseudoImage.getDataInputStream(), SRMetaBlockID.BACKUP_MGR);
+        followerHandler.loadBackupHandlerV2(reader);
+        reader.close();
 
         Assert.assertEquals(1, followerHandler.dbIdToBackupOrRestoreJob.size());
 

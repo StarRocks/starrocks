@@ -306,19 +306,14 @@ public class MaterializedViewMgr {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.MATERIALIZED_VIEW_MGR);
-        try {
-            int numJson = reader.readInt();
-            for (int i = 0; i < numJson; ++i) {
-                MVMaintenanceJob mvMaintenanceJob = reader.readJson(MVMaintenanceJob.class);
-                // NOTE: job's view is not serialized, cannot use it directly!
-                MvId mvId = new MvId(mvMaintenanceJob.getDbId(), mvMaintenanceJob.getViewId());
-                mvMaintenanceJob.restore();
-                jobMap.put(mvId, mvMaintenanceJob);
-            }
-        } finally {
-            reader.close();
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int numJson = reader.readInt();
+        for (int i = 0; i < numJson; ++i) {
+            MVMaintenanceJob mvMaintenanceJob = reader.readJson(MVMaintenanceJob.class);
+            // NOTE: job's view is not serialized, cannot use it directly!
+            MvId mvId = new MvId(mvMaintenanceJob.getDbId(), mvMaintenanceJob.getViewId());
+            mvMaintenanceJob.restore();
+            jobMap.put(mvId, mvMaintenanceJob);
         }
     }
 }

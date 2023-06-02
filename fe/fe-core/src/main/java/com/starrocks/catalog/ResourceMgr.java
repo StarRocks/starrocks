@@ -52,7 +52,6 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -62,7 +61,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -358,19 +356,9 @@ public class ResourceMgr implements Writable {
         writer.close();
     }
 
-    public void loadResourcesV2(DataInputStream dis, CatalogMgr catalogMgr)
+    public void loadResourcesV2(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.RESOURCE_MGR);
-        try {
-            ResourceMgr data = reader.readJson(ResourceMgr.class);
-            this.nameToResource = data.nameToResource;
-        } finally {
-            reader.close();
-        }
-        LOG.info("finished replay resources from image");
-
-        LOG.info("start to replay resource mapping catalog");
-        catalogMgr.loadResourceMappingCatalog();
-        LOG.info("finished replaying resource mapping catalogs from resources");
+        ResourceMgr data = reader.readJson(ResourceMgr.class);
+        this.nameToResource = data.nameToResource;
     }
 }

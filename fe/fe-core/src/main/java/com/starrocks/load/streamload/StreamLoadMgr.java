@@ -40,7 +40,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -552,24 +551,19 @@ public class StreamLoadMgr {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         long currentMs = System.currentTimeMillis();
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.STREAM_LOAD_MGR);
-        try {
-            int numJson = reader.readInt();
-            for (int i = 0; i < numJson; ++i) {
-                StreamLoadTask loadTask = reader.readJson(StreamLoadTask.class);
-                loadTask.init();
-                // discard expired task right away
-                if (loadTask.checkNeedRemove(currentMs)) {
-                    LOG.info("discard expired task: {}", loadTask.getLabel());
-                    continue;
-                }
-
-                addLoadTask(loadTask);
+        int numJson = reader.readInt();
+        for (int i = 0; i < numJson; ++i) {
+            StreamLoadTask loadTask = reader.readJson(StreamLoadTask.class);
+            loadTask.init();
+            // discard expired task right away
+            if (loadTask.checkNeedRemove(currentMs)) {
+                LOG.info("discard expired task: {}", loadTask.getLabel());
+                continue;
             }
-        } finally {
-            reader.close();
+
+            addLoadTask(loadTask);
         }
     }
 }

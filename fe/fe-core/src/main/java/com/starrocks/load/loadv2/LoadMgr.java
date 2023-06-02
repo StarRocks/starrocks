@@ -732,24 +732,19 @@ public class LoadMgr implements Writable {
         return checksum;
     }
 
-    public void loadLoadJobsV2JsonFormat(DataInputStream in) throws IOException,
-            SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(in, SRMetaBlockID.LOAD_MGR);
-        try {
-            int size = reader.readInt();
-            long now = System.currentTimeMillis();
-            while (size-- > 0) {
-                LoadJob loadJob = reader.readJson(LoadJob.class);
-                // discard expired job right away
-                if (isJobExpired(loadJob, now)) {
-                    LOG.info("discard expired job: {}", loadJob);
-                    continue;
-                }
-
-                putLoadJob(loadJob);
+    public void loadLoadJobsV2JsonFormat(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int size = reader.readInt();
+        long now = System.currentTimeMillis();
+        while (size-- > 0) {
+            LoadJob loadJob = reader.readJson(LoadJob.class);
+            // discard expired job right away
+            if (isJobExpired(loadJob, now)) {
+                LOG.info("discard expired job: {}", loadJob);
+                continue;
             }
-        } finally {
-            reader.close();
+
+            putLoadJob(loadJob);
         }
     }
 

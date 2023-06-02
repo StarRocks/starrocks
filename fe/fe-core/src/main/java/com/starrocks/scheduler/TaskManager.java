@@ -501,8 +501,8 @@ public class TaskManager {
         return checksum;
     }
 
-    public void loadTasksV2(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.TASK_MGR);
+    public void loadTasksV2(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         int size = reader.readInt();
         while (size-- > 0) {
             Task task = reader.readJson(Task.class);
@@ -584,7 +584,7 @@ public class TaskManager {
     /**
      * Return the last refresh TaskRunStatus for the task which the source type is MV.
      * The iteration order is by the task refresh time:
-     *      PendingTaskRunMap > RunningTaskRunMap > TaskRunHistory
+     * PendingTaskRunMap > RunningTaskRunMap > TaskRunHistory
      * TODO: Maybe only return needed MVs rather than all MVs.
      */
     public Map<String, TaskRunStatus> showMVLastRefreshTaskRunStatus(String dbName) {
