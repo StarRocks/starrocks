@@ -34,8 +34,12 @@
 
 package com.starrocks.transaction;
 
-import com.google.gson.annotations.SerializedName;
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+
 import com.google.common.base.Preconditions;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
@@ -43,10 +47,6 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
 import com.starrocks.thrift.TTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 
 public abstract class TxnCommitAttachment implements Writable {
 

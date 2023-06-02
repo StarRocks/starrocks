@@ -34,6 +34,16 @@
 
 package com.starrocks.persist.gson;
 
+import java.io.IOException;
+import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.HashBasedTable;
@@ -120,8 +130,6 @@ import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
-import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
-import com.starrocks.load.loadv2.MiniLoadTxnCommitAttachment;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.load.routineload.KafkaProgress;
@@ -159,16 +167,6 @@ import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.LocalWarehouse;
 import com.starrocks.warehouse.Warehouse;
-
-import java.io.IOException;
-import java.lang.reflect.Method;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
 
 /*
  * Some utilities about Gson.
@@ -314,8 +312,6 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory.of(TxnCommitAttachment.class, "clazz")
                     .registerSubtype(InsertTxnCommitAttachment.class, "InsertTxnCommitAttachment")
                     .registerSubtype(LoadJobFinalOperation.class, "LoadJobFinalOperation")
-                    .registerSubtype(ManualLoadTxnCommitAttachment.class, "ManualLoadTxnCommitAttachment")
-                    .registerSubtype(MiniLoadTxnCommitAttachment.class, "MiniLoadTxnCommitAttachment")
                     .registerSubtype(RLTaskTxnCommitAttachment.class, "RLTaskTxnCommitAttachment")
                     .registerSubtype(StreamLoadTxnCommitAttachment.class, "StreamLoadTxnCommitAttachment");
 

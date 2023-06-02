@@ -34,6 +34,17 @@
 
 package com.starrocks.service;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
+import static com.starrocks.thrift.TStatusCode.NOT_IMPLEMENTED_ERROR;
+import static com.starrocks.thrift.TStatusCode.OK;
+import static com.starrocks.thrift.TStatusCode.RUNTIME_ERROR;
+
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -246,17 +257,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.jetbrains.annotations.NotNull;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-
-import static com.starrocks.thrift.TStatusCode.NOT_IMPLEMENTED_ERROR;
-import static com.starrocks.thrift.TStatusCode.OK;
-import static com.starrocks.thrift.TStatusCode.RUNTIME_ERROR;
 
 // Frontend service used to serve all request for this frontend through
 // thrift protocol
@@ -1378,19 +1378,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
                 break;
             case MANUAL_LOAD:
-                if (!(attachment instanceof ManualLoadTxnCommitAttachment)) {
-                    break;
-                }
-                ManualLoadTxnCommitAttachment streamAttachment = (ManualLoadTxnCommitAttachment) attachment;
-
-                if (streamLoadtask != null) {
-                    streamLoadtask.setLoadState(streamAttachment.getLoadedBytes(),
-                            streamAttachment.getLoadedRows(),
-                            streamAttachment.getFilteredRows(),
-                            streamAttachment.getUnselectedRows(),
-                            streamAttachment.getErrorLogUrl(), request.getReason());
-                }
-
+                Preconditions.checkState(false, "deprecated MANUAL_LOAD");
                 break;
             default:
                 break;
