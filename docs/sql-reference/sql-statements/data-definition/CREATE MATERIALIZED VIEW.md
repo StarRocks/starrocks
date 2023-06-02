@@ -22,7 +22,6 @@ In StarRocks v2.5, asynchronous async refresh materialized views support query r
 
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
-[ORDER BY (<sort_key>)]
 [COMMENT ""]
 [PROPERTIES ("key"="value", ...)]
 AS 
@@ -85,7 +84,6 @@ A synchronous materialized view is similar to an index of the base table; it is 
 ```sql
 select * from sync_materialized_view [_SYNC_MV_] limit 1;
 ```
-
  > **CAUTION**
  >
  > - The schema of sync materialized view is not as expected for now because the output column name is optimized when creating.
@@ -176,7 +174,7 @@ The partitioning strategy of the materialized view. As for the current version o
 
 If this parameter is not specified, the materialized view adopts no partitioning strategy by default.
 
-**order_by** (optional)
+**order_by_expression** (optional)
 
 Specifies the sort key of materialized view. If you do not specify the sort key, StarRocks chooses some of the prefix columns from SELECT columns as the sort keys, for example, in `select a, b, c, d`, sort keys can be `a` and `b`. This parameter has been supported since StarRocks v3.0.
 
@@ -204,13 +202,9 @@ Properties of the materialized view. You can modify the properties of an existin
 
 **query_statement** (required)
 
-The query statement to create the materialized view. Its result is the data in the materialized view. The syntax is as follows:
+The query statement to create the materialized view. Query statement is more flexable in async materialized view.
 
-```SQL
-SELECT select_expr[, select_expr ...]
-[GROUP BY column_name[, column_name ...]]
-[ORDER BY column_name[, column_name ...]]
-```
+However if you want you materialized view is used for automatic rewrite, suggest you design the Materialized View carefully. StarRocks v2.5 supports automatic and transparent query rewrite based on the SPJG-type asynchronous materialized views. SPJG-type materialized views refer to materialized views whose plan only includes Scan, Filter, Project, and Aggregate types of operators. 
 
 ### Query Materialized View
 
