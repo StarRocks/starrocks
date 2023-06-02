@@ -66,6 +66,7 @@ Describes the data file that you want to load. The `data_desc` descriptor can in
 -H "row_delimiter: <row_delimiter>"
 -H "columns: <column1_name>[, <column2_name>, ... ]"
 -H "partitions: <partition1_name>[, <partition2_name>, ...]"
+-H "temporary_partitions: <temporary_partition1_name>[, <temporary_partition2_name>, ...]"
 -H "jsonpaths: [ \"<json_path1>\"[, \"<json_path2>\", ...] ]"
 -H "strip_outer_array:  true | false"
 -H "json_root: <json_path>"
@@ -80,6 +81,7 @@ The parameters in the `data_desc` descriptor can be divided into three types: co
 | file_name  | Yes      | The name of the data file. You can optionally include the extension of the file name. |
 | format     | No       | The format of the data file. Valid values: `CSV` and `JSON`. Default value: `CSV`. |
 | partitions | No       | The partitions into which you want to load the data file. By default, if you do not specify this parameter, StarRocks loads the data file into all partitions of the StarRocks table. |
+| temporary_partitions| No | The name of the [temporary partition](../../../table_design/Temporary_partition.md) into which you want to load data file. You can specify multiple temporary partitions, which must be separated by commas (,).|
 | columns    | No       | The column mapping between the data file and the StarRocks table.<br/>If the fields in the data file can be mapped in sequence onto the columns in the StarRocks table, you do not need to specify this parameter. Instead, you can use this parameter to implement data conversions. For example, if you load a CSV data file and the file consists of two columns that can be mapped in sequence onto the two columns, `id` and `city`, of the StarRocks table, you can specify `"columns: city,tmp_id, id = tmp_id * 100"`. For more information, see the "[Column mapping](#column-mapping)" section in this topic. |
 
 #### CSV parameters

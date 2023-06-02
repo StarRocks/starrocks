@@ -14,7 +14,9 @@
 + Table Design
   + [Understand StarRocks table design](./table_design/StarRocks_table_design.md)
   + [Data models](./table_design/Data_model.md)
-  + [Data distribution](./table_design/Data_distribution.md)
+  + Data distribution
+    + [Data distribution](./table_design/Data_distribution.md)
+    + [Temporary partition](./table_design/Temporary_partition.md)
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
   + Concepts
