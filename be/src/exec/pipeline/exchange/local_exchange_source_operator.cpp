@@ -104,7 +104,10 @@ bool LocalExchangeSourceOperator::is_finished() const {
 
 bool LocalExchangeSourceOperator::has_output() const {
     std::lock_guard<std::mutex> l(_chunk_lock);
-
+    if (_local_memory_usage > 0 && runtime_state()->should_release_buffer()) {
+        LOG(INFO) << "release buffer due to memory pressure";
+        return true;
+    }
     return !_full_chunk_queue.empty() || _partition_rows_num >= _factory->runtime_state()->chunk_size() ||
            _key_partition_max_rows() >= _factory->runtime_state()->chunk_size() ||
            (_is_finished && (_partition_rows_num > 0 || _key_partition_max_rows() > 0)) || _local_buffer_almost_full();

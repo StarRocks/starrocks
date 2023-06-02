@@ -396,6 +396,12 @@ public:
 
     bool use_page_cache();
 
+    bool should_release_buffer();
+
+    void set_release_buffer_mode(bool val);
+    void enter_release_buffer_mode();
+    bool is_release_buffer_mode();
+
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,

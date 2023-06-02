@@ -483,4 +483,17 @@ Status RuntimeState::reset_epoch() {
     return Status::OK();
 }
 
+bool RuntimeState::should_release_buffer() {
+    auto mem_tracker = _query_ctx->mem_tracker();
+    auto consumption = mem_tracker->consumption();
+    auto limit = mem_tracker->limit();
+    if (enable_spill()) {
+        LOG(INFO) << "consumption: " << consumption << ", limit: " << limit << ", threshold: " << consumption* 1.0 / limit;
+        if (consumption >= limit * 0.8) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // end namespace starrocks
