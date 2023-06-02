@@ -26,6 +26,7 @@ import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -89,10 +90,10 @@ public class AuthenticationMgr {
         /**
          * If someone log in from 10.1.1.1 with name "test_user", the matching UserIdentity
          * can be sorted in the below order,
-         *   1. test_user@10.1.1.1
-         *   2. test_user@["hostname"], in which "hostname" can be resolved to 10.1.1.1.
-         *      If multiple hostnames match the login ip, just return one randomly.
-         *   3. test_user@%, as a fallback.
+         * 1. test_user@10.1.1.1
+         * 2. test_user@["hostname"], in which "hostname" can be resolved to 10.1.1.1.
+         * If multiple hostnames match the login ip, just return one randomly.
+         * 3. test_user@%, as a fallback.
          */
         private static Integer scoreUserIdentityHost(UserIdentity userIdentity) {
             // ip(1) > hostname(2) > %(3)
@@ -701,7 +702,7 @@ public class AuthenticationMgr {
         try {
             // 1 json for myself,1 json for number of users, 2 json for each user(kv)
             final int cnt = 1 + 1 + userToAuthenticationInfo.size() * 2;
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, AuthenticationMgr.class.getName(), cnt);
+            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.AUTHENTICATION_MGR, cnt);
             // 1 json for myself
             writer.writeJson(this);
             // 1 json for num user
@@ -721,7 +722,7 @@ public class AuthenticationMgr {
     }
 
     public void loadV2(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, AuthenticationMgr.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.AUTHENTICATION_MGR);
         try {
             AuthenticationMgr ret = null;
             try {
@@ -740,8 +741,6 @@ public class AuthenticationMgr {
                 }
             } catch (AuthenticationException e) {
                 throw new RuntimeException(e);
-            } finally {
-                reader.close();
             }
             LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
 

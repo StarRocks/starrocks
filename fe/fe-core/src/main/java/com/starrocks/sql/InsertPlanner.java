@@ -33,6 +33,7 @@ import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.IcebergTableSink;
@@ -107,6 +108,7 @@ public class InsertPlanner {
     // Only for unit test
     public static boolean enableSingleReplicationShuffle = false;
     private boolean shuffleServiceEnable = false;
+    private boolean forceReplicatedStorage = false;
 
     private static final Logger LOG = LogManager.getLogger(InsertPlanner.class);
 
@@ -162,6 +164,7 @@ public class InsertPlanner {
 
             Optimizer optimizer = new Optimizer();
             PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
+
             LOG.debug("property {}", requiredPropertySet);
             OptExpression optimizedPlan;
 
@@ -215,7 +218,8 @@ public class InsertPlanner {
                     enableAutomaticPartition = olapTable.supportedAutomaticPartition();
                 }
                 dataSink = new OlapTableSink(olapTable, tupleDesc, insertStmt.getTargetPartitionIds(),
-                        canUsePipeline, olapTable.writeQuorum(), olapTable.enableReplicatedStorage(),
+                        canUsePipeline, olapTable.writeQuorum(),
+                        forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
                         false, enableAutomaticPartition);
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) targetTable);
@@ -610,6 +614,11 @@ public class InsertPlanner {
                 new HashDistributionDesc(keyColumnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
         DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
         DistributionProperty property = new DistributionProperty(spec);
+
+        if (Config.eliminate_shuffle_load_by_replicated_storage) {
+            forceReplicatedStorage = true;
+            return new PhysicalPropertySet();
+        }
 
         shuffleServiceEnable = true;
 

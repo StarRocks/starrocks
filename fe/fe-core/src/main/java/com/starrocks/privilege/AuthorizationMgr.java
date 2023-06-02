@@ -31,6 +31,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
@@ -1745,12 +1746,19 @@ public class AuthorizationMgr {
 
     public void loadV2(DataInputStream dis) throws IOException, DdlException {
         try {
-            SRMetaBlockReader reader = new SRMetaBlockReader(dis, AuthorizationMgr.class.getName());
+            SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.AUTHORIZATION_MGR);
             AuthorizationMgr ret = null;
 
             try {
                 // 1 json for myself
                 ret = reader.readJson(AuthorizationMgr.class);
+                ret.globalStateMgr = globalStateMgr;
+                if (provider == null) {
+                    ret.provider = new DefaultAuthorizationProvider();
+                } else {
+                    ret.provider = provider;
+                }
+                ret.initBuiltinRolesAndUsers();
 
                 // 1 json for num user
                 int numUser = reader.readJson(int.class);
@@ -1813,7 +1821,7 @@ public class AuthorizationMgr {
             // 1 json for number of roles, 2 json for each role(kv)
             final int cnt = 1 + 1 + userToPrivilegeCollection.size() * 2
                     + 1 + roleIdToPrivilegeCollection.size() * 2;
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, AuthorizationMgr.class.getName(), cnt);
+            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.AUTHORIZATION_MGR, cnt);
             // 1 json for myself
             writer.writeJson(this);
             // 1 json for num user

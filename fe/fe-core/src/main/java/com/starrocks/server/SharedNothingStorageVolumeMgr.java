@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
+import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
@@ -26,19 +27,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
+    @SerializedName("nameToSV")
     private Map<String, StorageVolume> nameToSV = new HashMap<>();
 
     @Override
-    public Long createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
+    public String createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
                                     Optional<Boolean> enabled, String comment)
             throws AlreadyExistsException, AnalysisException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             if (nameToSV.containsKey(name)) {
                 throw new AlreadyExistsException(String.format("Storage volume '%s' already exists", name));
             }
-            long id = GlobalStateMgr.getCurrentState().getNextId();
+            String id = UUID.randomUUID().toString();
             StorageVolume sv = new StorageVolume(id, name, svType, locations, params, enabled.orElse(true), comment);
             nameToSV.put(name, sv);
             return id;
@@ -51,7 +54,7 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
             Preconditions.checkState(nameToSV.containsKey(name),
                     "Storage volume '%s' does not exist", name);
             StorageVolume sv = nameToSV.get(name);
-            Preconditions.checkState(sv.getId() != defaultStorageVolumeId,
+            Preconditions.checkState(!sv.getId().equals(defaultStorageVolumeId),
                     "default storage volume can not be removed");
             Set<Long> dbs = storageVolumeToDbs.get(sv.getId());
             Set<Long> tables = storageVolumeToTables.get(sv.getId());
@@ -78,7 +81,8 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
             if (enabled.isPresent()) {
                 boolean enabledValue = enabled.get();
                 if (!enabledValue) {
-                    Preconditions.checkState(copied.getId() != defaultStorageVolumeId, "Default volume can not be disabled");
+                    Preconditions.checkState(!copied.getId().equals(defaultStorageVolumeId),
+                            "Default volume can not be disabled");
                 }
                 copied.setEnabled(enabledValue);
             }
@@ -116,10 +120,10 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public StorageVolume getStorageVolume(long storageVolumeId) throws AnalysisException {
+    public StorageVolume getStorageVolume(String storageVolumeId) throws AnalysisException {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             for (StorageVolume sv : nameToSV.values()) {
-                if (sv.getId() == storageVolumeId) {
+                if (sv.getId().equals(storageVolumeId)) {
                     return sv;
                 }
             }

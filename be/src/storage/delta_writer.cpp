@@ -240,8 +240,8 @@ Status DeltaWriter::_init() {
     }
 
     if (auto_increment_in_sort_key && _opt.miss_auto_increment_column) {
-        LOG(WARNING) << "table with sort key do not support partial update";
-        return Status::NotSupported("table with sort key do not support partial update");
+        LOG(WARNING) << "auto increment column in sort key do not support partial update";
+        return Status::NotSupported("auto increment column in sort key do not support partial update");
     }
 
     writer_context.rowset_id = _storage_engine->next_rowset_id();

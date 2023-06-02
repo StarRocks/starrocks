@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -49,6 +50,11 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.TablePropertyInfo;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import org.apache.logging.log4j.LogManager;
@@ -77,7 +83,9 @@ public class ColocateTableIndex implements Writable {
     private static final Logger LOG = LogManager.getLogger(ColocateTableIndex.class);
 
     public static class GroupId implements Writable {
+        @SerializedName("db")
         public Long dbId;
+        @SerializedName("gp")
         public Long grpId;
 
         private GroupId() {
@@ -129,16 +137,22 @@ public class ColocateTableIndex implements Writable {
     }
 
     // group_name -> group_id
+    @SerializedName("gn")
     private Map<String, GroupId> groupName2Id = Maps.newHashMap();
     // group_id -> table_ids
+    @SerializedName("gt")
     private Multimap<GroupId, Long> group2Tables = ArrayListMultimap.create();
     // table_id -> group_id
+    @SerializedName("tg")
     private Map<Long, GroupId> table2Group = Maps.newHashMap();
     // group id -> group schema
+    @SerializedName("gs")
     private Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
     // group_id -> bucketSeq -> backend ids
+    @SerializedName("gb")
     private Map<GroupId, List<List<Long>>> group2BackendsPerBucketSeq = Maps.newHashMap();
     // the colocate group is unstable
+    @SerializedName("ug")
     private Set<GroupId> unstableGroups = Sets.newHashSet();
     // lake group, in memory
     private Set<GroupId> lakeGroups = Sets.newHashSet();
@@ -564,7 +578,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     public GroupId changeGroup(long dbId, OlapTable tbl, String oldGroup, String newGroup, GroupId assignedGroupId,
-            boolean isReplay) throws DdlException {
+                               boolean isReplay) throws DdlException {
         writeLock();
         try {
             if (!Strings.isNullOrEmpty(oldGroup)) {
@@ -776,6 +790,31 @@ public class ColocateTableIndex implements Writable {
         return checksum;
     }
 
+    public void saveColocateTableIndexV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.COLOCATE_TABLE_INDEX, 1);
+        writer.writeJson(this);
+        writer.close();
+    }
+
+    public void loadColocateTableIndexV2(DataInputStream dis) throws IOException, SRMetaBlockException,
+            SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.COLOCATE_TABLE_INDEX);
+        try {
+            ColocateTableIndex data = reader.readJson(ColocateTableIndex.class);
+            this.groupName2Id = data.groupName2Id;
+            this.group2Tables = data.group2Tables;
+            this.table2Group = data.table2Group;
+            this.group2Schema = data.group2Schema;
+            this.group2BackendsPerBucketSeq = data.group2BackendsPerBucketSeq;
+            this.unstableGroups = data.unstableGroups;
+        } finally {
+            reader.close();
+        }
+
+        constructLakeGroups(GlobalStateMgr.getCurrentState());
+        LOG.info("finished replay colocateTableIndex from image");
+    }
+
     private List<GroupId> getOtherGroupsWithSameOrigNameUnlocked(String origName, long dbId) {
         List<GroupId> groupIds = new ArrayList<>();
         for (Map.Entry<String, GroupId> entry : groupName2Id.entrySet()) {
@@ -789,7 +828,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     public GroupId checkColocateSchemaWithGroupInOtherDb(String toCreateGroupName, long dbId,
-                                                      OlapTable toCreateTable) throws DdlException {
+                                                         OlapTable toCreateTable) throws DdlException {
         try {
             readLock();
             List<GroupId> sameOrigNameGroups = getOtherGroupsWithSameOrigNameUnlocked(toCreateGroupName, dbId);
@@ -997,7 +1036,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     public void updateLakeTableColocationInfo(OlapTable olapTable, boolean isJoin,
-            GroupId expectGroupId) throws DdlException {
+                                              GroupId expectGroupId) throws DdlException {
         if (olapTable == null || !olapTable.isCloudNativeTable()) { // skip non-lake table
             return;
         }

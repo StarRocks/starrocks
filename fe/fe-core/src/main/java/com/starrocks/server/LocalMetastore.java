@@ -41,6 +41,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.analysis.Expr;
@@ -76,6 +77,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -104,7 +106,6 @@ import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
@@ -144,6 +145,11 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
@@ -1562,8 +1568,8 @@ public class LocalMetastore implements ConnectorMetadata {
         if (isTempPartition) {
             olapTable.dropTempPartition(partitionName, true);
         } else {
+            Partition partition = olapTable.getPartition(partitionName);
             if (!clause.isForceDrop()) {
-                Partition partition = olapTable.getPartition(partitionName);
                 if (partition != null) {
                     if (stateMgr.getGlobalTransactionMgr()
                             .existCommittedTxns(db.getId(), olapTable.getId(), partition.getId())) {
@@ -1575,10 +1581,14 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             }
+            Range<PartitionKey> partitionRange = null;
+            if (partitionInfo instanceof RangePartitionInfo && partition != null) {
+                partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+            }
             olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
             if (olapTable instanceof MaterializedView) {
                 MaterializedView mv = (MaterializedView) olapTable;
-                SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName);
+                SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName, partitionRange);
             }
             try {
                 for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
@@ -1945,7 +1955,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 List<Map.Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
                 List<Map.Entry<Long, Long>> firstThree =
                         unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
-                StringBuilder sb = new StringBuilder("fail to create tablet: timed out. unfinished replicas");
+                StringBuilder sb = new StringBuilder("Table creation timed out. unfinished replicas");
                 sb.append("(").append(firstThree.size()).append("/").append(unfinishedMarks.size()).append("): ");
                 // Show details of the first 3 unfinished tablets.
                 for (Map.Entry<Long, Long> mark : firstThree) {
@@ -1955,11 +1965,23 @@ public class LocalMetastore implements ConnectorMetadata {
                     sb.append(backend != null ? backend.getHost() : "N/A");
                     sb.append(") ");
                 }
-                sb.append(" timeout=").append(timeout).append("s");
+                sb.append(" timeout=").append(timeout).append('s');
                 String errMsg = sb.toString();
                 LOG.warn(errMsg);
+
+                String userErrorMsg = String.format(
+                        "Table creation timed out.\n You can increase the timeout by increasing the " +
+                        "config \"tablet_create_timeout_second\" and try again.\n" +
+                        "To increase the config \"tablet_create_timeout_second\" (currently %d), run the following command:\n" +
+                        "```\nadmin set frontend config(\"tablet_create_timeout_second\"=\"%d\")\n```\n" +
+                        "or add the following configuration to the fe.conf file and restart the process:\n" +
+                        "```\ntablet_create_timeout_second=%d\n```",
+                        Config.tablet_create_timeout_second,
+                        Config.tablet_create_timeout_second * 2,
+                        Config.tablet_create_timeout_second * 2
+                        );
                 countDownLatch.countDownToZero(new Status(TStatusCode.TIMEOUT, "timed out"));
-                throw new DdlException(errMsg);
+                throw new DdlException(userErrorMsg);
             }
         } catch (InterruptedException e) {
             LOG.warn(e);
@@ -3903,14 +3925,6 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public long loadCluster(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() <= StarRocksFEMetaVersion.VERSION_3) {
-            return loadClusterV1(dis, checksum);
-        } else {
-            return loadClusterV2(dis, checksum);
-        }
-    }
-
-    public long loadClusterV1(DataInputStream dis, long checksum) throws IOException {
         int clusterCount = dis.readInt();
         checksum ^= clusterCount;
         for (long i = 0; i < clusterCount; ++i) {
@@ -3957,28 +3971,6 @@ public class LocalMetastore implements ConnectorMetadata {
             defaultCluster = cluster;
         }
         LOG.info("finished replay cluster from image");
-        return checksum;
-    }
-
-    // put built-in database into cluster
-    public long loadClusterV2(DataInputStream dis, long checksum) throws IOException {
-        InfoSchemaDb infoSchemaDb = new InfoSchemaDb();
-        Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
-                "InfoSchemaDb id shouldn't larger than " + NEXT_ID_INIT_VALUE);
-        idToDb.put(infoSchemaDb.getId(), infoSchemaDb);
-        fullNameToDb.put(infoSchemaDb.getFullName(), infoSchemaDb);
-
-        if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
-            LOG.warn("Since the the database of starrocks already exists, " +
-                    "the system will not automatically create the database of starrocks for system.");
-        } else {
-            StarRocksDb starRocksDb = new StarRocksDb();
-            Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
-                    "starocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
-            idToDb.put(starRocksDb.getId(), starRocksDb);
-            fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
-        }
-
         return checksum;
     }
 
@@ -4718,6 +4710,84 @@ public class LocalMetastore implements ConnectorMetadata {
         Long oldId = tableIdToIncrementId.putIfAbsent(tableId, id);
         if (oldId != null) {
             tableIdToIncrementId.replace(tableId, id);
+        }
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        // Don't write system db meta
+        Map<Long, Database> idToDbNormal = idToDb.entrySet().stream().filter(entry -> entry.getKey() > NEXT_ID_INIT_VALUE)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        int tableSize = 0;
+        for (Database database : idToDbNormal.values()) {
+            tableSize += database.getTableNumber();
+        }
+        int cnt = 1 + idToDbNormal.size() + tableSize + 1;
+
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.LOCAL_META_STORE, cnt);
+
+        writer.writeJson(idToDbNormal.size());
+        for (Database database : idToDbNormal.values()) {
+            writer.writeJson(database);
+            List<Table> tables = database.getTables();
+            for (Table table : tables) {
+                writer.writeJson(table);
+            }
+        }
+
+        AutoIncrementInfo info = new AutoIncrementInfo(tableIdToIncrementId);
+        writer.writeJson(info);
+
+        writer.close();
+    }
+
+    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.LOCAL_META_STORE);
+        try {
+            int dbSize = reader.readJson(int.class);
+            for (int i = 0; i < dbSize; ++i) {
+                Database db = reader.readJson(Database.class);
+                int tableSize = reader.readInt();
+                for (int j = 0; j < tableSize; ++j) {
+                    Table table = reader.readJson(Table.class);
+                    db.createTableWithLock(table, true);
+                }
+
+                idToDb.put(db.getId(), db);
+                fullNameToDb.put(db.getFullName(), db);
+                stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
+                db.getMaterializedViews().forEach(Table::onCreate);
+                db.getHiveTables().forEach(Table::onCreate);
+            }
+
+
+            // put built-in database into local metastore
+            InfoSchemaDb infoSchemaDb = new InfoSchemaDb();
+            Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
+                    "InfoSchemaDb id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+            idToDb.put(infoSchemaDb.getId(), infoSchemaDb);
+            fullNameToDb.put(infoSchemaDb.getFullName(), infoSchemaDb);
+
+            if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
+                LOG.warn("Since the the database of starrocks already exists, " +
+                        "the system will not automatically create the database of starrocks for system.");
+            } else {
+                StarRocksDb starRocksDb = new StarRocksDb();
+                Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
+                        "starocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+                idToDb.put(starRocksDb.getId(), starRocksDb);
+                fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
+            }
+
+            AutoIncrementInfo autoIncrementInfo = reader.readJson(AutoIncrementInfo.class);
+            for (Map.Entry<Long, Long> entry : autoIncrementInfo.tableIdToIncrementId().entrySet()) {
+                Long tableId = entry.getKey();
+                Long id = entry.getValue();
+
+                tableIdToIncrementId.put(tableId, id);
+            }
+
+        } finally {
+            reader.close();
         }
     }
 }

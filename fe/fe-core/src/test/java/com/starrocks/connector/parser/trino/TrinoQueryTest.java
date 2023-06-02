@@ -249,6 +249,13 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "  |  order by: 3: v3 ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
+        sql = "select cume_dist() over(partition by v2 order by v3) from t0";
+        assertPlanContains(sql, " 2:ANALYTIC\n" +
+                "  |  functions: [, cume_dist(), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
         sql =
                 "select sum(v1) over(partition by v2 order by v3 range between unbounded preceding and unbounded following) " +
                         "from t0";
@@ -920,5 +927,26 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select coalesce(try(100 / v1), 1) from t0 where v1 = 0";
         assertPlanContains(sql, "coalesce(100.0 / CAST(1: v1 AS DOUBLE), 1.0)");
+    }
+
+    @Test
+    public void testUnaryExpression() throws Exception {
+        String sql = "select -abs(1);";
+        assertPlanContains(sql, "-1 * CAST(abs(1) AS INT)");
+
+        sql = "select +abs(-1);";
+        assertPlanContains(sql, "abs(-1)");
+
+        sql = "select \n" +
+                "  - if(\n" +
+                "    day_of_week(\n" +
+                "      cast('2023-01-01' AS date)\n" +
+                "    )= 7, \n" +
+                "    0, \n" +
+                "    day_of_week(\n" +
+                "      cast('2023-01-01' AS date)\n" +
+                "    )\n" +
+                "  );";
+        assertPlanContains(sql, "-1 * CAST(if(3: dayofweek = 7, 0, 3: dayofweek) AS BIGINT)");
     }
 }

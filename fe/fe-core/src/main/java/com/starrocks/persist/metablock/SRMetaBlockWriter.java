@@ -43,16 +43,26 @@ import java.util.zip.CheckedOutputStream;
  * Usage see com.starrocks.persist.metablock.SRMetaBlockTest#testSimple()
  */
 public class SRMetaBlockWriter {
-    private CheckedOutputStream checkedOutputStream;
-    private SRMetaBlockHeader header;
+    private final CheckedOutputStream checkedOutputStream;
+    private final SRMetaBlockHeader header;
     private int numJsonWritten;
 
+    @Deprecated
     public SRMetaBlockWriter(DataOutputStream dos, String name, int numJson) throws SRMetaBlockException {
         if (numJson <= 0) {
             throw new SRMetaBlockException(String.format("invalid numJson: %d", numJson));
         }
         this.checkedOutputStream = new CheckedOutputStream(dos, new CRC32());
         this.header = new SRMetaBlockHeader(name, numJson);
+        this.numJsonWritten = 0;
+    }
+
+    public SRMetaBlockWriter(DataOutputStream dos, SRMetaBlockID id, int numJson) throws SRMetaBlockException {
+        if (numJson <= 0) {
+            throw new SRMetaBlockException(String.format("invalid numJson: %d", numJson));
+        }
+        this.checkedOutputStream = new CheckedOutputStream(dos, new CRC32());
+        this.header = new SRMetaBlockHeader(id, numJson);
         this.numJsonWritten = 0;
     }
 

@@ -47,6 +47,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.rpc.FrontendServiceProxy;
@@ -762,7 +763,7 @@ public class GlobalTransactionMgr implements Writable {
     public void loadTransactionStateV2(DataInputStream dis)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         long now = System.currentTimeMillis();
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, GlobalTransactionMgr.class.getName());
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.GLOBAL_TRANSACTION_MGR);
         try {
             idGenerator = reader.readJson(TransactionIdGenerator.class);
             int numTransactions = reader.readInt();
@@ -841,7 +842,7 @@ public class GlobalTransactionMgr implements Writable {
     public void saveTransactionStateV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
         int txnNum = getTransactionNum();
         final int cnt = 2 + txnNum;
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, GlobalTransactionMgr.class.getName(), cnt);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.GLOBAL_TRANSACTION_MGR, cnt);
         writer.writeJson(idGenerator);
         writer.writeJson(txnNum);
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {

@@ -36,6 +36,7 @@ class LocationProvider;
 class Tablet;
 class MetaFileBuilder;
 class UpdateManager;
+class AutoIncrementPartialUpdateState;
 
 class LakeDelvecLoader : public DelvecLoader {
 public:
@@ -73,7 +74,8 @@ public:
     Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
                              const TabletSchema& tablet_schema, std::vector<uint32_t>& column_ids, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                             vector<std::unique_ptr<Column>>* columns);
+                             vector<std::unique_ptr<Column>>* columns,
+                             AutoIncrementPartialUpdateState* auto_increment_state = nullptr);
     // get delvec by version
     Status get_del_vec(const TabletSegmentId& tsid, int64_t version, const MetaFileBuilder* builder,
                        DelVectorPtr* pdelvec);

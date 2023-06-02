@@ -107,6 +107,7 @@ import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.cluster.Cluster;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigRefreshDaemon;
@@ -734,10 +735,10 @@ public class GlobalStateMgr {
 
         this.binlogManager = new BinlogManager();
 
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-            this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
-        } else if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.getCurrentRunMode().isAllowCreateLakeTable()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
+        } else {
+            this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
 
         GlobalStateMgr gsm = this;
@@ -1258,6 +1259,14 @@ public class GlobalStateMgr {
             feType = oldType;
             throw t;
         }
+
+        if (RunMode.allowCreateLakeTable()) {
+            try {
+                ((SharedDataStorageVolumeMgr) storageVolumeMgr).createOrUpdateBuiltinStorageVolume();
+            } catch (DdlException | AnalysisException | AlreadyExistsException e) {
+                LOG.warn("Failed to create or update builtin storage volume", e);
+            }
+        }
     }
 
     // start all daemon threads only running on Master
@@ -1416,47 +1425,44 @@ public class GlobalStateMgr {
             checksum = loadVersion(dis, checksum);
             if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() >= StarRocksFEMetaVersion.VERSION_4) {
                 try {
-                    checksum = loadHeaderV2(dis, checksum);
+                    loadHeaderV2(dis, checksum);
                     nodeMgr.load(dis);
-                    loadMgr.loadLoadJobsV2JsonFormat(dis);
+                    localMetastore.load(dis);
+                    // ATTN: this should be done after load Db, and before loadAlterJob
+                    localMetastore.recreateTabletInvertIndex();
                     alterJobMgr.load(dis);
+                    // rebuild es state state
+                    esRepository.loadTableFromCatalog();
+                    starRocksRepository.loadTableFromCatalog();
+                    recycleBin.load(dis);
+                    VariableMgr.load(dis);
+                    resourceMgr.loadResourcesV2(dis, catalogMgr);
+                    exportMgr.loadExportJobV2(dis);
+                    backupHandler.loadBackupHandlerV2(dis);
+                    auth.load(dis);
+                    // global transaction must be replayed before load jobs v2
+                    globalTransactionMgr.loadTransactionStateV2(dis);
+                    colocateTableIndex.loadColocateTableIndexV2(dis);
+                    routineLoadMgr.loadRoutineLoadJobsV2(dis);
+                    loadMgr.loadLoadJobsV2JsonFormat(dis);
+                    smallFileMgr.loadSmallFilesV2(dis);
                     pluginMgr.load(dis);
                     deleteMgr.load(dis);
                     analyzeMgr.load(dis);
                     resourceGroupMgr.load(dis);
-                    routineLoadMgr.loadRoutineLoadJobsV2(dis);
-                    globalTransactionMgr.loadTransactionStateV2(dis);
-                    auth.load(dis);
                     authenticationMgr.loadV2(dis);
                     authorizationMgr.loadV2(dis);
-                    exportMgr.loadExportJobV2(dis);
-                    smallFileMgr.loadSmallFilesV2(dis);
+                    taskManager.loadTasksV2(dis);
                     catalogMgr.load(dis);
                     insertOverwriteJobMgr.load(dis);
                     compactionMgr.load(dis);
                     streamLoadMgr.load(dis);
                     MaterializedViewMgr.getInstance().load(dis);
                     globalFunctionMgr.load(dis);
-                    backupHandler.loadBackupHandlerV2(dis);
                 } catch (SRMetaBlockException | SRMetaBlockEOFException e) {
                     LOG.error("load image failed", e);
                     throw new IOException("load image failed", e);
                 }
-
-                //TODO: The following parts have not been refactored, and they are added for the convenience of testing
-                checksum = localMetastore.loadDb(dis, checksum);
-                // ATTN: this should be done after load Db, and before loadAlterJob
-                localMetastore.recreateTabletInvertIndex();
-                // rebuild es state state
-                esRepository.loadTableFromCatalog();
-                starRocksRepository.loadTableFromCatalog();
-                checksum = recycleBin.loadRecycleBin(dis, checksum);
-                checksum = VariableMgr.loadGlobalVariable(dis, checksum);
-                checksum = localMetastore.loadCluster(dis, checksum);
-                checksum = loadResources(dis, checksum);
-                checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
-                checksum = taskManager.loadTasks(dis, checksum);
-                checksum = localMetastore.loadAutoIncrementId(dis, checksum);
             } else {
                 checksum = loadHeaderV1(dis, checksum);
                 checksum = nodeMgr.loadLeaderInfo(dis, checksum);
@@ -1517,14 +1523,14 @@ public class GlobalStateMgr {
                 checksum = localMetastore.loadAutoIncrementId(dis, checksum);
                 remoteChecksum = dis.readLong();
                 // ** NOTICE **: always add new code at the end
+
+                Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
             }
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
             dis.close();
         }
-
-        Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
 
         if (isUsingNewPrivilege() && needUpgradedToNewPrivilege() && !isLeader() && !isCheckpointThread()) {
             LOG.warn(
@@ -1805,41 +1811,36 @@ public class GlobalStateMgr {
                 try {
                     checksum = saveHeaderV2(dos, checksum);
                     nodeMgr.save(dos);
-                    loadMgr.saveLoadJobsV2JsonFormat(dos);
+                    localMetastore.save(dos);
                     alterJobMgr.save(dos);
+                    recycleBin.save(dos);
+                    VariableMgr.save(dos);
+                    resourceMgr.saveResourcesV2(dos);
+                    exportMgr.saveExportJobV2(dos);
+                    backupHandler.saveBackupHandlerV2(dos);
+                    auth.save(dos);
+                    globalTransactionMgr.saveTransactionStateV2(dos);
+                    colocateTableIndex.saveColocateTableIndexV2(dos);
+                    routineLoadMgr.saveRoutineLoadJobsV2(dos);
+                    loadMgr.saveLoadJobsV2JsonFormat(dos);
+                    smallFileMgr.saveSmallFilesV2(dos);
                     pluginMgr.save(dos);
                     deleteMgr.save(dos);
                     analyzeMgr.save(dos);
                     resourceGroupMgr.save(dos);
-                    routineLoadMgr.saveRoutineLoadJobsV2(dos);
-                    globalTransactionMgr.saveTransactionStateV2(dos);
-                    auth.save(dos);
                     authenticationMgr.saveV2(dos);
                     authorizationMgr.saveV2(dos);
-                    exportMgr.saveExportJobV2(dos);
-                    smallFileMgr.saveSmallFilesV2(dos);
+                    taskManager.saveTasksV2(dos);
                     catalogMgr.save(dos);
                     insertOverwriteJobMgr.save(dos);
                     compactionMgr.save(dos);
                     streamLoadMgr.save(dos);
                     MaterializedViewMgr.getInstance().save(dos);
                     globalFunctionMgr.save(dos);
-                    backupHandler.saveBackupHandlerV2(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("save image failed", e);
                     throw new IOException("save image failed", e);
                 }
-
-                //TODO: The following parts have not been refactored, and they are added for the convenience of testing
-                checksum = localMetastore.saveDb(dos, checksum);
-                checksum = recycleBin.saveRecycleBin(dos, checksum);
-                checksum = VariableMgr.saveGlobalVariable(dos, checksum);
-                checksum = localMetastore.saveCluster(dos, checksum);
-                checksum = resourceMgr.saveResources(dos, checksum);
-                checksum = colocateTableIndex.saveColocateTableIndex(dos, checksum);
-                checksum = taskManager.saveTasks(dos, checksum);
-                checksum = localMetastore.saveAutoIncrementId(dos, checksum);
-
             } else {
                 checksum = saveVersion(dos, checksum);
                 checksum = saveHeader(dos, replayedJournalId, checksum);
@@ -1862,6 +1863,7 @@ public class GlobalStateMgr {
                 checksum = routineLoadMgr.saveRoutineLoadJobs(dos, checksum);
                 checksum = loadMgr.saveLoadJobsV2(dos, checksum);
                 checksum = smallFileMgr.saveSmallFiles(dos, checksum);
+
                 checksum = pluginMgr.savePlugins(dos, checksum);
                 checksum = deleteMgr.saveDeleteHandler(dos, checksum);
                 dos.writeLong(checksum);

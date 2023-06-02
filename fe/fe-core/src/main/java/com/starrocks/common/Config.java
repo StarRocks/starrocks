@@ -1953,6 +1953,12 @@ public class Config extends ConfigBase {
     public static boolean enable_shuffle_load = true;
 
     /**
+     * Eliminate shuffle load by replicated storage
+     */
+    @ConfField(mutable = true)
+    public static boolean eliminate_shuffle_load_by_replicated_storage = true;
+
+    /**
      * Unused config field, leave it here for backward compatibility
      */
     @Deprecated
@@ -2020,7 +2026,7 @@ public class Config extends ConfigBase {
     public static int cloud_native_meta_port = 6090;
     // remote storage related configuration
     /**
-     * storage type for cloud native table. Available options: "S3", "HDFS", case-sensitive
+     * storage type for cloud native table. Available options: "S3", "HDFS", "AZBLOB". case-insensitive
      */
     @ConfField
     public static String cloud_native_storage_type = "S3";

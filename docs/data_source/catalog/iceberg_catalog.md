@@ -21,7 +21,7 @@ To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster 
   - Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
   - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
 
-- Iceberg catalogs do not support Iceberg v2 tables.
+- Iceberg catalogs support v1 tables. v2 tables are supported from v3.0 onwards.
 
 ## Integration preparations
 
@@ -223,6 +223,8 @@ For information about how to choose an authentication method for accessing AWS S
 
 ##### S3-compatible storage system
 
+Iceberg catalogs support S3-compatible storage systems from v2.5 onwards.
+
 If you choose an S3-compatible storage system, such as MinIO, as storage for your Iceberg cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
 
 ```SQL
@@ -244,6 +246,8 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.secret_key                | Yes      | The secret key of your IAM user. |
 
 ##### Microsoft Azure Storage
+
+Iceberg catalogs support Microsoft Azure Storage from v3.0 onwards.
 
 ###### Azure Blob Storage
 
@@ -362,6 +366,8 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
   | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
 
 ##### Google GCS
+
+Iceberg catalogs support Google GCS from v3.0 onwards.
 
 If you choose Google GCS as storage for your Iceberg cluster, take one of the following actions:
 
