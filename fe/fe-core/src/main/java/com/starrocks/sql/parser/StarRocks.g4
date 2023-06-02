@@ -1703,7 +1703,7 @@ showSmallFilesStatement
 // -------------------------------------------- Pipe Statement ---------------------------------------------------------
 
 createPipeStatement
-    : CREATE PIPE (IF NOT EXISTS)? identifier
+    : CREATE PIPE (IF NOT EXISTS)? pipeName=identifier
         AS insertStatement
     ;
 

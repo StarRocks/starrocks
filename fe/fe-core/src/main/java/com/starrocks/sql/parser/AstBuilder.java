@@ -3718,7 +3718,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // -------------------------------------------- Pipe Statement -----------------------------------------------------
     @Override
     public ParseNode visitCreatePipeStatement(StarRocksParser.CreatePipeStatementContext context) {
-        String pipeName = String.valueOf((Identifier) visit(context.identifier()));
+        String pipeName = ((Identifier) visit(context.pipeName)).getValue();
         boolean ifNotExists = context.IF() != null;
         ParseNode insertNode = visit(context.insertStatement());
         if (!(insertNode instanceof InsertStmt)) {
