@@ -151,12 +151,6 @@ public class Group {
         if (lowestCostExpressions.containsKey(physicalPropertySet)) {
             if (lowestCostExpressions.get(physicalPropertySet).first > cost) {
                 lowestCostExpressions.put(physicalPropertySet, new Pair<>(cost, expression));
-            } else {
-                for (PhysicalPropertySet test : lowestCostExpressions.keySet()) {
-                    if (physicalPropertySet.equals(test)) {
-                        physicalPropertySet.setDistributionProperty(test.getDistributionProperty());
-                    }
-                }
             }
         } else {
             lowestCostExpressions.put(physicalPropertySet, new Pair<>(cost, expression));

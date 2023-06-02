@@ -525,11 +525,16 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         groupExpression.getGroup().setBestExpression(enforcer, curTotalCost, newOutputProperty);
     }
 
+    // need to return the same out
     private PhysicalPropertySet updateCostAndOutputPropertySet(GroupExpression enforcer,
                                                                PhysicalPropertySet oldOutputProperty,
                                                                PhysicalPropertySet requiredPropertySet) {
         context.getOptimizerContext().getMemo().insertEnforceExpression(enforcer, groupExpression.getGroup());
         curTotalCost += CostModel.calculateCost(enforcer);
+        // if there already has a lower cost enforcer meet the requirement, we need use the same
+        // output propertySet object, or the distributionDesc object in requirementProperty and
+        // PhysicalDistributionOperator are two different objects. When clearing redundant shuffle columns,
+        // the other value remains unchanged, which will affect subsequent processing.
         PhysicalPropertySet newOutputProperty = groupExpression.getGroup().updateOutputPropertySet(enforcer, curTotalCost,
                 requiredPropertySet);
         if (enforcer.updatePropertyWithCost(newOutputProperty, Lists.newArrayList(oldOutputProperty), curTotalCost)) {
