@@ -435,22 +435,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 db.getId(), tableId, stmt.getKafkaBrokerList(), stmt.getKafkaTopic());
         kafkaRoutineLoadJob.setOptional(stmt);
         kafkaRoutineLoadJob.checkCustomProperties();
-        kafkaRoutineLoadJob.checkCustomPartition(kafkaRoutineLoadJob.customKafkaPartitions);
 
         return kafkaRoutineLoadJob;
-    }
-
-    private void checkCustomPartition(List<Integer> customKafkaPartitions) throws UserException {
-        if (customKafkaPartitions.isEmpty()) {
-            return;
-        }
-        List<Integer> allKafkaPartitions = getAllKafkaPartitions();
-        for (Integer customPartition : customKafkaPartitions) {
-            if (!allKafkaPartitions.contains(customPartition)) {
-                throw new LoadException("there is a custom kafka partition " + customPartition
-                        + " which is invalid for topic " + topic);
-            }
-        }
     }
 
     private void checkCustomProperties() throws DdlException {
@@ -627,13 +613,6 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                     if (! customKafkaPartitions.contains(pair.first)) {
                         throw new DdlException("The specified partition " + pair.first + " is not in the custom partitions");
                     }
-                }
-            } else {
-                // check if partition is validate
-                try {
-                    checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()));
-                } catch (UserException e) {
-                    throw new DdlException("The specified partition is not in the consumed partitions ", e);
                 }
             }
         }
