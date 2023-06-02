@@ -341,6 +341,8 @@ public class AlterJobMgr {
                 AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
                         materializedView.getId(), status);
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
+            } else if (stmt.getSwapTable() != null) {
+                processSwap(db, materializedView, Collections.singletonList(stmt.getSwapTable()));
             } else {
                 throw new DdlException("Unsupported modification for materialized view");
             }
@@ -700,8 +702,8 @@ public class AlterJobMgr {
             olapTable = (OlapTable) table;
 
             if (olapTable.getState() != OlapTableState.NORMAL) {
-                throw new DdlException(
-                        "Table[" + table.getName() + "]'s state is not NORMAL. Do not allow doing ALTER ops");
+                throw new DdlException("The state of \"" + table.getName() + "\" is " + olapTable.getState().name()
+                                       + ". Alter operation is only permitted if NORMAL");
             }
 
             if (currentAlterOps.hasSchemaChangeOp()) {
@@ -867,7 +869,7 @@ public class AlterJobMgr {
     }
 
     // entry of processing swap table
-    private void processSwap(Database db, OlapTable origTable, List<AlterClause> alterClauses) throws UserException {
+    private void processSwap(Database db, OlapTable origTable, List<AlterClause> alterClauses) throws DdlException {
         if (!(alterClauses.get(0) instanceof SwapTableClause)) {
             throw new DdlException("swap operation only support table");
         }
@@ -879,7 +881,7 @@ public class AlterJobMgr {
         String origTblName = origTable.getName();
         String newTblName = clause.getTblName();
         Table newTbl = db.getTable(newTblName);
-        if (newTbl == null || !newTbl.isOlapOrCloudNativeTable()) {
+        if (newTbl == null || !(newTbl.isOlapOrCloudNativeTable() || newTbl.isMaterializedView())) {
             throw new DdlException("Table " + newTblName + " does not exist or is not OLAP/LAKE table");
         }
         OlapTable olapNewTbl = (OlapTable) newTbl;
@@ -887,6 +889,12 @@ public class AlterJobMgr {
         // First, we need to check whether the table to be operated on can be renamed
         olapNewTbl.checkAndSetName(origTblName, true);
         origTable.checkAndSetName(newTblName, true);
+
+        if (origTable.isMaterializedView() || newTbl.isMaterializedView()) {
+            if (!(origTable.isMaterializedView() && newTbl.isMaterializedView())) {
+                throw new DdlException("Materialized view can only SWAP WITH materialized view");
+            }
+        }
 
         swapTableInternal(db, origTable, olapNewTbl);
 
@@ -936,6 +944,14 @@ public class AlterJobMgr {
         // rename origin table name to new table name and add it to database
         origTable.checkAndSetName(newTblName, false);
         db.createTable(origTable);
+
+        // swap dependencies of base table
+        if (origTable.isMaterializedView()) {
+            MaterializedView oldMv = (MaterializedView) origTable;
+            MaterializedView newMv = (MaterializedView) newTbl;
+            updateTaskDefinition(oldMv);
+            updateTaskDefinition(newMv);
+        }
     }
 
     public void processAlterView(AlterViewStmt stmt, ConnectContext ctx) throws UserException {

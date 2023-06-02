@@ -216,7 +216,6 @@ public class LoadPlanner {
         this.label = label;
         this.timeoutS = timeoutS;
         this.etlJobType = EtlJobType.STREAM_LOAD;
-        this.context.getSessionVariable().setEnableResourceGroup(false);
         if (Config.enable_pipeline_load) {
             this.context.getSessionVariable().setEnablePipelineEngine(true);
         }

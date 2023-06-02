@@ -1591,9 +1591,8 @@ public class CoordinatorPreprocessor {
                     commonParams.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
                     commonParams.params.setEnable_exchange_perf(sessionVariable.isEnableExchangePerf());
 
-                    boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
-                    commonParams.setEnable_resource_group(enableResourceGroup);
-                    if (enableResourceGroup && resourceGroup != null) {
+                    commonParams.setEnable_resource_group(true);
+                    if (resourceGroup != null) {
                         commonParams.setWorkgroup(resourceGroup);
                     }
                     if (fragment.isUseRuntimeAdaptiveDop()) {
