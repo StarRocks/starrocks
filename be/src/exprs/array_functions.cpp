@@ -94,11 +94,12 @@ static StatusOr<ColumnPtr> do_array_append(const Column& elements, const UInt32C
 
 // FIXME: A proof-of-concept implementation with poor performance.
 StatusOr<ColumnPtr> ArrayFunctions::array_append([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    const Column* arg0 = columns[0].get();
-    const Column* arg1 = columns[1].get();
-    if (arg0->only_null()) {
+    if (columns[0]->only_null()) {
         return columns[0];
     }
+
+    const Column* arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]).get();
+    const Column* arg1 = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]).get();
 
     arg0 = arg0->has_null() || arg0->is_constant() ? arg0 : ColumnHelper::get_data_column(arg0);
     arg1 = arg1->has_null() || arg1->is_constant() ? arg1 : ColumnHelper::get_data_column(arg1);
@@ -473,8 +474,8 @@ DEFINE_ARRAY_CUMSUM_FN(double, TYPE_DOUBLE)
 #undef DEFINE_ARRAY_CUMSUM_FN
 
 StatusOr<ColumnPtr> ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    const ColumnPtr& arg0 = columns[0]; // array
-    const ColumnPtr& arg1 = columns[1]; // element
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]); // element
 
     return ArrayRemoveImpl::evaluate(arg0, arg1);
 }
@@ -969,31 +970,31 @@ private:
 };
 
 StatusOr<ColumnPtr> ArrayFunctions::array_contains([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    const ColumnPtr& arg0 = columns[0]; // array
-    const ColumnPtr& arg1 = columns[1]; // element
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]); // element
 
     return ArrayContainsImpl<false, UInt8Column>::evaluate(*arg0, *arg1);
 }
 
 StatusOr<ColumnPtr> ArrayFunctions::array_position([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    const ColumnPtr& arg0 = columns[0]; // array
-    const ColumnPtr& arg1 = columns[1]; // element
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]); // element
 
     return ArrayContainsImpl<true, Int32Column>::evaluate(*arg0, *arg1);
 }
 
 StatusOr<ColumnPtr> ArrayFunctions::array_contains_any([[maybe_unused]] FunctionContext* context,
                                                        const Columns& columns) {
-    const ColumnPtr& arg0 = columns[0]; // array
-    const ColumnPtr& arg1 = columns[1]; // element
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]); // element
 
     return ArrayHasImpl<true>::evaluate(*arg0, *arg1);
 }
 
 StatusOr<ColumnPtr> ArrayFunctions::array_contains_all([[maybe_unused]] FunctionContext* context,
                                                        const Columns& columns) {
-    const ColumnPtr& arg0 = columns[0]; // array
-    const ColumnPtr& arg1 = columns[1]; // element
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]); // element
 
     return ArrayHasImpl<false>::evaluate(*arg0, *arg1);
 }
