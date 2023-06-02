@@ -13,8 +13,23 @@
   + [Load and query data](./quick_start/Import_and_query.md)
 + Table Design
   + [Understand StarRocks table design](./table_design/StarRocks_table_design.md)
+<<<<<<< HEAD
   + [Data models](./table_design/Data_model.md)
   + [Data distribution](./table_design/Data_distribution.md)
+=======
+  + Table types
+    + [Overview of table types](./table_design/table_types/table_types.md)
+    + [Duplicate Key table](./table_design/table_types/duplicate_key_table.md)
+    + [Aggregate table](./table_design/table_types/aggregate_table.md)
+    + [Unique Key table](./table_design/table_types/unique_key_table.md)
+    + [Primary Key table](./table_design/table_types/primary_key_table.md)
+  + Data distribution
+    + [Data distribution](./table_design/Data_distribution.md)
+    + [Automatic partitioning](./table_design/automatic_partitioning.md)
+    + [Dynamic partitioning](./table_design/dynamic_partitioning.md)
+    + [Temporary partition](./table_design/Temporary_partition.md)
+  + [Data compression](./table_design/data_compression.md)
+>>>>>>> 620865e4c ([Doc] Add temporary partitions (#24553))
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
   + Concepts
