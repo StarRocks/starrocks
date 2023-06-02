@@ -694,10 +694,8 @@ private:
     void _evaluate_min_max(const CppType* values, uint8_t* selection, size_t size) const {
         if constexpr (!IsSlice<CppType>) {
             for (size_t i = 0; i < size; i++) {
-                selection[i] = (values[i] >= _min && values[i] <= _max);
+                selection[i] = (selection[i] && values[i] >= _min && values[i] <= _max);
             }
-        } else {
-            memset(selection, 0x1, size);
         }
     }
 
