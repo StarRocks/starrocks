@@ -112,7 +112,7 @@ union
 select k1, v1, v2 from t2;
 -- result:
 -- !result
-insert into t2 values (202301,1,1),(202305,1,2);
+insert into t1 values (202301,1,1),(202305,1,2);
 -- result:
 -- !result
 select sleep(2);
