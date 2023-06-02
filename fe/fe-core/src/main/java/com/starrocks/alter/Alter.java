@@ -667,8 +667,8 @@ public class Alter {
             olapTable = (OlapTable) table;
 
             if (olapTable.getState() != OlapTableState.NORMAL) {
-                throw new DdlException(
-                        "Table[" + table.getName() + "]'s state is not NORMAL. Do not allow doing ALTER ops");
+                throw new DdlException("The state of \"" + table.getName() + "\" is " + olapTable.getState().name()
+                                       + ". Alter operation is only permitted if NORMAL");
             }
 
             if (currentAlterOps.hasSchemaChangeOp()) {
