@@ -45,8 +45,9 @@ It is used to describe imported data. Syntax:
 
 [WHERE <expr>],
 
-[PARTITION ([ <partition_name> [, ...] ])]
+[PARTITION (<partition1_name>[, <partition2_name>, ...])]
 
+[TEMPORARY PARTITION (<temporary_partition1_name>[, <temporary_partition2_name>, ...])]
 
 
 column_assignment:
@@ -101,6 +102,10 @@ It specifies which partitions to import into the destination table. If not speci
 ```Plain%20Text
 PARTITION(p1, p2, p3)
 ```
+
+- `TEMPORARY PARTITION`
+
+The name of the [temporary partition](../../../table_design/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).
 
 ### job_properties
 
