@@ -18,9 +18,9 @@ SHOW VARIABLES LIKE '%time_zone%';
 
 ### Set variables
 
-Variables can generally be set to take effect **globally** or **only on the current session**. When set to global, a new value will be used in subsequent new sessions without affecting the current session. When set to "current session only", the variable will only take effect on the current session.
+You can set variables to take effect **globally** or **only on the current session**. When set to global, the new value will be used for subsequent new sessions, while the current session still uses the original value. When set to "current session only", the variable will only take effect on the current session.
 
-A variable set by `SET var_name=xxx;` only takes effect for the current session. For example:
+A variable set by `SET var_name=xxx;` only takes effect for the current session. Example:
 
 ```SQL
 SET exec_mem_limit = 137438953472;
@@ -30,15 +30,15 @@ SET forward_to_master = true;
 SET time_zone = "Asia/Shanghai";
 ```
 
-A variable set by the `SET GLOBAL var_name=xxx;` statement takes effect globally. For example:
+A variable set by `SET GLOBAL var_name=xxx;` takes effect globally. Example:
 
 ```SQL
 SET GLOBAL exec_mem_limit = 137438953472;
 ```
 
-> Note: Only ADMIN users can set variables to be globally effective. Globally effective variables do not affect the current session, only subsequent new sessions.
+> Note: Only users with the ADMIN_PRIV privilege can set variables to be globally effective. Globally effective variables do not affect the current session, only subsequent new sessions.
 
-Variables that can be set both globally or partially effective include:
+Variables that can take effect both globally and at the session level include:
 
 * batch_size
 * disable_streaming_preaggregations
@@ -298,7 +298,7 @@ SELECT /*+ SET_VAR
 
 * max_allowed_packet
 
-  Used for compatibility with the JDBC connection pool C3P0. This parameter specifies the maximum size of packets that can be transmitted between the client and server. Default value: 32 MB. You can raise this value if the client reports "PacketTooBigException".
+  Used for compatibility with the JDBC connection pool C3P0. This parameter specifies the maximum size of packets that can be transmitted between the client and server. Default value: 32 MB. Unit: Byte. You can raise this value if the client reports "PacketTooBigException".
 
 * max_pushdown_conditions_per_column
 

@@ -77,9 +77,11 @@ import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.load.DeleteHandler;
@@ -97,6 +99,7 @@ import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
@@ -162,10 +165,13 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -626,6 +632,7 @@ public class ShowExecutor {
         ShowTableStatusStmt showStmt = (ShowTableStatusStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
         Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDb());
+        ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
         if (db != null) {
             db.readLock();
             try {
@@ -646,16 +653,51 @@ public class ShowExecutor {
                         continue;
                     }
 
+                    TTableInfo info = new TTableInfo();
+                    if (table.isMaterializedView() || table.getType() == Table.TableType.OLAP_EXTERNAL) {
+                        InformationSchemaDataSource.genNormalTableInfo(table, info);
+                    } else {
+                        InformationSchemaDataSource.genDefaultConfigInfo(info);
+                    }
+
                     List<String> row = Lists.newArrayList();
                     // Name
                     row.add(table.getName());
                     // Engine
                     row.add(table.getEngine());
-                    // version, ra
-                    for (int i = 0; i < 15; ++i) {
-                        row.add(null);
-                    }
+                    // Version
+                    row.add(null);
+                    // Row_format
+                    row.add("");
+                    // Rows
+                    row.add(String.valueOf(info.getTable_rows()));
+                    // Avg_row_length
+                    row.add(String.valueOf(info.getAvg_row_length()));
+                    // Data_length
+                    row.add(String.valueOf(info.getData_length()));
+                    // Max_data_length
+                    row.add(null);
+                    // Index_length
+                    row.add(null);
+                    // Data_free
+                    row.add(null);
+                    // Auto_increment
+                    row.add(null);
+                    // Create_time
+                    row.add(DateUtils.formatTimeStampInSeconds(table.getCreateTime(), currentTimeZoneId));
+                    // Update_time
+                    row.add(DateUtils.formatTimeStampInSeconds(info.getUpdate_time(), currentTimeZoneId));
+                    // Check_time
+                    row.add(null);
+                    // Collation
+                    row.add(InformationSchemaDataSource.UTF8_GENERAL_CI);
+                    // Checksum
+                    row.add(null);
+                    // Create_options
+                    row.add("");
+                    // Comment
                     row.add(table.getComment());
+
                     rows.add(row);
                 }
             } finally {
@@ -1373,7 +1415,6 @@ public class ShowExecutor {
                 } else if (showStmt.hasLimit()) {
                     sizeLimit = showStmt.getLimit();
                 }
-
                 boolean stop = false;
                 Collection<Partition> partitions = new ArrayList<Partition>();
                 if (showStmt.hasPartition()) {
@@ -1415,7 +1456,8 @@ public class ShowExecutor {
                             tabletInfos.addAll(procDir.fetchComparableResult(
                                     showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState()));
                         }
-                        if (sizeLimit > -1 && tabletInfos.size() >= sizeLimit) {
+                        if (sizeLimit > -1 && CollectionUtils.isEmpty(showStmt.getOrderByPairs())
+                                && tabletInfos.size() >= sizeLimit) {
                             stop = true;
                             break;
                         }
@@ -1434,7 +1476,7 @@ public class ShowExecutor {
                 }
                 Collections.sort(tabletInfos, comparator);
 
-                if (sizeLimit > -1 && tabletInfos.size() > sizeLimit) {
+                if (sizeLimit > -1 && tabletInfos.size() >= sizeLimit) {
                     tabletInfos = tabletInfos.subList((int) showStmt.getOffset(), (int) sizeLimit);
                 }
 

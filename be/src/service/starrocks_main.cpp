@@ -194,6 +194,7 @@ int main(int argc, char** argv) {
         cache_options.checksum = starrocks::config::block_cache_checksum_enable;
         cache_options.max_parcel_memory_mb = starrocks::config::block_cache_max_parcel_memory_mb;
         cache_options.max_concurrent_inserts = starrocks::config::block_cache_max_concurrent_inserts;
+        cache_options.lru_insertion_point = starrocks::config::block_cache_lru_insertion_point;
         EXIT_IF_ERROR(cache->init(cache_options));
     }
 #endif

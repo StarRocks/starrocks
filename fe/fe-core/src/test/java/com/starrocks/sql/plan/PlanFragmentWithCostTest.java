@@ -1594,6 +1594,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             cardinality.setRef(avgHighCardinality);
             sql = "select sum(v2) from t0 group by v2";
             plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: 2: v2");
+
             execPlan = getExecPlan(sql);
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
             Assert.assertEquals(0, olapScanNode.getBucketExprs().size());

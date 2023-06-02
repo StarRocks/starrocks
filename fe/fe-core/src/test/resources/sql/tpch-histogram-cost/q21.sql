@@ -49,7 +49,7 @@ limit: 100
 cardinality: 100
 column statistics:
 * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-* count-->[0.0, 40000.0, 0.0, 8.0, 40000.0] ESTIMATE
+* count-->[0.0, 2334116.9317591335, 0.0, 8.0, 40000.0] ESTIMATE
 
 PLAN FRAGMENT 1(F10)
 
@@ -64,7 +64,7 @@ OutPut Exchange Id: 28
 |  cardinality: 100
 |  column statistics:
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|  * count-->[0.0, 40000.0, 0.0, 8.0, 40000.0] ESTIMATE
+|  * count-->[0.0, 2334116.9317591335, 0.0, 8.0, 40000.0] ESTIMATE
 |
 26:AGGREGATE (merge finalize)
 |  aggregate: count[([77: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false]
@@ -72,7 +72,7 @@ OutPut Exchange Id: 28
 |  cardinality: 40000
 |  column statistics:
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|  * count-->[0.0, 40000.0, 0.0, 8.0, 40000.0] ESTIMATE
+|  * count-->[0.0, 2334116.9317591335, 0.0, 8.0, 40000.0] ESTIMATE
 |
 25:EXCHANGE
 cardinality: 40000
@@ -90,49 +90,42 @@ OutPut Exchange Id: 25
 |  cardinality: 40000
 |  column statistics:
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|  * count-->[0.0, 4799990.4000047995, 0.0, 8.0, 40000.0] ESTIMATE
+|  * count-->[0.0, 2334116.9317591335, 0.0, 8.0, 40000.0] ESTIMATE
 |
 23:Project
 |  output columns:
 |  2 <-> [2: S_NAME, VARCHAR, false]
-|  cardinality: 4799990
+|  cardinality: 2334117
 |  column statistics:
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |
 22:HASH JOIN
-|  join op: INNER JOIN (BUCKET_SHUFFLE)
-|  equal join conjunct: [26: O_ORDERKEY, INT, false] = [9: L_ORDERKEY, INT, false]
+|  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)
+|  equal join conjunct: [41: L_ORDERKEY, INT, false] = [9: L_ORDERKEY, INT, false]
+|  other join predicates: [43: L_SUPPKEY, INT, false] != [11: L_SUPPKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 4, build_expr = (9: L_ORDERKEY), remote = false
 |  output columns: 2
-|  cardinality: 4799990
+|  cardinality: 2334117
 |  column statistics:
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 4799990.4000047995] ESTIMATE
-|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 4799990.4000047995] ESTIMATE
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |
 |----21:EXCHANGE
-|       cardinality: 4799990
-|
-1:Project
-|  output columns:
-|  26 <-> [26: O_ORDERKEY, INT, false]
-|  cardinality: 72941300
-|  column statistics:
-|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 7.29413E7] ESTIMATE
+|       cardinality: 2334119
 |
 0:OlapScanNode
-table: orders, rollup: orders
+table: lineitem, rollup: lineitem
 preAggregation: on
-Predicates: [28: O_ORDERSTATUS, CHAR, false] = 'F'
-partitionsRatio=1/1, tabletsRatio=10/10
-actualRows=0, avgRowSize=9.0
-cardinality: 72941300
+partitionsRatio=1/1, tabletsRatio=20/20
+actualRows=0, avgRowSize=12.0
+cardinality: 600000000
 probe runtime filters:
-- filter_id = 4, probe_expr = (26: O_ORDERKEY)
+- filter_id = 4, probe_expr = (41: L_ORDERKEY)
 column statistics:
-* O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 7.29413E7] ESTIMATE
-* O_ORDERSTATUS-->[-Infinity, Infinity, 0.0, 1.0, 1.0] ESTIMATE
+* L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
+* L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 
 PLAN FRAGMENT 3(F01)
 
@@ -144,40 +137,49 @@ OutPut Exchange Id: 21
 |  output columns:
 |  2 <-> [2: S_NAME, VARCHAR, false]
 |  9 <-> [9: L_ORDERKEY, INT, false]
-|  cardinality: 4799990
+|  11 <-> [11: L_SUPPKEY, INT, false]
+|  cardinality: 2334119
 |  column statistics:
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 4799990.4000048] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2334119.2658784] ESTIMATE
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |
 19:HASH JOIN
-|  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)
-|  equal join conjunct: [41: L_ORDERKEY, INT, false] = [9: L_ORDERKEY, INT, false]
-|  other join predicates: [43: L_SUPPKEY, INT, false] != [11: L_SUPPKEY, INT, false]
+|  join op: INNER JOIN (BUCKET_SHUFFLE)
+|  equal join conjunct: [26: O_ORDERKEY, INT, false] = [9: L_ORDERKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 3, build_expr = (9: L_ORDERKEY), remote = false
-|  output columns: 2, 9
-|  cardinality: 4799990
+|  output columns: 2, 9, 11
+|  cardinality: 2334119
 |  column statistics:
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
-|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 4799990.4000048] ESTIMATE
-|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
-|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 4799990.4000048] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2334119.2658784] ESTIMATE
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 2334119.2658784] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |
 |----18:EXCHANGE
 |       cardinality: 4799995
 |
-2:OlapScanNode
-table: lineitem, rollup: lineitem
+2:Project
+|  output columns:
+|  26 <-> [26: O_ORDERKEY, INT, false]
+|  cardinality: 72941300
+|  column statistics:
+|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 7.29413E7] ESTIMATE
+|
+1:OlapScanNode
+table: orders, rollup: orders
 preAggregation: on
-partitionsRatio=1/1, tabletsRatio=20/20
-actualRows=0, avgRowSize=12.0
-cardinality: 600000000
+Predicates: [28: O_ORDERSTATUS, CHAR, false] = 'F'
+partitionsRatio=1/1, tabletsRatio=10/10
+actualRows=0, avgRowSize=9.0
+cardinality: 72941300
 probe runtime filters:
-- filter_id = 3, probe_expr = (41: L_ORDERKEY)
+- filter_id = 3, probe_expr = (26: O_ORDERKEY)
 column statistics:
-* L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
-* L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+* O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 7.29413E7] ESTIMATE
+* O_ORDERSTATUS-->[-Infinity, Infinity, 0.0, 1.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 4(F02)
 
@@ -192,9 +194,9 @@ OutPut Exchange Id: 18
 |  11 <-> [11: L_SUPPKEY, INT, false]
 |  cardinality: 4799995
 |  column statistics:
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 4799995.2] ESTIMATE
-|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |
 16:HASH JOIN
 |  join op: RIGHT ANTI JOIN (COLOCATE)
@@ -206,9 +208,9 @@ OutPut Exchange Id: 18
 |  output columns: 2, 9, 11
 |  cardinality: 4799995
 |  column statistics:
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 4799995.2] ESTIMATE
-|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 4799995.2] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |
@@ -219,9 +221,9 @@ OutPut Exchange Id: 18
 |    |  11 <-> [11: L_SUPPKEY, INT, false]
 |    |  cardinality: 12000000
 |    |  column statistics:
-|    |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
+|    |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
 |    |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.2E7] ESTIMATE
-|    |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
+|    |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |    |
 |    14:HASH JOIN
 |    |  join op: INNER JOIN (BROADCAST)
@@ -231,10 +233,11 @@ OutPut Exchange Id: 18
 |    |  output columns: 2, 9, 11
 |    |  cardinality: 12000000
 |    |  column statistics:
-|    |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
-|    |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
+|    |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE
+|    |  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |    |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.2E7] ESTIMATE
-|    |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
+|    |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|    |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |    |
 |    |----13:EXCHANGE
 |    |       cardinality: 40000

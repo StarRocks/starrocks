@@ -39,7 +39,7 @@ public:
 
 private:
 #ifndef BE_TEST
-    BlockCache();
+    BlockCache() = default;
 #endif
 
     size_t _block_size = 0;
