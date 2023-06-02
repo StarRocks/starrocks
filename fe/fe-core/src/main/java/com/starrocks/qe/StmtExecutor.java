@@ -72,7 +72,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
@@ -469,7 +469,7 @@ public class StmtExecutor {
 
                         handleQueryStmt(execPlan);
                         break;
-                    } catch (StarRocksConnectorException e) {
+                    } catch (RemoteFileNotFoundException e) {
                         // If modifications are made to the partition files of a Hive table by user,
                         // such as through "insert overwrite partition", the Frontend couldn't be aware of these changes.
                         // As a result, queries may use the file information cached in the FE for execution.
