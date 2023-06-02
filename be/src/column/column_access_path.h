@@ -53,7 +53,7 @@ public:
 
     bool is_offset() { return _type == TAccessPathType::type::OFFSET; }
 
-    // segement may have different column schema(because schema change), 
+    // segement may have different column schema(because schema change),
     // we need copy one and set the offset of schema, to help column reader find column access path
     StatusOr<std::unique_ptr<ColumnAccessPath>> convert_by_index(const Field* filed, uint32_t index);
 
