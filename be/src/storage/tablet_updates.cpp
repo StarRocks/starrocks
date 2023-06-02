@@ -2804,7 +2804,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, st
     for (int i = 0; i < rowsets.size(); i++) {
         auto& src_rowset = *rowsets[i];
         RowsetId rid = StorageEngine::instance()->next_rowset_id();
-        auto st = src_rowset.link_files_to(_tablet.schema_hash_path(), rid);
+        auto st = src_rowset.link_files_to(_tablet.schema_hash_path(), rid, version.major());
         if (!st.ok()) {
             return st;
         }

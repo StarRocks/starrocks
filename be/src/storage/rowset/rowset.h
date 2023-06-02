@@ -257,7 +257,8 @@ public:
     }
 
     // hard link all files in this rowset to `dir` to form a new rowset with id `new_rowset_id`.
-    Status link_files_to(const std::string& dir, RowsetId new_rowset_id);
+    // `version` is used for link col files, default using INT64_MAX means link all col files
+    Status link_files_to(const std::string& dir, RowsetId new_rowset_id, int64_t version = INT64_MAX);
 
     // copy all files to `dir`
     Status copy_files_to(const std::string& dir);
@@ -368,7 +369,7 @@ private:
 
     Status _remove_delta_column_group_files(std::shared_ptr<FileSystem> fs);
 
-    Status _link_delta_column_group_files(const std::string& dir);
+    Status _link_delta_column_group_files(const std::string& dir, int64_t version);
 
     std::vector<SegmentSharedPtr> _segments;
 };
