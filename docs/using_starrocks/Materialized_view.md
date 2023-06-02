@@ -242,6 +242,54 @@ Currently, StarRocks supports rewriting queries on asynchronous materialized vie
   where empid < 5;
   ```
 
+### Query Rewrite with Aggregate Rollup
+
+If the grouping of data requested by a query is at a coarser level than the grouping of data stored in a materialized view, the optimizer can still use the materialized view to rewrite the query by Aggregate Rollup.
+
+Example:
+
+```SQL
+CREATE MATERIALIZED VIEW order_agg_mv
+DISTRIBUTED BY HASH(`order_id`) BUCKETS 12
+REFRESH ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)
+AS
+SELECT
+    order_id,
+    order_date,
+    bitmap_union(to_bitmap(client_id))  -- uv
+FROM order_list 
+GROUP BY order_id, order_date;
+
+-- Example1: Aggregate Rollup
+SELECT
+    order_date,
+    bitmap_union(to_bitmap(client_id))  -- uv
+FROM order_list 
+GROUP BY order_date;
+
+-- Example2: Aggregate Rollup
+SELECT
+    order_date,
+    count(distinct client_id) 
+FROM order_list 
+GROUP BY order_date;
+```
+
+There are only certen aggregate functions that can be used for Aggregate Functions. eg, if the materialized view use `count(distinct client_id)` as the `uv` result, we cannot use it as Aggregate Rollup, you must use `bitmap_union(to_bitmap(client_id))` as the result to support Aggregate Rollup.
+
+The following table shows the correspondence between the aggregate function in the original query and the aggregate function used to construct the materialized view. You can select the corresponding aggregate function to build a materialized view according to your business scenario.
+
+| **suppprted rewrite aggregate function in original query**| **supported rollup aggregate function in materialized view** |
+| ------------------------------------------------------ | ----------------------------------------------- |
+| sum                                                    | sum                                             |
+| count                                                  | count                                           |
+| min                                                    | min                                             |
+| max                                                    | max                                             |
+| avg                                                    | sum / count                                     |
+| bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union                                    |
+| hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                       |
+| percentile_approx, percentile_union                    | percentile_union                                |
+
 ### Rewrite queries in View Delta Join scenarios
 
 StarRocks now supports rewriting queries based on asynchronous materialized views with Delta Join, which means that the queried tables are a subset of the materialized view's base tables. For example, queries of the form `table_a INNER JOIN table_b` can be rewritten by materialized views of the form `table_a INNER JOIN table_b INNER JOIN/LEFT OUTER JOIN table_c`, where `table_b INNER JOIN/LEFT OUTER JOIN table_c` is the Delta Join. This feature allows transparent acceleration for such queries, thereby preserving the flexibility of the query and avoiding the huge cost of building wide tables.
