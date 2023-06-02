@@ -440,7 +440,10 @@ vectorized_functions = [
     [50373, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
     [50400, 'next_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::next_day', 'TimeFunctions::next_day_prepare', 'TimeFunctions::next_day_close'],
     [50401, 'previous_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::previous_day', 'TimeFunctions::previous_day_prepare', 'TimeFunctions::previous_day_close'],
+    [50402, 'last_day', 'DATE', ['DATETIME'], 'TimeFunctions::last_day'],
+    [50403, 'last_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::last_day_with_format', 'TimeFunctions::last_day_prepare', 'TimeFunctions::last_day_close'],
     [50501, 'makedate', 'DATE', ['INT','INT'], 'TimeFunctions::make_date'],
+
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
     [60010, 'LIKE', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'LikePredicate::like', 'LikePredicate::like_prepare',

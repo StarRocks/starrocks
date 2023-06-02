@@ -504,6 +504,7 @@
       + [next_day](./sql-reference/sql-functions/date-time-functions/next_day.md)
       + [now](./sql-reference/sql-functions/date-time-functions/now.md)
       + [previous_day](./sql-reference/sql-functions/date-time-functions/previous_day.md)
+      + [last_day](./sql-reference/sql-functions/date-time-functions/last_day.md)
       + [quarter](./sql-reference/sql-functions/date-time-functions/quarter.md)
       + [second](./sql-reference/sql-functions/date-time-functions/second.md)
       + [seconds_add](./sql-reference/sql-functions/date-time-functions/seconds_add.md)
