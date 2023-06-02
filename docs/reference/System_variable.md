@@ -143,12 +143,6 @@ SELECT /*+ SET_VAR
 
   Used to enable the strict mode when loading data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md).
 
-* enable_spilling
-
-  Used to enable large data volume drop sorting. The default value is false, meaning it is not enabled. It is enabled when the user does not specify a `LIMIT` condition in the `ORDER BY` clause and sets `enable_spilling` to true. When enabled, the BE data directory `starrocks-scratch/` is used to store temporary spilling data that will be cleared after the query is completed.
-
-  This function is mainly used for sorting operations with large data volume using limited memory.
-
 * event_scheduler
 
   Used for MySQL client compatibility. No practical usage.
