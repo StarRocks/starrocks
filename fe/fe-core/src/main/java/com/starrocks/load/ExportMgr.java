@@ -446,8 +446,5 @@ public class ExportMgr {
             }
             unprotectAddJob(job);
         }
-        reader.close();
-
-        LOG.info("finished replay exportJob from image");
     }
 }

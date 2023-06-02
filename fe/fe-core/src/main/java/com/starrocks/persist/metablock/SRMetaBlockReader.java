@@ -65,27 +65,22 @@ public class SRMetaBlockReader {
     }
 
     @Deprecated
-    public SRMetaBlockReader(DataInputStream dis, String name) {
+    public SRMetaBlockReader(DataInputStream dis, String name) throws IOException {
         this.checkedInputStream = new CheckedInputStream(dis, new CRC32());
         this.id = SRMetaBlockID.INVALID;
         this.header = null;
         this.numJsonRead = 0;
+
+        String s = Text.readStringWithChecksum(checkedInputStream);
+        header = GsonUtils.GSON.fromJson(s, SRMetaBlockHeader.class);
     }
 
     public SRMetaBlockHeader getHeader() {
         return header;
     }
 
-    private String readJsonText() throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        if (numJsonRead == 0) {
-            // read header and check for name
-            String s = Text.readStringWithChecksum(checkedInputStream);
-            header = GsonUtils.GSON.fromJson(s, SRMetaBlockHeader.class);
-            if (!header.getId().equals(id)) {
-                throw new SRMetaBlockException(
-                        "Invalid meta block header, expect " + header.getId().name() + " actual " + id.name());
-            }
-        } else if (numJsonRead >= header.getNumJson()) {
+    private String readJsonText() throws IOException, SRMetaBlockEOFException {
+        if (numJsonRead >= header.getNumJson()) {
             throw new SRMetaBlockEOFException(String.format(
                     "Read json more than expect: %d >= %d", numJsonRead, header.getNumJson()));
         }

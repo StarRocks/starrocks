@@ -25,6 +25,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
@@ -32,6 +33,7 @@
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/memtable_sink.h"
+#include "storage/primary_key_encoder.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks::lake {
@@ -77,7 +79,8 @@ public:
               _partition_id(partition_id),
               _mem_tracker(mem_tracker),
               _slots(slots),
-              _schema_initialized(false) {}
+              _schema_initialized(false),
+              _miss_auto_increment_column(false) {}
 
     explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                              const std::vector<SlotDescriptor*>* slots, std::string merge_condition,
@@ -89,7 +92,22 @@ public:
               _mem_tracker(mem_tracker),
               _slots(slots),
               _schema_initialized(false),
-              _merge_condition(std::move(merge_condition)) {}
+              _merge_condition(std::move(merge_condition)),
+              _miss_auto_increment_column(false) {}
+
+    explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
+                             const std::vector<SlotDescriptor*>* slots, std::string merge_condition,
+                             bool miss_auto_increment_column, int64_t table_id, MemTracker* mem_tracker)
+            : _tablet_manager(tablet_manager),
+              _tablet_id(tablet_id),
+              _txn_id(txn_id),
+              _partition_id(partition_id),
+              _mem_tracker(mem_tracker),
+              _slots(slots),
+              _schema_initialized(false),
+              _merge_condition(std::move(merge_condition)),
+              _miss_auto_increment_column(miss_auto_increment_column),
+              _table_id(table_id) {}
 
     explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t max_buffer_size,
                              MemTracker* mem_tracker)
@@ -100,7 +118,8 @@ public:
               _mem_tracker(mem_tracker),
               _slots(nullptr),
               _max_buffer_size(max_buffer_size),
-              _schema_initialized(false) {}
+              _schema_initialized(false),
+              _miss_auto_increment_column(false) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -139,8 +158,12 @@ public:
     void TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
                                  const std::vector<int32_t>& referenced_column_ids);
 
+    void TEST_set_miss_auto_increment_column();
+
 private:
     Status reset_memtable();
+
+    Status _fill_auto_increment_id(const Chunk& chunk);
 
     TabletManager* _tablet_manager;
     const int64_t _tablet_id;
@@ -168,6 +191,11 @@ private:
 
     // for condition update
     std::string _merge_condition;
+
+    // for auto increment
+    bool _miss_auto_increment_column; // true if miss AUTO_INCREMENT column
+                                      // in partial update mode
+    int64_t _table_id;
 };
 
 void DeltaWriterImpl::TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
@@ -177,6 +205,10 @@ void DeltaWriterImpl::TEST_set_partial_update(std::shared_ptr<const TabletSchema
     build_schema_and_writer();
     // recover _tablet_schema with partial update schema
     _tablet_schema = _partial_update_tablet_schema;
+}
+
+void DeltaWriterImpl::TEST_set_miss_auto_increment_column() {
+    _miss_auto_increment_column = true;
 }
 
 Status DeltaWriterImpl::build_schema_and_writer() {
@@ -215,6 +247,9 @@ inline Status DeltaWriterImpl::flush_async() {
     Status st;
     if (_mem_table != nullptr) {
         RETURN_IF_ERROR(_mem_table->finalize());
+        if (_miss_auto_increment_column && _mem_table->get_result_chunk() != nullptr) {
+            _fill_auto_increment_id(*_mem_table->get_result_chunk());
+        }
         st = _flush_token->submit(std::move(_mem_table));
         _mem_table.reset(nullptr);
     }
@@ -287,6 +322,22 @@ Status DeltaWriterImpl::handle_partial_update() {
         }
         _tablet_schema = _partial_update_tablet_schema;
     }
+
+    auto sort_key_idxes = _tablet_schema->sort_key_idxes();
+    std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
+    bool auto_increment_in_sort_key = false;
+    for (auto& idx : sort_key_idxes) {
+        auto& col = _tablet_schema->column(idx);
+        if (col.is_auto_increment()) {
+            auto_increment_in_sort_key = true;
+            break;
+        }
+    }
+
+    if (auto_increment_in_sort_key && _miss_auto_increment_column) {
+        LOG(WARNING) << "auto increment column in sort key do not support partial update";
+        return Status::NotSupported("auto increment column in sort key do not support partial update");
+    }
     return Status::OK();
 }
 
@@ -344,12 +395,89 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
         if (_merge_condition != "") {
             op_write->mutable_txn_meta()->set_merge_condition(_merge_condition);
         }
+        // handle auto increment
+        if (_miss_auto_increment_column) {
+            for (auto i = 0; i < _tablet_schema->num_columns(); ++i) {
+                auto col = _tablet_schema->column(i);
+                if (col.is_auto_increment()) {
+                    op_write->mutable_txn_meta()->set_auto_increment_partial_update_column_id(i);
+                    break;
+                }
+            }
+
+            if (op_write->rewrite_segments_size() == 0) {
+                for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
+                    op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
+                }
+            }
+        }
     }
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload update state here to minimaze the cost when publishing.
         tablet.update_mgr()->preload_update_state(*txn_log, &tablet);
     }
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
+    return Status::OK();
+}
+
+Status DeltaWriterImpl::_fill_auto_increment_id(const Chunk& chunk) {
+    ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
+
+    // 1. get pk column from chunk
+    vector<uint32_t> pk_columns;
+    for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
+        pk_columns.push_back((uint32_t)i);
+    }
+    Schema pkey_schema = ChunkHelper::convert_schema(*_tablet_schema, pk_columns);
+    std::unique_ptr<Column> pk_column;
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+        CHECK(false) << "create column for primary key encoder failed";
+    }
+    auto col = pk_column->clone();
+
+    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get());
+    std::vector<std::unique_ptr<Column>> upserts;
+    upserts.resize(1);
+    upserts[0] = std::move(col);
+
+    std::vector<uint64_t> rss_rowid_map(upserts[0]->size(), (uint64_t)((uint32_t)-1) << 32);
+    std::vector<std::vector<uint64_t>*> rss_rowids;
+    rss_rowids.resize(1);
+    rss_rowids[0] = &rss_rowid_map;
+
+    // 2. probe index
+    auto metadata = _tablet_manager->get_latest_cached_tablet_metadata(_tablet_id);
+    std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(tablet, metadata);
+
+    tablet.update_mgr()->get_rowids_from_pkindex(&tablet, *metadata.get(), upserts, metadata->version(), builder.get(),
+                                                 &rss_rowids);
+
+    std::vector<uint8_t> filter;
+    uint32_t gen_num = 0;
+    for (uint32_t i = 0; i < rss_rowid_map.size(); i++) {
+        uint64_t v = rss_rowid_map[i];
+        uint32_t rssid = v >> 32;
+        if (rssid == (uint32_t)-1) {
+            filter.emplace_back(1);
+            ++gen_num;
+        } else {
+            filter.emplace_back(0);
+        }
+    }
+
+    // 3. fill the non-existing rows
+    std::vector<int64_t> ids(gen_num);
+    RETURN_IF_ERROR(StorageEngine::instance()->get_next_increment_id_interval(_table_id, gen_num, ids));
+
+    for (int i = 0; i < _vectorized_schema.num_fields(); i++) {
+        const TabletColumn& tablet_column = _tablet_schema->column(i);
+        if (tablet_column.is_auto_increment()) {
+            auto& column = chunk.get_column_by_index(i);
+            RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(column))->fill_range(ids, filter));
+            break;
+        }
+    }
+
     return Status::OK();
 }
 
@@ -453,6 +581,10 @@ void DeltaWriter::TEST_set_partial_update(std::shared_ptr<const TabletSchema> ts
     _impl->TEST_set_partial_update(std::move(tschema), referenced_column_ids);
 }
 
+void DeltaWriter::TEST_set_miss_auto_increment_column() {
+    _impl->TEST_set_miss_auto_increment_column();
+}
+
 std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
                                                  int64_t partition_id, const std::vector<SlotDescriptor*>* slots,
                                                  MemTracker* mem_tracker) {
@@ -465,6 +597,15 @@ std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, 
                                                  const std::string& merge_condition, MemTracker* mem_tracker) {
     return std::make_unique<DeltaWriter>(
             new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, merge_condition, mem_tracker));
+}
+
+std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
+                                                 int64_t partition_id, const std::vector<SlotDescriptor*>* slots,
+                                                 const std::string& merge_condition, bool miss_auto_increment_column,
+                                                 int64_t table_id, MemTracker* mem_tracker) {
+    return std::make_unique<DeltaWriter>(new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots,
+                                                             merge_condition, miss_auto_increment_column, table_id,
+                                                             mem_tracker));
 }
 
 std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,

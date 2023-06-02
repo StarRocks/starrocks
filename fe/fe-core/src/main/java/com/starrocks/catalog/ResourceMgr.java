@@ -45,6 +45,11 @@ import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -87,7 +92,7 @@ public class ResourceMgr implements Writable {
             .build();
 
     @SerializedName(value = "nameToResource")
-    private final HashMap<String, Resource> nameToResource = new HashMap<>();
+    private HashMap<String, Resource> nameToResource = new HashMap<>();
     private final ResourceProcNode procNode = new ResourceProcNode();
     private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
 
@@ -343,5 +348,17 @@ public class ResourceMgr implements Writable {
     public long saveResources(DataOutputStream out, long checksum) throws IOException {
         write(out);
         return checksum;
+    }
+
+    public void saveResourcesV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.RESOURCE_MGR, 1);
+        writer.writeJson(this);
+        writer.close();
+    }
+
+    public void loadResourcesV2(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        ResourceMgr data = reader.readJson(ResourceMgr.class);
+        this.nameToResource = data.nameToResource;
     }
 }
