@@ -40,7 +40,8 @@ public class RangePartitionDesc extends PartitionDesc {
     private final List<String> partitionColNames;
     private final List<SingleRangePartitionDesc> singleRangePartitionDescs;
     private final List<MultiRangePartitionDesc> multiRangePartitionDescs;
-    private boolean isAutoPartitionTable = false;
+    // for automatic partition table is ture. otherwise is false
+    protected boolean isAutoPartitionTable = false;
 
     public RangePartitionDesc(List<String> partitionColNames, List<PartitionDesc> partitionDescs) {
         type = PartitionType.RANGE;
@@ -152,14 +153,20 @@ public class RangePartitionDesc extends PartitionDesc {
     }
 
     @Override
-    public PartitionInfo toPartitionInfo(List<Column> schema, Map<String, Long> partitionNameToId,
-                                         boolean isTemp, boolean isExprPartition)
+    public PartitionInfo toPartitionInfo(List<Column> schema, Map<String, Long> partitionNameToId, boolean isTemp)
             throws DdlException {
         List<Column> partitionColumns = Lists.newArrayList();
 
         // check and get partition column
         for (String colName : partitionColNames) {
             ExpressionPartitionDesc.findRangePartitionColumn(schema, partitionColumns, colName);
+            for (Column column : partitionColumns) {
+                try {
+                    RangePartitionInfo.checkRangeColumnType(column);
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
+            }
         }
 
         /*
