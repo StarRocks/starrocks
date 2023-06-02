@@ -59,6 +59,16 @@ std::ostream& operator<<(std::ostream& os, const NullIndicatorOffset& null_indic
     return os;
 }
 
+SlotDescriptor::SlotDescriptor(SlotId id, const std::string& name, const TypeDescriptor& type)
+        : _id(id),
+          _type(type),
+          _parent(0),
+          _null_indicator_offset(0, 0),
+          _col_name(name),
+          _slot_idx(0),
+          _slot_size(_type.get_slot_size()),
+          _is_materialized(false) {}
+
 SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
         : _id(tdesc.id),
           _type(TypeDescriptor::from_thrift(tdesc.slotType)),

@@ -43,6 +43,8 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotDescriptor;
@@ -184,14 +186,25 @@ public class FileScanNode extends LoadScanNode {
 
         this.analyzer = analyzer;
         if (desc.getTable() != null) {
-            BrokerTable brokerTable = (BrokerTable) desc.getTable();
-            try {
-                fileGroups = Lists.newArrayList(new BrokerFileGroup(brokerTable));
-            } catch (AnalysisException e) {
-                throw new UserException(e.getMessage());
+            Table tbl = desc.getTable();
+            if (tbl instanceof BrokerTable) {
+                BrokerTable brokerTable = (BrokerTable) tbl;
+                try {
+                    fileGroups = Lists.newArrayList(new BrokerFileGroup(brokerTable));
+                } catch (AnalysisException e) {
+                    throw new UserException(e.getMessage());
+                }
+                brokerDesc = new BrokerDesc(brokerTable.getBrokerName(), brokerTable.getBrokerProperties());
+            } else if (tbl instanceof TableFunctionTable) {
+                TableFunctionTable funcTable = (TableFunctionTable) tbl;
+                try {
+                    fileGroups = Lists.newArrayList(new BrokerFileGroup(funcTable));
+                } catch (AnalysisException e) {
+                    throw new UserException(e.getMessage());
+                }
+                brokerDesc = new BrokerDesc(funcTable.getProperties());
             }
-            brokerDesc = new BrokerDesc(brokerTable.getBrokerName(), brokerTable.getBrokerProperties());
-            targetTable = brokerTable;
+            targetTable = tbl;
         }
 
         // Get all broker file status

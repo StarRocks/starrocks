@@ -28,6 +28,7 @@ import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
@@ -42,6 +43,7 @@ import com.starrocks.rpc.PCollectQueryStatisticsRequest;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
 import com.starrocks.rpc.PFetchDataRequest;
+import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.rpc.PTriggerProfileReportRequest;
 import com.starrocks.thrift.BackendService;
@@ -401,6 +403,11 @@ public class MockedBackend {
         @Override
         public Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request) {
             return null;
+        }
+
+        @Override
+        public Future<PGetFileSchemaResult> getFileSchema(PGetFileSchemaRequest request) {
+            throw new NotImplementedException("TODO");
         }
 
         @Override

@@ -56,6 +56,7 @@ service PBackendService {
     rpc collect_query_statistics(starrocks.PCollectQueryStatisticsRequest) returns (starrocks.PCollectQueryStatisticsResult);
     rpc get_info(starrocks.PProxyRequest) returns (starrocks.PProxyResult);
     rpc get_pulsar_info(starrocks.PPulsarProxyRequest) returns (starrocks.PPulsarProxyResult);
+    rpc get_file_schema(starrocks.PGetFileSchemaRequest) returns (starrocks.PGetFileSchemaResult);
 
     // Transmit vectorized data between backends
     rpc transmit_chunk(starrocks.PTransmitChunkParams) returns (starrocks.PTransmitChunkResult);

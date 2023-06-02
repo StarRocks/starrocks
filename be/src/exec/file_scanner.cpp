@@ -34,19 +34,23 @@
 namespace starrocks {
 
 FileScanner::FileScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfile* profile,
-                         const starrocks::TBrokerScanRangeParams& params, starrocks::ScannerCounter* counter)
+                         const starrocks::TBrokerScanRangeParams& params, starrocks::ScannerCounter* counter,
+                         bool schema_only)
         : _state(state),
           _profile(profile),
           _params(params),
           _counter(counter),
           _row_desc(nullptr),
           _strict_mode(false),
-          _error_counter(0) {}
+          _error_counter(0),
+          _schema_only(schema_only) {}
 
 FileScanner::~FileScanner() = default;
 
 void FileScanner::close() {
-    Expr::close(_dest_expr_ctx, _state);
+    if (!_schema_only) {
+        Expr::close(_dest_expr_ctx, _state);
+    }
 }
 
 Status FileScanner::init_expr_ctx() {
@@ -121,7 +125,9 @@ Status FileScanner::init_expr_ctx() {
 }
 
 Status FileScanner::open() {
-    RETURN_IF_ERROR(init_expr_ctx());
+    if (!_schema_only) {
+        RETURN_IF_ERROR(init_expr_ctx());
+    }
 
     if (_params.__isset.strict_mode) {
         _strict_mode = _params.strict_mode;

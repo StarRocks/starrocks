@@ -449,3 +449,7 @@ struct TExportStatusResult {
     3: optional list<string> files
 }
 
+struct TGetFileSchemaRequest {
+  1: required PlanNodes.TScanRange scan_range
+  2: optional i32 volume_id = -1
+}

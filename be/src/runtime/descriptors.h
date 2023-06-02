@@ -89,6 +89,8 @@ std::ostream& operator<<(std::ostream& os, const NullIndicatorOffset& null_indic
 
 class SlotDescriptor {
 public:
+    SlotDescriptor(SlotId id, const std::string& name, const TypeDescriptor& type);
+
     SlotId id() const { return _id; }
     const TypeDescriptor& type() const { return _type; }
     TypeDescriptor& type() { return _type; }
