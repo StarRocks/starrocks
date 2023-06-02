@@ -22,6 +22,11 @@
   + Data distribution
     + [Data distribution](./table_design/Data_distribution.md)
     + [Dynamic partitioning](./table_design/dynamic_partitioning.md)
+<<<<<<< HEAD
+=======
+    + [Temporary partition](./table_design/Temporary_partition.md)
+  + [Data compression](./table_design/data_compression.md)
+>>>>>>> 620865e4c ([Doc] Add temporary partitions (#24553))
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
   + Concepts
