@@ -91,8 +91,8 @@ public class JoinHelper {
 
         for (BinaryPredicateOperator binaryPredicate : equalsPredicate) {
             boolean nullStrict = binaryPredicate.getBinaryType() == EQ_FOR_NULL;
-            leftTableAggStrict = !nullStrict && leftTableAggStrict;
-            rightTableAggStrict = !nullStrict && rightTableAggStrict;
+            leftTableAggStrict = leftTableAggStrict || nullStrict;
+            rightTableAggStrict = rightTableAggStrict || nullStrict;
             ColumnRefSet leftUsedColumns = binaryPredicate.getChild(0).getUsedColumns();
             ColumnRefSet rightUsedColumns = binaryPredicate.getChild(1).getUsedColumns();
             // Join on expression had pushed down to project node, so there must be one column

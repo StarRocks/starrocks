@@ -359,9 +359,11 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         List<DistributionCol> requiredCols;
         if (shouldAdjustGroupByOrder(parentsRequiredCols, groupByCols)) {
             // keep order with parent
-            requiredCols = parentsRequiredCols;
+            groupByCols = parentsRequiredCols.stream().map(e -> new DistributionCol(e.getColId(), true))
+                    .collect(Collectors.toList());
 
-        } else if (canRelaxGroupByCols(parentsRequiredCols, groupByCols)) {
+        }
+        if (canRelaxGroupByCols(parentsRequiredCols, groupByCols)) {
             requiredCols = groupByCols.stream().map(col -> col.getNullRelaxCol()).collect(
                     Collectors.toList());
         } else {
