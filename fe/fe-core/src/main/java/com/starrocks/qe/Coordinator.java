@@ -54,6 +54,11 @@ import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.exception.RemoteFileNotFoundException;
+import com.starrocks.load.loadv2.BulkLoadJob;
+>>>>>>> c2e911b55 ([Feature] Completely resolving the issue of query failures in Hive external tables due to inconsistent metadata caching (#24501))
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -1324,6 +1329,11 @@ public class Coordinator {
             if (Strings.isNullOrEmpty(copyStatus.getErrorMsg())) {
                 copyStatus.rewriteErrorMsg();
             }
+
+            if (copyStatus.isRemoteFileNotFound()) {
+                throw new RemoteFileNotFoundException(copyStatus.getErrorMsg());
+            }
+
             if (copyStatus.isRpcError()) {
                 throw new RpcException("unknown", copyStatus.getErrorMsg());
             } else {

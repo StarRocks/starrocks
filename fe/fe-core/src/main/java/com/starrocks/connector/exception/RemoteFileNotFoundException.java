@@ -16,16 +16,16 @@ package com.starrocks.connector.exception;
 
 import static java.lang.String.format;
 
-public class StarRocksConnectorException extends RuntimeException {
-    public StarRocksConnectorException(String message) {
+public class RemoteFileNotFoundException extends RuntimeException {
+    public RemoteFileNotFoundException(String message) {
         super(message);
     }
 
-    public StarRocksConnectorException(String formatString, Object... args) {
+    public RemoteFileNotFoundException(String formatString, Object... args) {
         super(format(formatString, args));
     }
 
-    public StarRocksConnectorException(String message, Throwable cause) {
+    public RemoteFileNotFoundException(String message, Throwable cause) {
         super(message, cause);
     }
 
@@ -37,11 +37,4 @@ public class StarRocksConnectorException extends RuntimeException {
     public String getMessage() {
         return getErrorMessage();
     }
-
-    public static void check(boolean test, String message, Object... args) {
-        if (!test) {
-            throw new StarRocksConnectorException(message, args);
-        }
-    }
-
 }

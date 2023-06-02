@@ -22,7 +22,11 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.connector.Connector;
+>>>>>>> c2e911b55 ([Feature] Completely resolving the issue of query failures in Hive external tables due to inconsistent metadata caching (#24501))
 import com.starrocks.connector.RemoteScanRangeLocations;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.credential.CloudConfiguration;
@@ -38,11 +42,13 @@ import com.starrocks.thrift.TScanRangeLocations;
 import java.util.List;
 
 public class HudiScanNode extends ScanNode {
-    private RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
+    private final RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
 
-    private HudiTable hudiTable;
-    private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+    private final HudiTable hudiTable;
+    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private CloudConfiguration cloudConfiguration = null;
+
+    private DescriptorTable descTbl;
 
     public HudiScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -66,8 +72,9 @@ public class HudiScanNode extends ScanNode {
         return helper.toString();
     }
 
-    public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
-        scanRangeLocations.setupScanRangeLocations(descTbl, hudiTable, scanNodePredicates);
+    public void setupScanRangeLocations(DescriptorTable descTbl) {
+        this.descTbl = descTbl;
+        scanRangeLocations.setup(descTbl, hudiTable, scanNodePredicates);
     }
 
     private void setupCloudCredential() {
@@ -84,7 +91,7 @@ public class HudiScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return scanRangeLocations.getScanRangeLocations(maxScanRangeLength);
+        return scanRangeLocations.getScanRangeLocations(descTbl, hudiTable, scanNodePredicates);
     }
 
     @Override
