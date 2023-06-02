@@ -24,6 +24,7 @@ import com.starrocks.catalog.AnyMapType;
 import com.starrocks.catalog.AnyStructType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.StructType;
@@ -210,7 +211,7 @@ public class PolymorphicFunctionAnalyzer {
             .put("map_keys", new MapKeysDeduce())
             .put("map_values", new MapValuesDeduce())
             .put("map_from_arrays", new MapFromArraysDeduce())
-            .put("row", new RowDeduce())
+            .put(FunctionSet.ROW, new RowDeduce())
             .put("map_apply", new MapApplyDeduce())
             .put("map_filter", new MapFilterDeduce())
             .put("distinct_map_keys", new DistinctMapKeysDeduce())
@@ -219,6 +220,8 @@ public class PolymorphicFunctionAnalyzer {
             .put("ifnull", new CommonDeduce())
             .put("nullif", new CommonDeduce())
             .put("coalesce", new CommonDeduce())
+            // it's mock, need handle it in expressionAnalyzer
+            .put(FunctionSet.NAMED_STRUCT, new RowDeduce())
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {

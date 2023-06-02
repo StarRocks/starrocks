@@ -345,25 +345,14 @@ int64_t StructColumn::xor_checksum(uint32_t from, uint32_t to) const {
 void StructColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
     DCHECK_LT(idx, size());
     buf->begin_push_bracket();
-    if (is_unnamed_struct()) {
-        for (size_t i = 0; i < _fields.size(); ++i) {
-            const auto& field = _fields[i];
-            field->put_mysql_row_buffer(buf, idx);
-            if (i < _fields.size() - 1) {
-                // Add struct field separator, last field don't need ','.
-                buf->separator(',');
-            }
-        }
-    } else {
-        for (size_t i = 0; i < _fields.size(); ++i) {
-            const auto& field = _fields[i];
-            buf->push_string(_field_names[i]);
-            buf->separator(':');
-            field->put_mysql_row_buffer(buf, idx);
-            if (i < _fields.size() - 1) {
-                // Add struct field separator, last field don't need ','.
-                buf->separator(',');
-            }
+    for (size_t i = 0; i < _fields.size(); ++i) {
+        const auto& field = _fields[i];
+        buf->push_string(_field_names[i]);
+        buf->separator(':');
+        field->put_mysql_row_buffer(buf, idx);
+        if (i < _fields.size() - 1) {
+            // Add struct field separator, last field don't need ','.
+            buf->separator(',');
         }
     }
     buf->finish_push_bracket();
@@ -373,25 +362,14 @@ std::string StructColumn::debug_item(size_t idx) const {
     DCHECK_LT(idx, size());
     std::stringstream ss;
     ss << '{';
-    if (is_unnamed_struct()) {
-        for (size_t i = 0; i < _fields.size(); i++) {
-            const auto& field = _fields[i];
-            ss << field->debug_item(idx);
-            if (i < _fields.size() - 1) {
-                // Add struct field separator, last field don't need ','.
-                ss << ",";
-            }
-        }
-    } else {
-        for (size_t i = 0; i < _fields.size(); i++) {
-            const auto& field = _fields[i];
-            ss << _field_names[i];
-            ss << ":";
-            ss << field->debug_item(idx);
-            if (i < _fields.size() - 1) {
-                // Add struct field separator, last field don't need ','.
-                ss << ",";
-            }
+    for (size_t i = 0; i < _fields.size(); i++) {
+        const auto& field = _fields[i];
+        ss << _field_names[i];
+        ss << ":";
+        ss << field->debug_item(idx);
+        if (i < _fields.size() - 1) {
+            // Add struct field separator, last field don't need ','.
+            ss << ",";
         }
     }
     ss << '}';

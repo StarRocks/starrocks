@@ -163,8 +163,6 @@ public:
     // Struct Column own functions
     const Columns& fields() const;
 
-    bool is_unnamed_struct() const { return _field_names.empty(); }
-
     Columns& fields_column();
 
     ColumnPtr field_column(const std::string& field_name);
