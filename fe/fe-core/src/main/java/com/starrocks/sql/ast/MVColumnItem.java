@@ -159,7 +159,7 @@ public class MVColumnItem {
             result.setDefineExpr(defineExpr);
         }
         /// FIXME One Mv column can reference multiple base columns
-        result.setBaseColumnName(baseColumnNames.get(0));
+        result.setBaseColumnName(!baseColumnNames.isEmpty() ? baseColumnNames.get(0) : "");
         return result;
     }
 }

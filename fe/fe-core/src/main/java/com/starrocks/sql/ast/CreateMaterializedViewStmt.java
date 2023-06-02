@@ -450,7 +450,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         String functionName = functionCallExpr.getFnName().getFunction();
         List<SlotRef> slots = new ArrayList<>();
         functionCallExpr.collect(SlotRef.class, slots);
-        SlotRef baseColumnRef = slots.get(0);
+        Expr slotRef = slots.isEmpty() ? functionCallExpr.getChild(0) : slots.get(0);
         List<String> baseColumnNames = slots.stream().map(slot -> slot.getColumnName().toLowerCase()).
                 collect(Collectors.toList());
         Expr functionChild0 = functionCallExpr.getChild(0);
@@ -493,7 +493,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             case FunctionSet.COUNT:
                 mvAggregateType = AggregateType.SUM;
                 defineExpr = new CaseExpr(null, Lists.newArrayList(new CaseWhenClause(
-                        new IsNullPredicate(baseColumnRef, false),
+                        new IsNullPredicate(slotRef, false),
                         new IntLiteral(0, Type.BIGINT))), new IntLiteral(1, Type.BIGINT));
                 type = Type.BIGINT;
                 break;
