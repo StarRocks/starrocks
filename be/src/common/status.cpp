@@ -215,6 +215,8 @@ std::string Status::code_as_string() const {
         return "Resource busy";
     case TStatusCode::SR_EAGAIN:
         return "Resource temporarily unavailable";
+    case TStatusCode::REMOTE_FILE_NOT_FOUND:
+        return "Remote file not found";
     default: {
         char tmp[30];
         snprintf(tmp, sizeof(tmp), "Unknown code(%d): ", static_cast<int>(code()));
