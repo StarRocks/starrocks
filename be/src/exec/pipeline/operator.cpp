@@ -18,6 +18,7 @@
 #include <utility>
 
 #include "exec/exec_node.h"
+#include "exec/pipeline/query_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
@@ -76,6 +77,7 @@ Status Operator::prepare(RuntimeState* state) {
     _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);
     _pull_chunk_num_counter = ADD_COUNTER(_common_metrics, "PullChunkNum", TUnit::UNIT);
     _pull_row_num_counter = ADD_COUNTER(_common_metrics, "PullRowNum", TUnit::UNIT);
+    _mem_resource_manager.prepare(this, state->query_ctx()->spill_manager());
     return Status::OK();
 }
 
@@ -97,6 +99,7 @@ RuntimeFilterHub* Operator::runtime_filter_hub() {
 }
 
 void Operator::close(RuntimeState* state) {
+    _mem_resource_manager.close();
     if (auto* rf_bloom_filters = runtime_bloom_filters()) {
         _init_rf_counters(false);
         _runtime_in_filter_num_counter->set((int64_t)runtime_in_filters().size());

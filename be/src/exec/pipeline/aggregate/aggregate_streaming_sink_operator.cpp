@@ -50,8 +50,7 @@ StatusOr<ChunkPtr> AggregateStreamingSinkOperator::pull_chunk(RuntimeState* stat
     return Status::InternalError("Not support");
 }
 
-void AggregateStreamingSinkOperator::increase_performance_level() {
-    Operator::increase_performance_level();
+void AggregateStreamingSinkOperator::set_execute_mode(int performance_level) {
     _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::FORCE_STREAMING;
 }
 

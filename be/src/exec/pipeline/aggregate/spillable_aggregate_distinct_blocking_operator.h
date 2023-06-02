@@ -42,8 +42,8 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    void increase_performance_level() override {
-        Operator::increase_performance_level();
+    bool spillable() const override { return true; }
+    void set_execute_mode(int performance_level) override {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
         TRACE_SPILL_LOG << "AggregateDistinctBlockingSink, mark spill " << (void*)this;
     }

@@ -34,12 +34,13 @@ public:
 
     bool is_finished() const override { return _is_finished || _sort_context->is_finished(); }
 
-    void increase_performance_level() override {
-        _performance_level = MAX_PERFORMANCE_LEVEL;
+    void set_execute_mode(int performance_level) override {
         if (_chunks_sorter) {
             _chunks_sorter->set_spill_stragety(spill::SpillStrategy::SPILL_ALL);
         }
     }
+
+    bool spillable() const override { return true; }
 
     size_t estimated_memory_reserved(const ChunkPtr& chunk) override;
     size_t estimated_memory_reserved() override;

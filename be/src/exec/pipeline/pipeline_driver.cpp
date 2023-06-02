@@ -464,7 +464,8 @@ void PipelineDriver::_set_operator_execute_mode(RuntimeState* state, MemTracker*
                                                 const ChunkPtr& chunk) {
     // TODO: FIXME
     // a simple spill stragety
-    if (state->enable_spill() && !op->is_max_performance_level() &&
+    auto& mem_resource_mgr = op->mem_resource_manager();
+    if (state->enable_spill() && mem_resource_mgr.releaseable() &&
         op->revocable_mem_bytes() > state->spill_operator_min_bytes()) {
         auto request_reserved = 0;
         if (chunk == nullptr) {
@@ -475,7 +476,7 @@ void PipelineDriver::_set_operator_execute_mode(RuntimeState* state, MemTracker*
         request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
         if (!tls_thread_status.try_mem_reserve(request_reserved, tracker,
                                                tracker->limit() * state->spill_mem_limit_threshold())) {
-            op->increase_performance_level();
+            mem_resource_mgr.to_low_memory_mode();
         }
     }
 }

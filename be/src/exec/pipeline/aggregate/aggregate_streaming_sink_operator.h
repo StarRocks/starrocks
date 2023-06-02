@@ -46,7 +46,7 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
-    void increase_performance_level() override;
+    void set_execute_mode(int performance_level) override;
 
 private:
     // Invoked by push_chunk if current mode is TStreamingPreaggregationMode::FORCE_STREAMING

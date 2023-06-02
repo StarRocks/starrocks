@@ -168,8 +168,7 @@ Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const Chu
     return Status::OK();
 }
 
-void SpillableHashJoinBuildOperator::increase_performance_level() {
-    HashJoinBuildOperator::increase_performance_level();
+void SpillableHashJoinBuildOperator::set_execute_mode(int performance_level) {
     if (!_is_finished) {
         _join_builder->set_spill_strategy(spill::SpillStrategy::SPILL_ALL);
     }

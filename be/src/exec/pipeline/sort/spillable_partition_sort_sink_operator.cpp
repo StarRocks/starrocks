@@ -31,7 +31,6 @@ Status SpillablePartitionSortSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(PartitionSortSinkOperator::prepare(state));
     RETURN_IF_ERROR(_chunks_sorter->spiller()->prepare(state));
     if (state->spill_mode() == TSpillMode::FORCE) {
-        increase_performance_level();
         _chunks_sorter->set_spill_stragety(spill::SpillStrategy::SPILL_ALL);
     }
     return Status::OK();
