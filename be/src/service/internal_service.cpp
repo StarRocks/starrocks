@@ -37,6 +37,7 @@
 #include <fmt/format.h>
 
 #include <atomic>
+#include <memory>
 #include <shared_mutex>
 #include <sstream>
 
@@ -48,6 +49,7 @@
 #include "common/closure_guard.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "exec/parquet_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -55,17 +57,21 @@
 #include "exec/pipeline/stream_epoch_manager.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"
+#include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/MVMaintenance_types.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/command_executor.h"
 #include "runtime/data_stream_mgr.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
+#include "runtime/types.h"
 #include "service/brpc.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
@@ -726,6 +732,66 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(
         }
     }
     Status::OK().to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcController* controller,
+                                                  const PGetFileSchemaRequest* request, PGetFileSchemaResult* response,
+                                                  google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    TGetFileSchemaRequest t_request;
+
+    auto st = Status::OK();
+    DeferOp defer1([&st, &response] { st.to_protobuf(response->mutable_status()); });
+
+    {
+        auto* cntl = static_cast<brpc::Controller*>(controller);
+        auto ser_request = cntl->request_attachment().to_string();
+        const auto* buf = (const uint8_t*)ser_request.data();
+        uint32_t len = ser_request.size();
+        st = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request);
+        if (!st.ok()) {
+            LOG(WARNING) << "deserialize thrift message error: " << st;
+            return;
+        }
+    }
+    const auto& scan_range = t_request.scan_range.broker_scan_range;
+    if (scan_range.ranges.empty()) {
+        st = Status::InvalidArgument("No file to scan. Please check the specified path.");
+        return;
+    }
+
+    std::unique_ptr<FileScanner> p_scanner;
+    auto tp = scan_range.ranges[0].format_type;
+    {
+        RuntimeState state{};
+        RuntimeProfile profile{"dummy_profile", false};
+        ScannerCounter counter{};
+        switch (tp) {
+        case TFileFormatType::FORMAT_PARQUET:
+            p_scanner.reset(new ParquetScanner(&state, &profile, scan_range, &counter, true));
+            break;
+        default:
+            st = Status::InvalidArgument(fmt::format("format: {} not supported", to_string(tp)));
+            return;
+        }
+    }
+
+    st = p_scanner->open();
+    if (!st.ok()) {
+        LOG(WARNING) << "open file scanner: " << st;
+        return;
+    }
+
+    DeferOp defer2([&p_scanner] { p_scanner->close(); });
+
+    std::vector<SlotDescriptor> schema;
+    st = p_scanner->get_schema(&schema);
+
+    for (const auto& slot : schema) {
+        slot.to_protobuf(response->add_schema());
+    }
+    return;
 }
 
 template <typename T>

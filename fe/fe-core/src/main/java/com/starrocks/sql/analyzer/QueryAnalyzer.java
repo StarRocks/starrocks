@@ -37,9 +37,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
@@ -51,6 +53,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
@@ -228,6 +231,11 @@ public class QueryAnalyzer {
                     join.setLateral(true);
                 }
                 return join;
+            } else if (relation instanceof FileTableFunctionRelation) {
+                FileTableFunctionRelation tableFunctionRelation = (FileTableFunctionRelation) relation;
+                Table table = resolveTableFunctionTable(tableFunctionRelation.getProperties());
+                tableFunctionRelation.setTable(table);
+                return relation;
             } else if (relation instanceof TableRelation) {
                 TableRelation tableRelation = (TableRelation) relation;
                 TableName tableName = tableRelation.getName();
@@ -389,6 +397,28 @@ public class QueryAnalyzer {
             columns.add(new Column(BINLOG_SEQ_ID_COLUMN_NAME, Type.BIGINT));
             columns.add(new Column(BINLOG_TIMESTAMP_COLUMN_NAME, Type.BIGINT));
             return columns;
+        }
+
+        @Override
+        public Scope visitFileTableFunction(FileTableFunctionRelation node, Scope outerScope) {
+            TableName tableName = node.getResolveTableName();
+            Table table = node.getTable();
+
+            ImmutableList.Builder<Field> fields = ImmutableList.builder();
+            ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
+
+            List<Column> fullSchema = table.getFullSchema();
+            for (Column column : fullSchema) {
+                Field field = new Field(column.getName(), column.getType(), tableName,
+                        new SlotRef(tableName, column.getName(), column.getName()), true);
+                columns.put(field, column);
+                fields.add(field);
+            }
+
+            node.setColumns(columns.build());
+            Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
+            node.setScope(scope);
+            return scope;
         }
 
         @Override
@@ -911,6 +941,14 @@ public class QueryAnalyzer {
             }
             return table;
         } catch (AnalysisException e) {
+            throw new SemanticException(e.getMessage());
+        }
+    }
+
+    private Table resolveTableFunctionTable(Map<String, String> properties) {
+        try {
+            return new TableFunctionTable(properties);
+        } catch (DdlException e) {
             throw new SemanticException(e.getMessage());
         }
     }

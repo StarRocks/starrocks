@@ -111,7 +111,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         @SerializedName("FILE")
         FILE,
         @SerializedName("LAKE_MATERIALIZED_VIEW") // for backward and rollback compatibility
-        CLOUD_NATIVE_MATERIALIZED_VIEW;
+        CLOUD_NATIVE_MATERIALIZED_VIEW,
+        @SerializedName("TABLE_FUNCTION")
+        TABLE_FUNCTION;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -241,6 +243,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public String getName() {
         return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     public String getTableIdentifier() {
