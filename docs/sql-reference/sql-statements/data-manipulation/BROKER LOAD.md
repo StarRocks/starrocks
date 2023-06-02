@@ -110,7 +110,7 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
 - `TEMPORARY_PARTITION`
 
-  Specifies the [temporary partition(s)](../../../table_design/Temporary_partition.md) into which you want to load data.
+  Specifies the name of the [temporary partition](../../../table_design/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).
 
 - `FORMAT AS`
 
