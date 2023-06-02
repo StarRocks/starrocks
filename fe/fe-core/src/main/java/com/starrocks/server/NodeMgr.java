@@ -1220,23 +1220,18 @@ public class NodeMgr {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.NODE_MGR);
-        try {
-            NodeMgr nodeMgr = reader.readJson(NodeMgr.class);
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        NodeMgr nodeMgr = reader.readJson(NodeMgr.class);
 
-            leaderRpcPort = nodeMgr.leaderRpcPort;
-            leaderHttpPort = nodeMgr.leaderHttpPort;
-            leaderIp = nodeMgr.leaderIp;
+        leaderRpcPort = nodeMgr.leaderRpcPort;
+        leaderHttpPort = nodeMgr.leaderHttpPort;
+        leaderIp = nodeMgr.leaderIp;
 
-            frontends = nodeMgr.frontends;
-            removedFrontends = nodeMgr.removedFrontends;
+        frontends = nodeMgr.frontends;
+        removedFrontends = nodeMgr.removedFrontends;
 
-            systemInfo = nodeMgr.systemInfo;
-            brokerMgr = nodeMgr.brokerMgr;
-        } finally {
-            reader.close();
-        }
+        systemInfo = nodeMgr.systemInfo;
+        brokerMgr = nodeMgr.brokerMgr;
     }
 
     public void setLeaderInfo() {

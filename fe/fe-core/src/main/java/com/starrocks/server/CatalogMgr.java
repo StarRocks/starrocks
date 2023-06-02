@@ -252,6 +252,8 @@ public class CatalogMgr {
     }
 
     public void loadResourceMappingCatalog() {
+        LOG.info("start to replay resource mapping catalog");
+
         List<Resource> resources = GlobalStateMgr.getCurrentState().getResourceMgr().getNeedMappingCatalogResources();
         for (Resource resource : resources) {
             Map<String, String> properties = Maps.newHashMap(resource.getProperties());
@@ -269,6 +271,7 @@ public class CatalogMgr {
                 LOG.error("Failed to load resource mapping inside catalog {}", catalogName, e);
             }
         }
+        LOG.info("finished replaying resource mapping catalogs from resources");
     }
 
     public long saveCatalogs(DataOutputStream dos, long checksum) throws IOException {
@@ -407,18 +410,16 @@ public class CatalogMgr {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.CATALOG_MGR);
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         try {
             int serializedCatalogsSize = reader.readInt();
             for (int i = 0; i < serializedCatalogsSize; ++i) {
                 Catalog catalog = reader.readJson(Catalog.class);
                 replayCreateCatalog(catalog);
             }
+            loadResourceMappingCatalog();
         } catch (DdlException e) {
-            throw new RuntimeException(e);
-        } finally {
-            reader.close();
+            throw new IOException(e);
         }
     }
 }

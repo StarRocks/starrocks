@@ -434,25 +434,17 @@ public class ExportMgr {
         writer.close();
     }
 
-    public void loadExportJobV2(DataInputStream dis)
-            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.EXPORT_MGR);
-        try {
-            int size = reader.readInt();
-            long currentTimeMs = System.currentTimeMillis();
-            for (int i = 0; i < size; i++) {
-                ExportJob job = reader.readJson(ExportJob.class);
-                // discard expired job right away
-                if (isJobExpired(job, currentTimeMs)) {
-                    LOG.info("discard expired job: {}", job);
-                    continue;
-                }
-                unprotectAddJob(job);
+    public void loadExportJobV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int size = reader.readInt();
+        long currentTimeMs = System.currentTimeMillis();
+        for (int i = 0; i < size; i++) {
+            ExportJob job = reader.readJson(ExportJob.class);
+            // discard expired job right away
+            if (isJobExpired(job, currentTimeMs)) {
+                LOG.info("discard expired job: {}", job);
+                continue;
             }
-        } finally {
-            reader.close();
+            unprotectAddJob(job);
         }
-
-        LOG.info("finished replay exportJob from image");
     }
 }

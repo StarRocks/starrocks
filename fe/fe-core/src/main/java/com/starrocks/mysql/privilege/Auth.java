@@ -2000,23 +2000,18 @@ public class Auth implements Writable {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.AUTH);
-        try {
-            byte[] s = reader.readJson(byte[].class);
-            DataInputStream dataInputStream = new DataInputStream(new ByteArrayInputStream(s));
-            readFields(dataInputStream);
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        byte[] s = reader.readJson(byte[].class);
+        DataInputStream dataInputStream = new DataInputStream(new ByteArrayInputStream(s));
+        readFields(dataInputStream);
 
-            SerializeData serializeData = reader.readJson(SerializeData.class);
-            try {
-                this.impersonateUserPrivTable.loadEntries(serializeData.entries);
-                this.roleManager.loadImpersonateRoleToUser(serializeData.impersonateRoleToUser);
-            } catch (AnalysisException e) {
-                LOG.error("failed to readAsGson, ", e);
-                throw new IOException(e.getMessage());
-            }
-        } finally {
-            reader.close();
+        SerializeData serializeData = reader.readJson(SerializeData.class);
+        try {
+            this.impersonateUserPrivTable.loadEntries(serializeData.entries);
+            this.roleManager.loadImpersonateRoleToUser(serializeData.impersonateRoleToUser);
+        } catch (AnalysisException e) {
+            LOG.error("failed to readAsGson, ", e);
+            throw new IOException(e.getMessage());
         }
     }
 
