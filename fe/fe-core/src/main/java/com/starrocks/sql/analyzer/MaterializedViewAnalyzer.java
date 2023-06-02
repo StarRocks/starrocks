@@ -348,6 +348,7 @@ public class MaterializedViewAnalyzer {
             }
         }
 
+<<<<<<< HEAD
         private void checkNondeterministicFunction(Expr expr) {
             if (expr instanceof FunctionCallExpr) {
                 if (((FunctionCallExpr) expr).isNondeterministicBuiltinFnName()) {
@@ -360,16 +361,30 @@ public class MaterializedViewAnalyzer {
                 checkNondeterministicFunction(child);
             }
         }
+=======
+        private List<Column> genMaterializedViewColumns(CreateMaterializedViewStatement statement) {
+            List<String> columnNames = statement.getQueryStatement().getQueryRelation()
+                    .getRelationFields().getAllFields().stream()
+                    .map(Field::getName).collect(Collectors.toList());
+            Scope queryScope = statement.getQueryStatement().getQueryRelation().getScope();
+            List<Field> relationFields = queryScope.getRelationFields().getAllFields();
+>>>>>>> 480324dd8 ([BugFix] fix mv on union bug (#24465))
 
         private void genColumnAndSetIntoStmt(CreateMaterializedViewStatement statement, QueryRelation queryRelation,
                                              Map<Column, Expr> columnExprMap) {
             List<Column> mvColumns = Lists.newArrayList();
+<<<<<<< HEAD
             List<String> columnOutputNames = queryRelation.getColumnOutputNames();
             List<Expr> outputExpression = queryRelation.getOutputExpression();
             for (int i = 0; i < outputExpression.size(); ++i) {
                 Type type = AnalyzerUtils.transformTypeForMv(outputExpression.get(i).getType());
                 Column column = new Column(columnOutputNames.get(i), type,
                         outputExpression.get(i).isNullable());
+=======
+            for (int i = 0; i < relationFields.size(); ++i) {
+                Type type = AnalyzerUtils.transformTypeForMv(relationFields.get(i).getType());
+                Column column = new Column(columnNames.get(i), type, relationFields.get(i).isNullable());
+>>>>>>> 480324dd8 ([BugFix] fix mv on union bug (#24465))
                 // set default aggregate type, look comments in class Column
                 column.setAggregationType(AggregateType.NONE, false);
                 mvColumns.add(column);
