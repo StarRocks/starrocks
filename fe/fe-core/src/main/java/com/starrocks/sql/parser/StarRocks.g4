@@ -1704,7 +1704,7 @@ showSmallFilesStatement
 
 createPipeStatement
     : CREATE PIPE (IF NOT EXISTS)? identifier
-        AS queryStatement
+        AS insertStatement
     ;
 
 dropPipeStatement

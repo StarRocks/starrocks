@@ -20,17 +20,17 @@ import com.starrocks.sql.parser.NodePosition;
 
 public class CreatePipeStmt extends DdlStmt {
 
-    private boolean ifNotExists;
-    private String pipeName;
-    private InsertStmt insertStmt;
+    private final boolean ifNotExists;
+    private final String pipeName;
+    private final InsertStmt insertStmt;
     private Table targetTable;
     private TableFunctionRelation tableFunctionRelation;
 
     public CreatePipeStmt(boolean ifNotExists, String pipeName, InsertStmt insertStmt, NodePosition pos) {
         super(pos);
-        ifNotExists = ifNotExists;
-        pipeName = pipeName;
-        insertStmt = insertStmt;
+        this.ifNotExists = ifNotExists;
+        this.pipeName = pipeName;
+        this.insertStmt = insertStmt;
     }
 
     public boolean isIfNotExists() {

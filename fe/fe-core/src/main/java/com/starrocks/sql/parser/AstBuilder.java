@@ -3719,10 +3719,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitCreatePipeStatement(StarRocksParser.CreatePipeStatementContext context) {
         String pipeName = String.valueOf((Identifier) visit(context.identifier()));
         boolean ifNotExists = context.IF() != null;
-        ParseNode insertNode = visit(context.queryStatement());
+        ParseNode insertNode = visit(context.insertStatement());
         if (!(insertNode instanceof InsertStmt)) {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedStatement(insertNode.toSql()),
-                    context.queryStatement());
+                    context.insertStatement());
         }
 
         return new CreatePipeStmt(ifNotExists, pipeName, (InsertStmt) insertNode, createPos(context));
