@@ -1762,8 +1762,7 @@ public class StmtExecutor {
                     LOG.warn("errors when cancel insert load job {}", jobId);
                 }
             } else {
-                StatisticUtils.triggerCollectionOnFirstLoad(txnState, database, targetTable, true,
-                        StatisticUtils.createCounteredListener(1, null));
+                StatisticUtils.triggerCollectionOnFirstLoad(txnState, database, targetTable, true);
             }
         }
 
