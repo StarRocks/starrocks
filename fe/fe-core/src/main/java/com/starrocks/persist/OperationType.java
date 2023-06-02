@@ -438,7 +438,6 @@ public class OperationType {
 
     //Table/Partition json format log
     public static final short OP_CREATE_TABLE_V2 = 13000;
-<<<<<<< HEAD
     public static final short OP_DROP_TABLE_V2 = 13001;
     public static final short OP_RECOVER_TABLE_V2 = 13002;
     public static final short OP_RECOVER_PARTITION_V2 = 13003;

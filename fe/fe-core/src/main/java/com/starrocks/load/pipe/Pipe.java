@@ -212,12 +212,20 @@ public class Pipe implements Writable {
 
     public static Pipe read(DataInput input) throws IOException {
         String json = Text.readString(input);
-        return GsonUtils.GSON.fromJson(json, Pipe.class);
+        return fromJson(json);
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
+        Text.writeString(out, toJson());
+    }
+
+    public String toJson() {
+        return GsonUtils.GSON.toJson(this);
+    }
+
+    public static Pipe fromJson(String json) {
+        return GsonUtils.GSON.fromJson(json, Pipe.class);
     }
 
     @Override

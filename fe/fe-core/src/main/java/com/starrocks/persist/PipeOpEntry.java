@@ -17,7 +17,6 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.load.pipe.Pipe;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
@@ -27,24 +26,24 @@ import java.io.IOException;
 public class PipeOpEntry implements Writable {
 
     @SerializedName(value = "pipe")
-    Pipe pipe;
+    String pipeJson;
     @SerializedName(value = "opType")
-    PipeOpType opType;
+    PipeOpType pipeOp;
 
-    public Pipe getPipe() {
-        return pipe;
+    public String getPipeJson() {
+        return pipeJson;
     }
 
-    public void setPipe(Pipe pipe) {
-        this.pipe = pipe;
+    public void setPipeJson(String pipeJson) {
+        this.pipeJson = pipeJson;
     }
 
-    public PipeOpType getOpType() {
-        return opType;
+    public PipeOpType getPipeOp() {
+        return pipeOp;
     }
 
-    public void setOpType(PipeOpType opType) {
-        this.opType = opType;
+    public void setPipeOp(PipeOpType pipeOp) {
+        this.pipeOp = pipeOp;
     }
 
     public static PipeOpEntry read(DataInput input) throws IOException {

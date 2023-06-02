@@ -1067,6 +1067,10 @@ public class EditLog {
                     DropStorageVolumeLog log = (DropStorageVolumeLog) journal.getData();
                     globalStateMgr.getStorageVolumeMgr().replayDropStorageVolume(log);
                     break;
+                case OperationType.OP_PIPE: {
+                    PipeOpEntry opEntry = (PipeOpEntry) journal.getData();
+                    globalStateMgr.getPipeManager().replay(opEntry);
+                    break;
                 }
                 default: {
                     if (Config.ignore_unknown_log_id) {
