@@ -113,7 +113,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
    200,'Beijing'
    ```
 
-3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `input` folder of your AWS S3 bucket `bucket_s3`, and to the `input` folder of your Google GCS bucket `bucket_gcs`.
+3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `input` folder of your AWS S3 bucket `bucket_s3`, to the `input` folder of your Google GCS bucket `bucket_gcs`, and to the `input` folder of your MinIO bucket `bucket_minio`.
 
 #### Load data from HDFS
 
