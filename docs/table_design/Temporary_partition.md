@@ -48,7 +48,7 @@ ADD TEMPORARY PARTITIONS START ("value1") END ("value2") EVERY {(INTERVAL <num> 
 
 ### Parameters
 
-`partition_desc`:  specifies the number of buckets and properties for temporary partitions, such as the number of replicas and the storage medium.
+`partition_desc`: specifies the number of buckets and properties for temporary partitions, such as the number of replicas and the storage medium.
 
 ### Examples
 
@@ -110,18 +110,18 @@ INSERT INTO site_access TEMPORARY PARTITION (tp2) SELECT * FROM site_access_copy
 INSERT INTO site_access TEMPORARY PARTITION (tp3, tp4,...) SELECT * FROM site_access_copy PARTITION (p3, p4,...);
 ```
 
-For detailed information such as the syntax and parameters descriptions, see [INSERT INTO](../sql-reference/sql-statements/data-manipulation/insert.md).
+For detailed syntax and parameter descriptions, see [INSERT INTO](../sql-reference/sql-statements/data-manipulation/insert.md).
 
 ### Load data by using STREAM LOAD
 
 Example:
 
-```undefined
+```bash
 curl --location-trusted -u root: -H "label:123" -H "temporary_partitions: tp1, tp2, ..." -T testData \
     http://host:port/api/example_db/site_access/_stream_load    
 ```
 
-For detailed information such as the syntax and parameters descriptions, see [STREAM LOAD](..sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+For detailed syntax and parameter descriptions, see [STREAM LOAD](..sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 
 ### Load data by using BROKER LOAD
 
@@ -139,21 +139,9 @@ WITH BROKER
 (
     StorageCredentialParams
 );
-LOAD LABEL example_db.label1
-(
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starrocks/data/input/file")
-    INTO TABLE my_table
-    TEMPORARY PARTITION (tp1, tp2, ...)
-    ...
-)
-WITH BROKER "mybroker"
-(
-    "username" = "hdfs_username",
-    "password" = "hdfs_password"
-);
 ```
 
-For detailed information such as the syntax and parameters descriptions, see [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+Note that StorageCredentialParams represents a group of authentication parameters which vary depending on the authentication method you choose. For detailed syntax and parameter descriptions, see [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 ### Load data by using ROUTINE LOAD
 
@@ -170,7 +158,7 @@ FROM KAFKA
 );
 ```
 
-For detailed information such as the syntax and parameters descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
+For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 ## Query data in temporary partitions
 

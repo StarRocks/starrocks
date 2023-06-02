@@ -41,10 +41,10 @@ Optional. The properties of the data. Syntax:
 ```SQL
 [COLUMNS TERMINATED BY '<column_separator>'],
 [ROWS TERMINATED BY '<row_separator>'],
-[COLUMNS (<column1_name>[,<column2_name>,<column_assignment>,... ])],
+[COLUMNS (<column1_name>[, <column2_name>, <column_assignment>, ... ])],
 [WHERE <expr>],
-[PARTITION (<partition1_name>[,<partition2_name>,...])]
-[TEMPORARY PARTITION (<temporary_partition1_name>[,<temporary_partition2_name>,...])]
+[PARTITION (<partition1_name>[, <partition2_name>, ...])]
+[TEMPORARY PARTITION (<temporary_partition1_name>[, <temporary_partition2_name>, ...])]
 ```
 
 `COLUMNS TERMINATED BY`
