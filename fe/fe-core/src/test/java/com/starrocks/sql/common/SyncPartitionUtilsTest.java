@@ -589,7 +589,7 @@ public class SyncPartitionUtilsTest {
         tableMap.put("p1", new MaterializedView.BasePartitionInfo(1, 2));
         tableMap.put("p2", new MaterializedView.BasePartitionInfo(3, 4));
         versionMap.put(tbl1.getId(), tableMap);
-        SyncPartitionUtils.dropBaseVersionMeta(mv, "p1");
+        SyncPartitionUtils.dropBaseVersionMeta(mv, "p1", null);
 
         Assert.assertNull(tableMap.get("p1"));
     }

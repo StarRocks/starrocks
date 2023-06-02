@@ -8,6 +8,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.SlotRef;
@@ -16,6 +17,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -411,7 +413,8 @@ public class SyncPartitionUtils {
         return Range.closedOpen(lowerBoundPartitionKey, upperBoundPartitionKey);
     }
 
-    private static void dropBaseVersionMetaForOlapTable(MaterializedView mv, String basePartitionName,
+    private static void dropBaseVersionMetaForOlapTable(MaterializedView mv, String mvPartitionName,
+                                                        Range<PartitionKey> mvPartitionRange,
                                                         MaterializedView.AsyncRefreshContext refreshContext,
                                                         TableName tableName) {
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
@@ -432,8 +435,18 @@ public class SyncPartitionUtils {
         long tableId = baseTable.getId();
         if (expr instanceof SlotRef) {
             Map<String, MaterializedView.BasePartitionInfo> mvTableVersionMap = versionMap.get(tableId);
+            // mv partition name same as base table.
             if (mvTableVersionMap != null) {
-                mvTableVersionMap.remove(basePartitionName);
+                mvTableVersionMap.remove(mvPartitionName);
+            }
+        } else if (expr instanceof FunctionCallExpr) {
+            Map<String, MaterializedView.BasePartitionInfo> mvTableVersionMap = versionMap.get(tableId);
+            if (mvTableVersionMap != null && mvPartitionRange != null && baseTable instanceof OlapTable) {
+                // use range derive connect base partition
+                Map<String, Range<PartitionKey>> basePartitionMap = ((OlapTable) baseTable).getRangePartitionMap();
+                Map<String, Set<String>> mvToBaseMapping = generatePartitionRefMap(
+                        Collections.singletonMap(mvPartitionName, mvPartitionRange), basePartitionMap);
+                mvToBaseMapping.values().forEach(parts -> parts.forEach(mvTableVersionMap::remove));
             }
         } else {
             // This is a bad case for refreshing, and this problem will be optimized later.
@@ -441,7 +454,7 @@ public class SyncPartitionUtils {
         }
     }
 
-    private static void dropBaseVersionMetaForExternalTable(MaterializedView mv, String basePartitionName,
+    private static void dropBaseVersionMetaForExternalTable(MaterializedView mv, String mvPartitionName,
                                                             MaterializedView.AsyncRefreshContext refreshContext,
                                                             TableName tableName) {
         Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
@@ -467,7 +480,7 @@ public class SyncPartitionUtils {
                         Set<String> partitionNames = PartitionUtil.getMVPartitionName(baseTable, partitionColumn,
                                 Lists.newArrayList(partitionName));
                         return partitionNames != null && partitionNames.size() == 1 &&
-                                Lists.newArrayList(partitionNames).get(0).equals(basePartitionName);
+                                Lists.newArrayList(partitionNames).get(0).equals(mvPartitionName);
                     } catch (AnalysisException e) {
                         LOG.warn("failed to get mv partition name", e);
                         return false;
@@ -482,7 +495,8 @@ public class SyncPartitionUtils {
     }
 
 
-    public static void dropBaseVersionMeta(MaterializedView mv, String basePartitionName) {
+    public static void dropBaseVersionMeta(MaterializedView mv, String mvPartitionName,
+                                           Range<PartitionKey> partitionRange) {
         MaterializedView.AsyncRefreshContext refreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
 
         Expr expr = mv.getPartitionRefTableExprs().get(0);
@@ -496,7 +510,7 @@ public class SyncPartitionUtils {
         }
         TableName tableName = slotRef.getTblNameWithoutAnalyzed();
         // base version meta for olap table and external table are different, we need to drop them separately
-        dropBaseVersionMetaForOlapTable(mv, basePartitionName, refreshContext, tableName);
-        dropBaseVersionMetaForExternalTable(mv, basePartitionName, refreshContext, tableName);
+        dropBaseVersionMetaForOlapTable(mv, mvPartitionName, partitionRange, refreshContext, tableName);
+        dropBaseVersionMetaForExternalTable(mv, mvPartitionName, refreshContext, tableName);
     }
 }
