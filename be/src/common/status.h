@@ -149,6 +149,8 @@ public:
 
     static Status EAgain(const Slice& msg) { return Status(TStatusCode::SR_EAGAIN, msg); }
 
+    static Status RemoteFileNotFound(const Slice& msg) { return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg); }
+
     bool ok() const { return _state == nullptr; }
 
     bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }
