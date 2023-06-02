@@ -4587,7 +4587,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 cluster.addDb(dbName, db.getId());
 
                 if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
-                    LOG.warn("Since the the database of mysql already exists, " +
+                    LOG.warn("Since the the database of starrocsks already exists, " +
                             "the system will not automatically create the database of starrocks for system.");
                 } else {
                     StarRocksDb starRocksDb = new StarRocksDb();
