@@ -442,9 +442,9 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                     // list partition
                     auto it = _partitions_map.find(&row);
                     if (it != _partitions_map.end() && _part_contains(it->second, &row)) {
-                            (*partitions)[i] = it->second;
-                            (*indexes)[i] = (*indexes)[i] % it->second->num_buckets;
-                            LOG(INFO) << "find list partition:" << it->second->id << " row:" << row.debug_string();
+                        (*partitions)[i] = it->second;
+                        (*indexes)[i] = (*indexes)[i] % it->second->num_buckets;
+                        LOG(INFO) << "find list partition:" << it->second->id << " row:" << row.debug_string();
                     } else {
                         if (partition_not_exist_row_values) {
                             auto partition_value_items = std::make_unique<std::vector<std::string>>();
