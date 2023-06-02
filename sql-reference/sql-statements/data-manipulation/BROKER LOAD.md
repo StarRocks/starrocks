@@ -50,10 +50,10 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 INTO TABLE <table_name>
 [PARTITION (<partition1_name>[, <partition2_name> ...])]
 [TEMPORARY PARTITION (<temporary_partition1_name>[, <temporary_partition2_name> ...])]
-[FORMAT AS "CSV | Parquet | ORC"]
-[(fomat_type_options)]
 [COLUMNS TERMINATED BY "<column_separator>"]
 [ROWS TERMINATED BY "<row_separator>"]
+[FORMAT AS "CSV | Parquet | ORC"]
+[(format_type_options)]
 [(column_list)]
 [COLUMNS FROM PATH AS (<partition_field_name>[, <partition_field_name> ...])]
 [SET <k1=f1(v1)>[, <k2=f2(v2)> ...]]
