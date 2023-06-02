@@ -143,7 +143,7 @@ StarRocks 中 Instance Profile、Assumed Role、以及 IAM User 三种认证方�
 
 ![Credentials](../assets/authenticate_s3_credential_methods.png)
 
-## 相关参数配置
+## 参数配置
 
 ### 访问 AWS S3 的认证参数
 
@@ -153,6 +153,15 @@ StarRocks 中 Instance Profile、Assumed Role、以及 IAM User 三种认证方�
 - 如果基于 Assumed Role 进行认证和鉴权，则需要把 `aws.s3.use_instance_profile` 设置为 `true`，并在 `aws.s3.iam_role_arn` 中填入用于访问 AWS S3 的 Assumed Role 的 ARN。
 - 如果基于 IAM User 进行认证和鉴权，则需要把 `aws.s3.use_instance_profile` 设置为 `false`，并在 `aws.s3.access_key` 和 `aws.s3.secret_key` 中分别填入 AWS IAM User 的 Access Key 和 Secret Key。
 
+参数说明见下表。
+
+| 参数                        | 是否必须   | 说明                                                         |
+| --------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
+| aws.s3.iam_role_arn         | 否       | 有权限访问 AWS S3 Bucket 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS S3 时，必须指定此参数。 |
+| aws.s3.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
+| aws.s3.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
+
 ### 访问 AWS Glue 的认证参数
 
 在 StarRocks 需要与 AWS Glue 进行集成的各类场景下，例如在创建 External Catalog 时，AWS Glue 的认证参数都需要参考下述进行配置：
@@ -160,6 +169,15 @@ StarRocks 中 Instance Profile、Assumed Role、以及 IAM User 三种认证方�
 - 如果基于 Instance Profile 进行认证和鉴权，则需要把 `aws.glue.use_instance_profile` 设置为 `true`。
 - 如果基于 Assumed Role 进行认证和鉴权，则需要把 `aws.glue.use_instance_profile` 设置为 `true`，并在 `aws.glue.iam_role_arn` 中填入用于访问 AWS Glue 的 Assumed Role 的 ARN。
 - 如果基于 IAM User 进行认证和鉴权，则需要把 `aws.glue.use_instance_profile` 设置为 `false`，并在 `aws.glue.access_key` 和 `aws.glue.secret_key` 中分别填入 AWS IAM User 的 Access Key 和 Secret Key。
+
+参数说明见下表。
+
+| 参数                          | 是否必须   | 说明                                                         |
+| ----------------------------- | -------- | ------------------------------------------------------------ |
+| aws.glue.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
+| aws.glue.iam_role_arn         | 否       | 有权限访问 AWS Glue Data Catalog 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
+| aws.glue.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
+| aws.glue.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 
 ## 集成示例
 
