@@ -127,7 +127,7 @@ For detailed syntax and parameter descriptions, see [STREAM LOAD](..sql-referenc
 
 Example:
 
-```SQL
+```sql
 LOAD LABEL example_db.label1
 (
     DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starrocks/data/input/file")
@@ -135,9 +135,10 @@ LOAD LABEL example_db.label1
     TEMPORARY PARTITION (tp1, tp2, ...)
     ...
 )
-WITH BROKER
+WITH BROKER "mybroker"
 (
-    StorageCredentialParams
+    "username" = "hdfs_username",
+    "password" = "hdfs_password"
 );
 ```
 
