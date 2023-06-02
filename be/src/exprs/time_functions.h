@@ -700,6 +700,7 @@ private:
     static StatusOr<ColumnPtr> _last_day_with_format(FunctionContext* context, const Columns& columns);
     static StatusOr<ColumnPtr> _last_day_with_format_const(std::string& format_content, FunctionContext* context,
                                                            const Columns& columns);
+    static Status _error_date_part();
 
 public:
     static TimestampValue start_of_time_slice;
