@@ -15,8 +15,6 @@
 
 package com.starrocks.load.pipe;
 
-import java.util.List;
-
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.UserException;
@@ -25,6 +23,8 @@ import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.commons.collections.CollectionUtils;
+
+import java.util.List;
 
 public class FilePipeSource extends PipeSource {
 

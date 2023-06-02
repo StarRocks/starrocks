@@ -15,9 +15,9 @@
 
 package com.starrocks.load.pipe;
 
-import java.util.List;
-
 import com.starrocks.thrift.TBrokerFileStatus;
+
+import java.util.List;
 
 public class FilePipePiece extends PipePiece {
 

@@ -15,17 +15,17 @@
 
 package com.starrocks.load.pipe;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
-
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreatePipeStmt;
 import com.starrocks.sql.ast.DropPipeStmt;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 public class PipeManager {
 

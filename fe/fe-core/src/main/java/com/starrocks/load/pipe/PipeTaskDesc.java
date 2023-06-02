@@ -15,11 +15,11 @@
 
 package com.starrocks.load.pipe;
 
-import java.util.Map;
-
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+
+import java.util.Map;
 
 public class PipeTaskDesc {
     private String dbName;

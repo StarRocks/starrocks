@@ -15,9 +15,9 @@
 
 package com.starrocks.load.pipe;
 
-import java.util.List;
-
 import com.starrocks.common.UserException;
+
+import java.util.List;
 
 public abstract class PipeSource {
 

@@ -15,11 +15,6 @@
 
 package com.starrocks.load.pipe;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.locks.ReentrantLock;
-
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.scheduler.SubmitResult;
@@ -31,6 +26,11 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * PipeScheduler: get tasks from pipe and execute them
