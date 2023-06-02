@@ -213,6 +213,8 @@ For information about how to choose an authentication method for accessing AWS S
 
 ##### S3-compatible storage system
 
+Hive catalogs support S3-compatible storage systems from v2.5 onwards.
+
 If you choose an S3-compatible storage system, such as MinIO, as storage for your Hive cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
 
 ```SQL
