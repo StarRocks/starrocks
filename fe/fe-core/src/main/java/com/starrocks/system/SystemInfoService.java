@@ -895,8 +895,8 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void clear() {
-        this.idToBackendRef = null;
-        this.idToReportVersionRef = null;
+        this.idToBackendRef = new ConcurrentHashMap<>();
+        this.idToReportVersionRef = ImmutableMap.of();
     }
 
     public static Pair<String, Integer> validateHostAndPort(String hostPort) throws AnalysisException {

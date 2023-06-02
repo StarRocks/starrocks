@@ -697,24 +697,18 @@ public class RoutineLoadMgr implements Writable {
         return checksum;
     }
 
-    public void loadRoutineLoadJobsV2(DataInputStream dis) throws IOException,
-            SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.ROUTINE_LOAD_MGR);
+    public void loadRoutineLoadJobsV2(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int size = reader.readInt();
+        while (size-- > 0) {
+            RoutineLoadJob routineLoadJob = reader.readJson(RoutineLoadJob.class);
 
-        try {
-            int size = reader.readInt();
-            while (size-- > 0) {
-                RoutineLoadJob routineLoadJob = reader.readJson(RoutineLoadJob.class);
-
-                if (routineLoadJob.needRemove()) {
-                    LOG.info("discard expired job [{}]", routineLoadJob.getId());
-                    continue;
-                }
-
-                putJob(routineLoadJob);
+            if (routineLoadJob.needRemove()) {
+                LOG.info("discard expired job [{}]", routineLoadJob.getId());
+                continue;
             }
-        } finally {
-            reader.close();
+
+            putJob(routineLoadJob);
         }
     }
 }

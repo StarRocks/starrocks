@@ -70,16 +70,11 @@ import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class GlobalStateMgrTest {
-
-    @Mocked
-    InetAddress addr1;
 
     @Before
     public void setUp() {
@@ -213,32 +208,6 @@ public class GlobalStateMgrTest {
         field4.set(globalStateMgr, nodeMgr);
 
         return globalStateMgr;
-    }
-
-    private void mockNet() {
-        new MockUp<InetAddress>() {
-            @Mock
-            public InetAddress getByName(String host) throws UnknownHostException {
-                return addr1;
-            }
-        };
-    }
-
-    @Test
-    public void testGetFeByHost() throws Exception {
-        mockNet();
-        new Expectations() {
-            {
-                addr1.getHostAddress();
-                result = "127.0.0.1";
-            }
-        };
-
-        GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-        Frontend testFeIp = globalStateMgr.getFeByHost("127.0.0.1");
-        Assert.assertNotNull(testFeIp);
-        Frontend testFeHost = globalStateMgr.getFeByHost("sandbox");
-        Assert.assertNotNull(testFeHost);
     }
 
     @Test

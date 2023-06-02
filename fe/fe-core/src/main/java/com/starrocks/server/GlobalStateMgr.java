@@ -38,6 +38,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -207,6 +208,9 @@ import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockLoader;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -299,12 +303,12 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -695,7 +699,7 @@ public class GlobalStateMgr {
         this.pluginMgr = new PluginMgr();
         this.auditEventProcessor = new AuditEventProcessor(this.pluginMgr);
         this.analyzeMgr = new AnalyzeMgr();
-        this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
+        this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
         this.warehouseMgr = new WarehouseManager();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
@@ -1351,6 +1355,7 @@ public class GlobalStateMgr {
         feType = newType;
     }
 
+
     public void loadImage(String imageDir) throws IOException, DdlException {
         Storage storage = new Storage(imageDir);
         nodeMgr.setClusterId(storage.getClusterID());
@@ -1364,7 +1369,7 @@ public class GlobalStateMgr {
         LOG.info("start load image from {}. is ckpt: {}", curFile.getAbsolutePath(),
                 GlobalStateMgr.isCheckpointThread());
         long loadImageStartTime = System.currentTimeMillis();
-        DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
+        DataInputStream dis = new DataInputStream(new BufferedInputStream(Files.newInputStream(curFile.toPath())));
 
         long checksum = 0;
         long remoteChecksum = -1;  // in case of empty image file checksum match
@@ -1589,16 +1594,11 @@ public class GlobalStateMgr {
         return newChecksum;
     }
 
-    public long loadHeaderV2(DataInputStream dis, long checksum) throws IOException {
+    public void loadHeaderV2(DataInputStream dis) throws IOException {
         ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
-
-        checksum ^= header.getBatchEndId();
         idGenerator.setId(header.getBatchEndId());
-
         isDefaultClusterCreated = header.isDefaultClusterCreated();
-
         LOG.info("finished to replay header from image");
-        return checksum;
     }
 
     public long loadAlterJob(DataInputStream dis, long checksum) throws IOException {
@@ -1752,9 +1752,8 @@ public class GlobalStateMgr {
         // save image does not need any lock. because only checkpoint thread will call this method.
         LOG.info("start save image to {}. is ckpt: {}", curFile.getAbsolutePath(), GlobalStateMgr.isCheckpointThread());
 
-        long checksum = 0;
         long saveImageStartTime = System.currentTimeMillis();
-        try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(curFile))) {
+        try (DataOutputStream dos = new DataOutputStream(Files.newOutputStream(curFile.toPath()))) {
             // ** NOTICE **: always add new code at the end
             checksum = saveHeader(dos, replayedJournalId, checksum);
             checksum = nodeMgr.saveLeaderInfo(dos, checksum);
@@ -1809,9 +1808,11 @@ public class GlobalStateMgr {
             // ** NOTICE **: always add new code at the end
         }
 
-        long saveImageEndTime = System.currentTimeMillis();
-        LOG.info("finished save image {} in {} ms. checksum is {}",
-                curFile.getAbsolutePath(), (saveImageEndTime - saveImageStartTime), checksum);
+                long saveImageEndTime = System.currentTimeMillis();
+                LOG.info("finished save image {} in {} ms. checksum is {}",
+                        curFile.getAbsolutePath(), (saveImageEndTime - saveImageStartTime), checksum);
+            }
+        }
     }
 
     public long saveHeader(DataOutputStream dos, long replayedJournalId, long checksum) throws IOException {

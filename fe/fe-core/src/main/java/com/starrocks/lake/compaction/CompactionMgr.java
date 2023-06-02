@@ -29,7 +29,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -191,13 +190,8 @@ public class CompactionMgr {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.COMPACTION_MGR);
-        try {
-            CompactionMgr compactionManager = reader.readJson(CompactionMgr.class);
-            partitionStatisticsHashMap = compactionManager.partitionStatisticsHashMap;
-        } finally {
-            reader.close();
-        }
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        CompactionMgr compactionManager = reader.readJson(CompactionMgr.class);
+        partitionStatisticsHashMap = compactionManager.partitionStatisticsHashMap;
     }
 }

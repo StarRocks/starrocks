@@ -415,8 +415,7 @@ public class VariableMgr {
         writer.close();
     }
 
-    public static void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException, DdlException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.VARIABLE_MGR);
+    public static void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         try {
             int sessionVarSize = reader.readInt();
             for (int i = 0; i < sessionVarSize; ++i) {
@@ -431,8 +430,8 @@ public class VariableMgr {
                 VarContext varContext = getVarContext(v.name);
                 setValue(varContext.getObj(), varContext.getField(), v.variable);
             }
-        } finally {
-            reader.close();
+        } catch (DdlException e) {
+            throw new IOException(e);
         }
     }
 

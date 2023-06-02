@@ -48,7 +48,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateFileStmt;
@@ -553,16 +552,11 @@ public class SmallFileMgr implements Writable {
         return checksum;
     }
 
-    public void loadSmallFilesV2(DataInputStream in) throws IOException, SRMetaBlockEOFException, SRMetaBlockException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(in, SRMetaBlockID.SMALL_FILE_MGR);
-        try {
-            int size = reader.readInt();
-            while (size-- > 0) {
-                SmallFile smallFile = reader.readJson(SmallFile.class);
-                putToFiles(smallFile);
-            }
-        } finally {
-            reader.close();
+    public void loadSmallFilesV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockEOFException, SRMetaBlockException {
+        int size = reader.readInt();
+        while (size-- > 0) {
+            SmallFile smallFile = reader.readJson(SmallFile.class);
+            putToFiles(smallFile);
         }
     }
 
