@@ -1031,48 +1031,31 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         if (!txnOperated) {
             return;
         }
-        collectStatisticsOnFirstLoadAsync(txnState, () -> {
-            unprotectUpdateLoadingStatus(txnState);
-            updateState(JobState.FINISHED);
-        });
+        collectStatisticsOnFirstLoadAsync(txnState);
+        unprotectUpdateLoadingStatus(txnState);
+        updateState(JobState.FINISHED);
     }
 
-    private void collectStatisticsOnFirstLoadAsync(TransactionState txnState, Runnable listener) {
-        boolean earlyReturn = true;
+    private void collectStatisticsOnFirstLoadAsync(TransactionState txnState) {
+        Database db;
         try {
-            // TODO(hcf) there's compatible issue with spark load
-            if (this instanceof SparkLoadJob) {
-                return;
-            }
+            db = getDb();
+        } catch (MetaNotFoundException e) {
+            return;
+        }
 
-            Database db;
-            try {
-                db = getDb();
-            } catch (MetaNotFoundException e) {
-                return;
-            }
+        List<Table> tables = txnState.getIdToTableCommitInfos().values().stream()
+                .map(TableCommitInfo::getTableId)
+                .distinct()
+                .map(db::getTable)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (tables.isEmpty()) {
+            return;
+        }
 
-            List<Table> tables = txnState.getIdToTableCommitInfos().values().stream()
-                    .map(TableCommitInfo::getTableId)
-                    .distinct()
-                    .map(db::getTable)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
-            if (tables.isEmpty()) {
-                return;
-            }
-
-            earlyReturn = false;
-
-            StatisticUtils.CountedListener counteredListener =
-                    StatisticUtils.createCounteredListener(tables.size(), listener);
-            for (Table table : tables) {
-                StatisticUtils.triggerCollectionOnFirstLoad(txnState, db, table, false, counteredListener);
-            }
-        } finally {
-            if (earlyReturn) {
-                listener.run();
-            }
+        for (Table table : tables) {
+            StatisticUtils.triggerCollectionOnFirstLoad(txnState, db, table, false);
         }
     }
 
