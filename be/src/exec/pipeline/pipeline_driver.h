@@ -19,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 
+#include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
@@ -31,6 +32,7 @@
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "fmt/printf.h"
+#include "runtime/mem_tracker.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -456,6 +458,8 @@ protected:
     Status _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
     Status _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
+
+    void _set_operator_execute_mode(RuntimeState* state, MemTracker* tracker, OperatorPtr& op, const ChunkPtr& chunk);
 
     // Update metrics when the driver yields.
     void _update_driver_acct(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);

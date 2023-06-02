@@ -31,6 +31,7 @@ Status SpillablePartitionSortSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(PartitionSortSinkOperator::prepare(state));
     RETURN_IF_ERROR(_chunks_sorter->spiller()->prepare(state));
     if (state->spill_mode() == TSpillMode::FORCE) {
+        increase_performance_level();
         _chunks_sorter->set_spill_stragety(spill::SpillStrategy::SPILL_ALL);
     }
     return Status::OK();
@@ -38,6 +39,14 @@ Status SpillablePartitionSortSinkOperator::prepare(RuntimeState* state) {
 
 void SpillablePartitionSortSinkOperator::close(RuntimeState* state) {
     PartitionSortSinkOperator::close(state);
+}
+
+size_t SpillablePartitionSortSinkOperator::estimated_memory_reserved(const ChunkPtr& chunk) {
+    return _chunks_sorter->reserved_bytes(chunk);
+}
+
+size_t SpillablePartitionSortSinkOperator::estimated_memory_reserved() {
+    return _chunks_sorter->reserved_bytes(nullptr);
 }
 
 Status SpillablePartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {

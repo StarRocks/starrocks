@@ -222,14 +222,26 @@ public:
     // Called when the new Epoch starts at first to reset operator's internal state.
     virtual Status reset_epoch(RuntimeState* state) { return Status::OK(); }
 
-    // it means this operator need spill
-    virtual void mark_need_spill() { _marked_need_spill = true; }
-    bool need_mark_spill() { return _marked_need_spill; }
+    virtual void increase_performance_level() { _performance_level = MAX_PERFORMANCE_LEVEL; }
+    bool is_max_performance_level() { return _performance_level == MAX_PERFORMANCE_LEVEL; }
+    size_t performance_level() { return _performance_level; }
+
     // the memory that can be freed by the current operator
     size_t revocable_mem_bytes() { return _revocable_mem_bytes; }
     void set_revocable_mem_bytes(size_t bytes) { _revocable_mem_bytes = bytes; }
     int32_t get_driver_sequence() const { return _driver_sequence; }
     OperatorFactory* get_factory() const { return _factory; }
+
+    // memory to be reserved before executing push_chunk
+    virtual size_t estimated_memory_reserved(const ChunkPtr& chunk) {
+        if (chunk && !chunk->is_empty()) {
+            return chunk->memory_usage();
+        }
+        return 0;
+    }
+
+    // memory to be reserved before executing set_finishing
+    virtual size_t estimated_memory_reserved() { return 0; }
 
 protected:
     OperatorFactory* _factory;
@@ -252,8 +264,11 @@ protected:
 
     RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
 
-    // if _need_spill is true. reserved data in this operator need spill
-    bool _marked_need_spill = false;
+    inline static size_t MAX_PERFORMANCE_LEVEL = 3;
+    // performance level. Determine the execution mode and whether memory can be freed early
+    // A higher performance level will allow the operator to execute with less memory, which will reduce performance
+    size_t _performance_level{};
+
     // the memory that can be released by this operator
     size_t _revocable_mem_bytes = 0;
 

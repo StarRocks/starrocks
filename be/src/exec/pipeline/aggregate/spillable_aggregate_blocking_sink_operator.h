@@ -41,8 +41,8 @@ public:
     Status prepare(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    void mark_need_spill() override {
-        Operator::mark_need_spill();
+    void increase_performance_level() override {
+        Operator::increase_performance_level();
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
         TRACE_SPILL_LOG << "AggregateBlockingSink, mark spill " << (void*)this;
     }

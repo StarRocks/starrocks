@@ -34,12 +34,15 @@ public:
 
     bool is_finished() const override { return _is_finished || _sort_context->is_finished(); }
 
-    void mark_need_spill() override {
-        Operator::mark_need_spill();
+    void increase_performance_level() override {
+        _performance_level = MAX_PERFORMANCE_LEVEL;
         if (_chunks_sorter) {
             _chunks_sorter->set_spill_stragety(spill::SpillStrategy::SPILL_ALL);
         }
     }
+
+    size_t estimated_memory_reserved(const ChunkPtr& chunk) override;
+    size_t estimated_memory_reserved() override;
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
