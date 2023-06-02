@@ -47,7 +47,6 @@ public:
     }
 
     StatusOr<std::string_view> peek(int64_t count) override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
         auto st = _stream->peek(count);
         if (st.ok()) {
             _stats->io_count += 1;
