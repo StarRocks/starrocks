@@ -28,7 +28,7 @@ RESULT SINK
 14:MERGING-EXCHANGE
 cardinality: 10031873
 column statistics:
-* count-->[0.0, 1.0031873E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
+* count-->[0.0, 1.125E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
 * count-->[0.0, 1.0031873E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 
 PLAN FRAGMENT 1(F06)
@@ -43,7 +43,7 @@ OutPut Exchange Id: 14
 |  hasNullableGenerateChild: true
 |  cardinality: 10031873
 |  column statistics:
-|  * count-->[0.0, 1.0031873E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
+|  * count-->[0.0, 1.125E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |  * count-->[0.0, 1.0031873E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |
 12:AGGREGATE (update finalize)
@@ -52,7 +52,7 @@ OutPut Exchange Id: 14
 |  hasNullableGenerateChild: true
 |  cardinality: 10031873
 |  column statistics:
-|  * count-->[0.0, 1.0031873E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
+|  * count-->[0.0, 1.125E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |  * count-->[0.0, 1.0031873E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |
 11:EXCHANGE
@@ -70,7 +70,7 @@ OutPut Exchange Id: 11
 |  hasNullableGenerateChild: true
 |  cardinality: 10031873
 |  column statistics:
-|  * count-->[0.0, 1.0031873E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
+|  * count-->[0.0, 1.125E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |
 9:AGGREGATE (merge finalize)
 |  aggregate: count[([18: count, BIGINT, false]); args: INT; result: BIGINT; args nullable: true; result nullable: false]
@@ -79,7 +79,7 @@ OutPut Exchange Id: 11
 |  cardinality: 10031873
 |  column statistics:
 |  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
-|  * count-->[0.0, 1.0031873E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
+|  * count-->[0.0, 1.125E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |
 8:EXCHANGE
 cardinality: 10031873

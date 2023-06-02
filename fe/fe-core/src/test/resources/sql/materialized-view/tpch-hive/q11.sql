@@ -30,10 +30,9 @@ order by
 TOP-N (order by [[: sum DESC NULLS LAST]])
     TOP-N (order by [[: sum DESC NULLS LAST]])
         INNER JOIN (join-predicate [cast(: sum as double) > cast(: expr as double)] post-join-predicate [null])
-            AGGREGATE ([GLOBAL] aggregate [{: sum=sum(: sum)}] group by [[: ps_partkey]] having [null]
+            AGGREGATE ([GLOBAL] aggregate [{: sum=sum(: expr)}] group by [[: ps_partkey]] having [null]
                 EXCHANGE SHUFFLE[]
-                    AGGREGATE ([LOCAL] aggregate [{: sum=sum(: expr)}] group by [[: ps_partkey]] having [null]
-                        SCAN (mv[partsupp_mv] columns[: n_name, : ps_partkey, : ps_partvalue] predicate[: n_name = PERU])
+                    SCAN (mv[partsupp_mv] columns[: n_name, : ps_partkey, : ps_partvalue] predicate[: n_name = PERU])
             EXCHANGE BROADCAST
                 ASSERT LE
                     AGGREGATE ([GLOBAL] aggregate [{: sum=sum(: sum)}] group by [[]] having [null]

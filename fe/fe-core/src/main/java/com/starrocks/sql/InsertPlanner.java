@@ -116,7 +116,7 @@ public class InsertPlanner {
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(insertStmt.getTargetTable());
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
-        try {
+        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("InsertPlanner")) {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(false);
             }
@@ -145,9 +145,12 @@ public class InsertPlanner {
             //7. Build fragment exec plan
             boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
                     || insertStmt.getTargetTable() instanceof MysqlTable);
-            ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
-                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                    queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+            ExecPlan execPlan;
+            try (PlannerProfile.ScopedTimer ignore3 = PlannerProfile.getScopedTimer("PlanBuilder")) {
+                execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+                        optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                        queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+            }
 
             DescriptorTable descriptorTable = execPlan.getDescTbl();
             TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
