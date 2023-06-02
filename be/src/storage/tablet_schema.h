@@ -96,6 +96,9 @@ public:
     bool has_bitmap_index() const { return _check_flag(kHasBitmapIndexShift); }
     void set_has_bitmap_index(bool value) { _set_flag(kHasBitmapIndexShift, value); }
 
+    bool is_sort_key() const { return _check_flag(kIsSortKey); }
+    void set_is_sort_key(bool value) { _set_flag(kIsSortKey, value); }
+
     ColumnLength length() const { return _length; }
     void set_length(ColumnLength length) { _length = length; }
 
@@ -162,6 +165,11 @@ private:
     constexpr static uint8_t kHasBitmapIndexShift = 3;
     constexpr static uint8_t kHasPrecisionShift = 4;
     constexpr static uint8_t kHasScaleShift = 5;
+<<<<<<< HEAD
+=======
+    constexpr static uint8_t kHasAutoIncrementShift = 6;
+    constexpr static uint8_t kIsSortKey = 7;
+>>>>>>> 6d3a41926 ([Enhancement] Add zone map for sort key column (#24593))
 
     ExtraFields* _get_or_alloc_extra_fields() {
         if (_extra_fields == nullptr) {
