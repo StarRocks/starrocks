@@ -8,14 +8,14 @@
 
 ### StarRocks 版本
 
-StarRocks 的版本号由三个数字表示，格式为 **Major.Minor.Patch**，例如 `2.5.4`。第一个数字代表 StarRocks 的重大版本，第二个数字代表大版本，第三个数字代表小版本。目前，StarRocks v2.2 和 v2.5 是长期支持（Long-time Support，LTS）版本，维护期为半年以上。
+StarRocks 的版本号由三个数字表示，格式为 **Major.Minor.Patch**，例如 `2.5.4`。第一个数字代表 StarRocks 的重大版本，第二个数字代表大版本，第三个数字代表小版本。目前，StarRocks 为部分版本提供长期支持（Long-time Support，LTS），维护期为半年以上。
 
 | **StarRocks 版本** | **是否为 LTS 版本** |
 | ------------------ | ------------------- |
 | v1.19.x            | 否                  |
 | v2.0.x             | 否                  |
 | v2.1.x             | 否                  |
-| v2.2.x             | 是                  |
+| v2.2.x             | 否                  |
 | v2.3.x             | 否                  |
 | v2.4.x             | 否                  |
 | v2.5.x             | 是                  |
