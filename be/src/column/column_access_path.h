@@ -32,7 +32,7 @@ class RuntimeState;
  *  column: structA STRUCT<a STRCUT<a1 INT, b STRUCT<c INT>>>
  *  path: /structA/a/b/c
  *  type: /ROOT/FIELD/FIELD/FIELD
- *  index: /7/0/1/0
+ *  index: /7/0/1/0, offset in storage
  */
 class ColumnAccessPath {
 public:
@@ -53,8 +53,9 @@ public:
 
     bool is_offset() { return _type == TAccessPathType::type::OFFSET; }
 
-    // copy and set index
-    std::unique_ptr<ColumnAccessPath> convert_by_index(const Field* filed, uint32_t index);
+    // segement may have different column schema(because schema change), 
+    // we need copy one and set the offset of schema, to help column reader find column access path
+    StatusOr<std::unique_ptr<ColumnAccessPath>> convert_by_index(const Field* filed, uint32_t index);
 
 private:
     TAccessPathType::type _type;

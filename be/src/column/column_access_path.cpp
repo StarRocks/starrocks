@@ -67,31 +67,32 @@ Status ColumnAccessPath::init(const TAccessPathType::type& type, const std::stri
     return Status::OK();
 }
 
-ColumnAccessPathPtr ColumnAccessPath::convert_by_index(const Field* filed, uint32_t index) {
+StatusOr<ColumnAccessPathPtr> ColumnAccessPath::convert_by_index(const Field* field, uint32_t index) {
     ColumnAccessPathPtr path = std::make_unique<ColumnAccessPath>();
     path->_type = this->_type;
     path->_path = this->_path;
     path->_column_index = index;
 
-    if (!filed->has_sub_fields()) {
+    if (!field->has_sub_fields()) {
         if (!this->_children.empty()) {
-            LOG(WARNING) << "impossable bad storage schema for access path, filed: " << filed
-                         << ", path: " << this->_path;
+            return Status::InternalError(fmt::format(
+                    "impossable bad storage schema for access path, field: {}, path: {}", field, this->_path));
         }
         return path;
     }
 
-    auto all_filed = filed->sub_fields();
+    auto all_field = field->sub_fields();
 
     std::unordered_map<std::string_view, uint32_t> name_index;
 
-    for (uint32_t i = 0; i < all_filed.size(); i++) {
-        name_index[all_filed[i].name()] = i;
+    for (uint32_t i = 0; i < all_field.size(); i++) {
+        name_index[all_field[i].name()] = i;
     }
 
     for (const auto& child : this->_children) {
         uint32_t i = name_index[child->_path];
-        auto copy = child->convert_by_index(&all_filed[i], i);
+
+        ASSIGN_OR_RETURN(auto copy, child->convert_by_index(&all_field[i], i));
         path->_children.emplace_back(std::move(copy));
     }
 

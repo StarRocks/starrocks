@@ -17,6 +17,7 @@
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
+#include "column/column_access_path.h"
 #include "column/datum_convert.h"
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
@@ -143,11 +144,11 @@ protected:
         }
 
         // read and check
-        {
-            auto res = ColumnReader::create(&meta, segment.get());
-            ASSERT_TRUE(res.ok());
-            auto reader = std::move(res).value();
+        auto res = ColumnReader::create(&meta, segment.get());
+        ASSERT_TRUE(res.ok());
+        auto reader = std::move(res).value();
 
+        {
             ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
@@ -178,22 +179,15 @@ protected:
             }
         }
 
-        // read and check
         {
-            auto res = ColumnReader::create(&meta, segment.get());
-            ASSERT_TRUE(res.ok());
-            auto reader = std::move(res).value();
+            auto child_path = std::make_unique<ColumnAccessPath>();
+            child_path->init(TAccessPathType::type::OFFSET, "offsets", 1);
 
-
-            ColumnAccessPath child_path;
-            child_path.init(TAccessPathType::type::OFFSET, "offsets", 1);
-            
             ColumnAccessPath path;
             path.init(TAccessPathType::type::ROOT, "root", 0);
-            path.children().emplace_back(child_path);
+            path.children().emplace_back(std::move(child_path));
 
-
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;
@@ -216,29 +210,22 @@ protected:
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
-                ASSERT_EQ("{0:0}", dst_column->debug_item(0));
+                ASSERT_EQ("{NULL:NULL}", dst_column->debug_item(0));
                 ASSERT_EQ("{}", dst_column->debug_item(1));
-                ASSERT_EQ("{0:0,0:0}", dst_column->debug_item(2));
-                ASSERT_EQ("{0:0,0:0,0:0}", dst_column->debug_item(3));
+                ASSERT_EQ("{NULL:NULL,NULL:NULL}", dst_column->debug_item(2));
+                ASSERT_EQ("{NULL:NULL,NULL:NULL,NULL:NULL}", dst_column->debug_item(3));
             }
         }
 
-        // read and check
         {
-            auto res = ColumnReader::create(&meta, segment.get());
-            ASSERT_TRUE(res.ok());
-            auto reader = std::move(res).value();
+            auto child_path = std::make_unique<ColumnAccessPath>();
+            child_path->init(TAccessPathType::type::KEY, "key", 1);
 
-
-            ColumnAccessPath child_path;
-            child_path.init(TAccessPathType::type::KEY, "key", 1);
-            
             ColumnAccessPath path;
             path.init(TAccessPathType::type::ROOT, "root", 0);
-            path.children().emplace_back(child_path);
+            path.children().emplace_back(std::move(child_path));
 
-
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;
@@ -261,10 +248,10 @@ protected:
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src_column->size(), rows_read);
 
-                ASSERT_EQ("{1:0}", dst_column->debug_item(0));
+                ASSERT_EQ("{1:NULL}", dst_column->debug_item(0));
                 ASSERT_EQ("{}", dst_column->debug_item(1));
-                ASSERT_EQ("{2:0,3:0}", dst_column->debug_item(2));
-                ASSERT_EQ("{4:0,5:0,6:0}", dst_column->debug_item(3));
+                ASSERT_EQ("{2:NULL,3:NULL}", dst_column->debug_item(2));
+                ASSERT_EQ("{4:NULL,5:NULL,6:NULL}", dst_column->debug_item(3));
             }
         }
     }
