@@ -63,7 +63,9 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.time.format.ResolverStyle;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.IsoFields;
 import java.time.temporal.TemporalAdjusters;
+import java.time.temporal.TemporalUnit;
 import java.util.Set;
 
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
@@ -98,6 +100,8 @@ public class ScalarOperatorFunctions {
     private static final int YEAR_MAX = 9999;
     private static final int DAY_OF_YEAR_MIN = 1;
     private static final int DAY_OF_YEAR_MAX = 366;
+
+    private static final LocalDateTime TIME_SLICE_START = LocalDateTime.of(1, 1, 1, 0, 0);
 
     static {
         for (int shiftBy = 0; shiftBy < CONSTANT_128; ++shiftBy) {
@@ -514,6 +518,62 @@ public class ScalarOperatorFunctions {
         }
 
         return ConstantOperator.createDate(ld.atTime(0, 0, 0));
+    }
+
+    @ConstantFunction(name = "time_slice", argTypes = {DATETIME, INT, VARCHAR}, returnType = DATETIME)
+    public static ConstantOperator timeSlice(ConstantOperator datetime, ConstantOperator interval, ConstantOperator unit) {
+        return timeSlice(datetime, interval, unit, ConstantOperator.createVarchar("floor"));
+    }
+
+    @ConstantFunction(name = "time_slice", argTypes = {DATETIME, INT, VARCHAR, VARCHAR}, returnType = DATETIME)
+    public static ConstantOperator timeSlice(ConstantOperator datetime, ConstantOperator interval,
+                                             ConstantOperator unit, ConstantOperator boundary) {
+        TemporalUnit timeUnit;
+        switch (unit.getVarchar()) {
+            case "second":
+                timeUnit = ChronoUnit.SECONDS;
+                break;
+            case "minute":
+                timeUnit = ChronoUnit.MINUTES;
+                break;
+            case "hour":
+                timeUnit = ChronoUnit.HOURS;
+                break;
+            case "day":
+                timeUnit = ChronoUnit.DAYS;
+                break;
+            case "month":
+                timeUnit = ChronoUnit.MONTHS;
+                break;
+            case "year":
+                timeUnit = ChronoUnit.YEARS;
+                break;
+            case "week":
+                timeUnit = ChronoUnit.WEEKS;
+                break;
+            case "quarter":
+                timeUnit = IsoFields.QUARTER_YEARS;
+                break;
+            default:
+                throw new IllegalArgumentException(unit + " not supported in time_slice unit param");
+        }
+        boolean isEnd;
+        switch (boundary.getVarchar()) {
+            case "floor":
+                isEnd = false;
+                break;
+            case "ceil":
+                isEnd = true;
+                break;
+            default:
+                throw new IllegalArgumentException(boundary + " not supported in time_slice boundary param");
+        }
+        long duration = TIME_SLICE_START.until(datetime.getDatetime(), timeUnit);
+        long epoch = duration - (duration % interval.getInt());
+        if (isEnd) {
+            epoch += interval.getInt();
+        }
+        return ConstantOperator.createDatetime(TIME_SLICE_START.plus(epoch, timeUnit));
     }
 
     /**
