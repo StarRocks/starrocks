@@ -27,12 +27,15 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CatalogProperties;
+import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.util.ThreadPools;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.Properties;
+
+import static org.apache.iceberg.CatalogProperties.FILE_IO_IMPL;
 
 public class IcebergConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(IcebergConnector.class);
@@ -77,6 +80,7 @@ public class IcebergConnector implements Connector {
                 catalogLoader = CatalogLoader.glue(icebergNativeCatalogName, conf, properties);
                 break;
             case REST_CATALOG:
+                properties.put(FILE_IO_IMPL, HadoopFileIO.class.getName());
                 catalogLoader = CatalogLoader.rest(icebergNativeCatalogName, conf, properties);
                 break;
             case CUSTOM_CATALOG:
