@@ -198,6 +198,8 @@ StarRocks 访问 Delta Lake 集群文件存储的相关参数配置。
 
 ##### 兼容 S3 协议的对象存储
 
+Delta Lake Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
+
 如果选择兼容 S3 协议的对象存储（如 MinIO）作为 Delta Lake 集群的文件存储，请按如下配置 `StorageCredentialParams`：
 
 ```SQL
