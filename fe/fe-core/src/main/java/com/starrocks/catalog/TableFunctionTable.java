@@ -89,7 +89,7 @@ public class TableFunctionTable extends Table {
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TTableFunctionTable tTbl = new TTableFunctionTable();
-        tTbl.setLocation(path);
+        tTbl.setPath(path);
 
         List<TColumn> tColumns = Lists.newArrayList();
 
@@ -98,8 +98,8 @@ public class TableFunctionTable extends Table {
         }
         tTbl.setColumns(tColumns);
 
-        TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.FILE_TABLE, fullSchema.size(),
-                0, "", "");
+        TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.TABLE_FUNCTION_TABLE, fullSchema.size(),
+                0, "_table_function_table", "_table_function_db");
         tTableDescriptor.setTableFunctionTable(tTbl);
         return tTableDescriptor;
     }

@@ -366,7 +366,7 @@ struct TFileTable {
 
 struct TTableFunctionTable {
     // Table Function Table's file dir 
-    1: optional string location
+    1: optional string path 
 
     // Schema columns
     2: optional list<TColumn> columns
