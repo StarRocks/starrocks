@@ -12,7 +12,7 @@
 
 ### 功能优化
 
-- 存算分离集群支持 StarRocks 外表。
+- 存算分离集群 (shared-data) 支持通过 StarRocks 外表来同步其他 StarRocks 集群的数据。
 - [Information Schema](../administration/information_schema.md#load_tracking_logs) 增加 `load_tracking_logs` 来记录最近的导入错误信息。
 - 忽略建表语句中多余的特殊字符。[#23885](https://github.com/StarRocks/starrocks/pull/23885)
 
