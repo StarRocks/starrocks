@@ -1761,7 +1761,7 @@ public class StmtExecutor {
                 } catch (Exception abortTxnException) {
                     LOG.warn("errors when cancel insert load job {}", jobId);
                 }
-            } else {
+            } else if (txnState != null) {
                 StatisticUtils.triggerCollectionOnFirstLoad(txnState, database, targetTable, true);
             }
         }
