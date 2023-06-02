@@ -59,15 +59,36 @@ public abstract class StorageVolumeMgr {
                 enabled, stmt.getComment());
     }
 
-    public abstract String createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
+    public String createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
                                     Optional<Boolean> enabled, String comment)
-            throws AlreadyExistsException, AnalysisException, DdlException;
+            throws DdlException, AlreadyExistsException, AnalysisException {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            if (exists(name)) {
+                throw new AlreadyExistsException(String.format("Storage volume '%s' already exists", name));
+            }
+            return createInternalNoLock(name, svType, locations, params, enabled, comment);
+        }
+    }
 
     public void removeStorageVolume(DropStorageVolumeStmt stmt) throws DdlException, AnalysisException {
         removeStorageVolume(stmt.getName());
     }
 
-    public abstract void removeStorageVolume(String name) throws AnalysisException, DdlException;
+    public void removeStorageVolume(String name) throws AnalysisException, DdlException {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            StorageVolume sv = getStorageVolumeByName(name);
+            Preconditions.checkState(sv != null,
+                    "Storage volume '%s' does not exist", name);
+            Preconditions.checkState(!defaultStorageVolumeId.equals(sv.getId()),
+                    "default storage volume can not be removed");
+            Set<Long> dbs = storageVolumeToDbs.get(sv.getId());
+            Set<Long> tables = storageVolumeToTables.get(sv.getId());
+            Preconditions.checkState(dbs == null && tables == null,
+                    "Storage volume '%s' is referenced by dbs or tables, dbs: %s, tables: %s",
+                    name, dbs != null ? dbs.toString() : "[]", tables != null ? tables.toString() : "[]");
+            removeInternalNoLock(sv);
+        }
+    }
 
     public void updateStorageVolume(AlterStorageVolumeStmt stmt) throws AnalysisException, DdlException {
         Map<String, String> params = new HashMap<>();
@@ -75,26 +96,61 @@ public abstract class StorageVolumeMgr {
         updateStorageVolume(stmt.getName(), params, enabled, stmt.getComment());
     }
 
-    public abstract void updateStorageVolume(String name, Map<String, String> params, Optional<Boolean> enabled, String comment)
-            throws AnalysisException, DdlException;
+    public void updateStorageVolume(String name, Map<String, String> params, Optional<Boolean> enabled, String comment)
+            throws AnalysisException, DdlException {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            StorageVolume sv = getStorageVolumeByName(name);
+            Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", name);
+            StorageVolume copied = new StorageVolume(sv);
 
-    public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) throws AnalysisException, DdlException {
+            if (enabled.isPresent()) {
+                boolean enabledValue = enabled.get();
+                if (!enabledValue) {
+                    Preconditions.checkState(!copied.getId().equals(defaultStorageVolumeId),
+                            "Default volume can not be disabled");
+                }
+                copied.setEnabled(enabledValue);
+            }
+
+            if (!comment.isEmpty()) {
+                copied.setComment(comment);
+            }
+
+            if (!params.isEmpty()) {
+                copied.setCloudConfiguration(params);
+            }
+
+            updateInternalNoLock(copied);
+        }
+    }
+
+    public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) throws AnalysisException {
         setDefaultStorageVolume(stmt.getName());
     }
 
-    public abstract void setDefaultStorageVolume(String svKey) throws AnalysisException, DdlException;
+    public void setDefaultStorageVolume(String svKey) throws AnalysisException {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            StorageVolume sv = getStorageVolumeByName(svKey);
+            Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svKey);
+            Preconditions.checkState(sv.getEnabled(), "Storage volume '%s' is disabled", svKey);
+            this.defaultStorageVolumeId = sv.getId();
+        }
+    }
 
     public String getDefaultStorageVolumeId() {
         return defaultStorageVolumeId;
     }
 
-    public abstract boolean exists(String svKey) throws DdlException;
-
-    public abstract StorageVolume getStorageVolumeByName(String svKey) throws AnalysisException;
-
-    public abstract StorageVolume getStorageVolume(String storageVolumeId) throws AnalysisException;
-
-    public abstract List<String> listStorageVolumeNames() throws DdlException;
+    public boolean exists(String svKey) throws DdlException {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            try {
+                StorageVolume sv = getStorageVolumeByName(svKey);
+                return sv != null;
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+        }
+    }
 
     private Optional<Boolean> parseProperties(Map<String, String> properties, Map<String, String> params) {
         params.putAll(properties);
@@ -143,4 +199,18 @@ public abstract class StorageVolumeMgr {
             }
         }
     }
+
+    public abstract StorageVolume getStorageVolumeByName(String svKey) throws AnalysisException;
+
+    public abstract StorageVolume getStorageVolume(String storageVolumeId) throws AnalysisException;
+
+    public abstract List<String> listStorageVolumeNames() throws DdlException;
+
+    protected abstract String createInternalNoLock(String name, String svType, List<String> locations,
+                                                   Map<String, String> params, Optional<Boolean> enabled, String comment)
+            throws AnalysisException, DdlException;
+
+    protected abstract void updateInternalNoLock(StorageVolume sv) throws DdlException;
+
+    protected abstract void removeInternalNoLock(StorageVolume sv) throws DdlException;
 }
