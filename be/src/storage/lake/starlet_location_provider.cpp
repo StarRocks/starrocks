@@ -41,7 +41,8 @@ Status StarletLocationProvider::list_root_locations(std::set<std::string>* roots
     std::unordered_map<std::string, staros::starlet::ShardId> root_ids;
     for (const auto& shard : shards) {
         if (shard.path_info.fs_info().fs_type() != staros::FileStoreType::S3 &&
-            shard.path_info.fs_info().fs_type() != staros::FileStoreType::HDFS) {
+            shard.path_info.fs_info().fs_type() != staros::FileStoreType::HDFS &&
+            shard.path_info.fs_info().fs_type() != staros::FileStoreType::AZBLOB) {
             return Status::NotSupported(
                     fmt::format("Unsupported object store type: {}", shard.path_info.fs_info().fs_type()));
         }
