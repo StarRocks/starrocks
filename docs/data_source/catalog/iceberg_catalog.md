@@ -16,7 +16,7 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
   - Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
   - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
 
-- Iceberg catalogs do not support Iceberg v2 tables.
+- Iceberg catalogs support v1 tables, but do not support v2 tables.
 
 ## Integration preparations
 
@@ -215,6 +215,8 @@ The following table describes the parameters you need to configure in `StorageCr
 For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 ##### S3-compatible storage system
+
+Iceberg catalogs support S3-compatible storage systems from v2.5 onwards.
 
 If you choose an S3-compatible storage system, such as MinIO, as storage for your Iceberg cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
 

@@ -80,6 +80,7 @@ public class InsertPlanner {
     // Only for unit test
     public static boolean enableSingleReplicationShuffle = false;
     private boolean shuffleServiceEnable = false;
+    private boolean forceReplicatedStorage = false;
 
     private static final Logger LOG = LogManager.getLogger(InsertPlanner.class);
 
@@ -125,14 +126,6 @@ public class InsertPlanner {
 
             Optimizer optimizer = new Optimizer();
             PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
-
-            boolean forceReplicatedStorage = false;
-            if (!requiredPropertySet.equals(PhysicalPropertySet.EMPTY)) {
-                if (Config.eliminate_shuffle_load_by_replicated_storage) {
-                    requiredPropertySet = PhysicalPropertySet.EMPTY;
-                    forceReplicatedStorage = true;
-                }
-            }
 
             LOG.debug("property {}", requiredPropertySet);
             OptExpression optimizedPlan = optimizer.optimize(
@@ -445,6 +438,11 @@ public class InsertPlanner {
                 new HashDistributionDesc(keyColumnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
         DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
         DistributionProperty property = new DistributionProperty(spec);
+
+        if (Config.eliminate_shuffle_load_by_replicated_storage) {
+            forceReplicatedStorage = true;
+            return new PhysicalPropertySet();
+        }
 
         shuffleServiceEnable = true;
 
