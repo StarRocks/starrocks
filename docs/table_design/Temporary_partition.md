@@ -66,7 +66,7 @@ ALTER TABLE site_access
 ADD TEMPORARY PARTITION tp2 VALUES LESS THAN ("2020-03-01");
 ```
 
-Create a temporary partition `tp3` in the table `site_access`, specify its upper bound as `2020-04-01` by using the `VALUES LESS THAN (...)` syntax, specify the number of replicas as `1` and the number of buckets as `5` .
+Create a temporary partition `tp3` in the table `site_access`, specify its upper bound as `2020-04-01` by using the `VALUES LESS THAN (...)` syntax, and specify the number of replicas as `1` and the number of buckets as `5` .
 
 ```SQL
 ALTER TABLE site_access
@@ -117,7 +117,7 @@ For detailed syntax and parameter descriptions, see [INSERT INTO](../sql-referen
 Example:
 
 ```bash
-curl --location-trusted -u root: -H "label:123" -H "temporary_partitions: tp1, tp2, ..." -T testData \
+curl --location-trusted -u root: -H "label:123" -H "Expect:100-continue" -H "temporary_partitions: tp1, tp2, ..." -T testData \
     http://host:port/api/example_db/site_access/_stream_load    
 ```
 
@@ -141,7 +141,7 @@ WITH BROKER
 );
 ```
 
-Note that StorageCredentialParams represents a group of authentication parameters which vary depending on the authentication method you choose. For detailed syntax and parameter descriptions, see [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+Note that `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For detailed syntax and parameter descriptions, see [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 ### Load data by using ROUTINE LOAD
 
@@ -216,19 +216,19 @@ PROPERTIES ("key" = "value");
       # Ranges of original formal partitions p1, p2, and p3 => Unions of these ranges
       [10, 20), [20, 30), [40, 50) => [10, 30), [40, 50)
       
-      # Ranges of temporary partitions tp1, and tp2 => Unions of these ranges
+      # Ranges of temporary partitions tp1 and tp2 => Unions of these ranges
       [10, 30), [40, 45), [45, 50) => [10, 30), [40, 50)
       ```
 
   - Example 2:
 
-    In the following example, the union of ranges is not the same. If the value of the parameter `strict_range` is set to `true`, the temporary partitions `tp1` and `tp2` cannot replace the original formal partition `p1`. If the value is set to `false`, and the ranges [10, 30) and [40, 50) of the temporary partitions do not overlap with other formal partitions, the temporary partitions can replace the original formal partitions.
+    In the following example, the union of ranges of the original formal partition differs from the union of ranges of the temporary partitions. If the value of the parameter `strict_range` is set to `true`, the temporary partitions `tp1` and `tp2` cannot replace the original formal partition `p1`. If the value is set to `false`, and the ranges [10, 30) and [40, 50) of the temporary partitions do not overlap with other formal partitions, the temporary partitions can replace the original formal partition.
 
       ```plaintext
-      # Ranges of original formal partitions p1 => Unions of these ranges
+      # Range of original formal partition p1 => Union of the range
       [10, 50) => [10, 50)
       
-      # Ranges of temporary partitions tp1, tp2 => Unions of these ranges
+      # Ranges of temporary partitions tp1 and tp2 => Unions of these ranges
       [10, 30), [40, 50) => [10, 30), [40, 50)
       ```
 
@@ -283,7 +283,7 @@ PROPERTIES (
 
 ## Delete temporary partitions
 
-Use the following command to delete the temporary partition tp1.
+Use the following command to delete the temporary partition `tp1`.
 
 ```SQL
 ALTER TABLE site_access DROP TEMPORARY PARTITION tp1;
