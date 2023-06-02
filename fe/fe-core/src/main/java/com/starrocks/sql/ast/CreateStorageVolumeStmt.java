@@ -66,6 +66,10 @@ public class CreateStorageVolumeStmt extends DdlStmt {
         return comment;
     }
 
+    public boolean isSetIfNotExists() {
+        return ifNotExists;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateStorageVolumeStatement(this, context);
