@@ -644,6 +644,18 @@ public:
      */
     DEFINE_VECTORIZED_FN(time_to_sec);
 
+    /**
+     * Returns the last day of the specified date part for a date or datetime.
+     * @param: [date_or_datetime_expr, date_part]
+     * @paramType columns: [TimestampColumn, VARCHAR]
+     * @return DateColumn of TYPE_DATE.
+     */
+    DEFINE_VECTORIZED_FN(last_day);
+    DEFINE_VECTORIZED_FN(last_day_with_format);
+
+    static Status last_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status last_day_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
     // Following const variables used to obtains number days of year
     constexpr static int NUMBER_OF_LEAP_YEAR = 366;
     constexpr static int NUMBER_OF_NON_LEAP_YEAR = 365;
@@ -675,6 +687,10 @@ private:
 
     static StatusOr<ColumnPtr> convert_tz_const(FunctionContext* context, const Columns& columns,
                                                 const cctz::time_zone& from, const cctz::time_zone& to);
+
+    static StatusOr<ColumnPtr> _last_day_with_format(FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> _last_day_with_format_const(std::string& format_content, FunctionContext* context,
+                                                           const Columns& columns);
 
 public:
     static TimestampValue start_of_time_slice;
@@ -725,6 +741,12 @@ private:
     // method for datetime_trunc and time_slice
     struct DateTruncCtx {
         ScalarFunction function;
+    };
+
+    // last_day ctx
+    struct LastDayCtx {
+        bool const_optional{false};
+        std::string optional_content;
     };
 
     template <LogicalType Type>
