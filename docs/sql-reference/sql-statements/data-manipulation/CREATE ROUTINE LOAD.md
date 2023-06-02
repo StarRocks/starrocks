@@ -87,7 +87,7 @@ PARTITION (p1, p2, p3)
 
 `TEMPORARY PARTITION`
 
-The name of the [temporary partition(s)](../../../table_design/Temporary_partition.md) to load data in.
+The name of the [temporary partition](../../../table_design/Temporary_partition.md) to load data in. You can specify multiple temporary partitions.
 
 ### `job_properties`
 
