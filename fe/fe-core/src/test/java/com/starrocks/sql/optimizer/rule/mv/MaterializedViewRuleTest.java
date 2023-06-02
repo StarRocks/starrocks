@@ -50,7 +50,6 @@ public class MaterializedViewRuleTest extends PlanTestBase {
                 "select LO_ORDERDATE, LO_ORDERKEY, count(LO_LINENUMBER) from lineorder_flat_for_mv" +
                 " group by LO_ORDERDATE, LO_ORDERKEY;");
     }
-
     @Test
     public void testMaterializedViewWithCountSelection() throws Exception {
         String sql = "select LO_ORDERDATE,count(LO_LINENUMBER) from lineorder_flat_for_mv group by LO_ORDERDATE;";

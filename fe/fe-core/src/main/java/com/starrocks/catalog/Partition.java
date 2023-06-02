@@ -56,6 +56,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.stream.Collectors;
 
 /**
  * Internal representation of partition-related metadata.
@@ -95,8 +96,6 @@ public class Partition extends MetaObject implements Writable {
     @SerializedName(value = "idToShadowIndex")
     private Map<Long, MaterializedIndex> idToShadowIndex = Maps.newHashMap();
 
-    @SerializedName(value = "idToLogicalIndex")
-    private Map<Long, MaterializedIndex> idToLogicalIndex = Maps.newHashMap();
 
     /**
      * committed version(hash): after txn is committed, set committed version(hash)
@@ -157,7 +156,6 @@ public class Partition extends MetaObject implements Writable {
         partition.nextVersion = this.nextVersion;
         partition.distributionInfo = this.distributionInfo;
         partition.shardGroupId = this.shardGroupId;
-        partition.idToLogicalIndex = Maps.newHashMap(this.idToLogicalIndex);
         return partition;
     }
 
@@ -263,14 +261,12 @@ public class Partition extends MetaObject implements Writable {
         }
         index.setTargetPartitionId(targetPartition.getId());
         index.setTargetTableId(associatedTableId);
-        this.idToLogicalIndex.put(index.getId(), index);
+        createRollupIndex(index);
     }
 
     public void createRollupIndex(MaterializedIndex mIndex) {
-        if (mIndex.getState().isVisible()) {
+        if (mIndex.getState().isVisible() || mIndex.getState().isLogical()) {
             this.idToVisibleRollupIndex.put(mIndex.getId(), mIndex);
-        } else if (mIndex.getState().isLogical()) {
-            this.idToLogicalIndex.put(mIndex.getId(), mIndex);
         } else {
             this.idToShadowIndex.put(mIndex.getId(), mIndex);
         }
@@ -279,8 +275,6 @@ public class Partition extends MetaObject implements Writable {
     public MaterializedIndex deleteRollupIndex(long indexId) {
         if (this.idToVisibleRollupIndex.containsKey(indexId)) {
             return idToVisibleRollupIndex.remove(indexId);
-        } else if (idToLogicalIndex.containsKey(indexId)) {
-            return idToLogicalIndex.remove(indexId);
         } else {
             return idToShadowIndex.remove(indexId);
         }
@@ -312,27 +306,24 @@ public class Partition extends MetaObject implements Writable {
         }
         if (idToVisibleRollupIndex.containsKey(indexId)) {
             return idToVisibleRollupIndex.get(indexId);
-        } else if (idToLogicalIndex.containsKey(indexId)) {
-            return idToLogicalIndex.get(indexId);
         } else {
             return idToShadowIndex.get(indexId);
         }
     }
 
+    // TODO: by default we don't output logical materialized views.
     public List<MaterializedIndex> getMaterializedIndices(IndexExtState extState) {
         List<MaterializedIndex> indices = Lists.newArrayList();
         switch (extState) {
             case ALL:
                 indices.add(baseIndex);
-                indices.addAll(idToVisibleRollupIndex.values());
+                indices.addAll(getVisibleMaterializedIndicesWithoutLogical());
                 indices.addAll(idToShadowIndex.values());
                 break;
             case VISIBLE:
                 indices.add(baseIndex);
-                indices.addAll(idToVisibleRollupIndex.values());
+                indices.addAll(getVisibleMaterializedIndicesWithoutLogical());
                 break;
-            case LOGICAL:
-                indices.addAll(idToLogicalIndex.values());
             case SHADOW:
                 indices.addAll(idToShadowIndex.values());
             default:
@@ -340,21 +331,25 @@ public class Partition extends MetaObject implements Writable {
         }
         return indices;
     }
+    private List<MaterializedIndex> getVisibleMaterializedIndicesWithoutLogical() {
+        return idToVisibleRollupIndex.values().stream().filter(x -> !x.isLogical())
+                .collect(Collectors.toList());
+    }
 
+    // All MVs with logical states.
     public List<MaterializedIndex> getAllMaterializedIndices() {
         List<MaterializedIndex> indices = Lists.newArrayList();
         indices.add(baseIndex);
         indices.addAll(idToVisibleRollupIndex.values());
         indices.addAll(idToShadowIndex.values());
-        indices.addAll(idToLogicalIndex.values());
         return indices;
     }
 
+    // Visible MVs with logical states.
     public List<MaterializedIndex> getAllVisibleMaterializedIndices() {
         List<MaterializedIndex> indices = Lists.newArrayList();
         indices.add(baseIndex);
         indices.addAll(idToVisibleRollupIndex.values());
-        indices.addAll(idToLogicalIndex.values());
         return indices;
     }
 
@@ -364,8 +359,6 @@ public class Partition extends MetaObject implements Writable {
                 return 1 + idToVisibleRollupIndex.size() + idToShadowIndex.size();
             case VISIBLE:
                 return 1 + idToVisibleRollupIndex.size();
-            case LOGICAL:
-                return idToLogicalIndex.size();
             case SHADOW:
                 return idToShadowIndex.size();
             default:
@@ -402,7 +395,7 @@ public class Partition extends MetaObject implements Writable {
     }
 
     public boolean hasMaterializedView() {
-        return !idToVisibleRollupIndex.isEmpty() || !idToLogicalIndex.isEmpty();
+        return !idToVisibleRollupIndex.isEmpty();
     }
 
     public boolean hasData() {
@@ -472,14 +465,6 @@ public class Partition extends MetaObject implements Writable {
 
         Text.writeString(out, distributionInfo.getType().name());
         distributionInfo.write(out);
-
-        int logicalRollupCount = (idToLogicalIndex != null) ? idToLogicalIndex.size() : 0;
-        out.writeInt(logicalRollupCount);
-        if (idToLogicalIndex != null) {
-            for (Map.Entry<Long, MaterializedIndex> entry : idToLogicalIndex.entrySet()) {
-                entry.getValue().write(out);
-            }
-        }
     }
 
     @Override
@@ -518,12 +503,6 @@ public class Partition extends MetaObject implements Writable {
         } else {
             throw new IOException("invalid distribution type: " + distriType);
         }
-
-        int logicalRollupCount = in.readInt();
-        for (int i = 0; i < logicalRollupCount; ++i) {
-            MaterializedIndex rollupTable = MaterializedIndex.read(in);
-            idToLogicalIndex.put(rollupTable.getId(), rollupTable);
-        }
     }
 
     @Override
@@ -543,10 +522,6 @@ public class Partition extends MetaObject implements Writable {
         Partition partition = (Partition) obj;
         if (idToVisibleRollupIndex != partition.idToVisibleRollupIndex &&
                 !equals(idToVisibleRollupIndex, partition.idToVisibleRollupIndex)) {
-            return false;
-        }
-        if (idToLogicalIndex != partition.idToLogicalIndex &&
-                !equals(idToLogicalIndex, partition.idToLogicalIndex)) {
             return false;
         }
 
@@ -585,13 +560,6 @@ public class Partition extends MetaObject implements Writable {
         if (idToVisibleRollupIndex != null) {
             for (Map.Entry<Long, MaterializedIndex> entry : idToVisibleRollupIndex.entrySet()) {
                 buffer.append("rollup_index: ").append(entry.getValue().toString()).append("; ");
-            }
-        }
-        int logicalRollupCount = (idToLogicalIndex != null) ? idToLogicalIndex.size() : 0;
-        buffer.append("logical rollup count: ").append(logicalRollupCount).append("; ");
-        if (idToLogicalIndex != null) {
-            for (Map.Entry<Long, MaterializedIndex> entry : idToLogicalIndex.entrySet()) {
-                buffer.append("logical rollup_index: ").append(entry.getValue().toString()).append("; ");
             }
         }
 
