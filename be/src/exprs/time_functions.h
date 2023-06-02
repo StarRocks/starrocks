@@ -607,6 +607,55 @@ public:
      */
     DEFINE_VECTORIZED_FN(time_to_sec);
 
+<<<<<<< HEAD
+=======
+    /**
+     * Returns the date of the first specified DOW (day of week) that occurs after the input date.
+     * @param: [timestamp, dow]
+     * @paramType columns: [TimestampColumn, BinaryColumn of TYPE_VARCHAR]
+     * @return DateColumn of TYPE_DATE.
+     */
+    DEFINE_VECTORIZED_FN(next_day);
+
+    static Status next_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status next_day_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    // Process the case where dow is not constant in next_day
+    static StatusOr<ColumnPtr> next_day_common(FunctionContext* context, const Columns& columns);
+
+    // Process the case where dow is constant in next_day
+    static StatusOr<ColumnPtr> next_day_wdc(FunctionContext* context, const Columns& columns);
+
+    /**
+     * Returns the date of the first specified DOW (day of week) that occurs before the input date.
+     * @param: [timestamp, dow]
+     * @paramType columns: [TimestampColumn, BinaryColumn of TYPE_VARCHAR]
+     * @return DateColumn of TYPE_DATE.
+     */
+    DEFINE_VECTORIZED_FN(previous_day);
+
+    static Status previous_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status previous_day_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    // Process the case where dow is not constant in previous_day
+    static StatusOr<ColumnPtr> previous_day_common(FunctionContext* context, const Columns& columns);
+
+    // Process the case where dow is constant in previous_day
+    static StatusOr<ColumnPtr> previous_day_wdc(FunctionContext* context, const Columns& columns);
+
+    /**
+     * Returns the last day of the specified date part for a date or datetime.
+     * @param: [date_or_datetime_expr, date_part]
+     * @paramType columns: [TimestampColumn, VARCHAR]
+     * @return DateColumn of TYPE_DATE.
+     */
+    DEFINE_VECTORIZED_FN(last_day);
+    DEFINE_VECTORIZED_FN(last_day_with_format);
+
+    static Status last_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status last_day_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+>>>>>>> 34f0a3aa1 ([Feature] Support function last_day (#23348))
     // Following const variables used to obtains number days of year
     constexpr static int NUMBER_OF_LEAP_YEAR = 366;
     constexpr static int NUMBER_OF_NON_LEAP_YEAR = 365;
@@ -638,6 +687,10 @@ private:
 
     static StatusOr<ColumnPtr> convert_tz_const(FunctionContext* context, const Columns& columns,
                                                 const cctz::time_zone& from, const cctz::time_zone& to);
+
+    static StatusOr<ColumnPtr> _last_day_with_format(FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> _last_day_with_format_const(std::string& format_content, FunctionContext* context,
+                                                           const Columns& columns);
 
 public:
     static TimestampValue start_of_time_slice;
@@ -690,6 +743,20 @@ private:
         ScalarFunction function;
     };
 
+<<<<<<< HEAD
+=======
+    // weekday context
+    struct WeekDayCtx {
+        int dow_weekday;
+    };
+
+    // last_day ctx
+    struct LastDayCtx {
+        bool const_optional{false};
+        std::string optional_content;
+    };
+
+>>>>>>> 34f0a3aa1 ([Feature] Support function last_day (#23348))
     template <LogicalType Type>
     friend StatusOr<ColumnPtr> do_format(const FormatCtx* ctx, const Columns& cols);
 };

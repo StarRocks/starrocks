@@ -78,6 +78,10 @@ public:
     void trunc_to_week();
     void trunc_to_quarter();
 
+    void set_end_of_month();
+    void set_end_of_quarter();
+    void set_end_of_year();
+
     bool is_valid() const;
 
     // date_valid function needs this method, for DateValue '0000-00-00', is_valid_non_strict returns true but

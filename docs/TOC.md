@@ -500,6 +500,11 @@
       + [months_diff](./sql-reference/sql-functions/date-time-functions/months_diff.md)
       + [months_sub](./sql-reference/sql-functions/date-time-functions/months_sub.md)
       + [now](./sql-reference/sql-functions/date-time-functions/now.md)
+<<<<<<< HEAD
+=======
+      + [previous_day](./sql-reference/sql-functions/date-time-functions/previous_day.md)
+      + [last_day](./sql-reference/sql-functions/date-time-functions/last_day.md)
+>>>>>>> 34f0a3aa1 ([Feature] Support function last_day (#23348))
       + [quarter](./sql-reference/sql-functions/date-time-functions/quarter.md)
       + [second](./sql-reference/sql-functions/date-time-functions/second.md)
       + [seconds_add](./sql-reference/sql-functions/date-time-functions/seconds_add.md)
