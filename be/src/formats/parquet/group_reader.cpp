@@ -83,7 +83,10 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
 
     bool has_filter = false;
     int chunk_size = -1;
-    Filter chunk_filter(count, 1);
+    JoinRuntimeFilter::RunningContext ctx;
+    ctx.use_merged_selection = true;
+    ctx.merged_selection = Filter(count, 1);
+    Filter& chunk_filter = ctx.merged_selection;
     DCHECK_EQ(active_chunk->num_rows(), count);
 
     // dict filter chunk
@@ -116,7 +119,47 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     }
 
     if (has_filter) {
+        LOG(WARNING) << "After conjunct, chunk_size: " << chunk_size << ", Filter: "
+            << SIMD::count_nonzero(chunk_filter.data(), count);
         size_t hit_count = chunk_size >= 0 ? chunk_size : SIMD::count_nonzero(chunk_filter.data(), count);
+
+        // bloom filter
+        if (hit_count >0 && _param.runtime_filter_collector) {
+            for (auto &it: _param.runtime_filter_collector->descriptors()) {
+                RuntimeFilterProbeDescriptor *rf_desc = it.second;
+                const JoinRuntimeFilter *filter = rf_desc->runtime_filter();
+                SlotId probe_slot_id;
+                if (filter == nullptr || filter->has_null() || !rf_desc->is_probe_slot_ref(&probe_slot_id)) continue;
+                if (!active_chunk->is_slot_exist(probe_slot_id)) {
+                    LOG(WARNING) << "slot not in active chunk " << probe_slot_id;
+                    continue;
+                }
+                // bloom filter must be _active_column_indices, cause of min/max conjuncts
+                int filter_col_index = 0;
+                for (int col_index: _active_column_indices) {
+                    const auto &column = _param.read_cols[col_index];
+                    if (column.slot_id == probe_slot_id) {
+                        filter_col_index = col_index;
+                        break;
+                    }
+                }
+                if (_dict_filter_ctx.is_dict_filter_column(filter_col_index)) continue;
+                auto column = active_chunk->get_column_by_slot_id(_param.read_cols[filter_col_index].slot_id);
+
+                filter->evaluate(column.get(), &ctx);
+                if (SIMD::count_nonzero(chunk_filter.data(), count) == 0) {
+                    chunk_size = 0;
+                    LOG(WARNING) << "bloom filter work on lazy materialized.";
+                    break;
+                }
+            }
+        }
+        LOG(WARNING) << "Before bloom filter: " << hit_count << ", After bloom filter: "
+            << SIMD::count_nonzero(chunk_filter.data(), count);
+    }
+
+    if (has_filter) {
+        size_t hit_count = SIMD::count_nonzero(chunk_filter.data(), count);
         if (hit_count == 0) {
             active_chunk->set_num_rows(0);
         } else if (hit_count != count) {

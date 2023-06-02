@@ -448,6 +448,7 @@ Status FileReader::_init_group_readers() {
     // _group_reader_param is used by all group readers
     _group_reader_param.tuple_desc = fd_scanner_ctx.tuple_desc;
     _group_reader_param.conjunct_ctxs_by_slot = fd_scanner_ctx.conjunct_ctxs_by_slot;
+    _group_reader_param.runtime_filter_collector = fd_scanner_ctx.runtime_filter_collector;
     _group_reader_param.timezone = fd_scanner_ctx.timezone;
     _group_reader_param.stats = fd_scanner_ctx.stats;
     _group_reader_param.sb_stream = nullptr;

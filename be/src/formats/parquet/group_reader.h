@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/runtime_filter_bank.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
@@ -54,6 +55,9 @@ struct GroupReaderParam {
     const TupleDescriptor* tuple_desc = nullptr;
     // conjunct_ctxs that column is materialized in group reader
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
+
+    // bloom filter
+    const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
     // columns
     std::vector<Column> read_cols;
@@ -105,6 +109,10 @@ private:
                 return ColumnContentType::DICT_CODE;
             }
             return ColumnContentType::VALUE;
+        }
+
+        bool is_dict_filter_column(int index) {
+            return _is_dict_filter_column[index];
         }
 
     private:

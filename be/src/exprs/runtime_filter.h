@@ -25,6 +25,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "types/logical_type.h"
+#include "simd/simd.h"
 
 namespace starrocks {
 // 0x1. initial global runtime filter impl
@@ -694,10 +695,8 @@ private:
     void _evaluate_min_max(const CppType* values, uint8_t* selection, size_t size) const {
         if constexpr (!IsSlice<CppType>) {
             for (size_t i = 0; i < size; i++) {
-                selection[i] = (values[i] >= _min && values[i] <= _max);
+                selection[i] = (selection[i] && values[i] >= _min && values[i] <= _max);
             }
-        } else {
-            memset(selection, 0x1, size);
         }
     }
 
@@ -809,6 +808,7 @@ private:
         Filter& _selection_filter = ctx->use_merged_selection ? ctx->merged_selection : ctx->selection;
         _selection_filter.resize(size);
         uint8_t* _selection = _selection_filter.data();
+        int ori_sel = SIMD::count_nonzero(_selection, size);
 
         // reuse ctx's hash_values object.
         HashValues& _hash_values = ctx->hash_values;
@@ -826,10 +826,16 @@ private:
             }
             uint8_t sel = _selection[0];
             memset(_selection, sel, size);
+            if (SIMD::count_nonzero(_selection, size) > ori_sel) {
+                LOG(WARNING) << "error 832";
+            }
         } else if (input_column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(input_column);
             auto* input_data = down_cast<const ColumnType*>(nullable_column->data_column().get())->get_data().data();
             _evaluate_min_max(input_data, _selection, size);
+            if (SIMD::count_nonzero(_selection, size) > ori_sel) {
+                LOG(WARNING) << "error 839";
+            }
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
                 for (int i = 0; i < size; i++) {
@@ -839,16 +845,28 @@ private:
                         _rf_test_data<hash_partition>(_selection, input_data, _hash_values, i);
                     }
                 }
+                if (SIMD::count_nonzero(_selection, size) > ori_sel) {
+                    LOG(WARNING) << "error 851";
+                }
             } else {
                 for (int i = 0; i < size; ++i) {
                     _rf_test_data<hash_partition>(_selection, input_data, _hash_values, i);
+                }
+                if (SIMD::count_nonzero(_selection, size) > ori_sel) {
+                    LOG(WARNING) << "error 858";
                 }
             }
         } else {
             auto* input_data = down_cast<const ColumnType*>(input_column)->get_data().data();
             _evaluate_min_max(input_data, _selection, size);
+            if (SIMD::count_nonzero(_selection, size) > ori_sel) {
+                LOG(WARNING) << "error 866";
+            }
             for (int i = 0; i < size; ++i) {
                 _rf_test_data<hash_partition>(_selection, input_data, _hash_values, i);
+            }
+            if (SIMD::count_nonzero(_selection, size) > ori_sel) {
+                LOG(WARNING) << "error 871";
             }
         }
     }
