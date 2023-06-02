@@ -62,7 +62,6 @@ import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
@@ -112,76 +111,64 @@ public class StatisticUtils {
         return StatsConstants.AnalyzeType.FULL;
     }
 
-    public static void triggerCollectionOnFirstLoad(TransactionState txnState, Database db, Table table,
-                                                    boolean sync, CountedListener listener) {
-        boolean earlyReturn = true;
+    public static void triggerCollectionOnFirstLoad(TransactionState txnState, Database db, Table table, boolean sync) {
+        if (!Config.enable_statistic_collect_on_first_load) {
+            return;
+        }
+        if (statisticDatabaseBlackListCheck(db.getFullName())) {
+            return;
+        }
+
+        // check if it's first load.
+        if (txnState.getIdToTableCommitInfos() == null) {
+            return;
+        }
+        TableCommitInfo tableCommitInfo = txnState.getIdToTableCommitInfos().get(table.getId());
+        if (tableCommitInfo == null) {
+            return;
+        }
+        // collectPartitionIds contains partition that is first loaded.
+        List<Long> collectPartitionIds = Lists.newArrayList();
+        for (long partitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
+            if (table.getPartition(partitionId).isFirstLoad()) {
+                collectPartitionIds.add(partitionId);
+            }
+        }
+        if (collectPartitionIds.isEmpty()) {
+            return;
+        }
+
+        StatsConstants.AnalyzeType analyzeType = parseAnalyzeType(txnState, table);
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), table.getId(), null, analyzeType,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+
+        Future<?> future;
         try {
-            if (!Config.enable_statistic_collect_on_first_load) {
-                return;
-            }
-            if (statisticDatabaseBlackListCheck(db.getFullName())) {
-                return;
-            }
+            future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
+                    .submit(() -> {
+                        StatisticExecutor statisticExecutor = new StatisticExecutor();
+                        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                        statsConnectCtx.setThreadLocalInfo();
 
-            // check if it's first load
-            if (txnState.getIdToTableCommitInfos() == null) {
-                return;
-            }
-            TableCommitInfo tableCommitInfo = txnState.getIdToTableCommitInfos().get(table.getId());
-            if (tableCommitInfo == null) {
-                return;
-            }
-            List<Long> collectPartitionIds = Lists.newArrayList();
-            for (long partitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
-                if (table.getPartition(partitionId).isFirstLoad()) {
-                    collectPartitionIds.add(partitionId);
-                }
-            }
-            if (collectPartitionIds.isEmpty()) {
-                return;
-            }
+                        statisticExecutor.collectStatistics(statsConnectCtx,
+                                StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
+                                        collectPartitionIds, null, analyzeType,
+                                        StatsConstants.ScheduleType.ONCE,
+                                        analyzeStatus.getProperties()), analyzeStatus, false);
+                    });
+        } catch (Throwable e) {
+            LOG.error("failed to submit statistic collect job", e);
+            return;
+        }
 
-            StatsConstants.AnalyzeType analyzeType = parseAnalyzeType(txnState, table);
-            AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
-                    db.getId(), table.getId(), null, analyzeType,
-                    StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
-            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
-            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
-
-            Future<?> future;
+        if (sync) {
             try {
-                future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
-                        .submit(() -> {
-                            try {
-                                StatisticExecutor statisticExecutor = new StatisticExecutor();
-                                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                                statsConnectCtx.setThreadLocalInfo();
-
-                                statisticExecutor.collectStatistics(statsConnectCtx,
-                                        StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
-                                                collectPartitionIds, null, analyzeType,
-                                                StatsConstants.ScheduleType.ONCE,
-                                                analyzeStatus.getProperties()), analyzeStatus, false);
-                            } finally {
-                                listener.run();
-                            }
-                        });
-            } catch (Throwable e) {
-                LOG.error("failed to submit statistic collect job", e);
-                return;
-            }
-
-            earlyReturn = false;
-            if (sync) {
-                try {
-                    future.get();
-                } catch (InterruptedException | ExecutionException e) {
-                    LOG.error("failed to execute statistic collect job", e);
-                }
-            }
-        } finally {
-            if (earlyReturn) {
-                listener.run();
+                future.get();
+            } catch (InterruptedException | ExecutionException e) {
+                LOG.error("failed to execute statistic collect job", e);
             }
         }
     }
@@ -436,28 +423,5 @@ public class StatisticUtils {
 
     public static String quoting(String identifier) {
         return "`" + identifier + "`";
-    }
-
-    public static CountedListener createCounteredListener(int count, Runnable listener) {
-        return new CountedListener(count, listener);
-    }
-
-    public static final class CountedListener implements Runnable {
-        private final AtomicInteger count;
-        private final Runnable listener;
-
-        private CountedListener(int count, Runnable listener) {
-            this.count = new AtomicInteger(count);
-            this.listener = listener;
-        }
-
-        @Override
-        public void run() {
-            if (count.decrementAndGet() == 0) {
-                if (listener != null) {
-                    listener.run();
-                }
-            }
-        }
     }
 }

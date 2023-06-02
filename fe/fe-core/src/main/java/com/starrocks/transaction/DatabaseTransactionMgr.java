@@ -1711,10 +1711,8 @@ public class DatabaseTransactionMgr {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
-        StatisticUtils.CountedListener counteredListener =
-                StatisticUtils.createCounteredListener(tables.size(), null);
         for (Table table : tables) {
-            StatisticUtils.triggerCollectionOnFirstLoad(txnState, db, table, false, counteredListener);
+            StatisticUtils.triggerCollectionOnFirstLoad(txnState, db, table, false);
         }
     }
 
