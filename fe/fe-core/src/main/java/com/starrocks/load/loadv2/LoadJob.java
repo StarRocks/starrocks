@@ -1038,29 +1038,41 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     private void collectStatisticsOnFirstLoadAsync(TransactionState txnState, Runnable listener) {
-        Database db;
+        boolean earlyReturn = true;
         try {
-            db = getDb();
-        } catch (MetaNotFoundException e) {
-            listener.run();
-            return;
-        }
+            // TODO(hcf) there's compatible issue with spark load
+            if (this instanceof SparkLoadJob) {
+                return;
+            }
 
-        List<Table> tables = txnState.getIdToTableCommitInfos().values().stream()
-                .map(TableCommitInfo::getTableId)
-                .distinct()
-                .map(db::getTable)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-        if (tables.isEmpty()) {
-            listener.run();
-            return;
-        }
+            Database db;
+            try {
+                db = getDb();
+            } catch (MetaNotFoundException e) {
+                return;
+            }
 
-        StatisticUtils.CountedListener counteredListener =
-                StatisticUtils.createCounteredListener(tables.size(), listener);
-        for (Table table : tables) {
-            StatisticUtils.triggerCollectionOnFirstLoad(txnState, db, table, false, counteredListener);
+            List<Table> tables = txnState.getIdToTableCommitInfos().values().stream()
+                    .map(TableCommitInfo::getTableId)
+                    .distinct()
+                    .map(db::getTable)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            if (tables.isEmpty()) {
+                return;
+            }
+
+            earlyReturn = false;
+
+            StatisticUtils.CountedListener counteredListener =
+                    StatisticUtils.createCounteredListener(tables.size(), listener);
+            for (Table table : tables) {
+                StatisticUtils.triggerCollectionOnFirstLoad(txnState, db, table, false, counteredListener);
+            }
+        } finally {
+            if (earlyReturn) {
+                listener.run();
+            }
         }
     }
 
