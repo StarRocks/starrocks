@@ -53,6 +53,10 @@ public:
         return _stream->skip(count);
     }
 
+    StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
+        return _stream->get_numeric_statistics();
+    }
+
     Status set_io_ranges(const std::vector<IORange>& ranges);
     void release_to_offset(int64_t offset);
     void release();

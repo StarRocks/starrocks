@@ -20,7 +20,7 @@ namespace starrocks::io {
 
 SharedBufferedInputStream::SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream,
                                                      const std::string& filename, size_t file_size)
-        : _stream(stream), _filename(filename), _file_size(file_size) {}
+        : _stream(std::move(stream)), _filename(std::move(filename)), _file_size(file_size) {}
 
 void SharedBufferedInputStream::SharedBuffer::align(int64_t align_size, int64_t file_size) {
     if (align_size != 0) {

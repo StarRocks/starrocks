@@ -175,7 +175,6 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     update_counter();
     do_close(runtime_state);
     _file.reset(nullptr);
-    _raw_file.reset(nullptr);
     if (_opened && _scanner_params.open_limit != nullptr) {
         _scanner_params.open_limit->fetch_sub(1, std::memory_order_relaxed);
     }
@@ -197,12 +196,12 @@ uint64_t HdfsScanner::exit_pending_queue() {
 
 Status HdfsScanner::open_random_access_file() {
     CHECK(_file == nullptr) << "File has already been opened";
-    ASSIGN_OR_RETURN(_raw_file, _scanner_params.fs->new_random_access_file(_scanner_params.path))
-    _raw_file->set_size(_scanner_params.file_size);
-    int64_t file_size = _scanner_params.file_size;
-    const std::string& filename = _raw_file->filename();
+    ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file, _scanner_params.fs->new_random_access_file(_scanner_params.path))
+    const int64_t file_size = _scanner_params.file_size;
+    raw_file->set_size(file_size);
+    const std::string& filename = raw_file->filename();
 
-    std::shared_ptr<io::SeekableInputStream> input_stream = _raw_file->stream();
+    std::shared_ptr<io::SeekableInputStream> input_stream = raw_file->stream();
 
     input_stream = std::make_shared<CountedSeekableInputStream>(input_stream, &_fs_stats);
 
@@ -240,7 +239,7 @@ Status HdfsScanner::open_random_access_file() {
 
     // so wrap function is f(x) = (CountedInputStream (CacheInputStream (DecompressInputStream (CountedInputStream x))))
     _file = std::make_unique<RandomAccessFile>(input_stream, filename);
-    _file->set_size(_scanner_params.file_size);
+    _file->set_size(file_size);
     return Status::OK();
 }
 
