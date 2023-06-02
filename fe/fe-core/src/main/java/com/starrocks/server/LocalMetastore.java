@@ -1925,7 +1925,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 List<Map.Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
                 List<Map.Entry<Long, Long>> firstThree =
                         unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
-                StringBuilder sb = new StringBuilder("fail to create tablet: timed out. unfinished replicas");
+                StringBuilder sb = new StringBuilder("Table creation timed out. unfinished replicas");
                 sb.append("(").append(firstThree.size()).append("/").append(unfinishedMarks.size()).append("): ");
                 // Show details of the first 3 unfinished tablets.
                 for (Map.Entry<Long, Long> mark : firstThree) {
@@ -1935,11 +1935,23 @@ public class LocalMetastore implements ConnectorMetadata {
                     sb.append(backend != null ? backend.getHost() : "N/A");
                     sb.append(") ");
                 }
-                sb.append(" timeout=").append(timeout).append("s");
+                sb.append(" timeout=").append(timeout).append('s');
                 String errMsg = sb.toString();
                 LOG.warn(errMsg);
+
+                String userErrorMsg = String.format(
+                        "Table creation timed out.\n You can increase the timeout by increasing the " +
+                        "config \"tablet_create_timeout_second\" and try again.\n" +
+                        "To increase the config \"tablet_create_timeout_second\" (currently %d), run the following command:\n" +
+                        "```\nadmin set frontend config(\"tablet_create_timeout_second\"=\"%d\")\n```\n" +
+                        "or add the following configuration to the fe.conf file and restart the process:\n" +
+                        "```\ntablet_create_timeout_second=%d\n```",
+                        Config.tablet_create_timeout_second,
+                        Config.tablet_create_timeout_second * 2,
+                        Config.tablet_create_timeout_second * 2
+                        );
                 countDownLatch.countDownToZero(new Status(TStatusCode.TIMEOUT, "timed out"));
-                throw new DdlException(errMsg);
+                throw new DdlException(userErrorMsg);
             }
         } catch (InterruptedException e) {
             LOG.warn(e);
@@ -2091,7 +2103,7 @@ public class LocalMetastore implements ConnectorMetadata {
             } else {
                 throw new DdlException("Currently only support range or list partition with engine type olap");
             }
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false, true);
+            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
 
             // Automatic partitioning needs to ensure that at least one tablet is opened.
             if (partitionInfo instanceof ExpressionRangePartitionInfo) {
@@ -2631,7 +2643,7 @@ public class LocalMetastore implements ConnectorMetadata {
         PartitionInfo partitionInfo = null;
         Map<String, Long> partitionNameToId = Maps.newHashMap();
         if (partitionDesc != null) {
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false, false);
+            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
         } else {
             long partitionId = getNextId();
             // use table name as single partition name
@@ -3697,7 +3709,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (partitionDesc != null) {
             partitionInfo = partitionDesc.toPartitionInfo(
                     Collections.singletonList(stmt.getPartitionColumn()),
-                    Maps.newHashMap(), false, false);
+                    Maps.newHashMap(), false);
         } else {
             partitionInfo = new SinglePartitionInfo();
         }
@@ -4587,7 +4599,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 cluster.addDb(dbName, db.getId());
 
                 if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
-                    LOG.warn("Since the the database of mysql already exists, " +
+                    LOG.warn("Since the the database of starrocsks already exists, " +
                             "the system will not automatically create the database of starrocks for system.");
                 } else {
                     StarRocksDb starRocksDb = new StarRocksDb();

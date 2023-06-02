@@ -198,22 +198,22 @@ public class CreateTableTest {
                         "distributed by hash(key1) buckets 1 properties('replication_num' = '1', 'storage_medium' = 'ssd');"));
 
         ExceptionChecker
-                 .expectThrowsNoException(() -> createTable("create table test.tb8(key1 int, key2 varchar(10)) \n"
+                .expectThrowsNoException(() -> createTable("create table test.tb8(key1 int, key2 varchar(10)) \n"
                         + "distributed by hash(key1) buckets 1 \n"
                         + "properties('replication_num' = '1', 'compression' = 'lz4_frame');"));
 
         ExceptionChecker
-                 .expectThrowsNoException(() -> createTable("create table test.tb9(key1 int, key2 varchar(10)) \n"
+                .expectThrowsNoException(() -> createTable("create table test.tb9(key1 int, key2 varchar(10)) \n"
                         + "distributed by hash(key1) buckets 1 \n"
                         + "properties('replication_num' = '1', 'compression' = 'lz4');"));
 
         ExceptionChecker
-                 .expectThrowsNoException(() -> createTable("create table test.tb10(key1 int, key2 varchar(10)) \n"
+                .expectThrowsNoException(() -> createTable("create table test.tb10(key1 int, key2 varchar(10)) \n"
                         + "distributed by hash(key1) buckets 1 \n"
                         + "properties('replication_num' = '1', 'compression' = 'zstd');"));
 
         ExceptionChecker
-                 .expectThrowsNoException(() -> createTable("create table test.tb11(key1 int, key2 varchar(10)) \n"
+                .expectThrowsNoException(() -> createTable("create table test.tb11(key1 int, key2 varchar(10)) \n"
                         + "distributed by hash(key1) buckets 1 \n"
                         + "properties('replication_num' = '1', 'compression' = 'zlib');"));
 
@@ -990,49 +990,49 @@ public class CreateTableTest {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "processing constraint failed when creating table",
                 () -> createTable(
-                "CREATE TABLE test.base_table2(\n" +
-                        "k1 INT,\n" +
-                        "k2 VARCHAR(20),\n" +
-                        "k3 INT,\n" +
-                        "k4 VARCHAR(20),\n" +
-                        "k5 INT,\n" +
-                        "k6 VARCHAR(20),\n" +
-                        "k7 INT,\n" +
-                        "k8 VARCHAR(20),\n" +
-                        "k9 INT,\n" +
-                        "k10 VARCHAR(20)\n" +
-                        ") ENGINE=OLAP\n" +
-                        "DUPLICATE KEY(k1)\n" +
-                        "COMMENT \"OLAP\"\n" +
-                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\",\n" +
-                        "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table1(k2, k1)\"\n" +
-                        ");"
-        ));
+                        "CREATE TABLE test.base_table2(\n" +
+                                "k1 INT,\n" +
+                                "k2 VARCHAR(20),\n" +
+                                "k3 INT,\n" +
+                                "k4 VARCHAR(20),\n" +
+                                "k5 INT,\n" +
+                                "k6 VARCHAR(20),\n" +
+                                "k7 INT,\n" +
+                                "k8 VARCHAR(20),\n" +
+                                "k9 INT,\n" +
+                                "k10 VARCHAR(20)\n" +
+                                ") ENGINE=OLAP\n" +
+                                "DUPLICATE KEY(k1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\",\n" +
+                                "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table1(k2, k1)\"\n" +
+                                ");"
+                ));
 
         // key size does not match
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "processing constraint failed when creating table",
                 () -> createTable(
-                "CREATE TABLE test.base_table2(\n" +
-                        "k1 INT,\n" +
-                        "k2 VARCHAR(20),\n" +
-                        "k3 INT,\n" +
-                        "k4 VARCHAR(20),\n" +
-                        "k5 INT,\n" +
-                        "k6 VARCHAR(20),\n" +
-                        "k7 INT,\n" +
-                        "k8 VARCHAR(20)\n" +
-                        ") ENGINE=OLAP\n" +
-                        "DUPLICATE KEY(k1)\n" +
-                        "COMMENT \"OLAP\"\n" +
-                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\",\n" +
-                        "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table2(k1, k2)\"\n" +
-                        ");"
-        ));
+                        "CREATE TABLE test.base_table2(\n" +
+                                "k1 INT,\n" +
+                                "k2 VARCHAR(20),\n" +
+                                "k3 INT,\n" +
+                                "k4 VARCHAR(20),\n" +
+                                "k5 INT,\n" +
+                                "k6 VARCHAR(20),\n" +
+                                "k7 INT,\n" +
+                                "k8 VARCHAR(20)\n" +
+                                ") ENGINE=OLAP\n" +
+                                "DUPLICATE KEY(k1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\",\n" +
+                                "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table2(k1, k2)\"\n" +
+                                ");"
+                ));
 
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "processing constraint failed when creating table",
@@ -1152,6 +1152,30 @@ public class CreateTableTest {
                         ");"
         ));
 
+    }
+
+    @Test
+
+    public void testCreatePartitionByExprTable() {
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable(
+                        "CREATE TABLE test.`bill_detail` (\n" +
+                                "  `bill_code` varchar(200) NOT NULL DEFAULT \"\" COMMENT \"\"\n" +
+                                ") ENGINE=OLAP \n" +
+                                "PRIMARY KEY(`bill_code`)\n" +
+                                "PARTITION BY RANGE(cast(substring(bill_code, 3) as bigint))\n" +
+                                "(PARTITION p1 VALUES [('0'), ('5000000')),\n" +
+                                "PARTITION p2 VALUES [('5000000'), ('10000000')),\n" +
+                                "PARTITION p3 VALUES [('10000000'), ('15000000')),\n" +
+                                "PARTITION p4 VALUES [('15000000'), ('20000000'))\n" +
+                                ")\n" +
+                                "DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10 \n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\",\n" +
+                                "\"in_memory\" = \"false\",\n" +
+                                "\"storage_format\" = \"DEFAULT\"\n" +
+                                ");"
+                ));
     }
 
     @Test
