@@ -318,6 +318,7 @@ StarRocks 数据库 `test_db` 里的表 `table5` 包含三列，按顺序依次�
 
 ```Bash
 curl --location-trusted -u <username>:<password>  -H "label:label5" \
+    -H "Expect:100-continue" \
     -H "partitions: p1, p2" \
     -T example5.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
