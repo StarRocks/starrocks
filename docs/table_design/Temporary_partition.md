@@ -86,7 +86,7 @@ ADD TEMPORARY PARTITIONS START ("2020-04-01") END ("2021-01-01") EVERY (INTERVAL
 
 - The partition column for a temporary partition must be the same as the partition column for the original formal partition based on which you create the temporary partition and cannot be changed.
 - The name of a temporary partition cannot be the same as the name of any formal partition or other temporary partition.
-- The ranges of all temporary partitions in a table cannot overlap, but the range of a temporary partition and a formal partition can overlap.
+- The ranges of all temporary partitions in a table cannot overlap, but the ranges of a temporary partition and a formal partition can overlap.
 
 ## Show temporary partitions
 
