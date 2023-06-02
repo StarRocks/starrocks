@@ -1069,7 +1069,7 @@ public class EditLog {
                     break;
                 case OperationType.OP_PIPE: {
                     PipeOpEntry opEntry = (PipeOpEntry) journal.getData();
-                    globalStateMgr.getPipeManager().replay(opEntry);
+                    globalStateMgr.getPipeManager().getRepo().replay(opEntry);
                     break;
                 }
                 default: {
