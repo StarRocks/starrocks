@@ -67,6 +67,7 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -266,6 +267,12 @@ public class StarRocksAssert {
         DropDbStmt dropDbStmt =
                 (DropDbStmt) UtFrameUtils.parseStmtWithNewParser("drop database " + dbName + ";", ctx);
         GlobalStateMgr.getCurrentState().getMetadata().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
+        return this;
+    }
+
+    public StarRocksAssert alterMvProperties(String sql) throws Exception {
+        AlterMaterializedViewStmt alterMvStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterMaterializedView(alterMvStmt);
         return this;
     }
 
