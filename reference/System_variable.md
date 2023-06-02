@@ -142,14 +142,6 @@ SELECT /*+ SET_VAR
 
   用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。默认为 `true`，即开启严格模式。关于该模式的介绍，可以参阅[严格模式](../loading/load_concept/strict_mode.md)。
 
-* enable_spilling
-
-  用于设置是否开启大数据量落盘排序。默认为 false，即关闭该功能。当用户未指定 ORDER BY 子句的 LIMIT 条件，同时设置 enable_spilling 为 true 时，才会开启落盘排序。该功能启用后，会使用 BE 数据目录下 `starrocks-scratch/` 目录存放临时的落盘数据，并在查询结束后清空临时数据。
-  
-  该功能主要用于使用有限的内存进行大数据量的排序操作。
-
-  > 注：该功能为实验性质，不保证稳定性，请谨慎开启。
-
 * event_scheduler
 
   用于兼容 MySQL 客户端。无实际作用。
