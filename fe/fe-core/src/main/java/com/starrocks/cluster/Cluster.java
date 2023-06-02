@@ -118,6 +118,7 @@ public class Cluster implements Writable {
         try {
             dbNames.remove(name);
             dbIds.remove(id);
+            dbNameToIDs.remove(name, id);
         } finally {
             unlock();
         }
@@ -182,16 +183,19 @@ public class Cluster implements Writable {
         }
 
         if (dbNames.contains(StarRocksDb.DATABASE_NAME) &&
+                dbNameToIDs.containsKey(StarRocksDb.DATABASE_NAME) &&
                 dbNameToIDs.get(StarRocksDb.DATABASE_NAME).equals(SystemId.STARROCKS_DB_ID)) {
             dbCount--;
         }
 
         out.writeInt(dbCount);
-        // don't persist InfoSchemaDb meta
         for (String name : dbNames) {
+            // don't persist InfoSchemaDb meta
             if (name.equals(InfoSchemaDb.DATABASE_NAME)) {
                 dbIds.remove(dbNameToIDs.get(name));
+            // don't persist StarRocksDb meta
             } else if (name.equals(StarRocksDb.DATABASE_NAME) &&
+                    dbNameToIDs.containsKey(StarRocksDb.DATABASE_NAME) &&
                     dbNameToIDs.get(StarRocksDb.DATABASE_NAME).equals(SystemId.STARROCKS_DB_ID)) {
                 dbIds.remove(dbNameToIDs.get(name));
             } else {
