@@ -208,6 +208,8 @@ For information about how to choose an authentication method for accessing AWS S
 
 ##### S3-compatible storage system
 
+Hudi catalogs support S3-compatible storage systems from v2.5 onwards.
+
 If you choose an S3-compatible storage system, such as MinIO, as storage for your Hudi cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
 
 ```SQL
