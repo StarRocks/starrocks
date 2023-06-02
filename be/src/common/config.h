@@ -961,4 +961,6 @@ CONF_mInt64(load_tablet_timeout_seconds, "30");
 
 CONF_mBool(enable_pk_value_column_zonemap, "true");
 
+CONF_mBool(enable_short_key_for_one_column_filter, "true");
+
 } // namespace starrocks::config

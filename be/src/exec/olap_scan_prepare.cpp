@@ -638,7 +638,7 @@ Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_sca
         }
         conditional_key_columns++;
     }
-    if (conditional_key_columns > 1) {
+    if (config::enable_short_key_for_one_column_filter || conditional_key_columns > 1) {
         for (int i = 0; i < conditional_key_columns && !scan_keys.has_range_value(); ++i) {
             ExtendScanKeyVisitor visitor(&scan_keys, max_scan_key_num);
             if (!std::visit(visitor, column_value_ranges[ref_key_column_names[i]]).ok()) {
