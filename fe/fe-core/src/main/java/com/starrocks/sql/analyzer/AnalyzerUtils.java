@@ -14,10 +14,12 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Predicate;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -34,16 +36,21 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -62,6 +69,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.PartitionMeasure;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
@@ -70,6 +78,7 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QueryStatement;
@@ -764,14 +773,110 @@ public class AnalyzerUtils {
         }
     }
 
+
+
+    public static PartitionMeasure checkAndGetPartitionMeasure(ExpressionRangePartitionInfo expressionRangePartitionInfo)
+            throws AnalysisException {
+        long interval = 1;
+        String granularity;
+        List<Expr> partitionExprs = expressionRangePartitionInfo.getPartitionExprs();
+
+        if (partitionExprs.size() != 1) {
+            throw new AnalysisException("automatic partition only support one expression partitionExpr.");
+        }
+        Expr expr = partitionExprs.get(0);
+        if (!(expr instanceof FunctionCallExpr)) {
+            throw new AnalysisException("automatic partition only support FunctionCallExpr");
+        }
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+        String fnName = functionCallExpr.getFnName().getFunction();
+        if (fnName.equals(FunctionSet.DATE_TRUNC)) {
+            List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
+            if (paramsExprs.size() != 2) {
+                throw new AnalysisException("date_trunc params exprs size should be 2.");
+            }
+            Expr granularityExpr = paramsExprs.get(0);
+            if (!(granularityExpr instanceof StringLiteral)) {
+                throw new AnalysisException("date_trunc granularity is not string literal.");
+            }
+            StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
+            granularity = granularityLiteral.getStringValue();
+        } else if (fnName.equals(FunctionSet.TIME_SLICE)) {
+            List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
+            if (paramsExprs.size() != 4) {
+                throw new AnalysisException("time_slice params exprs size should be 4.");
+            }
+            Expr intervalExpr = paramsExprs.get(1);
+            if (!(intervalExpr instanceof IntLiteral)) {
+                throw new AnalysisException("time_slice interval is not int literal.");
+            }
+            Expr granularityExpr = paramsExprs.get(2);
+            if (!(granularityExpr instanceof StringLiteral)) {
+                throw new AnalysisException("time_slice granularity is not string literal.");
+            }
+            StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
+            IntLiteral intervalLiteral = (IntLiteral) intervalExpr;
+            granularity = granularityLiteral.getStringValue();
+            interval = intervalLiteral.getLongValue();
+        } else {
+            throw new AnalysisException("automatic partition only support data_trunc function.");
+        }
+        return new PartitionMeasure(interval, granularity);
+    }
+
     public static Map<String, AddPartitionClause> getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
-                                                                                           List<String> partitionValues,
-                                                                                           long interval,
-                                                                                           String granularity,
-                                                                                           Type firstPartitionColumnType)
+                                                                                           List<List<String>> partitionValues)
             throws AnalysisException {
         Map<String, AddPartitionClause> result = Maps.newHashMap();
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            PartitionMeasure measure = checkAndGetPartitionMeasure((ExpressionRangePartitionInfo) partitionInfo);
+            getAddPartitionClauseForRangePartition(olapTable, partitionValues.get(0), measure, result,
+                    (ExpressionRangePartitionInfo) partitionInfo);
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            Short replicationNum = olapTable.getTableProperty().getReplicationNum();
+            DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc();
+            Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
+            String partitionPrefix = "p";
+
+            for (List<String> partitionValue : partitionValues) {
+                List<String> formattedPartitionValue = Lists.newArrayList();
+                for (String value : partitionValue) {
+                    String formatValue = value.replaceAll("[^a-zA-Z0-9]", "");
+                    formattedPartitionValue.add(formatValue);
+                }
+                String partitionName = partitionPrefix + Joiner.on("_").join(formattedPartitionValue);
+                if (partitionName.length() > 64) {
+                    partitionName = partitionName.substring(0, 64);
+                }
+                MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
+                        partitionName, Collections.singletonList(partitionValue), partitionProperties);
+
+                multiItemListPartitionDesc.setSystem(true);
+                AddPartitionClause addPartitionClause =
+                        new AddPartitionClause(multiItemListPartitionDesc, distributionDesc,
+                                partitionProperties, false);
+                result.put(partitionName, addPartitionClause);
+            }
+        } else {
+            throw new AnalysisException("automatic partition only support expression range partition.");
+        }
+        return result;
+    }
+
+    private static void getAddPartitionClauseForRangePartition(OlapTable olapTable, List<String> partitionValues,
+                                                               PartitionMeasure measure,
+                                                               Map<String, AddPartitionClause> result,
+                                                               ExpressionRangePartitionInfo expressionRangePartitionInfo)
+            throws AnalysisException {
+        String granularity = measure.getGranularity();
+        long interval = measure.getInterval();
+        Type firstPartitionColumnType = expressionRangePartitionInfo.getPartitionColumns().get(0).getType();
         String partitionPrefix = "p";
+        Short replicationNum = olapTable.getTableProperty().getReplicationNum();
+        DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc();
+        Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
+
         for (String partitionValue : partitionValues) {
             DateTimeFormatter beginDateTimeFormat;
             LocalDateTime beginTime;
@@ -810,10 +915,6 @@ public class AnalyzerUtils {
                         throw new AnalysisException("unsupported automatic partition granularity:" + granularity);
                 }
                 PartitionKeyDesc partitionKeyDesc = createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
-                Map<String, String> partitionProperties = Maps.newHashMap();
-                Short replicationNum = olapTable.getTableProperty().getReplicationNum();
-                partitionProperties.put("replication_num", String.valueOf(replicationNum));
-                DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc();
 
                 SingleRangePartitionDesc singleRangePartitionDesc =
                         new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
@@ -826,7 +927,6 @@ public class AnalyzerUtils {
                 throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionValue));
             }
         }
-        return result;
     }
 
     private static PartitionKeyDesc createPartitionKeyDesc(Type partitionType, LocalDateTime beginTime,

@@ -228,9 +228,9 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
             }
         } else {
             _partitions_map.emplace(&part->end_key, part);
+            VLOG(1) << "add partition:" << part->id << " start " << part->start_key.debug_string() << " end "
+                    << part->end_key.debug_string();
         }
-        VLOG(1) << "add partition:" << part->id << " start " << part->start_key.debug_string() << " end "
-                << part->end_key.debug_string();
     }
 
     return Status::OK();
@@ -361,6 +361,14 @@ Status OlapTablePartitionParam::add_partitions(const std::vector<TOlapTableParti
         if (t_part.__isset.end_keys) {
             RETURN_IF_ERROR_WITH_WARN(_create_partition_keys(t_part.end_keys, &part->end_key), "end keys");
         }
+
+        if (t_part.__isset.in_keys) {
+            part->in_keys.resize(t_part.in_keys.size());
+            for (int i = 0; i < t_part.in_keys.size(); i++) {
+                RETURN_IF_ERROR_WITH_WARN(_create_partition_keys(t_part.in_keys[i], &part->in_keys[i]), "in_keys");
+            }
+        }
+
         part->num_buckets = t_part.num_buckets;
         auto num_indexes = _schema->indexes().size();
         if (t_part.indexes.size() != num_indexes) {
@@ -387,9 +395,15 @@ Status OlapTablePartitionParam::add_partitions(const std::vector<TOlapTableParti
             }
         }
         _partitions.emplace(part->id, part);
-        _partitions_map.emplace(&part->end_key, part);
-        VLOG(1) << "add automatic partition:" << part->id << " start " << part->start_key.debug_string() << " end "
-                << part->end_key.debug_string();
+        if (t_part.__isset.in_keys) {
+            for (auto& in_key : part->in_keys) {
+                _partitions_map.emplace(&in_key, part);
+            }
+        } else {
+            _partitions_map.emplace(&part->end_key, part);
+            VLOG(1) << "add automatic partition:" << part->id << " start " << part->start_key.debug_string() << " end "
+                    << part->end_key.debug_string();
+        }
     }
 
     return Status::OK();
@@ -424,48 +438,60 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
         for (size_t i = 0; i < num_rows; ++i) {
             if ((*selection)[i]) {
                 row.index = i;
-                auto it = is_list_partition ? _partitions_map.find(&row) : _partitions_map.upper_bound(&row);
-                if (UNLIKELY(it == _partitions_map.end())) {
-                    if (partition_not_exist_row_values) {
-                        // only support single column partition now
-                        if (partition_columns.size() != partition_not_exist_row_values->size()) {
-                            return Status::InternalError("automatic partition only support single column partition.");
-                        }
-                        for (auto& column : *row.columns) {
-                            VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partion row "
-                                    << row.debug_string();
-                            (*partition_not_exist_row_values)[0].emplace_back(column->debug_item(i));
-                        }
+                if (is_list_partition) {
+                    // list partition
+                    auto it = _partitions_map.find(&row);
+                    if (it != _partitions_map.end() && _part_contains(it->second, &row)) {
+                            (*partitions)[i] = it->second;
+                            (*indexes)[i] = (*indexes)[i] % it->second->num_buckets;
+                            LOG(INFO) << "find list partition:" << it->second->id << " row:" << row.debug_string();
                     } else {
-                        VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partion row "
-                                << row.debug_string();
-                        (*partitions)[i] = nullptr;
-                        (*selection)[i] = 0;
-                        if (invalid_row_indexs != nullptr) {
-                            invalid_row_indexs->emplace_back(i);
+                        if (partition_not_exist_row_values) {
+                            auto partition_value_items = std::make_unique<std::vector<std::string>>();
+                            for (auto& column : *row.columns) {
+                                VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partition row "
+                                        << row.debug_string();
+                                partition_value_items->emplace_back(column->raw_item_value(i));
+                            }
+                            (*partition_not_exist_row_values).emplace_back(*partition_value_items);
+                        } else {
+                            VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partition row "
+                                    << row.debug_string();
+                            (*partitions)[i] = nullptr;
+                            (*selection)[i] = 0;
+                            if (invalid_row_indexs != nullptr) {
+                                invalid_row_indexs->emplace_back(i);
+                            }
                         }
                     }
-                } else if (LIKELY(is_list_partition || _part_contains(it->second, &row))) {
-                    (*partitions)[i] = it->second;
-                    (*indexes)[i] = (*indexes)[i] % it->second->num_buckets;
                 } else {
-                    if (partition_not_exist_row_values) {
-                        if (partition_columns.size() != partition_not_exist_row_values->size()) {
-                            return Status::InternalError("automatic partition only support single column partition.");
-                        }
-                        for (auto& column : *row.columns) {
-                            VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partion row "
-                                    << row.debug_string();
-                            (*partition_not_exist_row_values)[0].emplace_back(column->debug_item(i));
-                        }
+                    // range partition
+                    auto it = _partitions_map.upper_bound(&row);
+                    if (it != _partitions_map.end() && _part_contains(it->second, &row)) {
+                        (*partitions)[i] = it->second;
+                        (*indexes)[i] = (*indexes)[i] % it->second->num_buckets;
                     } else {
-                        VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partion row "
-                                << row.debug_string() << " partition start " << it->second->start_key.debug_string()
-                                << " end " << it->second->end_key.debug_string();
-                        (*partitions)[i] = nullptr;
-                        (*selection)[i] = 0;
-                        if (invalid_row_indexs != nullptr) {
-                            invalid_row_indexs->emplace_back(i);
+                        if (partition_not_exist_row_values) {
+                            // only support single column partition for range partition now
+                            if (partition_columns.size() != 1) {
+                                return Status::InternalError(
+                                        "automatic partition only support single column partition.");
+                            }
+                            auto partition_value_items = std::make_unique<std::vector<std::string>>();
+                            for (auto& column : *row.columns) {
+                                VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partition row "
+                                        << row.debug_string();
+                                partition_value_items->emplace_back(column->raw_item_value(i));
+                                (*partition_not_exist_row_values).emplace_back(*partition_value_items);
+                            }
+                        } else {
+                            VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partition row "
+                                    << row.debug_string();
+                            (*partitions)[i] = nullptr;
+                            (*selection)[i] = 0;
+                            if (invalid_row_indexs != nullptr) {
+                                invalid_row_indexs->emplace_back(i);
+                            }
                         }
                     }
                 }

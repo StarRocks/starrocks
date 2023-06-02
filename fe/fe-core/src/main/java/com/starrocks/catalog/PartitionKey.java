@@ -93,7 +93,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         PartitionKey partitionKey = new PartitionKey();
         for (Column column : columns) {
             PrimitiveType primitiveType = column.getPrimitiveType();
-            DateLiteral shadowLiteral;
+            LiteralExpr shadowLiteral;
             switch (primitiveType) {
                 case DATE:
                     shadowLiteral = SHADOW_DATE_LITERAL;
