@@ -1716,7 +1716,7 @@ alterPipeStatement
     ;
 
 showPipeStatement
-    : SHOW PIPES
+    : SHOW PIPES ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 

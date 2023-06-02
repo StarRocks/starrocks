@@ -102,6 +102,7 @@ import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
+import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
@@ -173,6 +174,7 @@ import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowLoadStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.ShowPipeStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowProcesslistStmt;
@@ -372,6 +374,8 @@ public class ShowExecutor {
             handleShowStorageVolumes();
         } else if (stmt instanceof DescStorageVolumeStmt) {
             handleDescStorageVolume();
+        } else if (stmt instanceof ShowPipeStmt) {
+            handleShowPipes();
         } else {
             handleEmpty();
         }
@@ -2573,5 +2577,16 @@ public class ShowExecutor {
     private void handleDescStorageVolume() throws AnalysisException {
         DescStorageVolumeStmt desc = (DescStorageVolumeStmt) stmt;
         resultSet = new ShowResultSet(desc.getMetaData(), desc.getResultRows());
+    }
+
+    private void handleShowPipes() {
+        List<List<String>> rows = Lists.newArrayList();
+        PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
+        pipeManager.getPipesUnlock().values().forEach(pipe -> {
+            List<String> row = Lists.newArrayList();
+            row.add(String.valueOf(pipe.getId()));
+            row.add(pipe.getName());
+        });
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 }

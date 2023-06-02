@@ -334,6 +334,7 @@ import com.starrocks.sql.ast.ShowLoadWarningsStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowOpenTableStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.ShowPipeStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowPrivilegesStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
@@ -3732,6 +3733,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDropPipeStatement(StarRocksParser.DropPipeStatementContext context) {
         String pipeName = String.valueOf((Identifier) visit(context.identifier()));
         return new DropPipeStmt(pipeName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowPipeStatement(StarRocksParser.ShowPipeStatementContext context) {
+        if (context.LIKE() != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            return new ShowPipeStmt(stringLiteral.getValue(), null, createPos(context));
+        } else if (context.WHERE() != null) {
+            return new ShowPipeStmt(null, (Expr) visit(context.expression()), createPos(context));
+        } else {
+            return new ShowPipeStmt(null, null, createPos(context));
+        }
     }
 
     // ------------------------------------------- Query Statement -----------------------------------------------------

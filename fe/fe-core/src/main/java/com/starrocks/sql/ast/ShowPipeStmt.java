@@ -15,12 +15,40 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
-public class ShowPipeStmt extends DdlStmt {
+public class ShowPipeStmt extends ShowStmt {
 
-    protected ShowPipeStmt(NodePosition pos) {
+    private static final ShowResultSetMetaData META_DATA =
+            ShowResultSetMetaData.builder()
+                    .addColumn(new Column("ID", ScalarType.BIGINT))
+                    .addColumn(new Column("Name", ScalarType.createVarchar(256)))
+                    .build();
+
+    private final String like;
+    private final Expr where;
+
+    public ShowPipeStmt(String like, Expr where, NodePosition pos) {
         super(pos);
+        this.like = like;
+        this.where = where;
+    }
+
+    public String getLike() {
+        return like;
+    }
+
+    public Expr getWhere() {
+        return where;
+    }
+
+    @Override
+    public ShowResultSetMetaData getMetaData() {
+        return META_DATA;
     }
 
     @Override
