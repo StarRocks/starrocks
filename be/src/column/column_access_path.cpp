@@ -76,7 +76,7 @@ StatusOr<ColumnAccessPathPtr> ColumnAccessPath::convert_by_index(const Field* fi
     if (!field->has_sub_fields()) {
         if (!this->_children.empty()) {
             return Status::InternalError(fmt::format(
-                    "impossable bad storage schema for access path, field: {}, path: {}", field, this->_path));
+                    "impossable bad storage schema for access path, field: {}, path: {}", field->name(), this->_path));
         }
         return path;
     }
