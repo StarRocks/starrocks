@@ -182,7 +182,7 @@ private:
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<MemTableSink> _mem_table_sink;
     const TabletSchema* _tablet_schema;
-
+    std::shared_ptr<TabletSchema> _new_tablet_schema;
     std::unique_ptr<FlushToken> _flush_token;
     std::unique_ptr<ReplicateToken> _replicate_token;
     bool _with_rollback_log;

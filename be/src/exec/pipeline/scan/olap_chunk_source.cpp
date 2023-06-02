@@ -271,6 +271,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges(), scanner_columns, reader_columns));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
+    /// TODO(fzh): just read some sub fields from tablet schema.
     starrocks::Schema child_schema = ChunkHelper::convert_schema(tablet_schema, reader_columns);
 
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),

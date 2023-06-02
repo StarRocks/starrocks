@@ -164,6 +164,8 @@ message RowsetMetaPB {
     optional uint32 num_update_files = 57;
     // total partial update row size
     optional int64 total_update_row_size = 58;
+    // rowset may change tablet schema during flatting map or json.
+    optional TabletSchemaPB schema = 59;
 }
 
 enum DataFileType {

@@ -208,6 +208,7 @@ private:
 
     using SubReaderList = std::vector<std::unique_ptr<ColumnReader>>;
     std::unique_ptr<SubReaderList> _sub_readers;
+    std::vector<std::string> _map_keys_name;
 
     // Pointer to its father segment, as the column reader
     // is never released before the end of the parent's life cycle,

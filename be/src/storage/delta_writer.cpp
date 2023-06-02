@@ -219,10 +219,14 @@ Status DeltaWriter::_init() {
                            sort_key_idxes.begin(), sort_key_idxes.end())) {
             _partial_schema_with_sort_key = true;
         }
-        writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
+        _new_tablet_schema = writer_context.partial_update_tablet_schema;
+        writer_context.tablet_schema = _new_tablet_schema.get();
         writer_context.partial_update_mode = _opt.partial_update_mode;
     } else {
-        writer_context.tablet_schema = &_tablet->tablet_schema();
+        /// copy schema
+        _new_tablet_schema = _tablet->tablet_schema().deep_copy();
+        writer_context.referenced_column_ids.clear();
+        writer_context.tablet_schema = _new_tablet_schema.get();
         if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
             writer_context.merge_condition = _opt.merge_condition;
         }
@@ -256,7 +260,7 @@ Status DeltaWriter::_init() {
     writer_context.segments_overlap = OVERLAPPING;
     writer_context.global_dicts = _opt.global_dicts;
     writer_context.miss_auto_increment_column = _opt.miss_auto_increment_column;
-    Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
+    Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer); ///TODO(fzh) more than once
     if (!st.ok()) {
         auto msg = strings::Substitute("Fail to create rowset writer. tablet_id: $0, error: $1", _opt.tablet_id,
                                        st.to_string());
@@ -503,7 +507,7 @@ Status DeltaWriter::commit() {
         return res.status();
     }
 
-    _cur_rowset->set_schema(&_tablet->tablet_schema());
+    _cur_rowset->set_schema(_new_tablet_schema.get());
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
         if (!st.ok()) {

@@ -257,7 +257,7 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const Schema& schema, const Seg
     }
     // If input schema is not match the actual meta, must convert the read_options according
     // to the actual format. And create an AdaptSegmentIterator to wrap
-    if (_needs_chunk_adapter) {
+    if (_needs_chunk_adapter) { /// TODO(fzh) reuse this logic to cast?
         std::unique_ptr<SegmentChunkIteratorAdapter> adapter(new SegmentChunkIteratorAdapter(
                 *_tablet_schema, *_column_storage_types, schema, read_options.chunk_size));
         RETURN_IF_ERROR(adapter->prepare(read_options));

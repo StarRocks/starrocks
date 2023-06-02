@@ -185,6 +185,10 @@ public:
     ColumnPtr& values_column() { return _values; }
     ColumnPtr values_column() const { return _values; }
 
+    const Column& flat() const { return *_flat; }
+    ColumnPtr& flat_column() { return _flat; }
+    ColumnPtr flat_column() const { return _flat; }
+
     size_t get_map_size(size_t idx) const;
     std::pair<size_t, size_t> get_map_offset_size(size_t idx) const;
 
@@ -203,6 +207,8 @@ private:
     //                          m1vals [v1, v2, v3], m2vals [v4, v5, v6]
     // The two element array has three offsets(0, 3, 6)
     UInt32Column::Ptr _offsets;
+
+    ColumnPtr _flat;
 };
 
 } // namespace starrocks

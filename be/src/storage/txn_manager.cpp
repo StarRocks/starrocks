@@ -267,9 +267,13 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
     // save meta need access disk, it maybe very slow, so that it is not in global txn lock
     // it is under a single txn lock
     if (!is_recovery) {
+        rowset_ptr->schema().to_schema_pb(rowset_ptr->rowset_meta()->get_mutable_schema());
         RowsetMetaPB rowset_meta_pb;
-        rowset_ptr->rowset_meta()->to_rowset_pb(&rowset_meta_pb);
-        Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);
+        rowset_ptr->rowset_meta()->to_rowset_pb(&rowset_meta_pb); ///TODO(fzh) add delta schema
+        auto new_tablet_schema = TabletSchema::create(rowset_ptr->rowset_meta()->schema());
+
+        Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb); ///TODO(fzh) write schema
+
         if (!st.ok()) {
             LOG(WARNING) << "Fail to save committed rowset. "
                          << "tablet_id: " << tablet_id << ", txn_id: " << transaction_id
@@ -301,10 +305,10 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
     }
     return Status::OK();
 }
-
+///TODO
 Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                                int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time) {
-    if (tablet->updates() != nullptr) {
+    if (tablet->updates() != nullptr) { ///TODO read rowset meta and merge it with tablet schema
         StarRocksMetrics::instance()->update_rowset_commit_request_total.increment(1);
         auto st = tablet->rowset_commit(version, rowset, wait_time);
         if (!st.ok()) {
@@ -320,6 +324,12 @@ Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr&
             return st;
         }
     }
+
+    ///TODO: check rowset schema updated or not?
+    ///TODO: set versioned tablet schema?
+    auto new_tablet_schema = TabletSchema::create(rowset->rowset_meta()->schema());
+    new_tablet_schema->update_schema(tablet->tablet_meta()->tablet_schema());
+
     std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
     txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
     pair<int64_t, int64_t> key(partition_id, transaction_id);

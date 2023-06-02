@@ -613,6 +613,7 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     // TODO: is rollback modification of rowset meta required if commit failed?
     rowset->make_commit(version, rowsetid);
     span->AddEvent("save_meta_begin");
+    ///TODO(fzh) merge rowset schema with tablet schema
     auto st = TabletMetaManager::rowset_commit(
             _tablet.data_dir(), _tablet.tablet_id(), _next_log_id, &edit, rowset->rowset_meta()->get_meta_pb(),
             RowsetMetaManager::get_rowset_meta_key(_tablet.tablet_uid(), rowset->rowset_id()));
@@ -709,7 +710,7 @@ void TabletUpdates::_ignore_rowset_commit(int64_t version, const RowsetSharedPtr
                               << " txn_id: " << rowset->txn_id() << " rowset: " << rowset->rowset_id().to_string();
 }
 
-Status TabletUpdates::save_meta() {
+Status TabletUpdates::save_meta() { ///TODO
     TabletMetaPB metapb;
     // No need to acquire the meta lock?
     _tablet._tablet_meta->to_meta_pb(&metapb);

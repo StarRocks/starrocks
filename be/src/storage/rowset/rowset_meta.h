@@ -110,6 +110,10 @@ public:
         *_rowset_meta_pb->mutable_delete_predicate() = delete_predicate;
     }
 
+    const TabletSchemaPB& schema() const { return _rowset_meta_pb->schema(); }
+
+    TabletSchemaPB* get_mutable_schema() { return _rowset_meta_pb->mutable_schema(); }
+
     // return semgent_footer position and size if rowset is partial_rowset
     const FooterPointerPB* partial_rowset_footer(uint32_t segment_id) const {
         if (!_rowset_meta_pb->has_txn_meta() || _rowset_meta_pb->txn_meta().has_merge_condition() ||

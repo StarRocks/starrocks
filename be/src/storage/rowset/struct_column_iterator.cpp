@@ -104,6 +104,9 @@ Status StructColumnIterator::next_batch(size_t* n, Column* dst) {
 Status StructColumnIterator::next_batch(const SparseRange& range, Column* dst) {
     StructColumn* struct_column = nullptr;
     NullColumn* null_column = nullptr;
+    if (dst == nullptr) {
+        return Status::RuntimeError("dst col is null when read struct columns.");
+    }
     if (dst->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(dst);
 
