@@ -94,6 +94,8 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
         return Status::OK();
     }
 
+    LOG(INFO) << "tablet:" << _tablet_id << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
+              << " start load segment:" << idx;
     OlapReaderStatistics stats;
     auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
@@ -139,7 +141,8 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
     // So we try build slice in advance in here to make sure the correctness of memory statistics
     dest->raw_data();
     _memory_usage += dest != nullptr ? dest->memory_usage() : 0;
-
+    LOG(INFO) << "tablet:" << _tablet_id << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
+              << " finish load segment:" << idx;
     return Status::OK();
 }
 
