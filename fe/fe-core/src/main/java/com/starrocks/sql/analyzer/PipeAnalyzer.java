@@ -22,6 +22,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
@@ -87,5 +88,9 @@ public class PipeAnalyzer {
                 StringUtils.isNullOrEmpty(context.getDatabase())) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
         }
+    }
+
+    public static void analyze(AlterPipeStmt stmt, ConnectContext context) {
+        analyzePipeName(stmt.getPipeName(), context);
     }
 }

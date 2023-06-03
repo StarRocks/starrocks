@@ -111,6 +111,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.statistic.AnalyzeJob;
@@ -896,6 +897,7 @@ public class DDLStmtExecutor {
             return null;
         }
 
+        //=========================================== Pipe Statement ==================================================
         @Override
         public ShowResultSet visitCreatePipeStatement(CreatePipeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() ->
@@ -908,6 +910,14 @@ public class DDLStmtExecutor {
         public ShowResultSet visitDropPipeStatement(DropPipeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() ->
                     context.getGlobalStateMgr().getPipeManager().dropPipe(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterPipeStatement(AlterPipeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getPipeManager().alterPipe(stmt)
             );
             return null;
         }

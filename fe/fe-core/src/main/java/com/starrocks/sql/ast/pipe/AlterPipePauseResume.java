@@ -13,18 +13,24 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.sql.ast;
+package com.starrocks.sql.ast.pipe;
 
 import com.starrocks.sql.parser.NodePosition;
 
-public class AlterPipeStmt extends DdlStmt {
+public class AlterPipePauseResume extends AlterPipeClause {
 
-    protected AlterPipeStmt(NodePosition pos) {
+    private final boolean isPause;
+
+    public AlterPipePauseResume(NodePosition pos, boolean isPause) {
         super(pos);
+        this.isPause = isPause;
     }
 
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterPipeStatement(this, context);
+    public boolean isPause() {
+        return isPause;
+    }
+
+    public boolean isResume() {
+        return !isPause;
     }
 }

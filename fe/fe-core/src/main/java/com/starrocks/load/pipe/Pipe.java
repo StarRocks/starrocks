@@ -23,7 +23,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -53,7 +52,7 @@ public class Pipe implements Writable {
     @SerializedName(value = "targetTable")
     private Table targetTable;
     @SerializedName(value = "type")
-    private Type type;
+    private final Type type;
     @SerializedName(value = "state")
     private State state;
 
@@ -65,18 +64,19 @@ public class Pipe implements Writable {
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    public Pipe(long dbId, String name, long id, Table targetTable) {
-        this.name = name;
-        this.id = new PipeId(dbId, id);
-        this.targetTable = targetTable;
+    private Pipe(PipeId id, String name, Table targetTable) {
+        this.name = Preconditions.checkNotNull(name);
+        this.id = Preconditions.checkNotNull(id);
+        this.targetTable = Preconditions.checkNotNull(targetTable);
+        this.type = Type.FILE;
+        this.state = State.RUNNING;
     }
 
     public static Pipe fromStatement(long id, CreatePipeStmt stmt) {
-        TableFunctionRelation tableFunctionRelation = stmt.getTableFunctionRelation();
         PipeName pipeName = stmt.getPipeName();
         long dbId = GlobalStateMgr.getCurrentState().getDb(pipeName.getDbName()).getId();
 
-        return new Pipe(dbId, pipeName.getPipeName(), id, stmt.getTargetTable());
+        return new Pipe(new PipeId(dbId, id), pipeName.getPipeName(), stmt.getTargetTable());
     }
 
     /**
@@ -148,10 +148,6 @@ public class Pipe implements Writable {
         lock.writeLock().unlock();
     }
 
-    private long idealBatchSize() {
-        return 1 << 30;
-    }
-
     public void pause() {
         try {
             lock.writeLock().lock();
@@ -162,7 +158,7 @@ public class Pipe implements Writable {
                 for (PipeTaskDesc task : readyTasks) {
                     task.interrupt();
                 }
-                LOG.info("Pause pipe " + toString());
+                LOG.info("Pause pipe " + this);
             }
         } finally {
             lock.writeLock().unlock();
@@ -176,12 +172,11 @@ public class Pipe implements Writable {
 
             if (this.state == State.PAUSED || this.state == State.ERROR) {
                 this.state = State.RUNNING;
-                LOG.info("Resume pipe " + toString());
+                LOG.info("Resume pipe " + this);
             }
 
         } finally {
             lock.writeLock().unlock();
-            ;
         }
     }
 

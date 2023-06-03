@@ -167,9 +167,11 @@ public interface ParserErrorMsg {
     @BaseMessage("Unsupported operation on {0}")
     String unsupportedOpWithInfo(String a0);
 
+    @BaseMessage("Unsupported operation {0}")
+    String unsupportedOp(String a0);
+
     @BaseMessage("Unsupported predicates. Where clause can only be ''{0}''")
     String invalidWhereExpr(String a0);
-
 
     @BaseMessage("''{0}'' must be an aggregate expression or appear in GROUP BY clause")
     String shouldBeAggFunc(String a0);

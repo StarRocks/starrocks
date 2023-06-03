@@ -56,7 +56,10 @@ public class PipeRepo {
     }
 
     public void alterPipe(Pipe pipe) {
-
+        PipeOpEntry opEntry = new PipeOpEntry();
+        opEntry.setPipeOp(PipeOpEntry.PipeOpType.PIPE_OP_ALTER);
+        opEntry.setPipeJson(pipe.toJson());
+        GlobalStateMgr.getCurrentState().getEditLog().logPipeOp(opEntry);
     }
 
     public long saveImage(DataOutputStream output, long checksum) throws IOException {

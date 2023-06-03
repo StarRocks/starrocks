@@ -1715,8 +1715,12 @@ dropPipeStatement
     : DROP PIPE (IF EXISTS)? pipeName
     ;
 
+alterPipeClause
+    : PAUSE | RESUME
+    ;
+
 alterPipeStatement
-    : ALTER PIPE pipeName
+    : ALTER PIPE pipeName alterPipeClause
     ;
 
 showPipeStatement

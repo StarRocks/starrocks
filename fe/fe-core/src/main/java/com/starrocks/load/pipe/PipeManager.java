@@ -20,8 +20,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.pipe.AlterPipePauseResume;
+import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
+import com.starrocks.sql.ast.pipe.PipeName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,6 +42,9 @@ public class PipeManager {
 
     @SerializedName(value = "pipes")
     private Map<PipeId, Pipe> pipeMap = new HashMap<>();
+    @SerializedName(value = "nameToId")
+    private Map<Pair<Long, String>, PipeId> nameToId = new HashMap<>();
+
     private PipeRepo repo;
 
     public PipeManager() {
@@ -48,7 +54,8 @@ public class PipeManager {
     public void createPipe(CreatePipeStmt stmt) throws DdlException {
         try {
             lock.writeLock().lock();
-            boolean existed = pipeMap.containsKey(stmt.getPipeName());
+            Pair<Long, String> dbIdAndName = resolvePipeNameUnlock(stmt.getPipeName());
+            boolean existed = nameToId.containsKey(dbIdAndName);
             if (existed) {
                 if (!stmt.isIfNotExists()) {
                     throw new DdlException("Pipe already exists");
@@ -60,6 +67,7 @@ public class PipeManager {
             long id = GlobalStateMgr.getCurrentState().getNextId();
             Pipe pipe = Pipe.fromStatement(id, stmt);
             pipeMap.put(pipe.getPipeId(), pipe);
+            nameToId.put(dbIdAndName, pipe.getPipeId());
 
             repo.addPipe(pipe);
         } finally {
@@ -71,18 +79,47 @@ public class PipeManager {
     public void dropPipe(DropPipeStmt stmt) throws DdlException {
         try {
             lock.writeLock().lock();
-            Pipe pipe = pipeMap.get(stmt.getPipeName());
-            if (pipe == null) {
-                throw new DdlException("Pipe not exists");
-            }
-            pipe.pause();
-            pipeMap.remove(stmt.getPipeName());
+            Pair<Long, String> dbAndName = resolvePipeNameUnlock(stmt.getPipeName());
+            PipeId pipeId = nameToId.get(dbAndName);
+            DdlException.requireNotNull("pipe-" + dbAndName.second, pipeId);
+            Pipe pipe = pipeMap.get(nameToId.get(dbAndName));
 
-            // edit log
+            pipe.pause();
+            pipeMap.remove(pipe.getPipeId());
+            nameToId.remove(dbAndName);
+
+            // persistence
             repo.deletePipe(pipe);
         } finally {
             lock.writeLock().unlock();
         }
+    }
+
+    public void alterPipe(AlterPipeStmt stmt) throws DdlException {
+        LOG.info("alter pipe " + stmt.toString());
+        try {
+            lock.writeLock().lock();
+            Pair<Long, String> dbAndName = resolvePipeNameUnlock(stmt.getPipeName());
+            PipeId pipeId = nameToId.get(dbAndName);
+            DdlException.requireNotNull("pipe-" + dbAndName.second, pipeId);
+            Pipe pipe = pipeMap.get(pipeId);
+            AlterPipePauseResume alterClause = (AlterPipePauseResume) stmt.getAlterPipeClause();
+            if (alterClause.isPause()) {
+                pipe.pause();
+            } else if (alterClause.isResume()) {
+                pipe.resume();
+            }
+
+            // persistence
+            repo.alterPipe(pipe);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    private Pair<Long, String> resolvePipeNameUnlock(PipeName name) {
+        long dbId = GlobalStateMgr.getCurrentState().getDb(name.getDbName()).getId();
+        return Pair.create(dbId, name.getPipeName());
     }
 
     public List<Pipe> getRunnablePipes() {

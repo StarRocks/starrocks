@@ -18,6 +18,7 @@ package com.starrocks.sql.ast.pipe;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
@@ -25,6 +26,7 @@ import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
+import java.util.Optional;
 
 public class ShowPipeStmt extends ShowStmt {
 
@@ -55,7 +57,7 @@ public class ShowPipeStmt extends ShowStmt {
         row.add(String.valueOf(pipe.getPipeId().getDbId()));
         row.add(String.valueOf(pipe.getPipeId().getId()));
         row.add(pipe.getName());
-        row.add(pipe.getTargetTable().getName());
+        row.add(Optional.ofNullable(pipe.getTargetTable()).map(Table::getName).orElse("null"));
         row.add(String.valueOf(pipe.getState()));
     }
 

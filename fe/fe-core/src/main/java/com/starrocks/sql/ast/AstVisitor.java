@@ -45,6 +45,8 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
+import com.starrocks.sql.ast.pipe.AlterPipeClause;
+import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
@@ -799,6 +801,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowPipeStatement(ShowPipeStmt statement, C context) {
         return visitNode(statement, context);
+    }
+
+    public R visitAlterPipeClause(AlterPipeClause clause, C context) {
+        return visitNode(clause, context);
     }
 
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------
