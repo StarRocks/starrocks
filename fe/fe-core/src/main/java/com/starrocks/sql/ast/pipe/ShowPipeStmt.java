@@ -13,12 +13,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.sql.ast;
+package com.starrocks.sql.ast.pipe;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
 public class ShowPipeStmt extends ShowStmt {
@@ -29,13 +31,19 @@ public class ShowPipeStmt extends ShowStmt {
                     .addColumn(new Column("Name", ScalarType.createVarchar(256)))
                     .build();
 
+    private final String dbName;
     private final String like;
     private final Expr where;
 
-    public ShowPipeStmt(String like, Expr where, NodePosition pos) {
+    public ShowPipeStmt(String dbName, String like, Expr where, NodePosition pos) {
         super(pos);
+        this.dbName = dbName;
         this.like = like;
         this.where = where;
+    }
+
+    public String getDbName() {
+        return dbName;
     }
 
     public String getLike() {

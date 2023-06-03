@@ -58,6 +58,9 @@ public interface ParserErrorMsg {
     @BaseMessage("Invalid task name format ''{0}''")
     String invalidTaskFormat(String a0);
 
+    @BaseMessage("Invalid pipe name ''{0}''")
+    String invalidPipeName(String a0);
+
     @BaseMessage("Invalid UDF function name ''{0}''")
     String invalidUDFName(String a0);
 

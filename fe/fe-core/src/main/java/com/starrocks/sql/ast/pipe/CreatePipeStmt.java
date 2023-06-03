@@ -13,20 +13,25 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.sql.ast;
+package com.starrocks.sql.ast.pipe;
 
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DdlStmt;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.parser.NodePosition;
 
 public class CreatePipeStmt extends DdlStmt {
 
     private final boolean ifNotExists;
-    private final String pipeName;
+    private final PipeName pipeName;
     private final InsertStmt insertStmt;
     private Table targetTable;
     private TableFunctionRelation tableFunctionRelation;
 
-    public CreatePipeStmt(boolean ifNotExists, String pipeName, InsertStmt insertStmt, NodePosition pos) {
+    public CreatePipeStmt(boolean ifNotExists, PipeName pipeName, InsertStmt insertStmt,
+                          NodePosition pos) {
         super(pos);
         this.ifNotExists = ifNotExists;
         this.pipeName = pipeName;
@@ -37,7 +42,7 @@ public class CreatePipeStmt extends DdlStmt {
         return ifNotExists;
     }
 
-    public String getPipeName() {
+    public PipeName getPipeName() {
         return pipeName;
     }
 

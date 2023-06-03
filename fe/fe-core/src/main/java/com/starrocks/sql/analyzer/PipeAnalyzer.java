@@ -16,22 +16,33 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.CreatePipeStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.ast.pipe.PipeName;
+import org.apache.ivy.util.StringUtils;
 
 public class PipeAnalyzer {
 
     // only analyze create pipe right now
     public static void analyze(CreatePipeStmt stmt, ConnectContext context) {
-        String name = stmt.getPipeName();
-        if (Strings.isNullOrEmpty(name)) {
+        PipeName pipeName = stmt.getPipeName();
+        if (StringUtils.isNullOrEmpty(pipeName.getDbName())) {
+            if (StringUtils.isNullOrEmpty(context.getDatabase())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+            }
+            pipeName.setDbName(context.getDatabase());
+        }
+        if (Strings.isNullOrEmpty(pipeName.getPipeName())) {
             throw new SemanticException("empty pipe name");
         }
-        FeNameFormat.checkCommonName("pipe", name);
+        FeNameFormat.checkCommonName("db", pipeName.getDbName());
+        FeNameFormat.checkCommonName("pipe", pipeName.getPipeName());
 
         // Analyze Insert Statement
         // 1. Source table must be s3 table function

@@ -70,7 +70,7 @@ public class PipeRepo {
         String imageJson = Text.readString(input);
         PipeManager data = GsonUtils.GSON.fromJson(imageJson, PipeManager.class);
         if (data.getPipesUnlock() != null) {
-            Map<String, Pipe> pipes = data.getPipesUnlock();
+            Map<PipeId, Pipe> pipes = data.getPipesUnlock();
             pipeManager.addPipes(pipes);
             LOG.info("Load pipes from image: " + pipes.size());
             checksum ^= pipes.size();
@@ -87,7 +87,7 @@ public class PipeRepo {
                 break;
             }
             case PIPE_OP_DROP: {
-                pipeManager.removePipe(pipe.getName());
+                pipeManager.removePipe(pipe.getPipeId());
                 break;
             }
             default: {

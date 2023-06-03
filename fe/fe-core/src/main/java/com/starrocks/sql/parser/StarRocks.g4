@@ -1702,21 +1702,25 @@ showSmallFilesStatement
     ;
 // -------------------------------------------- Pipe Statement ---------------------------------------------------------
 
+pipeName:
+    qualifiedName
+    ;
+
 createPipeStatement
-    : CREATE PIPE (IF NOT EXISTS)? pipeName=identifier
+    : CREATE PIPE (IF NOT EXISTS)? pipeName
         AS insertStatement
     ;
 
 dropPipeStatement
-    : DROP PIPE (IF EXISTS)? identifier
+    : DROP PIPE (IF EXISTS)? pipeName
     ;
 
 alterPipeStatement
-    : ALTER PIPE identifier
+    : ALTER PIPE pipeName
     ;
 
 showPipeStatement
-    : SHOW PIPES ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW PIPES ((LIKE pattern=string) | (WHERE expression) | (FROM qualifiedName))?
     ;
 
 

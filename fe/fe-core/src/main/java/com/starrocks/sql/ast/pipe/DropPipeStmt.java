@@ -13,20 +13,22 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.sql.ast;
+package com.starrocks.sql.ast.pipe;
 
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DropPipeStmt extends DdlStmt {
 
-    private String pipeName;
+    private final PipeName pipeName;
 
-    public DropPipeStmt(String pipeName, NodePosition pos) {
+    public DropPipeStmt(PipeName pipeName, NodePosition pos) {
         super(pos);
         this.pipeName = pipeName;
     }
 
-    public String getPipeName() {
+    public PipeName getPipeName() {
         return pipeName;
     }
 

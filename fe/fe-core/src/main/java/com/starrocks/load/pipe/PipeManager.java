@@ -20,8 +20,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.CreatePipeStmt;
-import com.starrocks.sql.ast.DropPipeStmt;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -38,7 +38,7 @@ public class PipeManager {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     @SerializedName(value = "pipes")
-    private Map<String, Pipe> pipeMap = new HashMap<>();
+    private Map<PipeId, Pipe> pipeMap = new HashMap<>();
     private PipeRepo repo;
 
     public PipeManager() {
@@ -59,7 +59,7 @@ public class PipeManager {
             // Add pipe
             long id = GlobalStateMgr.getCurrentState().getNextId();
             Pipe pipe = Pipe.fromStatement(id, stmt);
-            pipeMap.put(stmt.getPipeName(), pipe);
+            pipeMap.put(pipe.getPipeId(), pipe);
 
             repo.addPipe(pipe);
         } finally {
@@ -111,22 +111,22 @@ public class PipeManager {
     public void putPipe(Pipe pipe) {
         try {
             lock.writeLock().lock();
-            pipeMap.put(pipe.getName(), pipe);
+            pipeMap.put(pipe.getPipeId(), pipe);
         } finally {
             lock.writeLock().unlock();
         }
     }
 
-    public void removePipe(String pipeName) {
+    public void removePipe(PipeId id) {
         try {
             lock.writeLock().lock();
-            pipeMap.remove(pipeName);
+            pipeMap.remove(id);
         } finally {
             lock.writeLock().unlock();
         }
     }
 
-    public void addPipes(Map<String, Pipe> pipes) {
+    public void addPipes(Map<PipeId, Pipe> pipes) {
         try {
             lock.writeLock().lock();
             pipeMap.putAll(pipes);
@@ -135,7 +135,7 @@ public class PipeManager {
         }
     }
 
-    public Map<String, Pipe> getPipesUnlock() {
+    public Map<PipeId, Pipe> getPipesUnlock() {
         return pipeMap;
     }
 

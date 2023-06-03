@@ -23,8 +23,9 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.CreatePipeStmt;
 import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -35,7 +36,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -49,7 +49,7 @@ public class Pipe implements Writable {
     @SerializedName(value = "name")
     private final String name;
     @SerializedName(value = "id")
-    private final long id;
+    private final PipeId id;
     @SerializedName(value = "targetTable")
     private Table targetTable;
     @SerializedName(value = "type")
@@ -64,16 +64,18 @@ public class Pipe implements Writable {
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    public Pipe(String name, long id, Table targetTable) {
+    public Pipe(long dbId, String name, long id, Table targetTable) {
         this.name = name;
-        this.id = id;
+        this.id = new PipeId(dbId, id);
         this.targetTable = targetTable;
     }
 
     public static Pipe fromStatement(long id, CreatePipeStmt stmt) {
         TableFunctionRelation tableFunctionRelation = stmt.getTableFunctionRelation();
+        PipeName pipeName = stmt.getPipeName();
+        long dbId = GlobalStateMgr.getCurrentState().getDb(pipeName.getDbName()).getId();
 
-        return new Pipe(stmt.getPipeName(), id, stmt.getTargetTable());
+        return new Pipe(dbId, pipeName.getPipeName(), id, stmt.getTargetTable());
     }
 
     /**
@@ -191,6 +193,10 @@ public class Pipe implements Writable {
     }
 
     public long getId() {
+        return id.getId();
+    }
+
+    public PipeId getPipeId() {
         return id;
     }
 
@@ -226,23 +232,6 @@ public class Pipe implements Writable {
 
     public static Pipe fromJson(String json) {
         return GsonUtils.GSON.fromJson(json, Pipe.class);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        Pipe pipe = (Pipe) o;
-        return id == pipe.id && Objects.equals(name, pipe.name);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(name, id);
     }
 
     @Override

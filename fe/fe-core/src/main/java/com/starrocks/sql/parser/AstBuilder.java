@@ -163,7 +163,6 @@ import com.starrocks.sql.ast.CreateImageClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
-import com.starrocks.sql.ast.CreatePipeStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -198,7 +197,6 @@ import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropObserverClause;
 import com.starrocks.sql.ast.DropPartitionClause;
-import com.starrocks.sql.ast.DropPipeStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
@@ -334,7 +332,6 @@ import com.starrocks.sql.ast.ShowLoadWarningsStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowOpenTableStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
-import com.starrocks.sql.ast.ShowPipeStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowPrivilegesStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
@@ -392,6 +389,10 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.ast.pipe.DropPipeStmt;
+import com.starrocks.sql.ast.pipe.PipeName;
+import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.common.EngineType;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RuleContext;
@@ -713,7 +714,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 if (firstExpr instanceof SlotRef) {
                     columnList.add(((SlotRef) firstExpr).getColumnName());
                 } else {
-                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
+                    throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"),
+                            pos);
                 }
             } else {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(expr.toSql(), "PARTITION BY"), pos);
@@ -3717,8 +3719,31 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     // -------------------------------------------- Pipe Statement -----------------------------------------------------
     @Override
+    public PipeName visitPipeName(StarRocksParser.PipeNameContext context) {
+        String dbName = null;
+        String pipeName = null;
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        if (qualifiedName.getParts().size() == 2) {
+            dbName = qualifiedName.getParts().get(0);
+            pipeName = qualifiedName.getParts().get(1);
+        } else if (qualifiedName.getParts().size() == 1) {
+            pipeName = qualifiedName.getParts().get(0);
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidPipeName(qualifiedName.toString()));
+        }
+
+        if (dbName != null && pipeName != null) {
+            return new PipeName(createPos(context), dbName, pipeName);
+        } else if (pipeName != null) {
+            return new PipeName(createPos(context), pipeName);
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidPipeName(qualifiedName.toString()));
+        }
+    }
+
+    @Override
     public ParseNode visitCreatePipeStatement(StarRocksParser.CreatePipeStatementContext context) {
-        String pipeName = ((Identifier) visit(context.pipeName)).getValue();
+        PipeName pipeName = (PipeName) visit(context.pipeName());
         boolean ifNotExists = context.IF() != null;
         ParseNode insertNode = visit(context.insertStatement());
         if (!(insertNode instanceof InsertStmt)) {
@@ -3731,19 +3756,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDropPipeStatement(StarRocksParser.DropPipeStatementContext context) {
-        String pipeName = String.valueOf((Identifier) visit(context.identifier()));
+        PipeName pipeName = (PipeName) visit(context.pipeName());
         return new DropPipeStmt(pipeName, createPos(context));
     }
 
     @Override
     public ParseNode visitShowPipeStatement(StarRocksParser.ShowPipeStatementContext context) {
+        String dbName = null;
+        if (context.qualifiedName() != null) {
+            dbName = getQualifiedName(context.qualifiedName()).toString();
+        }
         if (context.LIKE() != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            return new ShowPipeStmt(stringLiteral.getValue(), null, createPos(context));
+            return new ShowPipeStmt(dbName, stringLiteral.getValue(), null, createPos(context));
         } else if (context.WHERE() != null) {
-            return new ShowPipeStmt(null, (Expr) visit(context.expression()), createPos(context));
+            return new ShowPipeStmt(dbName, null, (Expr) visit(context.expression()), createPos(context));
         } else {
-            return new ShowPipeStmt(null, null, createPos(context));
+            return new ShowPipeStmt(dbName, null, null, createPos(context));
         }
     }
 
@@ -6581,7 +6610,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return properties;
     }
-
 
     private Map<String, String> getPropertyList(StarRocksParser.PropertyListContext context) {
         Map<String, String> properties = new HashMap<>();
