@@ -44,6 +44,7 @@
 
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
+#include "thirdparty/libdeflate/libdeflate.h"
 #include "util/compression/compression_context_pool_singletons.h"
 #include "util/faststring.h"
 
@@ -966,6 +967,62 @@ private:
     const static int MEM_LEVEL = 8;
 };
 
+class GzipBlockCompressionV2 final : public BlockCompressionCodec {
+public:
+    GzipBlockCompressionV2() : BlockCompressionCodec(CompressionTypePB::GZIP) {
+    }
+
+    GzipBlockCompressionV2(CompressionTypePB type) : BlockCompressionCodec(type) {}
+
+    static const GzipBlockCompressionV2* instance() {
+        static GzipBlockCompressionV2 s_instance;
+        return &s_instance;
+    }
+
+    ~GzipBlockCompressionV2() override = default;
+
+    virtual Status init_compress_stream(z_stream& zstrm) const {
+        return Status::NotSupported("");
+    }
+
+    Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
+                    faststring* compressed_body1, raw::RawString* compressed_body2) const override {
+        return Status::NotSupported("");
+    }
+
+    Status compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
+                    size_t uncompressed_size, faststring* compressed_body1,
+                    raw::RawString* compressed_body2) const override {
+        return Status::NotSupported("");
+    }
+
+    Status decompress(const Slice& input, Slice* output) const override {
+        // 初始化libdeflate解压缩器
+        struct libdeflate_decompressor* decompressor = libdeflate_alloc_decompressor();
+        if (!decompressor) {
+            return Status::InternalError("libdeflate_alloc_decompressor failed");
+        }
+
+        // 解压缩数据
+        std::size_t out_len;
+        auto result = libdeflate_gzip_decompress(decompressor, input.data, input.size, output->data, output->size, &out_len);
+        if (result != LIBDEFLATE_SUCCESS) {
+            libdeflate_free_decompressor(decompressor);
+            return Status::InvalidArgument("libdeflate_gzip_decompress failed");
+        }
+
+        libdeflate_free_decompressor(decompressor);
+
+        return Status::OK();
+    }
+
+    size_t max_compressed_len(size_t len) const override {
+        // one-time overhead of six bytes for the entire stream plus five bytes
+        // per 16 KB block
+        return len + 6 + 5 * ((len >> 14) + 1);
+    }
+};
+
 Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec) {
     switch (type) {
     case CompressionTypePB::NO_COMPRESSION:
@@ -987,7 +1044,7 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
         *codec = ZstdBlockCompression::instance();
         break;
     case CompressionTypePB::GZIP:
-        *codec = GzipBlockCompression::instance();
+        *codec = GzipBlockCompressionV2::instance();
         break;
     case CompressionTypePB::LZ4_HADOOP:
         *codec = Lz4HadoopBlockCompression::instance();

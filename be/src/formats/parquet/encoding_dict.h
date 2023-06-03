@@ -301,12 +301,6 @@ public:
             data_column->resize_uninitialized(cur_size + count);
             int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
             _index_batch_decoder.GetBatch(reinterpret_cast<uint32_t*>(data), count);
-
-            auto ret = dst->append_numbers(&_indexes[0], count * SIZE_OF_DICT_CODE_TYPE);
-            if (UNLIKELY(!ret)) {
-                return Status::InternalError("DictDecoder append numbers to column failed");
-            }
-            DCHECK(ret) << "append_numbers failed";
             break;
         }
         case VALUE: {
