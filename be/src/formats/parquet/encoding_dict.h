@@ -287,11 +287,21 @@ public:
     }
 
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
-        _indexes.reserve(count);
-        _index_batch_decoder.GetBatch(&_indexes[0], count);
-
         switch (content_type) {
         case DICT_CODE: {
+            FixedLengthColumn<int32_t>* data_column;
+            if (dst->is_nullable()) {
+                auto nullable_column = down_cast<NullableColumn*>(dst);
+                nullable_column->null_column()->append_default(count);
+                data_column = down_cast<FixedLengthColumn<int32_t>*>(nullable_column->data_column().get());
+            } else {
+                data_column = down_cast<FixedLengthColumn<int32_t>*>(dst);
+            }
+            size_t cur_size = data_column->size();
+            data_column->resize_uninitialized(cur_size + count);
+            int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
+            _index_batch_decoder.GetBatch(reinterpret_cast<uint32_t*>(data), count);
+
             auto ret = dst->append_numbers(&_indexes[0], count * SIZE_OF_DICT_CODE_TYPE);
             if (UNLIKELY(!ret)) {
                 return Status::InternalError("DictDecoder append numbers to column failed");
@@ -301,17 +311,7 @@ public:
         }
         case VALUE: {
             raw::stl_vector_resize_uninitialized(&_slices, count);
-            auto flag = 0;
-            size_t size = _dict.size();
-            for (int i = 0; i < count; i++) {
-                flag |= _indexes[i] >= size;
-            }
-            if (UNLIKELY(flag)) {
-                return Status::InternalError("Index not in dictionary bounds");
-            }
-            for (int i = 0; i < count; ++i) {
-                _slices[i] = _dict[_indexes[i]];
-            }
+            _index_batch_decoder.GetBatchWithDict(_dict.data(), _dict.size(), _slices.data(), count);
             auto ret = dst->append_strings_overflow(_slices, _max_value_length);
             if (UNLIKELY(!ret)) {
                 return Status::InternalError("DictDecoder append strings to column failed");
