@@ -54,12 +54,13 @@ public class Pipe implements Writable {
     private Table targetTable;
     @SerializedName(value = "type")
     private Type type;
+    @SerializedName(value = "state")
+    private State state;
 
     // FIXME: refine these data structure according to implementation of table function
     private PipeSource pipeSource;
     private List<PipePiece> pipePieceList;
 
-    private State state;
     private List<PipeTaskDesc> readyTasks = new ArrayList<>();
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
@@ -214,6 +215,10 @@ public class Pipe implements Writable {
 
     public void setDataSource(PipeSource dataSource) {
         this.pipeSource = dataSource;
+    }
+
+    public State getState() {
+        return state;
     }
 
     public static Pipe read(DataInput input) throws IOException {

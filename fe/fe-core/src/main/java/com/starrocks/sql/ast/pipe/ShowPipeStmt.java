@@ -32,8 +32,9 @@ public class ShowPipeStmt extends ShowStmt {
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("DATABASE_ID", ScalarType.BIGINT))
                     .addColumn(new Column("ID", ScalarType.BIGINT))
-                    .addColumn(new Column("NAME", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("TABLE_NAME", ScalarType.createVarchar(256)))
+                    .addColumn(new Column("NAME", ScalarType.createVarchar(64)))
+                    .addColumn(new Column("TABLE_NAME", ScalarType.createVarchar(64)))
+                    .addColumn(new Column("STATE", ScalarType.createVarcharType(8)))
                     .build();
 
     private final String dbName;
@@ -55,6 +56,7 @@ public class ShowPipeStmt extends ShowStmt {
         row.add(String.valueOf(pipe.getPipeId().getId()));
         row.add(pipe.getName());
         row.add(pipe.getTargetTable().getName());
+        row.add(String.valueOf(pipe.getState()));
     }
 
     public String getDbName() {

@@ -22,16 +22,15 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
+import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import org.apache.ivy.util.StringUtils;
 
 public class PipeAnalyzer {
 
-    // only analyze create pipe right now
-    public static void analyze(CreatePipeStmt stmt, ConnectContext context) {
-        PipeName pipeName = stmt.getPipeName();
+    private static void analyzePipeName(PipeName pipeName, ConnectContext context) {
         if (StringUtils.isNullOrEmpty(pipeName.getDbName())) {
             if (StringUtils.isNullOrEmpty(context.getDatabase())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
@@ -43,6 +42,11 @@ public class PipeAnalyzer {
         }
         FeNameFormat.checkCommonName("db", pipeName.getDbName());
         FeNameFormat.checkCommonName("pipe", pipeName.getPipeName());
+    }
+
+    // only analyze create pipe right now
+    public static void analyze(CreatePipeStmt stmt, ConnectContext context) {
+        analyzePipeName(stmt.getPipeName(), context);
 
         // Analyze Insert Statement
         // 1. Source table must be s3 table function
@@ -59,6 +63,7 @@ public class PipeAnalyzer {
         if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
             throw new SemanticException("INSERT INTO can only with SELECT");
         }
+        /*
         SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
         if (!(selectRelation.getRelation() instanceof TableFunctionRelation)) {
             throw new SemanticException("SELECT must FROM table function");
@@ -70,6 +75,17 @@ public class PipeAnalyzer {
         }
         stmt.setTableFunctionRelation(tableFunctionRelation);
         stmt.setTargetTable(insertStmt.getTargetTable());
+        */
     }
 
+    public static void analyze(DropPipeStmt stmt, ConnectContext context) {
+        analyzePipeName(stmt.getPipeName(), context);
+    }
+
+    public static void analyze(ShowPipeStmt stmt, ConnectContext context) {
+        if (StringUtils.isNullOrEmpty(stmt.getDbName()) &&
+                StringUtils.isNullOrEmpty(context.getDatabase())) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+        }
+    }
 }
