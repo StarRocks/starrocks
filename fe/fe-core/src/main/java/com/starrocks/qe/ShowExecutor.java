@@ -2586,8 +2586,8 @@ public class ShowExecutor {
         PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
         pipeManager.getPipesUnlock().values().forEach(pipe -> {
             List<String> row = Lists.newArrayList();
-            row.add(String.valueOf(pipe.getId()));
-            row.add(pipe.getName());
+            ShowPipeStmt.handleShow(row, pipe);
+            rows.add(row);
         });
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
