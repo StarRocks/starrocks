@@ -21,11 +21,17 @@ import com.starrocks.sql.parser.NodePosition;
 
 public class DropPipeStmt extends DdlStmt {
 
+    private final boolean ifExists;
     private final PipeName pipeName;
 
-    public DropPipeStmt(PipeName pipeName, NodePosition pos) {
+    public DropPipeStmt(boolean ifExists, PipeName pipeName, NodePosition pos) {
         super(pos);
+        this.ifExists = ifExists;
         this.pipeName = pipeName;
+    }
+
+    public boolean isIfExists() {
+        return ifExists;
     }
 
     public PipeName getPipeName() {

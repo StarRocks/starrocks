@@ -48,6 +48,7 @@ import com.starrocks.connector.parser.trino.PlaceholderExpr;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
@@ -805,6 +806,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitAlterPipeClause(AlterPipeClause clause, C context) {
         return visitNode(clause, context);
+    }
+
+    public R visitDescPipeStatement(DescPipeStmt statement, C context) {
+        return visitNode(statement, context);
     }
 
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------

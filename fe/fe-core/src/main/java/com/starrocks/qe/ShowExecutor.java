@@ -102,6 +102,7 @@ import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
+import com.starrocks.load.pipe.Pipe;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
 import com.starrocks.load.routineload.RoutineLoadJob;
@@ -199,6 +200,7 @@ import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
@@ -376,6 +378,8 @@ public class ShowExecutor {
             handleDescStorageVolume();
         } else if (stmt instanceof ShowPipeStmt) {
             handleShowPipes();
+        } else if (stmt instanceof DescPipeStmt) {
+            handleDescPipe();
         } else {
             handleEmpty();
         }
@@ -2583,12 +2587,33 @@ public class ShowExecutor {
 
     private void handleShowPipes() {
         List<List<String>> rows = Lists.newArrayList();
+        String dbName = ((ShowPipeStmt) stmt).getDbName();
+        long dbId = GlobalStateMgr.getCurrentState().mayGetDb(dbName)
+                .map(Database::getId)
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName));
         PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
         pipeManager.getPipesUnlock().values().forEach(pipe -> {
+            // show pipes in current database
+            if (pipe.getPipeId().getDbId() != dbId) {
+                return;
+            }
             List<String> row = Lists.newArrayList();
             ShowPipeStmt.handleShow(row, pipe);
             rows.add(row);
         });
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private void handleDescPipe() {
+        List<List<String>> rows = Lists.newArrayList();
+        DescPipeStmt descStmt = ((DescPipeStmt) stmt);
+        PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
+        Pipe pipe = pipeManager.mayGetPipe(descStmt.getName())
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_UNKNOWN_PIPE, descStmt.getName()));
+
+        List<String> row = Lists.newArrayList();
+        DescPipeStmt.handleDesc(row, pipe);
+        rows.add(row);
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 }

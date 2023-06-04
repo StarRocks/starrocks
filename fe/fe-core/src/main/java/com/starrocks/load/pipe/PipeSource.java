@@ -17,9 +17,11 @@ package com.starrocks.load.pipe;
 
 import com.starrocks.common.UserException;
 
-import java.util.List;
-
 public abstract class PipeSource {
 
-    abstract List<PipePiece> pollPiece() throws UserException;
+    public abstract void poll();
+
+    public abstract boolean eos();
+
+    public abstract PipePiece pullPiece() throws UserException;
 }

@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast.pipe;
 
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
@@ -28,60 +27,38 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.List;
 import java.util.Optional;
 
-public class ShowPipeStmt extends ShowStmt {
+public class DescPipeStmt extends ShowStmt {
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("DATABASE_ID", ScalarType.BIGINT))
                     .addColumn(new Column("ID", ScalarType.BIGINT))
                     .addColumn(new Column("NAME", ScalarType.createVarchar(64)))
+                    .addColumn(new Column("TYPE", ScalarType.createVarchar(8)))
                     .addColumn(new Column("TABLE_NAME", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("STATE", ScalarType.createVarcharType(8)))
-                    .addColumn(new Column("LOADED_FILES", ScalarType.BIGINT))
-                    .addColumn(new Column("LOADED_ROWS", ScalarType.BIGINT))
-                    .addColumn(new Column("LOADED_BYTES", ScalarType.BIGINT))
+                    .addColumn(new Column("SOURCE", ScalarType.createVarcharType(128)))
+                    .addColumn(new Column("SQL", ScalarType.createVarcharType(128)))
                     .build();
 
-    private String dbName;
-    private final String like;
-    private final Expr where;
+    private final PipeName name;
 
-    public ShowPipeStmt(String dbName, String like, Expr where, NodePosition pos) {
+    public DescPipeStmt(NodePosition pos, PipeName name) {
         super(pos);
-        this.dbName = dbName;
-        this.like = like;
-        this.where = where;
+        this.name = name;
     }
 
-    /**
-     * NOTE: Must be consistent with the META_DATA
-     */
-    public static void handleShow(List<String> row, Pipe pipe) {
-        Pipe.LoadStatus loadStatus = pipe.getLoadStatus();
+    public static void handleDesc(List<String> row, Pipe pipe) {
         row.add(String.valueOf(pipe.getPipeId().getDbId()));
         row.add(String.valueOf(pipe.getPipeId().getId()));
         row.add(pipe.getName());
+        row.add(String.valueOf(pipe.getType()));
         row.add(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
-        row.add(String.valueOf(pipe.getState()));
-        row.add(String.valueOf(loadStatus.loadFiles));
-        row.add(String.valueOf(loadStatus.loadRows));
-        row.add(String.valueOf(loadStatus.loadBytes));
+        row.add(pipe.getPipeSource().toString());
+        row.add(pipe.getOriginSql());
     }
 
-    public void setDbName(String dbName) {
-        this.dbName = dbName;
-    }
-
-    public String getDbName() {
-        return dbName;
-    }
-
-    public String getLike() {
-        return like;
-    }
-
-    public Expr getWhere() {
-        return where;
+    public PipeName getName() {
+        return name;
     }
 
     @Override
@@ -91,6 +68,6 @@ public class ShowPipeStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowPipeStatement(this, context);
+        return visitor.visitDescPipeStatement(this, context);
     }
 }

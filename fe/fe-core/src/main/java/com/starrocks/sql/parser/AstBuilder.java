@@ -393,6 +393,7 @@ import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipePauseResume;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
@@ -421,6 +422,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -3753,14 +3755,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedStatement(insertNode.toSql()),
                     context.insertStatement());
         }
+        Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        InsertStmt insertStmt = (InsertStmt) insertNode;
+        int insertSqlIndex = context.insertStatement().start.getStartIndex();
 
-        return new CreatePipeStmt(ifNotExists, pipeName, (InsertStmt) insertNode, createPos(context));
+        return new CreatePipeStmt(ifNotExists, pipeName, insertSqlIndex, insertStmt, properties, createPos(context));
     }
 
     @Override
     public ParseNode visitDropPipeStatement(StarRocksParser.DropPipeStatementContext context) {
         PipeName pipeName = (PipeName) visit(context.pipeName());
-        return new DropPipeStmt(pipeName, createPos(context));
+        boolean ifExists = context.IF() != null;
+        return new DropPipeStmt(ifExists, pipeName, createPos(context));
     }
 
     @Override
@@ -3777,6 +3789,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return new ShowPipeStmt(dbName, null, null, createPos(context));
         }
+    }
+
+    @Override
+    public ParseNode visitDescPipeStatement(StarRocksParser.DescPipeStatementContext context) {
+        PipeName pipeName = (PipeName) visit(context.pipeName());
+        return new DescPipeStmt(createPos(context), pipeName);
     }
 
     @Override

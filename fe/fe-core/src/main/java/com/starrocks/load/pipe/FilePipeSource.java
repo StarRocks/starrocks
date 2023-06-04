@@ -15,46 +15,132 @@
 
 package com.starrocks.load.pipe;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
-import com.starrocks.load.BrokerFileGroup;
-import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
-public class FilePipeSource extends PipeSource {
+public class FilePipeSource extends PipeSource implements GsonPostProcessable {
 
-    private TableFunctionRelation dataSource;
-    private BrokerFileGroup fileGroup;
+    private static final Logger LOG = LogManager.getLogger(FilePipeSource.class);
 
-    @Override
-    List<PipePiece> pollPiece() throws UserException {
-        // FIXME: get a broker desc
-        BrokerDesc brokerDesc = null;
-        List<TBrokerFileStatus> fileList = Lists.newArrayList();
-        for (String path : fileGroup.getFilePaths()) {
-            HdfsUtil.parseFile(path, brokerDesc, fileList);
-        }
-        List<PipePiece> pieces = Lists.newArrayList();
-        FilePipePiece filePiece = new FilePipePiece();
-        long sumSize = 0;
-        for (TBrokerFileStatus file : fileList) {
-            filePiece.getFile().add(file);
-            sumSize += file.getSize();
-            if (sumSize >= (1 << 30)) {
-                pieces.add(filePiece);
-                filePiece = new FilePipePiece();
-                sumSize = 0;
-            }
-        }
-        if (CollectionUtils.isNotEmpty(filePiece.getFile())) {
-            pieces.add(filePiece);
-        }
-        return pieces;
+    @SerializedName(value = "path")
+    private String path;
+    @SerializedName(value = "format")
+    private String format;
+    @SerializedName(value = "table_properties")
+    private Map<String, String> tableProperties;
+    @SerializedName(value = "auto_ingest")
+    private boolean autoIngest = true;
+    @SerializedName(value = "eos")
+    private boolean eos = false;
+
+    private FileListRepo fileListRepo;
+
+    public FilePipeSource(String path, String format, Map<String, String> sourceProperties) {
+        this.path = Preconditions.checkNotNull(path);
+        this.format = Preconditions.checkNotNull(format);
+        this.tableProperties = Preconditions.checkNotNull(sourceProperties);
+        this.fileListRepo = new FileListRepo();
     }
 
+    @Override
+    public void poll() {
+        // TODO: poll it seriously
+        if (fileListRepo.size() == 0) {
+            BrokerDesc brokerDesc = new BrokerDesc(tableProperties);
+            List<TBrokerFileStatus> fileList = Lists.newArrayList();
+            try {
+                HdfsUtil.parseFile(path, brokerDesc, fileList);
+            } catch (UserException e) {
+                LOG.error("Failed to poll the source: ", e);
+                throw new RuntimeException(e);
+            } catch (Throwable e) {
+                LOG.error("Failed to poll the source", e);
+                throw e;
+            }
+
+            fileListRepo.addBrokerFiles(fileList);
+        }
+        if (!autoIngest) {
+            // TODO: persist state
+            eos = true;
+        }
+    }
+
+    @Override
+    public boolean eos() {
+        return eos;
+    }
+
+    @Override
+    public PipePiece pullPiece() {
+        List<PipeFile> unloadFiles = fileListRepo.getUnloadedFiles();
+        if (CollectionUtils.isEmpty(unloadFiles)) {
+            return null;
+        }
+        List<PipeFile> loadFile = Collections.singletonList(unloadFiles.get(0));
+        FilePipePiece piece = new FilePipePiece();
+        piece.setFile(unloadFiles.get(0));
+        fileListRepo.updateFiles(loadFile, FileListRepo.PipeFileState.LOADING);
+
+        return piece;
+    }
+
+    public void finishPiece(FilePipePiece piece, PipeTaskDesc.PipeTaskState taskState) {
+        FileListRepo.PipeFileState state =
+                taskState == PipeTaskDesc.PipeTaskState.ERROR ?
+                        FileListRepo.PipeFileState.FAILED : FileListRepo.PipeFileState.LOADED;
+        fileListRepo.updateFiles(Collections.singletonList(piece.getFile()), state);
+    }
+
+    public void setAutoIngest(boolean autoIngest) {
+        this.autoIngest = autoIngest;
+    }
+
+    public void setPath(String path) {
+        this.path = path;
+    }
+
+    public void setFormat(String format) {
+        this.format = format;
+    }
+
+    public String getPath() {
+        return path;
+    }
+
+    public String getFormat() {
+        return format;
+    }
+
+    public Map<String, String> getTableProperties() {
+        return tableProperties;
+    }
+
+    public FileListRepo getFileListRepo() {
+        return fileListRepo;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        this.fileListRepo = new FileListRepo();
+    }
+
+    @Override
+    public String toString() {
+        return "FILE_SOURCE(path=" + path + ")";
+    }
 }

@@ -17,81 +17,98 @@ package com.starrocks.load.pipe;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Table;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.ExecuteOption;
+import com.starrocks.scheduler.SubmitResult;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
-import com.starrocks.thrift.TBrokerFileStatus;
-import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
 
 /**
  * Pipe: continuously load and unload data
  */
-public class Pipe implements Writable {
+public class Pipe implements GsonPostProcessable {
 
     private static final Logger LOG = LogManager.getLogger(Pipe.class);
+    public static final int FAILED_TASK_THRESHOLD = 5;
 
     @SerializedName(value = "name")
     private final String name;
     @SerializedName(value = "id")
     private final PipeId id;
-    @SerializedName(value = "targetTable")
-    private Table targetTable;
     @SerializedName(value = "type")
     private final Type type;
     @SerializedName(value = "state")
     private State state;
-
-    // FIXME: refine these data structure according to implementation of table function
+    @SerializedName(value = "originSql")
+    private String originSql;
+    @SerializedName(value = "pipeSource")
     private PipeSource pipeSource;
-    private List<PipePiece> pipePieceList;
+    @SerializedName(value = "targetTable")
+    private TableName targetTable;
+    @SerializedName(value = "properties")
+    private Map<String, String> properties;
+    @SerializedName(value = "load_status")
+    private LoadStatus loadStatus = new LoadStatus();
 
-    private List<PipeTaskDesc> readyTasks = new ArrayList<>();
+    private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private Map<Long, PipeTaskDesc> runningTasks = new HashMap<>();
+    private int failedTaskExecutionCount = 0;
 
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-
-    private Pipe(PipeId id, String name, Table targetTable) {
+    protected Pipe(PipeId id, String name, TableName targetTable, PipeSource sourceTable, String originSql) {
         this.name = Preconditions.checkNotNull(name);
         this.id = Preconditions.checkNotNull(id);
         this.targetTable = Preconditions.checkNotNull(targetTable);
         this.type = Type.FILE;
         this.state = State.RUNNING;
+        this.pipeSource = sourceTable;
+        this.originSql = originSql;
     }
 
     public static Pipe fromStatement(long id, CreatePipeStmt stmt) {
         PipeName pipeName = stmt.getPipeName();
         long dbId = GlobalStateMgr.getCurrentState().getDb(pipeName.getDbName()).getId();
 
-        return new Pipe(new PipeId(dbId, id), pipeName.getPipeName(), stmt.getTargetTable());
+        Pipe res = new Pipe(new PipeId(dbId, id), pipeName.getPipeName(), stmt.getTargetTable(), stmt.getDataSource(),
+                stmt.getInsertSql());
+        res.properties = stmt.getProperties();
+        return res;
     }
 
     /**
      * Poll event from data source
-     * TODO: getObjects from s3
      */
     public void poll() throws UserException {
         try {
             lock.writeLock().lock();
-            if (CollectionUtils.isNotEmpty(pipePieceList)) {
-                return;
-            }
-
-            List<PipePiece> pieces = pipeSource.pollPiece();
-            this.pipePieceList.addAll(pieces);
+            pipeSource.poll();
+        } catch (Throwable e) {
+            changeState(State.ERROR, true);
         } finally {
             lock.writeLock().unlock();
         }
@@ -99,53 +116,222 @@ public class Pipe implements Writable {
 
     /**
      * Try to execute the pipe
+     * 1. It should be event-driven and asynchronous, and drive the task lifecycle
+     * 2. It needs to clean up the timeout and failed task in asynchronous style
+     * <p>
+     * Running Task Lifecycle:
+     * 1. Pull from PipeSource: turn a PipePiece(a bunch of files) into a task
+     * 2. Runnable and wait for schedule
+     * 3. Get scheduled, and become running
+     * 4. If the task execution get any error, retry for a few times, before it fails
+     * 5. Either FINISHED/FAILED, change the state of corresponding source file and remove the tasks
      */
-    public List<PipeTaskDesc> execute() {
+    public void schedule() {
+        if (!getState().equals(State.RUNNING)) {
+            return;
+        }
+
+        buildNewTasks();
+        scheduleRunnableTasks();
+        finalizeTasks();
+    }
+
+    /**
+     * Pull PipePiece from source, and build new tasks
+     */
+    private void buildNewTasks() {
+        Preconditions.checkState(type == Type.FILE);
+
+        if (MapUtils.isNotEmpty(runningTasks)) {
+            return;
+        }
+        if (pipeSource instanceof EmptyPipeSource) {
+            return;
+        }
+        FilePipeSource fileSource = (FilePipeSource) pipeSource;
+        FilePipePiece piece = (FilePipePiece) fileSource.pullPiece();
+        if (piece == null) {
+            // EOS
+            if (fileSource.eos()) {
+                changeState(State.FINISHED, true);
+                LOG.info("pipe {} finish all tasks, change state to {}", this, state);
+            }
+            return;
+        }
+
         try {
             lock.writeLock().lock();
-            if (!CollectionUtils.isNotEmpty(readyTasks)) {
-                List<PipeTaskDesc> runnable =
-                        readyTasks.stream().filter(PipeTaskDesc::isRunnable).collect(Collectors.toList());
-                if (CollectionUtils.isNotEmpty(runnable)) {
-                    return runnable;
-                }
 
-                // TODO: cleanup failed tasks
-            }
+            // TODO: structural replace ?
+            String sqlTask = originSql.replaceAll("(?i)TABLE\\(.*\\)", buildFileSelectSource(piece));
+            long taskId = GlobalStateMgr.getCurrentState().getNextId();
+            PipeId pipeId = getPipeId();
+            String uniqueName = PipeTaskDesc.genUniqueTaskName(getName(), taskId, 0);
+            String dbName = GlobalStateMgr.getCurrentState().mayGetDb(pipeId.getDbId())
+                    .map(Database::getOriginName)
+                    .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR));
+            PipeTaskDesc taskDesc = new PipeTaskDesc(taskId, uniqueName, dbName, sqlTask, piece);
+            taskDesc.setErrorLimit(FAILED_TASK_THRESHOLD);
 
-            buildNewTasks();
-            return readyTasks;
+            runningTasks.put(taskId, taskDesc);
+            LOG.debug("pipe {} build task: {}", name, taskDesc);
         } finally {
             lock.writeLock().unlock();
         }
     }
 
-    private void buildNewTasks() {
-        Preconditions.checkState(type == Type.FILE);
-
-        StringBuilder sb = new StringBuilder();
-        // FIXME: keep projection and filter
-        sb.append("INSERT INTO " + targetTable.getName() + " SELECT * FROM TABLE(");
-        sb.append("file_list='");
-        long sumSize = 0;
-        for (PipePiece piece : pipePieceList) {
-            if (piece instanceof FilePipePiece) {
-                FilePipePiece filePipePiece = (FilePipePiece) piece;
-                for (TBrokerFileStatus file : filePipePiece.getFile()) {
-                    sb.append(file.getPath());
-                }
-            }
+    /**
+     * Schedule runnable tasks
+     * // TODO: async execution
+     */
+    private void scheduleRunnableTasks() {
+        if (MapUtils.isEmpty(runningTasks)) {
+            return;
         }
 
-        sb.append("'");
-        sb.append(")");
-        String sqlTask = sb.toString();
-        String uniqueName = String.format("pipe-%d-task-%d", id, GlobalStateMgr.getCurrentState().getNextId());
-        PipeTaskDesc taskDesc = new PipeTaskDesc(uniqueName, sqlTask, null);
+        for (PipeTaskDesc task : runningTasks.values()) {
+            executeTask(task);
+        }
+    }
 
-        lock.writeLock().lock();
-        readyTasks.add(taskDesc);
-        lock.writeLock().unlock();
+    /**
+     * Clean up FINISHED/FAILED tasks
+     */
+    private void finalizeTasks() {
+        List<Long> removeTaskId = new ArrayList<>();
+        try {
+            lock.writeLock().lock();
+
+            for (PipeTaskDesc task : runningTasks.values()) {
+                if (task.isFinished() || task.tooManyErrors()) {
+                    removeTaskId.add(task.getId());
+                    FilePipePiece piece = task.getPiece();
+                    ((FilePipeSource) pipeSource).finishPiece(piece, task.getState());
+                }
+                if (task.isError()) {
+                    failedTaskExecutionCount++;
+                    if (failedTaskExecutionCount > FAILED_TASK_THRESHOLD) {
+                        changeState(State.ERROR, false);
+                    }
+                }
+                if (task.isFinished()) {
+                    FilePipePiece piece = task.getPiece();
+                    loadStatus.loadFiles++;
+                    loadStatus.loadBytes += piece.getFile().getSize();
+                    // TODO: fill data rows
+                    loadStatus.loadRows += 1;
+                }
+            }
+            for (long taskId : removeTaskId) {
+                runningTasks.remove(taskId);
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
+
+        if (CollectionUtils.isNotEmpty(removeTaskId)) {
+            persistPipe();
+            LOG.info("pipe {} remove finalized tasks {}", this, removeTaskId);
+        }
+    }
+
+    private void changeState(State state, boolean persist) {
+        try {
+            lock.writeLock().lock();
+            this.state = state;
+            if (persist) {
+                PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
+                pm.updatePipe(this);
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    private void persistPipe() {
+        try {
+            lock.writeLock().lock();
+            PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
+            pm.updatePipe(this);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    private String buildFileSelectSource(FilePipePiece piece) {
+        Preconditions.checkState(pipeSource instanceof FilePipeSource);
+
+        FilePipeSource fileSource = (FilePipeSource) pipeSource;
+        StringBuilder sb = new StringBuilder();
+        sb.append("TABLE(");
+        boolean isFirst = true;
+        for (Map.Entry<String, String> entry : fileSource.getTableProperties().entrySet()) {
+            if (!isFirst) {
+                sb.append(", ");
+            }
+            isFirst = false;
+            if (entry.getKey().equalsIgnoreCase(TableFunctionTable.PROPERTY_PATH)) {
+                sb.append("'").append(TableFunctionTable.PROPERTY_PATH).append("'='").append(piece.getFile().getPath())
+                        .append("'");
+            } else {
+                sb.append("'").append(entry.getKey()).append("'='");
+                sb.append(entry.getValue()).append("'");
+            }
+        }
+        sb.append(")");
+        return sb.toString();
+    }
+
+    private void executeTask(PipeTaskDesc taskDesc) {
+        if (!taskDesc.needSchedule()) {
+            return;
+        }
+
+        if (taskDesc.isRunning()) {
+            // Task is running, check the execution state
+            // TODO: timeout
+            Preconditions.checkNotNull(taskDesc.getFuture());
+            if (taskDesc.getFuture().isDone()) {
+                try {
+                    Constants.TaskRunState taskRunState = taskDesc.getFuture().get();
+                    if (taskRunState == Constants.TaskRunState.SUCCESS) {
+                        taskDesc.onFinished();
+                        LOG.info("finish pipe {} task {}", this, taskDesc);
+                    } else {
+                        taskDesc.onError(String.format("task execution state: " + taskRunState.toString()));
+                    }
+                } catch (Throwable e) {
+                    taskDesc.onError(String.format("task exception: " + e.getMessage()));
+                }
+            } else if (taskDesc.getFuture().isCancelled()) {
+                taskDesc.onError("task got cancelled");
+            }
+        } else if (taskDesc.isRunnable()) {
+            // Submit a new task
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            Task task = TaskBuilder.buildPipeTask(taskDesc);
+            try {
+                taskManager.createTask(task, false);
+            } catch (DdlException e) {
+                LOG.error("create pipe task error: ", e);
+                taskDesc.onError("create failed: " + e.getMessage());
+                return;
+            }
+            // TODO: persist the submitted task list in pipe
+            SubmitResult result = taskManager.executeTaskAsync(task, new ExecuteOption());
+            taskDesc.onRunning();
+            taskDesc.setFuture(result.getFuture());
+            if (result.getStatus() != SubmitResult.SubmitStatus.SUBMITTED) {
+                taskDesc.onError("submit task error");
+            }
+        } else if (taskDesc.isError()) {
+            // On error, need retry
+            // TODO: retry the task itself instead of creating another task
+            taskDesc.onRetry();
+            String newName = PipeTaskDesc.genUniqueTaskName(getName(), taskDesc.getId(), taskDesc.getRetryCount());
+            taskDesc.setUniqueTaskName(newName);
+            LOG.info("retry pipe {} task {}", this, taskDesc);
+        }
     }
 
     public void pause() {
@@ -155,14 +341,18 @@ public class Pipe implements Writable {
             if (this.state == State.RUNNING) {
                 this.state = State.PAUSED;
 
-                for (PipeTaskDesc task : readyTasks) {
+                for (PipeTaskDesc task : runningTasks.values()) {
                     task.interrupt();
                 }
                 LOG.info("Pause pipe " + this);
+
+                if (!runningTasks.isEmpty()) {
+                    runningTasks.clear();
+                    LOG.info("pause pipe {} and clear running tasks {}", this, runningTasks);
+                }
             }
         } finally {
             lock.writeLock().unlock();
-            ;
         }
     }
 
@@ -172,6 +362,7 @@ public class Pipe implements Writable {
 
             if (this.state == State.PAUSED || this.state == State.ERROR) {
                 this.state = State.RUNNING;
+                this.failedTaskExecutionCount = 0;
                 LOG.info("Resume pipe " + this);
             }
 
@@ -181,7 +372,30 @@ public class Pipe implements Writable {
     }
 
     public boolean isRunnable() {
-        return this.state.equals(State.RUNNING);
+        return this.state != null &&
+                this.state.equals(State.RUNNING);
+    }
+
+    public List<PipeTaskDesc> getRunningTasks() {
+        try {
+            lock.readLock().lock();
+            return new ArrayList<>(runningTasks.values());
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    public int getFailedTaskExecutionCount() {
+        return failedTaskExecutionCount;
+    }
+
+    public State getState() {
+        try {
+            lock.readLock().lock();
+            return state;
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     public String getName() {
@@ -196,15 +410,22 @@ public class Pipe implements Writable {
         return id;
     }
 
-    public Table getTargetTable() {
+    /**
+     * Pair<DatabaseId, PipeName>
+     */
+    public Pair<Long, String> getDbAndName() {
+        return Pair.create(getPipeId().getDbId(), getName());
+    }
+
+    public Type getType() {
+        return type;
+    }
+
+    public TableName getTargetTable() {
         return targetTable;
     }
 
-    public void setTargetTable(Table targetTable) {
-        this.targetTable = targetTable;
-    }
-
-    public PipeSource getDataSource() {
+    public PipeSource getPipeSource() {
         return pipeSource;
     }
 
@@ -212,18 +433,18 @@ public class Pipe implements Writable {
         this.pipeSource = dataSource;
     }
 
-    public State getState() {
-        return state;
+    public String getOriginSql() {
+        return originSql;
     }
 
-    public static Pipe read(DataInput input) throws IOException {
-        String json = Text.readString(input);
-        return fromJson(json);
+    public LoadStatus getLoadStatus() {
+        return loadStatus;
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, toJson());
+    public void gsonPostProcess() throws IOException {
+        this.runningTasks = new HashMap<>();
+        this.lock = new ReentrantReadWriteLock();
     }
 
     public String toJson() {
@@ -236,10 +457,36 @@ public class Pipe implements Writable {
 
     @Override
     public String toString() {
-        return "pipe-" + name;
+        return "pipe(" + name + ")";
     }
 
-    enum State {
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        Pipe pipe = (Pipe) o;
+        return Objects.equals(name, pipe.name) && Objects.equals(id, pipe.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(name, id);
+    }
+
+    public static class LoadStatus {
+        @SerializedName(value = "load_files")
+        public long loadFiles = 0;
+        @SerializedName(value = "load_rows")
+        public long loadRows = 0;
+        @SerializedName(value = "load_bytes")
+        public long loadBytes = 0;
+    }
+
+    public enum State {
         PAUSED,
         RUNNING,
         FINISHED,

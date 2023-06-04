@@ -1,0 +1,150 @@
+-- name: test_pipe_basic
+show pipes;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: No database selected.')
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+create database db_${uuid1};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+show pipes;
+-- result:
+-- !result
+show pipes from db_${uuid1};
+-- result:
+-- !result
+set enable_pipe_validate = false;
+-- result:
+-- !result
+create table t1 (id int) duplicate key(id) properties('replication_num' = '1');
+-- result:
+-- !result
+create pipe p1 as insert into t1 select * from t1;
+-- result:
+-- !result
+show pipes;
+-- result:
+233313	233322	p1	t1	RUNNING
+-- !result
+desc pipe;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 9. Detail message: Input ';' is not valid at this position.")
+-- !result
+alter pipe p1 pause;
+-- result:
+-- !result
+show pipes;
+-- result:
+233313	233322	p1	t1	PAUSED
+-- !result
+alter pipe p1 resume;
+-- result:
+-- !result
+show pipes;
+-- result:
+233313	233322	p1	t1	RUNNING
+-- !result
+use db_${uuid1};
+-- result:
+-- !result
+show pipes from db_${uuid0};
+-- result:
+233313	233322	p1	t1	RUNNING
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+drop pipe p1;
+-- result:
+-- !result
+show pipes;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+show pipes;
+-- result:
+-- !result
+set enable_pipe_validate = true;
+-- result:
+-- !result
+create table t1 (id int) duplicate key(id) properties('replication_num' = '1');
+-- result:
+-- !result
+create pipe p1 as insert into t1 select * from t1;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Bad pipe statement: 'only support FileTableFunction'.")
+-- !result
+create pipe if not exists p1 as insert into t1 select * from t1;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Bad pipe statement: 'only support FileTableFunction'.")
+-- !result
+create pipe p1 as insert into t1 select * from t1;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Bad pipe statement: 'only support FileTableFunction'.")
+-- !result
+create pipe p2 as select * from t1;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 18. Detail message: Input 'select' is not valid at this position.")
+-- !result
+create pipe p+1 as select * from t1;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 13. Detail message: Input '+' is not valid at this position.")
+-- !result
+create pipe p3 as insert into t2 select * from t1;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Table t2 is not found.')
+-- !result
+set enable_pipe_validate = false;
+-- result:
+-- !result
+create pipe p1 as insert into t1 select * from t1;
+-- result:
+-- !result
+alter pipe p1 pause;
+-- result:
+-- !result
+alter pipe p1 pause;
+-- result:
+-- !result
+show pipes;
+-- result:
+233323	233331	p1	t1	PAUSED
+-- !result
+alter pipe p1 resume;
+-- result:
+-- !result
+alter pipe p1 resume;
+-- result:
+-- !result
+show pipes;
+-- result:
+233323	233331	p1	t1	RUNNING
+-- !result
+drop pipe if exists p1;
+-- result:
+-- !result
+drop pipe if exists p1;
+-- result:
+E: (1064, 'Unexpected exception: pipe-p1 not exists')
+-- !result
+drop pipe p2;
+-- result:
+E: (1064, 'Unexpected exception: pipe-p2 not exists')
+-- !result
+drop pipe if exists p2;
+-- result:
+E: (1064, 'Unexpected exception: pipe-p2 not exists')
+-- !result

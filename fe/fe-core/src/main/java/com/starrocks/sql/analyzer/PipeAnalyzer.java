@@ -16,19 +16,38 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.ImmutableSortedSet;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.load.pipe.EmptyPipeSource;
+import com.starrocks.load.pipe.FilePipeSource;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import org.apache.commons.collections4.MapUtils;
+
+import java.util.Map;
 
 public class PipeAnalyzer {
+
+    private static final String PROPERTY_AUTO_INGEST = "auto_ingest";
+
+    private static final ImmutableSet<String> SUPPORTED_PROPERTIES =
+            new ImmutableSortedSet.Builder<String>(String.CASE_INSENSITIVE_ORDER)
+                    .add(PROPERTY_AUTO_INGEST)
+                    .build();
 
     private static void analyzePipeName(PipeName pipeName, ConnectContext context) {
         if (Strings.isNullOrEmpty(pipeName.getDbName())) {
@@ -44,38 +63,64 @@ public class PipeAnalyzer {
         FeNameFormat.checkCommonName("pipe", pipeName.getPipeName());
     }
 
-    // only analyze create pipe right now
+    private static void analyzeProperties(Map<String, String> properties) {
+        if (MapUtils.isEmpty(properties)) {
+            return;
+        }
+        for (String propertyName : properties.keySet()) {
+            if (!SUPPORTED_PROPERTIES.contains(propertyName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, propertyName);
+            }
+        }
+    }
+
     public static void analyze(CreatePipeStmt stmt, ConnectContext context) {
         analyzePipeName(stmt.getPipeName(), context);
+        analyzeProperties(stmt.getProperties());
+        Map<String, String> properties = stmt.getProperties();
 
-        // Analyze Insert Statement
-        // 1. Source table must be s3 table function
         InsertStmt insertStmt = stmt.getInsertStmt();
+        stmt.setTargetTable(insertStmt.getTableName());
+        String insertSql = stmt.getOrigStmt().originStmt.substring(stmt.getInsertSqlStartIndex());
+        stmt.setInsertSql(insertSql);
+        if (!context.getSessionVariable().isEnablePipeValidate()) {
+            stmt.setDataSource(new EmptyPipeSource());
+            return;
+        }
         InsertAnalyzer.analyze(insertStmt, context);
+
+        // Must be the form: insert into <target_table> select <projection> from <source_table> [where_clause]
         if (!Strings.isNullOrEmpty(insertStmt.getLabel())) {
-            throw new SemanticException("INSERT INTO cannot with label");
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "INSERT INTO cannot with label");
         }
         if (insertStmt.isOverwrite()) {
-            throw new SemanticException("INSERT INTO cannot be OVERWRITE");
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "INSERT INTO cannot be OVERWRITE");
         }
-
         QueryStatement queryStatement = insertStmt.getQueryStatement();
         if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
-            throw new SemanticException("INSERT INTO can only with SELECT");
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "must be select statement");
         }
-        /*
         SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
-        if (!(selectRelation.getRelation() instanceof TableFunctionRelation)) {
-            throw new SemanticException("SELECT must FROM table function");
+        if (selectRelation.hasAggregation() || selectRelation.hasOrderByClause() || selectRelation.hasLimit()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "must be a vanilla select statement");
         }
-        // FIXME: change to the real relation
-        TableFunctionRelation tableFunctionRelation = (TableFunctionRelation) selectRelation.getRelation();
-        if (!tableFunctionRelation.getFunctionName().getFunction().equalsIgnoreCase("s3")) {
-            throw new SemanticException("Only support S3 table function");
+        if (!(selectRelation.getRelation() instanceof FileTableFunctionRelation)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "only support FileTableFunction");
         }
-        stmt.setTableFunctionRelation(tableFunctionRelation);
-        stmt.setTargetTable(insertStmt.getTargetTable());
-        */
+        FileTableFunctionRelation tableFunctionRelation = (FileTableFunctionRelation) selectRelation.getRelation();
+        Table rawTable = tableFunctionRelation.getTable();
+        if (rawTable == null || rawTable.getType() != Table.TableType.TABLE_FUNCTION) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "only support FileTableFunction");
+        }
+
+        TableFunctionTable sourceTable = (TableFunctionTable) rawTable;
+        FilePipeSource source =
+                new FilePipeSource(sourceTable.getPath(), sourceTable.getFormat(), sourceTable.getProperties());
+        if (properties.containsKey(PROPERTY_AUTO_INGEST)) {
+            boolean value = VariableMgr.parseBooleanVariable(properties.get(PROPERTY_AUTO_INGEST));
+            source.setAutoIngest(value);
+        }
+        stmt.setDataSource(source);
     }
 
     public static void analyze(DropPipeStmt stmt, ConnectContext context) {
@@ -83,13 +128,19 @@ public class PipeAnalyzer {
     }
 
     public static void analyze(ShowPipeStmt stmt, ConnectContext context) {
-        if (Strings.isNullOrEmpty(stmt.getDbName()) &&
-                Strings.isNullOrEmpty(context.getDatabase())) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+        if (Strings.isNullOrEmpty(stmt.getDbName())) {
+            if (Strings.isNullOrEmpty(context.getDatabase())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+            }
+            stmt.setDbName(context.getDatabase());
         }
     }
 
     public static void analyze(AlterPipeStmt stmt, ConnectContext context) {
         analyzePipeName(stmt.getPipeName(), context);
+    }
+
+    public static void analyze(DescPipeStmt stmt, ConnectContext context) {
+        analyzePipeName(stmt.getName(), context);
     }
 }

@@ -34,7 +34,7 @@ public class PipeListener extends FrontendDaemon {
     private PipeManager pipeManager;
 
     public PipeListener(PipeManager pm) {
-        super("PipeListener", Config.pipe_listener_poll_interval_millis);
+        super("PipeListener", Config.pipe_listener_interval_millis);
         this.pipeManager = pm;
     }
 
@@ -50,7 +50,11 @@ public class PipeListener extends FrontendDaemon {
     private void process() throws UserException {
         List<Pipe> pipes = pipeManager.getRunnablePipes();
         for (Pipe pipe : pipes) {
-            pipe.poll();
+            try {
+                pipe.poll();
+            } catch (Throwable e) {
+                LOG.warn("Poll pipe failed due to ", e);
+            }
         }
     }
 

@@ -15,35 +15,30 @@
 
 package com.starrocks.load.pipe;
 
-import com.google.gson.annotations.SerializedName;
-
 import java.util.Objects;
 
-public class PipeId {
-    @SerializedName(value = "dbId")
-    private long dbId;
-    @SerializedName(value = "id")
-    private long id;
+public class PipeFile {
 
-    public PipeId(long dbId, long id) {
-        this.dbId = dbId;
-        this.id = id;
+    public String path;
+    public long size;
+    public FileListRepo.PipeFileState state;
+
+    public PipeFile(String path, long size, FileListRepo.PipeFileState state) {
+        this.path = path;
+        this.size = size;
+        this.state = state;
     }
 
-    public long getDbId() {
-        return dbId;
+    public String getPath() {
+        return path;
     }
 
-    public void setDbId(long dbId) {
-        this.dbId = dbId;
+    public long getSize() {
+        return size;
     }
 
-    public long getId() {
-        return id;
-    }
-
-    public void setId(long id) {
-        this.id = id;
+    public FileListRepo.PipeFileState getState() {
+        return state;
     }
 
     @Override
@@ -54,20 +49,23 @@ public class PipeId {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        PipeId pipeId = (PipeId) o;
-        return dbId == pipeId.dbId && id == pipeId.id;
+        PipeFile pipeFile = (PipeFile) o;
+        return Objects.equals(path, pipeFile.path)
+                && Objects.equals(state, pipeFile.state)
+                && Objects.equals(size, pipeFile.size);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(dbId, id);
+        return Objects.hash(path);
     }
 
     @Override
     public String toString() {
-        return "PipeId{" +
-                "dbId=" + dbId +
-                ", id=" + id +
+        return "PipeFile{" +
+                "path='" + path + '\'' +
+                ", size=" + size +
+                ", state=" + state +
                 '}';
     }
 }

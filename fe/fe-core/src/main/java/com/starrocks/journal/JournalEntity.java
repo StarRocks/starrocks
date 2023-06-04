@@ -1036,6 +1036,7 @@ public class JournalEntity implements Writable {
             case OperationType.OP_PIPE:
                 data = PipeOpEntry.read(in);
                 isRead = true;
+                break;
             default: {
                 if (Config.ignore_unknown_log_id) {
                     LOG.warn("UNKNOWN Operation Type {}", opCode);

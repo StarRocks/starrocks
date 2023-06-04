@@ -15,15 +15,9 @@
 
 package com.starrocks.load.pipe;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.scheduler.SubmitResult;
-import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.TaskBuilder;
-import com.starrocks.scheduler.TaskManager;
-import com.starrocks.server.GlobalStateMgr;
-import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,12 +33,13 @@ public class PipeScheduler extends FrontendDaemon {
 
     private static final Logger LOG = LogManager.getLogger(PipeScheduler.class);
 
-    private PipeManager pipeManager;
+    private final PipeManager pipeManager;
 
     private final Map<Long, Integer> beSlotMap = new HashMap<>();
     private final ReentrantLock slotLock = new ReentrantLock();
 
     public PipeScheduler(PipeManager pm) {
+        super("PipeScheduler", Config.pipe_scheduler_interval_millis);
         this.pipeManager = pm;
     }
 
@@ -60,63 +55,23 @@ public class PipeScheduler extends FrontendDaemon {
     private void process() throws DdlException {
         List<Pipe> pipes = pipeManager.getRunnablePipes();
         for (Pipe pipe : pipes) {
-            if (!hasAvailableSlot()) {
-                break;
-            }
-
-            List<PipeTaskDesc> tasks = pipe.execute();
-            if (CollectionUtils.isEmpty(tasks)) {
-                continue;
-            }
-            for (PipeTaskDesc task : tasks) {
-                if (!tryExecuteTask(task)) {
-                    break;
-                }
+            try {
+                pipe.schedule();
+            } catch (Throwable e) {
+                LOG.warn("Failed to execute due to ", e);
             }
         }
     }
 
-    private boolean tryExecuteTask(PipeTaskDesc taskDesc) throws DdlException {
-        // Acquire resource for this task
-        boolean ready = true;
-        if (MapUtils.isNotEmpty(taskDesc.getBeSlotRequirement())) {
-            ready = acquireSlots(taskDesc.getBeSlotRequirement());
-        }
-        if (!ready) {
-            return false;
-        }
-
-        try {
-            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            Task task = TaskBuilder.buildPipeTask(taskDesc);
-            taskManager.createTask(task, false);
-            // FIXME: execute task async
-            taskDesc.onRunning();
-            SubmitResult result = taskManager.executeTaskSync(task);
-            if (result.getStatus().equals(SubmitResult.SubmitStatus.SUBMITTED)) {
-                taskDesc.onFinished();
-            } else {
-                taskDesc.onError();
-            }
-        } catch (Throwable e) {
-            taskDesc.onError();
-        } finally {
-            releaseSlots(taskDesc.getBeSlotRequirement());
-        }
-
-        return true;
-    }
-
+    // TODO: manage the resource
     private boolean acquireSlots(Map<Long, Integer> slots) {
         return true;
     }
 
     private void releaseSlots(Map<Long, Integer> slots) {
-
     }
 
     private boolean hasAvailableSlot() {
-        // FIXME: consider available resource
         return true;
     }
 

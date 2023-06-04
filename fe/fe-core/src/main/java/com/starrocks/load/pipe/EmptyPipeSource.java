@@ -15,20 +15,26 @@
 
 package com.starrocks.load.pipe;
 
-public class FilePipePiece extends PipePiece {
+import com.starrocks.common.UserException;
 
-    private PipeFile file;
+public class EmptyPipeSource extends PipeSource {
 
-    public PipeFile getFile() {
-        return file;
-    }
-
-    public void setFile(PipeFile file) {
-        this.file = file;
+    @Override
+    public String toString() {
+        return "EMPTY_SOURCE";
     }
 
     @Override
-    PipeTaskDesc convertToTask() {
+    public boolean eos() {
+        return true;
+    }
+
+    @Override
+    public void poll() {
+    }
+
+    @Override
+    public PipePiece pullPiece() throws UserException {
         return null;
     }
 }

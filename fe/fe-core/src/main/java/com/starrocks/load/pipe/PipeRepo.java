@@ -35,7 +35,7 @@ public class PipeRepo {
 
     private static final Logger LOG = LogManager.getLogger(PipeRepo.class);
 
-    private PipeManager pipeManager;
+    private final PipeManager pipeManager;
 
     public PipeRepo(PipeManager pipeManager) {
         this.pipeManager = pipeManager;
@@ -74,8 +74,10 @@ public class PipeRepo {
         PipeManager data = GsonUtils.GSON.fromJson(imageJson, PipeManager.class);
         if (data.getPipesUnlock() != null) {
             Map<PipeId, Pipe> pipes = data.getPipesUnlock();
-            pipeManager.addPipes(pipes);
-            LOG.info("Load pipes from image: " + pipes.size());
+            for (Pipe pipe : pipes.values()) {
+                pipeManager.putPipe(pipe);
+            }
+            LOG.info("Load {} pipes from image: {}", pipes.size(), pipes);
             checksum ^= pipes.size();
         }
         return checksum;
@@ -90,7 +92,7 @@ public class PipeRepo {
                 break;
             }
             case PIPE_OP_DROP: {
-                pipeManager.removePipe(pipe.getPipeId());
+                pipeManager.removePipe(pipe);
                 break;
             }
             default: {

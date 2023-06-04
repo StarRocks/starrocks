@@ -16,7 +16,10 @@
 package com.starrocks.load.pipe;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -31,6 +34,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -45,7 +49,7 @@ public class PipeManager {
     @SerializedName(value = "nameToId")
     private Map<Pair<Long, String>, PipeId> nameToId = new HashMap<>();
 
-    private PipeRepo repo;
+    private final PipeRepo repo;
 
     public PipeManager() {
         repo = new PipeRepo(this);
@@ -58,7 +62,7 @@ public class PipeManager {
             boolean existed = nameToId.containsKey(dbIdAndName);
             if (existed) {
                 if (!stmt.isIfNotExists()) {
-                    throw new DdlException("Pipe already exists");
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_PIPE_EXISTS);
                 }
                 return;
             }
@@ -66,8 +70,7 @@ public class PipeManager {
             // Add pipe
             long id = GlobalStateMgr.getCurrentState().getNextId();
             Pipe pipe = Pipe.fromStatement(id, stmt);
-            pipeMap.put(pipe.getPipeId(), pipe);
-            nameToId.put(dbIdAndName, pipe.getPipeId());
+            putPipe(pipe);
 
             repo.addPipe(pipe);
         } finally {
@@ -81,12 +84,16 @@ public class PipeManager {
             lock.writeLock().lock();
             Pair<Long, String> dbAndName = resolvePipeNameUnlock(stmt.getPipeName());
             PipeId pipeId = nameToId.get(dbAndName);
-            DdlException.requireNotNull("pipe-" + dbAndName.second, pipeId);
+            if (pipeId == null) {
+                if (stmt.isIfExists()) {
+                    return;
+                }
+                ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PIPE, stmt.getPipeName());
+            }
             Pipe pipe = pipeMap.get(nameToId.get(dbAndName));
 
             pipe.pause();
-            pipeMap.remove(pipe.getPipeId());
-            nameToId.remove(dbAndName);
+            removePipe(pipe);
 
             // persistence
             repo.deletePipe(pipe);
@@ -95,15 +102,37 @@ public class PipeManager {
         }
     }
 
+    public void dropPipesOfDb(String dbName, long dbId) {
+        try {
+            lock.writeLock().lock();
+
+            List<PipeId> removed = nameToId.entrySet().stream()
+                    .filter(kv -> kv.getKey().first == dbId)
+                    .map(Map.Entry::getValue)
+                    .collect(Collectors.toList());
+            nameToId.keySet().removeIf(x -> x.first == dbId);
+            for (PipeId id : removed) {
+                Pipe pipe = pipeMap.get(id);
+                if (pipe != null) {
+                    pipe.pause();
+                    pipeMap.remove(id);
+                }
+            }
+            LOG.info("drop pipes in database " + dbName + ": " + removed);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
     public void alterPipe(AlterPipeStmt stmt) throws DdlException {
         LOG.info("alter pipe " + stmt.toString());
+        AlterPipePauseResume alterClause = (AlterPipePauseResume) stmt.getAlterPipeClause();
         try {
             lock.writeLock().lock();
             Pair<Long, String> dbAndName = resolvePipeNameUnlock(stmt.getPipeName());
             PipeId pipeId = nameToId.get(dbAndName);
             DdlException.requireNotNull("pipe-" + dbAndName.second, pipeId);
             Pipe pipe = pipeMap.get(pipeId);
-            AlterPipePauseResume alterClause = (AlterPipePauseResume) stmt.getAlterPipeClause();
             if (alterClause.isPause()) {
                 pipe.pause();
             } else if (alterClause.isResume()) {
@@ -117,9 +146,29 @@ public class PipeManager {
         }
     }
 
+    protected void updatePipe(Pipe pipe) {
+        try {
+            lock.writeLock().lock();
+            repo.alterPipe(pipe);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
     private Pair<Long, String> resolvePipeNameUnlock(PipeName name) {
-        long dbId = GlobalStateMgr.getCurrentState().getDb(name.getDbName()).getId();
+        long dbId = GlobalStateMgr.getCurrentState().mayGetDb(name.getDbName())
+                .map(Database::getId)
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR));
         return Pair.create(dbId, name.getPipeName());
+    }
+
+    private Pipe getPipeByNameUnlock(PipeName name) {
+        Pair<Long, String> idName = resolvePipeNameUnlock(name);
+        PipeId pipeId = nameToId.get(Pair.create(idName.first, name.getPipeName()));
+        if (pipeId == null) {
+            return null;
+        }
+        return pipeMap.get(pipeId);
     }
 
     public List<Pipe> getRunnablePipes() {
@@ -149,24 +198,17 @@ public class PipeManager {
         try {
             lock.writeLock().lock();
             pipeMap.put(pipe.getPipeId(), pipe);
+            nameToId.put(pipe.getDbAndName(), pipe.getPipeId());
         } finally {
             lock.writeLock().unlock();
         }
     }
 
-    public void removePipe(PipeId id) {
+    public void removePipe(Pipe pipe) {
         try {
             lock.writeLock().lock();
-            pipeMap.remove(id);
-        } finally {
-            lock.writeLock().unlock();
-        }
-    }
-
-    public void addPipes(Map<PipeId, Pipe> pipes) {
-        try {
-            lock.writeLock().lock();
-            pipeMap.putAll(pipes);
+            pipeMap.remove(pipe.getPipeId());
+            nameToId.remove(pipe.getDbAndName());
         } finally {
             lock.writeLock().unlock();
         }
@@ -174,6 +216,15 @@ public class PipeManager {
 
     public Map<PipeId, Pipe> getPipesUnlock() {
         return pipeMap;
+    }
+
+    public Optional<Pipe> mayGetPipe(PipeName name) {
+        try {
+            lock.readLock().lock();
+            return Optional.ofNullable(getPipeByNameUnlock(name));
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
 }

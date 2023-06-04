@@ -320,6 +320,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -982,6 +983,14 @@ public class GlobalStateMgr {
 
     public PipeManager getPipeManager() {
         return pipeManager;
+    }
+
+    public PipeScheduler getPipeScheduler() {
+        return pipeScheduler;
+    }
+
+    public PipeListener getPipeListener() {
+        return pipeListener;
     }
 
     public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
@@ -2976,6 +2985,14 @@ public class GlobalStateMgr {
 
     public Database getDb(String name) {
         return localMetastore.getDb(name);
+    }
+
+    public Optional<Database> mayGetDb(String name) {
+        return Optional.ofNullable(localMetastore.getDb(name));
+    }
+
+    public Optional<Database> mayGetDb(long dbId) {
+        return Optional.ofNullable(localMetastore.getDb(dbId));
     }
 
     public Database getDb(long dbId) {

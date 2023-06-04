@@ -39,10 +39,10 @@ import java.util.concurrent.TimeUnit;
 public class TaskBuilder {
 
     public static Task buildPipeTask(PipeTaskDesc desc) {
-        Task task = new Task(desc.getUniqueName());
+        Task task = new Task(desc.getUniqueTaskName());
         task.setSource(Constants.TaskSource.PIPE);
         task.setCreateTime(System.currentTimeMillis());
-        task.setDbName(task.getDbName());
+        task.setDbName(desc.getDbName());
         task.setDefinition(desc.getSqlTask());
         task.setProperties(desc.getProperties());
         task.setType(Constants.TaskType.EVENT_TRIGGERED);

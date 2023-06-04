@@ -33,6 +33,12 @@ public class PipeName extends StatementBase {
         this.pipeName = pipeName;
     }
 
+    public PipeName(String dbName, String pipeName) {
+        super(NodePosition.ZERO);
+        this.dbName = dbName;
+        this.pipeName = pipeName;
+    }
+
     public PipeName(NodePosition pos, String dbName, String pipeName) {
         super(pos);
         this.dbName = dbName;
@@ -81,5 +87,13 @@ public class PipeName extends StatementBase {
     @Override
     public int hashCode() {
         return Objects.hash(dbName, pipeName);
+    }
+
+    @Override
+    public String toString() {
+        if (dbName == null) {
+            return pipeName;
+        }
+        return dbName + "." + pipeName;
     }
 }

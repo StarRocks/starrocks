@@ -15,27 +15,34 @@
 
 package com.starrocks.sql.ast.pipe;
 
-import com.starrocks.catalog.Table;
+import com.starrocks.analysis.TableName;
+import com.starrocks.load.pipe.PipeSource;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.parser.NodePosition;
+
+import java.util.Map;
 
 public class CreatePipeStmt extends DdlStmt {
 
     private final boolean ifNotExists;
     private final PipeName pipeName;
+    private final int insertSqlStartIndex;
+    private final Map<String, String> properties;
     private final InsertStmt insertStmt;
-    private Table targetTable;
-    private TableFunctionRelation tableFunctionRelation;
+    private String insertSql;
+    private TableName targetTable;
+    private PipeSource pipeSource;
 
-    public CreatePipeStmt(boolean ifNotExists, PipeName pipeName, InsertStmt insertStmt,
-                          NodePosition pos) {
+    public CreatePipeStmt(boolean ifNotExists, PipeName pipeName, int insertSqlStartIndex, InsertStmt insertStmt,
+                          Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.ifNotExists = ifNotExists;
         this.pipeName = pipeName;
+        this.insertSqlStartIndex = insertSqlStartIndex;
         this.insertStmt = insertStmt;
+        this.properties = properties;
     }
 
     public boolean isIfNotExists() {
@@ -46,33 +53,50 @@ public class CreatePipeStmt extends DdlStmt {
         return pipeName;
     }
 
+    public int getInsertSqlStartIndex() {
+        return insertSqlStartIndex;
+    }
+
+    public void setInsertSql(String insertSql) {
+        this.insertSql = insertSql;
+    }
+
+    public String getInsertSql() {
+        return insertSql;
+    }
+
     public InsertStmt getInsertStmt() {
         return insertStmt;
     }
 
-    public Table getTargetTable() {
+    public TableName getTargetTable() {
         return targetTable;
     }
 
-    public void setTargetTable(Table targetTable) {
+    public void setTargetTable(TableName targetTable) {
         this.targetTable = targetTable;
     }
 
-    public TableFunctionRelation getTableFunctionRelation() {
-        return tableFunctionRelation;
+    public void setDataSource(PipeSource source) {
+        this.pipeSource = source;
     }
 
-    public void setTableFunctionRelation(TableFunctionRelation tableFunctionRelation) {
-        this.tableFunctionRelation = tableFunctionRelation;
+    public PipeSource getDataSource() {
+        return pipeSource;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     @Override
     public String toSql() {
-        return "CREATE PIPE " + pipeName + " AS " + insertStmt.toSql();
+        return "CREATE PIPE " + pipeName + " AS " + insertSql;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreatePipeStatement(this, context);
     }
+
 }

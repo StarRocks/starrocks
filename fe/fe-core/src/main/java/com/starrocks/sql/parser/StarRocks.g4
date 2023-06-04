@@ -286,6 +286,7 @@ statement
     | dropPipeStatement
     | alterPipeStatement
     | showPipeStatement
+    | descPipeStatement
 
     //Unsupported Statement
     | unsupportedStatement
@@ -1708,6 +1709,7 @@ pipeName:
 
 createPipeStatement
     : CREATE PIPE (IF NOT EXISTS)? pipeName
+        properties?
         AS insertStatement
     ;
 
@@ -1721,6 +1723,10 @@ alterPipeClause
 
 alterPipeStatement
     : ALTER PIPE pipeName alterPipeClause
+    ;
+
+descPipeStatement
+    : (DESC | DESCRIBE) PIPE pipeName
     ;
 
 showPipeStatement
