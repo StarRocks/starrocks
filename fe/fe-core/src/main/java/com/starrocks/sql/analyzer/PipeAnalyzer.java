@@ -27,13 +27,12 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
-import org.apache.ivy.util.StringUtils;
 
 public class PipeAnalyzer {
 
     private static void analyzePipeName(PipeName pipeName, ConnectContext context) {
-        if (StringUtils.isNullOrEmpty(pipeName.getDbName())) {
-            if (StringUtils.isNullOrEmpty(context.getDatabase())) {
+        if (Strings.isNullOrEmpty(pipeName.getDbName())) {
+            if (Strings.isNullOrEmpty(context.getDatabase())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
             pipeName.setDbName(context.getDatabase());
@@ -84,8 +83,8 @@ public class PipeAnalyzer {
     }
 
     public static void analyze(ShowPipeStmt stmt, ConnectContext context) {
-        if (StringUtils.isNullOrEmpty(stmt.getDbName()) &&
-                StringUtils.isNullOrEmpty(context.getDatabase())) {
+        if (Strings.isNullOrEmpty(stmt.getDbName()) &&
+                Strings.isNullOrEmpty(context.getDatabase())) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
         }
     }
