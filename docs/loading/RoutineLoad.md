@@ -95,7 +95,7 @@ CREATE TABLE example_db.example_tbl1 (
     `price`double NULL COMMENT "Price"
 ) 
 ENGINE=OLAP 
-PRIMARY KEY (order_id,pay_dt) 
+DUPLICATE KEY (order_id,pay_dt) 
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
 ```
 
@@ -311,7 +311,7 @@ CREATE TABLE sensor.sensor_log (
     `sensor_type` varchar(26) NOT NULL COMMENT "sensor type"
 ) 
 ENGINE=OLAP 
-PRIMARY KEY (id) 
+DUPLICATE KEY (id) 
 DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
 ```
 
