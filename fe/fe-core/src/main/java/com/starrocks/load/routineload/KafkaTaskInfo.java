@@ -77,6 +77,11 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         this.partitionIdToOffset = partitionIdToOffset;
     }
 
+    public KafkaTaskInfo(long timeToExecuteMs, KafkaTaskInfo kafkaTaskInfo, Map<Integer, Long> partitionIdToOffset,
+                         Map<Integer, Long> latestPartOffset) {
+        this(timeToExecuteMs, kafkaTaskInfo, partitionIdToOffset);
+    }
+
     public KafkaTaskInfo(long timeToExecuteMs, KafkaTaskInfo kafkaTaskInfo, Map<Integer, Long> partitionIdToOffset) {
         super(UUID.randomUUID(), kafkaTaskInfo.getJobId(),
                 kafkaTaskInfo.getTaskScheduleIntervalMs(), timeToExecuteMs, kafkaTaskInfo.getBeId());
@@ -187,8 +192,17 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
 
     @Override
     protected String getTaskDataSourceProperties() {
+        StringBuilder result = new StringBuilder();
+
         Gson gson = new Gson();
-        return gson.toJson(partitionIdToOffset);
+        result.append("Progress:").append(gson.toJson(partitionIdToOffset));
+        result.append(" ");
+        result.append("LatestOffset:").append(gson.toJson(latestPartOffset));
+        return result.toString();
+    }
+
+    public Map<Integer, Long> getLatestOffset() {
+        return latestPartOffset;
     }
 
     private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws UserException {
