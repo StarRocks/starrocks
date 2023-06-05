@@ -332,8 +332,8 @@ StarRocks 提供了多个与 Colocate Join 有关的 HTTP Restful API，用于�
 
 1. 查看集群的全部 Colocation 信息。
 
-    ~~~shell
-    curl -u<user>:<password> http://<fe_host>:<fe_http_port>/api/colocate
+    ~~~bash
+    curl --location-trusted -u<username>:<password> 'http://<fe_host>:<fe_http_port>/api/colocate'  
     ~~~
 
     示例：
@@ -400,9 +400,10 @@ StarRocks 提供了多个与 Colocate Join 有关的 HTTP Restful API，用于�
 
     ~~~shell
     # 标记为 Stable。
-    curl -u<user>:<password> http://<fe_host>:<fe_http_port>/api/colocate/group_stable?db_id=<dbId>&group_id=<grpId>
+    curl -XPOST --location-trusted -u<user>:<password> ​'http://<fe_host>:<fe_http_port>/api/colocate/group_stable?db_id=<dbId>&group_id=<grpId>​'
+
     # 标记为 Unstable。
-    curl -u<user>:<password> http://<fe_host>:<fe_http_port>/api/colocate/group_unstable?db_id=<dbId>&group_id=<grpId>
+   curl -XPOST --location-trusted -u<user>:<password> ​'http://<fe_host>:<fe_http_port>/api/colocate/group_unstable?db_id=<dbId>&group_id=<grpId>​'
     ~~~
 
     若返回为 `200`， 则表示标记修改成功。

@@ -268,7 +268,7 @@ CREATE TABLE example_db.example_tbl1 (
     `nationality` varchar(26) NULL COMMENT "国籍", 
     `gender` varchar(26) NULL COMMENT "性别", 
     `price` double NULL COMMENT "支付金额") 
-PRIMARY KEY (order_id,pay_dt) 
+DUPLICATE KEY (order_id,pay_dt) 
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
 ```
 
@@ -336,7 +336,7 @@ CREATE TABLE example_db.example_tbl2 (
     `nationality` varchar(26) NULL COMMENT "国籍", 
     `price` double NULL COMMENT "支付金额"
 ) 
-PRIMARY KEY (order_id,pay_dt) 
+DUPLICATE KEY (order_id,pay_dt) 
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
 ```
 
@@ -671,7 +671,7 @@ CREATE TABLE sensor.sensor_log1 (
     `sensor_type` varchar(26) NOT NULL COMMENT "sensor type"
 ) 
 ENGINE=OLAP 
-PRIMARY KEY (id) 
+DUPLICATE KEY (id) 
 DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
 ```
 
@@ -749,7 +749,7 @@ CREATE TABLE sensor.sensor_log2 (
     `data_y` long NULL COMMENT "sensor data" 
 ) 
 ENGINE=OLAP 
-PRIMARY KEY (id) 
+DUPLICATE KEY (id) 
 DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
 ```
 
@@ -829,7 +829,7 @@ CREATE TABLE sensor.sensor_log3 (
     `data_y` long NULL COMMENT "sensor data" 
 ) 
 ENGINE=OLAP 
-PRIMARY KEY (id) 
+DUPLICATE KEY (id) 
 DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
 ```
 
