@@ -130,14 +130,14 @@ private:
     void _init_chunk_stream() const;
     spill::IOTaskExecutor& _executor();
     // current build finish
-    bool _build_finished() const { return _is_build_finished; }
-    void _set_build_finished(bool build_finished) { _is_build_finished = build_finished; }
+    bool _is_current_build_probe_finished() const { return _current_build_probe_finished; }
+    void _set_current_build_probe_finished(bool build_finished) { _current_build_probe_finished = build_finished; }
 
     ChunkAccumulator _accumulator;
 
 private:
     bool _is_finishing{};
-    bool _is_build_finished = true;
+    bool _current_build_probe_finished = true;
     ChunkPtr _build_chunk;
 
     bool _is_finished{};

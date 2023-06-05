@@ -692,6 +692,10 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
                                                                               context->degree_of_parallelism());
     left_ops.emplace_back(std::move(left_factory));
 
+    if constexpr (std::is_same_v<BuildFactory, SpillableNLJoinBuildOperatorFactory>) {
+        may_add_chunk_accumulate_operator(left_ops, context, id());
+    }
+
     if (limit() != -1) {
         left_ops.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
@@ -703,7 +707,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
 pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    if (runtime_state()->enable_spill() && _join_op == TJoinOp::CROSS_JOIN) {
+    if (runtime_state()->enable_spill() && runtime_state()->enable_nl_join_spill() && _join_op == TJoinOp::CROSS_JOIN) {
         return _decompose_to_pipeline<SpillableNLJoinBuildOperatorFactory, SpillableNLJoinProbeOperatorFactory>(
                 context);
     } else {

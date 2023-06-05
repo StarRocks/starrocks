@@ -25,6 +25,7 @@
 
 namespace starrocks::pipeline {
 
+// TODO: use NLJoinProber refactor NLJoinProbeOperator when all join method has supported
 // NestLoopJoin
 // Implement the block-wise nestloop algorithm, support inner/outer join
 // The algorithm consists of three steps:
