@@ -72,6 +72,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          submodules: recursive
 
       - name: Checkout PR
         run: |
@@ -136,6 +137,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          submodules: recursive
 
       - name: BRANCH INFO
         id: branch
@@ -178,6 +180,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          submodules: recursive
 
       - name: Update Image
         id: update-image
