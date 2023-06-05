@@ -386,6 +386,10 @@
       + [sub_bitmap](./sql-reference/sql-functions/bitmap-functions/sub_bitmap.md)
       + [to_bitmap](./sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
     + Conditional Functions
+<<<<<<< HEAD
+=======
+      + [case](./sql-reference/sql-functions/condition-functions/case_when.md)
+>>>>>>> 779cacc86 ([Doc] update case expr (#24404))
       + [coalesce](./sql-reference/sql-functions/condition-functions/coalesce.md)
       + [if](./sql-reference/sql-functions/condition-functions/if.md)
       + [ifnull](./sql-reference/sql-functions/condition-functions/ifnull.md)
