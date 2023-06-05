@@ -946,10 +946,6 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     auto state_entry = manager->update_state_cache().get_or_create(
             strings::Substitute("$0_$1", tablet_id, rowset->rowset_id().to_string()));
     state_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
-    uint32_t update_stat_ref_count = state_entry->get_ref();
-    LOG(INFO) << "apply_rowset_commit start. tablet:" << tablet_id << " version:" << version.to_string()
-              << " rowset:" << rowset_id << " seg:" << rowset->num_segments()
-              << " update_stat_ref_count:" << update_stat_ref_count;
     auto& state = state_entry->value();
     auto st = state.load(&_tablet, rowset.get());
     manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
@@ -965,8 +961,6 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     std::lock_guard lg(_index_lock);
     // 2. load index
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
-    uint32_t index_ref_count = index_entry->get_ref();
-    LOG(INFO) << "apply_rowset. tablet:" << tablet_id << " index_ref_count:" << index_ref_count;
     index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
     auto& index = index_entry->value();
     // empty rowset does not need to load in-memory primary index, so skip it
@@ -1037,7 +1031,6 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
 
     if (rowset->rowset_meta()->get_meta_pb().delfile_idxes_size() == 0) {
         for (uint32_t i = 0; i < rowset->num_segments(); i++) {
-            LOG(INFO) << "apply_rowset, tablet:" << tablet_id << " rowset:" << rowset_id << " start load segment:" << i;
             state.load_upserts(rowset.get(), i);
             auto& upserts = state.upserts();
             if (upserts[i] != nullptr) {
@@ -1061,8 +1054,6 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                 }
             }
             state.release_upserts(i);
-            LOG(INFO) << "apply_rowset, tablet:" << tablet_id << " rowset:" << rowset_id
-                      << " finish load segment:" << i;
         }
 
         // two states
@@ -1152,7 +1143,6 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     // release resource
     // update state only used once, so delete it
     manager->update_state_cache().remove(state_entry);
-    update_stat_ref_count = state_entry->get_ref();
     int64_t t_index = MonotonicMillis();
 
     span->AddEvent("gen_delvec");
@@ -1292,7 +1282,6 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     } else {
         manager->index_cache().release(index_entry);
     }
-    index_ref_count = index_entry->get_ref();
     _update_total_stats(version_info.rowsets, nullptr, nullptr);
     int64_t t_write = MonotonicMillis();
 
@@ -1303,8 +1292,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
               << " #op(upsert:" << rowset->num_rows() << " del:" << delete_op << ") #del:" << old_total_del << "+"
               << new_del << "=" << total_del << " #dv:" << ndelvec << " duration:" << t_write - t_start << "ms"
               << strings::Substitute("($0/$1/$2/$3)", t_apply - t_start, t_index - t_apply, t_delvec - t_index,
-                                     t_write - t_delvec)
-              << "ref_count(state/index): " << update_stat_ref_count << "/" << index_ref_count;
+                                     t_write - t_delvec);
     VLOG(1) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);
 }
 
