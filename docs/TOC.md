@@ -442,6 +442,10 @@
       + [to_binary](/sql-reference/sql-functions/binary-functions/to_binary.md)
       + [from_binary](/sql-reference/sql-functions/binary-functions/from_binary.md)
     + Conditional Functions
+<<<<<<< HEAD
+=======
+      + [case](./sql-reference/sql-functions/condition-functions/case_when.md)
+>>>>>>> 779cacc86 ([Doc] update case expr (#24404))
       + [coalesce](./sql-reference/sql-functions/condition-functions/coalesce.md)
       + [if](./sql-reference/sql-functions/condition-functions/if.md)
       + [ifnull](./sql-reference/sql-functions/condition-functions/ifnull.md)
