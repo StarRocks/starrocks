@@ -347,8 +347,15 @@ public class MaterializedViewHandler extends AlterHandler {
         DistributionInfo distributionInfo = targetOlapTable.getDefaultDistributionInfo();
         if (!(distributionInfo instanceof RandomDistributionInfo)) {
             // distribution keys must be the same with the base table: only need to check the colum name is the same
-            if (!baseTable.getDefaultDistributionInfo().equals(targetOlapTable.getDefaultDistributionInfo())) {
+            if (!baseTable.getDefaultDistributionInfo().getDistributionKey().equals(targetOlapTable.
+                    getDefaultDistributionInfo().getDistributionKey())) {
                 throw new DdlException("Base table's distribution keys should be the" +
+                        " same with the target table: " + targetOlapTable);
+            }
+
+            if (baseTable.getDefaultDistributionInfo().getBucketNum() != targetOlapTable.
+                    getDefaultDistributionInfo().getBucketNum()) {
+                throw new DdlException("Base table's distribution bucket num should be the" +
                         " same with the target table: " + targetOlapTable);
             }
 
