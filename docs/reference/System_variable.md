@@ -147,7 +147,7 @@ SELECT /*+ SET_VAR
 
 * enable_distinct_column_bucketization (2.5 and later)
 
-  Whether to enable bucketization for the COUNT DISTINCT colum in a group-by-count-distinct query. Use the `select a, count(distinct b) from t group by a;` query as an example. If the GROUP BY colum `a` is a low-cardinality column and the COUNT DISTINCT column `b` is a high-cardinality column which has severe data skew, performance bottleneck will occur. In this situation, you can configure buckets for the COUNT DISTINCT column to balance data and prevent data skew.
+  Whether to enable bucketization for the COUNT DISTINCT colum in a group-by-count-distinct query. Use the `select a, count(distinct b) from t group by a;` query as an example. If the GROUP BY colum `a` is a low-cardinality column and the COUNT DISTINCT column `b` is a high-cardinality column which has severe data skew, performance bottleneck will occur. In this situation, you can split data in the COUNT DISTINCT column into multiple buckets to balance data and prevent data skew.
 
   Default value: false, which means this feature is disabled. You must use this variable with `count_distinct_column_buckets`.
 
