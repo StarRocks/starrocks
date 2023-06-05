@@ -89,8 +89,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
+=======
+>>>>>>> 1c90961be ([Refactor] Adjust the auto tablet distribution for exist table (#24543))
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
@@ -948,44 +951,6 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum) {
-        // 1. If the partition is less than recentPartitionNum, use backendNum to speculate the bucketNum
-        int bucketNum = 0;
-        if (olapTable.getPartitions().size() < recentPartitionNum) {
-            bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
-            return bucketNum;
-        }
-
-        // 2. If the partition is not imported anydata, use backendNum to speculate the bucketNum
-        List<Partition> partitions = (List<Partition>) olapTable.getRecentPartitions(recentPartitionNum);
-        boolean dataImported = true;
-        for (Partition partition : partitions) {
-            if (partition.getVisibleVersion() == 1) {
-                dataImported = false;
-                break;
-            }
-        }
-
-        bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
-        if (!dataImported) {
-            return bucketNum;
-        }
-
-        // 3. Use the totalSize of recentPartitions to speculate the bucketNum
-        long maxDataSize = 0;
-        for (Partition partition : partitions) {
-            maxDataSize = Math.max(maxDataSize, partition.getDataSize());
-        }
-        // A tablet will be regarded using the 1GB size
-        // And also the number will not be larger than the calBucketNumAccordingToBackends()
-        long speculateTabletNum = (maxDataSize + FeConstants.AUTO_DISTRIBUTION_UNIT - 1) / FeConstants.AUTO_DISTRIBUTION_UNIT;
-        bucketNum = (int) Math.min(bucketNum, speculateTabletNum);
-        if (bucketNum == 0) {
-            bucketNum = 1;
-        }
-        return bucketNum;
-    }
-
     private DistributionInfo getDistributionInfo(OlapTable olapTable, AddPartitionClause addPartitionClause)
             throws DdlException {
         DistributionInfo distributionInfo;
@@ -1014,17 +979,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
         } else {
-            if (defaultDistributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH
-                    && Config.enable_auto_tablet_distribution
-                    && !colocateTableIndex.isColocateTable(olapTable.getId())) {
-                // 1. If enable_auto_tablet_distribution = true, AUTO Tablet Distibution
-                //    also take effect on exist table when adding new partitions
-                // 2. ColocateTable should comply the original tablet num when creating table.
-                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) defaultDistributionInfo;
-                distributionInfo = new HashDistributionInfo(0, hashDistributionInfo.getDistributionColumns());
-            } else {
-                distributionInfo = defaultDistributionInfo;
-            }
+            distributionInfo = defaultDistributionInfo;
         }
         return distributionInfo;
     }
@@ -1306,10 +1261,10 @@ public class LocalMetastore implements ConnectorMetadata {
             analyzeAddPartition(olapTable, partitionDescs, addPartitionClause, partitionInfo);
 
             // get distributionInfo
-            distributionInfo = getDistributionInfo(olapTable, addPartitionClause);
-
+            distributionInfo = getDistributionInfo(olapTable, addPartitionClause).copy();
             if (distributionInfo.getBucketNum() == 0) {
-                int numBucket = calAvgBucketNumOfRecentPartitions(olapTable, 5);
+                int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 5,
+                                    Config.enable_auto_tablet_distribution);
                 distributionInfo.setBucketNum(numBucket);
             }
 
@@ -1607,7 +1562,24 @@ public class LocalMetastore implements ConnectorMetadata {
             MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
             indexMap.put(indexId, rollup);
         }
+<<<<<<< HEAD
         DistributionInfo distributionInfo = table.getDefaultDistributionInfo();
+=======
+        DistributionInfo distributionInfo = table.getDefaultDistributionInfo().copy();
+
+        if (distributionInfo.getBucketNum() == 0) {
+            int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(table, 5, Config.enable_auto_tablet_distribution);
+            distributionInfo.setBucketNum(numBucket);
+        }
+
+        // create shard group
+        long shardGroupId = 0;
+        if (table.isCloudNativeTableOrMaterializedView()) {
+            shardGroupId = GlobalStateMgr.getCurrentStarOSAgent().
+                    createShardGroup(db.getId(), table.getId(), partitionId);
+        }
+
+>>>>>>> 1c90961be ([Refactor] Adjust the auto tablet distribution for exist table (#24543))
         Partition partition =
                 new Partition(partitionId, partitionName, indexMap.get(table.getBaseIndexId()), distributionInfo);
 
@@ -3292,10 +3264,6 @@ public class LocalMetastore implements ConnectorMetadata {
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
-        if (distributionInfo.getBucketNum() == 0) {
-            int numBucket = CatalogUtils.calBucketNumAccordingToBackends();
-            distributionInfo.setBucketNum(numBucket);
-        }
         // create refresh scheme
         MaterializedView.MvRefreshScheme mvRefreshScheme;
         RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();
