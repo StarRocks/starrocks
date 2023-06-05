@@ -18,9 +18,11 @@
 #include "exec/spill/query_spill_manager.h"
 
 namespace starrocks::spill {
-#define MEM_RESOURCE_DEFAULE_MEMORY 0
-#define MEM_RESOURCE_MID_MEMORY 1
-#define MEM_RESOURCE_LOW_MEMORY 2
+enum MEM_RESOURCE {
+    MEM_RESOURCE_DEFAULE_MEMORY = 0,
+    MEM_RESOURCE_MID_MEMORY = 1,
+    MEM_RESOURCE_LOW_MEMORY = 2,
+};
 
 class OperatorMemoryResourceManager {
 public:
@@ -31,6 +33,8 @@ public:
     void close();
 
     bool releaseable() const { return _releaseable && _performance_level <= MEM_RESOURCE_LOW_MEMORY; }
+
+    bool spillable() const { return _spillable; }
 
     void to_low_memory_mode();
 

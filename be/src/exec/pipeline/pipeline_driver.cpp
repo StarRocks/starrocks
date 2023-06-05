@@ -260,7 +260,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         // For source operators
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
-                    _set_operator_execute_mode(runtime_state, query_mem_tracker.get(), next_op, nullptr);
+                    _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
                     new_first_unfinished = i + 1;
@@ -306,8 +306,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                             SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(next_op);
                             SCOPED_TIMER(next_op->_push_timer);
                             QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
-                            _set_operator_execute_mode(runtime_state, query_mem_tracker.get(), next_op,
-                                                       maybe_chunk.value());
+                            _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, maybe_chunk.value());
                             RELEASE_RESERVED_GUARD();
                             return_status = next_op->push_chunk(runtime_state, maybe_chunk.value());
                         }
@@ -336,7 +335,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         // For source operators
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
-                    _set_operator_execute_mode(runtime_state, query_mem_tracker.get(), next_op, nullptr);
+                    _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
                     new_first_unfinished = i + 1;
@@ -460,8 +459,8 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
     }
 }
 
-void PipelineDriver::_set_operator_execute_mode(RuntimeState* state, MemTracker* tracker, OperatorPtr& op,
-                                                const ChunkPtr& chunk) {
+void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op,
+                                          const ChunkPtr& chunk) {
     // TODO: FIXME
     // a simple spill stragety
     auto& mem_resource_mgr = op->mem_resource_manager();
@@ -474,6 +473,7 @@ void PipelineDriver::_set_operator_execute_mode(RuntimeState* state, MemTracker*
             request_reserved = op->estimated_memory_reserved(chunk);
         }
         request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
+
         if (!tls_thread_status.try_mem_reserve(request_reserved, tracker,
                                                tracker->limit() * state->spill_mem_limit_threshold())) {
             mem_resource_mgr.to_low_memory_mode();

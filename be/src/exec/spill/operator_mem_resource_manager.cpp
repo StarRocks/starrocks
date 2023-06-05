@@ -20,7 +20,8 @@ namespace starrocks::spill {
 void OperatorMemoryResourceManager::prepare(OP* op, QuerySpillManager* query_spill_manager) {
     _op = op;
     _spillable = op->spillable();
-    _releaseable |= _releaseable;
+    _releaseable = op->releaseable();
+    _releaseable |= _spillable;
     _query_spill_manager = query_spill_manager;
     if (_spillable) {
         _query_spill_manager->increase_spillable_operators();
@@ -31,7 +32,9 @@ void OperatorMemoryResourceManager::to_low_memory_mode() {
     if (_performance_level < MEM_RESOURCE_LOW_MEMORY) {
         _performance_level = MEM_RESOURCE_LOW_MEMORY;
         _op->set_execute_mode(_performance_level);
-        _query_spill_manager->increase_spilling_operators();
+        if (_spillable) {
+            _query_spill_manager->increase_spilling_operators();
+        }
     }
 }
 

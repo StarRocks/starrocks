@@ -223,8 +223,11 @@ public:
     // Called when the new Epoch starts at first to reset operator's internal state.
     virtual Status reset_epoch(RuntimeState* state) { return Status::OK(); }
 
+    // Adjusts the execution mode of the operator (will only be called by the OperatorMemoryResourceManager component)
     virtual void set_execute_mode(int performance_level) {}
     virtual bool spillable() const { return false; }
+    // Operator can free memory/buffer early
+    virtual bool releaseable() const { return false; }
     spill::OperatorMemoryResourceManager& mem_resource_manager() { return _mem_resource_manager; }
 
     // the memory that can be freed by the current operator

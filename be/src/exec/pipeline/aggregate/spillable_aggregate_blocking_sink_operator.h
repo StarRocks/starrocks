@@ -47,6 +47,17 @@ public:
         TRACE_SPILL_LOG << "AggregateBlockingSink, mark spill " << (void*)this;
     }
 
+    size_t estimated_memory_reserved(const ChunkPtr& chunk) override {
+        if (chunk && !chunk->is_empty()) {
+            if (_aggregator->is_hash_set()) {
+                return chunk->memory_usage() + _aggregator->hash_set_memory_usage();
+            } else {
+                return chunk->memory_usage() + _aggregator->hash_map_memory_usage();
+            }
+        }
+        return 0;
+    }
+
 private:
     Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
     std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state);
