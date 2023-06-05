@@ -196,7 +196,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
 
         Gson gson = new Gson();
         result.append("Progress:").append(gson.toJson(partitionIdToOffset));
-        result.append(" ");
+        result.append(",");
         result.append("LatestOffset:").append(gson.toJson(latestPartOffset));
         return result.toString();
     }
