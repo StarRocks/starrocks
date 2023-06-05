@@ -99,7 +99,7 @@ public class StructTypeTest {
                 new StructField("st", ScalarType.createType(PrimitiveType.INT)),
                 new StructField("cc", c1)
         ));
-        Assert.assertTrue(root.matchesType(diffName));
+        Assert.assertFalse(root.matchesType(diffName));
 
         // Different field type
         StructType diffType = new StructType(Lists.newArrayList(
