@@ -831,7 +831,7 @@ public class AnalyzerUtils {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             PartitionMeasure measure = checkAndGetPartitionMeasure((ExpressionRangePartitionInfo) partitionInfo);
-            getAddPartitionClauseForRangePartition(olapTable, partitionValues.get(0), measure, result,
+            getAddPartitionClauseForRangePartition(olapTable, partitionValues, measure, result,
                     (ExpressionRangePartitionInfo) partitionInfo);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             Short replicationNum = olapTable.getTableProperty().getReplicationNum();
@@ -864,7 +864,7 @@ public class AnalyzerUtils {
         return result;
     }
 
-    private static void getAddPartitionClauseForRangePartition(OlapTable olapTable, List<String> partitionValues,
+    private static void getAddPartitionClauseForRangePartition(OlapTable olapTable, List<List<String>> partitionValues,
                                                                PartitionMeasure measure,
                                                                Map<String, AddPartitionClause> result,
                                                                ExpressionRangePartitionInfo expressionRangePartitionInfo)
@@ -877,17 +877,22 @@ public class AnalyzerUtils {
         DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc();
         Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
-        for (String partitionValue : partitionValues) {
+        for (List<String> partitionValue : partitionValues) {
+            if (partitionValue.size() != 1) {
+                Lists.newArrayList(
+                        "automatic partition only support single column for range partition.");
+            }
+            String partitionItem = partitionValue.get(0);
             DateTimeFormatter beginDateTimeFormat;
             LocalDateTime beginTime;
             LocalDateTime endTime;
             String partitionName;
             try {
-                if ("NULL".equalsIgnoreCase(partitionValue)) {
-                    partitionValue = "0000-01-01";
+                if ("NULL".equalsIgnoreCase(partitionItem)) {
+                    partitionItem = "0000-01-01";
                 }
-                beginDateTimeFormat = DateUtils.probeFormat(partitionValue);
-                beginTime = DateUtils.parseStringWithDefaultHSM(partitionValue, beginDateTimeFormat);
+                beginDateTimeFormat = DateUtils.probeFormat(partitionItem);
+                beginTime = DateUtils.parseStringWithDefaultHSM(partitionItem, beginDateTimeFormat);
                 // The start date here is passed by BE through function calculation,
                 // so it must be the start date of a certain partition.
                 switch (granularity.toLowerCase()) {

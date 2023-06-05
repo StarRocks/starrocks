@@ -1740,7 +1740,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         // Now only supports the case of automatically creating single range partition
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        if (partitionInfo.isRangePartition() && request.partition_values.size() != 1) {
+        if (partitionInfo.isRangePartition() && olapTable.getPartitionColumnNames().size() != 1) {
             errorStatus.setError_msgs(Lists.newArrayList(
                     "automatic partition only support single column for range partition."));
             result.setStatus(errorStatus);
