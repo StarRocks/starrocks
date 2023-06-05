@@ -319,9 +319,6 @@ private:
     }
 
     static ColumnPtr _array_remove_generic(const ColumnPtr& array, const ColumnPtr& target) {
-        if (array->only_null()) {
-            return array;
-        }
         if (auto nullable = dynamic_cast<const NullableColumn*>(array.get()); nullable != nullptr) {
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
             auto result = _array_remove_non_nullable(*array_col, *target);
@@ -943,7 +940,6 @@ ColumnPtr ArrayFunctions::array_contains_all([[maybe_unused]] FunctionContext* c
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
     const ColumnPtr& arg1 = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]); // element
-
 
     return ArrayHasImpl<false>::evaluate(*arg0, *arg1);
 }
