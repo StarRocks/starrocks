@@ -228,11 +228,22 @@ TEST_F(ArrayFunctionsTest, array_length) {
 
     // [] only null
     {
-        auto c = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, true, true, 1);
+        auto c = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, true, true, 10);
 
-        auto result = ArrayFunctions::array_length(nullptr, {c});
-        EXPECT_EQ(1, result->size());
+        auto result = ArrayFunctions::array_length(nullptr, {c}).value();
+        EXPECT_EQ(10, result->size());
         EXPECT_TRUE(result->is_null(0));
+    }
+
+    // [] only const
+    {
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        src_column->append_datum(DatumArray{"5", "5", "33", "666"});
+        src_column = std::make_shared<ConstColumn>(src_column, 3);
+
+        auto result = ArrayFunctions::array_length(nullptr, {src_column}).value();
+        EXPECT_EQ(3, result->size());
+        EXPECT_EQ(4, result->get(1).get_int32());
     }
 }
 
