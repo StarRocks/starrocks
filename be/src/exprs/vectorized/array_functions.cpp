@@ -1228,12 +1228,9 @@ ColumnPtr ArrayFunctions::_array_process_not_nullable(const Column* raw_array_co
 template <PrimitiveType column_type, ArrayFunctions::ArithmeticType type>
 ColumnPtr ArrayFunctions::array_arithmetic(const Columns& columns) {
     DCHECK_EQ(1, columns.size());
-    const ColumnPtr& array_column = columns[0]; // array
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    const ColumnPtr& array_column = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]);
     const auto& raw_array_column = *array_column;
-
-    if (raw_array_column.only_null()) {
-        return array_column;
-    }
 
     if (auto nullable = dynamic_cast<const NullableColumn*>(&raw_array_column); nullable != nullptr) {
         auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
