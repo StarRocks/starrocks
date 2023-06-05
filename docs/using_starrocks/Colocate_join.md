@@ -389,7 +389,7 @@ This API is implemented on the FE and can be accessed using `fe_host:fe_http_por
     curl -XPOST --location-trusted -u<username>:<password> ​'http://<fe_host>:<fe_http_port>/api/colocate/group_unstable?db_id=<dbId>&group_id=<grpId>​'
     ~~~
 
-    If the returned result is `200`, the Group is successful marked as Stable or Unstable.
+    If the returned result is `200`, the Group is successfully marked as Stable or Unstable.
 
 3. Set the data distribution of a Group
 
