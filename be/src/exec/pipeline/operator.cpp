@@ -77,7 +77,9 @@ Status Operator::prepare(RuntimeState* state) {
     _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);
     _pull_chunk_num_counter = ADD_COUNTER(_common_metrics, "PullChunkNum", TUnit::UNIT);
     _pull_row_num_counter = ADD_COUNTER(_common_metrics, "PullRowNum", TUnit::UNIT);
-    _mem_resource_manager.prepare(this, state->query_ctx()->spill_manager());
+    if (state->query_ctx() && state->query_ctx()->spill_manager()) {
+        _mem_resource_manager.prepare(this, state->query_ctx()->spill_manager());
+    }
     return Status::OK();
 }
 
