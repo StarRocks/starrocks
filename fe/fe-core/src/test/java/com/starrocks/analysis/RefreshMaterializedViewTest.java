@@ -184,4 +184,252 @@ public class RefreshMaterializedViewTest {
             System.out.println("mv2 refresh context" + mv2.getRefreshScheme().getAsyncRefreshContext());
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testMaxMVRewriteStaleness() throws Exception {
+        Set<String> cachePartitionsToRefresh;
+        // refresh partitions are not empty if base table is updated.
+        cluster.runSql("test", "insert into tbl_with_mv partition(p2) values(\"2022-02-20\", 1, 10)");
+        {
+
+            // publish version is async, so version update may be late
+            OlapTable mvTable = (OlapTable) getTable("test", "mv_with_mv_rewrite_staleness");
+            Partition p1 = mvTable.getPartition("p2");
+            while (p1.getVisibleVersion() != 1) {
+                Thread.sleep(500);
+            }
+
+            MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness");
+            Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv();
+            Assert.assertTrue(!partitionsToRefresh.isEmpty());
+        }
+        // no refresh partitions if there is new data & refresh.
+        {
+            refreshMaterializedView("test", "mv_with_mv_rewrite_staleness");
+            MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness");
+            cachePartitionsToRefresh = mv1.getPartitionNamesToRefreshForMv();
+            Assert.assertTrue(cachePartitionsToRefresh.isEmpty());
+        }
+
+        // alter mv_rewrite_staleness
+        {
+            String alterMvSql = "alter materialized view mv_with_mv_rewrite_staleness " +
+                    "set (\"mv_rewrite_staleness_second\" = \"60\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            GlobalStateMgr.getCurrentState().alterMaterializedView(stmt);
+        }
+        // no refresh partitions if mv_rewrite_staleness is set.
+        cluster.runSql("test", "insert into tbl_with_mv values(\"2022-02-20\", 1, 10)");
+        {
+            MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness");
+            Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv();
+            Assert.assertTrue(partitionsToRefresh.isEmpty());
+
+        }
+        // no refresh partitions if there is no new data.
+        {
+            refreshMaterializedView("test", "mv_with_mv_rewrite_staleness");
+            MaterializedView mv2 = getMv("test", "mv_with_mv_rewrite_staleness");
+            Set<String> partitionsToRefresh = mv2.getPartitionNamesToRefreshForMv();
+            Assert.assertTrue(partitionsToRefresh.isEmpty());
+            Assert.assertEquals(cachePartitionsToRefresh, partitionsToRefresh);
+        }
+        // no refresh partitions if there is new data & no refresh but is set `mv_rewrite_staleness`.
+        {
+            cluster.runSql("test", "insert into tbl_with_mv values(\"2022-02-22\", 1, 10)");
+            MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness");
+            Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv();
+            Assert.assertTrue(partitionsToRefresh.isEmpty());
+            Assert.assertEquals(cachePartitionsToRefresh, partitionsToRefresh);
+        }
+    }
+
+    @Test
+    public void testRefreshHourPartitionMv() throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb(stmt.getTableName().getDb());
+                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    for (Partition partition : tbl.getPartitions()) {
+                        if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                            long version = partition.getVisibleVersion() + 1;
+                            partition.setVisibleVersion(version, System.currentTimeMillis());
+                            MaterializedIndex baseIndex = partition.getBaseIndex();
+                            List<Tablet> tablets = baseIndex.getTablets();
+                            for (Tablet tablet : tablets) {
+                                List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+                                for (Replica replica : replicas) {
+                                    replica.updateVersionInfo(version, -1, version);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE `test`.`tbl_with_hour_partition` (\n" +
+                        "  `k1` datetime,\n" +
+                        "  `k2` int,\n" +
+                        "  `v1` string\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`k1`, `k2`)\n" +
+                        "PARTITION BY RANGE(`k1`)\n" +
+                        "(\n" +
+                        "PARTITION p2023041015 VALUES [(\"2023-04-10 15:00:00\"), (\"2023-04-10 16:00:00\")),\n" +
+                        "PARTITION p2023041016 VALUES [(\"2023-04-10 16:00:00\"), (\"2023-04-10 17:00:00\")),\n" +
+                        "PARTITION p2023041017 VALUES [(\"2023-04-10 17:00:00\"), (\"2023-04-10 18:00:00\")),\n" +
+                        "PARTITION p2023041018 VALUES [(\"2023-04-10 18:00:00\"), (\"2023-04-10 19:00:00\"))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                        "PROPERTIES (\"replication_num\" = \"1\");")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `mv_with_hour_partiton`\n" +
+                        "PARTITION BY (date_trunc('hour', `k1`))\n" +
+                        "REFRESH DEFERRED MANUAL \n" +
+                        "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                        "PROPERTIES (\"replication_num\" = \"1\", \"partition_refresh_number\"=\"1\")\n" +
+                        "AS\n" +
+                        "SELECT \n" +
+                        "k1,\n" +
+                        "count(DISTINCT `v1`) AS `v` \n" +
+                        "FROM `test`.`tbl_with_hour_partition`\n" +
+                        "group by k1;");
+        starRocksAssert.updateTablePartitionVersion("test", "tbl_with_hour_partition", 2);
+        starRocksAssert.refreshMvPartition("REFRESH MATERIALIZED VIEW test.mv_with_hour_partiton \n" +
+                "PARTITION START (\"2023-04-10 15:00:00\") END (\"2023-04-10 17:00:00\");");
+        MaterializedView mv1 = getMv("test", "mv_with_hour_partiton");
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap1 =
+                mv1.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assert.assertEquals(1, versionMap1.size());
+        Set<String> partitions1 = versionMap1.values().iterator().next().keySet();
+        Assert.assertEquals(2, partitions1.size());
+
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE `test`.`tbl_with_day_partition` (\n" +
+                        "  `k1` date,\n" +
+                        "  `k2` int,\n" +
+                        "  `v1` string\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`k1`, `k2`)\n" +
+                        "PARTITION BY RANGE(`k1`)\n" +
+                        "(\n" +
+                        "PARTITION p20230410 VALUES [(\"2023-04-10\"), (\"2023-04-11\")),\n" +
+                        "PARTITION p20230411 VALUES [(\"2023-04-11\"), (\"2023-04-12\")),\n" +
+                        "PARTITION p20230412 VALUES [(\"2023-04-12\"), (\"2023-04-13\")),\n" +
+                        "PARTITION p20230413 VALUES [(\"2023-04-13\"), (\"2023-04-14\"))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                        "PROPERTIES (\"replication_num\" = \"1\");")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `mv_with_day_partiton`\n" +
+                        "PARTITION BY (date_trunc('day', `k1`))\n" +
+                        "REFRESH DEFERRED MANUAL \n" +
+                        "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                        "PROPERTIES (\"replication_num\" = \"1\", \"partition_refresh_number\"=\"1\")\n" +
+                        "AS\n" +
+                        "SELECT \n" +
+                        "k1,\n" +
+                        "count(DISTINCT `v1`) AS `v` \n" +
+                        "FROM `test`.`tbl_with_day_partition`\n" +
+                        "group by k1;");
+        starRocksAssert.updateTablePartitionVersion("test", "tbl_with_day_partition", 2);
+        starRocksAssert.refreshMvPartition("REFRESH MATERIALIZED VIEW test.mv_with_day_partiton \n" +
+                "PARTITION START (\"2023-04-10\") END (\"2023-04-13\");");
+        MaterializedView mv2 = getMv("test", "mv_with_day_partiton");
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap2 =
+                mv2.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assert.assertEquals(1, versionMap2.size());
+        Set<String> partitions2 = versionMap2.values().iterator().next().keySet();
+        Assert.assertEquals(3, partitions2.size());
+    }
+
+    @Test
+    public void testDropBaseTablePartitionRemoveVersionMap() throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb(stmt.getTableName().getDb());
+                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    for (Partition partition : tbl.getPartitions()) {
+                        if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                            long version = partition.getVisibleVersion() + 1;
+                            partition.setVisibleVersion(version, System.currentTimeMillis());
+                            MaterializedIndex baseIndex = partition.getBaseIndex();
+                            List<Tablet> tablets = baseIndex.getTablets();
+                            for (Tablet tablet : tablets) {
+                                List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+                                for (Replica replica : replicas) {
+                                    replica.updateVersionInfo(version, -1, version);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        starRocksAssert.useDatabase("test")
+            .withTable("CREATE TABLE `test`.`tbl_with_partition` (\n" +
+                "  `k1` date,\n" +
+                "  `k2` int,\n" +
+                "  `v1` string\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`, `k2`)\n" +
+                "PARTITION BY RANGE(`k1`)\n" +
+                "(\n" +
+                "PARTITION p20230410 VALUES [(\"2023-04-10\"), (\"2023-04-11\")),\n" +
+                "PARTITION p20230411 VALUES [(\"2023-04-11\"), (\"2023-04-12\")),\n" +
+                "PARTITION p20230412 VALUES [(\"2023-04-12\"), (\"2023-04-13\")),\n" +
+                "PARTITION p20230413 VALUES [(\"2023-04-13\"), (\"2023-04-14\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");")
+            .withMaterializedView("CREATE MATERIALIZED VIEW `mv_with_partition`\n" +
+                "PARTITION BY (date_trunc('day', k1))\n" +
+                "REFRESH DEFERRED MANUAL \n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\", \"partition_refresh_number\"=\"1\")\n" +
+                "AS\n" +
+                "SELECT \n" +
+                "k1,\n" +
+                "count(DISTINCT `v1`) AS `v` \n" +
+                "FROM `test`.`tbl_with_partition`\n" +
+                "group by k1;");
+        starRocksAssert.updateTablePartitionVersion("test", "tbl_with_partition", 2);
+        starRocksAssert.refreshMvPartition("REFRESH MATERIALIZED VIEW test.mv_with_partition \n" +
+            "PARTITION START (\"2023-04-10\") END (\"2023-04-14\");");
+        MaterializedView mv = getMv("test", "mv_with_partition");
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
+            mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assert.assertEquals(1, versionMap.size());
+        Set<String> partitions = versionMap.values().iterator().next().keySet();
+        Assert.assertEquals(4, partitions.size());
+
+        starRocksAssert.alterMvProperties(
+            "alter materialized view test.mv_with_partition set (\"partition_ttl_number\" = \"1\")");
+
+        DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
+            .getDynamicPartitionScheduler();
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable tbl = (OlapTable) db.getTable("mv_with_partition");
+        dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
+        dynamicPartitionScheduler.runOnceForTest();
+        Assert.assertEquals(Sets.newHashSet("p20230413"), versionMap.values().iterator().next().keySet());
+
+        starRocksAssert
+            .useDatabase("test")
+            .dropMaterializedView("mv_with_partition")
+            .dropTable("tbl_with_partition");
+    }
+>>>>>>> c1d5ac662 ([UT] Fix unstable test case: testMaxMVRewriteStaleness (#24677))
 }
