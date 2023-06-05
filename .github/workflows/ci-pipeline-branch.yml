@@ -63,6 +63,9 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
+      - name: clean
+        run: rm -rf ${{ github.workspace }}
+
       - name: BRANCH INFO
         id: branch
         run: |
@@ -130,8 +133,8 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
     if: ${{ needs.be-checker.outputs.output1 == 'true' }}
     steps:
-      - name: Clean Workspace
-        uses: AutoModality/action-clean@v1.1.0
+      - name: clean
+        run: rm -rf ${{ github.workspace }}
 
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -173,8 +176,8 @@ jobs:
       instance_id: ${{ steps.update-image.outputs.instance_id }}
       image_cache_id: ${{ steps.update-image.outputs.image_cache_id }}
     steps:
-      - name: Clean Workspace
-        uses: AutoModality/action-clean@v1.1.0
+      - name: clean
+        run: rm -rf ${{ github.workspace }}
 
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -291,6 +294,9 @@ jobs:
     if: needs.fe-checker.outputs.output1 == 'true'
     name: FE Code Style Check
     steps:
+      - name: clean
+        run: rm -rf ${{ github.workspace }}
+
       - uses: dorny/paths-filter@v2
         id: java-file
         name: JAVA FILE
