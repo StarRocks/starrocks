@@ -146,7 +146,7 @@ SELECT /*+ SET_VAR
 
   The default compression algorithm for table storage. Supported compression algorithms are `snappy, lz4, zlib, zstd`. Default value: lz4_frame.
 
-  Note that the `compression` property you specified in a CREATE TABLE statement takes precedence over this variable.
+  Note that if you specified the `compression` property in a CREATE TABLE statement, the compression algorithm specified by `compression` takes effect.
 
 * disable_colocate_join
 
