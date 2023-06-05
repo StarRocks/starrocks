@@ -146,6 +146,8 @@ SELECT /*+ SET_VAR
 
   The default compression algorithm for table storage. Supported compression algorithms are `snappy, lz4, zlib, zstd`. Default value: lz4_frame.
 
+  Note that the `compression` property you specified in a CREATE TABLE statement takes precedence over this variable.
+
 * disable_colocate_join
 
   Used to control whether the Colocation Join is enabled. The default value is `false`, meaning the feature is enabled. When this feature is disabled, query planning will not attempt to execute Colocation Join.
