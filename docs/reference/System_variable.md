@@ -134,7 +134,7 @@ SELECT /*+ SET_VAR
 
 * count_distinct_column_buckets (2.5 and later)
 
-  The number of buckets for the COUNT DISTINCT column in a group-by-count-distinct query. This variable takes effect only when `enable_distinct_column_bucketization` is enabled. Default value: 1024.
+  The number of buckets for the COUNT DISTINCT column in a group-by-count-distinct query. This variable takes effect only when `enable_distinct_column_bucketization` is set to `true`. Default value: 1024.
 
 * default_rowset_type (global)
 
@@ -162,7 +162,7 @@ SELECT /*+ SET_VAR
 
   Whether to enable bucketization for the COUNT DISTINCT colum in a group-by-count-distinct query. Use the `select a, count(distinct b) from t group by a;` query as an example. If the GROUP BY colum `a` is a low-cardinality column and the COUNT DISTINCT column `b` is a high-cardinality column which has severe data skew, performance bottleneck will occur. In this situation, you can split data in the COUNT DISTINCT column into multiple buckets to balance data and prevent data skew.
 
-  Default value: false, which means this feature is disabled. You must use this variable with `count_distinct_column_buckets`.
+  Default value: false, which means this feature is disabled. You must use this variable with the variable `count_distinct_column_buckets`.
 
   You can also enable bucketization for the COUNT DISTINCT column by adding the `skew` hint to your query, for example, `select a,count(distinct [skew] b) from t group by a;`.
 
@@ -347,7 +347,7 @@ SELECT /*+ SET_VAR
 
 * new_planner_optimize_timeout
 
-  The timeout duration of the query optimizer. The timeout often occurs when a query has too many joins. An error is returned and the query is stopped when the optimizer times out, which affects the query performance. You can set this variable to a larger value based on your query or contact StarRocks technical support for troubleshooting.
+  The timeout duration of the query optimizer. When the optimizer times out, an error is returned and the query is stopped, which affects the query performance. You can set this variable to a larger value based on your query or contact StarRocks technical support for troubleshooting. A timeout often occurs when a query has too many joins.
 
   Default value: 3000. Unit: seconds.
 
