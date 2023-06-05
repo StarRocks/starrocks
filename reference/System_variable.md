@@ -127,7 +127,7 @@ SELECT /*+ SET_VAR
 
 * count_distinct_column_buckets（2.5 及以后）
 
-  group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该参数只有在 `enable_distinct_column_bucketization` 开启后才会生效。默认值：1024。
+  group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该变量只有在 `enable_distinct_column_bucketization` 设置为 `true` 时才会生效。默认值：1024。
 
 * default_rowset_type (global)
 
@@ -149,7 +149,7 @@ SELECT /*+ SET_VAR
 
   是否在 group-by-count-distinct 查询中开启对 count distinct 列的分桶优化。在类似 `select a, count(distinct b) from t group by a;` 的查询中，如果 group by 列 a 为低基数列，count distinct 列 b 为高基数列且发生严重数据倾斜时，会引发查询性能瓶颈。可以通过对 count distinct 列进行分桶来平衡数据，规避数据倾斜。
 
-  默认值：false，表示不开启。该参数需要与 `count_distinct_column_buckets` 配合使用。
+  默认值：false，表示不开启。该变量需要与 `count_distinct_column_buckets` 配合使用。
 
   您也可以通过添加 `skew` hint 来开启 count distinct 列的分桶优化，例如 `select a,count(distinct [skew] b) from t group by a;`。
 
