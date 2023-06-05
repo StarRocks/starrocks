@@ -15,11 +15,11 @@
 #include "fs/fs_jindo.h"
 
 #include <fmt/format.h>
-#include <fstream>
 #include <pwd.h>
 
-#include <utility>
 #include <filesystem>
+#include <fstream>
+#include <utility>
 
 #include "common/config.h"
 #include "common/s3_uri.h"
@@ -34,7 +34,7 @@ using namespace fmt::literals;
 namespace starrocks {
 
 int JindoSdkConfig::loadConfig(const std::string& config) {
-    std::ifstream infile { config };
+    std::ifstream infile{config};
     std::string line, seg;
     while (std::getline(infile, line)) {
         _text.push_back(line);
@@ -44,14 +44,13 @@ int JindoSdkConfig::loadConfig(const std::string& config) {
             // is empty
         } else if (line[0] == '#' || line[0] == ';') {
             // is comment
-        } else if (line.size() >= 3
-                   && line.front() == '[' && line.back() == ']') {
+        } else if (line.size() >= 3 && line.front() == '[' && line.back() == ']') {
             // is section
         } else {
             auto pos = line.find_first_of('=');
             std::string key = trim(line.substr(0, pos));
             std::string value = trim(line.substr(pos + 1));
-            _configs[key] = pos == std::string::npos ? std::string():value;
+            _configs[key] = pos == std::string::npos ? std::string() : value;
         }
     }
     return 0;
@@ -64,8 +63,7 @@ HashMap& JindoSdkConfig::get_configs() {
 // trim from start
 std::string JindoSdkConfig::lefttrim(const std::string& s) {
     std::string r = s;
-    r.erase(r.begin(), std::find_if(
-            r.begin(), r.end(), std::not1(IsSpace())));
+    r.erase(r.begin(), std::find_if(r.begin(), r.end(), std::not1(IsSpace())));
     return r;
 }
 
@@ -77,7 +75,7 @@ std::string JindoSdkConfig::righttrim(const std::string& s) {
 }
 
 // trim from both ends
-std::string JindoSdkConfig::trim(const std::string &s) {
+std::string JindoSdkConfig::trim(const std::string& s) {
     return righttrim(lefttrim(s));
 }
 

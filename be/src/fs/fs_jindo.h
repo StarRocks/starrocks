@@ -22,10 +22,8 @@
 
 namespace starrocks {
 
-struct IsSpace: std::unary_function<int, bool> {
-    bool operator()(int ch) const {
-        return (ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t');
-    }
+struct IsSpace : std::unary_function<int, bool> {
+    bool operator()(int ch) const { return (ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t'); }
 };
 
 typedef std::unordered_map<std::string, std::string> HashMap;
@@ -47,7 +45,7 @@ private:
     std::string righttrim(const std::string& s);
 
     // trim from both ends
-    std::string trim(const std::string &s);
+    std::string trim(const std::string& s);
 
 private:
     std::vector<std::string> _text;

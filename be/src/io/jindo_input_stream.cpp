@@ -50,9 +50,10 @@ StatusOr<int64_t> JindoInputStream::read(void* out, int64_t count) {
     }
     // relax check exception due to the wrong params from CSV scanner
     if (bytes_read < count) {
-        std::string msg = fmt::format("No enough data to read from the file {}, current offset = {}, bytes_read = {},"
-                                      "bytes_to_read = {}, bytes last read = {}",
-                                      _file_path, _offset + bytes_read, bytes_read, bytes_to_read, bytes);
+        std::string msg = fmt::format(
+                "No enough data to read from the file {}, current offset = {}, bytes_read = {},"
+                "bytes_to_read = {}, bytes last read = {}",
+                _file_path, _offset + bytes_read, bytes_read, bytes_to_read, bytes);
         LOG(WARNING) << msg;
     }
     return bytes_read;
@@ -73,8 +74,7 @@ StatusOr<int64_t> JindoInputStream::get_size() {
         JdoContext_t jdo_ctx = jdo_createContext1(_jindo_client);
         bool file_exist = jdo_exists(jdo_ctx, _file_path.c_str());
         if (UNLIKELY(!file_exist)) {
-            std::string msg = fmt::format("File {} does not exist, request offset = {}",
-                                          _file_path, _offset);
+            std::string msg = fmt::format("File {} does not exist, request offset = {}", _file_path, _offset);
             LOG(ERROR) << msg;
             return Status::IOError(msg);
         }
