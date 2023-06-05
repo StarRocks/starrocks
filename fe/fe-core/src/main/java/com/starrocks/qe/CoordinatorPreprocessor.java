@@ -778,7 +778,7 @@ public class CoordinatorPreprocessor {
             if (params.instanceExecParams.isEmpty()) {
                 Reference<Long> backendIdRef = new Reference<>();
                 TNetworkAddress execHostport;
-                if (usedComputeNode) {
+                if (usedComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                     execHostport = SimpleScheduler.getComputeNodeHost(this.idToComputeNode, backendIdRef);
                 } else {
                     execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
@@ -1347,8 +1347,6 @@ public class CoordinatorPreprocessor {
             computeNode =
                     GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
             if (computeNode == null) {
-                // for debug
-                LOG.debug("computeNode is null in toRpcHost");
                 throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
             }
         }
@@ -1989,8 +1987,6 @@ public class CoordinatorPreprocessor {
                         idToBackend, idToComputeNode, backendIdRef);
 
                 if (execHostPort == null) {
-                    // for debug
-                    LOG.debug("execHostPort is null in computeScanRangeAssignment");
                     throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR
                             + backendInfosString(false));
                 }
