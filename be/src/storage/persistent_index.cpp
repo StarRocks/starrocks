@@ -646,6 +646,7 @@ public:
             const auto value = values[idx];
             uint64_t hash = FixedKeyHash<KeySize>()(key);
             if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); inserted) {
+                old_values[idx] = NullIndexValue;
                 not_found->key_infos.emplace_back((uint32_t)idx, hash);
             } else {
                 auto old_value = it->second;
@@ -933,6 +934,7 @@ public:
             put_fixed64_le(&composite_key, value.get_value());
             uint64_t hash = StringHasher2()(composite_key);
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
+                old_values[idx] = NullIndexValue;
                 not_found->key_infos.emplace_back((uint32_t)idx, hash);
                 _total_kv_pairs_usage += composite_key.size();
             } else {
