@@ -69,6 +69,6 @@ public class DistributionDisjointSet {
     }
 
     public boolean isConnected(DistributionCol col1, DistributionCol col2) {
-        return find(col1) == find(col2);
+        return find(col1).equals(col2);
     }
 }
