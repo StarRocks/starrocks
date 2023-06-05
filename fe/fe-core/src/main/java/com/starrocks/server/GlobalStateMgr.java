@@ -1449,6 +1449,7 @@ public class GlobalStateMgr {
                         .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
                         .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
                         .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
+                        .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                         .build();
                 try {
                     loadHeaderV2(dis);
@@ -1857,6 +1858,7 @@ public class GlobalStateMgr {
                     streamLoadMgr.save(dos);
                     MaterializedViewMgr.getInstance().save(dos);
                     globalFunctionMgr.save(dos);
+                    storageVolumeMgr.save(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("Save meta block failed ", e);
                     throw new IOException("Save meta block failed ", e);

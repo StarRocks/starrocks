@@ -226,6 +226,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
                 table = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
                 metastore.setLakeStorageInfo(table, sv.getId(), properties);
+                svm.bindTableToStorageVolume(sv.getId(), table.getId());
                 table.setStorageVolume(sv.getName());
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);

@@ -21,9 +21,13 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.credential.CloudConfigurationConstants;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -158,5 +162,14 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 return params;
         }
         return params;
+    }
+
+    @Override
+    public void load(SRMetaBlockReader reader)
+            throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
+        SharedDataStorageVolumeMgr data = reader.readJson(SharedDataStorageVolumeMgr.class);
+        this.storageVolumeToDbs = data.storageVolumeToDbs;
+        this.storageVolumeToTables = data.storageVolumeToTables;
+        this.defaultStorageVolumeId = data.defaultStorageVolumeId;
     }
 }

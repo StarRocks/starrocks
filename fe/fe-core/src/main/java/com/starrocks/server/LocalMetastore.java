@@ -423,7 +423,11 @@ public class LocalMetastore implements ConnectorMetadata {
         tryLock(true);
         try {
             Database db = new Database(createDbInfo.getId(), createDbInfo.getDbName());
+            db.setStorageVolumeId(createDbInfo.getStorageVolumeId());
             unprotectCreateDb(db);
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                stateMgr.getStorageVolumeMgr().bindDbToStorageVolume(db.getStorageVolumeId(), db.getId());
+            }
             LOG.info("finish replay create db, name: {}, id: {}", db.getOriginName(), db.getId());
         } finally {
             unlock();
@@ -477,6 +481,12 @@ public class LocalMetastore implements ConnectorMetadata {
                     .stream().map(Task::getId).collect(Collectors.toList());
             taskManager.dropTasks(dropTaskIdList, false);
 
+            // 5. unbind db from storage volume
+            StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && !db.getStorageVolumeId().isEmpty()) {
+                storageVolumeMgr.unbindDbToStorageVolume(db.getStorageVolumeId(), db.getId());
+            }
+
             DropDbInfo info = new DropDbInfo(db.getFullName(), isForceDrop);
             GlobalStateMgr.getCurrentState().getEditLog().logDropDb(info);
 
@@ -523,6 +533,10 @@ public class LocalMetastore implements ConnectorMetadata {
 
             fullNameToDb.remove(dbName);
             idToDb.remove(db.getId());
+
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && !db.getStorageVolumeId().isEmpty()) {
+                stateMgr.getStorageVolumeMgr().unbindDbToStorageVolume(db.getStorageVolumeId(), db.getId());
+            }
 
             LOG.info("finish replay drop db, name: {}, id: {}", dbName, db.getId());
         } finally {
@@ -1996,7 +2010,16 @@ public class LocalMetastore implements ConnectorMetadata {
                         }
                     }
                 } // end for partitions
+
                 DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(dbId, olapTable);
+            }
+        }
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && table.isNativeTable()) {
+            String storageVolumeId = ((OlapTable) table).getStorageVolumeId();
+            if (!storageVolumeId.isEmpty()) {
+                GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                        .bindTableToStorageVolume(storageVolumeId, table.getId());
             }
         }
     }

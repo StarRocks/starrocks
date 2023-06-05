@@ -20,12 +20,21 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.persist.DropStorageVolumeLog;
+import com.starrocks.persist.SetDefaultStorageVolumeLog;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.storagevolume.StorageVolume;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -137,6 +146,8 @@ public abstract class StorageVolumeMgr {
             StorageVolume sv = getStorageVolumeByName(svKey);
             Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svKey);
             Preconditions.checkState(sv.getEnabled(), "Storage volume '%s' is disabled", svKey);
+            SetDefaultStorageVolumeLog log = new SetDefaultStorageVolumeLog(sv.getId());
+            GlobalStateMgr.getCurrentState().getEditLog().logSetDefaultStorageVolume(log);
             this.defaultStorageVolumeId = sv.getId();
         }
     }
@@ -210,7 +221,28 @@ public abstract class StorageVolumeMgr {
         }
     }
 
-    public abstract StorageVolume getStorageVolumeByName(String svName) throws AnalysisException;
+    public void replaySetDefaultStorageVolume(SetDefaultStorageVolumeLog info) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            defaultStorageVolumeId = info.getId();
+        }
+    }
+
+    public void replayCreateStorageVolume(StorageVolume sv) {}
+
+    public void replayUpdateStorageVolume(StorageVolume sv) {}
+
+    public void replayDropStorageVolume(DropStorageVolumeLog info) {}
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.STORAGE_VOLUME_MGR, 1);
+        writer.writeJson(this);
+        writer.close();
+    }
+
+    public abstract void load(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException;
+
+    public abstract StorageVolume getStorageVolumeByName(String svKey) throws AnalysisException;
 
     public abstract StorageVolume getStorageVolume(String storageVolumeId);
 

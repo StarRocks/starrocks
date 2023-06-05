@@ -102,6 +102,7 @@ import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeStatus;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -1047,6 +1048,27 @@ public class EditLog {
                     MaterializedViewMgr.getInstance().replayEpoch(epoch);
                     break;
                 }
+                case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME: {
+                    SetDefaultStorageVolumeLog info = (SetDefaultStorageVolumeLog) journal.getData();
+                    globalStateMgr.getStorageVolumeMgr().replaySetDefaultStorageVolume(info);
+                    break;
+                }
+                case OperationType.OP_CREATE_STORAGE_VOLUME: {
+                    StorageVolume sv = (StorageVolume) journal.getData();
+                    globalStateMgr.getStorageVolumeMgr().replayCreateStorageVolume(sv);
+                    break;
+                }
+                case OperationType.OP_UPDATE_STORAGE_VOLUME: {
+                    StorageVolume sv = (StorageVolume) journal.getData();
+                    globalStateMgr.getStorageVolumeMgr().replayUpdateStorageVolume(sv);
+                    break;
+                }
+                case OperationType.OP_DROP_STORAGE_VOLUME: {
+                    DropStorageVolumeLog info = (DropStorageVolumeLog) journal.getData();
+                    globalStateMgr.getStorageVolumeMgr().replayDropStorageVolume(info);
+                    break;
+                }
+
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1165,6 +1187,7 @@ public class EditLog {
     public void logCreateDb(Database db) {
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             CreateDbInfo createDbInfo = new CreateDbInfo(db.getId(), db.getFullName());
+            createDbInfo.setStorageVolumeId(db.getStorageVolumeId());
             logJsonObject(OperationType.OP_CREATE_DB_V2, createDbInfo);
         } else {
             logEdit(OperationType.OP_CREATE_DB, db);
@@ -2014,4 +2037,19 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_TASK, changedTask);
     }
 
+    public void logSetDefaultStorageVolume(SetDefaultStorageVolumeLog info) {
+        logEdit(OperationType.OP_SET_DEFAULT_STORAGE_VOLUME, info);
+    }
+
+    public void logCreateStorageVolume(StorageVolume storageVolume) {
+        logEdit(OperationType.OP_CREATE_STORAGE_VOLUME, storageVolume);
+    }
+
+    public void logUpdateStorageVolume(StorageVolume storageVolume) {
+        logEdit(OperationType.OP_UPDATE_STORAGE_VOLUME, storageVolume);
+    }
+
+    public void logDropStorageVolume(DropStorageVolumeLog info) {
+        logEdit(OperationType.OP_DROP_STORAGE_VOLUME, info);
+    }
 }

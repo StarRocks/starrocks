@@ -59,6 +59,7 @@ import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -109,6 +110,8 @@ public class Database extends MetaObject implements Writable {
     private volatile long dataQuotaBytes;
     @SerializedName(value = "r")
     private volatile long replicaQuotaSize;
+    @SerializedName(value = "storageVolumeId")
+    private String storageVolumeId = "";
 
     private final Map<String, Table> nameToTable;
     private final Map<Long, Table> idToTable;
@@ -128,8 +131,6 @@ public class Database extends MetaObject implements Writable {
 
     // For external database location like hdfs://name_node:9000/user/hive/warehouse/test.db/
     private String location;
-
-    private String storageVolumeId = "";
 
     public Database() {
         this(0, null);
@@ -587,6 +588,13 @@ public class Database extends MetaObject implements Writable {
         if (table != null) {
             this.nameToTable.remove(tableName);
             this.idToTable.remove(table.getId());
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && table.isNativeTable()) {
+                String storageVolumeId = ((OlapTable) table).getStorageVolumeId();
+                if (!storageVolumeId.isEmpty()) {
+                    GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                            .unbindTableToStorageVolume(storageVolumeId, table.getId());
+                }
+            }
         }
     }
 

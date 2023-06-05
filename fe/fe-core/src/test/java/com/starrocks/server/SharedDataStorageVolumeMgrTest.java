@@ -23,7 +23,10 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.storagevolume.StorageVolume;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -48,6 +51,9 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AW
 public class SharedDataStorageVolumeMgrTest {
     @Mocked
     private StarOSAgent starOSAgent;
+
+    @Mocked
+    private EditLog editLog;
 
     @Before
     public void setUp() {
@@ -119,6 +125,19 @@ public class SharedDataStorageVolumeMgrTest {
 
     @Test
     public void testStorageVolumeCRUD() throws AnalysisException, AlreadyExistsException, DdlException {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return editLog;
+            }
+        };
+
+        new Expectations() {
+            {
+                editLog.logSetDefaultStorageVolume((SetDefaultStorageVolumeLog) any);
+            }
+        };
+
         String svKey = "test";
         String svKey1 = "test1";
         // create
@@ -260,6 +279,19 @@ public class SharedDataStorageVolumeMgrTest {
 
     @Test
     public void testCreateOrUpdateBuiltinStorageVolume() throws AnalysisException, DdlException, AlreadyExistsException {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return editLog;
+            }
+        };
+
+        new Expectations() {
+            {
+                editLog.logSetDefaultStorageVolume((SetDefaultStorageVolumeLog) any);
+            }
+        };
+
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
         Assert.assertFalse(sdsvm.exists(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME));
         sdsvm.createOrUpdateBuiltinStorageVolume();
