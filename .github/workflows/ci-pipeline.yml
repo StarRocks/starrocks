@@ -63,9 +63,6 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
-      - name: clean
-        run: rm -rf ${{ github.workspace }}
-
       - name: BRANCH INFO
         id: branch
         run: |
@@ -75,7 +72,6 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          submodules: recursive
 
       - name: Checkout PR
         run: |
@@ -133,14 +129,13 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
     if: ${{ needs.be-checker.outputs.output1 == 'true' }}
     steps:
-      - name: clean
-        run: rm -rf ${{ github.workspace }}
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
 
       - name: Checkout Code
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          submodules: recursive
 
       - name: BRANCH INFO
         id: branch
@@ -176,14 +171,13 @@ jobs:
       instance_id: ${{ steps.update-image.outputs.instance_id }}
       image_cache_id: ${{ steps.update-image.outputs.image_cache_id }}
     steps:
-      - name: clean
-        run: rm -rf ${{ github.workspace }}
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
 
       - name: Checkout Code
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          submodules: recursive
 
       - name: Update Image
         id: update-image
@@ -298,7 +292,7 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
     steps:
       - name: clean
-        run: rm -rf ${{ github.workspace }}
+        run: rm -rf ${{ github.workspace }}/*
 
       - uses: dorny/paths-filter@v2
         id: java-file
@@ -319,7 +313,6 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          submodules: recursive
 
       - name: Checkout PR
         run: |
@@ -361,7 +354,8 @@ jobs:
       - name: clean
         run: |
           set -x
-          rm -rf ${{ github.workspace }}
+          echo ${{ github.workspace }}
+          rm -rf ${{ github.workspace }}/*
 
       - name: BRANCH INFO
         id: branch
@@ -372,7 +366,6 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          submodules: recursive
 
       - name: Checkout PR
         run: |
@@ -618,14 +611,13 @@ jobs:
       BE_NODE: ${{ needs.deploy.outputs.be }}
       BASE_VERSION: ${{needs.build.outputs.base_version}}
     steps:
-      - name: clean
-        run: rm -rf ${{ github.workspace }}
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
 
       - name: Checkout Code
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          submodules: recursive
 
       - name: BRANCH INFO
         id: branch
