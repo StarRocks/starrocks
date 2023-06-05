@@ -243,6 +243,11 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_CREATE_TABLE_V2: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), CreateTableInfo.class);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_DROP_TABLE:
             case OperationType.OP_DROP_ROLLUP: {
                 data = new DropInfo();

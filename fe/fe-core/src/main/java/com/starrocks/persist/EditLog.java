@@ -212,7 +212,8 @@ public class EditLog {
                     globalStateMgr.replayRenameDatabase(dbName, dbInfo.getNewDbName());
                     break;
                 }
-                case OperationType.OP_CREATE_TABLE: {
+                case OperationType.OP_CREATE_TABLE:
+                case OperationType.OP_CREATE_TABLE_V2: {
                     CreateTableInfo info = (CreateTableInfo) journal.getData();
                     LOG.info("Begin to unprotect create table. db = "
                             + info.getDbName() + " table = " + info.getTable().getId());
@@ -1137,7 +1138,11 @@ public class EditLog {
     }
 
     public void logCreateTable(CreateTableInfo info) {
-        logEdit(OperationType.OP_CREATE_TABLE, info);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_CREATE_TABLE_V2, info);
+        } else {
+            logEdit(OperationType.OP_CREATE_TABLE, info);
+        }
     }
 
     public void logCreateMaterializedView(CreateTableInfo info) {
