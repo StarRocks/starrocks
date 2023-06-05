@@ -5302,26 +5302,31 @@ TEST_F(ArrayFunctionsTest, array_match_nullable) {
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(int8_t)1, Datum()});
     src_column->append_datum(DatumArray{(int8_t)0, Datum()});
+    src_column->append_datum(DatumArray{});
+
 
     auto dest_column = ArrayMatch<true>::process(nullptr, {src_column});
     ASSERT_TRUE(dest_column->is_nullable());
-    ASSERT_EQ(dest_column->size(), 6);
+    ASSERT_EQ(dest_column->size(), 7);
     ASSERT_TRUE(dest_column->get(0).get_int8());
     ASSERT_FALSE(dest_column->get(1).get_int8());
     ASSERT_TRUE(dest_column->get(2).get_int8());
     ASSERT_TRUE(dest_column->get(3).is_null());
     ASSERT_TRUE(dest_column->get(4).get_int8());
     ASSERT_TRUE(dest_column->get(5).is_null());
+    ASSERT_FALSE(dest_column->get(6).get_int8());
+
 
     dest_column = ArrayMatch<false>::process(nullptr, {src_column});
     ASSERT_TRUE(dest_column->is_nullable());
-    ASSERT_EQ(dest_column->size(), 6);
+    ASSERT_EQ(dest_column->size(), 7);
     ASSERT_FALSE(dest_column->get(0).get_int8());
     ASSERT_FALSE(dest_column->get(1).get_int8());
     ASSERT_TRUE(dest_column->get(2).get_int8());
     ASSERT_TRUE(dest_column->get(3).is_null());
     ASSERT_TRUE(dest_column->get(4).is_null());
     ASSERT_FALSE(dest_column->get(5).get_int8());
+    ASSERT_TRUE(dest_column->get(6).get_int8());
 }
 
 TEST_F(ArrayFunctionsTest, array_match_not_null) {
@@ -5332,26 +5337,30 @@ TEST_F(ArrayFunctionsTest, array_match_not_null) {
     src_column->append_datum(DatumArray{Datum()});
     src_column->append_datum(DatumArray{(int8_t)1, Datum()});
     src_column->append_datum(DatumArray{(int8_t)0, Datum()});
+    src_column->append_datum(DatumArray{});
 
     auto dest_column = ArrayMatch<true>::process(nullptr, {src_column});
     ASSERT_TRUE(dest_column->is_nullable());
-    ASSERT_EQ(dest_column->size(), 6);
+    ASSERT_EQ(dest_column->size(), 7);
     ASSERT_TRUE(dest_column->get(0).get_int8());
     ASSERT_FALSE(dest_column->get(1).get_int8());
     ASSERT_TRUE(dest_column->get(2).get_int8());
     ASSERT_TRUE(dest_column->get(3).is_null());
     ASSERT_TRUE(dest_column->get(4).get_int8());
     ASSERT_TRUE(dest_column->get(5).is_null());
+    ASSERT_FALSE(dest_column->get(6).get_int8());
+
 
     dest_column = ArrayMatch<false>::process(nullptr, {src_column});
     ASSERT_TRUE(dest_column->is_nullable());
-    ASSERT_EQ(dest_column->size(), 6);
+    ASSERT_EQ(dest_column->size(), 7);
     ASSERT_FALSE(dest_column->get(0).get_int8());
     ASSERT_FALSE(dest_column->get(1).get_int8());
     ASSERT_TRUE(dest_column->get(2).get_int8());
     ASSERT_TRUE(dest_column->get(3).is_null());
     ASSERT_TRUE(dest_column->get(4).is_null());
     ASSERT_FALSE(dest_column->get(5).get_int8());
+    ASSERT_TRUE(dest_column->get(6).get_int8());
 }
 
 TEST_F(ArrayFunctionsTest, array_match_only_null) {
@@ -5369,13 +5378,26 @@ TEST_F(ArrayFunctionsTest, array_match_only_null) {
     // test const
     {
         auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
-        src_column->append_datum(DatumArray{"1", "0"});
+        src_column->append_datum(DatumArray{(uint8) false, (uint8) true});
         src_column = std::make_shared<ConstColumn>(src_column, 3);
         auto dest_column = ArrayMatch<false>::process(nullptr, {src_column});
         ASSERT_EQ(dest_column->size(), 3);
         ASSERT_FALSE(dest_column->get(0).get_int8());
 
         dest_column = ArrayMatch<true>::process(nullptr, {src_column});
+        ASSERT_EQ(dest_column->size(), 3);
+        ASSERT_TRUE(dest_column->get(0).get_int8());
+    }
+    // test const
+    {
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+        src_column->append_datum(DatumArray{});
+        src_column = std::make_shared<ConstColumn>(src_column, 3);
+        auto dest_column = ArrayMatch<true>::process(nullptr, {src_column});
+        ASSERT_EQ(dest_column->size(), 3);
+        ASSERT_FALSE(dest_column->get(0).get_int8());
+
+        dest_column = ArrayMatch<false>::process(nullptr, {src_column});
         ASSERT_EQ(dest_column->size(), 3);
         ASSERT_TRUE(dest_column->get(0).get_int8());
     }
