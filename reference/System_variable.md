@@ -1,6 +1,6 @@
 # 系统变量
 
-## 变量设置与查看
+## 查看与设置变量
 
 本文介绍 StarRocks 系统支持的变量（system variables）。可以在 MySQL 客户端通过命令 `SHOW VARIABLES` 查看变量。您可以设置（SET）变量在系统全局 (global) 范围内生效，也可以设置变量仅在当前会话 (session) 中生效。
 
@@ -11,12 +11,17 @@ StarRocks 中的变量参考 MySQL 中的变量设置，但**部分变量仅用�
 可以通过 `SHOW VARIABLES [LIKE 'xxx'];` 查看所有或指定的变量。例如：
 
 ```SQL
+
+-- 查看系统中所有变量。
 SHOW VARIABLES;
 
+-- 查看符合匹配规则的变量。
 SHOW VARIABLES LIKE '%time_zone%';
 ```
 
 ### 设置变量
+
+#### 设置变量全局生效或在会话中生效
 
 变量一般可以设置为**全局**生效或**仅当前会话**生效。设置为全局生效后，**后续新的会话**连接中会使用新设置的值，当前会话还会继续使用之前设置的值；设置为仅当前会话生效时，变量仅对当前会话产生作用。
 
@@ -72,7 +77,7 @@ SET exec_mem_limit = 10 * 1024 * 1024 * 1024;
 SET forward_to_master = concat('tr', 'u', 'e');
 ```
 
-### 在单个查询语句中设置变量
+#### 设置变量在单个查询语句中生效
 
 在一些场景中，可能需要对某些查询专门设置变量。可以使用 SET_VAR 提示 (hint) 在查询中设置仅在单个语句内生效的会话变量。举例：
 
@@ -194,7 +199,7 @@ SELECT /*+ SET_VAR
 
 * enable_tablet_internal_parallel
 
-  是否开启自适应 Tablet 并行扫描，使用多个线程并行分段扫描一个 Tablet，可以减少 Tablet 数量对查询能力的限制。默认值为 `true`。自 2.4 版本起，StarRocks 支持该参数。
+  是否开启自适应 Tablet 并行扫描，使用多个线程并行分段扫描一个 Tablet，可以减少 Tablet 数量对查询能力的限制。默认值为 `true`。自 2.3 版本起，StarRocks 支持该参数。
 
 * enable_query_cache (2.5 及以后)
 
@@ -225,6 +230,10 @@ SELECT /*+ SET_VAR
   对于 Broadcast 和 Replicated Join 类型之外的其他 Join，当 Join 的等值条件有多个的情况下：
   * 如果该选项关闭: 则只会产生 Local RF。
   * 如果该选项打开, 则会生成 multi-part GRF, 并且该 GRF 需要携带 multi-column 作为 partition-by 表达式.
+
+* event_scheduler
+
+  用于兼容 MySQL 客户端。无实际作用。
 
 * force_streaming_aggregate
 
@@ -298,11 +307,11 @@ SELECT /*+ SET_VAR
 
 * max_pushdown_conditions_per_column
 
-  该变量的具体含义请参阅 [BE 配置项](../administration/Configuration.md#配置-be-动态参数)中 `max_pushdown_conditions_per_column` 的说明。该变量默认置为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则当前会话中的查询会使用该变量值，而忽略 `be.conf` 中的配置值。
+  该变量的具体含义请参阅 [BE 配置项](../administration/Configuration.md#配置-be-动态参数)中 `max_pushdown_conditions_per_column` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 * max_scan_key_num
 
-  该变量的具体含义请参阅 [BE 配置项](../administration/Configuration.md#配置-be-动态参数)中 `max_scan_key_num` 的说明。该变量默认置为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则当前会话中的查询会使用该变量值，而忽略 `be.conf` 中的配置值。
+  该变量的具体含义请参阅 [BE 配置项](../administration/Configuration.md#配置-be-动态参数)中 `max_scan_key_num` 的说明。该变量默认值为 -1，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 * nested_mv_rewrite_max_level
 
