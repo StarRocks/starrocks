@@ -566,6 +566,7 @@
       + [regexp_extract](/sql-reference/sql-functions/string-functions/regexp_extract.md)
       + [regexp_replace](/sql-reference/sql-functions/string-functions/regexp_replace.md)
     + 条件函数
+      + [case](/sql-reference/sql-functions/condition-functions/coalesce.md)
       + [coalesce](/sql-reference/sql-functions/condition-functions/coalesce.md)
       + [if](/sql-reference/sql-functions/condition-functions/if.md)
       + [ifnull](/sql-reference/sql-functions/condition-functions/ifnull.md)
