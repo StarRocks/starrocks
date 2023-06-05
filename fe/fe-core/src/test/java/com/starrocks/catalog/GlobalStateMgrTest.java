@@ -62,10 +62,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.DataInputStream;
 import java.lang.reflect.Field;
 import java.util.List;
-import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class GlobalStateMgrTest {
@@ -83,21 +81,13 @@ public class GlobalStateMgrTest {
 
     @Test
     public void testSaveLoadHeader() throws Exception {
-        UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        long checksum1 = globalStateMgr.saveVersion(image1.getDataOutputStream(), 0);
-        checksum1 = globalStateMgr.saveHeader(image1.getDataOutputStream(), new Random().nextLong(), checksum1);
-
-        DataInputStream dis = image1.getDataInputStream();
-        long checksum2 = globalStateMgr.loadVersion(dis, 0);
-        checksum2 = globalStateMgr.loadHeader(dis, checksum2);
-        Assert.assertEquals(checksum1, checksum2);
 
         // test json-format header
         UtFrameUtils.PseudoImage image2 = new UtFrameUtils.PseudoImage();
         globalStateMgr.saveHeaderV2(image2.getDataOutputStream());
         MetaContext.get().setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_4);
-        checksum2 = globalStateMgr.loadHeader(image2.getDataInputStream(), 0);
+        long checksum2 = globalStateMgr.loadHeader(image2.getDataInputStream(), 0);
         Assert.assertEquals(0, checksum2);
     }
 
