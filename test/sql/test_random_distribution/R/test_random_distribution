@@ -58,7 +58,7 @@ t	CREATE TABLE `t` (
 DUPLICATE KEY(`k`, `v`)
 COMMENT "OLAP"
 PARTITION BY date_trunc('day', k)
-DISTRIBUTED BY RANDOM BUCKETS 6
+DISTRIBUTED BY RANDOM
 PROPERTIES (
 "replication_num" = "3",
 "in_memory" = "false",

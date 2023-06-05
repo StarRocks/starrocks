@@ -159,7 +159,7 @@ public class CreateTableAutoTabletTest {
         } finally {
             db.readUnlock();
         }
-        Assert.assertEquals(bucketNum, 20);
+        Assert.assertEquals(bucketNum, 10);
     }
 
     @Test
@@ -209,7 +209,7 @@ public class CreateTableAutoTabletTest {
         } finally {
             db.readUnlock();
         }
-        Assert.assertEquals(bucketNum, 20);
+        Assert.assertEquals(bucketNum, 10);
     }
 
     @Test
