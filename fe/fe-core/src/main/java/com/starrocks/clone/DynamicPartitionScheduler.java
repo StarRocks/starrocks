@@ -250,18 +250,21 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
                             dynamicPartitionProperty.getTimeUnit());
             SingleRangePartitionDesc rangePartitionDesc =
                     new SingleRangePartitionDesc(false, partitionName, partitionKeyDesc, partitionProperties);
+            if (dynamicPartitionProperty.getBuckets() == 0) {
+                addPartitionClauses.add(new AddPartitionClause(rangePartitionDesc, null, null, false));
+            } else {
+                // construct distribution desc
+                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) olapTable.getDefaultDistributionInfo();
+                List<String> distColumnNames = new ArrayList<>();
+                for (Column distributionColumn : hashDistributionInfo.getDistributionColumns()) {
+                    distColumnNames.add(distributionColumn.getName());
+                }
+                DistributionDesc distributionDesc = new HashDistributionDesc(dynamicPartitionProperty.getBuckets(),
+                                                                             distColumnNames);
 
-            // construct distribution desc
-            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) olapTable.getDefaultDistributionInfo();
-            List<String> distColumnNames = new ArrayList<>();
-            for (Column distributionColumn : hashDistributionInfo.getDistributionColumns()) {
-                distColumnNames.add(distributionColumn.getName());
+                // add partition according to partition desc and distribution desc
+                addPartitionClauses.add(new AddPartitionClause(rangePartitionDesc, distributionDesc, null, false));
             }
-            DistributionDesc distributionDesc =
-                    new HashDistributionDesc(dynamicPartitionProperty.getBuckets(), distColumnNames);
-
-            // add partition according to partition desc and distribution desc
-            addPartitionClauses.add(new AddPartitionClause(rangePartitionDesc, distributionDesc, null, false));
         }
         return addPartitionClauses;
     }
