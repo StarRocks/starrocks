@@ -45,9 +45,7 @@ ALTER DATABASE db_name SET REPLICA QUOTA <quota>
     ALTER DATABASE example_db SET DATA QUOTA 10995116277760;
     -- 上述单位为字节，等价于下面的语句
     ALTER DATABASE example_db SET DATA QUOTA 10T;
-
     ALTER DATABASE example_db SET DATA QUOTA 100G;
-
     ALTER DATABASE example_db SET DATA QUOTA 200M;
     ```
 
