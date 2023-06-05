@@ -539,7 +539,11 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
     }
 
     boolean process(OptExpression root) {
-        if (!root.getInputs().stream().allMatch(this::process)) {
+        boolean walkUpwards = true;
+        for (OptExpression child : root.getInputs()) {
+            walkUpwards &= process(child);
+        }
+        if (!walkUpwards) {
             return false;
         }
         return root.getOp().accept(this, root, null);
@@ -717,7 +721,7 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
         }
     }
 
-    Map<ColumnRefOperator, ColumnRefOperator> rewriteMapping = Maps.newConcurrentMap();
+    BiMap<ColumnRefOperator, ColumnRefOperator> rewriteMapping = HashBiMap.create();
     Set<OptExpression> prunedTables = Sets.newHashSet();
 
     public void pruneTables(List<ColumnRefOperator> outputColumnRefs) {
@@ -783,11 +787,11 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
             // parent can not be pruned if any of its offsprings is can not be pruned
             // NOTICE: if (!root.getChildren().stream().allMatch(this::pruneTable)) can
             // short-circuit.
-            boolean allChildPruned = true;
-            for (CPNode child: root.getChildren()) {
-                allChildPruned &= pruneTable(child);
+            boolean walkUpwards = true;
+            for (CPNode child : root.getChildren()) {
+                walkUpwards &= pruneTable(child);
             }
-            if (!allChildPruned) {
+            if (!walkUpwards) {
                 return false;
             }
 
@@ -938,9 +942,9 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
 
         Optional<OptExpression> optNewOptExpr = new Rewriter(rewriteMapping, prunedTables).process(optExpression);
         if (optNewOptExpr.isPresent()) {
-            Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
-            rewriteMapping.forEach((k, v) -> columnRefMap.put(v, k));
-            return Collections.singletonList(OptExpression.create(new LogicalProjectOperator(columnRefMap),
+            Map<ColumnRefOperator, ScalarOperator> columRefMap = Maps.newHashMap();
+            columRefMap.putAll(rewriteMapping.inverse());
+            return Collections.singletonList(OptExpression.create(new LogicalProjectOperator(columRefMap),
                     Collections.singletonList(optNewOptExpr.get())));
         } else {
             return Collections.singletonList(optExpression);
