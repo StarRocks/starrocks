@@ -50,7 +50,7 @@ COMMENT "my first starrocks table"
 DISTRIBUTED BY HASH(k1) BUCKETS 10;
 ```
 
-查看表`example_table`的建表语句。
+查看表 `example_table` 的建表语句。注意建表时如果未指定 PROPERTIES，SHOW CREATE TABLE 语句会显示默认的 PROPERTIES。
 
 ```Plain
 SHOW CREATE TABLE example_db.example_table;
@@ -69,8 +69,10 @@ COMMENT "my first starrocks table"
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10 
 PROPERTIES (
 "replication_num" = "3",
-"storage_format" = "DEFAULT",
-"enable_persistent_index" = "false"
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
 ); |
 +---------------+----------------------------------------------------------+
 ```
