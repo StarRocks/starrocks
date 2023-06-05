@@ -21,11 +21,13 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -96,16 +98,17 @@ public class TypeManager {
         if (t1.getFields().size() != t1.getFields().size()) {
             return Type.INVALID;
         }
-        List<Type> fieldTypes = Lists.newArrayList();
+        ArrayList<StructField> fields = Lists.newArrayList();
         for (int i = 0; i < t1.getFields().size(); ++i) {
             Type fieldCommon = getCommonSuperType(t1.getField(i).getType(), t2.getField(i).getType());
             if (!fieldCommon.isValid()) {
                 return Type.INVALID;
             }
-            fieldTypes.add(fieldCommon);
+
+            // default t1's field name
+            fields.add(new StructField(t1.getField(i).getName(), fieldCommon));
         }
-        // TODO(alvin): needed to assign field names for this struct type
-        return new StructType(fieldTypes);
+        return new StructType(fields);
     }
 
     public static Expr addCastExpr(Expr expr, Type targetType) {

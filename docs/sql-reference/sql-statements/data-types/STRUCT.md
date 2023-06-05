@@ -67,7 +67,7 @@ There are two ways to write struct values to StarRocks. Insert into is suitable 
 * **INSERT INTO**
 
   ~~~SQL
-  create table t0(c0 INT, c1 `STRUCT<a INT, b INT>`)duplicate key(c0);
+  create table t0(c0 INT, c1 STRUCT<a INT, b INT>)duplicate key(c0);
   INSERT INTO t0 VALUES(1, row(1, 1));
   ~~~
 

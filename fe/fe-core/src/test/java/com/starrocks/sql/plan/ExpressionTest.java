@@ -1510,4 +1510,28 @@ public class ExpressionTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertCContains(plan, "row('a', 1, 'a', 2).col1");
     }
+
+    @Test
+    public void testStructCollection() throws Exception {
+        String sql = "select row('a', 1, 'a', 2)[1]";
+        String plan = getVerboseExplain(sql);
+        assertCContains(plan, "row('a', 1, 'a', 2).col1");
+
+        sql = "select row('a', 1, 'a', 2)[4]";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "row('a', 1, 'a', 2).col4");
+
+        sql = "select row('a', 1, 'a', 2)[4]";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "row('a', 1, 'a', 2).col4");
+
+        sql = "select row('a', 1, 'a', 2)[-1]";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "row('a', 1, 'a', 2).col4");
+
+        sql = "select row('a', 1, 'a', 2)[-4]";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "row('a', 1, 'a', 2).col1");
+    }
+
 }
