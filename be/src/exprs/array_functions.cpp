@@ -28,7 +28,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContex
     DCHECK_EQ(1, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    Column* arg0 = columns[0].get();
+    Column* arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]).get();
     const size_t num_rows = arg0->size();
 
     auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
