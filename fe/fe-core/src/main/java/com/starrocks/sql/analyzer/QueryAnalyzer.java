@@ -726,7 +726,8 @@ public class QueryAnalyzer {
 
                     Type commonType = TypeManager.getCommonSuperType(outputTypes[fieldIdx],
                             relation.getRelationFields().getFieldByIndex(fieldIdx).getType());
-                    if (!commonType.isValid()) {
+                    // @todo: support struct type
+                    if (!commonType.isValid() || commonType.isStructType()) {
                         throw new SemanticException(String.format("Incompatible return types '%s' and '%s'",
                                 outputTypes[fieldIdx],
                                 relation.getRelationFields().getFieldByIndex(fieldIdx).getType()));
@@ -789,7 +790,8 @@ public class QueryAnalyzer {
                     analyzeExpression(row.get(fieldIdx), analyzeState, scope);
                     Type commonType =
                             TypeManager.getCommonSuperType(outputTypes[fieldIdx], row.get(fieldIdx).getType());
-                    if (!commonType.isValid()) {
+                    // @todo: support struct type
+                    if (!commonType.isValid() || commonType.isStructType()) {
                         throw new SemanticException(String.format("Incompatible return types '%s' and '%s'",
                                 outputTypes[fieldIdx], row.get(fieldIdx).getType()));
                     }

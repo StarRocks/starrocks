@@ -1031,18 +1031,16 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         if (!txnOperated) {
             return;
         }
-        collectStatisticsOnFirstLoadAsync(txnState, () -> {
-            unprotectUpdateLoadingStatus(txnState);
-            updateState(JobState.FINISHED);
-        });
+        collectStatisticsOnFirstLoadAsync(txnState);
+        unprotectUpdateLoadingStatus(txnState);
+        updateState(JobState.FINISHED);
     }
 
-    private void collectStatisticsOnFirstLoadAsync(TransactionState txnState, Runnable listener) {
+    private void collectStatisticsOnFirstLoadAsync(TransactionState txnState) {
         Database db;
         try {
             db = getDb();
         } catch (MetaNotFoundException e) {
-            listener.run();
             return;
         }
 
@@ -1053,14 +1051,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
         if (tables.isEmpty()) {
-            listener.run();
             return;
         }
 
-        StatisticUtils.CountedListener counteredListener =
-                StatisticUtils.createCounteredListener(tables.size(), listener);
         for (Table table : tables) {
-            StatisticUtils.triggerCollectionOnFirstLoad(txnState, db, table, false, counteredListener);
+            StatisticUtils.triggerCollectionOnFirstLoad(txnState, db, table, false);
         }
     }
 

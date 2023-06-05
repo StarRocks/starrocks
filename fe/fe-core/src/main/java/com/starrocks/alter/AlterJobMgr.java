@@ -136,7 +136,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Collections;
@@ -651,7 +650,7 @@ public class AlterJobMgr {
         try {
             MaterializedView mv = (MaterializedView) db.getTable(tableId);
             TableProperty tableProperty = mv.getTableProperty();
-            if  (tableProperty == null) {
+            if (tableProperty == null) {
                 tableProperty = new TableProperty(properties);
                 mv.setTableProperty(tableProperty.buildProperty(opCode));
             } else {
@@ -1208,38 +1207,33 @@ public class AlterJobMgr {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.ALTER_MGR);
-        try {
-            int schemaChangeJobSize = reader.readJson(int.class);
-            for (int i = 0; i != schemaChangeJobSize; ++i) {
-                AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
-                schemaChangeHandler.addAlterJobV2(alterJobV2);
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int schemaChangeJobSize = reader.readJson(int.class);
+        for (int i = 0; i != schemaChangeJobSize; ++i) {
+            AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
+            schemaChangeHandler.addAlterJobV2(alterJobV2);
 
-                // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
-                // to prevent TabletInvertedIndex data loss,
-                // So just use AlterJob.replay() instead of AlterHandler.replay().
-                if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
-                    alterJobV2.replay(alterJobV2);
-                    LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
-                }
+            // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
+            // to prevent TabletInvertedIndex data loss,
+            // So just use AlterJob.replay() instead of AlterHandler.replay().
+            if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
+                alterJobV2.replay(alterJobV2);
+                LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
             }
+        }
 
-            int materializedViewJobSize = reader.readJson(int.class);
-            for (int i = 0; i != materializedViewJobSize; ++i) {
-                AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
-                materializedViewHandler.addAlterJobV2(alterJobV2);
+        int materializedViewJobSize = reader.readJson(int.class);
+        for (int i = 0; i != materializedViewJobSize; ++i) {
+            AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
+            materializedViewHandler.addAlterJobV2(alterJobV2);
 
-                // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
-                // to prevent TabletInvertedIndex data loss,
-                // So just use AlterJob.replay() instead of AlterHandler.replay().
-                if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
-                    alterJobV2.replay(alterJobV2);
-                    LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
-                }
+            // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
+            // to prevent TabletInvertedIndex data loss,
+            // So just use AlterJob.replay() instead of AlterHandler.replay().
+            if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
+                alterJobV2.replay(alterJobV2);
+                LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
             }
-        } finally {
-            reader.close();
         }
     }
 }

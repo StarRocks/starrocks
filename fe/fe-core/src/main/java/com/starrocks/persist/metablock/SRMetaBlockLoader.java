@@ -12,17 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+package com.starrocks.persist.metablock;
 
-#include "exprs/function_helper.h"
+import java.io.IOException;
 
-namespace starrocks {
-
-class StructFunctions {
-public:
-    DEFINE_VECTORIZED_FN(new_struct);
-
-    DEFINE_VECTORIZED_FN(named_struct);
-};
-
-} // namespace starrocks
+public interface SRMetaBlockLoader {
+    void apply(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException;
+}
