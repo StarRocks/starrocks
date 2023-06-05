@@ -682,7 +682,7 @@ select array_agg(s_1) from array_test;
 -- !result
 select array_agg(i_1) from array_test;
 -- result:
-[[1,2,3,4,10],[1,2,3,4,10],null,[1,2,3,4,10]]
+[null,[1,2,3,4,10],[1,2,3,4,10],[1,2,3,4,10]]
 -- !result
 select array_agg(f_1) from array_test;
 -- result:
@@ -702,7 +702,7 @@ select array_agg(d_3) from array_test;
 -- !result
 select array_agg(d_4) from array_test;
 -- result:
-[null,[4.00000,2.10000,3.20000,10.00000,20.00000,3.00000,1.10000,-10.00000,-100.00000,100.00000,10.00000,4.30000],[4.00000,2.10000,3.20000,10.00000,2.00000,3.00000,1.10000,-1.00000,-10.00000,100.00000,1.00000,4.30000],[4.00000,2.10000,3.20000,10.00000,2.00000,3.00000,1.10000,-1.00000,-10.00000,100.00000,1.00000,4.30000]]
+[[4.00000,2.10000,3.20000,10.00000,2.00000,3.00000,1.10000,-1.00000,-10.00000,100.00000,1.00000,4.30000],[4.00000,2.10000,3.20000,10.00000,2.00000,3.00000,1.10000,-1.00000,-10.00000,100.00000,1.00000,4.30000],null,[4.00000,2.10000,3.20000,10.00000,20.00000,3.00000,1.10000,-10.00000,-100.00000,100.00000,10.00000,4.30000]]
 -- !result
 select array_agg(d_5) from array_test;
 -- result:
@@ -3838,6 +3838,166 @@ select array_intersect([[1,2,3], [2,3,4]], [[1,2,3], [2,3,4]]) from array_test o
 [[1,2,3],[2,3,4]]
 [[1,2,3],[2,3,4]]
 [[1,2,3],[2,3,4]]
+-- !result
+select all_match((x,y) -> x < y, null, [4,5,6]);
+-- result:
+None
+-- !result
+select all_match((x,y) -> x < y, [], []);
+-- result:
+1
+-- !result
+select all_match((x,y) -> x < y, null, []);
+-- result:
+None
+-- !result
+select all_match((x,y) -> x < y, null, null);
+-- result:
+None
+-- !result
+select any_match((x,y) -> x < y, null, [4,5,6]);
+-- result:
+None
+-- !result
+select any_match((x,y) -> x < y, [], []);
+-- result:
+0
+-- !result
+select any_match((x,y) -> x < y, null, []);
+-- result:
+None
+-- !result
+select any_match((x,y) -> x < y, null, null);
+-- result:
+None
+-- !result
+select all_match([0],x->1);
+-- result:
+1
+-- !result
+select any_match([0],x->1);
+-- result:
+1
+-- !result
+select any_match([],x->1);
+-- result:
+0
+-- !result
+select any_match(null);
+-- result:
+None
+-- !result
+select any_match([]);
+-- result:
+0
+-- !result
+select all_match([]);
+-- result:
+1
+-- !result
+select any_match((x,y) -> x < y, [1,2,8], [4,5,6]);
+-- result:
+1
+-- !result
+select any_match((x,y) -> x < y, [11,12,8], [4,5,6]);
+-- result:
+0
+-- !result
+select any_match((x,y) -> x < y, [11,12,null], [4,5,6]);
+-- result:
+None
+-- !result
+select all_match((x,y) -> x < y, [1,2,null], [4,5,6]);
+-- result:
+None
+-- !result
+select all_match(s_1, x->x is null) from array_test order by pk;
+-- result:
+0
+0
+None
+0
+-- !result
+select s_1, any_match(s_1, x->x is null) from array_test order by pk;
+-- result:
+["a","b","c"]	0
+["-1","10","1","100","2"]	0
+None	None
+["a",null,"c","e","d"]	1
+-- !result
+select d_6, d_5, all_match(d_6,d_5, (x,y)->x >y) from array_test order by pk;
+-- result:
+[4.000000,2.100000,100.000000,1.000000,4.300000,3.200000,10.000000,2.000000,3.000000,1.100000,-1.000000,-10.000000]	[4.000,2.100,3.000,1.100,4.300,3.200,-10.000,100.000,1.000,10.000,-1.000,2.000]	None
+[40.000000,20.100000,1000.000000,10.000000,40.300000,30.200000,100.000000,20.000000,3.000000,10.100000,-10.000000,-10.000000]	[40.000,20.100,30.000,10.100,40.300,30.200,-100.000,1000.000,1.000,100.000,-10.000,2.000]	0
+None	None	None
+[4.000000,2.100000,100.000000,null,1.000000,4.300000,3.200000,10.000000,2.000000,3.000000,1.100000,-1.000000,-10.000000]	[4.000,2.100,3.000,1.100,4.300,3.200,-10.000,100.000,1.000,10.000,-1.000,2.000]	None
+-- !result
+select d_6, d_5, any_match(d_6,d_5, (x,y)->x >y) from array_test order by pk;
+-- result:
+[4.000000,2.100000,100.000000,1.000000,4.300000,3.200000,10.000000,2.000000,3.000000,1.100000,-1.000000,-10.000000]	[4.000,2.100,3.000,1.100,4.300,3.200,-10.000,100.000,1.000,10.000,-1.000,2.000]	None
+[40.000000,20.100000,1000.000000,10.000000,40.300000,30.200000,100.000000,20.000000,3.000000,10.100000,-10.000000,-10.000000]	[40.000,20.100,30.000,10.100,40.300,30.200,-100.000,1000.000,1.000,100.000,-10.000,2.000]	1
+None	None	None
+[4.000000,2.100000,100.000000,null,1.000000,4.300000,3.200000,10.000000,2.000000,3.000000,1.100000,-1.000000,-10.000000]	[4.000,2.100,3.000,1.100,4.300,3.200,-10.000,100.000,1.000,10.000,-1.000,2.000]	None
+-- !result
+select all_match((x,y) -> x < y, []);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Lambda arguments should equal to lambda input arrays.')
+-- !result
+select all_match((x,y) -> x < y, [],{});
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 36 to line 1, column 37. Detail message: 2th lambda input should be arrays.')
+-- !result
+select all_match([],null);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 24. Detail message: all_match should have a input array.')
+-- !result
+select all_match({});
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 19. Detail message: The first input of all_match should be an array.')
+-- !result
+select all_match();
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 17. Detail message: all_match should have a input array.')
+-- !result
+select all_match(null,[]);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 24. Detail message: all_match should have a input array.')
+-- !result
+select all_match(null,null);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 26. Detail message: all_match should have a input array.')
+-- !result
+select any_match((x,y) -> x < y, []);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Lambda arguments should equal to lambda input arrays.')
+-- !result
+select any_match((x,y) -> x < y, [],{});
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 36 to line 1, column 37. Detail message: 2th lambda input should be arrays.')
+-- !result
+select any_match([],null);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 24. Detail message: any_match should have a input array.')
+-- !result
+select any_match({});
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 19. Detail message: The first input of any_match should be an array.')
+-- !result
+select any_match();
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 17. Detail message: any_match should have a input array.')
+-- !result
+select any_match(null,[]);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 24. Detail message: any_match should have a input array.')
+-- !result
+select any_match(null,null);
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 26. Detail message: any_match should have a input array.')
+-- !result
+select all_match([[]]);
+-- result:
+E: (1064, "Getting analyzing error from line 1, column 7 to line 1, column 21. Detail message: The second input of all_matchARRAY<ARRAY<NULL_TYPE>>  can't cast to ARRAY<BOOL>.")
 -- !result
 select array_sum(array_map(x->not like(x, 'starRocks'),s_1)) from array_test order by 1;
 -- result:
