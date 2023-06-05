@@ -470,10 +470,10 @@ std::string HorizontalRowsetWriter::_flush_state_to_string() {
 }
 
 std::string HorizontalRowsetWriter::_error_msg() {
-    std::string msg =
-            strings::Substitute("UNKNOWN flush chunk state:$0, tablet:$1 txn:$2 #seg:$3 #delfile:$4 #upsert:$5 #del:$6",
-                                _flush_state_to_string(), _context.tablet_id, _context.txn_id, _num_segment,
-                                _num_delfile, _num_rows_written, _num_rows_del);
+    std::string msg = strings::Substitute(
+            "UNKNOWN flush chunk state:$0, tablet:$1 txn:$2 #seg:$3 #delfile:$4 #uptfile:$5 #upsert:$6 #del:$7",
+            _flush_state_to_string(), _context.tablet_id, _context.txn_id, _num_segment, _num_delfile, _num_uptfile,
+            _num_rows_written, _num_rows_del);
     LOG(WARNING) << msg;
     return msg;
 }
