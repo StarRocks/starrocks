@@ -1273,7 +1273,7 @@ TEST_F(FileReaderTest, TestReadStruct) {
     ASSERT_TRUE(status.ok());
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
-    std::vector<SharedBufferedInputStream::IORange> ranges;
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
 
@@ -1355,7 +1355,7 @@ TEST_F(FileReaderTest, TestReadStructSubField) {
     ASSERT_TRUE(status.ok());
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
-    std::vector<SharedBufferedInputStream::IORange> ranges;
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
 

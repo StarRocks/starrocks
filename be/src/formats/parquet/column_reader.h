@@ -2,7 +2,6 @@
 
 #pragma once
 #include "formats/parquet/column_converter.h"
-#include "gen_cpp/PlanNodes_types.h"
 #include "io/shared_buffered_input_stream.h"
 
 namespace starrocks {
