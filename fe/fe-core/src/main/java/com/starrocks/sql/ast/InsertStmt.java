@@ -79,6 +79,14 @@ public class InsertStmt extends DmlStmt {
      */
     private boolean forCTAS = false;
 
+    private boolean tableFunctionAsTargetTable = false;
+
+    // following fields are set if useTableFunction == true
+    private final Map<String, String> tableFunctionProperties;
+    private String path;
+    private String format;
+    private String partitionBy;
+
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite) {
         this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, NodePosition.ZERO);
@@ -89,6 +97,7 @@ public class InsertStmt extends DmlStmt {
         super(pos);
         this.tblName = tblName;
         this.targetPartitionNames = targetPartitionNames;
+        this.tableFunctionProperties = null;
         this.label = label;
         this.queryStatement = queryStatement;
         this.targetColumnNames = cols;
@@ -102,8 +111,20 @@ public class InsertStmt extends DmlStmt {
         this.tblName = name;
         this.targetPartitionNames = null;
         this.targetColumnNames = null;
+        this.tableFunctionProperties = null;
         this.queryStatement = queryStatement;
         this.forCTAS = true;
+    }
+
+    // Ctor for INSERT INTO TABLE(...)
+    public InsertStmt(Map<String, String> tableFunctionProperties, QueryStatement queryStatement, NodePosition pos) {
+        super(pos);
+        this.tableFunctionAsTargetTable = true;
+        this.tableFunctionProperties = tableFunctionProperties;
+        this.tblName = new TableName("table_function_db", "table_function_table");
+        this.targetColumnNames = null;
+        this.targetPartitionNames = null;
+        this.queryStatement = queryStatement;
     }
 
     public Table getTargetTable() {
@@ -216,5 +237,29 @@ public class InsertStmt extends DmlStmt {
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitInsertStatement(this, context);
+    }
+
+    public boolean useTableFunctionAsTargetTable() {
+        return tableFunctionAsTargetTable;
+    }
+
+    public Map<String, String> getTableFunctionProperties() {
+        return tableFunctionProperties;
+    }
+
+    public String getPath() {
+        return path;
+    }
+
+    public void setPath(String path) {
+        this.path = path;
+    }
+
+    public String getFormat() {
+        return format;
+    }
+
+    public void setFormat(String format) {
+        this.format = format;
     }
 }

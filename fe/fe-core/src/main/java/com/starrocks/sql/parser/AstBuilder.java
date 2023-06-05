@@ -1805,13 +1805,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- DML Statement -------------------------------------------------------
     @Override
     public ParseNode visitInsertStatement(StarRocksParser.InsertStatementContext context) {
-        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        PartitionNames partitionNames = null;
-        if (context.partitionNames() != null) {
-            partitionNames = (PartitionNames) visit(context.partitionNames());
-        }
-
         QueryStatement queryStatement;
         if (context.VALUES() != null) {
             List<ValueList> rowValues = visit(context.expressionsWithDefault(), ValueList.class);
@@ -1832,10 +1825,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             queryStatement.setIsExplain(true, getExplainType(context.explainDesc()));
         }
 
-        return new InsertStmt(targetTableName, partitionNames,
-                context.label == null ? null : ((Identifier) visit(context.label)).getValue(),
-                getColumnNames(context.columnAliases()), queryStatement, context.OVERWRITE() != null,
-                createPos(context));
+        if (context.qualifiedName() != null) {
+            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+            TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+            PartitionNames partitionNames = null;
+            if (context.partitionNames() != null) {
+                partitionNames = (PartitionNames) visit(context.partitionNames());
+            }
+
+            return new InsertStmt(targetTableName, partitionNames,
+                    context.label == null ? null : ((Identifier) visit(context.label)).getValue(),
+                    getColumnNames(context.columnAliases()), queryStatement, context.OVERWRITE() != null,
+                    createPos(context));
+        }
+
+        // INSERT INTO TABLE(...)
+        Map<String, String> tableFunctionProperties = getPropertyList(context.propertyList());
+        return new InsertStmt(tableFunctionProperties, queryStatement, createPos(context));
     }
 
     @Override

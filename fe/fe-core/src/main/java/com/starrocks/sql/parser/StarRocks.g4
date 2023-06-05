@@ -947,7 +947,7 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT (INTO | OVERWRITE) qualifiedName partitionNames?
+    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName | TABLE propertyList) partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;

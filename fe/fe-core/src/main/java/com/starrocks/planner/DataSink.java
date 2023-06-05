@@ -38,6 +38,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.thrift.TDataSink;
@@ -91,13 +92,9 @@ public abstract class DataSink {
     public static boolean canTableSinkUsePipeline(Table table) {
         if (table instanceof OlapTable) {
             return Config.enable_pipeline_load;
-        } else if (table instanceof MysqlTable) {
-            return true;
-        } else if (table instanceof IcebergTable) {
-            return true;
         }
 
-        return false;
+        return table instanceof MysqlTable || table instanceof IcebergTable || table instanceof TableFunctionTable;
     }
 
     public boolean canUsePipeLine() {

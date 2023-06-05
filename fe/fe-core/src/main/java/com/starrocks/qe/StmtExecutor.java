@@ -53,6 +53,7 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -1407,12 +1408,20 @@ public class StmtExecutor {
             return;
         }
 
-        MetaUtils.normalizationTableName(context, stmt.getTableName());
-        String catalogName = stmt.getTableName().getCatalog();
-        String dbName = stmt.getTableName().getDb();
-        String tableName = stmt.getTableName().getTbl();
-        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
-        Table targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        Database database;
+        Table targetTable;
+        if (stmt instanceof InsertStmt && ((InsertStmt) stmt).useTableFunctionAsTargetTable()) {
+            InsertStmt insertStmt = (InsertStmt) stmt;
+            database = new Database(-1, insertStmt.getTableName().getDb());
+            targetTable = insertStmt.getTargetTable();
+        } else {
+            MetaUtils.normalizationTableName(context, stmt.getTableName());
+            String catalogName = stmt.getTableName().getCatalog();
+            String dbName = stmt.getTableName().getDb();
+            String tableName = stmt.getTableName().getTbl();
+            database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+            targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        }
 
         if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite() &&
                 !((InsertStmt) parsedStmt).hasOverwriteJob() &&
@@ -1457,7 +1466,8 @@ public class StmtExecutor {
                                     sourceType,
                                     context.getSessionVariable().getQueryTimeoutS(),
                                     authenticateParams);
-        } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
+        } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable
+                || targetTable instanceof TableFunctionTable) {
             // schema table and iceberg table does not need txn
         } else {
             transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
@@ -1527,7 +1537,7 @@ public class StmtExecutor {
                 type = TLoadJobType.INSERT_VALUES;
             }
 
-            if (!targetTable.isIcebergTable()) {
+            if (!targetTable.isIcebergTable() && !(targetTable instanceof TableFunctionTable)) {
                 jobId = context.getGlobalStateMgr().getLoadMgr().registerLoadJob(
                         label,
                         database.getFullName(),
@@ -1607,7 +1617,8 @@ public class StmtExecutor {
                                 externalTable.getSourceTableDbId(), transactionId,
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                        trackingSql
                         );
                     } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
                         // schema table does not need txn
@@ -1615,7 +1626,8 @@ public class StmtExecutor {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                 database.getId(),
                                 transactionId,
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql,
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                        trackingSql,
                                 TabletFailInfo.fromThrift(coord.getFailInfos())
                         );
                     }
@@ -1672,9 +1684,12 @@ public class StmtExecutor {
                     }
                 }
 
-                context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos);
+                context.getGlobalStateMgr().getMetadataMgr().finishSink(stmt.getTableName().getCatalog(),
+                        stmt.getTableName().getDb(), stmt.getTableName().getTbl(), commitInfos);
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_ICEBERG_SINK_LABEL";
+            } else if (targetTable instanceof TableFunctionTable) {
+                txnStatus = TransactionStatus.VISIBLE;
             } else {
                 if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                         database,

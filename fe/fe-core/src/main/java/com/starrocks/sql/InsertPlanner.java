@@ -32,6 +32,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -40,6 +41,7 @@ import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -221,18 +223,21 @@ public class InsertPlanner {
                         canUsePipeline, olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
                         false, enableAutomaticPartition);
-            } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
+            } else if (targetTable instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) targetTable);
             } else if (targetTable instanceof IcebergTable) {
                 descriptorTable.addReferencedTable(targetTable);
                 dataSink = new IcebergTableSink((IcebergTable) targetTable, tupleDesc,
                         isKeyPartitionStaticInsert(insertStmt, queryRelation));
+            } else if (targetTable instanceof TableFunctionTable) {
+                dataSink = new TableFunctionTableSink((TableFunctionTable) targetTable);
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
 
             PlanFragment sinkFragment = execPlan.getFragments().get(0);
-            if (canUsePipeline && (targetTable instanceof OlapTable || targetTable instanceof IcebergTable)) {
+            if (canUsePipeline && (targetTable instanceof OlapTable || targetTable instanceof IcebergTable
+                    || targetTable instanceof TableFunctionTable)) {
                 if (shuffleServiceEnable) {
                     // For shuffle insert into, we only support tablet sink dop = 1
                     // because for tablet sink dop > 1, local passthourgh exchange will influence the order of sending,

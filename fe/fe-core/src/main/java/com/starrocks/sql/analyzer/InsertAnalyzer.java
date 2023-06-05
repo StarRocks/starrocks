@@ -21,18 +21,17 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -61,22 +60,7 @@ public class InsertAnalyzer {
         tables.stream().map(table -> (HiveTable) table)
                 .forEach(table -> table.useMetadataCache(false));
 
-        /*
-         *  Target table
-         */
-        MetaUtils.normalizationTableName(session, insertStmt.getTableName());
-        String catalogName = insertStmt.getTableName().getCatalog();
-        String dbName = insertStmt.getTableName().getDb();
-        String tableName = insertStmt.getTableName().getTbl();
-
-        try {
-            MetaUtils.checkCatalogExistAndReport(catalogName);
-        } catch (AnalysisException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
-        }
-
-        Database database = MetaUtils.getDatabase(catalogName, dbName);
-        Table table = MetaUtils.getTable(catalogName, dbName, tableName);
+        Table table = getTargetTable(insertStmt, session);
 
         if (table instanceof MaterializedView && !insertStmt.isSystem()) {
             throw new SemanticException(
@@ -102,11 +86,6 @@ public class InsertAnalyzer {
                 throw unsupportedException("Only support insert into iceberg table with parquet file format");
             }
             throw unsupportedException("Only support insert into olap table or mysql table or iceberg table");
-        }
-
-        if (table instanceof IcebergTable && CatalogMgr.isInternalCatalog(catalogName)) {
-            throw unsupportedException("Doesn't support iceberg table sink in the internal catalog. " +
-                    "You need to use iceberg catalog.");
         }
 
         List<Long> targetPartitionIds = Lists.newArrayList();
@@ -280,6 +259,41 @@ public class InsertAnalyzer {
         insertStmt.setTargetTable(table);
         insertStmt.setTargetPartitionIds(targetPartitionIds);
         insertStmt.setTargetColumns(targetColumns);
-        session.getDumpInfo().addTable(database.getFullName(), table);
+        session.getDumpInfo().addTable(insertStmt.getTableName().getDb(), table);
+    }
+
+    private static Table getTargetTable(InsertStmt insertStmt, ConnectContext session) {
+        if (insertStmt.useTableFunctionAsTargetTable()) {
+            // analyze table function properties
+            Map<String, String> props = insertStmt.getTableFunctionProperties();
+            String path = props.get("path");
+            if (path == null) {
+                throw new SemanticException("Path is mandatory in table function. \"path\" = \"hdfs://path/to/your/location/prefix\"");
+            }
+            String format = props.getOrDefault("format", "parquet");
+
+            QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
+            List<Field> allFields = query.getRelationFields().getAllFields();
+            List<Column> columns = new ArrayList<>();
+            for (Field field : allFields) {
+                Column column = new Column(field.getName(), field.getType(), field.isNullable());
+                columns.add(column);
+            }
+            return new TableFunctionTable(path, format, columns);
+        }
+
+        MetaUtils.normalizationTableName(session, insertStmt.getTableName());
+        String catalogName = insertStmt.getTableName().getCatalog();
+        String dbName = insertStmt.getTableName().getDb();
+        String tableName = insertStmt.getTableName().getTbl();
+
+        try {
+            MetaUtils.checkCatalogExistAndReport(catalogName);
+        } catch (AnalysisException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+        }
+
+        // Database database = MetaUtils.getDatabase(catalogName, dbName);
+        return MetaUtils.getTable(catalogName, dbName, tableName);
     }
 }

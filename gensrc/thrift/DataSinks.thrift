@@ -52,7 +52,8 @@ enum TDataSinkType {
     MEMORY_SCRATCH_SINK,
     MULTI_CAST_DATA_STREAM_SINK,
     SCHEMA_TABLE_SINK,
-    ICEBERG_TABLE_SINK
+    ICEBERG_TABLE_SINK,
+    TABLE_FUNCTION_TABLE_SINK
 }
 
 enum TResultSinkType {
@@ -216,6 +217,13 @@ struct TIcebergTableSink {
     6: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
+struct TTableFunctionTableSink {
+    1: optional string path
+    2: optional string file_format
+    3: optional Types.TCompressionType compression_type
+    4: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+}
+
 struct TDataSink {
   1: required TDataSinkType type
   2: optional TDataStreamSink stream_sink
@@ -227,4 +235,5 @@ struct TDataSink {
   9: optional TMultiCastDataStreamSink multi_cast_stream_sink
   10: optional TSchemaTableSink schema_table_sink
   11: optional TIcebergTableSink iceberg_table_sink
+  12: optional TTableFunctionTableSink table_function_table_sink
 }
