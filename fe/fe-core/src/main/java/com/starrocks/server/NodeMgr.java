@@ -58,6 +58,7 @@ import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
@@ -1214,28 +1215,23 @@ public class NodeMgr {
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, NodeMgr.class.getName(), 1);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.NODE_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, NodeMgr.class.getName());
-        try {
-            NodeMgr nodeMgr = (NodeMgr) reader.readJson(NodeMgr.class);
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        NodeMgr nodeMgr = reader.readJson(NodeMgr.class);
 
-            leaderRpcPort = nodeMgr.leaderRpcPort;
-            leaderHttpPort = nodeMgr.leaderHttpPort;
-            leaderIp = nodeMgr.leaderIp;
+        leaderRpcPort = nodeMgr.leaderRpcPort;
+        leaderHttpPort = nodeMgr.leaderHttpPort;
+        leaderIp = nodeMgr.leaderIp;
 
-            frontends = nodeMgr.frontends;
-            removedFrontends = nodeMgr.removedFrontends;
+        frontends = nodeMgr.frontends;
+        removedFrontends = nodeMgr.removedFrontends;
 
-            systemInfo = nodeMgr.systemInfo;
-            brokerMgr = nodeMgr.brokerMgr;
-        } finally {
-            reader.close();
-        }
+        systemInfo = nodeMgr.systemInfo;
+        brokerMgr = nodeMgr.brokerMgr;
     }
 
     public void setLeaderInfo() {

@@ -2837,16 +2837,23 @@ static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-static ColumnPtr regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns) {
+static StatusOr<ColumnPtr> regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
     hs_scratch_t* scratch = nullptr;
     hs_error_t status;
     if ((status = hs_clone_scratch(state->scratch, &scratch)) != HS_SUCCESS) {
-        CHECK(false) << "ERROR: Unable to clone scratch space."
-                     << " status: " << status;
+        return Status::InternalError(strings::Substitute("Unable to clone scratch space. status: $0", status));
     }
+    DeferOp op([&] {
+        if (scratch != nullptr) {
+            hs_error_t st;
+            if ((st = hs_free_scratch(scratch)) != HS_SUCCESS) {
+                LOG(ERROR) << "free scratch space failure. status: " << st;
+            }
+        }
+    });
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
@@ -2868,7 +2875,7 @@ static ColumnPtr regexp_replace_use_hyperscan(StringFunctionsState* state, const
         const char* data =
                 (value_size) ? str_viewer.value(row).data : &StringFunctions::_DUMMY_STRING_FOR_EMPTY_PATTERN;
 
-        auto status = hs_scan(
+        auto st = hs_scan(
                 // Use &_DUMMY_STRING_FOR_EMPTY_PATTERN instead of nullptr to avoid crash.
                 state->database, data, value_size, 0, scratch,
                 [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
@@ -2885,7 +2892,7 @@ static ColumnPtr regexp_replace_use_hyperscan(StringFunctionsState* state, const
                     return 0;
                 },
                 &match_info_chain);
-        DCHECK(status == HS_SUCCESS || status == HS_SCAN_TERMINATED) << " status: " << status;
+        DCHECK(st == HS_SUCCESS || st == HS_SCAN_TERMINATED) << " status: " << st;
 
         std::string result_str;
         result_str.reserve(value_size);

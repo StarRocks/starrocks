@@ -588,7 +588,11 @@ dropMaterializedViewStatement
     ;
 
 alterMaterializedViewStatement
-    : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause | modifyTablePropertiesClause)
+    : ALTER MATERIALIZED VIEW mvName=qualifiedName (
+        refreshSchemeDesc |
+        tableRenameClause |
+        modifyTablePropertiesClause |
+        swapTableClause )
     | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
     ;
 
@@ -1854,6 +1858,8 @@ relationPrimary
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
     | TABLE '(' qualifiedName '(' expressionList ')' ')'
         (AS? alias=identifier columnAliases?)?                                          #normalizedTableFunction
+    | TABLE propertyList
+        (AS? alias=identifier columnAliases?)?                                          #fileTableFunction
     | '(' relations ')'                                                                 #parenthesizedRelation
     ;
 
@@ -2126,6 +2132,7 @@ windowFunction
     : name = ROW_NUMBER '(' ')'
     | name = RANK '(' ')'
     | name = DENSE_RANK '(' ')'
+    | name = CUME_DIST '(' ')'
     | name = NTILE  '(' expression? ')'
     | name = LEAD  '(' (expression ignoreNulls? (',' expression)*)? ')' ignoreNulls?
     | name = LAG '(' (expression ignoreNulls? (',' expression)*)? ')' ignoreNulls?

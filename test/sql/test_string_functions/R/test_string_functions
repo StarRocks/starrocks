@@ -145,3 +145,93 @@ test
 te
 
 -- !result
+select split_part("hello world", " ", 1);
+-- result:
+hello
+-- !result
+select split_part("hello world", " ", 2);
+-- result:
+world
+-- !result
+select split_part("hello world", " ", -1);
+-- result:
+world
+-- !result
+select split_part("hello world", " ", -2);
+-- result:
+hello
+-- !result
+select split_part("2023年5月23号", "月", 1);
+-- result:
+2023年5
+-- !result
+select split_part("2023年5月23号", "月", -1);
+-- result:
+23号
+-- !result
+select split_part("abc##567###234", "##", 1);
+-- result:
+abc
+-- !result
+select split_part("abc##567###234", "##", 2);
+-- result:
+567
+-- !result
+select split_part("abc##567###234", "##", -1);
+-- result:
+234
+-- !result
+select split_part("abc##567###234", "##", -2);
+-- result:
+567#
+-- !result
+create table t1(c0 varchar(20), c1 varchar(20))
+        DUPLICATE KEY(c0)
+        DISTRIBUTED BY HASH(c0)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t1 values ('hello world', 'abc##567###234');
+-- result:
+-- !result
+select split_part(c0, " ", 1) from t1;
+-- result:
+hello
+-- !result
+select split_part(c0, " ", 2) from t1;
+-- result:
+world
+-- !result
+select split_part(c0, " ", -1) from t1;
+-- result:
+world
+-- !result
+select split_part(c0, " ", -2) from t1;
+-- result:
+hello
+-- !result
+select split_part(c1, "##", 1) from t1;
+-- result:
+abc
+-- !result
+select split_part(c1, "##", 2) from t1;
+-- result:
+567
+-- !result
+select split_part(c1, "##", 3) from t1;
+-- result:
+#234
+-- !result
+select split_part(c1, "##", -1) from t1;
+-- result:
+234
+-- !result
+select split_part(c1, "##", -2) from t1;
+-- result:
+567#
+-- !result
+select split_part(c1, "##", -3) from t1;
+-- result:
+abc
+-- !result

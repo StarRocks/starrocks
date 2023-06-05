@@ -194,11 +194,6 @@ public class OlapTableFactory implements AbstractTableFactory {
             table = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
         } else if (stmt.isOlapEngine()) {
-            if (distributionInfo.getBucketNum() == 0) {
-                int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
-                distributionInfo.setBucketNum(bucketNum);
-            }
-
             RunMode runMode = RunMode.getCurrentRunMode();
             String volume = (properties != null) ? properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME) : null;
 
@@ -304,11 +299,6 @@ public class OlapTableFactory implements AbstractTableFactory {
             throw new DdlException(e.getMessage());
         }
 
-        if (table.hasAutoIncrementColumn() && stmt.isOlapEngine()
-                && RunMode.allowCreateLakeTable()) {
-            throw new DdlException("Table with AUTO_INCREMENT column can not be lake table");
-        }
-
         // replicated storage
         table.setEnableReplicatedStorage(
                 PropertyAnalyzer.analyzeBooleanProp(
@@ -364,7 +354,16 @@ public class OlapTableFactory implements AbstractTableFactory {
         String colocateGroup = null;
         try {
             colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-            colocateTableIndex.addTableToGroup(db, table, colocateGroup, false /* expectLakeTable */);
+            boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
+                                                colocateGroup, false /* expectLakeTable */);
+            if (table instanceof ExternalOlapTable == false && addedToColocateGroup) {
+                // Colocate table should keep the same bucket number accross the partitions
+                DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
+                if (defaultDistributionInfo.getBucketNum() == 0) {
+                    int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                    defaultDistributionInfo.setBucketNum(bucketNum);
+                }
+            }
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }

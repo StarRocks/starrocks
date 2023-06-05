@@ -98,6 +98,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -363,6 +364,10 @@ public class CoordinatorPreprocessor {
         return hostToNumbers;
     }
 
+    public boolean isLoadType() {
+        return queryOptions.getQuery_type() == TQueryType.LOAD;
+    }
+
     public void prepareExec() throws Exception {
         // prepare information
         resetFragmentState();
@@ -487,6 +492,35 @@ public class CoordinatorPreprocessor {
         return connectContext != null &&
                 connectContext.getSessionVariable().isEnablePipelineEngine() &&
                 fragments.stream().allMatch(PlanFragment::canUsePipeline);
+    }
+
+    /**
+     * Split scan range params into groupNum groups by each group's row count.
+     */
+    private List<List<TScanRangeParams>> splitScanRangeParamByRowCount(List<TScanRangeParams> scanRangeParams, int groupNum) {
+        List<List<TScanRangeParams>> result = new ArrayList<>(groupNum);
+        for (int i = 0; i < groupNum; i++) {
+            result.add(new ArrayList<>());
+        }
+        long[] dataSizePerGroup = new long[groupNum];
+        for (TScanRangeParams scanRangeParam : scanRangeParams) {
+            int minIndex = 0;
+            long minDataSize = dataSizePerGroup[0];
+            for (int i = 1; i < groupNum; i++) {
+                if (dataSizePerGroup[i] < minDataSize) {
+                    minIndex = i;
+                    minDataSize = dataSizePerGroup[i];
+                }
+            }
+            dataSizePerGroup[minIndex] += scanRangeParam.getScan_range().getInternal_scan_range().getRow_count();
+            result.get(minIndex).add(scanRangeParam);
+        }
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("dataSizePerGroup: {}", dataSizePerGroup);
+        }
+
+        return result;
     }
 
     // For each fragment in fragments, computes hosts on which to run the instances
@@ -688,8 +722,14 @@ public class CoordinatorPreprocessor {
                                 instanceParam.perNodeScanRanges.put(planNodeId, scanRangeParams);
                             } else {
                                 int expectedDop = Math.max(1, Math.min(pipelineDop, scanRangeParams.size()));
-                                List<List<TScanRangeParams>> scanRangeParamsPerDriverSeq =
-                                        ListUtil.splitBySize(scanRangeParams, expectedDop);
+                                List<List<TScanRangeParams>> scanRangeParamsPerDriverSeq = null;
+                                if (Config.enable_schedule_insert_query_by_row_count && isLoadType()
+                                        && scanRangeParams.size() > 0
+                                        && scanRangeParams.get(0).getScan_range().isSetInternal_scan_range()) {
+                                    scanRangeParamsPerDriverSeq = splitScanRangeParamByRowCount(scanRangeParams, expectedDop);
+                                } else {
+                                    scanRangeParamsPerDriverSeq = ListUtil.splitBySize(scanRangeParams, expectedDop);
+                                }
                                 if (fragment.isForceAssignScanRangesPerDriverSeq() && scanRangeParamsPerDriverSeq.size()
                                         != pipelineDop) {
                                     fragment.setPipelineDop(scanRangeParamsPerDriverSeq.size());
@@ -1057,7 +1097,7 @@ public class CoordinatorPreprocessor {
                     BackendSelector selector = new ColocatedBackendSelector((OlapScanNode) scanNode, assignment);
                     selector.computeScanRangeAssignment();
                 } else {
-                    BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment);
+                    BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment, isLoadType());
                     selector.computeScanRangeAssignment();
                 }
             }
@@ -1551,9 +1591,8 @@ public class CoordinatorPreprocessor {
                     commonParams.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
                     commonParams.params.setEnable_exchange_perf(sessionVariable.isEnableExchangePerf());
 
-                    boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
-                    commonParams.setEnable_resource_group(enableResourceGroup);
-                    if (enableResourceGroup && resourceGroup != null) {
+                    commonParams.setEnable_resource_group(true);
+                    if (resourceGroup != null) {
                         commonParams.setWorkgroup(resourceGroup);
                     }
                     if (fragment.isUseRuntimeAdaptiveDop()) {
@@ -1861,23 +1900,53 @@ public class CoordinatorPreprocessor {
         private final ScanNode scanNode;
         private final List<TScanRangeLocations> locations;
         private final FragmentScanRangeAssignment assignment;
+        private final boolean isLoad;
 
         public NormalBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
                                      FragmentScanRangeAssignment assignment) {
             this.scanNode = scanNode;
             this.locations = locations;
             this.assignment = assignment;
+            this.isLoad = false;
+        }
+
+        public NormalBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
+                                     FragmentScanRangeAssignment assignment, boolean isLoad) {
+            this.scanNode = scanNode;
+            this.locations = locations;
+            this.assignment = assignment;
+            this.isLoad = isLoad;
+        }
+
+        private boolean isEnableScheduleByRowCnt(TScanRangeLocations scanRangeLocations) {
+            // only enable for load now, The insert into select performance problem caused by data skew is the most serious
+            return Config.enable_schedule_insert_query_by_row_count && isLoad
+                    && scanRangeLocations.getScan_range().isSetInternal_scan_range()
+                    && scanRangeLocations.getScan_range().getInternal_scan_range().isSetRow_count()
+                    && scanRangeLocations.getScan_range().getInternal_scan_range().getRow_count() > 0;
         }
 
         @Override
         public void computeScanRangeAssignment() throws Exception {
-            HashMap<TNetworkAddress, Long> assignedBytesPerHost = Maps.newHashMap();
+            HashMap<TNetworkAddress, Long> assignedRowCountPerHost = Maps.newHashMap();
+            // sort the scan ranges by row count
+            // only sort the scan range when it is load job
+            // but when there are too many scan ranges, we will not sort them since performance issue
+            if (locations.size() < 10240 && locations.size() > 0 && isEnableScheduleByRowCnt(locations.get(0))) {
+                locations.sort(new Comparator<TScanRangeLocations>() {
+                    @Override
+                    public int compare(TScanRangeLocations l, TScanRangeLocations r) {
+                        return Long.compare(r.getScan_range().getInternal_scan_range().getRow_count(),
+                                l.getScan_range().getInternal_scan_range().getRow_count());
+                    }
+                });
+            }
             for (TScanRangeLocations scanRangeLocations : locations) {
-                // assign this scan range to the host w/ the fewest assigned bytes
+                // assign this scan range to the host w/ the fewest assigned row count
                 Long minAssignedBytes = Long.MAX_VALUE;
                 TScanRangeLocation minLocation = null;
                 for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {
-                    Long assignedBytes = BackendSelector.findOrInsert(assignedBytesPerHost, location.server, 0L);
+                    Long assignedBytes = BackendSelector.findOrInsert(assignedRowCountPerHost, location.server, 0L);
                     if (assignedBytes < minAssignedBytes) {
                         minAssignedBytes = assignedBytes;
                         minLocation = location;
@@ -1886,7 +1955,15 @@ public class CoordinatorPreprocessor {
                 if (minLocation == null) {
                     throw new UserException("Scan range not found" + backendInfosString(false));
                 }
-                assignedBytesPerHost.put(minLocation.server, assignedBytesPerHost.get(minLocation.server) + 1);
+
+                // only enable for load now, The insert into select performance problem caused by data skew is the most serious
+                if (isEnableScheduleByRowCnt(scanRangeLocations)) {
+                    assignedRowCountPerHost.put(minLocation.server, assignedRowCountPerHost.get(minLocation.server)
+                            + scanRangeLocations.getScan_range().getInternal_scan_range().getRow_count());
+                } else {
+                    // use tablet num as assigned row count
+                    assignedRowCountPerHost.put(minLocation.server, assignedRowCountPerHost.get(minLocation.server) + 1);
+                }
 
                 Reference<Long> backendIdRef = new Reference<>();
                 TNetworkAddress execHostPort = SimpleScheduler.getHost(minLocation.backend_id,
@@ -1907,6 +1984,9 @@ public class CoordinatorPreprocessor {
                 TScanRangeParams scanRangeParams = new TScanRangeParams();
                 scanRangeParams.scan_range = scanRangeLocations.scan_range;
                 scanRangeParamsList.add(scanRangeParams);
+            }
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("assignedRowCountPerHost: {}", assignedRowCountPerHost);
             }
         }
     }

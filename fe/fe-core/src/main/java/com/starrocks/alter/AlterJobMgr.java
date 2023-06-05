@@ -81,6 +81,7 @@ import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
@@ -135,7 +136,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Collections;
@@ -340,6 +340,8 @@ public class AlterJobMgr {
                 AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
                         materializedView.getId(), status);
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
+            } else if (stmt.getSwapTable() != null) {
+                processSwap(db, materializedView, Collections.singletonList(stmt.getSwapTable()));
             } else {
                 throw new DdlException("Unsupported modification for materialized view");
             }
@@ -648,7 +650,7 @@ public class AlterJobMgr {
         try {
             MaterializedView mv = (MaterializedView) db.getTable(tableId);
             TableProperty tableProperty = mv.getTableProperty();
-            if  (tableProperty == null) {
+            if (tableProperty == null) {
                 tableProperty = new TableProperty(properties);
                 mv.setTableProperty(tableProperty.buildProperty(opCode));
             } else {
@@ -699,8 +701,8 @@ public class AlterJobMgr {
             olapTable = (OlapTable) table;
 
             if (olapTable.getState() != OlapTableState.NORMAL) {
-                throw new DdlException(
-                        "Table[" + table.getName() + "]'s state is not NORMAL. Do not allow doing ALTER ops");
+                throw new DdlException("The state of \"" + table.getName() + "\" is " + olapTable.getState().name()
+                                       + ". Alter operation is only permitted if NORMAL");
             }
 
             if (currentAlterOps.hasSchemaChangeOp()) {
@@ -866,7 +868,7 @@ public class AlterJobMgr {
     }
 
     // entry of processing swap table
-    private void processSwap(Database db, OlapTable origTable, List<AlterClause> alterClauses) throws UserException {
+    private void processSwap(Database db, OlapTable origTable, List<AlterClause> alterClauses) throws DdlException {
         if (!(alterClauses.get(0) instanceof SwapTableClause)) {
             throw new DdlException("swap operation only support table");
         }
@@ -878,7 +880,7 @@ public class AlterJobMgr {
         String origTblName = origTable.getName();
         String newTblName = clause.getTblName();
         Table newTbl = db.getTable(newTblName);
-        if (newTbl == null || !newTbl.isOlapOrCloudNativeTable()) {
+        if (newTbl == null || !(newTbl.isOlapOrCloudNativeTable() || newTbl.isMaterializedView())) {
             throw new DdlException("Table " + newTblName + " does not exist or is not OLAP/LAKE table");
         }
         OlapTable olapNewTbl = (OlapTable) newTbl;
@@ -886,6 +888,12 @@ public class AlterJobMgr {
         // First, we need to check whether the table to be operated on can be renamed
         olapNewTbl.checkAndSetName(origTblName, true);
         origTable.checkAndSetName(newTblName, true);
+
+        if (origTable.isMaterializedView() || newTbl.isMaterializedView()) {
+            if (!(origTable.isMaterializedView() && newTbl.isMaterializedView())) {
+                throw new DdlException("Materialized view can only SWAP WITH materialized view");
+            }
+        }
 
         swapTableInternal(db, origTable, olapNewTbl);
 
@@ -935,6 +943,14 @@ public class AlterJobMgr {
         // rename origin table name to new table name and add it to database
         origTable.checkAndSetName(newTblName, false);
         db.createTable(origTable);
+
+        // swap dependencies of base table
+        if (origTable.isMaterializedView()) {
+            MaterializedView oldMv = (MaterializedView) origTable;
+            MaterializedView newMv = (MaterializedView) newTbl;
+            updateTaskDefinition(oldMv);
+            updateTaskDefinition(newMv);
+        }
     }
 
     public void processAlterView(AlterViewStmt stmt, ConnectContext ctx) throws UserException {
@@ -1176,7 +1192,7 @@ public class AlterJobMgr {
         Map<Long, AlterJobV2> materializedViewAlterJobs = materializedViewHandler.getAlterJobsV2();
 
         int cnt = 1 + schemaChangeAlterJobs.size() + 1 + materializedViewAlterJobs.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, AlterJobMgr.class.getName(), cnt);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.ALTER_MGR, cnt);
 
         writer.writeJson(schemaChangeAlterJobs.size());
         for (AlterJobV2 alterJobV2 : schemaChangeAlterJobs.values()) {
@@ -1191,38 +1207,33 @@ public class AlterJobMgr {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, AlterJobMgr.class.getName());
-        try {
-            int schemaChangeJobSize = reader.readJson(int.class);
-            for (int i = 0; i != schemaChangeJobSize; ++i) {
-                AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
-                schemaChangeHandler.addAlterJobV2(alterJobV2);
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int schemaChangeJobSize = reader.readJson(int.class);
+        for (int i = 0; i != schemaChangeJobSize; ++i) {
+            AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
+            schemaChangeHandler.addAlterJobV2(alterJobV2);
 
-                // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
-                // to prevent TabletInvertedIndex data loss,
-                // So just use AlterJob.replay() instead of AlterHandler.replay().
-                if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
-                    alterJobV2.replay(alterJobV2);
-                    LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
-                }
+            // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
+            // to prevent TabletInvertedIndex data loss,
+            // So just use AlterJob.replay() instead of AlterHandler.replay().
+            if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
+                alterJobV2.replay(alterJobV2);
+                LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
             }
+        }
 
-            int materializedViewJobSize = reader.readJson(int.class);
-            for (int i = 0; i != materializedViewJobSize; ++i) {
-                AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
-                materializedViewHandler.addAlterJobV2(alterJobV2);
+        int materializedViewJobSize = reader.readJson(int.class);
+        for (int i = 0; i != materializedViewJobSize; ++i) {
+            AlterJobV2 alterJobV2 = reader.readJson(AlterJobV2.class);
+            materializedViewHandler.addAlterJobV2(alterJobV2);
 
-                // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
-                // to prevent TabletInvertedIndex data loss,
-                // So just use AlterJob.replay() instead of AlterHandler.replay().
-                if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
-                    alterJobV2.replay(alterJobV2);
-                    LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
-                }
+            // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
+            // to prevent TabletInvertedIndex data loss,
+            // So just use AlterJob.replay() instead of AlterHandler.replay().
+            if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
+                alterJobV2.replay(alterJobV2);
+                LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
             }
-        } finally {
-            reader.close();
         }
     }
 }

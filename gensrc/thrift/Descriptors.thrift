@@ -364,6 +364,14 @@ struct TFileTable {
     2: optional list<TColumn> columns
 }
 
+struct TTableFunctionTable {
+    // Table Function Table's file dir 
+    1: optional string path 
+
+    // Schema columns
+    2: optional list<TColumn> columns
+}
+
 struct TIcebergSchema {
     1: optional list<TIcebergSchemaField> fields
 }
@@ -492,6 +500,9 @@ struct TTableDescriptor {
 
   // File Table
   34: optional TFileTable fileTable
+
+  // Table Function Table
+  35: optional TTableFunctionTable tableFunctionTable
 }
 
 struct TDescriptorTable {

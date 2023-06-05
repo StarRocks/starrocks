@@ -23,6 +23,7 @@ import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.StringLiteral;
 
 import java.util.List;
 import java.util.Map;
@@ -76,6 +77,7 @@ public class Trino2SRFunctionCallTransformer {
         registerRegexpFunctionTransformer();
         registerJsonFunctionTransformer();
         registerBitwiseFunctionTransformer();
+        registerUnicodeFunctionTransformer();
         // todo: support more function transform
     }
 
@@ -218,6 +220,16 @@ public class Trino2SRFunctionCallTransformer {
 
         // bitwise_right_shift -> bit_shift_right
         registerFunctionTransformer("bitwise_right_shift", 2, "bit_shift_right", ImmutableList.of(Expr.class, Expr.class));
+    }
+
+    private static void registerUnicodeFunctionTransformer() {
+        // to_utf8 -> to_binary
+        registerFunctionTransformer("to_utf8", 1, new FunctionCallExpr("to_binary",
+                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new StringLiteral("utf8"))));
+
+        // from_utf8 -> from_binary
+        registerFunctionTransformer("from_utf8", 1, new FunctionCallExpr("from_binary",
+                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new StringLiteral("utf8"))));
     }
 
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,

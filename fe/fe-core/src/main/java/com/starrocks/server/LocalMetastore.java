@@ -41,6 +41,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.analysis.Expr;
@@ -76,6 +77,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -99,12 +101,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
@@ -144,6 +144,11 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
@@ -258,14 +263,12 @@ public class LocalMetastore implements ConnectorMetadata {
     private EditLog editLog;
     private final CatalogRecycleBin recycleBin;
     private ColocateTableIndex colocateTableIndex;
-    private final SystemInfoService systemInfoService;
 
     public LocalMetastore(GlobalStateMgr globalStateMgr, CatalogRecycleBin recycleBin,
-                          ColocateTableIndex colocateTableIndex, SystemInfoService systemInfoService) {
+                          ColocateTableIndex colocateTableIndex) {
         this.stateMgr = globalStateMgr;
         this.recycleBin = recycleBin;
         this.colocateTableIndex = colocateTableIndex;
-        this.systemInfoService = systemInfoService;
     }
 
     boolean tryLock(boolean mustLock) {
@@ -790,7 +793,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // only internal table should check quota and cluster capacity
         if (!stmt.isExternal()) {
             // check cluster capacity
-            systemInfoService.checkClusterCapacity();
+            GlobalStateMgr.getCurrentSystemInfo().checkClusterCapacity();
             // check db quota
             db.checkQuota();
         }
@@ -984,44 +987,6 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum) {
-        // 1. If the partition is less than recentPartitionNum, use backendNum to speculate the bucketNum
-        int bucketNum = 0;
-        if (olapTable.getPartitions().size() < recentPartitionNum) {
-            bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
-            return bucketNum;
-        }
-
-        // 2. If the partition is not imported anydata, use backendNum to speculate the bucketNum
-        List<Partition> partitions = (List<Partition>) olapTable.getRecentPartitions(recentPartitionNum);
-        boolean dataImported = true;
-        for (Partition partition : partitions) {
-            if (partition.getVisibleVersion() == 1) {
-                dataImported = false;
-                break;
-            }
-        }
-
-        bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
-        if (!dataImported) {
-            return bucketNum;
-        }
-
-        // 3. Use the totalSize of recentPartitions to speculate the bucketNum
-        long maxDataSize = 0;
-        for (Partition partition : partitions) {
-            maxDataSize = Math.max(maxDataSize, partition.getDataSize());
-        }
-        // A tablet will be regarded using the 1GB size
-        // And also the number will not be larger than the calBucketNumAccordingToBackends()
-        long speculateTabletNum = (maxDataSize + FeConstants.AUTO_DISTRIBUTION_UNIT - 1) / FeConstants.AUTO_DISTRIBUTION_UNIT;
-        bucketNum = (int) Math.min(bucketNum, speculateTabletNum);
-        if (bucketNum == 0) {
-            bucketNum = 1;
-        }
-        return bucketNum;
-    }
-
     private DistributionInfo getDistributionInfo(OlapTable olapTable, AddPartitionClause addPartitionClause)
             throws DdlException {
         DistributionInfo distributionInfo;
@@ -1056,17 +1021,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
         } else {
-            if (defaultDistributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH
-                    && Config.enable_auto_tablet_distribution
-                    && !colocateTableIndex.isColocateTable(olapTable.getId())) {
-                // 1. If enable_auto_tablet_distribution = true, AUTO Tablet Distibution
-                //    also take effect on exist table when adding new partitions
-                // 2. ColocateTable should comply the original tablet num when creating table.
-                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) defaultDistributionInfo;
-                distributionInfo = new HashDistributionInfo(0, hashDistributionInfo.getDistributionColumns());
-            } else {
-                distributionInfo = defaultDistributionInfo;
-            }
+            distributionInfo = defaultDistributionInfo;
         }
         return distributionInfo;
     }
@@ -1350,10 +1305,10 @@ public class LocalMetastore implements ConnectorMetadata {
             analyzeAddPartition(olapTable, partitionDescs, addPartitionClause, partitionInfo);
 
             // get distributionInfo
-            distributionInfo = getDistributionInfo(olapTable, addPartitionClause);
-
+            distributionInfo = getDistributionInfo(olapTable, addPartitionClause).copy();
             if (distributionInfo.getBucketNum() == 0) {
-                int numBucket = calAvgBucketNumOfRecentPartitions(olapTable, 5);
+                int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 5,
+                                    Config.enable_auto_tablet_distribution);
                 distributionInfo.setBucketNum(numBucket);
             }
 
@@ -1562,8 +1517,8 @@ public class LocalMetastore implements ConnectorMetadata {
         if (isTempPartition) {
             olapTable.dropTempPartition(partitionName, true);
         } else {
+            Partition partition = olapTable.getPartition(partitionName);
             if (!clause.isForceDrop()) {
-                Partition partition = olapTable.getPartition(partitionName);
                 if (partition != null) {
                     if (stateMgr.getGlobalTransactionMgr()
                             .existCommittedTxns(db.getId(), olapTable.getId(), partition.getId())) {
@@ -1575,10 +1530,14 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             }
+            Range<PartitionKey> partitionRange = null;
+            if (partitionInfo instanceof RangePartitionInfo && partition != null) {
+                partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+            }
             olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
             if (olapTable instanceof MaterializedView) {
                 MaterializedView mv = (MaterializedView) olapTable;
-                SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName);
+                SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName, partitionRange);
             }
             try {
                 for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
@@ -1648,10 +1607,10 @@ public class LocalMetastore implements ConnectorMetadata {
             MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
             indexMap.put(indexId, rollup);
         }
-        DistributionInfo distributionInfo = table.getDefaultDistributionInfo();
+        DistributionInfo distributionInfo = table.getDefaultDistributionInfo().copy();
 
         if (distributionInfo.getBucketNum() == 0) {
-            int numBucket = calAvgBucketNumOfRecentPartitions(table, 5);
+            int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(table, 5, Config.enable_auto_tablet_distribution);
             distributionInfo.setBucketNum(numBucket);
         }
 
@@ -1701,9 +1660,9 @@ public class LocalMetastore implements ConnectorMetadata {
         if (partitions.isEmpty()) {
             return;
         }
-        int numAliveBackends = systemInfoService.getAliveBackendNumber();
+        int numAliveBackends = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            numAliveBackends += systemInfoService.getAliveComputeNodeNumber();
+            numAliveBackends += GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
         }
         int numReplicas = 0;
         for (Partition partition : partitions) {
@@ -1945,7 +1904,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 List<Map.Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
                 List<Map.Entry<Long, Long>> firstThree =
                         unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
-                StringBuilder sb = new StringBuilder("fail to create tablet: timed out. unfinished replicas");
+                StringBuilder sb = new StringBuilder("Table creation timed out. unfinished replicas");
                 sb.append("(").append(firstThree.size()).append("/").append(unfinishedMarks.size()).append("): ");
                 // Show details of the first 3 unfinished tablets.
                 for (Map.Entry<Long, Long> mark : firstThree) {
@@ -1955,11 +1914,23 @@ public class LocalMetastore implements ConnectorMetadata {
                     sb.append(backend != null ? backend.getHost() : "N/A");
                     sb.append(") ");
                 }
-                sb.append(" timeout=").append(timeout).append("s");
+                sb.append(" timeout=").append(timeout).append('s');
                 String errMsg = sb.toString();
                 LOG.warn(errMsg);
+
+                String userErrorMsg = String.format(
+                        "Table creation timed out.\n You can increase the timeout by increasing the " +
+                        "config \"tablet_create_timeout_second\" and try again.\n" +
+                        "To increase the config \"tablet_create_timeout_second\" (currently %d), run the following command:\n" +
+                        "```\nadmin set frontend config(\"tablet_create_timeout_second\"=\"%d\")\n```\n" +
+                        "or add the following configuration to the fe.conf file and restart the process:\n" +
+                        "```\ntablet_create_timeout_second=%d\n```",
+                        Config.tablet_create_timeout_second,
+                        Config.tablet_create_timeout_second * 2,
+                        Config.tablet_create_timeout_second * 2
+                        );
                 countDownLatch.countDownToZero(new Status(TStatusCode.TIMEOUT, "timed out"));
-                throw new DdlException(errMsg);
+                throw new DdlException(userErrorMsg);
             }
         } catch (InterruptedException e) {
             LOG.warn(e);
@@ -2230,7 +2201,7 @@ public class LocalMetastore implements ConnectorMetadata {
     // create replicas for tablet with random chosen backends
     private List<Long> chosenBackendIdBySeq(int replicationNum, TStorageMedium storageMedium)
             throws DdlException {
-        List<Long> chosenBackendIds = systemInfoService.seqChooseBackendIdsByStorageMedium(replicationNum,
+        List<Long> chosenBackendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIdsByStorageMedium(replicationNum,
                 true, true, storageMedium);
         if (CollectionUtils.isEmpty(chosenBackendIds)) {
             throw new DdlException(
@@ -2246,7 +2217,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private List<Long> chosenBackendIdBySeq(int replicationNum) throws DdlException {
         List<Long> chosenBackendIds =
-                systemInfoService.seqChooseBackendIds(replicationNum, true, true);
+                GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(replicationNum, true, true);
         if (!CollectionUtils.isEmpty(chosenBackendIds)) {
             return chosenBackendIds;
         } else if (replicationNum > 1) {
@@ -2715,10 +2686,6 @@ public class LocalMetastore implements ConnectorMetadata {
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
-        if (distributionInfo.getBucketNum() == 0) {
-            int numBucket = CatalogUtils.calBucketNumAccordingToBackends();
-            distributionInfo.setBucketNum(numBucket);
-        }
         // create refresh scheme
         MaterializedView.MvRefreshScheme mvRefreshScheme;
         RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();
@@ -3903,14 +3870,6 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public long loadCluster(DataInputStream dis, long checksum) throws IOException {
-        if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() <= StarRocksFEMetaVersion.VERSION_3) {
-            return loadClusterV1(dis, checksum);
-        } else {
-            return loadClusterV2(dis, checksum);
-        }
-    }
-
-    public long loadClusterV1(DataInputStream dis, long checksum) throws IOException {
         int clusterCount = dis.readInt();
         checksum ^= clusterCount;
         for (long i = 0; i < clusterCount; ++i) {
@@ -3960,32 +3919,10 @@ public class LocalMetastore implements ConnectorMetadata {
         return checksum;
     }
 
-    // put built-in database into cluster
-    public long loadClusterV2(DataInputStream dis, long checksum) throws IOException {
-        InfoSchemaDb infoSchemaDb = new InfoSchemaDb();
-        Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
-                "InfoSchemaDb id shouldn't larger than " + NEXT_ID_INIT_VALUE);
-        idToDb.put(infoSchemaDb.getId(), infoSchemaDb);
-        fullNameToDb.put(infoSchemaDb.getFullName(), infoSchemaDb);
-
-        if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
-            LOG.warn("Since the the database of starrocks already exists, " +
-                    "the system will not automatically create the database of starrocks for system.");
-        } else {
-            StarRocksDb starRocksDb = new StarRocksDb();
-            Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
-                    "starocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
-            idToDb.put(starRocksDb.getId(), starRocksDb);
-            fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
-        }
-
-        return checksum;
-    }
-
     // TODO [meta-format-change] deprecated
     public void initDefaultCluster() {
         final List<Long> backendList = Lists.newArrayList();
-        final List<Backend> defaultClusterBackends = systemInfoService.getBackends();
+        final List<Backend> defaultClusterBackends = GlobalStateMgr.getCurrentSystemInfo().getBackends();
         for (Backend backend : defaultClusterBackends) {
             backendList.add(backend.getId());
         }
@@ -4719,6 +4656,84 @@ public class LocalMetastore implements ConnectorMetadata {
         if (oldId != null) {
             tableIdToIncrementId.replace(tableId, id);
         }
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        // Don't write system db meta
+        Map<Long, Database> idToDbNormal = idToDb.entrySet().stream().filter(entry -> entry.getKey() > NEXT_ID_INIT_VALUE)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        int totalTableNum = 0;
+        for (Database database : idToDbNormal.values()) {
+            totalTableNum += database.getTableNumber();
+        }
+        int cnt = 1 + idToDbNormal.size() + idToDbNormal.size() /* record database table size */ + totalTableNum + 1;
+
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.LOCAL_META_STORE, cnt);
+
+        writer.writeJson(idToDbNormal.size());
+        for (Database database : idToDbNormal.values()) {
+            writer.writeJson(database);
+            writer.writeJson(database.getTables().size());
+            List<Table> tables = database.getTables();
+            for (Table table : tables) {
+                writer.writeJson(table);
+            }
+        }
+
+        AutoIncrementInfo info = new AutoIncrementInfo(tableIdToIncrementId);
+        writer.writeJson(info);
+
+        writer.close();
+    }
+
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int dbSize = reader.readJson(int.class);
+        for (int i = 0; i < dbSize; ++i) {
+            Database db = reader.readJson(Database.class);
+            int tableSize = reader.readInt();
+            for (int j = 0; j < tableSize; ++j) {
+                Table table = reader.readJson(Table.class);
+                db.createTableWithLock(table, true);
+            }
+
+            idToDb.put(db.getId(), db);
+            fullNameToDb.put(db.getFullName(), db);
+            stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
+            db.getMaterializedViews().forEach(Table::onCreate);
+            db.getHiveTables().forEach(Table::onCreate);
+        }
+
+        // put built-in database into local metastore
+        InfoSchemaDb infoSchemaDb = new InfoSchemaDb();
+        Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
+                "InfoSchemaDb id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+        idToDb.put(infoSchemaDb.getId(), infoSchemaDb);
+        fullNameToDb.put(infoSchemaDb.getFullName(), infoSchemaDb);
+
+        if (getFullNameToDb().containsKey(StarRocksDb.DATABASE_NAME)) {
+            LOG.warn("Since the the database of starrocks already exists, " +
+                    "the system will not automatically create the database of starrocks for system.");
+        } else {
+            StarRocksDb starRocksDb = new StarRocksDb();
+            Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
+                    "starocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+            idToDb.put(starRocksDb.getId(), starRocksDb);
+            fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
+        }
+
+        AutoIncrementInfo autoIncrementInfo = reader.readJson(AutoIncrementInfo.class);
+        for (Map.Entry<Long, Long> entry : autoIncrementInfo.tableIdToIncrementId().entrySet()) {
+            Long tableId = entry.getKey();
+            Long id = entry.getValue();
+
+            tableIdToIncrementId.put(tableId, id);
+        }
+
+        recreateTabletInvertIndex();
+        GlobalStateMgr.getCurrentState().getEsRepository().loadTableFromCatalog();
+        GlobalStateMgr.getCurrentState().getStarRocksRepository().loadTableFromCatalog();
+
+        defaultCluster = new Cluster(SystemInfoService.DEFAULT_CLUSTER, 0);
     }
 }
 

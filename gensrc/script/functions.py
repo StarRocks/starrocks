@@ -440,7 +440,10 @@ vectorized_functions = [
     [50373, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
     [50400, 'next_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::next_day', 'TimeFunctions::next_day_prepare', 'TimeFunctions::next_day_close'],
     [50401, 'previous_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::previous_day', 'TimeFunctions::previous_day_prepare', 'TimeFunctions::previous_day_close'],
+    [50402, 'last_day', 'DATE', ['DATETIME'], 'TimeFunctions::last_day'],
+    [50403, 'last_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::last_day_with_format', 'TimeFunctions::last_day_prepare', 'TimeFunctions::last_day_close'],
     [50501, 'makedate', 'DATE', ['INT','INT'], 'TimeFunctions::make_date'],
+
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
     [60010, 'LIKE', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'LikePredicate::like', 'LikePredicate::like_prepare',
@@ -606,6 +609,7 @@ vectorized_functions = [
     [100017, 'assert_true', 'BOOLEAN', ['BOOLEAN'], 'UtilityFunctions::assert_true'],
     [100019, 'assert_true', 'BOOLEAN', ['BOOLEAN', "VARCHAR"], 'UtilityFunctions::assert_true'],
     [100018, 'host_name', 'VARCHAR', [], "UtilityFunctions::host_name"],
+    [100020, 'get_query_profile', 'VARCHAR', ['VARCHAR'], "UtilityFunctions::get_query_profile"],
 
     # json string function
     [110000, "get_json_int", "INT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_int",
@@ -971,5 +975,6 @@ vectorized_functions = [
     [170101, 'cardinality', 'INT', ['ANY_ARRAY'], 'ArrayFunctions::array_length'],
 
     # struct functions
-    # [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],
+    [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::new_struct'],
+    [170501, 'named_struct', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::named_struct'],
 ]

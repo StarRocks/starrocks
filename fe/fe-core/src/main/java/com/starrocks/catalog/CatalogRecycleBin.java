@@ -41,6 +41,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.google.common.reflect.TypeToken;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.Config;
@@ -56,6 +57,11 @@ import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
@@ -186,8 +192,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                                                  DataProperty dataProperty,
                                                  short replicationNum,
                                                  boolean isInMemory,
-                                                 StorageCacheInfo storageCacheInfo,
-                                                 boolean isCloudNativeTable) {
+                                                 StorageCacheInfo storageCacheInfo) {
         if (idToPartition.containsKey(partition.getId())) {
             LOG.error("partition[{}-{}] already in recycle bin.", partition.getId(), partition.getName());
             return false;
@@ -197,15 +202,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         erasePartitionWithSameName(dbId, tableId, partition.getName());
 
         // recycle partition
-        RecyclePartitionInfo partitionInfo = null;
-        if (isCloudNativeTable) {
-            // lake table
-            partitionInfo = new RecycleRangePartitionInfo(dbId, tableId, partition,
-                    range, dataProperty, replicationNum, isInMemory, storageCacheInfo);
-        } else {
-            partitionInfo = new RecyclePartitionInfoV1(dbId, tableId, partition,
-                    range, dataProperty, replicationNum, isInMemory);
-        }
+        RecyclePartitionInfo partitionInfo = new RecycleRangePartitionInfo(dbId, tableId, partition,
+                range, dataProperty, replicationNum, isInMemory, storageCacheInfo);
 
         idToRecycleTime.put(partition.getId(), System.currentTimeMillis());
         idToPartition.put(partition.getId(), partitionInfo);
@@ -922,8 +920,10 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
     }
 
-    public class RecycleDatabaseInfo implements Writable {
+    public static class RecycleDatabaseInfo implements Writable {
+        @SerializedName("d")
         private Database db;
+        @SerializedName("t")
         private Set<String> tableNames;
 
         public RecycleDatabaseInfo() {
@@ -965,8 +965,10 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
     }
 
-    private class RecycleTableInfo implements Writable {
+    private static class RecycleTableInfo implements Writable {
+        @SerializedName(value = "i")
         private long dbId;
+        @SerializedName(value = "t")
         private Table table;
 
         public RecycleTableInfo() {
@@ -1190,5 +1192,75 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     public long saveRecycleBin(DataOutputStream dos, long checksum) throws IOException {
         write(dos);
         return checksum;
+    }
+
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        int numJson = 1 + idToDatabase.size() + 1 + idToTableInfo.size()
+                + 1 + idToPartition.size() + 1;
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.CATALOG_RECYCLE_BIN, numJson);
+
+        writer.writeJson(idToDatabase.size());
+        for (RecycleDatabaseInfo recycleDatabaseInfo : idToDatabase.values()) {
+            writer.writeJson(recycleDatabaseInfo);
+        }
+
+        writer.writeJson(idToTableInfo.size());
+        for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
+            for (RecycleTableInfo recycleTableInfo : tableEntry.values()) {
+                writer.writeJson(recycleTableInfo);
+            }
+        }
+
+        writer.writeJson(idToPartition.size());
+        for (RecyclePartitionInfo recyclePartitionInfo : idToPartition.values()) {
+            if (recyclePartitionInfo instanceof RecyclePartitionInfoV1) {
+                RecyclePartitionInfoV1 recyclePartitionInfoV1 = (RecyclePartitionInfoV1) recyclePartitionInfo;
+                RecycleRangePartitionInfo recycleRangePartitionInfo = new RecycleRangePartitionInfo(
+                        recyclePartitionInfoV1.dbId, recyclePartitionInfoV1.tableId, recyclePartitionInfoV1.partition,
+                        recyclePartitionInfoV1.range, recyclePartitionInfoV1.dataProperty, recyclePartitionInfoV1.replicationNum,
+                        recyclePartitionInfoV1.isInMemory, null);
+                writer.writeJson(recycleRangePartitionInfo);
+            } else {
+                writer.writeJson(recyclePartitionInfo);
+            }
+        }
+
+        writer.writeJson(idToRecycleTime);
+
+        writer.close();
+    }
+
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int idToDatabaseSize = reader.readInt();
+        for (int i = 0; i < idToDatabaseSize; ++i) {
+            RecycleDatabaseInfo recycleDatabaseInfo = reader.readJson(RecycleDatabaseInfo.class);
+            idToDatabase.put(recycleDatabaseInfo.db.getId(), recycleDatabaseInfo);
+        }
+
+        int idToTableInfoSize = reader.readInt();
+        for (int i = 0; i < idToTableInfoSize; ++i) {
+            RecycleTableInfo recycleTableInfo = reader.readJson(RecycleTableInfo.class);
+            idToTableInfo.put(recycleTableInfo.dbId, recycleTableInfo.table.getId(), recycleTableInfo);
+            nameToTableInfo.put(recycleTableInfo.getDbId(), recycleTableInfo.getTable().getName(), recycleTableInfo);
+        }
+
+        int idToPartitionSize = reader.readInt();
+        for (int i = 0; i < idToPartitionSize; ++i) {
+            RecycleRangePartitionInfo recycleRangePartitionInfo = reader.readJson(RecycleRangePartitionInfo.class);
+            idToPartition.put(recycleRangePartitionInfo.partition.getId(), recycleRangePartitionInfo);
+        }
+
+        idToRecycleTime = (Map<Long, Long>) reader.readJson(new TypeToken<Map<Long, Long>>() {
+        }.getType());
+
+        if (!isCheckpointThread()) {
+            // add tablet in Recycle bin to TabletInvertedIndex
+            addTabletToInvertedIndex();
+        }
+        // create DatabaseTransactionMgr for db in recycle bin.
+        // these dbs do not exist in `idToDb` of the globalStateMgr.
+        for (Long dbId : getAllDbIds()) {
+            GlobalStateMgr.getCurrentGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
+        }
     }
 }

@@ -47,6 +47,11 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -359,7 +364,7 @@ public class ExportMgr {
                 LOG.info("remove expired job: {}", job);
                 idToJob.remove(info.jobId);
             }
-            job.setSnapshotPaths(info.snapshotPaths);
+            job.setSnapshotPaths(info.deserialize(info.snapshotPaths));
             job.setExportTempPath(info.exportTempPath);
             job.setExportedFiles(info.exportedFiles);
             job.setFailMsg(info.failMsg);
@@ -417,5 +422,29 @@ public class ExportMgr {
         }
 
         return checksum;
+    }
+
+    public void saveExportJobV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        int numJson = 1 + idToJob.size();
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.EXPORT_MGR, numJson);
+        writer.writeJson(idToJob.size());
+        for (ExportJob job : idToJob.values()) {
+            writer.writeJson(job);
+        }
+        writer.close();
+    }
+
+    public void loadExportJobV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int size = reader.readInt();
+        long currentTimeMs = System.currentTimeMillis();
+        for (int i = 0; i < size; i++) {
+            ExportJob job = reader.readJson(ExportJob.class);
+            // discard expired job right away
+            if (isJobExpired(job, currentTimeMs)) {
+                LOG.info("discard expired job: {}", job);
+                continue;
+            }
+            unprotectAddJob(job);
+        }
     }
 }

@@ -701,7 +701,7 @@ public class Config extends ConfigBase {
      * the create table request will run at most (m * n * tablet_create_timeout_second) before timeout.
      */
     @ConfField(mutable = true)
-    public static int tablet_create_timeout_second = 1;
+    public static int tablet_create_timeout_second = 10;
 
     /**
      * minimal intervals between two publish version action
@@ -1242,6 +1242,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_replicated_storage_as_default_engine = true;
+
+    /**
+     * enable schedule insert query by row count
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_schedule_insert_query_by_row_count = true;
 
     /**
      * FOR DiskAndTabletLoadBalancer:
@@ -1947,6 +1953,12 @@ public class Config extends ConfigBase {
     public static boolean enable_shuffle_load = true;
 
     /**
+     * Eliminate shuffle load by replicated storage
+     */
+    @ConfField(mutable = true)
+    public static boolean eliminate_shuffle_load_by_replicated_storage = true;
+
+    /**
      * Unused config field, leave it here for backward compatibility
      */
     @Deprecated
@@ -2014,7 +2026,7 @@ public class Config extends ConfigBase {
     public static int cloud_native_meta_port = 6090;
     // remote storage related configuration
     /**
-     * storage type for cloud native table. Available options: "S3", "HDFS", case-sensitive
+     * storage type for cloud native table. Available options: "S3", "HDFS", "AZBLOB". case-insensitive
      */
     @ConfField
     public static String cloud_native_storage_type = "S3";

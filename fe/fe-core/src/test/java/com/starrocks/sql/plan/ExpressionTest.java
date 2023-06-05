@@ -457,8 +457,9 @@ public class ExpressionTest extends PlanTestBase {
         String plan = getThriftPlan(sql);
         Assert.assertTrue(plan, plan.contains(
                 "signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), "
-                + "id:50287, fid:50287, could_apply_dict_optimize:false, ignore_nulls:false), has_nullable_child:false, "
-                + "is_nullable:true"));
+                        +
+                        "id:50287, fid:50287, could_apply_dict_optimize:false, ignore_nulls:false), has_nullable_child:false, "
+                        + "is_nullable:true"));
     }
 
     @Test
@@ -1218,6 +1219,10 @@ public class ExpressionTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "predicates: 11: dense_rank() = 1");
 
+        sql = "select tc from tall qualify cume_dist() OVER(PARTITION by ta order by tg) = 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: cume_dist() = 1");
+
         // for '<'
         sql = "select tc from tall qualify row_number() OVER(PARTITION by ta order by tg) < 1;";
         plan = getFragmentPlan(sql);
@@ -1231,6 +1236,10 @@ public class ExpressionTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "predicates: 11: dense_rank() < 1");
 
+        sql = "select tc from tall qualify cume_dist() OVER(PARTITION by ta order by tg) < 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: cume_dist() < 1");
+
         // for '>'
         sql = "select tc from tall qualify row_number() OVER(PARTITION by ta order by tg) > 1;";
         plan = getFragmentPlan(sql);
@@ -1243,6 +1252,10 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select tc from tall qualify dense_rank() OVER(PARTITION by ta order by tg) > 1;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "predicates: 11: dense_rank() > 1");
+
+        sql = "select tc from tall qualify cume_dist() OVER(PARTITION by ta order by tg) > 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: cume_dist() > 1");
 
         // for alias
         sql = "select ta as col1 from tall qualify dense_rank() OVER(PARTITION by ta order by tg) > 1;";
@@ -1454,4 +1467,47 @@ public class ExpressionTest extends PlanTestBase {
         assertContains(plan2, "<slot 2> : like(lower('AA'), lower('aA'))");
     }
 
+    @Test
+    public void testStructExpression() throws Exception {
+        String sql = "select struct('a', 1, 2, 10000)";
+        String plan = getVerboseExplain(sql);
+        assertCContains(plan, "struct<col1 varchar, col2 tinyint(4), col3 tinyint(4), col4 smallint(6)>");
+
+        sql = "select row('a', 1, 2, 10000, [1, 2, 3], NULL, {'a': 1, 'b': 2})";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "struct<col1 varchar, col2 tinyint(4), col3 tinyint(4), col4 smallint(6), " +
+                "col5 array<tinyint(4)>, col6 boolean, col7 map<varchar,tinyint(4)>>");
+
+        sql = "select named_struct('a', 1, 'b', 2)";
+        plan = getVerboseExplain(sql);
+        assertCContains(plan, "struct<a tinyint(4), b tinyint(4)>");
+
+        try {
+            sql = "select named_struct('a', 1, 'b', 2, 3, 6)";
+            plan = getVerboseExplain(sql);
+        } catch (Exception e) {
+            assertCContains(e.getMessage(), "The 5-th input of named_struct must be string literal");
+        }
+
+        try {
+            sql = "select named_struct('a', 1, 'b', 2, 3, 'x', 6)";
+            plan = getVerboseExplain(sql);
+        } catch (Exception e) {
+            assertCContains(e.getMessage(), "named_struct arguments must be in name/value pairs");
+        }
+
+        try {
+            sql = "select named_struct('a', 1, 'a', 2)";
+            plan = getVerboseExplain(sql);
+        } catch (Exception e) {
+            assertCContains(e.getMessage(), "named_struct contains duplicate subfield name: a at 3-th input");
+        }
+    }
+
+    @Test
+    public void testStructRow() throws Exception {
+        String sql = "select row('a', 1, 'a', 2).col1";
+        String plan = getVerboseExplain(sql);
+        assertCContains(plan, "row('a', 1, 'a', 2).col1");
+    }
 }

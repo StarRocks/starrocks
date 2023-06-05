@@ -14,14 +14,12 @@
 
 package com.starrocks.sql.optimizer.rule.join;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -73,13 +71,6 @@ public class JoinReorderHelper {
         return Lists.newArrayList(leftCols, rightCols, refBothChildCols);
     }
 
-
-    // TODO(packy) obtain the output info of tableFunction is not as easy as other op. Forbid it now.
-    public static boolean existTableFunc(OptExpression input) {
-        List<OptExpression> flattenExprs = ImmutableList.of(input.inputAt(0).inputAt(0),
-                input.inputAt(0).inputAt(1), input.inputAt(1));
-        return flattenExprs.stream().anyMatch(e -> e.getOp() instanceof LogicalTableFunctionOperator);
-    }
 
     public static boolean isAssoc(OptExpression bottomJoinExpr, OptExpression topJoinExpr) {
         LogicalJoinOperator topJoin = (LogicalJoinOperator) topJoinExpr.getOp();

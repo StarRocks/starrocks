@@ -94,8 +94,7 @@ StatusOr<ChunkPtr> LazyInstantiateDriversOperator::pull_chunk(RuntimeState* stat
         }
     }
 
-    auto* executor = fragment_ctx->enable_resource_group() ? state->exec_env()->wg_driver_executor()
-                                                           : state->exec_env()->driver_executor();
+    auto* executor = state->exec_env()->wg_driver_executor();
     for (const auto& pipe : ready_pipelines) {
         for (const auto& driver : pipe->drivers()) {
             DCHECK(!fragment_ctx->enable_resource_group() || driver->workgroup() != nullptr);

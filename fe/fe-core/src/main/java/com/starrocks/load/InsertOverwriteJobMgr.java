@@ -26,6 +26,7 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
@@ -36,7 +37,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -254,20 +254,15 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable {
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, InsertOverwriteJobMgr.class.getName(), 1);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, InsertOverwriteJobMgr.class.getName());
-        try {
-            InsertOverwriteJobMgr catalog = reader.readJson(InsertOverwriteJobMgr.class);
-            overwriteJobMap = catalog.overwriteJobMap;
-            tableToOverwriteJobs = catalog.tableToOverwriteJobs;
-            runningJobs = catalog.runningJobs;
-        } finally {
-            reader.close();
-        }
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        InsertOverwriteJobMgr catalog = reader.readJson(InsertOverwriteJobMgr.class);
+        overwriteJobMap = catalog.overwriteJobMap;
+        tableToOverwriteJobs = catalog.tableToOverwriteJobs;
+        runningJobs = catalog.runningJobs;
     }
 }

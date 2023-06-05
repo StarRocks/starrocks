@@ -212,7 +212,8 @@ public class EditLog {
                     globalStateMgr.replayRenameDatabase(dbName, dbInfo.getNewDbName());
                     break;
                 }
-                case OperationType.OP_CREATE_TABLE: {
+                case OperationType.OP_CREATE_TABLE:
+                case OperationType.OP_CREATE_TABLE_V2: {
                     CreateTableInfo info = (CreateTableInfo) journal.getData();
                     LOG.info("Begin to unprotect create table. db = "
                             + info.getDbName() + " table = " + info.getTable().getId());
@@ -395,7 +396,8 @@ public class EditLog {
                     globalStateMgr.replayRenameRollup(info);
                     break;
                 }
-                case OperationType.OP_EXPORT_CREATE: {
+                case OperationType.OP_EXPORT_CREATE:
+                case OperationType.OP_EXPORT_CREATE_V2: {
                     ExportJob job = (ExportJob) journal.getData();
                     ExportMgr exportMgr = globalStateMgr.getExportMgr();
                     exportMgr.replayCreateExportJob(job);
@@ -406,6 +408,7 @@ public class EditLog {
                     ExportMgr exportMgr = globalStateMgr.getExportMgr();
                     exportMgr.replayUpdateJobState(op.getJobId(), op.getState());
                     break;
+                case OperationType.OP_EXPORT_UPDATE_INFO_V2:
                 case OperationType.OP_EXPORT_UPDATE_INFO:
                     ExportJob.ExportUpdateInfo exportUpdateInfo = (ExportJob.ExportUpdateInfo) journal.getData();
                     globalStateMgr.getExportMgr().replayUpdateJobInfo(exportUpdateInfo);
@@ -583,7 +586,8 @@ public class EditLog {
                     globalStateMgr.replayTruncateTable(info);
                     break;
                 }
-                case OperationType.OP_COLOCATE_ADD_TABLE: {
+                case OperationType.OP_COLOCATE_ADD_TABLE:
+                case OperationType.OP_COLOCATE_ADD_TABLE_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayAddTableToGroup(info);
                     break;
@@ -593,22 +597,26 @@ public class EditLog {
                     globalStateMgr.getColocateTableIndex().replayRemoveTable(info);
                     break;
                 }
-                case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ: {
+                case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ:
+                case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayAddBackendsPerBucketSeq(info);
                     break;
                 }
-                case OperationType.OP_COLOCATE_MARK_UNSTABLE: {
+                case OperationType.OP_COLOCATE_MARK_UNSTABLE:
+                case OperationType.OP_COLOCATE_MARK_UNSTABLE_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayMarkGroupUnstable(info);
                     break;
                 }
-                case OperationType.OP_COLOCATE_MARK_STABLE: {
+                case OperationType.OP_COLOCATE_MARK_STABLE:
+                case OperationType.OP_COLOCATE_MARK_STABLE_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayMarkGroupStable(info);
                     break;
                 }
-                case OperationType.OP_MODIFY_TABLE_COLOCATE: {
+                case OperationType.OP_MODIFY_TABLE_COLOCATE:
+                case OperationType.OP_MODIFY_TABLE_COLOCATE_V2: {
                     final TablePropertyInfo info = (TablePropertyInfo) journal.getData();
                     globalStateMgr.replayModifyTableColocate(info);
                     break;
@@ -1130,7 +1138,11 @@ public class EditLog {
     }
 
     public void logCreateTable(CreateTableInfo info) {
-        logEdit(OperationType.OP_CREATE_TABLE, info);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_CREATE_TABLE_V2, info);
+        } else {
+            logEdit(OperationType.OP_CREATE_TABLE, info);
+        }
     }
 
     public void logCreateMaterializedView(CreateTableInfo info) {
@@ -1374,15 +1386,25 @@ public class EditLog {
     }
 
     public void logExportCreate(ExportJob job) {
-        logEdit(OperationType.OP_EXPORT_CREATE, job);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_EXPORT_CREATE_V2, job);
+        } else {
+            logEdit(OperationType.OP_EXPORT_CREATE, job);
+        }
     }
 
     public void logExportUpdateState(long jobId, ExportJob.JobState newState,
                                      List<Pair<TNetworkAddress, String>> snapshotPaths, String exportTempPath,
                                      Set<String> exportedFiles, ExportFailMsg failMsg) {
-        ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState,
-                snapshotPaths, exportTempPath, exportedFiles, failMsg);
-        logEdit(OperationType.OP_EXPORT_UPDATE_INFO, updateInfo);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState,
+                    snapshotPaths, exportTempPath, exportedFiles, failMsg);
+            logJsonObject(OperationType.OP_EXPORT_UPDATE_INFO_V2, updateInfo);
+        } else {
+            ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState,
+                    snapshotPaths, exportTempPath, exportedFiles, failMsg);
+            logEdit(OperationType.OP_EXPORT_UPDATE_INFO, updateInfo);
+        }
     }
 
     public void logUpdateClusterAndBackendState(BackendIdsUpdateInfo info) {
@@ -1435,7 +1457,11 @@ public class EditLog {
     }
 
     public void logColocateAddTable(ColocatePersistInfo info) {
-        logEdit(OperationType.OP_COLOCATE_ADD_TABLE, info);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_COLOCATE_ADD_TABLE_V2, info);
+        } else {
+            logEdit(OperationType.OP_COLOCATE_ADD_TABLE, info);
+        }
     }
 
     public void logColocateRemoveTable(ColocatePersistInfo info) {
@@ -1443,19 +1469,35 @@ public class EditLog {
     }
 
     public void logColocateBackendsPerBucketSeq(ColocatePersistInfo info) {
-        logEdit(OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ, info);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2, info);
+        } else {
+            logEdit(OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ, info);
+        }
     }
 
     public void logColocateMarkUnstable(ColocatePersistInfo info) {
-        logEdit(OperationType.OP_COLOCATE_MARK_UNSTABLE, info);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_COLOCATE_MARK_UNSTABLE_V2, info);
+        } else {
+            logEdit(OperationType.OP_COLOCATE_MARK_UNSTABLE, info);
+        }
     }
 
     public void logColocateMarkStable(ColocatePersistInfo info) {
-        logEdit(OperationType.OP_COLOCATE_MARK_STABLE, info);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_COLOCATE_MARK_STABLE_V2, info);
+        } else {
+            logEdit(OperationType.OP_COLOCATE_MARK_STABLE, info);
+        }
     }
 
     public void logModifyTableColocate(TablePropertyInfo info) {
-        logEdit(OperationType.OP_MODIFY_TABLE_COLOCATE, info);
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_MODIFY_TABLE_COLOCATE_V2, info);
+        } else {
+            logEdit(OperationType.OP_MODIFY_TABLE_COLOCATE, info);
+        }
     }
 
     public void logHeartbeat(HbPackage hbPackage) {

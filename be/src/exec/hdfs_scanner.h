@@ -315,7 +315,6 @@ protected:
     RuntimeState* _runtime_state = nullptr;
     HdfsScanStats _stats;
     HdfsScanStats _fs_stats;
-    std::unique_ptr<RandomAccessFile> _raw_file;
     std::unique_ptr<RandomAccessFile> _file;
     // by default it's no compression.
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;

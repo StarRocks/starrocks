@@ -57,6 +57,7 @@ import com.starrocks.load.Load;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
@@ -731,24 +732,19 @@ public class LoadMgr implements Writable {
         return checksum;
     }
 
-    public void loadLoadJobsV2JsonFormat(DataInputStream in) throws IOException,
-            SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(in, LoadMgr.class.getName());
-        try {
-            int size = reader.readInt();
-            long now = System.currentTimeMillis();
-            while (size-- > 0) {
-                LoadJob loadJob = reader.readJson(LoadJob.class);
-                // discard expired job right away
-                if (isJobExpired(loadJob, now)) {
-                    LOG.info("discard expired job: {}", loadJob);
-                    continue;
-                }
-
-                putLoadJob(loadJob);
+    public void loadLoadJobsV2JsonFormat(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int size = reader.readInt();
+        long now = System.currentTimeMillis();
+        while (size-- > 0) {
+            LoadJob loadJob = reader.readJson(LoadJob.class);
+            // discard expired job right away
+            if (isJobExpired(loadJob, now)) {
+                LOG.info("discard expired job: {}", loadJob);
+                continue;
             }
-        } finally {
-            reader.close();
+
+            putLoadJob(loadJob);
         }
     }
 
@@ -771,7 +767,7 @@ public class LoadMgr implements Writable {
         List<LoadJob> loadJobs = idToLoadJob.values().stream().filter(this::needSave).collect(Collectors.toList());
         // 1 json for number of jobs, size of idToLoadJob for jobs
         final int cnt = 1 + loadJobs.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(out, LoadMgr.class.getName(), cnt);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(out, SRMetaBlockID.LOAD_MGR, cnt);
         writer.writeJson(loadJobs.size());
         for (LoadJob loadJob : loadJobs) {
             writer.writeJson(loadJob);

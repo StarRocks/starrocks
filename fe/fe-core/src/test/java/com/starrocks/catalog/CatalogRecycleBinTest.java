@@ -86,9 +86,9 @@ public class CatalogRecycleBinTest {
                         BoundType.CLOSED);
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
         Partition partition = new Partition(1L, "pt", new MaterializedIndex(), null);
-        bin.recyclePartition(11L, 22L, partition, range, dataProperty, (short) 1, false, null, false);
+        bin.recyclePartition(11L, 22L, partition, range, dataProperty, (short) 1, false, null);
         Partition partition2 = new Partition(2L, "pt", new MaterializedIndex(), null);
-        bin.recyclePartition(11L, 22L, partition2, range, dataProperty, (short) 1, false, null, false);
+        bin.recyclePartition(11L, 22L, partition2, range, dataProperty, (short) 1, false, null);
 
         Partition recycledPart = bin.getPartition(1L);
         Assert.assertNull(recycledPart);
@@ -443,9 +443,9 @@ public class CatalogRecycleBinTest {
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
 
-        recycleBin.recyclePartition(dbId, tableId, p1, null, dataProperty, (short) 2, false, null, false);
-        recycleBin.recyclePartition(dbId, tableId, p2SameName, null, dataProperty, (short) 2, false, null, false);
-        recycleBin.recyclePartition(dbId, tableId, p2, null, dataProperty, (short) 2, false, null, false);
+        recycleBin.recyclePartition(dbId, tableId, p1, null, dataProperty, (short) 2, false, null);
+        recycleBin.recyclePartition(dbId, tableId, p2SameName, null, dataProperty, (short) 2, false, null);
+        recycleBin.recyclePartition(dbId, tableId, p2, null, dataProperty, (short) 2, false, null);
 
         Assert.assertEquals(recycleBin.getPartition(p1.getId()), p1);
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
@@ -523,9 +523,9 @@ public class CatalogRecycleBinTest {
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
 
-        recycleBin.recyclePartition(dbId, tableId, p1, null, dataProperty, (short) 2, false, null, true);
-        recycleBin.recyclePartition(dbId, tableId, p2SameName, null, dataProperty, (short) 2, false, null, true);
-        recycleBin.recyclePartition(dbId, tableId, p2, null, dataProperty, (short) 2, false, null, true);
+        recycleBin.recyclePartition(dbId, tableId, p1, null, dataProperty, (short) 2, false, null);
+        recycleBin.recyclePartition(dbId, tableId, p2SameName, null, dataProperty, (short) 2, false, null);
+        recycleBin.recyclePartition(dbId, tableId, p2, null, dataProperty, (short) 2, false, null);
 
         Assert.assertEquals(recycleBin.getPartition(p1.getId()), p1);
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);

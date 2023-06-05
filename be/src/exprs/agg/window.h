@@ -233,6 +233,44 @@ class DenseRankWindowFunction final : public WindowFunction<DenseRankState> {
     std::string get_name() const override { return "dense_rank"; }
 };
 
+struct CumeDistState {
+    int64_t rank;
+    int64_t frame_start;
+    int64_t count;
+};
+
+class CumeDistWindowFunction final : public WindowFunction<CumeDistState> {
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        auto& s = this->data(state);
+        s.rank = 0;
+        s.frame_start = -1;
+        s.count = 1;
+    }
+
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        auto& s = this->data(state);
+        if (s.frame_start != peer_group_start) {
+            s.frame_start = peer_group_start;
+            int64_t peer_group_count = peer_group_end - peer_group_start;
+            s.rank += peer_group_count;
+        }
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        DCHECK_GT(end, start);
+        auto& s = this->data(state);
+        auto* column = down_cast<DoubleColumn*>(dst);
+        for (size_t i = start; i < end; ++i) {
+            column->get_data()[i] = (double)s.rank / s.count;
+        }
+    }
+
+    std::string get_name() const override { return "cume_dist"; }
+};
+
 // The NTILE window function divides ordered rows in the partition into `num_buckets` ranked groups
 // of as equal size as possible and returns the group id of each row starting from 1.
 //

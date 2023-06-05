@@ -157,6 +157,9 @@ public:
     void reset_state_for_cur_partition();
     void reset_state_for_next_partition();
 
+    bool has_cume_function() const { return _has_cume_function; }
+    void set_partition_size_for_cume_function();
+
     void remove_unused_buffer_values(RuntimeState* state);
 
     bool need_partition_materializing() const { return _need_partition_materializing; }
@@ -202,6 +205,10 @@ private:
     int64_t _num_rows_returned = 0;
     int64_t _limit; // -1: no limit
     bool _has_lead_lag_function = false;
+
+    // For cumulative distribution ranking function.
+    bool _has_cume_function = false;
+    std::vector<int64_t> _cume_function_index;
 
     Columns _result_window_columns;
     std::vector<ChunkPtr> _input_chunks;

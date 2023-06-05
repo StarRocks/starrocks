@@ -48,6 +48,8 @@ public class OperationType {
     public static final short OP_RENAME_DB = 6;
 
     // 10~19 110~119 210~219 ...
+    @Deprecated
+    //Added OP_CREATE_TABLE_V2 in version 3.1, can be removed in version 3.2
     public static final short OP_CREATE_TABLE = 10;
     public static final short OP_DROP_TABLE = 11;
     public static final short OP_ADD_PARTITION = 12;
@@ -325,11 +327,21 @@ public class OperationType {
     public static final short OP_END_LOAD_JOB_V2 = 12101;
     public static final short OP_CREATE_ROUTINE_LOAD_JOB_V2 = 12102;
     public static final short OP_CHANGE_ROUTINE_LOAD_JOB_V2 = 12103;
-    public static final short OP_REMOVE_ROUTINE_LOAD_JOB_V2 = 12104;
 
     //Txn json format log
     public static final short OP_UPSERT_TRANSACTION_STATE_V2 = 12110;
-    public static final short OP_SAVE_TRANSACTION_ID_V2 = 12112;
+    public static final short OP_SAVE_TRANSACTION_ID_V2 = 12111;
+
+    //colocate table json format log
+    public static final short OP_COLOCATE_ADD_TABLE_V2 = 12130;
+    public static final short OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2 = 12131;
+    public static final short OP_COLOCATE_MARK_UNSTABLE_V2 = 12132;
+    public static final short OP_COLOCATE_MARK_STABLE_V2 = 12133;
+    public static final short OP_MODIFY_TABLE_COLOCATE_V2 = 12134;
+
+    //Export json format log
+    public static final short OP_EXPORT_CREATE_V2 = 12120;
+    public static final short OP_EXPORT_UPDATE_INFO_V2 = 12121;
 
     // small files json format log
     public static final short OP_CREATE_SMALL_FILE_V2 = 12140;
@@ -338,4 +350,7 @@ public class OperationType {
     //Backup/Restore json format log
     public static final short OP_BACKUP_JOB_V2 = 12150;
     public static final short OP_RESTORE_JOB_V2 = 12151;
+
+    // Local Meta Store
+    public static final short OP_CREATE_TABLE_V2 = 13000;
 }

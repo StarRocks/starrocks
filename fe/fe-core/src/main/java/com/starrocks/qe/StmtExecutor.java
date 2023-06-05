@@ -46,6 +46,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
@@ -70,6 +71,8 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
@@ -83,6 +86,7 @@ import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -94,6 +98,7 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.PlannerProfile;
@@ -464,6 +469,52 @@ public class StmtExecutor {
 
                         handleQueryStmt(execPlan);
                         break;
+                    } catch (RemoteFileNotFoundException e) {
+                        // If modifications are made to the partition files of a Hive table by user,
+                        // such as through "insert overwrite partition", the Frontend couldn't be aware of these changes.
+                        // As a result, queries may use the file information cached in the FE for execution.
+                        // When the Backend cannot find the corresponding files, it returns a "Status::ACCESS_REMOTE_FILE_ERROR."
+                        // To handle this exception, we perform a retry. Before initiating the retry, we need to
+                        // refresh the metadata cache for the table and clear the query-level metadata cache.
+                        if (i == retryTime - 1) {
+                            throw e;
+                        }
+
+                        List<ScanNode> scanNodes = execPlan.getScanNodes();
+                        boolean existExternalCatalog = false;
+                        for (ScanNode scanNode : scanNodes) {
+                            if (scanNode instanceof HdfsScanNode) {
+                                HiveTable hiveTable = ((HdfsScanNode) scanNode).getHiveTable();
+                                String catalogName = hiveTable.getCatalogName();
+                                if (CatalogMgr.isExternalCatalog(catalogName)) {
+                                    existExternalCatalog = true;
+                                    ConnectorMetadata metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                                            .getOptionalMetadata(hiveTable.getCatalogName()).get();
+                                    // refresh catalog level metadata cache
+                                    metadata.refreshTable(hiveTable.getDbName(), hiveTable, new ArrayList<>(), true);
+                                    // clear query level metadata cache
+                                    metadata.clear();
+                                }
+                            }
+                        }
+
+                        if (!existExternalCatalog) {
+                            throw e;
+                        }
+
+                        if (!context.getMysqlChannel().isSend()) {
+                            String originStmt;
+                            if (parsedStmt.getOrigStmt() != null) {
+                                originStmt = parsedStmt.getOrigStmt().originStmt;
+                            } else {
+                                originStmt = this.originStmt.originStmt;
+                            }
+                            needRetry = true;
+                            LOG.warn("retry {} times. stmt: {}", (i + 1), originStmt);
+                        } else {
+                            throw e;
+                        }
+                        PlannerProfile.addCustomProperties("HMS.RETRY", String.valueOf(i + 1));
                     } catch (RpcException e) {
                         // When enable_collect_query_detail_info is set to true, the plan will be recorded in the query detail,
                         // and hence there is no need to log it here.
@@ -1231,12 +1282,10 @@ public class StmtExecutor {
     private String buildExplainString(ExecPlan execPlan, ResourceGroupClassifier.QueryType queryType) {
         String explainString = "";
         if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
-            if (context.getSessionVariable().isEnableResourceGroup()) {
-                TWorkGroup resourceGroup = CoordinatorPreprocessor.prepareResourceGroup(context, queryType);
-                String resourceGroupStr =
-                        resourceGroup != null ? resourceGroup.getName() : ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME;
-                explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
-            }
+            TWorkGroup resourceGroup = CoordinatorPreprocessor.prepareResourceGroup(context, queryType);
+            String resourceGroupStr =
+                    resourceGroup != null ? resourceGroup.getName() : ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME;
+            explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
         }
         // marked delete will get execPlan null
         if (execPlan == null) {
@@ -1712,9 +1761,8 @@ public class StmtExecutor {
                 } catch (Exception abortTxnException) {
                     LOG.warn("errors when cancel insert load job {}", jobId);
                 }
-            } else {
-                StatisticUtils.triggerCollectionOnFirstLoad(txnState, database, targetTable, true,
-                        StatisticUtils.createCounteredListener(1, null));
+            } else if (txnState != null) {
+                StatisticUtils.triggerCollectionOnFirstLoad(txnState, database, targetTable, true);
             }
         }
 

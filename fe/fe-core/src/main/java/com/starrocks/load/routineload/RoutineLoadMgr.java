@@ -52,6 +52,7 @@ import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
@@ -673,7 +674,7 @@ public class RoutineLoadMgr implements Writable {
 
     public void saveRoutineLoadJobsV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
         final int cnt = 1 + idToRoutineLoadJob.size();
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, RoutineLoadMgr.class.getName(), cnt);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.ROUTINE_LOAD_MGR, cnt);
         writer.writeJson(idToRoutineLoadJob.size());
         for (RoutineLoadJob loadJob : idToRoutineLoadJob.values()) {
             writer.writeJson(loadJob);
@@ -681,24 +682,18 @@ public class RoutineLoadMgr implements Writable {
         writer.close();
     }
 
-    public void loadRoutineLoadJobsV2(DataInputStream dis) throws IOException,
-            SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, RoutineLoadMgr.class.getName());
+    public void loadRoutineLoadJobsV2(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int size = reader.readInt();
+        while (size-- > 0) {
+            RoutineLoadJob routineLoadJob = reader.readJson(RoutineLoadJob.class);
 
-        try {
-            int size = reader.readInt();
-            while (size-- > 0) {
-                RoutineLoadJob routineLoadJob = reader.readJson(RoutineLoadJob.class);
-
-                if (routineLoadJob.needRemove()) {
-                    LOG.info("discard expired job [{}]", routineLoadJob.getId());
-                    continue;
-                }
-
-                putJob(routineLoadJob);
+            if (routineLoadJob.needRemove()) {
+                LOG.info("discard expired job [{}]", routineLoadJob.getId());
+                continue;
             }
-        } finally {
-            reader.close();
+
+            putJob(routineLoadJob);
         }
     }
 }

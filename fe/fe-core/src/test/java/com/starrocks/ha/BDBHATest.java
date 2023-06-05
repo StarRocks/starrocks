@@ -17,6 +17,8 @@ package com.starrocks.ha;
 
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
@@ -85,7 +87,9 @@ public class BDBHATest {
 
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
         GlobalStateMgr.getCurrentState().getNodeMgr().save(image1.getDataOutputStream());
-        GlobalStateMgr.getCurrentState().getNodeMgr().load(image1.getDataInputStream());
+        SRMetaBlockReader reader = new SRMetaBlockReader(image1.getDataInputStream(), SRMetaBlockID.NODE_MGR);
+        GlobalStateMgr.getCurrentState().getNodeMgr().load(reader);
+        reader.close();
         Assert.assertEquals(GlobalStateMgr.getCurrentState().getRemovedFrontendNames().size(), 1);
     }
 }

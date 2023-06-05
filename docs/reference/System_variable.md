@@ -18,9 +18,9 @@ SHOW VARIABLES LIKE '%time_zone%';
 
 ### Set variables
 
-Variables can generally be set to take effect **globally** or **only on the current session**. When set to global, a new value will be used in subsequent new sessions without affecting the current session. When set to "current session only", the variable will only take effect on the current session.
+You can set variables to take effect **globally** or **only on the current session**. When set to global, the new value will be used for subsequent new sessions, while the current session still uses the original value. When set to "current session only", the variable will only take effect on the current session.
 
-A variable set by `SET var_name=xxx;` only takes effect for the current session. For example:
+A variable set by `SET var_name=xxx;` only takes effect for the current session. Example:
 
 ```SQL
 SET query_mem_limit = 137438953472;
@@ -30,15 +30,15 @@ SET forward_to_master = true;
 SET time_zone = "Asia/Shanghai";
 ```
 
-A variable set by the `SET GLOBAL var_name=xxx;` statement takes effect globally. For example:
+A variable set by `SET GLOBAL var_name=xxx;` takes effect globally. Example:
 
 ```SQL
 SET GLOBAL query_mem_limit = 137438953472;
 ```
 
-> Note: Only ADMIN users can set variables to be globally effective. Globally effective variables do not affect the current session, only subsequent new sessions.
+> Note: Only users with the SYSTEM-level OPERATE privilege can set variables to be globally effective. Globally effective variables do not affect the current session, only subsequent new sessions.
 
-Variables that can be set both globally or partially effective include:
+Variables that can take effect both globally and at the session level include:
 
 * batch_size
 * disable_streaming_preaggregations
@@ -148,11 +148,9 @@ SELECT /*+ SET_VAR
 
   Used to enable the strict mode when loading data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md).
 
-* enable_spilling
+* enable_spill
 
-  Used to enable large data volume drop sorting. The default value is false, meaning it is not enabled. It is enabled when the user does not specify a `LIMIT` condition in the `ORDER BY` clause and sets `enable_spilling` to true. When enabled, the BE data directory `starrocks-scratch/` is used to store temporary spilling data that will be cleared after the query is completed.
-
-  This function is mainly used for sorting operations with large data volume using limited memory.
+  Whether to enable intermediate result spilling. Default: `false`. If it is set to `true`, StarRocks spills the intermediate results to disk to reduce the memory usage when processing aggregate, sort, or join operators in queries.
 
 * event_scheduler
 
@@ -294,7 +292,7 @@ SELECT /*+ SET_VAR
 
 * max_allowed_packet
 
-  Used for compatibility with the JDBC connection pool C3P0. This parameter specifies the maximum size of packets that can be transmitted between the client and server. Default value: 32 MB. You can raise this value if the client reports "PacketTooBigException".
+  Used for compatibility with the JDBC connection pool C3P0. This parameter specifies the maximum size of packets that can be transmitted between the client and server. Default value: 32 MB. Unit: Byte. You can raise this value if the client reports "PacketTooBigException".
 
 * max_pushdown_conditions_per_column
 
@@ -474,6 +472,15 @@ SELECT /*+ SET_VAR
   The maximum number of rows allowed for the Hash table based on which Bloom filter Local RF is generated. Local RF will not be generated if this value is exceeded. This variable prevents the generation of an excessively long Local RF.
 
   The value is an integer. Default value: 1024000.
+
+* spill_mode
+
+  The execution mode of intermediate result spilling. Valid values:
+
+    * `auto`: Spilling is automatically triggered when the memory usage threshold is reached.
+    * `force`: StarRocks forcibly executes spilling for all relevant operators, regardless of memory usage.
+   
+  This variable takes effect only when the variable `enable_spill` is set to `true`.
 
 * sql_dialect  (v3.0 and later)
 

@@ -47,6 +47,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
@@ -560,16 +561,11 @@ public class SmallFileMgr implements Writable {
         return checksum;
     }
 
-    public void loadSmallFilesV2(DataInputStream in) throws IOException, SRMetaBlockEOFException, SRMetaBlockException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(in, SmallFileMgr.class.getName());
-        try {
-            int size = reader.readInt();
-            while (size-- > 0) {
-                SmallFile file = reader.readJson(SmallFile.class);
-                idToFiles.put(file.id, file);
-            }
-        } finally {
-            reader.close();
+    public void loadSmallFilesV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockEOFException, SRMetaBlockException {
+        int size = reader.readInt();
+        while (size-- > 0) {
+            SmallFile file = reader.readJson(SmallFile.class);
+            idToFiles.put(file.id, file);
         }
     }
 
@@ -579,7 +575,7 @@ public class SmallFileMgr implements Writable {
     }
 
     public void saveSmallFilesV2(DataOutputStream out) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(out, SmallFileMgr.class.getName(), 1 + idToFiles.size());
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(out, SRMetaBlockID.SMALL_FILE_MGR, 1 + idToFiles.size());
         writer.writeJson(idToFiles.size());
         for (SmallFile file : idToFiles.values()) {
             writer.writeJson(file);

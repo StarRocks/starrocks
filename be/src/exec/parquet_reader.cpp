@@ -23,6 +23,7 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "fmt/format.h"
+#include "parquet/schema.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {
@@ -71,8 +72,7 @@ Status ParquetReaderWrap::next_selected_row_group() {
     return Status::EndOfFile("End of row group");
 }
 
-Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs,
-                                              const std::string& timezone) {
+Status ParquetReaderWrap::_init_parquet_reader() {
     try {
         parquet::ArrowReaderProperties arrow_reader_properties;
         /*
@@ -125,8 +125,18 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
             }
         }
 
-        _timezone = timezone;
+        return Status::OK();
+    } catch (parquet::ParquetException& e) {
+        std::stringstream str_error;
+        str_error << "Init parquet reader fail. " << e.what() << ", filename: " << _filename;
+        LOG(WARNING) << str_error.str();
+        return Status::InternalError(str_error.str());
+    }
+}
 
+Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs) {
+    RETURN_IF_ERROR(_init_parquet_reader());
+    try {
         if (_current_line_of_group == 0) { // the first read
             RETURN_IF_ERROR(column_indices(tuple_slot_descs));
             arrow::Status status = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids, &_rb_batch);
@@ -164,6 +174,94 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
         LOG(WARNING) << str_error.str() << " filename: " << _filename;
         return Status::InternalError(fmt::format("{}. filename: {}", str_error.str(), _filename));
     }
+}
+
+Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
+    RETURN_IF_ERROR(_init_parquet_reader());
+
+    const auto& file_schema = _file_metadata->schema();
+
+    for (auto i = 0; i < file_schema->group_node()->field_count(); i++) {
+        const auto& field = file_schema->group_node()->field(i);
+        const auto& name = field->name();
+
+        if (!field->is_primitive()) {
+            // Now, we treat all nested types as VARCHAR.
+            schema->emplace_back(i, name, TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+            continue;
+        }
+
+        auto column = file_schema->Column(file_schema->ColumnIndex(*field));
+
+        auto physical_type = column->physical_type();
+        auto logical_type = column->logical_type();
+
+        // See detail in https://arrow.apache.org/docs/cpp/parquet.html
+        TypeDescriptor tp;
+        switch (physical_type) {
+        case parquet::Type::BOOLEAN:
+            tp = TypeDescriptor(TYPE_BOOLEAN);
+            break;
+        case parquet::Type::FLOAT:
+            tp = TypeDescriptor(TYPE_FLOAT);
+            break;
+        case parquet::Type::DOUBLE:
+            tp = TypeDescriptor(TYPE_DOUBLE);
+            break;
+        case parquet::Type::INT32:
+            if (logical_type->is_int()) {
+                tp = TypeDescriptor(TYPE_INT);
+            } else if (logical_type->is_date()) {
+                tp = TypeDescriptor(TYPE_DATE);
+            } else if (logical_type->is_time()) {
+                tp = TypeDescriptor(TYPE_TIME);
+            } else if (logical_type->is_decimal()) {
+                tp = TypeDescriptor(TYPE_DECIMAL);
+            } else {
+                tp = TypeDescriptor(TYPE_INT);
+            }
+            break;
+        case parquet::Type::INT64:
+            if (logical_type->is_int()) {
+                tp = TypeDescriptor(TYPE_BIGINT);
+            } else if (logical_type->is_time()) {
+                tp = TypeDescriptor(TYPE_TIME);
+            } else if (logical_type->is_timestamp()) {
+                tp = TypeDescriptor(TYPE_DATETIME);
+            } else if (logical_type->is_decimal()) {
+                tp = TypeDescriptor(TYPE_DECIMAL);
+            } else {
+                tp = TypeDescriptor(TYPE_BIGINT);
+            }
+            break;
+        case parquet::Type::INT96:
+            tp = TypeDescriptor(TYPE_DATETIME);
+            break;
+        case parquet::Type::BYTE_ARRAY:
+            if (logical_type->is_string()) {
+                tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            } else if (logical_type->is_decimal()) {
+                tp = TypeDescriptor(TYPE_DECIMAL);
+            } else {
+                tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            }
+            break;
+        case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
+            if (logical_type->is_decimal()) {
+                tp = TypeDescriptor(TYPE_DECIMAL);
+            } else {
+                tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            }
+            break;
+        }
+        default:
+            return Status::NotSupported(
+                    fmt::format("Unkown supported parquet physical type: {}, column name: {}", physical_type, name));
+        }
+        schema->emplace_back(i, name, tp);
+    }
+
+    return Status::OK();
 }
 
 void ParquetReaderWrap::close() {
@@ -283,7 +381,7 @@ int64_t ParquetChunkReader::total_num_rows() const {
 Status ParquetChunkReader::next_batch(RecordBatchPtr* batch) {
     switch (_state) {
     case State::UNINITIALIZED: {
-        RETURN_IF_ERROR(_parquet_reader->init_parquet_reader(_src_slot_descs, _time_zone));
+        RETURN_IF_ERROR(_parquet_reader->init_parquet_reader(_src_slot_descs));
         _state = INITIALIZED;
         break;
     }
@@ -306,6 +404,11 @@ Status ParquetChunkReader::next_batch(RecordBatchPtr* batch) {
     }
     *batch = _parquet_reader->get_batch();
     return Status::OK();
+}
+
+Status ParquetChunkReader::get_schema(std::vector<SlotDescriptor>* schema) {
+    RETURN_IF_ERROR(_parquet_reader->init_parquet_reader(_src_slot_descs));
+    return _parquet_reader->get_schema(schema);
 }
 
 using StarRocksStatusCode = ::starrocks::TStatusCode::type;

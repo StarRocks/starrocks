@@ -223,7 +223,7 @@ public class Load {
         return shadowColumnDescs;
     }
 
-    public static List<ImportColumnDesc> getMaterializedShadowColumnDesc(OlapTable tbl, String dbName) {
+    public static List<ImportColumnDesc> getMaterializedShadowColumnDesc(Table tbl, String dbName) {
         List<ImportColumnDesc> shadowColumnDescs = Lists.newArrayList();
         for (Column column : tbl.getFullSchema()) {
             if (!column.isMaterializedColumn()) {
@@ -437,7 +437,7 @@ public class Load {
             }
         }
     
-        copiedColumnExprs.addAll(getMaterializedShadowColumnDesc((OlapTable) tbl, dbName));
+        copiedColumnExprs.addAll(getMaterializedShadowColumnDesc(tbl, dbName));
         // get shadow column desc when table schema change
         copiedColumnExprs.addAll(getSchemaChangeShadowColumnDesc(tbl, columnExprMap));
 
@@ -719,7 +719,7 @@ public class Load {
                 }
 
                 SlotRef slotRef = (SlotRef) child;
-                String columnName = slotRef.getColumn().getName();
+                String columnName = slotRef.getColumnName();
                 if (excludedColumns.contains(columnName)) {
                     continue;
                 }

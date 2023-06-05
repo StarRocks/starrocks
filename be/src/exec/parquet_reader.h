@@ -66,15 +66,19 @@ public:
 
     void close();
     Status size(int64_t* size);
-    Status init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs, const std::string& timezone);
+    Status init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs);
     Status read_record_batch(const std::vector<SlotDescriptor*>& tuple_slot_descs, bool* eof);
     const std::shared_ptr<arrow::RecordBatch>& get_batch();
     int64_t num_rows() { return _num_rows; }
+
+    Status get_schema(std::vector<SlotDescriptor>* schema);
 
 private:
     Status column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs);
     Status handle_timestamp(const std::shared_ptr<arrow::TimestampArray>& ts_array, uint8_t* buf, int32_t* wbtyes);
     Status next_selected_row_group();
+    // _init_parquet_reader initializes the underlying parquets reader.
+    Status _init_parquet_reader();
 
     const int32_t _num_of_columns_from_file;
     int64_t _num_rows = 0;
@@ -100,7 +104,6 @@ private:
     int64_t _read_offset;
     int64_t _read_size;
 
-    std::string _timezone;
     std::string _filename;
 };
 
@@ -114,6 +117,7 @@ public:
     ~ParquetChunkReader();
     Status next_batch(RecordBatchPtr* batch);
     int64_t total_num_rows() const;
+    Status get_schema(std::vector<SlotDescriptor>* schema);
 
 private:
     std::shared_ptr<ParquetReaderWrap> _parquet_reader;

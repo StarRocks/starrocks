@@ -38,13 +38,14 @@ namespace starrocks {
 class ParquetScanner : public FileScanner {
 public:
     ParquetScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-                   ScannerCounter* counter);
+                   ScannerCounter* counter, bool schema_only = false);
 
     ~ParquetScanner() override;
 
     Status open() override;
 
     StatusOr<ChunkPtr> get_next() override;
+    Status get_schema(std::vector<SlotDescriptor>* schema);
 
     void close() override;
 

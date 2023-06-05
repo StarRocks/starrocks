@@ -181,7 +181,7 @@ public class IcebergApiConverterTest {
                 "  12: c12: required decimal(-1, -1) ()\n" +
                 "  13: c13: required list<int> ()\n" +
                 "  14: c14: required map<int, int> ()\n" +
-                "  15: c15: required struct<19: col0: optional int> ()\n" +
+                "  15: c15: required struct<19: col1: optional int> ()\n" +
                 "}", schema.toString());
 
         PartitionSpec spec = IcebergApiConverter.parsePartitionFields(schema, Lists.newArrayList("c1"));

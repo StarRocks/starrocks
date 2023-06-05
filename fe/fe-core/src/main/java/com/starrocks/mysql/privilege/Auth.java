@@ -60,6 +60,7 @@ import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
@@ -1985,7 +1986,7 @@ public class Auth implements Writable {
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, Auth.class.getName(), 2);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.AUTH, 2);
 
         DataOutputBuffer buffer = new DataOutputBuffer();
         write(buffer);
@@ -1999,23 +2000,18 @@ public class Auth implements Writable {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, Auth.class.getName());
-        try {
-            byte[] s = reader.readJson(byte[].class);
-            DataInputStream dataInputStream = new DataInputStream(new ByteArrayInputStream(s));
-            readFields(dataInputStream);
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        byte[] s = reader.readJson(byte[].class);
+        DataInputStream dataInputStream = new DataInputStream(new ByteArrayInputStream(s));
+        readFields(dataInputStream);
 
-            SerializeData serializeData = reader.readJson(SerializeData.class);
-            try {
-                this.impersonateUserPrivTable.loadEntries(serializeData.entries);
-                this.roleManager.loadImpersonateRoleToUser(serializeData.impersonateRoleToUser);
-            } catch (AnalysisException e) {
-                LOG.error("failed to readAsGson, ", e);
-                throw new IOException(e.getMessage());
-            }
-        } finally {
-            reader.close();
+        SerializeData serializeData = reader.readJson(SerializeData.class);
+        try {
+            this.impersonateUserPrivTable.loadEntries(serializeData.entries);
+            this.roleManager.loadImpersonateRoleToUser(serializeData.impersonateRoleToUser);
+        } catch (AnalysisException e) {
+            LOG.error("failed to readAsGson, ", e);
+            throw new IOException(e.getMessage());
         }
     }
 
