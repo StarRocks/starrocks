@@ -77,15 +77,20 @@ static ColumnPtr do_array_append(const Column& elements, const UInt32Column& off
 }
 
 // FIXME: A proof-of-concept implementation with poor performance.
+<<<<<<< HEAD:be/src/exprs/vectorized/array_functions.cpp
 ColumnPtr ArrayFunctions::array_append([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const Column* arg0 = columns[0].get();
     const Column* arg1 = columns[1].get();
     if (arg0->only_null()) {
+=======
+StatusOr<ColumnPtr> ArrayFunctions::array_append([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+    if (columns[0]->only_null()) {
+>>>>>>> 5fa696771 ([BugFix] array function doest not process const inputs (#24586)):be/src/exprs/array_functions.cpp
         return columns[0];
     }
 
-    arg0 = arg0->has_null() || arg0->is_constant() ? arg0 : ColumnHelper::get_data_column(arg0);
-    arg1 = arg1->has_null() || arg1->is_constant() ? arg1 : ColumnHelper::get_data_column(arg1);
+    const Column* arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]).get();
+    const Column* arg1 = columns[1].get();
 
     const Column* array = arg0;
     const NullableColumn* nullable_array = nullptr;
@@ -321,10 +326,14 @@ private:
         }
     }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/array_functions.cpp
     static ColumnPtr _array_remove_generic(const ColumnPtr& array, const ColumnPtr& target) {
         if (array->only_null()) {
             return array;
         }
+=======
+    static StatusOr<ColumnPtr> _array_remove_generic(const ColumnPtr& array, const ColumnPtr& target) {
+>>>>>>> 5fa696771 ([BugFix] array function doest not process const inputs (#24586)):be/src/exprs/array_functions.cpp
         if (auto nullable = dynamic_cast<const NullableColumn*>(array.get()); nullable != nullptr) {
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
             auto result = _array_remove_non_nullable(*array_col, *target);
@@ -448,9 +457,16 @@ DEFINE_ARRAY_CUMSUM_FN(double, TYPE_DOUBLE)
 
 #undef DEFINE_ARRAY_CUMSUM_FN
 
+<<<<<<< HEAD:be/src/exprs/vectorized/array_functions.cpp
 ColumnPtr ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
+=======
+StatusOr<ColumnPtr> ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL({columns[0]});
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = columns[1];                                                                      // element
+>>>>>>> 5fa696771 ([BugFix] array function doest not process const inputs (#24586)):be/src/exprs/array_functions.cpp
 
     return ArrayRemoveImpl::evaluate(arg0, arg1);
 }
@@ -638,6 +654,7 @@ private:
         }
     }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/array_functions.cpp
     static ColumnPtr _array_contains_generic(const Column& array, const Column& target) {
         // array_contains(NULL, xxx) -> NULL
         if (array.only_null()) {
@@ -645,6 +662,9 @@ private:
             result->append_nulls(array.size());
             return result;
         }
+=======
+    static StatusOr<ColumnPtr> _array_contains_generic(const Column& array, const Column& target) {
+>>>>>>> 5fa696771 ([BugFix] array function doest not process const inputs (#24586)):be/src/exprs/array_functions.cpp
         if (auto nullable = dynamic_cast<const NullableColumn*>(&array); nullable != nullptr) {
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
             auto result = _array_contains_non_nullable(*array_col, target);
@@ -886,6 +906,7 @@ private:
         return FunctionHelper::union_null_column(a->null_column(), b->null_column());
     }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/array_functions.cpp
     static ColumnPtr _array_has_generic(const Column& array, const Column& target) {
         // has_any(NULL, xxx) | has_any(xxx, NULL) -> NULL
         if (array.only_null() || target.only_null()) {
@@ -893,6 +914,9 @@ private:
             result->append_nulls(array.size());
             return result;
         }
+=======
+    static StatusOr<ColumnPtr> _array_has_generic(const Column& array, const Column& target) {
+>>>>>>> 5fa696771 ([BugFix] array function doest not process const inputs (#24586)):be/src/exprs/array_functions.cpp
         DCHECK_EQ(array.size(), target.size());
 
         const ArrayColumn* array_col = nullptr;
@@ -929,30 +953,60 @@ private:
     }
 };
 
+<<<<<<< HEAD:be/src/exprs/vectorized/array_functions.cpp
 ColumnPtr ArrayFunctions::array_contains([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
+=======
+StatusOr<ColumnPtr> ArrayFunctions::array_contains([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL({columns[0]});
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = columns[1];                                                                      // element
+>>>>>>> 5fa696771 ([BugFix] array function doest not process const inputs (#24586)):be/src/exprs/array_functions.cpp
 
     return ArrayContainsImpl<false, UInt8Column>::evaluate(*arg0, *arg1);
 }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/array_functions.cpp
 ColumnPtr ArrayFunctions::array_position([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
+=======
+StatusOr<ColumnPtr> ArrayFunctions::array_position([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL({columns[0]});
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = columns[1];                                                                      // element
+>>>>>>> 5fa696771 ([BugFix] array function doest not process const inputs (#24586)):be/src/exprs/array_functions.cpp
 
     return ArrayContainsImpl<true, Int32Column>::evaluate(*arg0, *arg1);
 }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/array_functions.cpp
 ColumnPtr ArrayFunctions::array_contains_any([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
+=======
+StatusOr<ColumnPtr> ArrayFunctions::array_contains_any([[maybe_unused]] FunctionContext* context,
+                                                       const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]); // element
+>>>>>>> 5fa696771 ([BugFix] array function doest not process const inputs (#24586)):be/src/exprs/array_functions.cpp
 
     return ArrayHasImpl<true>::evaluate(*arg0, *arg1);
 }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/array_functions.cpp
 ColumnPtr ArrayFunctions::array_contains_all([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
+=======
+StatusOr<ColumnPtr> ArrayFunctions::array_contains_all([[maybe_unused]] FunctionContext* context,
+                                                       const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]); // element
+>>>>>>> 5fa696771 ([BugFix] array function doest not process const inputs (#24586)):be/src/exprs/array_functions.cpp
 
     return ArrayHasImpl<false>::evaluate(*arg0, *arg1);
 }
