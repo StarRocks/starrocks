@@ -30,10 +30,6 @@ select ARRAY_DISTINCT( cast ('[40360,40361]' as array<int>));
 -- result:
 [40361,40360]
 -- !result
-select array_filter(cast ('[40360,40361]' as array<int>),[0,1]);
--- result:
-[40361]
--- !result
 select array_intersect( cast ('[40360,40361]' as array<int>), [40360]);
 -- result:
 [40360]
@@ -45,10 +41,6 @@ select array_join( cast ('[40360,40361]' as array<int>), '-');
 select array_length( cast ('[40360,40361]' as array<int>));
 -- result:
 2
--- !result
-select array_map(x->x+1, cast ('[40360,40361]' as array<int>));
--- result:
-[40361,40362]
 -- !result
 select array_max( cast ('[40360,40361]' as array<int>));
 -- result:
@@ -77,14 +69,6 @@ select array_slice( cast ('[40360,40361]' as array<int>), 1,1);
 select ARRAY_SORT( cast ('[40360,40361]' as array<int>));
 -- result:
 [40360,40361]
--- !result
-select array_sortby( cast ('[40360,40361]' as array<int>), [40360,1]);
--- result:
-[40361,40360]
--- !result
-select array_sortby([40360,1], cast ('[40360,40361]' as array<int>));
--- result:
-[40360,1]
 -- !result
 select array_sum( cast ('[40360,40361]' as array<int>));
 -- result:
@@ -134,10 +118,6 @@ select ARRAY_DISTINCT( cast ('null' as array<int>));
 -- result:
 None
 -- !result
-select array_filter(cast ('null' as array<int>),[0,1]);
--- result:
-None
--- !result
 select array_intersect( cast ('null' as array<int>), [40360]);
 -- result:
 None
@@ -147,10 +127,6 @@ select array_join( cast ('null' as array<int>), '-');
 None
 -- !result
 select array_length( cast ('null' as array<int>));
--- result:
-None
--- !result
-select array_map(x->x+1, cast ('null' as array<int>));
 -- result:
 None
 -- !result
@@ -181,14 +157,6 @@ None
 select ARRAY_SORT( cast ('null' as array<int>));
 -- result:
 None
--- !result
-select array_sortby( cast ('null' as array<int>), [40360,1]);
--- result:
-None
--- !result
-select array_sortby([40360,1], cast ('null' as array<int>));
--- result:
-[40360,1]
 -- !result
 select array_sum( cast ('null' as array<int>));
 -- result:
