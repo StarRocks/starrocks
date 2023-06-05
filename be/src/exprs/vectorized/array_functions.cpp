@@ -320,9 +320,6 @@ private:
     }
 
     static ColumnPtr _array_remove_generic(const ColumnPtr& array, const ColumnPtr& target) {
-        if (array->only_null()) {
-            return array;
-        }
         if (auto nullable = dynamic_cast<const NullableColumn*>(array.get()); nullable != nullptr) {
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
             auto result = _array_remove_non_nullable(*array_col, *target);
