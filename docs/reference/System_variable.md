@@ -1,12 +1,10 @@
 # System variables
 
-## View and set variables
-
-This section describes the variables supported by StarRocks. You can view these variables by using the `SHOW VARIABLES` command. These variables can take effect globally on the entire system or only on the current session.
+This section describes the variables supported by StarRocks. You can view these variables by using the `SHOW VARIABLES` command. You can also use SET to make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
 
 The variables in StarRocks refer to the variable sets in MySQL, but **some variables are only compatible with the MySQL client protocol and do not function on the MySQL database**.
 
-### View variables
+## View variables
 
 You can view all or some variables by using `SHOW VARIABLES [LIKE 'xxx']`. Example:
 
@@ -21,9 +19,9 @@ SHOW VARIABLES;
 SHOW VARIABLES LIKE '%time_zone%';
 ```
 
-### Set variables
+## Set variables
 
-#### Set variables globally or for a single session
+### Set variables globally or for a single session
 
 You can set variables to take effect **globally** or **only on the current session**. When set to global, the new value will be used for subsequent new sessions, while the current session still uses the original value. When set to "current session only", the variable will only take effect on the current session.
 
@@ -77,7 +75,7 @@ SET exec_mem_limit = 10 * 1024 * 1024 * 1024;
 SET forward_to_master = concat('tr', 'u', 'e');
 ```
 
-#### Set variables in a single query statement
+### Set variables in a single query statement
 
 In some scenarios, you may need to set variables specifically for certain queries. By using the `SET_VAR` hint, you can set session variables that will take effect only within a single statement. Example:
 
