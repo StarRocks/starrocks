@@ -106,7 +106,7 @@ SELECT /*+ SET_VAR
 
 ## Descriptions of variables
 
-* activate_all_roles_on_login（global）
+* activate_all_roles_on_login (global）
 
   Whether to enable all roles (including default and granted roles) for all StarRocks users when they connect to the StarRocks cluster. Default value: false.
 
@@ -128,7 +128,7 @@ SELECT /*+ SET_VAR
 
   Whether to enable low cardinality optimization. After this feature is enabled, the performance of querying STRING columns improves by about three times. Default value: true.
 
-* character_set_database（global）
+* character_set_database (global）
 
   The character set supported by StarRocks. Only UTF8 (`utf8`) is supported.
 
