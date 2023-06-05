@@ -75,7 +75,6 @@ Status RawSpillerWriter::flush_task(RuntimeState* state, const MemTablePtr& mem_
     SerdeContext spill_ctx;
     {
         TRY_CATCH_ALLOC_SCOPE_START()
-        SCOPED_TIMER(_spiller->metrics().write_io_timer);
         // flush all pending result to spilled files
         size_t num_rows_flushed = 0;
         RETURN_IF_ERROR(mem_table->flush([&](const auto& chunk) {

@@ -52,7 +52,6 @@ struct SpillProcessMetrics {
     RuntimeProfile::Counter* spill_rows = nullptr;
     RuntimeProfile::Counter* flush_timer = nullptr;
     RuntimeProfile::Counter* restore_timer = nullptr;
-    RuntimeProfile::Counter* write_io_timer = nullptr;
     RuntimeProfile::Counter* restore_rows = nullptr;
     RuntimeProfile::Counter* shuffle_timer = nullptr;
     RuntimeProfile::Counter* split_partition_timer = nullptr;

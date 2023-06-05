@@ -43,28 +43,27 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
     profile->add_child(_spiller_metrics.get(), true, nullptr);
 
     spill_timer = ADD_TIMER(_spiller_metrics.get(), "SpillTime");
-    spill_rows = ADD_COUNTER(_spiller_metrics.get(), "SpilledRows", TUnit::UNIT);
-    flush_timer = ADD_TIMER(_spiller_metrics.get(), "SpillFlushTimer");
-    write_io_timer = ADD_TIMER(_spiller_metrics.get(), "SpillWriteIOTimer");
-    restore_rows = ADD_COUNTER(_spiller_metrics.get(), "SpillRestoreRows", TUnit::UNIT);
-    restore_timer = ADD_TIMER(_spiller_metrics.get(), "SpillRestoreTimer");
-    shuffle_timer = ADD_TIMER(_spiller_metrics.get(), "SpillShuffleTimer");
-    split_partition_timer = ADD_TIMER(_spiller_metrics.get(), "SplitPartitionTimer");
+    spill_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsSpilled", TUnit::UNIT);
+    flush_timer = ADD_TIMER(_spiller_metrics.get(), "FlushTime");
+    restore_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsRestored", TUnit::UNIT);
+    restore_timer = ADD_TIMER(_spiller_metrics.get(), "RestoreTime");
+    shuffle_timer = ADD_TIMER(_spiller_metrics.get(), "ShuffleTime");
+    split_partition_timer = ADD_TIMER(_spiller_metrics.get(), "SplitPartitionTime");
 
-    flush_bytes = ADD_COUNTER(_spiller_metrics.get(), "SpillFlushBytes", TUnit::BYTES);
-    restore_bytes = ADD_COUNTER(_spiller_metrics.get(), "SpillRestoreBytes", TUnit::BYTES);
-    serialize_timer = ADD_TIMER(_spiller_metrics.get(), "SpillSerializeTimer");
-    deserialize_timer = ADD_TIMER(_spiller_metrics.get(), "SpillDeserializeTimer");
+    flush_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesFlushToDisk", TUnit::BYTES);
+    restore_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesRestoreFromDisk", TUnit::BYTES);
+    serialize_timer = ADD_TIMER(_spiller_metrics.get(), "SerializeTime");
+    deserialize_timer = ADD_TIMER(_spiller_metrics.get(), "DeserializeTime");
 
-    restore_from_mem_rows = ADD_COUNTER(_spiller_metrics.get(), "SpillRestoreFromMemRows", TUnit::UNIT);
-    restore_from_mem_bytes = ADD_COUNTER(_spiller_metrics.get(), "SpillRestoreFromMemBytes", TUnit::UNIT);
+    restore_from_mem_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsRestoreFromMemory", TUnit::UNIT);
+    restore_from_mem_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesRestoreFromMemory", TUnit::UNIT);
 
     mem_table_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
-            "SpillMemTablePeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+            "MemTablePeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     input_stream_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
-            "SpillInputStreamPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+            "InputStreamPeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     partition_writer_peak_memory_usage =
-            _spiller_metrics->AddHighWaterMarkCounter("SpillPartitionWriterPeakMemoryUsage", TUnit::BYTES,
+            _spiller_metrics->AddHighWaterMarkCounter("PartitionWriterPeakMemoryBytes", TUnit::BYTES,
                                              RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
 }
 
