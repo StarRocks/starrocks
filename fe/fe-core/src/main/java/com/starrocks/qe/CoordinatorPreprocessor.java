@@ -1340,6 +1340,21 @@ public class CoordinatorPreprocessor {
         return fragmentIdToBucketNumMap.get(fragmentId);
     }
 
+    public TNetworkAddress toRpcHost(TNetworkAddress host) throws Exception {
+        ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
+                host.getHostname(), host.getPort());
+        if (computeNode == null) {
+            computeNode =
+                    GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
+            if (computeNode == null) {
+                // for debug
+                LOG.debug("computeNode is null in toRpcHost");
+                throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+            }
+        }
+        return new TNetworkAddress(computeNode.getHost(), computeNode.getBeRpcPort());
+    }
+
     private String backendInfosString(boolean chooseComputeNode) {
         if (chooseComputeNode) {
             String infoStr = "compute node: ";
@@ -1974,6 +1989,8 @@ public class CoordinatorPreprocessor {
                         idToBackend, idToComputeNode, backendIdRef);
 
                 if (execHostPort == null) {
+                    // for debug
+                    LOG.debug("execHostPort is null in computeScanRangeAssignment");
                     throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR
                             + backendInfosString(false));
                 }
