@@ -370,12 +370,13 @@ private:
                                                        NullColumnPtr* null_result, bool* is_nullable, bool* has_null,
                                                        int* null_index) {
         for (int i = 0; i < columns.size(); ++i) {
-            if (columns[i]->is_nullable()) {
+            auto col = ColumnHelper::unpack_and_duplicate_const_column(columns[i]->size(), columns[i]);
+            if (col->is_nullable()) {
                 (*is_nullable) = true;
-                (*has_null) = (columns[i]->has_null() || (*has_null));
+                (*has_null) = (col->has_null() || (*has_null));
                 (*null_index) = i;
 
-                const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[i].get());
+                const auto* src_nullable_column = down_cast<const NullableColumn*>(col.get());
                 src_columns->emplace_back(down_cast<ArrayColumn*>(src_nullable_column->data_column().get()));
                 if ((*null_result)) {
                     (*null_result) =
@@ -384,7 +385,7 @@ private:
                     (*null_result) = NullColumn::create(*src_nullable_column->null_column());
                 }
             } else {
-                src_columns->emplace_back(down_cast<ArrayColumn*>(columns[i].get()));
+                src_columns->emplace_back(down_cast<ArrayColumn*>(col.get()));
             }
         }
     }
