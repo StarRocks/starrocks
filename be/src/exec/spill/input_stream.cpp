@@ -79,14 +79,14 @@ Status UnionAllSpilledInputStream::prefetch(SerdeContext& ctx) {
 }
 
 StatusOr<ChunkUniquePtr> UnionAllSpilledInputStream::get_next(SerdeContext& context) {
-    while (_current_process_idx < _streams.size()) {
+    if (_current_process_idx < _streams.size()) {
         auto chunk_st = _streams[_current_process_idx]->get_next(context);
         if (chunk_st.ok()) {
             return std::move(chunk_st.value());
         }
         if (chunk_st.status().is_end_of_file()) {
             _current_process_idx++;
-            continue;
+            return std::make_unique<Chunk>();
         } else {
             return chunk_st.status();
         }
