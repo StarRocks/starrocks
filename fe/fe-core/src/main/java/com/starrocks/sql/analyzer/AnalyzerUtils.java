@@ -879,8 +879,7 @@ public class AnalyzerUtils {
 
         for (List<String> partitionValue : partitionValues) {
             if (partitionValue.size() != 1) {
-                Lists.newArrayList(
-                        "automatic partition only support single column for range partition.");
+                throw new AnalysisException("automatic partition only support single column for range partition.");
             }
             String partitionItem = partitionValue.get(0);
             DateTimeFormatter beginDateTimeFormat;
