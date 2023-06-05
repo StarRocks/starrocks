@@ -396,7 +396,7 @@ public class GrantsTo {
                                 (StorageVolumePEntryObject) privilegeEntry.getObject();
                         String storageVolumeId = storageVolumePEntryObject.getId();
                         StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
-                        if (storageVolumeId == null) {
+                        if (storageVolumeId.equals(PrivilegeBuiltinConstants.ALL_STORAGE_VOLUMES_ID)) {
                             try {
                                 List<String> storageVolumeNames = storageVolumeMgr.listStorageVolumeNames();
                                 for (String storageVolumeName : storageVolumeNames) {

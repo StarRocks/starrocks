@@ -2554,7 +2554,6 @@ public class ShowExecutor {
         PatternMatcher finalMatcher = matcher;
         storageVolumeNames = storageVolumeNames.stream()
                 .filter(storageVolumeName -> finalMatcher == null || finalMatcher.match(storageVolumeName))
-                // TODO: check privilege
                 .filter(storageVolumeName -> PrivilegeActions.checkAnyActionOnStorageVolume(connectContext, storageVolumeName))
                 .collect(Collectors.toList());
         for (String storageVolumeName : storageVolumeNames) {

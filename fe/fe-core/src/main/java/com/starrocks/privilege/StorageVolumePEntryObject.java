@@ -36,11 +36,12 @@ public class StorageVolumePEntryObject implements PEntryObject {
         }
         String name = tokens.get(0);
         if (name.equals("*")) {
-            return new StorageVolumePEntryObject(null);
+            return new StorageVolumePEntryObject(PrivilegeBuiltinConstants.ALL_STORAGE_VOLUMES_ID);
         } else {
             StorageVolume sv = null;
             try {
                 sv = mgr.getStorageVolumeMgr().getStorageVolumeByName(name);
+            // TODO: Change it to MetaNotFoundException
             } catch (AnalysisException e) {
                 throw new PrivObjNotFoundException("unknown storage volume: " + tokens.get(0));
             }
@@ -61,7 +62,7 @@ public class StorageVolumePEntryObject implements PEntryObject {
             return false;
         }
         StorageVolumePEntryObject other = (StorageVolumePEntryObject) obj;
-        if (other.id == null) {
+        if (other.id.equals(PrivilegeBuiltinConstants.ALL_STORAGE_VOLUMES_ID)) {
             return true;
         }
         return other.id.equals(id);
@@ -69,7 +70,7 @@ public class StorageVolumePEntryObject implements PEntryObject {
 
     @Override
     public boolean isFuzzyMatching() {
-        return id == null;
+        return id.equals(PrivilegeBuiltinConstants.ALL_STORAGE_VOLUMES_ID);
     }
 
     @Override
@@ -88,14 +89,14 @@ public class StorageVolumePEntryObject implements PEntryObject {
         }
         StorageVolumePEntryObject o = (StorageVolumePEntryObject) obj;
         // other > all
-        if (id == null) {
-            if (o.id == null) {
+        if (id.equals(PrivilegeBuiltinConstants.ALL_STORAGE_VOLUMES_ID)) {
+            if (o.id.equals(PrivilegeBuiltinConstants.ALL_STORAGE_VOLUMES_ID)) {
                 return 0;
             } else {
                 return 1;
             }
         }
-        if (o.id == null) {
+        if (o.id.equals(PrivilegeBuiltinConstants.ALL_STORAGE_VOLUMES_ID)) {
             return -1;
         }
         return id.compareTo(o.id);
