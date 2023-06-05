@@ -29,6 +29,7 @@ Status ColumnAccessPath::init(const TColumnAccessPath& column_path, RuntimeState
     _type = column_path.type;
 
     ExprContext* expr_ctx = nullptr;
+    // Todo: may support late materialization? to compute path by other column predicate
     RETURN_IF_ERROR(Expr::create_expr_tree(pool, column_path.path, &expr_ctx, state));
     if (!expr_ctx->root()->is_constant()) {
         return Status::InternalError("error column access constant path.");
