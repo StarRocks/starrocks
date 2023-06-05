@@ -16,6 +16,7 @@
 
 #include <mutex>
 
+#include "column/column_access_path.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
@@ -71,6 +72,8 @@ public:
     Status capture_tablet_rowsets(const std::vector<TInternalScanRange*>& olap_scan_ranges);
     const std::vector<TabletSharedPtr>& tablets() const { return _tablets; }
     const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets() const { return _tablet_rowsets; };
+
+    const std::vector<ColumnAccessPathPtr>* column_access_paths() const;
 
 private:
     OlapScanNode* _scan_node;

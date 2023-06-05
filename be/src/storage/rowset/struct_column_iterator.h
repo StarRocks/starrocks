@@ -19,5 +19,6 @@
 namespace starrocks {
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_struct_iter(std::unique_ptr<ColumnIterator> null_iter,
-                                                             std::vector<std::unique_ptr<ColumnIterator>> field_iters);
+                                                             std::vector<std::unique_ptr<ColumnIterator>> field_iters,
+                                                             std::vector<uint8_t> access_flags);
 }

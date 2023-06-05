@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "column/column_access_path.h"
 #include "runtime/global_dict/types.h"
 #include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
@@ -76,6 +77,8 @@ struct TabletReaderParams {
 
     bool sorted_by_keys_per_tablet = false;
     OlapRuntimeScanRangePruner runtime_range_pruner;
+
+    std::unordered_map<uint32_t, ColumnAccessPathPtr>* column_access_paths = nullptr;
 
 public:
     std::string to_string() const;

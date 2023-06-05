@@ -240,6 +240,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
     if (scanner_columns.empty()) {
         return Status::InternalError("failed to build storage scanner, no materialized slot!");
     }
+
     return Status::OK();
 }
 
@@ -258,6 +259,26 @@ Status OlapChunkSource::_init_unused_output_columns(const std::vector<std::strin
     return Status::OK();
 }
 
+Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
+    // column access paths
+    auto* paths = _scan_ctx->column_access_paths();
+    for (const auto& path : *paths) {
+        auto& root = path->path();
+        int32_t index = _tablet->field_index(root);
+        auto filed = schema->get_field_by_name(root);
+        if (index >= 0) {
+            auto res = path->convert_by_index(filed.get(), index);
+            // read whole data, doesn't effect query
+            if (res.ok()) {
+                _column_access_paths[index] = std::move(res.value());
+            }
+        }
+    }
+    _params.column_access_paths = &_column_access_paths;
+
+    return Status::OK();
+}
+
 Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     // output columns of `this` OlapScanner, i.e, the final output columns of `get_chunk`.
@@ -272,6 +293,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges(), scanner_columns, reader_columns));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
     starrocks::Schema child_schema = ChunkHelper::convert_schema(tablet_schema, reader_columns);
+    RETURN_IF_ERROR(_init_column_access_paths(&child_schema));
 
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),
                                              std::move(child_schema), _morsel->rowsets());
