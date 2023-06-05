@@ -31,9 +31,7 @@ bool UnorderedMemTable::is_empty() {
 }
 
 Status UnorderedMemTable::append(ChunkPtr chunk) {
-    LOG(INFO) << "consume mem: " << chunk->memory_usage();
     _tracker->consume(chunk->memory_usage());
-    LOG(INFO) << "tracker consum: " << _tracker->consumption();
     _spiller->metrics().mem_table_peak_memory_usage->add(chunk->memory_usage());
     _chunks.emplace_back(std::move(chunk));
     return Status::OK();
@@ -43,7 +41,6 @@ Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* ind
     if (_chunks.empty() || _chunks.back()->num_rows() + size > _runtime_state->chunk_size()) {
         _chunks.emplace_back(src.clone_empty());
         _tracker->consume(_chunks.back()->memory_usage());
-        LOG(INFO) << "tracker consum: " << _tracker->consumption();
         _spiller->metrics().mem_table_peak_memory_usage->add(_chunks.back()->memory_usage());
     }
 
