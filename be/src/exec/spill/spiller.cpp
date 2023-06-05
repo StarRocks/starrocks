@@ -62,9 +62,8 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
             "MemTablePeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     input_stream_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
             "InputStreamPeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
-    partition_writer_peak_memory_usage =
-            _spiller_metrics->AddHighWaterMarkCounter("PartitionWriterPeakMemoryBytes", TUnit::BYTES,
-                                             RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    partition_writer_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
+            "PartitionWriterPeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
 }
 
 Status Spiller::prepare(RuntimeState* state) {
