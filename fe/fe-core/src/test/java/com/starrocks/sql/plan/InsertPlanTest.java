@@ -759,13 +759,13 @@ public class InsertPlanTest extends PlanTestBase {
         explainString = getInsertExecPlan("insert into tmap values (2,2,map(2,2))");
         Assert.assertTrue(explainString.contains("2 | 2 | {2:'2'}")); // implicit cast
 
-        explainString = getInsertExecPlan("insert into tmap values (2,2,{})");
+        explainString = getInsertExecPlan("insert into tmap values (2,2,map{})");
         Assert.assertTrue(explainString.contains("2 | 2 | {}"));
 
-        explainString = getInsertExecPlan("insert into tmap values (2,2,{2:3, 2:4})");
+        explainString = getInsertExecPlan("insert into tmap values (2,2,map{2:3, 2:4})");
         Assert.assertTrue(explainString.contains("2 | 2 | {2:'3',2:'4'}")); // will distinct in BE
 
-        explainString = getInsertExecPlan("insert into tmap values (2,2,{2:2})");
+        explainString = getInsertExecPlan("insert into tmap values (2,2,map{2:2})");
         Assert.assertTrue(explainString.contains("2 | 2 | {2:'2'}")); // implicit cast
     }
 
