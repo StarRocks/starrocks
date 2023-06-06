@@ -21,14 +21,17 @@ import com.google.common.collect.Multimap;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 
 import java.util.Map;
 import java.util.Optional;
@@ -36,10 +39,12 @@ import java.util.Optional;
 public class EquationRewriter {
 
     private Multimap<ScalarOperator, Pair<ColumnRefOperator, ScalarOperator>> equationMap;
+    private Multimap<ScalarOperator, Pair<ColumnRefOperator, PredicateReplaceChecker>> predicateProbMap;
     private Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
 
     public EquationRewriter() {
         this.equationMap = ArrayListMultimap.create();
+        this.predicateProbMap = ArrayListMultimap.create();
     }
 
     public void setOutputMapping(Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
@@ -57,7 +62,26 @@ public class EquationRewriter {
             @Override
             public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
                 ScalarOperator tmp = replace(predicate);
-                return tmp != null ? tmp : super.visitBinaryPredicate(predicate, context);
+                if (tmp != null) {
+                    return tmp;
+                }
+
+                ScalarOperator left = predicate.getChild(0);
+                ScalarOperator right = predicate.getChild(1);
+
+                if (predicateProbMap.containsKey(left)) {
+                    Pair<ColumnRefOperator, PredicateReplaceChecker> pair = predicateProbMap.get(left).iterator().next();
+                    if (pair.second.canReplace(right)) {
+                        ColumnRefOperator replaced = columnMapping.get(pair.first);
+                        if (replaced != null) {
+                            ScalarOperator clonePredicate = predicate.clone();
+                            clonePredicate.setChild(0, replaced.clone());
+                            return clonePredicate;
+                        }
+                    }
+                }
+
+                return super.visitBinaryPredicate(predicate, context);
             }
 
             @Override
@@ -135,6 +159,14 @@ public class EquationRewriter {
         if (extendedEntry.second != col) {
             equationMap.put(extendedEntry.first, Pair.create(col, extendedEntry.second));
         }
+
+        if (expr instanceof CallOperator && ((CallOperator) expr).getFnName().equals(FunctionSet.TIME_SLICE)) {
+            // mv:    SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table
+            // query: SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table WHERE dt > '2023-06-01'
+            // if '2023-06-01'=time_slice('2023-06-01', INTERVAL 5 MINUTE), can replace predicate dt => t
+            ScalarOperator first = expr.getChild(0);
+            predicateProbMap.put(first, Pair.create(col, new TimeSliceReplaceChecker(((CallOperator) expr))));
+        }
     }
 
     private static class EquationTransformer extends ScalarOperatorVisitor<Void, Void> {
@@ -190,6 +222,31 @@ public class EquationRewriter {
             return Expr.getBuiltinFunction(fnName, call.getFunction().getArgs(), Function.CompareMode.IS_IDENTICAL);
         }
 
+    }
+
+    private interface PredicateReplaceChecker {
+        boolean canReplace(ScalarOperator operator);
+    }
+
+    private static class TimeSliceReplaceChecker implements PredicateReplaceChecker {
+        private final CallOperator mvTimeSlice;
+
+        public TimeSliceReplaceChecker(CallOperator mvTimeSlice) {
+            this.mvTimeSlice = mvTimeSlice;
+        }
+
+        @Override
+        public boolean canReplace(ScalarOperator operator) {
+            if (operator.isConstantRef() && operator.getType().getPrimitiveType() == PrimitiveType.DATETIME) {
+                ConstantOperator sliced = ScalarOperatorFunctions.timeSlice(
+                        (ConstantOperator) operator,
+                        ((ConstantOperator) mvTimeSlice.getChild(1)),
+                        ((ConstantOperator) mvTimeSlice.getChild(2)),
+                        ((ConstantOperator) mvTimeSlice.getChild(3)));
+                return sliced.equals(operator);
+            }
+            return false;
+        }
     }
 
 }
