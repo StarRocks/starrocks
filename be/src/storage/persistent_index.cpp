@@ -36,8 +36,6 @@ constexpr size_t page_pack_limit = (page_size - page_header_size) / pack_size;
 constexpr size_t bucket_size_max = 256;
 constexpr uint64_t seed0 = 12980785309524476958ULL;
 constexpr uint64_t seed1 = 9110941936030554525ULL;
-// perform l0 snapshot if l0_memory exceeds this value
-constexpr size_t l0_snapshot_size_max = 16 * 1024 * 1024;
 // perform l0 l1 merge compaction if l1_file_size / l0_memory >= this value and l0_memory > l0_snapshot_size_max
 constexpr size_t l0_l1_merge_ratio = 10;
 
@@ -1415,7 +1413,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
             RETURN_IF_ERROR(_merge_compaction());
         }
         // if l1 is empty, and l0 memory usage is large enough
-    } else if (l0_mem_size > l0_snapshot_size_max) {
+    } else if (l0_mem_size > config::l0_snapshot_size) {
         // do flush l0
         _flushed = true;
         RETURN_IF_ERROR(_flush_l0());
@@ -1705,7 +1703,7 @@ bool PersistentIndex::_dump(phmap::BinaryOutputArchive& ar_out) {
 // TODO: maybe build snapshot is better than append wals when almost
 // operations are upsert or erase
 bool PersistentIndex::_can_dump_directly() {
-    return _dump_bound() <= l0_snapshot_size_max;
+    return _dump_bound() <= config::l0_snapshot_size;
 }
 
 bool PersistentIndex::_load_snapshot(phmap::BinaryInputArchive& ar) {
