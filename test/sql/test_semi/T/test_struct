@@ -64,13 +64,13 @@ select x.st2.ss3 from (select * from sc2 union all select * from sc2) x;
 select row(1,2,3);
 select * from t1;
 select row(1,v1,'a') from t1;
-select name_struct('a',v1,'b', v2) from t1;
+select named_struct('a',v1,'b', v2) from t1;
 select struct(v1,v2,v3) from t1;
 select row(map1) from sc2;
 select row(map1), row(map1).col1 from sc2;
-select name_struct('a', st1, 'b', st2) from sc2;
-select name_struct('a', st1, 'b', st2)[1] from sc2;
-select name_struct('a', st1, 'b', st2)[1].sm2 from sc2;
+select named_struct('a', st1, 'b', st2) from sc2;
+select named_struct('a', st1, 'b', st2)[1] from sc2;
+select named_struct('a', st1, 'b', st2)[1].sm2 from sc2;
 
 select cast(row(1,2,3) as STRUCT<a double, b string, c BIGINT>);
-select cast(name_struct('1', 1, '2', 2, '3', 3) as STRUCT<a double, b string, c BIGINT>);
+select cast(named_struct('1', 1, '2', 2, '3', 3) as STRUCT<a double, b string, c BIGINT>);
