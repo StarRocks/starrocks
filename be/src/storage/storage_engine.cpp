@@ -91,7 +91,10 @@ static Status _validate_options(const EngineOptions& options) {
 }
 
 Status StorageEngine::open(const EngineOptions& options, StorageEngine** engine_ptr) {
-    RETURN_IF_ERROR(_validate_options(options));
+    if (options.need_write_cluster_id) {
+        RETURN_IF_ERROR(_validate_options(options));
+    }
+
     std::unique_ptr<StorageEngine> engine = std::make_unique<StorageEngine>(options);
     RETURN_IF_ERROR_WITH_WARN(engine->_open(options), "open engine failed");
     *engine_ptr = engine.release();

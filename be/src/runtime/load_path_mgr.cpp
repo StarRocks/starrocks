@@ -68,9 +68,11 @@ Status LoadPathMgr::init() {
     LOG(INFO) << "Load path configured to [" << boost::join(_path_vec, ",") << "]";
 
     // error log is saved in first root path
-    _error_log_dir = _exec_env->store_paths()[0].path + ERROR_LOG_PREFIX;
-    // check and make dir
-    RETURN_IF_ERROR(fs::create_directories(_error_log_dir));
+    if (!_exec_env->store_paths().empty()) {
+        _error_log_dir = _exec_env->store_paths()[0].path + ERROR_LOG_PREFIX;
+        // check and make dir
+        RETURN_IF_ERROR(fs::create_directories(_error_log_dir));
+    }
 
     _idx = 0;
     _stop_future = _stop.get_future();
