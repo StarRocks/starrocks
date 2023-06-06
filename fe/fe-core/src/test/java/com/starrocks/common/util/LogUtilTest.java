@@ -22,7 +22,8 @@ public class LogUtilTest {
     public void testGetCurrentStackTrace() {
         String trace = LogUtil.getCurrentStackTrace();
         System.out.println(trace);
-        Assert.assertTrue(trace.startsWith("\n        java.base/java.lang.Thread.getStackTrace"));
+        Assert.assertTrue(trace.startsWith("\n        "));
+        Assert.assertTrue(trace.contains("java.lang.Thread.getStackTrace"));
         System.out.println("current stack trace: " + trace);
     }
 }

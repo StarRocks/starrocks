@@ -14,7 +14,6 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.common.TimeoutException;
 import com.starrocks.mysql.MysqlAuthPacket;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
