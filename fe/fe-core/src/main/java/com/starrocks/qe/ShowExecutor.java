@@ -2553,8 +2553,8 @@ public class ShowExecutor {
         }
         PatternMatcher finalMatcher = matcher;
         storageVolumeNames = storageVolumeNames.stream()
-                .filter(tblName -> finalMatcher == null || finalMatcher.match(tblName))
-                // TODO: check privilege
+                .filter(storageVolumeName -> finalMatcher == null || finalMatcher.match(storageVolumeName))
+                .filter(storageVolumeName -> PrivilegeActions.checkAnyActionOnStorageVolume(connectContext, storageVolumeName))
                 .collect(Collectors.toList());
         for (String storageVolumeName : storageVolumeNames) {
             rows.add(Lists.newArrayList(storageVolumeName));

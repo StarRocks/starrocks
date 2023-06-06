@@ -33,6 +33,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
@@ -62,6 +63,7 @@ import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterRoleStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
+import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
@@ -88,12 +90,14 @@ import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
@@ -106,6 +110,7 @@ import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
+import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
@@ -129,6 +134,7 @@ import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
+import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
@@ -463,6 +469,13 @@ public class PrivilegeChecker {
         }
     }
 
+    static void checkStorageVolumeAction(ConnectContext context, String storageVolumeName, PrivilegeType action) {
+        if (!PrivilegeActions.checkStorageVolumeAction(context, storageVolumeName, action)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                    context.getQualifiedUser(), storageVolumeName);
+        }
+    }
+
     /**
      * check privilege by AST tree
      */
@@ -678,6 +691,13 @@ public class PrivilegeChecker {
         @Override
         public Void visitCreateDbStatement(CreateDbStmt statement, ConnectContext context) {
             checkCatalogAction(context, context.getCurrentCatalog(), PrivilegeType.CREATE_DATABASE);
+            if (statement.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+                String storageVolume = statement.getProperties().get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+                if (!PrivilegeActions.checkStorageVolumeAction(context, storageVolume, PrivilegeType.USAGE)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                            "USAGE ON STORAGE VOLUME");
+                }
+            }
             return null;
         }
 
@@ -1205,13 +1225,24 @@ public class PrivilegeChecker {
             String dbName = tableName.getDb() == null ? context.getDatabase() : tableName.getDb();
             checkDbAction(context, catalog, dbName, PrivilegeType.CREATE_TABLE);
 
-            if (statement.getProperties() != null && statement.getProperties().containsKey("resource")) {
-                String resourceProp = statement.getProperties().get("resource");
-                Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceProp);
-                if (resource != null) {
-                    if (!PrivilegeActions.checkResourceAction(context, resource.getName(), PrivilegeType.USAGE)) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ACCESS_RESOURCE_DENIED,
-                                PrivilegeType.USAGE, context.getQualifiedUser(), context.getRemoteIP(), resource.getName());
+            if (statement.getProperties() != null) {
+                Map<String, String> properties = statement.getProperties();
+                if (statement.getProperties().containsKey("resource")) {
+                    String resourceProp = properties.get("resource");
+                    Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceProp);
+                    if (resource != null) {
+                        if (!PrivilegeActions.checkResourceAction(context, resource.getName(), PrivilegeType.USAGE)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ACCESS_RESOURCE_DENIED,
+                                    PrivilegeType.USAGE, context.getQualifiedUser(),
+                                    context.getRemoteIP(), resource.getName());
+                        }
+                    }
+                }
+                if (statement.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+                    String storageVolume = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+                    if (!PrivilegeActions.checkStorageVolumeAction(context, storageVolume, PrivilegeType.USAGE)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                                "USAGE ON STORAGE VOLUME");
                     }
                 }
             }
@@ -1758,6 +1789,58 @@ public class PrivilegeChecker {
                 } finally {
                     db.readUnlock();
                 }
+            }
+            return null;
+        }
+
+        // ------------------------------------------- Storage volume Statement ----------------------------------------
+        @Override
+        public Void visitCreateStorageVolumeStatement(CreateStorageVolumeStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkSystemAction(
+                    context, PrivilegeType.CREATE_STORAGE_VOLUME)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "CREATE STORAGE VOLUME");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAlterStorageVolumeStatement(AlterStorageVolumeStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkStorageVolumeAction(
+                    context, statement.getName(), PrivilegeType.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "ALTER STORAGE VOLUME");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropStorageVolumeStatement(DropStorageVolumeStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkStorageVolumeAction(
+                    context, statement.getName(), PrivilegeType.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "DROP STORAGE VOLUME");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDescStorageVolumeStatement(DescStorageVolumeStmt statement, ConnectContext context) {
+            if (!PrivilegeActions.checkAnyActionOnStorageVolume(
+                    context, statement.getName())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "DESC STORAGE VOLUME");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt statement,
+                                                          ConnectContext context) {
+            if (!PrivilegeActions.checkStorageVolumeAction(
+                    context, statement.getName(), PrivilegeType.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "SET DEFAULT STORAGE VOLUME");
             }
             return null;
         }

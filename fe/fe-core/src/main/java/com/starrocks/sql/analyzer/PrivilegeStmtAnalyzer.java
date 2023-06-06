@@ -328,6 +328,7 @@ public class PrivilegeStmtAnalyzer {
                         case RESOURCE:
                         case CATALOG:
                         case RESOURCE_GROUP:
+                        case STORAGE_VOLUME:
                             if (tokens.size() != 1) {
                                 throw new SemanticException("Invalid grant statement with error privilege object " + tokens);
                             }
@@ -365,6 +366,7 @@ public class PrivilegeStmtAnalyzer {
                                     PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID,
                                     PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID));
                             break;
+
                         default:
                             throw new SemanticException("Grant/Revoke unsupported object type " + objectType.name());
                     }
@@ -444,6 +446,7 @@ public class PrivilegeStmtAnalyzer {
                         case RESOURCE:
                         case CATALOG:
                         case RESOURCE_GROUP:
+                        case STORAGE_VOLUME:
                             for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
                                 if (tokens.size() != 1) {
                                     throw new SemanticException("Invalid grant statement with error privilege object " + tokens);
