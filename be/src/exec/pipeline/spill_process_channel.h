@@ -109,7 +109,6 @@ private:
     UnboundedBlockingQueue<SpillProcessTask> _spill_tasks;
     SpillProcessTask _current_task;
     SpillProcessChannelFactory* _parent;
-    std::mutex _mutex;
 };
 
 } // namespace starrocks

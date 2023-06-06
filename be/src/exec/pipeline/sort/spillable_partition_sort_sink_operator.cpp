@@ -55,10 +55,10 @@ Status SpillablePartitionSortSinkOperator::push_chunk(RuntimeState* state, const
 }
 
 Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
+    auto defer_set_finishing = DeferOp([this]() { _chunks_sorter->spill_channel()->set_finishing(); });
     if (state->is_cancelled()) {
         _is_finished = true;
         _chunks_sorter->cancel();
-        _chunks_sorter->spill_channel()->set_finishing();
         return Status::Cancelled("runtime state is cancelled");
     }
 
@@ -68,7 +68,6 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
     // TODO: test cancel case
     auto io_executor = _chunks_sorter->spill_channel()->io_executor();
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
-        _chunks_sorter->spill_channel()->set_finishing();
         return _chunks_sorter->spiller()->set_flush_all_call_back(
                 [this]() {
                     // Current partition sort is ended, and
@@ -78,8 +77,7 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
                     _is_finished = true;
                     return Status::OK();
                 },
-                state, *io_executor,
-                spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
+                state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
     };
 
     Status ret_status;

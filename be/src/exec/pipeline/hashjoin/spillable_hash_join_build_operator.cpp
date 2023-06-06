@@ -53,25 +53,25 @@ bool SpillableHashJoinBuildOperator::need_input() const {
 }
 
 Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
+    auto defer_set_finishing = DeferOp([this]() { _join_builder->spill_channel()->set_finishing(); });
+
     if (!_join_builder->spiller()->spilled()) {
-        _join_builder->spill_channel()->set_finishing();
         return HashJoinBuildOperator::set_finishing(state);
     }
+
     if (state->is_cancelled()) {
         _join_builder->spiller()->cancel();
     }
 
     auto io_executor = _join_builder->spill_channel()->io_executor();
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
-        _join_builder->spill_channel()->set_finishing();
         return _join_builder->spiller()->set_flush_all_call_back(
                 [this]() {
                     _is_finished = true;
                     _join_builder->enter_probe_phase();
                     return Status::OK();
                 },
-                state, *io_executor,
-                spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
+                state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
     };
 
     Status ret_status;
