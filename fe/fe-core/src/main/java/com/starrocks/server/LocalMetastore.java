@@ -4731,7 +4731,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
         recreateTabletInvertIndex();
         GlobalStateMgr.getCurrentState().getEsRepository().loadTableFromCatalog();
-        GlobalStateMgr.getCurrentState().getStarRocksRepository().loadTableFromCatalog();
 
         defaultCluster = new Cluster(SystemInfoService.DEFAULT_CLUSTER, 0);
     }
