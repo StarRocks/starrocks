@@ -886,9 +886,15 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitCreateStorageVolumeStatement(CreateStorageVolumeStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() ->
-                    context.getGlobalStateMgr().getStorageVolumeMgr().createStorageVolume(stmt)
-            );
+            ErrorReport.wrapWithRuntimeException(() -> {
+                try {
+                    context.getGlobalStateMgr().getStorageVolumeMgr().createStorageVolume(stmt);
+                } catch (AlreadyExistsException e) {
+                    if (stmt.isSetIfNotExists()) {
+                        LOG.info("create storage volume[{}] which already exists", stmt.getName());
+                    }
+                }
+            });
             return null;
         }
 
