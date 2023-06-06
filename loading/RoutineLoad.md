@@ -102,7 +102,7 @@ CREATE TABLE example_db.example_tbl1 (
     `price`double NULL COMMENT "支付金额"
 ) 
 ENGINE=OLAP 
-PRIMARY KEY (order_id,pay_dt) 
+DUPLICATE KEY (order_id,pay_dt) 
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
 ```
 
