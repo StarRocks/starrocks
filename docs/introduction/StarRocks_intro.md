@@ -12,6 +12,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [Introduction](../introduction/what_is_starrocks.md)
 - [Architecture](../introduction/Architecture.md)
+- [Shared-data StarRocks cluster](../administration/deploy_shared_data.md)
 - [Features](../introduction/Features.md)
 
 </NavBoxPartItem>
@@ -83,6 +84,18 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [MySQL](../data_source/External_table.md#mysql-external-table)
 - [Elasticsearch](../data_source/External_table.md#elasticsearch-external-table)
 - [JDBC-compatible database](../data_source/catalog/jdbc_catalog.md)
+<<<<<<< HEAD
+=======
+
+</NavBoxPartItem>
+<NavBoxPartItem title="Integration​">
+
+- [AWS](../integrations/authenticate_to_aws_resources.md)
+- [Microsoft Azure Storage](../integrations/authenticate_to_azure_storage.md)
+- [Google Cloud Storage](../integrations/authenticate_to_gcs.md)
+- [BI tools](../integrations/BI_integrations/Hex.md)
+- [IDE tools](../integrations/IDE_integrations/DataGrip.md)
+>>>>>>> 704a6d505 ([Doc]update 3.0 navigation (#22959))
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -94,6 +107,12 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [Manage a cluster](../administration/Cluster_administration.md)
 - [Scale in and out a cluster](../administration/Scale_up_down.md)
+<<<<<<< HEAD
+=======
+- [Resource group](../administration/monitor_manage_big_queries.md)
+- [Privileges](../administration/privilege_overview.md)
+- [Data recovery](../administration/Data_recovery.md)
+>>>>>>> 704a6d505 ([Doc]update 3.0 navigation (#22959))
 - [Tune query performance](../administration/Query_planning.md)
 - [Manage workloads](../administration/resource_group.md)
 
@@ -105,6 +124,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [SQL reference](../sql-reference/sql-statements/account-management/ALTER%20USER.md)
 - [Function reference](../sql-reference/sql-functions/date-time-functions/convert_tz.md)
+- [Data type](../sql-reference/sql-statements/data-types/TINYINT.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
