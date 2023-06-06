@@ -67,6 +67,7 @@ Status OlapSchemaChunkSource::prepare(RuntimeState* state) {
         }
         _index_map[i] = j;
     }
+    _accumulator.set_desired_size(state->chunk_size());
 
     return _schema_scanner->start(state);
 }
@@ -82,7 +83,16 @@ Status OlapSchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) 
         return Status::EndOfFile("end of file");
     }
 
+<<<<<<< HEAD
     ChunkPtr chunk_src = std::make_shared<vectorized::Chunk>();
+=======
+    if (!_accumulator.empty()) {
+        *chunk = _accumulator.pull();
+        return {};
+    }
+
+    ChunkPtr chunk_src = std::make_shared<Chunk>();
+>>>>>>> 49a809d1d ([BugFix] split chunk in SchemaScanChunkSource (#24744))
     if (chunk_src == nullptr) {
         return Status::InternalError("Failed to allocated new chunk");
     }
@@ -139,7 +149,9 @@ Status OlapSchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) 
         row_num = chunk_dst->num_rows();
         chunk_src->reset();
     }
-    *chunk = std::move(chunk_dst);
+    _accumulator.push(std::move(chunk_dst));
+    _accumulator.finalize();
+    *chunk = _accumulator.pull();
     return Status::OK();
 }
 
