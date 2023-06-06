@@ -392,10 +392,6 @@ TEST(SortingTest, merge_sorted_stream) {
 static void test_merge_path(const size_t num_cols, const size_t left_start, const size_t left_num_rows,
                             const size_t right_start, const size_t right_num_rows, const size_t dest_num_rows,
                             const size_t processor_num, bool& success) {
-    fmt::print(
-            "test_merge_path: num_cols={}, left_start={}, left_num_rows={}, right_start={}, right_num_rows={}, "
-            "dest_num_rows={}, processor_num={}\n",
-            num_cols, left_start, left_num_rows, right_start, right_num_rows, dest_num_rows, processor_num);
     ASSERT_LE(dest_num_rows, (left_num_rows - left_start) + (right_num_rows - right_start));
     auto runtime_state = create_runtime_state();
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
