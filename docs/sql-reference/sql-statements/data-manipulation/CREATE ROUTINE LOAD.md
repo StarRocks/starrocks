@@ -258,7 +258,7 @@ CREATE TABLE example_db.example_tbl1 (
     `nationality` varchar(26) NULL COMMENT "Nationality", 
     `gender` varchar(26) NULL COMMENT "Gender", 
     `price` double NULL COMMENT "Price") 
-PRIMARY KEY (order_id,pay_dt) 
+DUPLICATE KEY (order_id,pay_dt) 
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
 ```
 
@@ -332,7 +332,7 @@ CREATE TABLE example_db.example_tbl2 (
     `nationality` varchar(26) NULL COMMENT "Nationality", 
     `price` double NULL COMMENT "Price"
 ) 
-PRIMARY KEY (order_id,pay_dt) 
+DUPLICATE KEY (order_id,pay_dt) 
 DISTRIBUTED BY HASH(order_id) BUCKETS 5; 
 ```
 
