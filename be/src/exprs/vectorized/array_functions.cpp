@@ -13,7 +13,7 @@ ColumnPtr ArrayFunctions::array_length([[maybe_unused]] FunctionContext* context
     DCHECK_EQ(1, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    Column* arg0 = columns[0].get();
+    Column* arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]).get();
     const size_t num_rows = arg0->size();
 
     auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
@@ -78,14 +78,12 @@ static ColumnPtr do_array_append(const Column& elements, const UInt32Column& off
 
 // FIXME: A proof-of-concept implementation with poor performance.
 ColumnPtr ArrayFunctions::array_append([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    const Column* arg0 = columns[0].get();
-    const Column* arg1 = columns[1].get();
-    if (arg0->only_null()) {
+    if (columns[0]->only_null()) {
         return columns[0];
     }
 
-    arg0 = arg0->has_null() || arg0->is_constant() ? arg0 : ColumnHelper::get_data_column(arg0);
-    arg1 = arg1->has_null() || arg1->is_constant() ? arg1 : ColumnHelper::get_data_column(arg1);
+    const Column* arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]).get();
+    const Column* arg1 = columns[1].get();
 
     const Column* array = arg0;
     const NullableColumn* nullable_array = nullptr;
@@ -449,8 +447,9 @@ DEFINE_ARRAY_CUMSUM_FN(double, TYPE_DOUBLE)
 #undef DEFINE_ARRAY_CUMSUM_FN
 
 ColumnPtr ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    const ColumnPtr& arg0 = columns[0]; // array
-    const ColumnPtr& arg1 = columns[1]; // element
+    RETURN_IF_COLUMNS_ONLY_NULL({columns[0]});
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = columns[1];
 
     return ArrayRemoveImpl::evaluate(arg0, arg1);
 }
@@ -930,30 +929,33 @@ private:
 };
 
 ColumnPtr ArrayFunctions::array_contains([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    const ColumnPtr& arg0 = columns[0]; // array
-    const ColumnPtr& arg1 = columns[1]; // element
+    RETURN_IF_COLUMNS_ONLY_NULL({columns[0]});
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = columns[1];
 
     return ArrayContainsImpl<false, UInt8Column>::evaluate(*arg0, *arg1);
 }
 
 ColumnPtr ArrayFunctions::array_position([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    const ColumnPtr& arg0 = columns[0]; // array
-    const ColumnPtr& arg1 = columns[1]; // element
+    RETURN_IF_COLUMNS_ONLY_NULL({columns[0]});
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = columns[1];
 
     return ArrayContainsImpl<true, Int32Column>::evaluate(*arg0, *arg1);
 }
 
 ColumnPtr ArrayFunctions::array_contains_any([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    const ColumnPtr& arg0 = columns[0]; // array
-    const ColumnPtr& arg1 = columns[1]; // element
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]); // element
 
     return ArrayHasImpl<true>::evaluate(*arg0, *arg1);
 }
 
 ColumnPtr ArrayFunctions::array_contains_all([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    const ColumnPtr& arg0 = columns[0]; // array
-    const ColumnPtr& arg1 = columns[1]; // element
-
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]); // element
     return ArrayHasImpl<false>::evaluate(*arg0, *arg1);
 }
 
@@ -1226,12 +1228,9 @@ ColumnPtr ArrayFunctions::_array_process_not_nullable(const Column* raw_array_co
 template <PrimitiveType column_type, ArrayFunctions::ArithmeticType type>
 ColumnPtr ArrayFunctions::array_arithmetic(const Columns& columns) {
     DCHECK_EQ(1, columns.size());
-    const ColumnPtr& array_column = columns[0]; // array
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    const ColumnPtr& array_column = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]);
     const auto& raw_array_column = *array_column;
-
-    if (raw_array_column.only_null()) {
-        return array_column;
-    }
 
     if (auto nullable = dynamic_cast<const NullableColumn*>(&raw_array_column); nullable != nullptr) {
         auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
