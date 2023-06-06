@@ -276,9 +276,9 @@ public class InsertAnalyzer {
             QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
             List<Field> allFields = query.getRelationFields().getAllFields();
 
-            // fetch schema of target table from query
-            List<Column> columns = allFields.stream().map(field -> new Column(field.getName(), field.getType(),
-                    field.isNullable())).collect(Collectors.toList());
+            // fetch schema from query
+            List<Column> columns = allFields.stream().filter(Field::isVisible).map(field -> new Column(field.getName(),
+                    field.getType(), field.isNullable())).collect(Collectors.toList());
 
             boolean writeSingleFile = Boolean.parseBoolean(props.get("single"));
             String partitionBy = props.get("partition_by");
@@ -299,13 +299,14 @@ public class InsertAnalyzer {
 
             List<String> unmatchedPartitionColumnNames = partitionColumnNames.stream().filter(col ->
                     !columnNames.contains(col)).collect(Collectors.toList());
-
             if (!unmatchedPartitionColumnNames.isEmpty()) {
                 throw new SemanticException("partition columns expected to be a subset of " + columnNames +
                         ", but got extra columns: " + unmatchedPartitionColumnNames);
             }
 
-            return new TableFunctionTable(path, format, columns, partitionColumnNames, false);
+            List<Integer> partitionColumnIDs = partitionColumnNames.stream().map(columnNames::indexOf).collect(
+                    Collectors.toList());
+            return new TableFunctionTable(path, format, columns, partitionColumnIDs, false);
         }
 
         MetaUtils.normalizationTableName(session, insertStmt.getTableName());

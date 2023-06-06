@@ -262,7 +262,7 @@ public class InsertPlanner {
                     sinkFragment.setForceAssignScanRangesPerDriverSeq();
                 } else if (targetTable instanceof IcebergTable) {
                     sinkFragment.setHasIcebergTableSink();
-                } else if (targetTable instanceof TableFunctionTable) {
+                } else { // TableFunctionTable
                     sinkFragment.setHasTableFunctionTableSink();
                 }
 

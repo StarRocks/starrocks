@@ -371,10 +371,10 @@ struct TTableFunctionTable {
     // Schema columns
     2: optional list<TColumn> columns
 
-    // partition column names
-    3: optional list<string> partition_column_names
+    // Partition column ids
+    3: optional list<i32> partition_column_ids
 
-    // write single file
+    // Write single file
     4: optional bool write_single_file
 }
 

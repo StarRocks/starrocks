@@ -66,7 +66,7 @@ public class TableFunctionTable extends Table {
     private String path;
     private String format;
     private Map<String, String> properties;
-    private List<String> partitionColumnNames;
+    private List<Integer> partitionColumnIDs;
     private boolean writeSingleFile;
 
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
@@ -84,14 +84,14 @@ public class TableFunctionTable extends Table {
 
     // Ctor for unload data via table function
     public TableFunctionTable(String path, String format, List<Column> columns,
-                              @Nullable List<String> partitionColumnNames, boolean writeSingleFile) {
+                              @Nullable List<Integer> partitionColumnIDs, boolean writeSingleFile) {
         super(TableType.TABLE_FUNCTION);
         this.path = path;
         this.format = format;
-        this.partitionColumnNames = partitionColumnNames;
+        this.partitionColumnIDs = partitionColumnIDs;
         this.writeSingleFile = writeSingleFile;
         super.setNewFullSchema(columns);
-        verify(!writeSingleFile || partitionColumnNames == null);
+        verify(!writeSingleFile || partitionColumnIDs == null);
     }
 
     @Override
@@ -116,8 +116,8 @@ public class TableFunctionTable extends Table {
         tTbl.setPath(path);
         tTbl.setColumns(tColumns);
         tTbl.setWrite_single_file(writeSingleFile);
-        if (partitionColumnNames != null) {
-            tTbl.setPartition_column_names(partitionColumnNames);
+        if (partitionColumnIDs != null) {
+            tTbl.setPartition_column_ids(partitionColumnIDs);
         }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.TABLE_FUNCTION_TABLE, fullSchema.size(),
@@ -265,7 +265,7 @@ public class TableFunctionTable extends Table {
 
     @Override
     public List<String> getPartitionColumnNames() {
-        return partitionColumnNames;
+        return partitionColumnIDs.stream().map(id -> fullSchema.get(id).getName()).collect(Collectors.toList());
     }
 
     public boolean isWriteSingleFile() {

@@ -34,6 +34,7 @@ public class TableFunctionTableSink extends DataSink {
         TTableFunctionTableSink tTableFunctionTableSink = new TTableFunctionTableSink();
         tTableFunctionTableSink.setPath(table.getPath());
         tTableFunctionTableSink.setFile_format(table.getFormat());
+        // TODO: use user passed compression_codec
         tTableFunctionTableSink.setCompression_type(TCompressionType.NO_COMPRESSION);
 
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
