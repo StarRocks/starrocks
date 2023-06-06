@@ -51,12 +51,6 @@ constexpr size_t kPackSize = 16;
 constexpr size_t kPagePackLimit = (kPageSize - kPageHeaderSize) / kPackSize;
 constexpr size_t kBucketSizeMax = 256;
 constexpr size_t kMinEnableBFKVNum = 10000000;
-// if l0_mem_size exceeds this value, l0 need snapshot
-#if BE_TEST
-constexpr size_t kL0SnapshotSizeMax = 1 * 1024 * 1024;
-#else
-constexpr size_t kL0SnapshotSizeMax = 16 * 1024 * 1024;
-#endif
 constexpr size_t kLongKeySize = 64;
 constexpr size_t kMaxKeyLength = 128; // we only support key length is less than or equal to 128 bytes for now
 
@@ -2831,7 +2825,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
                 RETURN_IF_ERROR(_merge_compaction());
             }
             // if l1 is empty, and l0 memory usage is large enough
-        } else if (l0_mem_size > kL0SnapshotSizeMax) {
+        } else if (l0_mem_size > config::l0_snapshot_size) {
             // do flush l0
             _flushed = true;
             RETURN_IF_ERROR(_flush_l0());
@@ -3255,7 +3249,7 @@ size_t PersistentIndex::_dump_bound() {
 // TODO: maybe build snapshot is better than append wals when almost
 // operations are upsert or erase
 bool PersistentIndex::_can_dump_directly() {
-    return _dump_bound() <= kL0SnapshotSizeMax;
+    return _dump_bound() <= config::l0_snapshot_size;
 }
 
 bool PersistentIndex::_need_flush_advance() {
