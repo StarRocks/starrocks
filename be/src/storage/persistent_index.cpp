@@ -37,12 +37,16 @@ constexpr uint64_t kPageMax = 1ULL << 32;
 constexpr size_t kPackSize = 16;
 constexpr size_t kPagePackLimit = (kPageSize - kPageHeaderSize) / kPackSize;
 constexpr size_t kBucketSizeMax = 256;
+<<<<<<< HEAD
 // if l0_mem_size exceeds this value, l0 need snapshot
 #if BE_TEST
 constexpr size_t kL0SnapshotSizeMax = 1 * 1024 * 1024;
 #else
 constexpr size_t kL0SnapshotSizeMax = 16 * 1024 * 1024;
 #endif
+=======
+constexpr size_t kMinEnableBFKVNum = 10000000;
+>>>>>>> bdd4f0b9c ([Enhancement] Make l0 snapshot size configurable (#24748))
 constexpr size_t kLongKeySize = 64;
 
 const char* const kIndexFileMagic = "IDX1";
@@ -2669,10 +2673,26 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     const auto l0_mem_size = _l0->memory_usage();
     uint64_t l1_file_size = _l1 ? _l1->file_size() : 0;
     // if l1 is not empty,
+<<<<<<< HEAD
     if (l1_file_size != 0) {
         // and l0 memory usage is large enough,
         if (l0_mem_size * config::l0_l1_merge_ratio > l1_file_size) {
             // do l0 l1 merge compaction
+=======
+    if (_flushed) {
+        RETURN_IF_ERROR(_merge_compaction());
+    } else {
+        if (l1_file_size != 0) {
+            // and l0 memory usage is large enough,
+            if (l0_mem_size * config::l0_l1_merge_ratio > l1_file_size) {
+                // do l0 l1 merge compaction
+                _flushed = true;
+                RETURN_IF_ERROR(_merge_compaction());
+            }
+            // if l1 is empty, and l0 memory usage is large enough
+        } else if (l0_mem_size > config::l0_snapshot_size) {
+            // do flush l0
+>>>>>>> bdd4f0b9c ([Enhancement] Make l0 snapshot size configurable (#24748))
             _flushed = true;
             RETURN_IF_ERROR(_merge_compaction());
         }
@@ -2861,7 +2881,7 @@ size_t PersistentIndex::_dump_bound() {
 // TODO: maybe build snapshot is better than append wals when almost
 // operations are upsert or erase
 bool PersistentIndex::_can_dump_directly() {
-    return _dump_bound() <= kL0SnapshotSizeMax;
+    return _dump_bound() <= config::l0_snapshot_size;
 }
 
 Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version) {
