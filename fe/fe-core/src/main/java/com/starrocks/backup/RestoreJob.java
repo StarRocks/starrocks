@@ -65,6 +65,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -820,6 +821,7 @@ public class RestoreJob extends AbstractJob {
     protected void createReplicas(OlapTable localTbl, Partition restorePart) {
         Set<String> bfColumns = localTbl.getCopiedBfColumns();
         double bfFpp = localTbl.getBfFpp();
+        // TODO(meegoo): support sub partition
         for (MaterializedIndex restoredIdx : restorePart.getMaterializedIndices(IndexExtState.VISIBLE)) {
             MaterializedIndexMeta indexMeta = localTbl.getIndexMetaByIndexId(restoredIdx.getId());
             TabletMeta tabletMeta = new TabletMeta(dbId, localTbl.getId(), restorePart.getId(),
@@ -1259,7 +1261,7 @@ public class RestoreJob extends AbstractJob {
                 Map<Long, Long> map = restoredVersionInfo.rowMap().get(tblId);
                 for (Map.Entry<Long, Long> entry : map.entrySet()) {
                     long partId = entry.getKey();
-                    Partition part = olapTbl.getPartition(partId);
+                    PhysicalPartition part = olapTbl.getPhysicalPartition(partId);
                     if (part == null) {
                         continue;
                     }
@@ -1317,7 +1319,7 @@ public class RestoreJob extends AbstractJob {
         return Status.OK;
     }
 
-    protected void updateTablets(MaterializedIndex idx, Partition part) {
+    protected void updateTablets(MaterializedIndex idx, PhysicalPartition part) {
         for (Tablet tablet : idx.getTablets()) {
             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                 if (!replica.checkVersionCatchUp(part.getVisibleVersion(), false)) {

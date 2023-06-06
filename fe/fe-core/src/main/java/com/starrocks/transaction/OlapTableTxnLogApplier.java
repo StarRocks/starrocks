@@ -21,7 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.TabletScheduler;
@@ -46,7 +46,11 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
         Set<Long> errorReplicaIds = txnState.getErrorReplicas();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             long partitionId = partitionCommitInfo.getPartitionId();
-            Partition partition = table.getPartition(partitionId);
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+            if (partition == null) {
+                LOG.warn("partition {} is dropped, ignore", partitionId);
+                continue;
+            }
             List<MaterializedIndex> allIndices =
                     partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
             for (MaterializedIndex index : allIndices) {
@@ -81,7 +85,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
 
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             long partitionId = partitionCommitInfo.getPartitionId();
-            Partition partition = table.getPartition(partitionId);
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.warn("partition {} is dropped, ignore", partitionId);
                 continue;
