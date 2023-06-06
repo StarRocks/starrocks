@@ -158,9 +158,11 @@ Status LoadPathMgr::get_load_error_file_name(const TUniqueId& fragment_instance_
 
 std::string LoadPathMgr::get_load_error_absolute_path(const std::string& file_path) {
     std::string path;
-    path.append(_error_log_dir);
-    path.append("/");
-    path.append(file_path);
+    if (!_error_log_dir.empty()) {
+        path.append(_error_log_dir);
+        path.append("/");
+        path.append(file_path);
+    }
     return path;
 }
 
@@ -169,7 +171,7 @@ std::string LoadPathMgr::get_load_rejected_record_absolute_path(const std::strin
                                                                 const int64_t id,
                                                                 const TUniqueId& fragment_instance_id) {
     std::string path;
-    if (rejected_record_dir.empty()) {
+    if (rejected_record_dir.empty() && !_exec_env->store_paths().empty()) {
         path = _exec_env->store_paths()[0].path + REJECTED_RECORD_PREFIX;
     } else {
         path = rejected_record_dir;
@@ -178,7 +180,7 @@ std::string LoadPathMgr::get_load_rejected_record_absolute_path(const std::strin
     std::stringstream ss;
     ss << path << "/" << db << "/" << label << "/" << id << "/" << std::hex << fragment_instance_id.hi << "_"
        << fragment_instance_id.lo;
-    return ss.str();
+    return path.empty() ? path : ss.str();
 }
 
 void LoadPathMgr::process_path(time_t now, const std::string& path, int64_t reserve_hours) {
@@ -251,6 +253,9 @@ void LoadPathMgr::clean_error_log() {
 
     time_t now = time(nullptr);
     std::vector<std::string> sub_dirs;
+    if (_error_log_dir.empty()) {
+        return;
+    }
     Status status = fs->get_children(_error_log_dir, &sub_dirs);
     if (!status.ok()) {
         LOG(WARNING) << "scan error_log dir failed. dir=" << _error_log_dir;

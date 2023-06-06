@@ -312,30 +312,38 @@ Status RuntimeState::create_error_log_file() {
     _exec_env->load_path_mgr()->get_load_error_file_name(_fragment_instance_id, &_error_log_file_path);
     std::string error_log_absolute_path =
             _exec_env->load_path_mgr()->get_load_error_absolute_path(_error_log_file_path);
-    _error_log_file = new std::ofstream(error_log_absolute_path, std::ifstream::out);
-    if (!_error_log_file->is_open()) {
-        std::stringstream error_msg;
-        error_msg << "Fail to open error file: [" << _error_log_file_path << "].";
-        LOG(WARNING) << error_msg.str();
-        return Status::InternalError(error_msg.str());
+    if (!error_log_absolute_path.empty()) {
+        _error_log_file = new std::ofstream(error_log_absolute_path, std::ifstream::out);
+        if (!_error_log_file->is_open()) {
+            std::stringstream error_msg;
+            error_msg << "Fail to open error file: [" << _error_log_file_path << "].";
+            LOG(WARNING) << error_msg.str();
+            return Status::InternalError(error_msg.str());
+        }
+        return Status::OK();
     }
-    return Status::OK();
+
+    return Status::InternalError("Fail to open error file, which is a null string");
 }
 
 Status RuntimeState::create_rejected_record_file() {
     auto rejected_record_absolute_path = _exec_env->load_path_mgr()->get_load_rejected_record_absolute_path(
             "", _db, _load_label, _txn_id, _fragment_instance_id);
-    RETURN_IF_ERROR(fs::create_directories(std::filesystem::path(rejected_record_absolute_path).parent_path()));
+    if (!rejected_record_absolute_path.empty()) {
+        RETURN_IF_ERROR(fs::create_directories(std::filesystem::path(rejected_record_absolute_path).parent_path()));
 
-    _rejected_record_file = std::make_unique<std::ofstream>(rejected_record_absolute_path, std::ifstream::out);
-    if (!_rejected_record_file->is_open()) {
-        std::stringstream error_msg;
-        error_msg << "Fail to open rejected record file: [" << rejected_record_absolute_path << "].";
-        LOG(WARNING) << error_msg.str();
-        return Status::InternalError(error_msg.str());
+        _rejected_record_file = std::make_unique<std::ofstream>(rejected_record_absolute_path, std::ifstream::out);
+        if (!_rejected_record_file->is_open()) {
+            std::stringstream error_msg;
+            error_msg << "Fail to open rejected record file: [" << rejected_record_absolute_path << "].";
+            LOG(WARNING) << error_msg.str();
+            return Status::InternalError(error_msg.str());
+        }
+        _rejected_record_file_path = rejected_record_absolute_path;
+        return Status::OK();
     }
-    _rejected_record_file_path = rejected_record_absolute_path;
-    return Status::OK();
+
+    return Status::InternalError("Fail to open rejected record file, which is a null string");
 }
 
 bool RuntimeState::has_reached_max_error_msg_num(bool is_summary) {
