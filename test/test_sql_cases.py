@@ -26,6 +26,8 @@ import os
 import re
 import sys
 import time
+import uuid
+from typing import List
 
 from nose import tools
 from parameterized import parameterized
@@ -35,14 +37,12 @@ from lib import sr_sql_lib
 from lib import choose_cases
 from lib import sql_annotation
 
-
 # model: run case model, True => Record mode
 #    - t: run sql and save result into r dir
 #    - r: run sql and compare result with r
 record_mode = os.environ.get("record_mode", "false") == "true"
 
 case_list = choose_cases.choose_cases(record_mode).case_list
-
 
 if len(case_list) == 0:
     print("** ERROR: No case! **")
@@ -75,8 +75,8 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         """
         super(TestSQLCases, self).__init__(*args, **kwargs)
         self.case_info: choose_cases.ChooseCase.CaseTR
-        self.db = []
-        self.resource = []
+        self.db = set()
+        self.resource = set()
 
     def setUp(self, *args, **kwargs):
         """set up"""
@@ -103,6 +103,8 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         if record_mode:
             tools.assert_true(res, "Save %s.%s result error" % (self.case_info.file, self.case_info.name))
 
+        self.db.clear()
+
     # -------------------------------------------
     #         [CASE]
     # -------------------------------------------
@@ -125,8 +127,13 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         # -------------------------------------------
         #               [CASE EXECUTE]
         # -------------------------------------------
-        print("DB: %s" % self.db)
-        for sql_id, sql in enumerate(case_info.sql):
+
+        # replace all db_name with each run
+        sql_list = self.init_data(case_info.sql)
+        print("[case name]: ", case_info.name)
+        print("[case file]: ", case_info.file)
+
+        for sql_id, sql in enumerate(sql_list):
             uncheck = False
             order = False
             ori_sql = sql
@@ -206,3 +213,57 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
             # set variable dynamically
             if var:
                 self.__setattr__(var, actual_res)
+
+    def init_data(self, sql_list: List[str]) -> List[str]:
+        self.db = set()
+        ret = list()
+        variable_dict = dict()
+        # find all uuid variables
+        for sql in sql_list:
+            uuid_vars = re.findall(r"\${(uuid[0-9]*)}", sql)
+            for each_uuid in uuid_vars:
+                if each_uuid not in variable_dict:
+                    variable_dict[each_uuid] = uuid.uuid1().hex
+
+        # replace all uuid variables
+        for sql in sql_list:
+            for each_var in variable_dict:
+                sql = sql.replace("${%s}" % each_var, variable_dict[each_var])
+            ret.append(sql)
+
+            if "CREATE DATABASE" in sql.upper():
+                # last word is db by default
+                db_name = sql.rstrip(";").strip().split(" ")[-1]
+
+                self.db.add(db_name)
+
+            if "CREATE EXTERNAL RESOURCE " in sql.upper():
+                try:
+                    self.resource.add(re.findall(r"CREATE EXTERNAL RESOURCE ([a-zA-Z0-9_-]+)", sql)[0])
+                except Exception as e:
+                    log.info("no resource of CREATE EXTERNAL RESOURCE, %s" % e)
+
+                try:
+                    self.resource.add(re.findall(r"create external resource ([a-zA-Z0-9_-]+)", sql)[0])
+                except Exception as e:
+                    log.info("no resource of create external resource, %s" % e)
+
+                try:
+                    self.resource.add(re.findall(r"CREATE EXTERNAL RESOURCE \"([a-zA-Z0-9_-]+)\"", sql)[0])
+                except Exception as e:
+                    log.info("no resource of CREATE EXTERNAL RESOURCE \"\", %s" % e)
+
+                try:
+                    self.resource.add(re.findall(r"create external resource \"([a-zA-Z0-9_-]+)\"", sql)[0])
+                except Exception as e:
+                    log.info("no resource of create external resource \"\", %s" % e)
+
+        if len(self.db) == 0:
+            db_name = "test_db_%s" % uuid.uuid1().hex
+            self.db.add(db_name)
+            self.execute_sql("CREATE DATABASE %s;" % db_name)
+            self.execute_sql("USE %s;" % db_name)
+            print("[SQL]: CREATE DATABASE %s;" % db_name)
+            print("[SQL]: USE %s;" % db_name)
+
+        return ret

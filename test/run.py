@@ -129,10 +129,14 @@ if __name__ == "__main__":
 
     argv = [
         "nosetests",
+        "--with-flaky",
+        "--force-flaky",
+        "--max-runs=3",
+        "--min-passes=3",
         "test_sql_cases.py",
         "-vv",
         "-s",
-        "--nologcapture"
+        "--nologcapture",
     ]
 
     # concurrency

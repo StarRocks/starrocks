@@ -58,63 +58,63 @@ class ChooseCase(object):
             self.ori_sql: List = copy.deepcopy(sql)
             self.result: List = result
 
-            variable_dict = {}
+            # variable_dict = {}
 
             # get db from lines
             self.db = set()
             self.resource = set()
-            self.init_cmd = []
+            # self.init_cmd = []
 
             # identify uuid and replace them, save into variable_dict
-            for each_sql in sql:
-                uuid_vars = re.findall(r"\${(uuid[0-9]*)}", each_sql)
+            # for each_sql in sql:
+            #     uuid_vars = re.findall(r"\${(uuid[0-9]*)}", each_sql)
+            #
+            #     for each_uuid in uuid_vars:
+            #         if each_uuid not in variable_dict:
+            #             variable_dict[each_uuid] = uuid.uuid4().hex
 
-                for each_uuid in uuid_vars:
-                    if each_uuid not in variable_dict:
-                        variable_dict[each_uuid] = uuid.uuid4().hex
-
-            for sql_id, each_sql in enumerate(sql):
-
-                # replace uuid
-                for each_var in variable_dict:
-                    each_sql = each_sql.replace("${%s}" % each_var, variable_dict[each_var])
-
-                sql[sql_id] = each_sql
-
-                if "CREATE DATABASE" in each_sql.upper():
-                    # last word is db by default
-                    db_name = each_sql.rstrip(";").strip().split(" ")[-1]
-
-                    self.db.add(db_name)
-
-                if "CREATE EXTERNAL RESOURCE " in each_sql.upper():
-
-                    try:
-                        self.resource.add(re.findall(r"CREATE EXTERNAL RESOURCE ([a-zA-Z0-9_-]+)", each_sql)[0])
-                    except Exception as e:
-                        log.info("no resource of CREATE EXTERNAL RESOURCE, %s" % e)
-
-                    try:
-                        self.resource.add(re.findall(r"create external resource ([a-zA-Z0-9_-]+)", each_sql)[0])
-                    except Exception as e:
-                        log.info("no resource of create external resource, %s" % e)
-
-                    try:
-                        self.resource.add(re.findall(r"CREATE EXTERNAL RESOURCE \"([a-zA-Z0-9_-]+)\"", each_sql)[0])
-                    except Exception as e:
-                        log.info("no resource of CREATE EXTERNAL RESOURCE \"\", %s" % e)
-
-                    try:
-                        self.resource.add(re.findall(r"create external resource \"([a-zA-Z0-9_-]+)\"", each_sql)[0])
-                    except Exception as e:
-                        log.info("no resource of create external resource \"\", %s" % e)
+            # for sql_id, each_sql in enumerate(sql):
+            #
+            #     # replace uuid
+            #     # for each_var in variable_dict:
+            #     #     each_sql = each_sql.replace("${%s}" % each_var, variable_dict[each_var])
+            #
+            #     sql[sql_id] = each_sql
+            #
+            #     if "CREATE DATABASE" in each_sql.upper():
+            #         # last word is db by default
+            #         db_name = each_sql.rstrip(";").strip().split(" ")[-1]
+            #
+            #         self.db.add(db_name)
+            #
+            #     if "CREATE EXTERNAL RESOURCE " in each_sql.upper():
+            #
+            #         try:
+            #             self.resource.add(re.findall(r"CREATE EXTERNAL RESOURCE ([a-zA-Z0-9_-]+)", each_sql)[0])
+            #         except Exception as e:
+            #             log.info("no resource of CREATE EXTERNAL RESOURCE, %s" % e)
+            #
+            #         try:
+            #             self.resource.add(re.findall(r"create external resource ([a-zA-Z0-9_-]+)", each_sql)[0])
+            #         except Exception as e:
+            #             log.info("no resource of create external resource, %s" % e)
+            #
+            #         try:
+            #             self.resource.add(re.findall(r"CREATE EXTERNAL RESOURCE \"([a-zA-Z0-9_-]+)\"", each_sql)[0])
+            #         except Exception as e:
+            #             log.info("no resource of CREATE EXTERNAL RESOURCE \"\", %s" % e)
+            #
+            #         try:
+            #             self.resource.add(re.findall(r"create external resource \"([a-zA-Z0-9_-]+)\"", each_sql)[0])
+            #         except Exception as e:
+            #             log.info("no resource of create external resource \"\", %s" % e)
 
             # if no db is confirmed, init one
-            if len(self.db) == 0:
-                db_name = "test_db_%s" % uuid.uuid4().hex
-                self.db.add(db_name)
-                self.init_cmd.append("CREATE DATABASE %s;" % db_name)
-                self.init_cmd.append("USE %s;" % db_name)
+            # if len(self.db) == 0:
+            #     db_name = "test_db_%s" % uuid.uuid4().hex
+            #     self.db.add(db_name)
+            #     self.init_cmd.append("CREATE DATABASE %s;" % db_name)
+            #     self.init_cmd.append("USE %s;" % db_name)
 
         def __lt__(self, other):
             """less than"""
@@ -336,7 +336,7 @@ def choose_cases(record_mode=False):
     cases = ChooseCase(confirm_case_dir, record_mode, filename_regex, case_name_regex)
 
     # check db
-    check_db_unique(cases.case_list)
+    # check_db_unique(cases.case_list)
 
     # log info: case list
     print("case num: %s" % len(cases.case_list))
