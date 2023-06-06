@@ -108,11 +108,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
     # -------------------------------------------
     #         [CASE]
     # -------------------------------------------
-    @parameterized.expand(
-        [[case_info] for case_info in case_list],
-        doc_func=doc_func,
-        name_func=name_func
-    )
+    @parameterized.expand([[case_info] for case_info in case_list], doc_func=doc_func, name_func=name_func)
     @sql_annotation.init(record_mode)
     def test_sql_basic(self, case_info: choose_cases.ChooseCase.CaseTR):
         """
@@ -145,11 +141,11 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
             # uncheck flag, owns the highest priority
             if sql.startswith(sr_sql_lib.UNCHECK_FLAG):
                 uncheck = True
-                sql = sql[len(sr_sql_lib.UNCHECK_FLAG):]
+                sql = sql[len(sr_sql_lib.UNCHECK_FLAG) :]
 
             # execute command in files
             if sql.startswith(sr_sql_lib.SHELL_FLAG):
-                sql = sql[len(sr_sql_lib.SHELL_FLAG):]
+                sql = sql[len(sr_sql_lib.SHELL_FLAG) :]
 
                 # analyse var set
                 var, sql = self.analyse_var(sql)
@@ -163,7 +159,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
 
             elif sql.startswith(sr_sql_lib.FUNCTION_FLAG):
                 # function invoke
-                sql = sql[len(sr_sql_lib.FUNCTION_FLAG):]
+                sql = sql[len(sr_sql_lib.FUNCTION_FLAG) :]
 
                 # analyse var set
                 var, sql = self.analyse_var(sql)
@@ -181,7 +177,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                 # order flag
                 if sql.startswith(sr_sql_lib.ORDER_FLAG):
                     order = True
-                    sql = sql[len(sr_sql_lib.ORDER_FLAG):]
+                    sql = sql[len(sr_sql_lib.ORDER_FLAG) :]
 
                 # analyse var set
                 var, sql = self.analyse_var(sql)
@@ -251,12 +247,12 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                 try:
                     self.resource.add(re.findall(r"CREATE EXTERNAL RESOURCE \"([a-zA-Z0-9_-]+)\"", sql)[0])
                 except Exception as e:
-                    log.info("no resource of CREATE EXTERNAL RESOURCE \"\", %s" % e)
+                    log.info('no resource of CREATE EXTERNAL RESOURCE "", %s' % e)
 
                 try:
                     self.resource.add(re.findall(r"create external resource \"([a-zA-Z0-9_-]+)\"", sql)[0])
                 except Exception as e:
-                    log.info("no resource of create external resource \"\", %s" % e)
+                    log.info('no resource of create external resource "", %s' % e)
 
         if len(self.db) == 0:
             db_name = "test_db_%s" % uuid.uuid1().hex

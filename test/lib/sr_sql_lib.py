@@ -118,11 +118,11 @@ class StarrocksSQLApiLib(object):
         self.mysql_password = config_parser.get("mysql-client", "password")
 
         # read replace info
-        for (rep_key, rep_value) in config_parser.items("replace"):
+        for rep_key, rep_value in config_parser.items("replace"):
             self.__setattr__(rep_key, rep_value)
 
         # read env info
-        for (env_key, env_value) in config_parser.items("env"):
+        for env_key, env_value in config_parser.items("env"):
             if not env_value:
                 env_value = os.environ.get(env_key, "")
             self.__setattr__(env_key, env_value)
@@ -304,7 +304,6 @@ class StarrocksSQLApiLib(object):
         return self.delete_from(args)
 
     def treatment_record_res(self, sql, sql_res):
-
         if any(re.match(condition, sql) is not None for condition in skip.skip_res_cmd):
             return
 
@@ -380,7 +379,7 @@ class StarrocksSQLApiLib(object):
         log.info("shell result: code: %s, stdout: %s" % (cmd_res.returncode, cmd_res.stdout))
         return [
             cmd_res.returncode,
-            cmd_res.stdout.rstrip("\n") if cmd_res.returncode == 0 else cmd_res.stderr.rstrip("\n")
+            cmd_res.stdout.rstrip("\n") if cmd_res.returncode == 0 else cmd_res.stderr.rstrip("\n"),
         ]
 
     def replace(self, cmd):
@@ -401,7 +400,7 @@ class StarrocksSQLApiLib(object):
         if regex.match(cmd):
             # set variable
             var = regex.match(cmd).group()
-            cmd = cmd[len(var):]
+            cmd = cmd[len(var) :]
             var = var[:-1]
 
         # replace variable dynamically, only replace right of '='
@@ -460,7 +459,7 @@ class StarrocksSQLApiLib(object):
             log.info("[%s.check] skip check" % sql_id)
             return
 
-        tmp_ori_sql = ori_sql[len(UNCHECK_FLAG):] if ori_sql.startswith(UNCHECK_FLAG) else ori_sql
+        tmp_ori_sql = ori_sql[len(UNCHECK_FLAG) :] if ori_sql.startswith(UNCHECK_FLAG) else ori_sql
         if tmp_ori_sql.startswith(SHELL_FLAG):
             tools.assert_equal(int(exp.split("\n")[0]), act[0], "shell %s error: %s" % (sql, act))
 
@@ -523,13 +522,15 @@ class StarrocksSQLApiLib(object):
                         tools.assert_list_equal(
                             expect_res,
                             act,
-                            "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, expect_res, act),
+                            "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
+                            % (sql, expect_res, act),
                         )
                     else:
                         tools.assert_count_equal(
                             expect_res,
                             act,
-                            "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, expect_res, act),
+                            "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
+                            % (sql, expect_res, act),
                         )
                     return
                 elif exp.startswith("{") and exp.endswith("}"):
@@ -621,8 +622,8 @@ class StarrocksSQLApiLib(object):
 
         insert_round = 1
         while len(new_log) > 0:
-            current_log = new_log[:min(len(new_log), 65533)]
-            new_log = new_log[len(current_log):]
+            current_log = new_log[: min(len(new_log), 65533)]
+            new_log = new_log[len(current_log) :]
 
             arg_dict = {
                 "database_name": T_R_DB,
@@ -684,7 +685,6 @@ class StarrocksSQLApiLib(object):
             file_dict[file] = self.merge_case_info(part, file, logs)
 
         for file, logs in file_dict.items():
-
             # write into file
             file_path = os.path.join(self.root_path, file)
 

@@ -55,7 +55,7 @@ python run.py [-d dirname/file] [-r] [-l] [-c ${concurrency}] [-t ${time}] [-a $
 
 
 if __name__ == "__main__":
-    """ main """
+    """main"""
 
     record = False
     dirname = None
@@ -67,8 +67,19 @@ if __name__ == "__main__":
     part = False
 
     args = "hld:rvc:t:x:y:pa:"
-    detail_args = ["help", "list", "dir=", "record", "validate", "concurrency=", "timeout=", "file_filter=",
-                   "case_filter=", "part", "attr="]
+    detail_args = [
+        "help",
+        "list",
+        "dir=",
+        "record",
+        "validate",
+        "concurrency=",
+        "timeout=",
+        "file_filter=",
+        "case_filter=",
+        "part",
+        "attr=",
+    ]
 
     case_dir = None
 

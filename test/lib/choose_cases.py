@@ -48,7 +48,7 @@ CASE_DIR = "sql"
 class ChooseCase(object):
     class CaseTR(object):
         def __init__(self, ctx, name, file, sql, result, info):
-            """ init """
+            """init"""
             super().__init__()
             self.ctx = ctx
             self.info = info
@@ -181,7 +181,7 @@ class ChooseCase(object):
             return
 
         # path is dir
-        for (dir_path, _, file_names) in os.walk(self.case_dir):
+        for dir_path, _, file_names in os.walk(self.case_dir):
             if len(file_names) <= 0:
                 continue
 
@@ -212,11 +212,11 @@ class ChooseCase(object):
         with open(file, "r") as f:
             f_lines = f.readlines()
 
-        file = os.path.abspath(file)[len(os.path.abspath(self.sr_lib_obj.root_path)):].lstrip("/")
+        file = os.path.abspath(file)[len(os.path.abspath(self.sr_lib_obj.root_path)) :].lstrip("/")
 
         tools.assert_greater(len(f_lines), 0, "case file lines must not be empty: %s" % file)
 
-        attr = os.environ.get("attr").split(",") if os.environ.get("attr") != '' else []
+        attr = os.environ.get("attr").split(",") if os.environ.get("attr") != "" else []
 
         line_id = 0
         name = ""
@@ -270,7 +270,7 @@ class ChooseCase(object):
                 line_id += 1
 
                 if line_content.startswith(UNCHECK_FLAG):
-                    line_content = line_content[len(UNCHECK_FLAG):]
+                    line_content = line_content[len(UNCHECK_FLAG) :]
 
                 if line_content.startswith(SHELL_FLAG) or line_content.startswith(FUNCTION_FLAG):
                     # shell/function only support 1 line
@@ -329,8 +329,13 @@ def choose_cases(record_mode=False):
 [file regex]: %s
 [case regex]: %s
 [attr]: %s
-    """ % (confirm_case_dir, "RECORD" if record_mode else "VALIDATE", filename_regex, case_name_regex,
-           os.environ.get("attr"))
+    """ % (
+        confirm_case_dir,
+        "RECORD" if record_mode else "VALIDATE",
+        filename_regex,
+        case_name_regex,
+        os.environ.get("attr"),
+    )
     print(run_info)
     log.info(run_info)
     cases = ChooseCase(confirm_case_dir, record_mode, filename_regex, case_name_regex)
@@ -348,7 +353,7 @@ def choose_cases(record_mode=False):
 
 
 def check_db_unique(case_list: List[ChooseCase.CaseTR]):
-    """ check db unique in case list """
+    """check db unique in case list"""
     db_and_case_dict = {}
 
     # get info dict, key: db value: [..case_names]
