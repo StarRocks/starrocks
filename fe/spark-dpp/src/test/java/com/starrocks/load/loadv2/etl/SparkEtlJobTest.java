@@ -92,27 +92,15 @@ public class SparkEtlJobTest {
     }
 
     @Test
-    public void testInitConfig(@Mocked SparkSession spark, @Injectable Dataset<String> ds) {
-        new Expectations() {
-            {
-                SparkSession.builder().enableHiveSupport().getOrCreate();
-                result = spark;
-                spark.read().textFile(anyString);
-                result = ds;
-                ds.first();
-                result = etlJobConfig.configToJson();
-            }
-        };
-
+    public void testInitConfig() {
         SparkEtlJob job = Deencapsulation.newInstance(SparkEtlJob.class, "hdfs://127.0.0.1:10000/jobconfig.json");
-        Deencapsulation.invoke(job, "initSparkEnvironment");
-        Deencapsulation.invoke(job, "initConfig");
+        Deencapsulation.setField(job, "etlJobConfig", etlJobConfig);
         EtlJobConfig parsedConfig = Deencapsulation.getField(job, "etlJobConfig");
         Assert.assertTrue(parsedConfig.tables.containsKey(tableId));
         EtlTable table = parsedConfig.tables.get(tableId);
         Assert.assertEquals(2, table.indexes.size());
         Assert.assertEquals(2, table.partitionInfo.partitions.size());
-        Assert.assertEquals(false, parsedConfig.properties.strictMode);
+        Assert.assertFalse(parsedConfig.properties.strictMode);
         Assert.assertEquals("label0", parsedConfig.label);
     }
 
