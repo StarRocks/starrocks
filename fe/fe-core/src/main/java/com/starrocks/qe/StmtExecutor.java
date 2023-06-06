@@ -1620,7 +1620,8 @@ public class StmtExecutor {
                                 TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
                                         trackingSql
                         );
-                    } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
+                    } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable
+                            || targetTable instanceof TableFunctionTable) {
                         // schema table does not need txn
                     } else {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
@@ -1647,7 +1648,8 @@ public class StmtExecutor {
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),
                             TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
-                } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
+                } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable
+                        || targetTable instanceof TableFunctionTable) {
                     // schema table does not need txn
                 } else {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
