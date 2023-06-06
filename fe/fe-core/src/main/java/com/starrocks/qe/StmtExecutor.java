@@ -875,11 +875,16 @@ public class StmtExecutor {
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
         GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
+        int timeout = context.getSessionVariable().getQueryTimeoutS();
         try {
             Future<?> future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
                     .submit(() -> executeAnalyze(analyzeStmt, analyzeStatus, db, table));
 
             if (!analyzeStmt.isAsync()) {
+                // sync statistics collection doesn't be interrupted by query timeout, but
+                // will print warning log if timeout, so we update timeout temporarily to avoid
+                // warning log
+                context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
                 future.get();
             }
         } catch (RejectedExecutionException e) {
@@ -890,6 +895,8 @@ public class StmtExecutor {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setReason("The statistics tasks running failed");
             GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        } finally {
+            context.getSessionVariable().setQueryTimeoutS(timeout);
         }
 
         ShowResultSet resultSet = analyzeStatus.toShowResult();
