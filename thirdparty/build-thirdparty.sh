@@ -506,7 +506,7 @@ build_rocksdb() {
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    CFLAGS= ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=no --enable-static=yes --enable-shared=no
+    CFLAGS="" LDFLAGS="-L${TP_LIB_DIR}" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=no --enable-static=yes --enable-shared=no
     make -j$PARALLEL
     make install
 }
