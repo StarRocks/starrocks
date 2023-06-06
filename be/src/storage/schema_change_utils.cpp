@@ -336,8 +336,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
             }
         }
     }
-}
-return true;
+    return true;
 }
 
 bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const Schema& base_schema,
@@ -357,7 +356,6 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
 
     for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
         int ref_column = _schema_mapping[i].ref_column;
-        DCHECK_NE(ref_column, -1);
         if (ref_column >= 0) {
             if (_schema_mapping[i].mv_expr_ctx != nullptr) {
                 // init for expression evaluation only
@@ -370,7 +368,6 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                     return false;
                 }
                 auto new_col = new_col_status.value();
-                // TODO: no need to unpack const column later.
                 new_col = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
                 new_chunk->update_column_by_index(new_col, i);
             } else {
