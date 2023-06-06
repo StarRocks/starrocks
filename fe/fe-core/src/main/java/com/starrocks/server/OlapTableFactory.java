@@ -199,7 +199,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
 
             if (runMode == RunMode.SHARED_DATA) {
-                if (volume.equals("local")) {
+                if (volume.equals(StorageVolumeMgr.LOCAL)) {
                     throw new DdlException("Cannot create table " +
                             "without persistent volume in current run mode \"" + runMode + "\"");
                 }
@@ -225,7 +225,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setStorageVolume(sv.getName());
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-                table.setStorageVolume("local");
+                table.setStorageVolume(StorageVolumeMgr.LOCAL);
             }
 
             if (table.isCloudNativeTable() && !runMode.isAllowCreateLakeTable())  {

@@ -40,6 +40,8 @@ public abstract class StorageVolumeMgr {
 
     public static final String DEFAULT = "default";
 
+    public static final String LOCAL = "local";
+
     @SerializedName("defaultStorageVolumeId")
     protected String defaultStorageVolumeId = "";
 

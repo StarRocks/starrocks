@@ -380,7 +380,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 id = getNextId();
                 Database db = new Database(id, dbName);
                 unprotectCreateDb(db);
-
                 if (RunMode.allowCreateLakeTable()) {
                     String volume = StorageVolumeMgr.DEFAULT;
                     if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
@@ -388,14 +387,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                     setDbStorageVolumeInfo(db, volume);
                 }
-
-                /* TODO (log compatibility):
-                    For the compatibility reasons of the development version,
-                    temporarily use OP_CREATE_DB, we will use the new log of the new version in a single PR
-                 */
-                //CreateDbInfo createDbInfo = new CreateDbInfo(id, dbName);
-                //editLog.logCreateDb(createDbInfo);
-                editLog.logCreateDb(db);
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateDb(db);
             }
         } finally {
             unlock();

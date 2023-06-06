@@ -36,8 +36,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.SharedDataStorageVolumeMgr;
+import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -55,32 +57,6 @@ public class CreateLakeTableTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        Config.cloud_native_storage_type = "s3";
-        Config.aws_s3_access_key = "access_key";
-        Config.aws_s3_secret_key = "secret_key";
-        Config.aws_s3_region = "region";
-        Config.aws_s3_endpoint = "endpoint";
-        Config.aws_s3_path = "default-bucket/1";
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
-
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public FileStoreInfo getFileStore(String fsKey) {
-                S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
-                        .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
-                        .setCredential(AwsCredentialInfo.newBuilder()
-                                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()).build()).build();
-                return FileStoreInfo.newBuilder().setFsName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME)
-                        .setFsKey("1").setFsType(FileStoreType.S3)
-                        .setS3FsInfo(s3FileStoreInfo).build();
-            }
-        };
-
         UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
@@ -89,6 +65,27 @@ public class CreateLakeTableTest {
         String createDbStmtStr = "create database lake_test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<SharedNothingStorageVolumeMgr>() {
+            @Mock
+            public StorageVolume getStorageVolume(String fsKey) throws AnalysisException {
+                S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
+                        .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
+                        .setCredential(AwsCredentialInfo.newBuilder()
+                                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()).build()).build();
+                FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME)
+                        .setFsKey("1").setFsType(FileStoreType.S3)
+                        .setS3FsInfo(s3FileStoreInfo).build();
+                return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
+        };
     }
 
     @AfterClass
@@ -146,8 +143,6 @@ public class CreateLakeTableTest {
     public void testCreateLakeTable(@Mocked StarOSAgent agent) throws UserException {
         new Expectations(agent) {
             {
-                agent.getFileStore(anyString);
-                result = getFileStoreInfo();
                 agent.allocateFilePath(anyString, anyLong);
                 result = getPathInfo();
                 agent.createShardGroup(anyLong, anyLong, anyLong);
@@ -194,8 +189,6 @@ public class CreateLakeTableTest {
     public void testCreateLakeTableWithStorageCache(@Mocked StarOSAgent agent) throws UserException {
         new Expectations() {
             {
-                agent.getFileStore(anyString);
-                result = getFileStoreInfo();
                 agent.allocateFilePath(anyString, anyLong);
                 result = getPathInfo();
                 agent.createShardGroup(anyLong, anyLong, anyLong);
@@ -320,8 +313,6 @@ public class CreateLakeTableTest {
     public void testExplainRowCount(@Mocked StarOSAgent agent) throws Exception {
         new Expectations(agent) {
             {
-                agent.getFileStore(anyString);
-                result = getFileStoreInfo();
                 agent.allocateFilePath(anyString, anyLong);
                 result = getPathInfo();
                 agent.createShardGroup(anyLong, anyLong, anyLong);
