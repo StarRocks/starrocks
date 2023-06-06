@@ -61,6 +61,8 @@ public:
 
     void init_runtime_state(TQueryOptions query_options, TQueryGlobals query_globals);
 
+    void set_has_mv_expr_context(bool has_mv_expr_context) { this->_has_mv_expr_context = has_mv_expr_context; }
+
 private:
     // @brief column-mapping specification of new schema
     SchemaMapping _schema_mapping;
@@ -70,6 +72,8 @@ private:
     ObjectPool _obj_pool;
     RuntimeState* _state = nullptr;
     std::unordered_map<int, ExprContext*> _mc_exprs;
+
+    bool _has_mv_expr_context{false};
     // base table's slot_id to index mapping
     std::unordered_map<int32_t, int32_t> _slot_id_to_index_map;
 

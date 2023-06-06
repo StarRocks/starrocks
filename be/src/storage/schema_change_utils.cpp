@@ -212,21 +212,23 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                      << ", mapping_schema_size=" << _schema_mapping.size();
         return false;
     }
-    if (base_chunk->num_columns() != _slot_id_to_index_map.size()) {
+    if (_has_mv_expr_context && base_chunk->num_columns() != _slot_id_to_index_map.size()) {
         LOG(WARNING) << "base chunk does not match with _slot_id_to_index_map mapping rules. "
                      << "base_chunk_size=" << base_chunk->num_columns()
                      << ", slot_id_to_index_map's size=" << _slot_id_to_index_map.size();
         return false;
+    }
+    if (_has_mv_expr_context) {
+        // init for expression evaluation only
+        for (auto& iter : _slot_id_to_index_map) {
+            base_chunk->set_slot_id_to_index(iter.first, iter.second);
+        }
     }
 
     for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
         int ref_column = _schema_mapping[i].ref_column;
         if (ref_column >= 0) {
             if (_schema_mapping[i].mv_expr_ctx != nullptr) {
-                // init for expression evaluation only
-                for (auto& iter : _slot_id_to_index_map) {
-                    base_chunk->set_slot_id_to_index(iter.first, iter.second);
-                }
                 auto new_col_status = (_schema_mapping[i].mv_expr_ctx)->evaluate(base_chunk.get());
                 if (!new_col_status.ok()) {
                     return false;
@@ -347,22 +349,23 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                      << ", mapping_schema_size=" << _schema_mapping.size();
         return false;
     }
-    if (base_chunk->num_columns() != _slot_id_to_index_map.size()) {
+    if (_has_mv_expr_context && base_chunk->num_columns() != _slot_id_to_index_map.size()) {
         LOG(WARNING) << "base chunk does not match with _slot_id_to_index_map mapping rules. "
                      << "base_chunk_size=" << base_chunk->num_columns()
                      << ", slot_id_to_index_map's size=" << _slot_id_to_index_map.size();
         return false;
+    }
+    if (_has_mv_expr_context) {
+        // init for expression evaluation only
+        for (auto& iter : _slot_id_to_index_map) {
+            base_chunk->set_slot_id_to_index(iter.first, iter.second);
+        }
     }
 
     for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
         int ref_column = _schema_mapping[i].ref_column;
         if (ref_column >= 0) {
             if (_schema_mapping[i].mv_expr_ctx != nullptr) {
-                // init for expression evaluation only
-                for (auto& iter : _slot_id_to_index_map) {
-                    base_chunk->set_slot_id_to_index(iter.first, iter.second);
-                }
-
                 auto new_col_status = (_schema_mapping[i].mv_expr_ctx)->evaluate(base_chunk.get());
                 if (!new_col_status.ok()) {
                     return false;
@@ -526,6 +529,7 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
         if (materialized_view_param_map.find(column_name) != materialized_view_param_map.end()) {
             auto& mvParam = materialized_view_param_map.find(column_name)->second;
             if (mvParam.mv_expr != nullptr) {
+                chunk_changer->set_has_mv_expr_context(true);
                 chunk_changer->init_runtime_state(TQueryOptions(), TQueryGlobals());
                 RuntimeState* runtime_state = chunk_changer->get_runtime_state();
                 RETURN_IF_ERROR(Expr::create_expr_tree(chunk_changer->get_object_pool(), *(mvParam.mv_expr),
