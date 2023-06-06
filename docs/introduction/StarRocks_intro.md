@@ -22,7 +22,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPartItem>
 
 - [Deploy with Docker](../quick_start/deploy_with_docker.md)
-- [Create a table](../quick_start/create_table.md)
+- [Create a table](../quick_start/Create_table.md)
 - [Ingest and query data](../quick_start/Import_and_query.md)
 
 </NavBoxPartItem>
