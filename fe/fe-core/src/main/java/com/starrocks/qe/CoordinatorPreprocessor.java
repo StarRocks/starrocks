@@ -778,8 +778,10 @@ public class CoordinatorPreprocessor {
             if (params.instanceExecParams.isEmpty()) {
                 Reference<Long> backendIdRef = new Reference<>();
                 TNetworkAddress execHostport;
+                // TODO: need to refactor after be split into cn + dn
                 if (usedComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                    execHostport = SimpleScheduler.getComputeNodeHost(this.idToComputeNode, backendIdRef);
+                    execHostport = SimpleScheduler.getBackendOrComputeNodeHost(this.idToComputeNode,
+                            this.idToBackend, backendIdRef);
                 } else {
                     execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
                 }
