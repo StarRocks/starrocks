@@ -42,6 +42,7 @@ if [ -z $BUILD_TYPE ]; then
     export BUILD_TYPE=Release
 fi
 
+cd $STARROCKS_HOME
 if [ -z $STARROCKS_VERSION ]; then
     tag_name=$(git describe --tags --exact-match 2>/dev/null)
     branch_name=$(git symbolic-ref -q --short HEAD)
