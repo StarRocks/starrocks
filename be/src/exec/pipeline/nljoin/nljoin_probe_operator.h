@@ -25,6 +25,7 @@
 
 namespace starrocks::pipeline {
 
+// TODO: use NLJoinProber refactor NLJoinProbeOperator when all join method has supported
 // NestLoopJoin
 // Implement the block-wise nestloop algorithm, support inner/outer join
 // The algorithm consists of three steps:
@@ -67,10 +68,14 @@ private:
         Finished,      // Finish all job
     };
 
+    bool _is_build_side_empty() const;
     int _num_build_chunks() const;
-    Chunk* _move_build_chunk_index(int index);
+    void _move_build_chunk_index(int index);
+    void _reset_build_chunk_index();
+    void _next_build_chunk_index();
+
     ChunkPtr _init_output_chunk(RuntimeState* state) const;
-    Status _probe(RuntimeState* state, ChunkPtr chunk);
+    Status _probe(RuntimeState* state, const ChunkPtr& chunk);
     void _advance_join_stage(JoinStage stage) const;
     bool _skip_probe() const;
     void _check_post_probe() const;
