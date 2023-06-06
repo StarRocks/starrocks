@@ -20,6 +20,8 @@ public class TableFunctionTableSink extends DataSink {
         return prefix + "TABLE FUNCTION TABLE SINK\n" +
                 prefix + "  PATH: " + table.getPath() + "\n" +
                 prefix + "  FORMAT: " + table.getFormat() + "\n" +
+                prefix + "  PARTITION BY: " + table.getPartitionColumnNames() + "\n" +
+                prefix + "  SINGLE: " + table.isWriteSingleFile() + "\n" +
                 prefix + "  " + DataPartition.RANDOM.getExplainString(explainLevel);
     }
 

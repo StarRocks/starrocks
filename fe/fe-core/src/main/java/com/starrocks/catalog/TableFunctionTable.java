@@ -46,6 +46,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
+import jline.internal.Nullable;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
@@ -53,6 +54,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
+
+import static com.google.common.base.Verify.verify;
 
 public class TableFunctionTable extends Table {
 
@@ -62,26 +66,32 @@ public class TableFunctionTable extends Table {
     private String path;
     private String format;
     private Map<String, String> properties;
+    private List<String> partitionColumnNames;
+    private boolean writeSingleFile;
 
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
+    // Ctor for load data via table function
     public TableFunctionTable(Map<String, String> properties) throws DdlException {
         super(TableType.TABLE_FUNCTION);
         super.setId(-1);
         super.setName("table_function_table");
         this.properties = properties;
         parseProperties();
-
         parseFiles();
-
-        super.setNewFullSchema(getFileSchema());
+        super.setNewFullSchema(getFileSchema()); // infer schema
     }
 
-    public TableFunctionTable(String path, String format, List<Column> columns) {
+    // Ctor for unload data via table function
+    public TableFunctionTable(String path, String format, List<Column> columns,
+                              @Nullable List<String> partitionColumnNames, boolean writeSingleFile) {
         super(TableType.TABLE_FUNCTION);
         this.path = path;
         this.format = format;
+        this.partitionColumnNames = partitionColumnNames;
+        this.writeSingleFile = writeSingleFile;
         super.setNewFullSchema(columns);
+        verify(!writeSingleFile || partitionColumnNames == null);
     }
 
     @Override
@@ -101,14 +111,14 @@ public class TableFunctionTable extends Table {
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TTableFunctionTable tTbl = new TTableFunctionTable();
+        List<TColumn> tColumns = getFullSchema().stream().map(Column::toThrift).collect(Collectors.toList());
+
         tTbl.setPath(path);
-
-        List<TColumn> tColumns = Lists.newArrayList();
-
-        for (Column column : getBaseSchema()) {
-            tColumns.add(column.toThrift());
-        }
         tTbl.setColumns(tColumns);
+        tTbl.setWrite_single_file(writeSingleFile);
+        if (partitionColumnNames != null) {
+            tTbl.setPartition_column_names(partitionColumnNames);
+        }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.TABLE_FUNCTION_TABLE, fullSchema.size(),
                 0, "_table_function_table", "_table_function_db");
@@ -251,5 +261,14 @@ public class TableFunctionTable extends Table {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    @Override
+    public List<String> getPartitionColumnNames() {
+        return partitionColumnNames;
+    }
+
+    public boolean isWriteSingleFile() {
+        return writeSingleFile;
     }
 }

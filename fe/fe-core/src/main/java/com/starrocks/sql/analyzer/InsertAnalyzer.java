@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -264,7 +265,7 @@ public class InsertAnalyzer {
 
     private static Table getTargetTable(InsertStmt insertStmt, ConnectContext session) {
         if (insertStmt.useTableFunctionAsTargetTable()) {
-            // analyze table function properties
+            // make a TableFunctionTable from table function properties
             Map<String, String> props = insertStmt.getTableFunctionProperties();
             String path = props.get("path");
             if (path == null) {
@@ -274,12 +275,37 @@ public class InsertAnalyzer {
 
             QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
             List<Field> allFields = query.getRelationFields().getAllFields();
-            List<Column> columns = new ArrayList<>();
-            for (Field field : allFields) {
-                Column column = new Column(field.getName(), field.getType(), field.isNullable());
-                columns.add(column);
+
+            // fetch schema of target table from query
+            List<Column> columns = allFields.stream().map(field -> new Column(field.getName(), field.getType(),
+                    field.isNullable())).collect(Collectors.toList());
+
+            boolean writeSingleFile = Boolean.parseBoolean(props.get("single"));
+            String partitionBy = props.get("partition_by");
+            if (partitionBy == null) {
+                return new TableFunctionTable(path, format, columns, null, writeSingleFile);
             }
-            return new TableFunctionTable(path, format, columns);
+
+            if (writeSingleFile) {
+                throw new SemanticException("cannot use partition by and single simultaneously");
+            }
+
+            List<String> columnNames = columns.stream().map(Column::getName).collect(Collectors.toList());
+
+            // parse and validate partition columns
+            partitionBy = partitionBy.replaceAll("^\\(|\\)$", "");
+            List<String> partitionColumnNames = Arrays.asList(partitionBy.split(","));
+            partitionColumnNames.replaceAll(String::trim); // TODO: dedup
+
+            List<String> unmatchedPartitionColumnNames = partitionColumnNames.stream().filter(col ->
+                    !columnNames.contains(col)).collect(Collectors.toList());
+
+            if (!unmatchedPartitionColumnNames.isEmpty()) {
+                throw new SemanticException("partition columns expected to be a subset of " + columnNames +
+                        ", but got extra columns: " + unmatchedPartitionColumnNames);
+            }
+
+            return new TableFunctionTable(path, format, columns, partitionColumnNames, false);
         }
 
         MetaUtils.normalizationTableName(session, insertStmt.getTableName());

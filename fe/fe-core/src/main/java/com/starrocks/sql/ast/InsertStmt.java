@@ -79,13 +79,9 @@ public class InsertStmt extends DmlStmt {
      */
     private boolean forCTAS = false;
 
+    // tableFunctionAsTargetTable is true if insert statement is parsed from INSERT INTO TABLE(..)
     private boolean tableFunctionAsTargetTable = false;
-
-    // following fields are set if useTableFunction == true
     private final Map<String, String> tableFunctionProperties;
-    private String path;
-    private String format;
-    private String partitionBy;
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite) {
@@ -245,21 +241,5 @@ public class InsertStmt extends DmlStmt {
 
     public Map<String, String> getTableFunctionProperties() {
         return tableFunctionProperties;
-    }
-
-    public String getPath() {
-        return path;
-    }
-
-    public void setPath(String path) {
-        this.path = path;
-    }
-
-    public String getFormat() {
-        return format;
-    }
-
-    public void setFormat(String format) {
-        this.format = format;
     }
 }
