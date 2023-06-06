@@ -121,6 +121,12 @@ public class PrivilegeActions {
                 privilegeType, ObjectType.RESOURCE_GROUP, Collections.singletonList(name));
     }
 
+    public static boolean checkStorageVolumeAction(ConnectContext connectContext,
+                                                   String storageVolume, PrivilegeType privilegeType) {
+        return checkObjectTypeAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                privilegeType, ObjectType.STORAGE_VOLUME, Collections.singletonList(storageVolume));
+    }
+
     /**
      * Check whether current user has specified privilege action on any object(table/view/mv) in the db.
      */
@@ -313,6 +319,11 @@ public class PrivilegeActions {
             default:
                 return false;
         }
+    }
+
+    public static boolean checkAnyActionOnStorageVolume(ConnectContext context, String name) {
+        return checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                ObjectType.STORAGE_VOLUME, Collections.singletonList(name));
     }
 
     /**
