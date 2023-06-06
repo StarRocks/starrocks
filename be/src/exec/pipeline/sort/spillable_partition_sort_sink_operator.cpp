@@ -40,6 +40,14 @@ void SpillablePartitionSortSinkOperator::close(RuntimeState* state) {
     PartitionSortSinkOperator::close(state);
 }
 
+size_t SpillablePartitionSortSinkOperator::estimated_memory_reserved(const ChunkPtr& chunk) {
+    return _chunks_sorter->reserved_bytes(chunk);
+}
+
+size_t SpillablePartitionSortSinkOperator::estimated_memory_reserved() {
+    return _chunks_sorter->reserved_bytes(nullptr);
+}
+
 Status SpillablePartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     RETURN_IF_ERROR(PartitionSortSinkOperator::push_chunk(state, chunk));
     set_revocable_mem_bytes(_chunks_sorter->revocable_mem_bytes());

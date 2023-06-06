@@ -103,6 +103,7 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
         _max_num_rows = std::max<int>(_max_num_rows, _staging_unsorted_rows);
         _profiler->input_required_memory->update(_staging_unsorted_bytes);
         concat_chunks(_unsorted_chunk, _staging_unsorted_chunks, _staging_unsorted_rows);
+        _staging_unsorted_chunks.clear();
         RETURN_IF_ERROR(_unsorted_chunk->upgrade_if_overflow());
 
         SCOPED_TIMER(_sort_timer);
@@ -119,7 +120,6 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
         _unsorted_chunk->reset();
         _staging_unsorted_rows = 0;
         _staging_unsorted_bytes = 0;
-        _staging_unsorted_chunks.clear();
     }
 
     return Status::OK();

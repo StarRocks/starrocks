@@ -116,6 +116,13 @@ Status SpillableChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
+size_t SpillableChunksSorterFullSort::reserved_bytes(const ChunkPtr& chunk) {
+    if (chunk) {
+        return chunk->memory_usage() + _unsorted_chunk->memory_usage() * 2;
+    }
+    return _unsorted_chunk->memory_usage() * 2;
+}
+
 size_t SpillableChunksSorterFullSort::get_output_rows() const {
     if (!_spiller->spilled()) {
         return ChunksSorterFullSort::get_output_rows();
