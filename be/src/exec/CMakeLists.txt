@@ -179,13 +179,14 @@ set(EXEC_FILES
     pipeline/scan/olap_schema_chunk_source.cpp
     pipeline/scan/olap_schema_scan_operator.cpp
     pipeline/scan/olap_schema_scan_context.cpp
-    pipeline/sink/iceberg_table_sink_operator.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp
     pipeline/sink/export_sink_operator.cpp
     pipeline/sink/mysql_table_sink_operator.cpp
     pipeline/sink/memory_scratch_sink_operator.cpp
+    pipeline/sink/iceberg_table_sink_operator.cpp
+    pipeline/sink/table_function_table_sink_operator.cpp
     pipeline/select_operator.cpp
     pipeline/nljoin/nljoin_context.cpp
     pipeline/nljoin/nljoin_build_operator.cpp

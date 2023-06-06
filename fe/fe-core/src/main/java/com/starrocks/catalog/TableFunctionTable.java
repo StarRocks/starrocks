@@ -36,6 +36,7 @@ import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TGetFileSchemaRequest;
@@ -110,20 +111,26 @@ public class TableFunctionTable extends Table {
 
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
-        TTableFunctionTable tTbl = new TTableFunctionTable();
-        List<TColumn> tColumns = getFullSchema().stream().map(Column::toThrift).collect(Collectors.toList());
-
-        tTbl.setPath(path);
-        tTbl.setColumns(tColumns);
-        tTbl.setWrite_single_file(writeSingleFile);
-        if (partitionColumnIDs != null) {
-            tTbl.setPartition_column_ids(partitionColumnIDs);
-        }
-
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.TABLE_FUNCTION_TABLE, fullSchema.size(),
                 0, "_table_function_table", "_table_function_db");
-        tTableDescriptor.setTableFunctionTable(tTbl);
+
+        TTableFunctionTable tTableFunctionTable = this.toTTableFunctionTable();
+        tTableDescriptor.setTableFunctionTable(tTableFunctionTable);
         return tTableDescriptor;
+    }
+
+    public TTableFunctionTable toTTableFunctionTable() {
+        TTableFunctionTable tTableFunctionTable = new TTableFunctionTable();
+        List<TColumn> tColumns = getFullSchema().stream().map(Column::toThrift).collect(Collectors.toList());
+        tTableFunctionTable.setPath(path);
+        tTableFunctionTable.setColumns(tColumns);
+        tTableFunctionTable.setFile_format(format);
+        tTableFunctionTable.setCompression_type(TCompressionType.NO_COMPRESSION);
+        tTableFunctionTable.setWrite_single_file(writeSingleFile);
+        if (partitionColumnIDs != null) {
+            tTableFunctionTable.setPartition_column_ids(partitionColumnIDs);
+        }
+        return tTableFunctionTable;
     }
 
     public String getFormat() {

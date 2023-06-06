@@ -218,10 +218,8 @@ struct TIcebergTableSink {
 }
 
 struct TTableFunctionTableSink {
-    1: optional string path
-    2: optional string file_format
-    3: optional Types.TCompressionType compression_type
-    4: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+    1: optional Descriptors.TTableFunctionTable target_table
+    2: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
 struct TDataSink {

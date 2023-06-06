@@ -53,6 +53,7 @@
 #include "runtime/result_sink.h"
 #include "runtime/runtime_state.h"
 #include "runtime/schema_table_sink.h"
+#include "runtime/table_function_table_sink.h"
 
 namespace starrocks {
 
@@ -152,18 +153,18 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         *sink = std::make_unique<IcebergTableSink>(state->obj_pool(), output_exprs);
         break;
     }
-
-    default:
-        std::stringstream error_msg;
-        auto i = _TDataSinkType_VALUES_TO_NAMES.find(thrift_sink.type);
-        const char* str = "Unknown data sink type ";
-
-        if (i != _TDataSinkType_VALUES_TO_NAMES.end()) {
-            str = i->second;
+    case TDataSinkType::TABLE_FUNCTION_TABLE_SINK: {
+        if (!thrift_sink.__isset.table_function_table_sink) {
+            return Status::InternalError("Missing table function table sink");
         }
-
-        error_msg << str << " not implemented.";
-        return Status::InternalError(error_msg.str());
+        *sink = std::make_unique<TableFunctionTableSink>(state->obj_pool(), output_exprs);
+        break;
+    }
+    default: {
+        auto it = _TDataSinkType_VALUES_TO_NAMES.find(thrift_sink.type);
+        const char* data_sink_name = (it == _TDataSinkType_VALUES_TO_NAMES.end()) ? "UNKNOWN_TYPE" : it->second;
+        return Status::NotSupported(fmt::format("Data sink {} not implemented.", data_sink_name));
+    }
     }
 
     if (*sink != nullptr) {

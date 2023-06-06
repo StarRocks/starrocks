@@ -38,6 +38,7 @@
 #include "exec/pipeline/sink/iceberg_table_sink_operator.h"
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
+#include "exec/pipeline/sink/table_function_table_sink_operator.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
@@ -51,6 +52,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/export_sink.h"
 #include "runtime/iceberg_table_sink.h"
+#include "runtime/table_function_table_sink.h"
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/mysql_table_sink.h"
@@ -933,6 +935,61 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             context->maybe_interpolate_local_key_partition_exchange_for_sink(runtime_state, iceberg_table_sink_op,
                                                                              partition_expr_ctxs, source_operator_dop,
                                                                              desired_iceberg_sink_dop);
+        }
+    } else if (typeid(*datasink) == typeid(starrocks::TableFunctionTableSink)) {
+        DCHECK(thrift_sink.table_function_table_sink.__isset.target_table);
+        DCHECK(thrift_sink.table_function_table_sink.__isset.cloud_configuration);
+
+        const auto& target_table = thrift_sink.table_function_table_sink.target_table;
+        DCHECK(target_table.__isset.path);
+        DCHECK(target_table.__isset.file_format);
+        DCHECK(target_table.__isset.columns);
+        DCHECK(target_table.__isset.write_single_file);
+        DCHECK(target_table.columns.size() == output_exprs.size());
+
+        std::vector<TExpr> partition_exprs;
+        std::vector<std::string> partition_column_names;
+        if (target_table.__isset.partition_column_ids) {
+            for (auto id : target_table.partition_column_ids) {
+                partition_exprs.push_back(output_exprs[id]);
+                partition_column_names.push_back(target_table.columns[id].column_name);
+            }
+        }
+        std::vector<ExprContext*> partition_expr_ctxs;
+        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
+                                                runtime_state));
+
+        std::vector<ExprContext*> output_expr_ctxs;
+        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), output_exprs, &output_expr_ctxs,
+                                                runtime_state));
+
+        auto op = std::make_shared<TableFunctionTableSinkOperatorFactory>(
+                context->next_operator_id(),
+                thrift_sink.table_function_table_sink.target_table.path,
+                thrift_sink.table_function_table_sink.target_table.file_format,
+                thrift_sink.table_function_table_sink.target_table.compression_type,
+                thrift_sink.table_function_table_sink.target_table.write_single_file,
+                output_expr_ctxs,
+                partition_expr_ctxs,
+                partition_column_names,
+                thrift_sink.table_function_table_sink.cloud_configuration,
+                fragment_ctx
+        );
+
+        size_t source_dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+        size_t sink_dop = request.pipeline_sink_dop();
+
+        if (partition_expr_ctxs.empty()) {
+            if (sink_dop != source_dop) {
+                context->maybe_interpolate_local_passthrough_exchange_for_sink(
+                        runtime_state, std::move(op), source_dop, sink_dop);
+            } else {
+                fragment_ctx->pipelines().back()->get_op_factories().emplace_back(std::move(op));
+            }
+        } else {
+            context->maybe_interpolate_local_key_partition_exchange_for_sink(runtime_state, op,
+                                                                             partition_expr_ctxs, source_dop,
+                                                                             sink_dop);
         }
     }
 

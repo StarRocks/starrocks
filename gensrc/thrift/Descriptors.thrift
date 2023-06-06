@@ -371,11 +371,17 @@ struct TTableFunctionTable {
     // Schema columns
     2: optional list<TColumn> columns
 
+    // File format
+    3: optional string file_format;
+
+    // Compression type
+    4: optional Types.TCompressionType compression_type
+
     // Partition column ids
-    3: optional list<i32> partition_column_ids
+    5: optional list<i32> partition_column_ids // may not set if no partitioning
 
     // Write single file
-    4: optional bool write_single_file
+    6: optional bool write_single_file
 }
 
 struct TIcebergSchema {

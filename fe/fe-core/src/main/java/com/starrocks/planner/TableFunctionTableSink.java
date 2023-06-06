@@ -8,6 +8,7 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableFunctionTableSink;
 
 public class TableFunctionTableSink extends DataSink {
@@ -32,11 +33,7 @@ public class TableFunctionTableSink extends DataSink {
     @Override
     protected TDataSink toThrift() {
         TTableFunctionTableSink tTableFunctionTableSink = new TTableFunctionTableSink();
-        tTableFunctionTableSink.setPath(table.getPath());
-        tTableFunctionTableSink.setFile_format(table.getFormat());
-        // TODO: use user passed compression_codec
-        tTableFunctionTableSink.setCompression_type(TCompressionType.NO_COMPRESSION);
-
+        tTableFunctionTableSink.setTarget_table(table.toTTableFunctionTable());
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);
         tTableFunctionTableSink.setCloud_configuration(tCloudConfiguration);
