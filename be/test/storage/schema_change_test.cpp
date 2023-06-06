@@ -427,7 +427,6 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     for (size_t i = 0; i < 4; ++i) {
         ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(i);
         column_mapping->ref_column = i;
-        column_mapping->ref_base_reader_column_index = i;
         indexs->emplace_back(i);
     }
     _sc_procedure = new (std::nothrow) SchemaChangeDirectly(&chunk_changer);
@@ -483,19 +482,15 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
     auto indexs = chunk_changer.get_mutable_selected_column_indexes();
     ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(0);
     column_mapping->ref_column = 1;
-    column_mapping->ref_base_reader_column_index = 0;
     indexs->emplace_back(0);
     column_mapping = chunk_changer.get_mutable_column_mapping(1);
     column_mapping->ref_column = 0;
-    column_mapping->ref_base_reader_column_index = 1;
     indexs->emplace_back(1);
     column_mapping = chunk_changer.get_mutable_column_mapping(2);
     column_mapping->ref_column = 2;
-    column_mapping->ref_base_reader_column_index = 2;
     indexs->emplace_back(2);
     column_mapping = chunk_changer.get_mutable_column_mapping(3);
     column_mapping->ref_column = 3;
-    column_mapping->ref_base_reader_column_index = 3;
     indexs->emplace_back(3);
 
     _sc_procedure = new (std::nothrow) SchemaChangeWithSorting(
@@ -551,15 +546,12 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     auto indexs = chunk_changer.get_mutable_selected_column_indexes();
     ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(0);
     column_mapping->ref_column = 1;
-    column_mapping->ref_base_reader_column_index = 0;
     indexs->emplace_back(0);
     column_mapping = chunk_changer.get_mutable_column_mapping(1);
     column_mapping->ref_column = 0;
-    column_mapping->ref_base_reader_column_index = 1;
     indexs->emplace_back(1);
     column_mapping = chunk_changer.get_mutable_column_mapping(2);
     column_mapping->ref_column = 2;
-    column_mapping->ref_base_reader_column_index = 2;
     indexs->emplace_back(2);
 
     _sc_procedure = new (std::nothrow) SchemaChangeWithSorting(
@@ -653,7 +645,6 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column) {
     for (size_t i = 0; i < 4; ++i) {
         ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(i);
         column_mapping->ref_column = i;
-        column_mapping->ref_base_reader_column_index = i;
         indexs->emplace_back(i);
     }
 

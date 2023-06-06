@@ -210,7 +210,8 @@ public class Field {
     }
 
     public boolean matchesPrefix(TableName tableName) {
-        if (tableName.getCatalog() != null && !tableName.getCatalog().equals(relationAlias.getCatalog())) {
+        if (tableName.getCatalog() != null && relationAlias.getCatalog() != null &&
+                !tableName.getCatalog().equals(relationAlias.getCatalog())) {
             return false;
         }
 

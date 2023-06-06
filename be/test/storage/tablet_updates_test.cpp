@@ -2137,7 +2137,6 @@ void TabletUpdatesTest::test_reorder_from(bool enable_persistent_index) {
         auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_index >= 0) {
             column_mapping->ref_column = column_index;
-            column_mapping->ref_base_reader_column_index = i;
         }
     }
 
@@ -2154,7 +2153,6 @@ void TabletUpdatesTest::test_reorder_from(bool enable_persistent_index) {
         auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_index >= 0) {
             column_mapping->ref_column = column_index;
-            column_mapping->ref_base_reader_column_index = i;
         }
     }
     ASSERT_TRUE(tablet_with_sort_key2->updates()->reorder_from(tablet_with_sort_key1, 4, chunk_changer.get()).ok());

@@ -45,6 +45,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_aggregator.h"
 #include "storage/convert_helper.h"
 #include "storage/memtable.h"
@@ -556,14 +557,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         }
     }
 
-    // primary key do not support materialized view, initialize materialized_params_map here,
-    // just for later column_mapping of _parse_request.
-    SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map);
-    Status status = SchemaChangeUtils::parse_request(base_tablet->tablet_schema(), new_tablet->tablet_schema(),
-                                                     sc_params.chunk_changer.get(), sc_params.materialized_params_map,
-                                                     !base_tablet->delete_predicates().empty(), &sc_params.sc_sorting,
-                                                     &sc_params.sc_directly, &materialized_column_idxs);
-
     if (request.materialized_column_req.mc_exprs.size() != 0) {
         // Currently, a schema change task for materialized column is just
         // ADD/DROP/MODIFY a single materialized column, so it is impossible
@@ -586,6 +579,13 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         }
     }
 
+    // primary key do not support materialized view, initialize materialized_params_map here,
+    // just for later column_mapping of _parse_request.
+    SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map);
+    Status status = SchemaChangeUtils::parse_request(base_tablet->tablet_schema(), new_tablet->tablet_schema(),
+                                                     sc_params.chunk_changer.get(), sc_params.materialized_params_map,
+                                                     !base_tablet->delete_predicates().empty(), &sc_params.sc_sorting,
+                                                     &sc_params.sc_directly, &materialized_column_idxs);
     if (!status.ok()) {
         LOG(WARNING) << _alter_msg_header << "failed to parse the request. res=" << status.get_error_msg();
         return status;
