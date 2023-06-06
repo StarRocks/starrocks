@@ -28,6 +28,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -40,7 +41,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -55,128 +55,16 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
     Map<ColumnRefOperator, OptExpression> columnToScans = Maps.newHashMap();
     UnionFind<ColumnRefOperator> columnRefEquivClasses = new UnionFind<>();
     Map<OptExpression, Set<OptExpression>> cardinalityPreservingScanOps = Maps.newHashMap();
+    Map<OptExpression, ColumnRefSet> cardinalityPreservingColRefs = Maps.newHashMap();
     Map<OptExpression, Set<OptExpression>> scanOps = Maps.newHashMap();
 
     Set<CPEdge> cardinalityPreservingEdges = Sets.newHashSet();
 
     Map<OptExpression, CPNode> optToGraphNode = Maps.newHashMap();
     List<CPNode> hubNodes = Lists.newArrayList();
+    Map<Integer, ColumnRefSet> columnOrigins = Maps.newHashMap();
 
     public CardinalityPreservingJoinTablePruner() {
-    }
-
-    @Override
-    public Boolean visit(OptExpression optExpression, Void context) {
-        return false;
-    }
-
-    @Override
-    public Boolean visitLogicalTableScan(OptExpression optExpression, Void context) {
-        LogicalScanOperator scanOp = optExpression.getOp().cast();
-        scanOp.getColRefToColumnMetaMap().keySet().forEach(col -> columnToScans.put(col, optExpression));
-        scanOps.put(optExpression, ImmutableSet.of(optExpression));
-        cardinalityPreservingScanOps.put(optExpression, ImmutableSet.of(optExpression));
-        return true;
-    }
-
-    public static class UnionFind<T> {
-        private final Map<T, Integer> element2Group = Maps.newHashMap();
-        private final Map<Integer, Set<T>> eqGroupMap = Maps.newHashMap();
-
-        public Map<T, Set<T>> getEquivGroups(Set<T> elements) {
-            Map<T, Set<T>> elm2group = Maps.newHashMap();
-            for (T elm : elements) {
-                if (!element2Group.containsKey(elm)) {
-                    continue;
-                }
-                Set<T> eqGroup = eqGroupMap.get(element2Group.get(elm));
-                if (eqGroup.size() > 1) {
-                    elm2group.put(elm, eqGroup);
-                }
-            }
-            return elm2group;
-        }
-
-        public Set<T> getEquivGroup(T element) {
-            if (element2Group.containsKey(element)) {
-                return Collections.unmodifiableSet(eqGroupMap.get(element2Group.get(element)));
-            } else {
-                return Collections.emptySet();
-            }
-        }
-
-        public void add(T... elements) {
-            for (T elm : elements) {
-                if (!find(elm)) {
-                    int groupIdx = element2Group.size();
-                    element2Group.put(elm, groupIdx);
-                    eqGroupMap.put(groupIdx, ImmutableSet.of(elm));
-                }
-            }
-        }
-
-        public int getGroupIdOrAdd(T elem) {
-            add(elem);
-            return element2Group.get(elem);
-        }
-
-        public Optional<Integer> getGroupId(T elem) {
-            if (element2Group.containsKey(elem)) {
-                return Optional.of(element2Group.get(elem));
-            } else {
-                return Optional.empty();
-            }
-        }
-
-        public Set<T> getGroup(int groupId) {
-            return eqGroupMap.getOrDefault(groupId, Collections.emptySet());
-        }
-
-        public void union(T lhs, T rhs) {
-            add(lhs, rhs);
-            Integer lhsGroupIdx = element2Group.get(lhs);
-            Integer rhsGroupIdx = element2Group.get(rhs);
-            if (!lhsGroupIdx.equals(rhsGroupIdx)) {
-                Set<T> lhsGroup = eqGroupMap.get(lhsGroupIdx);
-                Set<T> rhsGroup = eqGroupMap.get(rhsGroupIdx);
-                Set<T> newGroup = Sets.union(lhsGroup, rhsGroup);
-                rhsGroup.forEach(s -> {
-                    element2Group.put(s, lhsGroupIdx);
-                });
-                eqGroupMap.put(lhsGroupIdx, newGroup);
-                eqGroupMap.remove(rhsGroupIdx);
-            }
-        }
-
-        public boolean find(T slotId) {
-            return element2Group.containsKey(slotId);
-        }
-
-        public boolean containsAll(Collection<T> keys) {
-            return element2Group.keySet().containsAll(keys);
-        }
-
-        public void removesAll(Collection<T> keys) {
-            for (T key : keys) {
-                if (!element2Group.containsKey(key)) {
-                    continue;
-                }
-                int groupIdx = element2Group.remove(key);
-                eqGroupMap.get(groupIdx).remove(key);
-            }
-        }
-    }
-
-    public boolean isForeignKeyConstraintReferenceToUniqueKey(
-            ForeignKeyConstraint foreignKeyConstraint,
-            OlapTable rhsTable) {
-        if (foreignKeyConstraint.getParentTableInfo().getTableId() != rhsTable.getId()) {
-            return false;
-        }
-        Set<String> referencedColumnNames =
-                foreignKeyConstraint.getColumnRefPairs().stream().map(p -> p.second).collect(Collectors.toSet());
-        return rhsTable.getUniqueConstraints().stream()
-                .anyMatch(uk -> new HashSet<>(uk.getUniqueColumns()).equals(referencedColumnNames));
     }
 
     public static class CardinalityPreservingBiRel {
@@ -301,6 +189,74 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
         }
     }
 
+    void computeOriginsOfColumnRefs(OptExpression optExpression) {
+        Map<ColumnRefOperator, ScalarOperator> colRefMap = Collections.emptyMap();
+        if (optExpression.getOp() instanceof LogicalProjectOperator) {
+            LogicalProjectOperator projectOp = optExpression.getOp().cast();
+            colRefMap = projectOp.getColumnRefMap();
+        } else if (optExpression.getOp().getProjection() != null) {
+            colRefMap = optExpression.getOp().getProjection().getColumnRefMap();
+        }
+
+        colRefMap.forEach((col, scalarOp) -> {
+            if (!columnOrigins.containsKey(col.getId())) {
+                ColumnRefSet columnRefSet = new ColumnRefSet();
+                scalarOp.getUsedColumns().getStream().forEach(id -> columnRefSet.union(columnOrigins.get(id)));
+                columnOrigins.put(col.getId(), columnRefSet);
+            }
+        });
+    }
+
+    @Override
+    public Boolean visit(OptExpression optExpression, Void context) {
+
+        return false;
+    }
+
+    @Override
+    public Boolean visitLogicalTableScan(OptExpression optExpression, Void context) {
+        LogicalScanOperator scanOp = optExpression.getOp().cast();
+        //TODO(by satanson): non-OlapTable will be supported in future
+        if (!(scanOp.getTable() instanceof OlapTable)) {
+            return false;
+        }
+        OlapTable table = ((OlapTable) scanOp.getTable());
+        // A Table that has no PK/UK/FK can not associate with other tables via
+        // cardinality-preserving relations.
+        if (!table.hasUniqueConstraints() && !table.hasForeignKeyConstraints()) {
+            return false;
+        }
+
+        if (table.hasUniqueConstraints()) {
+            Map<String, ColumnRefOperator> nameToColumnRefs = scanOp.getColumnNameToColRefMap();
+            List<ColumnRefOperator> columnRefs = table.getUniqueConstraints().stream().flatMap(uk ->
+                    uk.getUniqueColumns().stream().map(nameToColumnRefs::get)).collect(Collectors.toList());
+            cardinalityPreservingColRefs.put(optExpression, new ColumnRefSet(columnRefs));
+        }
+
+        scanOp.getColRefToColumnMetaMap().keySet().forEach(col -> {
+            columnOrigins.put(col.getId(), new ColumnRefSet(col.getId()));
+            columnToScans.put(col, optExpression);
+        });
+
+        computeOriginsOfColumnRefs(optExpression);
+        scanOps.put(optExpression, ImmutableSet.of(optExpression));
+        cardinalityPreservingScanOps.put(optExpression, ImmutableSet.of(optExpression));
+        return true;
+    }
+
+    public boolean isForeignKeyConstraintReferenceToUniqueKey(
+            ForeignKeyConstraint foreignKeyConstraint,
+            OlapTable rhsTable) {
+        if (foreignKeyConstraint.getParentTableInfo().getTableId() != rhsTable.getId()) {
+            return false;
+        }
+        Set<String> referencedColumnNames =
+                foreignKeyConstraint.getColumnRefPairs().stream().map(p -> p.second).collect(Collectors.toSet());
+        return rhsTable.getUniqueConstraints().stream()
+                .anyMatch(uk -> new HashSet<>(uk.getUniqueColumns()).equals(referencedColumnNames));
+    }
+
     public List<CardinalityPreservingBiRel> getCardPreservings(OptExpression lhs, OptExpression rhs,
                                                                boolean leftToRight) {
         LogicalScanOperator lhsScanOp = lhs.getOp().cast();
@@ -394,7 +350,11 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
         LogicalJoinOperator joinOp = optExpression.getOp().cast();
         JoinOperator joinType = joinOp.getJoinType();
         if (!joinType.isInnerJoin() && !joinType.isLeftOuterJoin() && !joinType.isRightOuterJoin()) {
-            return null;
+            return false;
+        }
+
+        if (joinOp.getPredicate() != null) {
+            return false;
         }
 
         Pair<List<BinaryPredicateOperator>, List<ScalarOperator>> onPredicates =
@@ -403,7 +363,7 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
         List<ScalarOperator> otherOnPredicates = onPredicates.second;
 
         if (!otherOnPredicates.isEmpty() || eqOnPredicates.isEmpty()) {
-            return null;
+            return false;
         }
 
         Set<Pair<ColumnRefOperator, ColumnRefOperator>> eqColumnRefPairs = Sets.newHashSet();
@@ -494,25 +454,36 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
             scanOps.put(optExpression, currScanOps);
 
             Set<OptExpression> currCPScanOps;
-            if (!biRel.isFromForeignKey() &&
-                    (lhsCardPreservingScanOps.contains(biRel.lhs) &&
-                            rhsCardPreservingScanOps.contains(biRel.rhs)) ||
-                    (lhsCardPreservingScanOps.contains(biRel.rhs) &&
-                            rhsCardPreservingScanOps.contains(biRel.lhs))) {
+            if (!biRel.isFromForeignKey()) {
                 cardinalityPreservingEdges.add(
                         new CPEdge(biRel.getLhs(), biRel.getRhs(), false, eqColumnRefs));
-
                 currCPScanOps = Sets.newHashSet(lhsCardPreservingScanOps);
                 currCPScanOps.addAll(rhsCardPreservingScanOps);
+                // Predicates in source and sink of edges that represent mutual cardinality-preserving from
+                // same table joining on PK/UK can not handle in collect-phase, it will be handled in pruneTables
+                // phase.
             } else {
+                CPEdge edge;
                 if (biRel.isLeftToRight()) {
-                    cardinalityPreservingEdges.add(
-                            new CPEdge(biRel.getLhs(), biRel.getRhs(), true, eqColumnRefs));
+                    edge = new CPEdge(biRel.getLhs(), biRel.getRhs(), true, eqColumnRefs);
                     currCPScanOps = lhsCardPreservingScanOps;
                 } else {
-                    cardinalityPreservingEdges.add(
-                            new CPEdge(biRel.getRhs(), biRel.getLhs(), true, eqColumnRefs));
+                    edge = new CPEdge(biRel.getRhs(), biRel.getLhs(), true, eqColumnRefs);
                     currCPScanOps = rhsCardPreservingScanOps;
+                }
+
+                // If sink of the CPEdge has predicates that reference non-equivalent columns,
+                // then the sink of the edge can not be pruned since cardinality-preserving relation
+                // is not satisfied.
+                OptExpression edgeSink = edge.getRhs();
+                ColumnRefSet usedColumns = Optional.ofNullable(edgeSink.getOp().getPredicate())
+                        .map(ScalarOperator::getUsedColumns)
+                        .orElse(new ColumnRefSet());
+                usedColumns.except(eqColumnRefs.keySet());
+                if (usedColumns.isEmpty()) {
+                    cardinalityPreservingEdges.add(edge);
+                } else {
+                    currCPScanOps = Collections.emptySet();
                 }
             }
 
@@ -528,13 +499,7 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
     public Boolean visitLogicalProject(OptExpression optExpression, Void context) {
         scanOps.put(optExpression, scanOps.get(optExpression.inputAt(0)));
         cardinalityPreservingScanOps.put(optExpression, cardinalityPreservingScanOps.get(optExpression.inputAt(0)));
-        return true;
-    }
-
-    @Override
-    public Boolean visitLogicalFilter(OptExpression optExpression, Void context) {
-        scanOps.put(optExpression, scanOps.get(optExpression.inputAt(0)));
-        cardinalityPreservingScanOps.put(optExpression, cardinalityPreservingScanOps.get(optExpression.inputAt(0)));
+        computeOriginsOfColumnRefs(optExpression);
         return true;
     }
 
@@ -691,14 +656,14 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
 
             CPNode lhsNode = optToGraphNode.get(e.getLhs());
             CPNode rhsNode = optToGraphNode.get(e.getRhs());
-            if (lhsNode.getParent() == null && rhsNode.getParent() == null) {
-                hubNodes.add(CPNode.createHubNode(lhsNode, rhsNode));
+            if (lhsNode.getParent() != null && rhsNode.getParent() != null) {
+                CPNode.mergeHubNode(lhsNode.getParent(), rhsNode.getParent());
             } else if (lhsNode.getParent() != null) {
                 lhsNode.getParent().addChild(rhsNode);
             } else if (rhsNode.getParent() != null) {
                 rhsNode.getParent().addChild(lhsNode);
             } else {
-                CPNode.mergeHubNode(lhsNode.getParent(), rhsNode.getParent());
+                hubNodes.add(CPNode.createHubNode(lhsNode, rhsNode));
             }
         }
 
@@ -800,6 +765,7 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
             Set<ColumnRefOperator> currentScanOutputColRefs = scanOperator.getColumnMetaToColRefMap()
                     .values().stream().filter(outputColRefs::contains)
                     .collect(Collectors.toSet());
+
 
             // current ScanOp has nothing to output, so it can be pruned
             if (currentScanOutputColRefs.isEmpty()) {
