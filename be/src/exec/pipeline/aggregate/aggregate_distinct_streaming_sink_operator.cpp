@@ -48,6 +48,10 @@ StatusOr<ChunkPtr> AggregateDistinctStreamingSinkOperator::pull_chunk(RuntimeSta
     return Status::InternalError("Not support");
 }
 
+void AggregateDistinctStreamingSinkOperator::set_execute_mode(int performance_level) {
+    _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::FORCE_STREAMING;
+}
+
 Status AggregateDistinctStreamingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     size_t chunk_size = chunk->num_rows();
 
