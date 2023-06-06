@@ -306,9 +306,8 @@ public class StatisticExecutor {
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
 
-        List<PhysicalOlapScanOperator> pos = Utils.extractPhysicalOlapScanOperator(execPlan.getPhysicalPlan());
-
         if (LOG.isDebugEnabled()) {
+            List<PhysicalOlapScanOperator> pos = Utils.extractPhysicalOlapScanOperator(execPlan.getPhysicalPlan());
             StringBuilder stringBuilder = new StringBuilder();
             for (PhysicalOlapScanOperator scan : pos) {
                 Table table = scan.getTable();
