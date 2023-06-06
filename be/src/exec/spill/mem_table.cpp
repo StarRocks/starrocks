@@ -25,36 +25,6 @@
 #include "runtime/current_thread.h"
 
 namespace starrocks::spill {
-class RawChunkInputStream final : public SpillInputStream {
-public:
-    RawChunkInputStream(std::vector<ChunkPtr> chunks) : _chunks(std::move(chunks)) {}
-    StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) override;
-
-    bool is_ready() override { return true; };
-    void close() override{};
-
-    bool enable_prefetch() const override { return true; }
-
-    Status prefetch(SerdeContext& ctx) override {
-        mark_is_eof();
-        return Status::EndOfFile("eos");
-    }
-
-private:
-    size_t read_idx{};
-    std::vector<ChunkPtr> _chunks;
-};
-
-StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(SerdeContext& context) {
-    if (read_idx >= _chunks.size()) {
-        return Status::EndOfFile("eos");
-    }
-    // TODO: make ChunkPtr could convert to ChunkUniquePtr to avoid unused memory copy
-    auto res = std::move(_chunks[read_idx++])->clone_unique();
-    _chunks[read_idx - 1].reset();
-
-    return res;
-}
 
 bool UnorderedMemTable::is_empty() {
     return _chunks.empty();
@@ -93,9 +63,9 @@ Status UnorderedMemTable::flush(FlushCallBack callback) {
 
 StatusOr<std::shared_ptr<SpillInputStream>> UnorderedMemTable::as_input_stream(bool shared) {
     if (shared) {
-        return std::make_shared<RawChunkInputStream>(_chunks);
+        return SpillInputStream::as_stream(_chunks);
     } else {
-        return std::make_shared<RawChunkInputStream>(std::move(_chunks));
+        return SpillInputStream::as_stream(std::move(_chunks));
     }
 }
 

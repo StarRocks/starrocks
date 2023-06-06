@@ -48,6 +48,8 @@ public:
     bool eof() { return _eof; }
 
     static InputStreamPtr union_all(const InputStreamPtr& left, const InputStreamPtr& right);
+    static InputStreamPtr union_all(std::vector<InputStreamPtr>& _streams);
+    static InputStreamPtr as_stream(std::vector<ChunkPtr> chunks);
 
 private:
     std::atomic_bool _eof = false;

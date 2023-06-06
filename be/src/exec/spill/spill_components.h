@@ -60,6 +60,8 @@ public:
 
     bool has_restore_task() const { return _running_restore_tasks > 0; }
 
+    size_t read_rows() const { return _read_rows; }
+
 protected:
     Spiller* _spiller;
     std::atomic_uint64_t _running_restore_tasks{};
