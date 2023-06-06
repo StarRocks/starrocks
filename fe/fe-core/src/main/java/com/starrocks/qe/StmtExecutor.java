@@ -863,7 +863,50 @@ public class StmtExecutor {
                 GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
             }
         } else {
+<<<<<<< HEAD
             executeAnalyze(false, analyzeStmt, analyzeStatus, db, table);
+=======
+            //Only for send sync command to client
+            analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                    db.getId(), table.getId(), analyzeStmt.getColumnNames(),
+                    analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+            GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+        }
+
+        int timeout = context.getSessionVariable().getQueryTimeoutS();
+        try {
+            Future<?> future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
+                    .submit(() -> executeAnalyze(analyzeStmt, analyzeStatus, db, table));
+
+            if (!analyzeStmt.isAsync()) {
+                // sync statistics collection doesn't be interrupted by query timeout, but
+                // will print warning log if timeout, so we update timeout temporarily to avoid
+                // warning log
+                context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
+                future.get();
+            }
+        } catch (RejectedExecutionException e) {
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+            analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
+            if (analyzeStmt.isExternal()) {
+                GlobalStateMgr.getCurrentAnalyzeMgr().addOrUpdateAnalyzeStatus(analyzeStatus);
+            } else {
+                GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            }
+        } catch (ExecutionException | InterruptedException e) {
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+            analyzeStatus.setReason("The statistics tasks running failed");
+            if (analyzeStmt.isExternal()) {
+                GlobalStateMgr.getCurrentAnalyzeMgr().addOrUpdateAnalyzeStatus(analyzeStatus);
+            } else {
+                GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            }
+        } finally {
+            context.getSessionVariable().setQueryTimeoutS(timeout);
+>>>>>>> a080144c9 ([BugFix] Fix sync analyze stmt print timeout log (#24693))
         }
 
         ShowResultSet resultSet = analyzeStatus.toShowResult();
