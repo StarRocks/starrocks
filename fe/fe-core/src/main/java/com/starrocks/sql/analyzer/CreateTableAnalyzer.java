@@ -351,7 +351,8 @@ public class CreateTableAnalyzer {
                     distributionDesc = new RandomDistributionDesc();
                 }
             }
-            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS) {
+            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS 
+                    && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
                 throw new SemanticException("Random distribution must be used in DUP_KEYS", distributionDesc.getPos());
             }
             distributionDesc.analyze(columnSet);
