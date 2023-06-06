@@ -678,9 +678,8 @@ public class Coordinator {
 
                 // if pipeline is enable and current fragment contain olap table sink, in fe we will 
                 // calculate the number of all tablet sinks in advance and assign them to each fragment instance
-                // TODO: adapt table function table sink
-                boolean enablePipelineTableSinkDop = enablePipelineEngine &&
-                        (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
+                boolean enablePipelineTableSinkDop = enablePipelineEngine && (fragment.hasOlapTableSink()
+                        || fragment.hasIcebergTableSink() || fragment.hasTableFunctionTableSink());
                 boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
                 int tabletSinkTotalDop = 0;
                 int accTabletSinkDop = 0;
@@ -958,8 +957,8 @@ public class Coordinator {
                                             Collectors.mapping(Function.identity(), Collectors.toList())));
                     // if pipeline is enable and current fragment contain olap table sink, in fe we will 
                     // calculate the number of all tablet sinks in advance and assign them to each fragment instance
-                    boolean enablePipelineTableSinkDop = enablePipelineEngine &&
-                            (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
+                    boolean enablePipelineTableSinkDop = enablePipelineEngine && (fragment.hasOlapTableSink()
+                            || fragment.hasIcebergTableSink() || fragment.hasTableFunctionTableSink());
                     boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
                     int tableSinkTotalDop = 0;
                     int accTabletSinkDop = 0;

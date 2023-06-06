@@ -257,12 +257,13 @@ public class InsertPlanner {
                     }
                 }
 
-                // TODO: adapt table function table
                 if (targetTable instanceof OlapTable) {
                     sinkFragment.setHasOlapTableSink();
                     sinkFragment.setForceAssignScanRangesPerDriverSeq();
-                } else {
+                } else if (targetTable instanceof IcebergTable) {
                     sinkFragment.setHasIcebergTableSink();
+                } else if (targetTable instanceof TableFunctionTable) {
+                    sinkFragment.setHasTableFunctionTableSink();
                 }
 
                 sinkFragment.disableRuntimeAdaptiveDop();

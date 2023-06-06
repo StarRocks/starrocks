@@ -1548,8 +1548,8 @@ public class CoordinatorPreprocessor {
                                              TNetworkAddress destHost, TDescriptorTable descTable,
                                              boolean isEnablePipelineEngine, int tableSinkTotalDop,
                                              boolean isEnableStreamPipeline) {
-            boolean enablePipelineTableSinkDop = isEnablePipelineEngine &&
-                    (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
+            boolean enablePipelineTableSinkDop = isEnablePipelineEngine && (fragment.hasOlapTableSink()
+                    || fragment.hasIcebergTableSink() || fragment.hasTableFunctionTableSink());
             commonParams.setProtocol_version(InternalServiceVersion.V1);
             commonParams.setFragment(fragment.toThrift());
             commonParams.setDesc_tbl(descTable);
@@ -1627,8 +1627,8 @@ public class CoordinatorPreprocessor {
                 throws Exception {
             // if pipeline is enable and current fragment contain olap table sink, in fe we will
             // calculate the number of all tablet sinks in advance and assign them to each fragment instance
-            boolean enablePipelineTableSinkDop = enablePipelineEngine &&
-                    (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
+            boolean enablePipelineTableSinkDop = enablePipelineEngine && (fragment.hasOlapTableSink()
+                    || fragment.hasIcebergTableSink() || fragment.hasTableFunctionTableSink());
 
             uniqueParams.setProtocol_version(InternalServiceVersion.V1);
             uniqueParams.setBackend_num(instanceExecParam.backendNum);
