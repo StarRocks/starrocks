@@ -148,42 +148,41 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
         }
         return Status::OK();
     } else if (_column_type == FieldType::OLAP_FIELD_TYPE_ARRAY) {
-        _sub_readers = std::make_unique<SubReaderList>();
         if (meta->is_nullable()) {
+            _sub_readers = std::make_unique<SubReaderList>(3);
             if (meta->children_columns_size() != 3) {
                 return Status::InvalidArgument("nullable array should have 3 children columns");
             }
-            _sub_readers->reserve(3);
 
             // elements
             auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            _sub_readers[0] = std::move(res).value();
 
             // null flags
             res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            _sub_readers[1] = std::move(res).value();
 
             // offsets
             res = ColumnReader::create(meta->mutable_children_columns(2), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            _sub_readers[2] = std::move(res).value();
         } else {
+            _sub_readers = std::make_unique<SubReaderList>(2);
             if (meta->children_columns_size() != 2) {
                 return Status::InvalidArgument("non-nullable array should have 2 children columns");
             }
-            _sub_readers->reserve(2);
 
             // elements
             auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            _sub_readers[0] = std::move(res).value();
 
             // offsets
             res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            _sub_readers[1] = std::move(res).value();
         }
         return Status::OK();
     } else {
@@ -414,15 +413,15 @@ Status ColumnReader::new_iterator(ColumnIterator** iterator) {
     } else if (_column_type == FieldType::OLAP_FIELD_TYPE_ARRAY) {
         size_t col = 0;
         ColumnIterator* element_iterator;
-        RETURN_IF_ERROR((*_sub_readers)[col++]->new_iterator(&element_iterator));
+        RETURN_IF_ERROR(_sub_readers[col++]->new_iterator(&element_iterator));
 
         ColumnIterator* null_iterator = nullptr;
         if (is_nullable()) {
-            RETURN_IF_ERROR((*_sub_readers)[col++]->new_iterator(&null_iterator));
+            RETURN_IF_ERROR(_sub_readers[col++]->new_iterator(&null_iterator));
         }
 
         ColumnIterator* array_size_iterator;
-        RETURN_IF_ERROR((*_sub_readers)[col]->new_iterator(&array_size_iterator));
+        RETURN_IF_ERROR(_sub_readers[col]->new_iterator(&array_size_iterator));
 
         *iterator = new ArrayColumnIterator(null_iterator, array_size_iterator, element_iterator);
         return Status::OK();

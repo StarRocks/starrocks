@@ -201,7 +201,7 @@ private:
 
     std::unique_ptr<ZoneMapPB> _segment_zone_map;
 
-    using SubReaderList = std::vector<std::unique_ptr<ColumnReader>>;
+    using SubReaderList = std::unique_ptr<ColumnReader>[];
     std::unique_ptr<SubReaderList> _sub_readers;
 
     // Pointer to its father segment, as the column reader
