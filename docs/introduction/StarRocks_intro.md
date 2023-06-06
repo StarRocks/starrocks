@@ -88,6 +88,15 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [JDBC-compatible database](../data_source/catalog/jdbc_catalog.md)
 
 </NavBoxPartItem>
+<NavBoxPartItem title="Integration​">
+
+- [AWS](../integrations/authenticate_to_aws_resources.md)
+- [Microsoft Azure Storage](../integrations/authenticate_to_azure_storage.md)
+- [Google Cloud Storage](../integrations/authenticate_to_gcs.md)
+- [BI tools](../integrations/BI_integrations/Hex.md)
+- [IDE tools](../integrations/IDE_integrations/DataGrip.md)
+
+</NavBoxPartItem>
 </NavBoxPart>
 </NavBox>
 
@@ -110,6 +119,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [SQL reference](../sql-reference/sql-statements/account-management/ALTER%20USER.md)
 - [Function reference](../sql-reference/sql-functions/date-time-functions/convert_tz.md)
+- [Data type](../sql-reference/sql-statements/data-types/TINYINT.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
