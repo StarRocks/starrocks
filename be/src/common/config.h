@@ -823,6 +823,8 @@ CONF_Int64(max_length_for_bitmap_function, "1000000");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
+// if l0_mem_size exceeds this value, l0 need snapshot
+CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
 
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");

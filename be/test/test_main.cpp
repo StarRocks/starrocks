@@ -37,6 +37,7 @@ int main(int argc, char** argv) {
     butil::FilePath storage_root;
     CHECK(butil::CreateNewTempDirectory("tmp_ut_", &storage_root));
     starrocks::config::storage_root_path = storage_root.value();
+    starrocks::config::l0_snapshot_size = 1048576;
 
     starrocks::init_glog("be_test", true);
     starrocks::CpuInfo::init();
