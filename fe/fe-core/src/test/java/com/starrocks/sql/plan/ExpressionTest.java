@@ -1473,7 +1473,7 @@ public class ExpressionTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertCContains(plan, "struct<col1 varchar, col2 tinyint(4), col3 tinyint(4), col4 smallint(6)>");
 
-        sql = "select row('a', 1, 2, 10000, [1, 2, 3], NULL, {'a': 1, 'b': 2})";
+        sql = "select row('a', 1, 2, 10000, [1, 2, 3], NULL, map{'a': 1, 'b': 2})";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "struct<col1 varchar, col2 tinyint(4), col3 tinyint(4), col4 smallint(6), " +
                 "col5 array<tinyint(4)>, col6 boolean, col7 map<varchar,tinyint(4)>>");

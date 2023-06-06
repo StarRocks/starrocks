@@ -35,7 +35,7 @@ public class MapTypeTest extends PlanTestBase {
 
     @Test
     public void testMapFunc() throws Exception { // get super common return type
-        String sql = "select map_concat({16865432442:3},{3.323777777:'3'})";
+        String sql = "select map_concat(map{16865432442:3},map{3.323777777:'3'})";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "MAP<DECIMAL128(28,9),VARCHAR>");
     }
