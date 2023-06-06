@@ -110,6 +110,7 @@ enum TSpillableOperatorType {
   AGG = 1;
   AGG_DISTINCT = 2;
   SORT = 3;
+  NL_JOIN = 4;
 }
 
 enum TTabletInternalParallelMode {

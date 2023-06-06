@@ -190,6 +190,8 @@ set(EXEC_FILES
     pipeline/nljoin/nljoin_context.cpp
     pipeline/nljoin/nljoin_build_operator.cpp
     pipeline/nljoin/nljoin_probe_operator.cpp
+    pipeline/nljoin/spillable_nljoin_build_operator.cpp
+    pipeline/nljoin/spillable_nljoin_probe_operator.cpp
     pipeline/sort/partition_sort_sink_operator.cpp
     pipeline/sort/local_partition_topn_sink.cpp
     pipeline/sort/local_partition_topn_source.cpp
