@@ -33,6 +33,7 @@ public:
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
     Status do_done(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
+    size_t reserved_bytes(const ChunkPtr& chunk) override;
 
     void cancel() override;
 
