@@ -607,7 +607,7 @@ std::shared_ptr<vectorized::Schema> SegmentDump::_init_query_schema(
 
 void SegmentDump::_convert_column_meta(const ColumnMetaPB& src_col, ColumnPB* dest_col) {
     dest_col->set_unique_id(src_col.unique_id());
-    dest_col->set_type(type_to_string(scalar_field_type_to_primitive_type((FieldType)(src_col.type()))));
+    dest_col->set_type(TabletColumn::get_string_by_field_type((FieldType)(src_col.type())));
     dest_col->set_is_nullable(src_col.is_nullable());
     dest_col->set_length(src_col.length());
 
