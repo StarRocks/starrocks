@@ -79,6 +79,7 @@ Status OlapSchemaChunkSource::prepare(RuntimeState* state) {
         }
         _index_map[i] = j;
     }
+    _accumulator.set_desired_size(state->chunk_size());
 
     return _schema_scanner->start(state);
 }
@@ -92,6 +93,11 @@ Status OlapSchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) 
     // For dummy schema scanner, the src_slot_descs is empty and the result also should be empty
     if (src_slot_descs.empty()) {
         return Status::EndOfFile("end of file");
+    }
+
+    if (!_accumulator.empty()) {
+        *chunk = _accumulator.pull();
+        return {};
     }
 
     ChunkPtr chunk_src = std::make_shared<Chunk>();
@@ -150,7 +156,9 @@ Status OlapSchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) 
         row_num = chunk_dst->num_rows();
         chunk_src->reset();
     }
-    *chunk = std::move(chunk_dst);
+    _accumulator.push(std::move(chunk_dst));
+    _accumulator.finalize();
+    *chunk = _accumulator.pull();
     return Status::OK();
 }
 
