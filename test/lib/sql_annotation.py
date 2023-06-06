@@ -64,12 +64,6 @@ Start to run: %s
                 log.info("init drop resource: %s" % each_resource)
                 args[0].drop_resource(each_resource)
 
-            # for each_cmd in args[1].init_cmd:
-            #     print("[INIT] SQL: %s" % each_cmd)
-            #     log.info("[INIT] SQL: %s" % each_cmd)
-            #     res = args[0].execute_sql(each_cmd)
-            #     tools.assert_true(res["status"], "init cmd execute error, %s" % res)
-
             return func(*args, **kwargs)
 
         return wrapper
