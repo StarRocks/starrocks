@@ -25,6 +25,7 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 constexpr size_t default_usage_percent = 85;
 constexpr size_t page_size = 4096;
 constexpr size_t page_header_size = 64;
@@ -40,6 +41,22 @@ constexpr uint64_t seed1 = 9110941936030554525ULL;
 constexpr size_t l0_snapshot_size_max = 16 * 1024 * 1024;
 // perform l0 l1 merge compaction if l1_file_size / l0_memory >= this value and l0_memory > l0_snapshot_size_max
 constexpr size_t l0_l1_merge_ratio = 10;
+=======
+constexpr size_t kDefaultUsagePercent = 85;
+constexpr size_t kPageSize = 4096;
+constexpr size_t kPageHeaderSize = 64;
+constexpr size_t kBucketHeaderSize = 4;
+constexpr size_t kBucketPerPage = 16;
+constexpr size_t kRecordPerBucket = 8;
+constexpr size_t kShardMax = 1 << 16;
+constexpr uint64_t kPageMax = 1ULL << 32;
+constexpr size_t kPackSize = 16;
+constexpr size_t kPagePackLimit = (kPageSize - kPageHeaderSize) / kPackSize;
+constexpr size_t kBucketSizeMax = 256;
+constexpr size_t kMinEnableBFKVNum = 10000000;
+constexpr size_t kLongKeySize = 64;
+constexpr size_t kMaxKeyLength = 128; // we only support key length is less than or equal to 128 bytes for now
+>>>>>>> bdd4f0b9c ([Enhancement] Make l0 snapshot size configurable (#24748))
 
 const char* const index_file_magic = "IDX1";
 
@@ -1407,10 +1424,26 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     const auto l0_mem_size = _l0->memory_usage();
     uint64_t l1_file_size = _l1 ? _l1->file_size() : 0;
     // if l1 is not empty,
+<<<<<<< HEAD
     if (l1_file_size != 0) {
         // and l0 memory usage is large enough,
         if (l0_mem_size * l0_l1_merge_ratio > l1_file_size) {
             // do l0 l1 merge compaction
+=======
+    if (_flushed) {
+        RETURN_IF_ERROR(_merge_compaction());
+    } else {
+        if (l1_file_size != 0) {
+            // and l0 memory usage is large enough,
+            if (l0_mem_size * config::l0_l1_merge_ratio > l1_file_size) {
+                // do l0 l1 merge compaction
+                _flushed = true;
+                RETURN_IF_ERROR(_merge_compaction());
+            }
+            // if l1 is empty, and l0 memory usage is large enough
+        } else if (l0_mem_size > config::l0_snapshot_size) {
+            // do flush l0
+>>>>>>> bdd4f0b9c ([Enhancement] Make l0 snapshot size configurable (#24748))
             _flushed = true;
             RETURN_IF_ERROR(_merge_compaction());
         }
@@ -1705,7 +1738,11 @@ bool PersistentIndex::_dump(phmap::BinaryOutputArchive& ar_out) {
 // TODO: maybe build snapshot is better than append wals when almost
 // operations are upsert or erase
 bool PersistentIndex::_can_dump_directly() {
+<<<<<<< HEAD
     return _dump_bound() <= l0_snapshot_size_max;
+=======
+    return _dump_bound() <= config::l0_snapshot_size;
+>>>>>>> bdd4f0b9c ([Enhancement] Make l0 snapshot size configurable (#24748))
 }
 
 bool PersistentIndex::_load_snapshot(phmap::BinaryInputArchive& ar) {

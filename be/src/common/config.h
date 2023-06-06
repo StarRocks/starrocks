@@ -801,6 +801,41 @@ CONF_Int64(max_length_for_to_base64, "200000");
 // Used by bitmap functions
 CONF_Int64(max_length_for_bitmap_function, "1000000");
 
+<<<<<<< HEAD
+=======
+CONF_Bool(block_cache_enable, "false");
+CONF_Int64(block_cache_disk_size, "0");
+CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
+CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
+CONF_Int64(block_cache_block_size, "262144");   // 256K
+CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
+CONF_Bool(block_cache_checksum_enable, "false");
+// Maximum number of concurrent inserts we allow globally for block cache.
+// 0 means unlimited.
+CONF_Int64(block_cache_max_concurrent_inserts, "1500000");
+// Total memory limit for in-flight parcels.
+// Once this is reached, requests will be rejected until the parcel memory usage gets under the limit.
+CONF_Int64(block_cache_max_parcel_memory_mb, "256");
+CONF_Bool(block_cache_report_stats, "false");
+// This essentially turns the LRU into a two-segmented LRU. Setting this to 1 means every new insertion
+// will be inserted 1/2 from the end of the LRU, 2 means 1/4 from the end of the LRU, and so on.
+// It is only useful for the cachelib engine currently.
+CONF_Int64(block_cache_lru_insertion_point, "1");
+// cachelib, starcache
+CONF_String(block_cache_engine, "starcache");
+
+CONF_mInt64(l0_l1_merge_ratio, "10");
+CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
+CONF_mInt64(l0_max_mem_usage, "67108864");  // 64MB
+// if l0_mem_size exceeds this value, l0 need snapshot
+CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
+CONF_mInt64(max_tmp_l1_num, "10");
+CONF_mBool(enable_parallel_get_and_bf, "true");
+
+// Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
+CONF_Int64(query_cache_capacity, "536870912");
+
+>>>>>>> bdd4f0b9c ([Enhancement] Make l0 snapshot size configurable (#24748))
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
 

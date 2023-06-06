@@ -36,6 +36,11 @@ int main(int argc, char** argv) {
     butil::FilePath storage_root;
     CHECK(butil::CreateNewTempDirectory("tmp_ut_", &storage_root));
     starrocks::config::storage_root_path = storage_root.value();
+<<<<<<< HEAD
+=======
+    starrocks::config::enable_event_based_compaction_framework = false;
+    starrocks::config::l0_snapshot_size = 1048576;
+>>>>>>> bdd4f0b9c ([Enhancement] Make l0 snapshot size configurable (#24748))
 
     starrocks::init_glog("be_test", true);
     starrocks::CpuInfo::init();
