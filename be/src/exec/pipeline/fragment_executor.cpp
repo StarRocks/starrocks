@@ -947,6 +947,11 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         DCHECK(target_table.__isset.write_single_file);
         DCHECK(target_table.columns.size() == output_exprs.size());
 
+        std::vector<std::string> column_names;
+        for (const auto& column : target_table.columns) {
+            column_names.push_back(column.column_name);
+        }
+
         std::vector<TExpr> partition_exprs;
         std::vector<std::string> partition_column_names;
         if (target_table.__isset.partition_column_ids) {
@@ -971,6 +976,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                 thrift_sink.table_function_table_sink.target_table.write_single_file,
                 output_expr_ctxs,
                 partition_expr_ctxs,
+                column_names,
                 partition_column_names,
                 thrift_sink.table_function_table_sink.cloud_configuration,
                 fragment_ctx

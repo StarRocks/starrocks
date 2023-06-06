@@ -86,7 +86,7 @@ class TableFunctionTableSinkOperatorFactory final : public OperatorFactory {
 public:
     TableFunctionTableSinkOperatorFactory(const int32_t id, const string& path, const string& file_format,
                                           const TCompressionType::type& compression_type, bool write_single_file, const std::vector<ExprContext*>& output_exprs, const std::vector<ExprContext*>& partition_exprs,
-                                          const std::vector<std::string>& partition_column_names, const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx);
+                                          const std::vector<std::string>& column_names, const std::vector<std::string>& partition_column_names, const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx);
 
     ~TableFunctionTableSinkOperatorFactory() override = default;
 
@@ -103,6 +103,7 @@ private:
     const bool _write_single_file;
     const std::vector<ExprContext*> _output_exprs;
     const std::vector<ExprContext*> _partition_exprs;
+    const std::vector<std::string> _column_names;
     const std::vector<std::string> _partition_column_names;
     const TCloudConfiguration _cloud_conf;
     const FragmentContext* _fragment_ctx;

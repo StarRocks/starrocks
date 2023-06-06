@@ -162,7 +162,7 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
 TableFunctionTableSinkOperatorFactory::TableFunctionTableSinkOperatorFactory(
         const int32_t id, const string& path, const string& file_format,
         const TCompressionType::type& compression_type, bool write_single_file, const std::vector<ExprContext*>& output_exprs, const std::vector<ExprContext*>& partition_exprs,
-        const std::vector<std::string>& partition_column_names, const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx)
+        const std::vector<std::string>& column_names, const std::vector<std::string>& partition_column_names, const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx)
         : OperatorFactory(id, "table_function_table_sink", Operator::s_pseudo_plan_node_id_for_table_function_table_sink),
           _path(path),
           _file_format(file_format),
@@ -170,6 +170,7 @@ TableFunctionTableSinkOperatorFactory::TableFunctionTableSinkOperatorFactory(
           _write_single_file(write_single_file),
           _output_exprs(output_exprs),
           _partition_exprs(partition_exprs),
+          _column_names(column_names),
           _partition_column_names(partition_column_names),
           _cloud_conf(cloud_conf),
           _fragment_ctx(fragment_ctx) {}
@@ -186,13 +187,7 @@ Status TableFunctionTableSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
 
     if (_file_format == "parquet") {
-        std::vector<std::string> field_names;
-        std::vector<parquet::FileColumnId> ids;
-        for (size_t i = 0; i < _output_exprs.size(); i++) {
-            field_names.push_back("col" + std::to_string(i));
-            ids.push_back({int32_t(i), {}});
-        }
-        auto result = parquet::ParquetBuildHelper::make_schema(field_names, _output_exprs, ids);
+        auto result = parquet::ParquetBuildHelper::make_schema(_column_names, _output_exprs, std::vector<parquet::FileColumnId>(_output_exprs.size()));
         if (!result.ok()) {
             return Status::NotSupported(result.status().message());
         }
