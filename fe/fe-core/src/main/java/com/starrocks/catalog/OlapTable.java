@@ -288,35 +288,41 @@ public class OlapTable extends Table {
 
     // Only Copy necessary metadata for query.
     // We don't do deep copy, because which is very expensive;
-    public void copyOnlyForQuery(OlapTable olapTable) {
-        olapTable.id = this.id;
-        olapTable.name = this.name;
-        olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
-        olapTable.nameToColumn = Maps.newHashMap(this.nameToColumn);
-        olapTable.relatedMaterializedViews = Sets.newHashSet(this.relatedMaterializedViews);
-        olapTable.state = this.state;
-        olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
-        olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
-        olapTable.keysType = this.keysType;
-        olapTable.partitionInfo = new PartitionInfo();
-        if (this.partitionInfo instanceof RangePartitionInfo) {
-            olapTable.partitionInfo = new RangePartitionInfo((RangePartitionInfo) this.partitionInfo);
-        } else if (this.partitionInfo instanceof SinglePartitionInfo) {
-            olapTable.partitionInfo = this.partitionInfo;
+    public OlapTable copyOnlyForQuery() {
+        OlapTable olapTable = new OlapTable();
+        olapTable.copyOnlyForQuery(this);
+        return olapTable;
+    }
+
+    public void copyOnlyForQuery(OlapTable o) {
+        this.id = o.id;
+        this.name = o.name;
+        this.fullSchema = Lists.newArrayList(o.fullSchema);
+        this.nameToColumn = Maps.newHashMap(o.nameToColumn);
+        this.relatedMaterializedViews = Sets.newHashSet(o.relatedMaterializedViews);
+        this.state = o.state;
+        this.indexNameToId = Maps.newHashMap(o.indexNameToId);
+        this.indexIdToMeta = Maps.newHashMap(o.indexIdToMeta);
+        this.keysType = o.keysType;
+        this.partitionInfo = new PartitionInfo();
+        if (o.partitionInfo instanceof RangePartitionInfo) {
+            this.partitionInfo = new RangePartitionInfo((RangePartitionInfo) o.partitionInfo);
+        } else if (o.partitionInfo instanceof SinglePartitionInfo) {
+            this.partitionInfo = o.partitionInfo;
         }
-        olapTable.defaultDistributionInfo = this.defaultDistributionInfo;
-        Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
+        this.defaultDistributionInfo = o.defaultDistributionInfo;
+        Map<Long, Partition> idToPartitions = new HashMap<>(o.idToPartition.size());
         Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
-        for (Map.Entry<Long, Partition> kv : this.idToPartition.entrySet()) {
+        for (Map.Entry<Long, Partition> kv : o.idToPartition.entrySet()) {
             Partition copiedPartition = kv.getValue().shallowCopy();
             idToPartitions.put(kv.getKey(), copiedPartition);
             nameToPartitions.put(kv.getValue().getName(), copiedPartition);
         }
-        olapTable.idToPartition = idToPartitions;
-        olapTable.nameToPartition = nameToPartitions;
-        olapTable.baseIndexId = this.baseIndexId;
-        if (this.tableProperty != null) {
-            olapTable.tableProperty = this.tableProperty.copy();
+        this.idToPartition = idToPartitions;
+        this.nameToPartition = nameToPartitions;
+        this.baseIndexId = o.baseIndexId;
+        if (o.tableProperty != null) {
+            this.tableProperty = o.tableProperty.copy();
         }
     }
 
