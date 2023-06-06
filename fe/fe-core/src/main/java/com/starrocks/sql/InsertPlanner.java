@@ -36,6 +36,8 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.MysqlTableSink;
@@ -230,7 +232,9 @@ public class InsertPlanner {
                 dataSink = new IcebergTableSink((IcebergTable) targetTable, tupleDesc,
                         isKeyPartitionStaticInsert(insertStmt, queryRelation));
             } else if (targetTable instanceof TableFunctionTable) {
-                dataSink = new TableFunctionTableSink((TableFunctionTable) targetTable);
+                CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(
+                        insertStmt.getTableFunctionProperties());
+                dataSink = new TableFunctionTableSink((TableFunctionTable) targetTable, cloudConfiguration);
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
@@ -253,6 +257,7 @@ public class InsertPlanner {
                     }
                 }
 
+                // TODO: adapt table function table
                 if (targetTable instanceof OlapTable) {
                     sinkFragment.setHasOlapTableSink();
                     sinkFragment.setForceAssignScanRangesPerDriverSeq();
