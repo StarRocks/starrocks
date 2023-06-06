@@ -367,6 +367,12 @@ public class MaterializedViewHandler extends AlterHandler {
                             " the distribution column: " + distColumn.toString());
                 }
             }
+        } else {
+            RandomDistributionInfo randomDistributionInfo = (RandomDistributionInfo) distributionInfo;
+            if (randomDistributionInfo.getBucketNum() != baseTable.getDefaultDistributionInfo().getBucketNum()) {
+                throw new DdlException("Base table's distribution keys's bucket number should be the" +
+                    " same with the target table: " + targetOlapTable);
+            }
         }
         long targetTableId = targetTable.getId();
         int mvSchemaHash = Util.schemaHash(0 /* init schema version */, mvColumns, targetOlapTable.getCopiedBfColumns(),
