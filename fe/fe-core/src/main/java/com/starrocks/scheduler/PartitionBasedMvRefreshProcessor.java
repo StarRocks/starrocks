@@ -626,7 +626,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                                                   boolean force) throws AnalysisException {
         int partitionTTLNumber = mvContext.getPartitionTTLNumber();
         if (force && start == null && end == null) {
-            return materializedView.getValidPartitionMap(partitionTTLNumber).keySet();
+            if (partitionInfo instanceof SinglePartitionInfo) {
+                return materializedView.getPartitionNames();
+            } else {
+                return materializedView.getValidPartitionMap(partitionTTLNumber).keySet();
+            }
         }
 
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
