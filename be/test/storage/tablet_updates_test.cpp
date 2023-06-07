@@ -2003,6 +2003,7 @@ void TabletUpdatesTest::test_convert_from(bool enable_persistent_index) {
             column_mapping->ref_column = column_index;
         }
     }
+    ASSERT_TRUE(chunk_changer->prepare().ok());
     ASSERT_TRUE(tablet_to_schema_change->updates()->convert_from(_tablet, 4, chunk_changer.get()).ok());
 
     ASSERT_EQ(N, read_tablet_and_compare_schema_changed(tablet_to_schema_change, 4, keys));
@@ -2037,6 +2038,7 @@ void TabletUpdatesTest::test_convert_from_with_pending(bool enable_persistent_in
             column_mapping->ref_column = column_index;
         }
     }
+    ASSERT_TRUE(chunk_changer->prepare().ok());
     ASSERT_TRUE(tablet_to_schema_change->rowset_commit(3, create_rowset(tablet_to_schema_change, keys3)).ok());
     ASSERT_TRUE(tablet_to_schema_change->rowset_commit(4, create_rowset(tablet_to_schema_change, keys4)).ok());
 
@@ -2073,6 +2075,7 @@ void TabletUpdatesTest::test_convert_from_with_mutiple_segment(bool enable_persi
             column_mapping->ref_column = column_index;
         }
     }
+    ASSERT_TRUE(chunk_changer->prepare().ok());
     std::vector<int64_t> ori_keys;
     for (int i = 100; i < 200; i++) {
         ori_keys.emplace_back(i);
@@ -2139,6 +2142,7 @@ void TabletUpdatesTest::test_reorder_from(bool enable_persistent_index) {
             column_mapping->ref_column = column_index;
         }
     }
+    ASSERT_TRUE(chunk_changer->prepare().ok());
 
     ASSERT_TRUE(tablet_with_sort_key1->updates()->reorder_from(_tablet, 4, chunk_changer.get()).ok());
 
@@ -2155,6 +2159,7 @@ void TabletUpdatesTest::test_reorder_from(bool enable_persistent_index) {
             column_mapping->ref_column = column_index;
         }
     }
+    ASSERT_TRUE(chunk_changer->prepare().ok());
     ASSERT_TRUE(tablet_with_sort_key2->updates()->reorder_from(tablet_with_sort_key1, 4, chunk_changer.get()).ok());
     ASSERT_EQ(N, read_tablet_and_compare_schema_changed_sort_key2(tablet_with_sort_key2, 4, keys));
 }

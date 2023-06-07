@@ -39,9 +39,6 @@ public:
 
     const SchemaMapping& get_schema_mapping() const { return _schema_mapping; }
 
-    const std::vector<ColumnId>& get_selected_column_indexes() const { return _selected_column_indexes; }
-    std::vector<ColumnId>* get_mutable_selected_column_indexes() { return &_selected_column_indexes; }
-
     const std::unordered_map<int32_t, int32_t>& get_slot_id_to_index_map() const { return _slot_id_to_index_map; }
     std::unordered_map<int32_t, int32_t>* get_mutable_slot_id_to_index_map() { return &_slot_id_to_index_map; }
 
@@ -61,7 +58,12 @@ public:
 
     void init_runtime_state(TQueryOptions query_options, TQueryGlobals query_globals);
 
+    const std::vector<ColumnId>& get_selected_column_indexes() const { return _selected_column_indexes; }
+    std::vector<ColumnId>* get_mutable_selected_column_indexes() { return &_selected_column_indexes; }
+
     void set_has_mv_expr_context(bool has_mv_expr_context) { this->_has_mv_expr_context = has_mv_expr_context; }
+
+    Status prepare();
 
 private:
     // @brief column-mapping specification of new schema

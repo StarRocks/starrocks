@@ -349,7 +349,7 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                      << ", mapping_schema_size=" << _schema_mapping.size();
         return false;
     }
-    if (_has_mv_expr_context && base_chunk->num_columns() != _slot_id_to_index_map.size()) {
+    if (base_chunk->num_columns() != _slot_id_to_index_map.size()) {
         LOG(WARNING) << "base chunk does not match with _slot_id_to_index_map mapping rules. "
                      << "base_chunk_size=" << base_chunk->num_columns()
                      << ", slot_id_to_index_map's size=" << _slot_id_to_index_map.size();
@@ -485,6 +485,30 @@ Status ChunkChanger::fill_materialized_columns(ChunkPtr& new_chunk) {
     return Status::OK();
 }
 
+Status ChunkChanger::prepare() {
+    // base tablet schema: k1 k2 k3 v1 v2
+    // new tablet schema: k3 k1 v2
+    // base reader schema: k1 k3 v2
+    // selected_column_index: 0 2 4
+    // ref_column: 2 0 4
+    int32_t index = 0;
+    for (int i = 0; i < _schema_mapping.size(); ++i) {
+        ColumnMapping* column_mapping = get_mutable_column_mapping(i);
+        if (column_mapping == nullptr) {
+            return Status::InternalError("referenced column was missing: " + i);
+        }
+        int32_t ref_column = column_mapping->ref_column;
+        if (ref_column < 0) {
+            continue;
+        }
+        if (_slot_id_to_index_map.find(ref_column) == _slot_id_to_index_map.end()) {
+            _slot_id_to_index_map.emplace(ref_column, index++);
+            _selected_column_indexes.emplace_back(ref_column);
+        }
+    }
+    return Status::OK();
+}
+
 #undef CONVERT_FROM_TYPE
 #undef TYPE_REINTERPRET_CAST
 #undef ASSIGN_DEFAULT_VALUE
@@ -581,25 +605,8 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
         }
     }
 
-    // base tablet schema: k1 k2 k3 v1 v2
-    // new tablet schema: k3 k1 v2
-    // base reader schema: k1 k3 v2
-    // selected_column_index: 0 2 4
-    // ref_column: 2 0 4
-    auto selected_column_indexs = chunk_changer->get_mutable_selected_column_indexes();
-    int32_t index = 0;
-    auto* slot_id_to_index_map = chunk_changer->get_mutable_slot_id_to_index_map();
-    for (int i = 0; i < new_schema.num_columns(); ++i) {
-        ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
-        int32_t ref_column = column_mapping->ref_column;
-        if (ref_column < 0) {
-            continue;
-        }
-        if (slot_id_to_index_map->find(ref_column) == slot_id_to_index_map->end()) {
-            slot_id_to_index_map->emplace(ref_column, index++);
-            selected_column_indexs->emplace_back(ref_column);
-        }
-    }
+    // initialized chunk charger state.
+    RETURN_IF_ERROR(chunk_changer->prepare());
 
     // Check if re-aggregation is needed.
     *sc_sorting = false;
