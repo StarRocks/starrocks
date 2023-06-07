@@ -2033,4 +2033,16 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static boolean enable_execute_script_on_frontend = true;
+
+    /**
+     * If set to <= 0, means that no limitation.
+     */
+    @ConfField(mutable = true)
+    public static int max_upload_task_per_be = 0;
+
+    /**
+     * If set to <= 0, means that no limitation.
+     */
+    @ConfField(mutable = true)
+    public static int max_download_task_per_be = 0;
 }
