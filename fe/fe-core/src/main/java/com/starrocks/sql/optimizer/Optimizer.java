@@ -261,6 +261,7 @@ public class Optimizer {
         rootTaskContext.setRequiredColumns(requiredColumns.clone());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         tree = new CardinalityPreservingTablePruneRule().rewrite(tree, rootTaskContext);
+        ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());

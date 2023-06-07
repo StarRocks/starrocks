@@ -165,6 +165,7 @@ public class LosslessLogicalViewTest {
                 "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"replicated_storage\" = \"false\",\n" +
+                "\"unique_constraints\" = \"empid\",\n" +
                 "\"foreign_key_constraints\" = \"(deptno) REFERENCES depts(deptno)\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ")";
@@ -249,6 +250,13 @@ public class LosslessLogicalViewTest {
     public void testBasic5() throws Exception {
         ctx.getSessionVariable().setQueryTimeoutS(100000000);
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, "select 1 from lineorder_flat_v1");
+        System.out.println(plan);
+    }
+
+    @Test
+    public void testBasic6() throws Exception {
+        ctx.getSessionVariable().setQueryTimeoutS(100000000);
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, "select r0.* from emps r0 inner join emps r1 on r0.empid=r1.empid");
         System.out.println(plan);
     }
 

@@ -55,7 +55,7 @@ public class UnionFind<T> {
             if (!find(elm)) {
                 int groupIdx = element2Group.size();
                 element2Group.put(elm, groupIdx);
-                eqGroupMap.put(groupIdx, ImmutableSet.of(elm));
+                eqGroupMap.put(groupIdx, Sets.newHashSet(elm));
             }
         }
     }
@@ -84,11 +84,10 @@ public class UnionFind<T> {
         if (!lhsGroupIdx.equals(rhsGroupIdx)) {
             Set<T> lhsGroup = eqGroupMap.get(lhsGroupIdx);
             Set<T> rhsGroup = eqGroupMap.get(rhsGroupIdx);
-            Set<T> newGroup = Sets.union(lhsGroup, rhsGroup);
+            lhsGroup.addAll(rhsGroup);
             rhsGroup.forEach(s -> {
                 element2Group.put(s, lhsGroupIdx);
             });
-            eqGroupMap.put(lhsGroupIdx, newGroup);
             eqGroupMap.remove(rhsGroupIdx);
         }
     }

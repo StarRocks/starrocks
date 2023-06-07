@@ -61,6 +61,7 @@ public class CardinalityPreservingJoinTableCollector extends OptExpressionVisito
     Map<OptExpression, CPNode> optToGraphNode = Maps.newHashMap();
     List<CPNode> hubNodes = Lists.newArrayList();
     Map<Integer, ColumnRefSet> columnOrigins = Maps.newHashMap();
+
     public CardinalityPreservingJoinTableCollector() {
     }
 
@@ -206,7 +207,7 @@ public class CardinalityPreservingJoinTableCollector extends OptExpressionVisito
 
     @Override
     public Boolean visit(OptExpression optExpression, Void context) {
-        for (int i=0; i < optExpression.getInputs().size();++i){
+        for (int i = 0; i < optExpression.getInputs().size(); ++i) {
             OptExpression input = optExpression.inputAt(i);
             if (cardinalityPreservingScanOps.containsKey(input)) {
                 cardinalityPreservingFrontiers.put(input, Pair.create(optExpression, i));
@@ -711,7 +712,7 @@ public class CardinalityPreservingJoinTableCollector extends OptExpressionVisito
     public PruneResult markPrunedTables(OptExpression frontier,
                                         Set<OptExpression> prunedTables) {
         Set<OptExpression> scanOpsLeadingByFrontier = scanOps.get(frontier);
-        Preconditions.checkArgument(scanOpsLeadingByFrontier!=null && !scanOpsLeadingByFrontier.isEmpty());
+        Preconditions.checkArgument(scanOpsLeadingByFrontier != null && !scanOpsLeadingByFrontier.isEmpty());
         ColumnRefSet originalColRefSet = new ColumnRefSet();
         frontier.getRowOutputInfo().getColumnRefOps().forEach(colRef ->
                 originalColRefSet.union(columnOrigins.get(colRef.getId())));
@@ -721,7 +722,7 @@ public class CardinalityPreservingJoinTableCollector extends OptExpressionVisito
                 .collect(Collectors.toList());
         PruneResult pruneResult = new PruneResult();
         for (CPNode node : nodes) {
-            pruneResult.merge(pruneTable(node, prunedTables, originalColRefSet));
+            pruneResult.merge(markPrunedTable(node, prunedTables, originalColRefSet));
         }
         return pruneResult;
     }
@@ -766,13 +767,13 @@ public class CardinalityPreservingJoinTableCollector extends OptExpressionVisito
         }
     }
 
-    private PruneResult pruneTable(CPNode root, Set<OptExpression> prunedTables, ColumnRefSet originalColRefSet) {
+    private PruneResult markPrunedTable(CPNode root, Set<OptExpression> prunedTables, ColumnRefSet originalColRefSet) {
         // visit children of current GraphNode in post-order order.
         PruneResult pruneResult = new PruneResult();
         if (root.isHub()) {
             // try to prune non-cardinality-preserving children
             for (CPNode child : root.getNonCPChildren()) {
-                pruneResult.merge(pruneTable(child, prunedTables, originalColRefSet));
+                pruneResult.merge(markPrunedTable(child, prunedTables, originalColRefSet));
             }
 
             // construct equivalent classes from equivalent ColumnRefOperator pairs of
@@ -793,8 +794,9 @@ public class CardinalityPreservingJoinTableCollector extends OptExpressionVisito
                         .map(ScalarOperator::getUsedColumns)
                         .orElse(new ColumnRefSet());
                 usedColRefSet.union(originalColRefSet);
-                Set<ColumnRefOperator> outputColRefs = scanOperator.getColRefToColumnMetaMap()
-                        .keySet().stream().filter(usedColRefSet::contains).collect(Collectors.toSet());
+                usedColRefSet.union(pruneResult.rewriteMapping.keySet());
+                Set<ColumnRefOperator> outputColRefs = scanOperator.getColumnMetaToColRefMap()
+                        .values().stream().filter(usedColRefSet::contains).collect(Collectors.toSet());
                 // if there exists output columns of current child that can not be remapped
                 // to other equivalent column, the child can be prunable.
                 if (!outputColRefs.isEmpty() &&
@@ -830,7 +832,7 @@ public class CardinalityPreservingJoinTableCollector extends OptExpressionVisito
             }
         } else {
             for (CPNode child : root.getChildren()) {
-                pruneResult.merge(pruneTable(child, prunedTables, originalColRefSet));
+                pruneResult.merge(markPrunedTable(child, prunedTables, originalColRefSet));
             }
             if (!pruneResult.isPruned() || root.isRoot()) {
                 return pruneResult.toUnpruned();
@@ -845,8 +847,8 @@ public class CardinalityPreservingJoinTableCollector extends OptExpressionVisito
                             .orElse(new ColumnRefSet());
             usedColRefSet.union(originalColRefSet);
 
-            Set<ColumnRefOperator> outputColRefs = scanOperator.getColRefToColumnMetaMap()
-                    .keySet().stream().filter(usedColRefSet::contains).collect(Collectors.toSet());
+            Set<ColumnRefOperator> outputColRefs = scanOperator.getColumnNameToColRefMap()
+                    .values().stream().filter(usedColRefSet::contains).collect(Collectors.toSet());
 
             // we must propagate columns from its children to current CPNode
             outputColRefs.addAll(pruneResult.getRewriteMapping().keySet());
@@ -878,14 +880,17 @@ public class CardinalityPreservingJoinTableCollector extends OptExpressionVisito
 
     public static class Pruner extends OptExpressionVisitor<Optional<OptExpression>, Void> {
         private final Map<ColumnRefOperator, ScalarOperator> remapping;
+        private final Set<ColumnRefOperator> substColRefs;
         private final ReplaceColumnRefRewriter columnRefRewriter;
         private final Set<OptExpression> prunedTables;
 
         private final List<ScalarOperator> prunedPredicates = Lists.newArrayList();
         private final Map<ColumnRefOperator, ScalarOperator> prunedColRefMap = Maps.newHashMap();
 
-        public Pruner(Map<ColumnRefOperator, ScalarOperator> remapping, Set<OptExpression> prunedTables) {
+        public Pruner(Map<ColumnRefOperator, ScalarOperator> remapping, Set<OptExpression> prunedTables,
+                      Set<ColumnRefOperator> substColRefs) {
             this.remapping = remapping;
+            this.substColRefs = substColRefs;
             this.columnRefRewriter = new ReplaceColumnRefRewriter(remapping);
             this.prunedTables = prunedTables;
         }
@@ -913,9 +918,8 @@ public class CardinalityPreservingJoinTableCollector extends OptExpressionVisito
             LogicalScanOperator scanOp = optExpression.getOp().cast();
             if (prunedTables.contains(optExpression)) {
                 Preconditions.checkArgument(
-                        Sets.intersection(
-                                Collections.unmodifiableSet(new HashSet<>(scanOp.getColumnMetaToColRefMap().values())),
-                                remapping.keySet()).isEmpty());
+                        new HashSet<>(scanOp.getColumnMetaToColRefMap().values()).containsAll(
+                                remapping.keySet()));
                 gatherPrunedPredicatesAndColumnRefMap(optExpression);
                 return Optional.empty();
             } else {
@@ -923,7 +927,7 @@ public class CardinalityPreservingJoinTableCollector extends OptExpressionVisito
                         newColRefToColumnMetaBuilder = new ImmutableMap.Builder<>();
                 newColRefToColumnMetaBuilder.putAll(scanOp.getColRefToColumnMetaMap());
                 scanOp.getColumnMetaToColRefMap().entrySet()
-                        .stream().filter(e -> remapping.containsKey(e.getValue()) &&
+                        .stream().filter(e -> substColRefs.contains(e.getValue()) &&
                                 !scanOp.getColRefToColumnMetaMap().containsKey(e.getValue()))
                         .forEach(e -> newColRefToColumnMetaBuilder.put(e.getValue(), e.getKey()));
                 Operator newScanOp = ((LogicalScanOperator.Builder) OperatorBuilderFactory.build(scanOp))
@@ -1015,7 +1019,7 @@ public class CardinalityPreservingJoinTableCollector extends OptExpressionVisito
             List<ScalarOperator> remainPredicates = Lists.newArrayList();
             List<ScalarOperator> selectedPredicates = Lists.newArrayList();
             LogicalScanOperator scanOperator = optExpression.getOp().cast();
-            ColumnRefSet outputColumnRefSet = optExpression.getOutputColumns();
+            ColumnRefSet outputColumnRefSet = optExpression.getRowOutputInfo().getOutputColumnRefSet();
             this.predicates.forEach(predicate -> {
                 if (outputColumnRefSet.containsAll(predicate.getUsedColumns())) {
                     selectedPredicates.add(predicate);
@@ -1062,13 +1066,10 @@ public class CardinalityPreservingJoinTableCollector extends OptExpressionVisito
         }
 
         Optional<OptExpression> graft(OptExpression optExpression) {
-            List<Optional<OptExpression>> newInputs = optExpression.getInputs().stream().map(this::graft).collect(Collectors.toList());
-            if (newInputs.stream().noneMatch(Optional::isPresent)) {
-               return Optional.empty();
-            }
-
+            List<Optional<OptExpression>> newInputs =
+                    optExpression.getInputs().stream().map(this::graft).collect(Collectors.toList());
             Iterator<Optional<OptExpression>> nextNewInput = newInputs.iterator();
-            optExpression.getInputs().replaceAll(input->nextNewInput.next().orElse(input));
+            optExpression.getInputs().replaceAll(input -> nextNewInput.next().orElse(input));
             return optExpression.getOp().accept(this, optExpression, null);
         }
     }
@@ -1081,14 +1082,17 @@ public class CardinalityPreservingJoinTableCollector extends OptExpressionVisito
             Map<ColumnRefOperator, ScalarOperator> rewriteMapping = Maps.newHashMap();
 
             PruneResult pruneResult = markPrunedTables(frontier, prunedTables);
+            Map<ColumnRefOperator, ScalarOperator> colRefMap = frontier.getRowOutputInfo().getColumnRefMap();
             if (!prunedTables.isEmpty()) {
                 pruneResult.getRewriteMapping().forEach((substColRef, originalColRefs) ->
                         originalColRefs.forEach(colRef -> rewriteMapping.put(colRef, substColRef)));
-                Pruner pruner = new Pruner(rewriteMapping, prunedTables);
+                Pruner pruner = new Pruner(rewriteMapping, prunedTables, pruneResult.rewriteMapping.keySet());
                 frontier = pruner.prune(frontier).orElse(frontier);
                 Grafter grafter = new Grafter(pruner.prunedPredicates, pruner.prunedColRefMap);
                 frontier = grafter.graft(frontier).orElse(frontier);
-                parent.setChild(idx, frontier);
+                colRefMap.replaceAll((k, v) -> pruner.columnRefRewriter.rewrite(v));
+                LogicalProjectOperator projectOperator = new LogicalProjectOperator(colRefMap);
+                parent.setChild(idx, OptExpression.create(projectOperator, Collections.singletonList(frontier)));
             }
         });
     }
