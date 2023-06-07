@@ -75,8 +75,9 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         """
         super(TestSQLCases, self).__init__(*args, **kwargs)
         self.case_info: choose_cases.ChooseCase.CaseTR
-        self.db = set()
-        self.resource = set()
+        self.db = list()
+        self.resource = list()
+        self._check_db_unique()
 
     def setUp(self, *args, **kwargs):
         """set up"""
@@ -103,13 +104,10 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         if record_mode:
             tools.assert_true(res, "Save %s.%s result error" % (self.case_info.file, self.case_info.name))
 
-        self.db.clear()
-
     # -------------------------------------------
     #         [CASE]
     # -------------------------------------------
     @parameterized.expand([[case_info] for case_info in case_list], doc_func=doc_func, name_func=name_func)
-    @sql_annotation.init(record_mode)
     def test_sql_basic(self, case_info: choose_cases.ChooseCase.CaseTR):
         """
         sql tester
@@ -125,9 +123,22 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         # -------------------------------------------
 
         # replace all db_name with each run
-        sql_list = self.init_data(case_info.sql)
+        sql_list = self._init_data(case_info.sql)
         print("[case name]: ", case_info.name)
         print("[case file]: ", case_info.file)
+        print("[case db]: ", self.db)
+        print("[case resource: ]: ", self.resource)
+
+        log.info(
+            """
+*********************************************
+Start to run: %s
+*********************************************"""
+            % case_info.name
+        )
+        # record mode, init info
+        if record_mode:
+            self.res_log.append(case_info.info)
 
         for sql_id, sql in enumerate(sql_list):
             uncheck = False
@@ -141,11 +152,11 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
             # uncheck flag, owns the highest priority
             if sql.startswith(sr_sql_lib.UNCHECK_FLAG):
                 uncheck = True
-                sql = sql[len(sr_sql_lib.UNCHECK_FLAG) :]
+                sql = sql[len(sr_sql_lib.UNCHECK_FLAG):]
 
             # execute command in files
             if sql.startswith(sr_sql_lib.SHELL_FLAG):
-                sql = sql[len(sr_sql_lib.SHELL_FLAG) :]
+                sql = sql[len(sr_sql_lib.SHELL_FLAG):]
 
                 # analyse var set
                 var, sql = self.analyse_var(sql)
@@ -159,7 +170,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
 
             elif sql.startswith(sr_sql_lib.FUNCTION_FLAG):
                 # function invoke
-                sql = sql[len(sr_sql_lib.FUNCTION_FLAG) :]
+                sql = sql[len(sr_sql_lib.FUNCTION_FLAG):]
 
                 # analyse var set
                 var, sql = self.analyse_var(sql)
@@ -177,7 +188,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                 # order flag
                 if sql.startswith(sr_sql_lib.ORDER_FLAG):
                     order = True
-                    sql = sql[len(sr_sql_lib.ORDER_FLAG) :]
+                    sql = sql[len(sr_sql_lib.ORDER_FLAG):]
 
                 # analyse var set
                 var, sql = self.analyse_var(sql)
@@ -210,56 +221,81 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
             if var:
                 self.__setattr__(var, actual_res)
 
-    def init_data(self, sql_list: List[str]) -> List[str]:
-        self.db = set()
+    def _init_data(self, sql_list: List[str]) -> List[str]:
+        self.db = list()
+        self.resource = list()
+
+        sql_list = self._replace_uuid_variables(sql_list)
+
+        for sql in sql_list:
+            db_name = self._get_db_name(sql)
+            if len(db_name) > 0:
+                self.db.append(db_name)
+            resource_name = self._get_resource_name(sql)
+            if len(resource_name) > 0:
+                self.resource.append(resource_name)
+
+        self._clear_db_and_resource_if_exists()
+
+        if len(self.db) == 0:
+            self._create_and_use_db()
+
+        return sql_list
+
+    def _clear_db_and_resource_if_exists(self):
+        for each_db in self.db:
+            log.info("init drop db: %s" % each_db)
+            self.drop_database(each_db)
+
+        for each_resource in self.resource:
+            log.info("init drop resource: %s" % each_resource)
+            self.drop_resource(each_resource)
+
+    def _create_and_use_db(self):
+        db_name = "test_db_%s" % uuid.uuid1().hex
+        self.db.append(db_name)
+        self.execute_sql("CREATE DATABASE %s;" % db_name)
+        self.execute_sql("USE %s;" % db_name)
+        print("[SQL]: CREATE DATABASE %s;" % db_name)
+        print("[SQL]: USE %s;" % db_name)
+
+    def _check_db_unique(self):
+        all_db_dict = dict()
+        for case in case_list:
+            sql_list = self._replace_uuid_variables(case.sql)
+            for sql in sql_list:
+                db_name = self._get_db_name(sql)
+                if len(db_name) > 0:
+                    all_db_dict.setdefault(db_name, list()).append(case.name)
+        error_info_dict = {db: cases for db, cases in all_db_dict.items() if len(cases) > 1}
+        tools.assert_true(len(error_info_dict) <= 0, "Pre Check Failed, Duplicate DBs: \n%s" % json.dumps(error_info_dict, indent=2))
+
+    @staticmethod
+    def _replace_uuid_variables(sql_list: List[str]) -> List[str]:
         ret = list()
         variable_dict = dict()
-        # find all uuid variables
         for sql in sql_list:
             uuid_vars = re.findall(r"\${(uuid[0-9]*)}", sql)
             for each_uuid in uuid_vars:
                 if each_uuid not in variable_dict:
                     variable_dict[each_uuid] = uuid.uuid1().hex
 
-        # replace all uuid variables
         for sql in sql_list:
             for each_var in variable_dict:
                 sql = sql.replace("${%s}" % each_var, variable_dict[each_var])
             ret.append(sql)
-
-            if "CREATE DATABASE" in sql.upper():
-                # last word is db by default
-                db_name = sql.rstrip(";").strip().split(" ")[-1]
-
-                self.db.add(db_name)
-
-            if "CREATE EXTERNAL RESOURCE " in sql.upper():
-                try:
-                    self.resource.add(re.findall(r"CREATE EXTERNAL RESOURCE ([a-zA-Z0-9_-]+)", sql)[0])
-                except Exception as e:
-                    log.info("no resource of CREATE EXTERNAL RESOURCE, %s" % e)
-
-                try:
-                    self.resource.add(re.findall(r"create external resource ([a-zA-Z0-9_-]+)", sql)[0])
-                except Exception as e:
-                    log.info("no resource of create external resource, %s" % e)
-
-                try:
-                    self.resource.add(re.findall(r"CREATE EXTERNAL RESOURCE \"([a-zA-Z0-9_-]+)\"", sql)[0])
-                except Exception as e:
-                    log.info('no resource of CREATE EXTERNAL RESOURCE "", %s' % e)
-
-                try:
-                    self.resource.add(re.findall(r"create external resource \"([a-zA-Z0-9_-]+)\"", sql)[0])
-                except Exception as e:
-                    log.info('no resource of create external resource "", %s' % e)
-
-        if len(self.db) == 0:
-            db_name = "test_db_%s" % uuid.uuid1().hex
-            self.db.add(db_name)
-            self.execute_sql("CREATE DATABASE %s;" % db_name)
-            self.execute_sql("USE %s;" % db_name)
-            print("[SQL]: CREATE DATABASE %s;" % db_name)
-            print("[SQL]: USE %s;" % db_name)
-
         return ret
+
+    @staticmethod
+    def _get_db_name(sql: str) -> str:
+        db_name = ""
+        if "CREATE DATABASE" in sql.upper():
+            db_name = sql.rstrip(";").strip().split(" ")[-1]
+        return db_name
+
+    @staticmethod
+    def _get_resource_name(sql: str) -> str:
+        matches = list()
+        if "CREATE EXTERNAL RESOURCE" in sql.upper():
+            matches = re.findall(r'CREATE EXTERNAL RESOURCE \"?([a-zA-Z0-9_-]+)\"?', sql, flags=re.IGNORECASE)
+        return matches[0] if len(matches) > 0 else ""

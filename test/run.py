@@ -48,6 +48,7 @@ python run.py [-d dirname/file] [-r] [-l] [-c ${concurrency}] [-t ${time}] [-a $
               -t|--timeout         Timeout(s) of each case, >0, default 600
               -l|--list            Only list cases name and don't run
               -a|--attr            Case attrs for filter, default all cases, e.x: system,admit
+              --skip_reruns        skip 3 time reruns, all case will be run exactly once, default False
               --file_filter        Case file regex for filter, default .*
               --case_filter        Case name regex for filter, default .*
         """
@@ -65,6 +66,7 @@ if __name__ == "__main__":
     case_filter = ".*"
     collect = False
     part = False
+    skip_reruns = False
 
     args = "hld:rvc:t:x:y:pa:"
     detail_args = [
@@ -79,6 +81,7 @@ if __name__ == "__main__":
         "case_filter=",
         "part",
         "attr=",
+        "skip_reruns",
     ]
 
     case_dir = None
@@ -131,6 +134,9 @@ if __name__ == "__main__":
         if opt in ("-a", "--attr"):
             attr = arg
 
+        if opt == "--skip_reruns":
+            skip_reruns = True
+
     # set environment
     os.environ["record_mode"] = "true" if record else "false"
     os.environ["sql_dir"] = str(dirname)
@@ -140,15 +146,19 @@ if __name__ == "__main__":
 
     argv = [
         "nosetests",
-        "--with-flaky",
-        "--force-flaky",
-        "--max-runs=3",
-        "--min-passes=3",
         "test_sql_cases.py",
         "-vv",
         "-s",
         "--nologcapture",
     ]
+
+    if not skip_reruns:
+        argv.extend([
+            "--with-flaky",
+            "--force-flaky",
+            "--max-runs=3",
+            "--min-passes=3",
+        ])
 
     # concurrency
     if concurrency <= 0:

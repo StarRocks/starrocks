@@ -57,9 +57,9 @@ class ChooseCase(object):
             self.ori_sql: List = copy.deepcopy(sql)
             self.result: List = result
 
-            # get db from lines
-            self.db = set()
-            self.resource = set()
+            # # get db from lines
+            # self.db = set()
+            # self.resource = set()
 
         def __lt__(self, other):
             """less than"""
@@ -78,12 +78,11 @@ class ChooseCase(object):
 
             return """---- CASE INFO ----
 [name]: {0}
-[db]: {1}
-[file]: {2}
+[file]: {1}
 [SQL]:
-{3}
+{2}
 """.format(
-                self.name, self.db, self.file, case_dict_str
+                self.name, self.file, case_dict_str
             )
 
     def __init__(self, case_dir=None, record_mode=False, file_regex=None, case_regex=None):
