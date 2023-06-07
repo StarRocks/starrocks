@@ -100,24 +100,22 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertContains(plan, "ColumnAccessPath: [/st1/s2, /st1/s1]");
     }
 
-    // @todo: Fix UNION Struct type deriver
-    // @Test
-    // public void testUnionAllPruneColumn() throws Exception {
-    //     String sql = "select st1.s1 from (" +
-    //             " select v1, st1, st2, st3 from sc0 x1 " +
-    //             " union all " +
-    //             " select v1, st1, st2, st3 from sc0 x2) x3";
-    //     System.out.println(sql);
-    //     String plan = getVerboseExplain(sql);
-    //     System.out.println(plan);
-    // }
+    @Test
+    public void testUnionAllPruneColumn() throws Exception {
+        String sql = "select st1.s1 from (" +
+                " select v1, st1, st2, st3 from sc0 x1 " +
+                " union all " +
+                " select v1, st1, st2, st3 from sc0 x2) x3";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "[/st1/s1]");
+    }
 
     @Test
     public void testCTEPruneColumn() throws Exception {
         String sql =
                 "with t1 as (select * from sc0) select x1.st1.s1, x2.st2.s2 from t1 x1 join t1 x2 on x1.v1 = x2.v1";
         String plan = getVerboseExplain(sql);
-        assertContains("ColumnAccessPath: [/st1/s1, /st2/s2]");
+        assertContains(plan, "ColumnAccessPath: [/st1/s1, /st2/s2]");
     }
 
     @Test

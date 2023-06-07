@@ -32,6 +32,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -125,6 +126,9 @@ public class StructType extends Type {
         }
         for (int i = 0; i < fields.size(); ++i) {
             if (!fields.get(i).getType().matchesType(rhsType.fields.get(i).getType())) {
+                return false;
+            }
+            if (!StringUtils.equals(fields.get(i).getName(), rhsType.fields.get(i).getName())) {
                 return false;
             }
         }

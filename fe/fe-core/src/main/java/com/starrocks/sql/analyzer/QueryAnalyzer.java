@@ -617,32 +617,36 @@ public class QueryAnalyzer {
             }
             Scope scope = new Scope(RelationId.of(subquery), new RelationFields(outputFields.build()));
 
-            if (subquery.hasOrderByClause()) {
-                List<Expr> outputExpressions = subquery.getOutputExpression();
-                for (OrderByElement orderByElement : subquery.getOrderBy()) {
-                    Expr expression = orderByElement.getExpr();
-                    AnalyzerUtils.verifyNoGroupingFunctions(expression, "ORDER BY");
-
-                    if (expression instanceof IntLiteral) {
-                        long ordinal = ((IntLiteral) expression).getLongValue();
-                        if (ordinal < 1 || ordinal > outputExpressions.size()) {
-                            throw new SemanticException("ORDER BY position %s is not in select list", ordinal);
-                        }
-                        expression = new FieldReference((int) ordinal - 1, null);
-                    }
-
-                    analyzeExpression(expression, new AnalyzeState(), scope);
-
-                    if (!expression.getType().canOrderBy()) {
-                        throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
-                    }
-
-                    orderByElement.setExpr(expression);
-                }
-            }
-
+            analyzeOrderByClause(subquery, scope);
             subquery.setScope(scope);
             return scope;
+        }
+
+        private void analyzeOrderByClause(QueryRelation query, Scope scope) {
+            if (!query.hasOrderByClause()) {
+                return;
+            }
+            List<Expr> outputExpressions = query.getOutputExpression();
+            for (OrderByElement orderByElement : query.getOrderBy()) {
+                Expr expression = orderByElement.getExpr();
+                AnalyzerUtils.verifyNoGroupingFunctions(expression, "ORDER BY");
+
+                if (expression instanceof IntLiteral) {
+                    long ordinal = ((IntLiteral) expression).getLongValue();
+                    if (ordinal < 1 || ordinal > outputExpressions.size()) {
+                        throw new SemanticException("ORDER BY position %s is not in select list", ordinal);
+                    }
+                    expression = new FieldReference((int) ordinal - 1, null);
+                }
+
+                analyzeExpression(expression, new AnalyzeState(), scope);
+
+                if (!expression.getType().canOrderBy()) {
+                    throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+                }
+
+                orderByElement.setExpr(expression);
+            }
         }
 
         @Override
@@ -726,8 +730,7 @@ public class QueryAnalyzer {
 
                     Type commonType = TypeManager.getCommonSuperType(outputTypes[fieldIdx],
                             relation.getRelationFields().getFieldByIndex(fieldIdx).getType());
-                    // @todo: support struct type
-                    if (!commonType.isValid() || commonType.isStructType()) {
+                    if (!commonType.isValid()) {
                         throw new SemanticException(String.format("Incompatible return types '%s' and '%s'",
                                 outputTypes[fieldIdx],
                                 relation.getRelationFields().getFieldByIndex(fieldIdx).getType()));
@@ -746,30 +749,7 @@ public class QueryAnalyzer {
 
             Scope setOpOutputScope = new Scope(RelationId.of(node), new RelationFields(fields));
 
-            if (node.hasOrderByClause()) {
-                List<Expr> outputExpressions = node.getOutputExpression();
-                for (OrderByElement orderByElement : node.getOrderBy()) {
-                    Expr expression = orderByElement.getExpr();
-                    AnalyzerUtils.verifyNoGroupingFunctions(expression, "ORDER BY");
-
-                    if (expression instanceof IntLiteral) {
-                        long ordinal = ((IntLiteral) expression).getLongValue();
-                        if (ordinal < 1 || ordinal > outputExpressions.size()) {
-                            throw new SemanticException("ORDER BY position %s is not in select list", ordinal);
-                        }
-                        expression = new FieldReference((int) ordinal - 1, null);
-                    }
-
-                    analyzeExpression(expression, new AnalyzeState(), setOpOutputScope);
-
-                    if (!expression.getType().canOrderBy()) {
-                        throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
-                    }
-
-                    orderByElement.setExpr(expression);
-                }
-            }
-
+            analyzeOrderByClause(node, setOpOutputScope);
             node.setScope(setOpOutputScope);
             return setOpOutputScope;
         }
@@ -790,8 +770,7 @@ public class QueryAnalyzer {
                     analyzeExpression(row.get(fieldIdx), analyzeState, scope);
                     Type commonType =
                             TypeManager.getCommonSuperType(outputTypes[fieldIdx], row.get(fieldIdx).getType());
-                    // @todo: support struct type
-                    if (!commonType.isValid() || commonType.isStructType()) {
+                    if (!commonType.isValid()) {
                         throw new SemanticException(String.format("Incompatible return types '%s' and '%s'",
                                 outputTypes[fieldIdx], row.get(fieldIdx).getType()));
                     }
@@ -889,6 +868,7 @@ public class QueryAnalyzer {
             node.setScope(node.getRight().getScope());
             return node.getScope();
         }
+
     }
 
     private Table resolveTable(TableRelation tableRelation) {

@@ -47,16 +47,16 @@ The struct type has the following restrictions:
 
 ### Construct structs in SQL
 
-Struct can be constructed in SQL using function `row`, `name_struct`, `struct` 
+Struct can be constructed in SQL using function `row`, `named_struct`, `struct` 
 
 ~~~SQL
 select row(1, 2, 3, 4) as numbers; -- The result is {'col1': 1, 'col2': 2, 'col3': 3, 'col4': 4}
 select struct(1, 2, 3, 4) as numbers; -- The result is {'col1': 1, 'col2': 2, 'col3': 3, 'col4': 4}
-select name_struct('a', 1, 'b', 2, 'c', 3, 'd', 4) as numbers; -- The result is {'a': 1, 'b': 2, 'c': 3, 'd': 4}
+select named_struct('a', 1, 'b', 2, 'c', 3, 'd', 4) as numbers; -- The result is {'a': 1, 'b': 2, 'c': 3, 'd': 4}
 ~~~
 
 `row`, `struct` support un-named struct, StarRocks will automatically generate column names, like `col1`, `col2`...
-`name_struct` support a named struct, the parameters must be a Name/Value pairs, and the number of parameters must be even.
+`named_struct` support a named struct, the parameters must be a Name/Value pairs, and the number of parameters must be even.
 
 StarRocks will automatically determine the type of the struct.
 
@@ -67,7 +67,7 @@ There are two ways to write struct values to StarRocks. Insert into is suitable 
 * **INSERT INTO**
 
   ~~~SQL
-  create table t0(c0 INT, c1 `STRUCT<a INT, b INT>`)duplicate key(c0);
+  create table t0(c0 INT, c1 STRUCT<a INT, b INT>)duplicate key(c0);
   INSERT INTO t0 VALUES(1, row(1, 1));
   ~~~
 
@@ -78,21 +78,28 @@ There are two ways to write struct values to StarRocks. Insert into is suitable 
 
 ### Struct element access
 
-Access a subfield of a struct using `.`
+Access a subfield of a struct using `.`, or using `[subfield-index]`
 
 ~~~Plain Text
-mysql> select name_struct('a', 1, 'b', 2, 'c', 3, 'd', 4).a;
+mysql> select named_struct('a', 1, 'b', 2, 'c', 3, 'd', 4).a;
 
-+-----------------------------------------------+
-| name_struct('a', 1, 'b', 2, 'c', 3, 'd', 4).a |
-+-----------------------------------------------+
-| 1                                             |
-+-----------------------------------------------+
++------------------------------------------------+
+| named_struct('a', 1, 'b', 2, 'c', 3, 'd', 4).a |
++------------------------------------------------+
+| 1                                              |
++------------------------------------------------+
 
 mysql> select row(1, 2, 3, 4).col1;
-+------------------+
-| row(1, 2, 3, 4)  |
-+------------------+
-| 1                |
-+------------------+
++-----------------------+
+| row(1, 2, 3, 4).col1  |
++-----------------------+
+| 1                     |
++-----------------------+
+
+mysql> select row(1, 2, 3, 4)[2];
++---------------------+
+| row(1, 2, 3, 4)[2]  |
++---------------------+
+| 2                   |
++---------------------+
 ~~~

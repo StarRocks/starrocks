@@ -337,4 +337,12 @@ public class AnalyzeExprTest {
         analyzeFail("select map_concat()");
     }
 
+    @Test
+    public void testAnalyzeStructFunc() {
+        analyzeFail("select row('a', 1, 'b', 2)[0]");
+        analyzeFail("select row('a', 1, 'b', 2)[5]");
+        analyzeFail("select row('a', 1, 'b', 2)[-5]");
+        analyzeSuccess("select row('a', 1, 'b', 2)[1]");
+        analyzeSuccess("select row('a', 1, 'b', 2)[-1]");
+    }
 }
