@@ -1422,7 +1422,12 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
             index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
         }
     } else {
-        index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
+        std::unique_ptr<IOStat> iostat = std::make_unique<IOStat>();
+        MonotonicStopWatch watch;
+        watch.start();
+        index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, iostat.get());
+        LOG(INFO) << "primary index upsert tid: " << tablet_id << ", cost: " << watch.elapsed_time() << ", "
+                  << iostat->print_str();
     }
 
     return Status::OK();
