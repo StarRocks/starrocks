@@ -2232,7 +2232,7 @@ public class Config extends ConfigBase {
      * Enable auto create tablet when creating table and add partition
      **/
     @ConfField(mutable = true)
-    public static boolean enable_auto_tablet_distribution = false;
+    public static boolean enable_auto_tablet_distribution = true;
 
     /**
      * default size of minimum cache size of auto increment id allocation
