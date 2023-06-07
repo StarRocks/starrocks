@@ -526,9 +526,12 @@ bool PrimaryKeyEncoder::encode_exceed_limit(const Schema& schema, const Chunk& c
     std::vector<const void*> datas(ncol, nullptr);
     if (ncol == 1) {
         if (schema.field(0)->type()->type() == TYPE_VARCHAR) {
-            if (static_cast<const Slice*>(static_cast<const void*>(chunk.get_column_by_index(0)->raw_data()))
-                        ->get_size() > limit_size) {
-                return true;
+            const Slice* keys =
+                    static_cast<const Slice*>(static_cast<const void*>(chunk.get_column_by_index(0)->raw_data()));
+            for (size_t i = 0; i < len; i++) {
+                if (keys[offset + i].size > limit_size) {
+                    return true;
+                }
             }
         }
     } else {
@@ -554,9 +557,9 @@ bool PrimaryKeyEncoder::encode_exceed_limit(const Schema& schema, const Chunk& c
             size = accumulated_fixed_size;
             for (const auto varchar_index : varchar_indexes) {
                 if (varchar_index + 1 == ncol) {
-                    size += static_cast<const Slice*>(datas[varchar_index])[i].get_size();
+                    size += static_cast<const Slice*>(datas[varchar_index])[offset + i].get_size();
                 } else {
-                    auto s = static_cast<const Slice*>(datas[varchar_index])[i];
+                    auto s = static_cast<const Slice*>(datas[varchar_index])[offset + i];
                     std::string_view sv(s.get_data(), s.get_size());
                     size += s.get_size() + std::count(sv.begin(), sv.end(), 0) + 2;
                 }
