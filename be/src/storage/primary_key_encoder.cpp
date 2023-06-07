@@ -454,10 +454,20 @@ bool PrimaryKeyEncoder::encode_exceed_limit(const vectorized::Schema& schema, co
     int ncol = schema.num_key_fields();
     vector<const void*> datas(ncol, nullptr);
     if (ncol == 1) {
+<<<<<<< HEAD
         if (schema.field(0)->type()->type() == OLAP_FIELD_TYPE_VARCHAR) {
             if (static_cast<const Slice*>(static_cast<const void*>(chunk.get_column_by_index(0)->raw_data()))
                         ->get_size() > limit_size) {
                 return true;
+=======
+        if (schema.field(0)->type()->type() == TYPE_VARCHAR) {
+            const Slice* keys =
+                    static_cast<const Slice*>(static_cast<const void*>(chunk.get_column_by_index(0)->raw_data()));
+            for (size_t i = 0; i < len; i++) {
+                if (keys[offset + i].size > limit_size) {
+                    return true;
+                }
+>>>>>>> 94c5041eb ([BugFix] Fix memory illegal modification (#24680))
             }
         }
     } else {
@@ -483,9 +493,9 @@ bool PrimaryKeyEncoder::encode_exceed_limit(const vectorized::Schema& schema, co
             size = accumulated_fixed_size;
             for (const auto varchar_index : varchar_indexes) {
                 if (varchar_index + 1 == ncol) {
-                    size += static_cast<const Slice*>(datas[varchar_index])[i].get_size();
+                    size += static_cast<const Slice*>(datas[varchar_index])[offset + i].get_size();
                 } else {
-                    auto s = static_cast<const Slice*>(datas[varchar_index])[i];
+                    auto s = static_cast<const Slice*>(datas[varchar_index])[offset + i];
                     std::string_view sv(s.get_data(), s.get_size());
                     size += s.get_size() + std::count(sv.begin(), sv.end(), 0) + 2;
                 }

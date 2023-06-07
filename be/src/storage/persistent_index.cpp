@@ -25,6 +25,7 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 constexpr size_t default_usage_percent = 85;
 constexpr size_t page_size = 4096;
 constexpr size_t page_header_size = 64;
@@ -40,6 +41,22 @@ constexpr uint64_t seed1 = 9110941936030554525ULL;
 constexpr size_t l0_snapshot_size_max = 16 * 1024 * 1024;
 // perform l0 l1 merge compaction if l1_file_size / l0_memory >= this value and l0_memory > l0_snapshot_size_max
 constexpr size_t l0_l1_merge_ratio = 10;
+=======
+constexpr size_t kDefaultUsagePercent = 85;
+constexpr size_t kPageSize = 4096;
+constexpr size_t kPageHeaderSize = 64;
+constexpr size_t kBucketHeaderSize = 4;
+constexpr size_t kBucketPerPage = 16;
+constexpr size_t kRecordPerBucket = 8;
+constexpr size_t kShardMax = 1 << 16;
+constexpr uint64_t kPageMax = 1ULL << 32;
+constexpr size_t kPackSize = 16;
+constexpr size_t kPagePackLimit = (kPageSize - kPageHeaderSize) / kPackSize;
+constexpr size_t kBucketSizeMax = 256;
+constexpr size_t kMinEnableBFKVNum = 10000000;
+constexpr size_t kLongKeySize = 64;
+constexpr size_t kFixedMaxKeySize = 128;
+>>>>>>> 94c5041eb ([BugFix] Fix memory illegal modification (#24680))
 
 const char* const index_file_magic = "IDX1";
 
@@ -1529,9 +1546,82 @@ Status PersistentIndex::on_commited() {
 Status PersistentIndex::get(size_t n, const void* keys, IndexValue* values) {
     KeysInfo l1_checks;
     size_t num_found = 0;
+<<<<<<< HEAD
     RETURN_IF_ERROR(_l0->get(n, keys, values, &l1_checks, &num_found));
     if (_l1) {
         RETURN_IF_ERROR(_l1->get(n, keys, l1_checks, values, &num_found));
+=======
+    RETURN_IF_ERROR(_l0->get(n, keys, values, &num_found, not_founds_by_key_size));
+    if (_get_thread_pool != nullptr) {
+        return _get_from_immutable_index_parallel(n, keys, values, not_founds_by_key_size);
+    }
+    return _get_from_immutable_index(n, keys, values, not_founds_by_key_size);
+}
+
+Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values) {
+    bool need_flush_advance = _need_flush_advance();
+    _flushed |= need_flush_advance;
+
+    if (need_flush_advance) {
+        RETURN_IF_ERROR(flush_advance());
+    }
+
+    if (_need_merge_advance()) {
+        RETURN_IF_ERROR(_merge_compaction_advance());
+    } else if (!_flushed) {
+        _dump_snapshot |= _can_dump_directly();
+        if (!_dump_snapshot) {
+            RETURN_IF_ERROR(_l0->append_wal(n, keys, values));
+        }
+    }
+
+    return Status::OK();
+}
+
+Status PersistentIndex::_update_usage_and_size_by_key_length(
+        std::vector<std::pair<int64_t, int64_t>>& add_usage_and_size) {
+    if (_key_size > 0) {
+        auto iter = _usage_and_size_by_key_length.find(_key_size);
+        DCHECK(iter != _usage_and_size_by_key_length.end());
+        if (iter == _usage_and_size_by_key_length.end()) {
+            std::string msg = strings::Substitute("no key_size: $0 in usage info", _key_size);
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        } else {
+            iter->second.first = std::max(0L, iter->second.first + add_usage_and_size[_key_size].first);
+            iter->second.second = std::max(0L, iter->second.second + add_usage_and_size[_key_size].second);
+        }
+    } else {
+        for (int key_size = 1; key_size <= kSliceMaxFixLength; key_size++) {
+            if (add_usage_and_size[key_size].second > 0) {
+                auto iter = _usage_and_size_by_key_length.find(key_size);
+                if (iter == _usage_and_size_by_key_length.end()) {
+                    std::string msg = strings::Substitute("no key_size: $0 in usage info", key_size);
+                    LOG(WARNING) << msg;
+                    return Status::InternalError(msg);
+                } else {
+                    iter->second.first = std::max(0L, iter->second.first + add_usage_and_size[key_size].first);
+                    iter->second.second = std::max(0L, iter->second.second + add_usage_and_size[key_size].second);
+                }
+            }
+        }
+
+        int64_t slice_usage = 0;
+        int64_t slice_size = 0;
+        for (int key_size = kSliceMaxFixLength + 1; key_size <= kFixedMaxKeySize; key_size++) {
+            slice_usage += add_usage_and_size[key_size].first;
+            slice_size += add_usage_and_size[key_size].second;
+        }
+        DCHECK(_key_size == 0);
+        auto iter = _usage_and_size_by_key_length.find(_key_size);
+        if (iter == _usage_and_size_by_key_length.end()) {
+            std::string msg = strings::Substitute("no key_size: $0 in usage info", _key_size);
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
+        iter->second.first = std::max(0L, iter->second.first + slice_usage);
+        iter->second.second = std::max(0L, iter->second.second + slice_size);
+>>>>>>> 94c5041eb ([BugFix] Fix memory illegal modification (#24680))
     }
     return Status::OK();
 }
@@ -1539,14 +1629,86 @@ Status PersistentIndex::get(size_t n, const void* keys, IndexValue* values) {
 Status PersistentIndex::upsert(size_t n, const void* keys, const IndexValue* values, IndexValue* old_values) {
     KeysInfo l1_checks;
     size_t num_found = 0;
+<<<<<<< HEAD
     RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &l1_checks, &num_found));
+=======
+    RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &num_found, not_founds_by_key_size));
+    if (_get_thread_pool != nullptr) {
+        RETURN_IF_ERROR(_get_from_immutable_index_parallel(n, keys, old_values, not_founds_by_key_size));
+    } else {
+        RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size));
+    }
+    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
+                                                                std::pair<int64_t, int64_t>(0, 0));
+    for (size_t i = 0; i < n; i++) {
+        if (old_values[i].get_value() == NullIndexValue) {
+            _size++;
+            _usage += keys[i].size + kIndexValueSize;
+            int64_t len = keys[i].size > kFixedMaxKeySize ? 0 : keys[i].size;
+            add_usage_and_size[len].first += keys[i].size + kIndexValueSize;
+            add_usage_and_size[len].second++;
+        }
+    }
+
+    RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
+    return _flush_advance_or_append_wal(n, keys, values);
+}
+
+Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
+    std::set<size_t> check_l1_key_sizes;
+    RETURN_IF_ERROR(_l0->insert(n, keys, values, check_l1_key_sizes));
+    if (!_l1_vec.empty()) {
+        int end_idx = _has_l1 ? 1 : 0;
+        for (int i = _l1_vec.size() - 1; i >= end_idx; i--) {
+            for (const auto check_l1_key_size : check_l1_key_sizes) {
+                RETURN_IF_ERROR(_l1_vec[i]->check_not_exist(n, keys, check_l1_key_size));
+            }
+        }
+    }
+    if (_has_l1 && check_l1) {
+        for (const auto check_l1_key_size : check_l1_key_sizes) {
+            RETURN_IF_ERROR(_l1_vec[0]->check_not_exist(n, keys, check_l1_key_size));
+        }
+    }
+    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
+                                                                std::pair<int64_t, int64_t>(0, 0));
+    _size += n;
+    for (size_t i = 0; i < n; i++) {
+        _usage += keys[i].size + kIndexValueSize;
+        int64_t len = keys[i].size > kFixedMaxKeySize ? 0 : keys[i].size;
+        add_usage_and_size[len].first += keys[i].size + kIndexValueSize;
+        add_usage_and_size[len].second++;
+    }
+    RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
+
+    return _flush_advance_or_append_wal(n, keys, values);
+}
+
+Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values) {
+    std::map<size_t, KeysInfo> not_founds_by_key_size;
+    size_t num_erased = 0;
+    RETURN_IF_ERROR(_l0->erase(n, keys, old_values, &num_erased, not_founds_by_key_size));
+>>>>>>> 94c5041eb ([BugFix] Fix memory illegal modification (#24680))
     _dump_snapshot |= _can_dump_directly();
     if (_l1) {
         RETURN_IF_ERROR(_l1->get(n, keys, l1_checks, old_values, &num_found));
     }
+<<<<<<< HEAD
     _size += (n - num_found);
     if (!_dump_snapshot) {
         RETURN_IF_ERROR(_append_wal(n, keys, values));
+=======
+    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
+                                                                std::pair<int64_t, int64_t>(0, 0));
+    for (size_t i = 0; i < n; i++) {
+        if (old_values[i].get_value() != NullIndexValue) {
+            _size--;
+            _usage -= keys[i].size + kIndexValueSize;
+            int64_t len = keys[i].size > kFixedMaxKeySize ? 0 : keys[i].size;
+            add_usage_and_size[len].first -= keys[i].size + kIndexValueSize;
+            add_usage_and_size[len].second--;
+        }
+>>>>>>> 94c5041eb ([BugFix] Fix memory illegal modification (#24680))
     }
     return Status::OK();
 }

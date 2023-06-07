@@ -22,7 +22,6 @@ namespace starrocks::vectorized {
 
 // TODO(cbl): move to common space latter
 static const string LOAD_OP_COLUMN = "__op";
-static const size_t kPrimaryKeyLimitSize = 128;
 
 MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs,
                    MemTableSink* sink, MemTracker* mem_tracker)
@@ -189,8 +188,13 @@ Status MemTable::finalize() {
 
             _result_chunk = _aggregator->aggregate_result();
             if (_keys_type == PRIMARY_KEYS &&
+<<<<<<< HEAD
                 PrimaryKeyEncoder::encode_exceed_limit(_vectorized_schema, *_result_chunk.get(), 0,
                                                        _result_chunk->num_rows(), kPrimaryKeyLimitSize)) {
+=======
+                PrimaryKeyEncoder::encode_exceed_limit(*_vectorized_schema, *_result_chunk.get(), 0,
+                                                       _result_chunk->num_rows(), config::primary_key_limit_size)) {
+>>>>>>> 94c5041eb ([BugFix] Fix memory illegal modification (#24680))
                 _aggregator.reset();
                 _aggregator_memory_usage = 0;
                 _aggregator_bytes_usage = 0;
