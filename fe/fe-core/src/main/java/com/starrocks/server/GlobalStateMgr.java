@@ -1107,9 +1107,6 @@ public class GlobalStateMgr {
         journalWriter = new JournalWriter(journal, journalQueue);
 
         editLog = new EditLog(journalQueue);
-        this.globalTransactionMgr.setEditLog(editLog);
-        this.idGenerator.setEditLog(editLog);
-        this.localMetastore.setEditLog(editLog);
     }
 
     // wait until FE is ready.
@@ -3173,7 +3170,6 @@ public class GlobalStateMgr {
 
     public void setEditLog(EditLog editLog) {
         this.editLog = editLog;
-        localMetastore.setEditLog(editLog);
     }
 
     public void setJournal(Journal journal) {

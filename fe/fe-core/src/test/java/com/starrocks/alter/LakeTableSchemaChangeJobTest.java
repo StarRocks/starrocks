@@ -46,6 +46,7 @@ import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.lake.Utils;
+import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
@@ -69,6 +70,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
@@ -102,6 +104,14 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
+        new MockUp<EditLog>() {
+            @Mock
+            public void logSaveNextId(long nextId) {
+
+            }
+        };
+
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         final int numBuckets = 4;
         final long dbId = GlobalStateMgr.getCurrentState().getNextId();
         final long partitionId = GlobalStateMgr.getCurrentState().getNextId();

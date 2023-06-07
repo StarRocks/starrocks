@@ -1231,6 +1231,7 @@ public class NodeMgr {
         removedFrontends = nodeMgr.removedFrontends;
 
         systemInfo = nodeMgr.systemInfo;
+        systemInfoMap.put(clusterId, systemInfo);
         brokerMgr = nodeMgr.brokerMgr;
     }
 
