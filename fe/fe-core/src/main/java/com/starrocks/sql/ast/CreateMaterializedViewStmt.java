@@ -133,25 +133,24 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     private String baseIndexName;
     private String dbName;
     private KeysType mvKeysType = KeysType.DUP_KEYS;
+    private final TableName targetTable;
 
     // If the process is replaying log, isReplay is true, otherwise is false,
     // avoid replay process error report, only in Rollup or MaterializedIndexMeta is true
     private boolean isReplay = false;
 
-    // `Populate` means whether to insert the existed data into the new MV. if false, then no insert the existed
-    // data into MV.
-    private boolean isPopulate = true;
+    public CreateMaterializedViewStmt(String mvName, QueryStatement queryStatement, Map<String, String> properties,
+                                      TableName targetTable) {
+        this(mvName, queryStatement, properties, targetTable, NodePosition.ZERO);
+    }
 
-    //  If `targetTableName` is set, use `targetTableName` instead of `mvName` as the result table.
-    private TableName targetTableName;
-
-    public CreateMaterializedViewStmt(String mvName, QueryStatement queryStatement,
-                                      Map<String, String> properties, TableName targetTableName) {
-        super(NodePosition.ZERO);
+    public CreateMaterializedViewStmt(String mvName, QueryStatement queryStatement, Map<String, String> properties,
+                                      TableName targetTable, NodePosition pos) {
+        super(pos);
         this.mvName = mvName;
         this.queryStatement = queryStatement;
         this.properties = properties;
-        this.targetTableName = targetTableName;
+        this.targetTable = targetTable;
     }
 
     public QueryStatement getQueryStatement() {
@@ -206,20 +205,8 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         this.mvKeysType = mvKeysType;
     }
 
-    public boolean isPopulate() {
-        return isPopulate;
-    }
-
-    public void setPopulate(boolean populate) {
-        isPopulate = populate;
-    }
-
     public TableName getTargetTableName() {
-        return targetTableName;
-    }
-
-    public void setTargetTableName(TableName targetTableName) {
-        this.targetTableName = targetTableName;
+        return targetTable;
     }
 
     public Map<String, Expr> parseDefineExprWithoutAnalyze(String originalSql) throws AnalysisException {

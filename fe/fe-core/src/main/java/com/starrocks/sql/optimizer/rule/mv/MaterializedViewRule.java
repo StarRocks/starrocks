@@ -203,6 +203,12 @@ public class MaterializedViewRule extends Rule {
                 continue;
             }
 
+            // Ignore if mv is logical
+            if (mvMeta.isLogical()) {
+                iterator.remove();
+                continue;
+            }
+
             // Ignore original query index.
             if (mvIdx == scanOperator.getSelectedIndexId()) {
                 iterator.remove();
@@ -695,6 +701,9 @@ public class MaterializedViewRule extends Rule {
             MaterializedIndexMeta> allVisibleIndexes, OlapTable table) {
         int keySizeOfBaseIndex = table.getKeyColumnsByIndexId(table.getBaseIndexId()).size();
         for (Map.Entry<Long, MaterializedIndexMeta> index : allVisibleIndexes.entrySet()) {
+            if (index.getValue().isLogical()) {
+                continue;
+            }
             long mvIndexId = index.getKey();
             if (table.getKeyColumnsByIndexId(mvIndexId).size() == keySizeOfBaseIndex) {
                 candidateIndexIdToMeta.put(mvIndexId, index.getValue());

@@ -1678,7 +1678,6 @@ public class LocalMetastore implements ConnectorMetadata {
             MaterializedIndexMeta indexMeta = table.getIndexIdToMeta().get(indexId);
 
             if (indexMeta.isLogical()) {
-                partition.createLogicalRollupIndex(db, index, indexMeta.getTargetTableId(), partitionName);
                 continue;
             }
 
@@ -2123,24 +2122,14 @@ public class LocalMetastore implements ConnectorMetadata {
             return;
         }
         if (!isCheckpointThread()) {
-            long mvIndexId = indexMeta.getIndexId();
-            long targetTableId = indexMeta.getTargetTableId();
-
-            db.writeLock();
             try {
-                for (Partition partition : table.getPartitions()) {
-                    String partName = partition.getName();
-                    MaterializedIndex rollupIndex = new MaterializedIndex(mvIndexId, MaterializedIndex.IndexState.LOGICAL);
-                    try {
-                        partition.createLogicalRollupIndex(db, rollupIndex, targetTableId, partName);
-                    } catch (Exception e) {
-                        LOG.info("replay create sync materialized view {} failed: {}", indexName, e);
-                    }
-                }
+                db.writeLock();
                 table.addMaterializedIndexMeta(indexName, indexMeta);
                 table.rebuildFullSchema();
                 table.lastSchemaUpdateTime.set(System.currentTimeMillis());
                 LOG.info("replay create sync materialized view {}", indexName);
+            } catch (Exception e) {
+                LOG.warn("replay create sync materialized view {} failed: {}", indexName, e);
             } finally {
                 db.writeUnlock();
             }
@@ -2456,7 +2445,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public Pair<Table, MaterializedIndex> getMaterializedViewIndex(String dbName, String indexName) {
+    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String indexName) {
         Database database = getDb(dbName);
         if (database == null) {
             return null;
