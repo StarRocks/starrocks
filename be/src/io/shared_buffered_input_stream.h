@@ -34,6 +34,7 @@ public:
         static constexpr int64_t MB = 1024 * 1024;
         int64_t max_dist_size = 1 * MB;
         int64_t max_buffer_size = 8 * MB;
+        int64_t efficiency = 1;
     };
 
     SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename,
