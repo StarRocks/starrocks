@@ -437,7 +437,8 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema =
+            ChunkHelper::convert_schema(base_tablet->tablet_schema(), chunk_changer.get_selected_column_indexes());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
@@ -498,7 +499,8 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema =
+            ChunkHelper::convert_schema(base_tablet->tablet_schema(), chunk_changer.get_selected_column_indexes());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
@@ -556,7 +558,8 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema =
+            ChunkHelper::convert_schema(base_tablet->tablet_schema(), chunk_changer.get_selected_column_indexes());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
@@ -678,7 +681,8 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column) {
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
-    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema =
+            ChunkHelper::convert_schema(base_tablet->tablet_schema(), chunk_changer.get_selected_column_indexes());
     auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());

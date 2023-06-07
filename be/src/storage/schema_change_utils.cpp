@@ -212,7 +212,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                      << ", mapping_schema_size=" << _schema_mapping.size();
         return false;
     }
-    if (_has_mv_expr_context && base_chunk->num_columns() != _slot_id_to_index_map.size()) {
+    if (base_chunk->num_columns() != _slot_id_to_index_map.size()) {
         LOG(WARNING) << "base chunk does not match with _slot_id_to_index_map mapping rules. "
                      << "base_chunk_size=" << base_chunk->num_columns()
                      << ", slot_id_to_index_map's size=" << _slot_id_to_index_map.size();
