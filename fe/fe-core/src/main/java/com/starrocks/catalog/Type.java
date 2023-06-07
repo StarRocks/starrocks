@@ -656,31 +656,68 @@ public abstract class Type implements Cloneable {
 
     public boolean canApplyToNumeric() {
         // TODO(mofei) support sum, avg for JSON
+<<<<<<< HEAD
         return !isOnlyMetricType() && !isJsonType();
     }
 
     public boolean canJoinOn() {
         return !isOnlyMetricType() && !isJsonType();
+=======
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType() && !isArrayType();
+    }
+
+    public boolean canJoinOn() {
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType() && !isArrayType();
+>>>>>>> 787dc9d37 ([Enhancement] clear unsupported keys from array nested types (#24811))
     }
 
     public boolean canGroupBy() {
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canGroupBy();
+        }
         // TODO(mofei) support group by for JSON
         return !isOnlyMetricType() && !isJsonType();
     }
 
     public boolean canOrderBy() {
         // TODO(mofei) support order by for JSON
+<<<<<<< HEAD
         return !isOnlyMetricType() && !isJsonType();
+=======
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canOrderBy();
+        }
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType();
+>>>>>>> 787dc9d37 ([Enhancement] clear unsupported keys from array nested types (#24811))
     }
 
     public boolean canPartitionBy() {
         // TODO(mofei) support partition by for JSON
+<<<<<<< HEAD
         return !isOnlyMetricType() && !isJsonType();
+=======
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canPartitionBy();
+        }
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType();
+>>>>>>> 787dc9d37 ([Enhancement] clear unsupported keys from array nested types (#24811))
     }
 
     public boolean canDistinct() {
         // TODO(mofei) support distinct by for JSON
+<<<<<<< HEAD
         return !isOnlyMetricType() && !isJsonType();
+=======
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canDistinct();
+        }
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType();
+>>>>>>> 787dc9d37 ([Enhancement] clear unsupported keys from array nested types (#24811))
     }
 
     public boolean canStatistic() {
@@ -705,8 +742,13 @@ public abstract class Type implements Cloneable {
                 !isJsonType() && !isOnlyMetricType();
     }
 
+<<<<<<< HEAD
     public static final String OnlyMetricTypeErrorMsg =
             "Type percentile/hll/bitmap/json not support aggregation/group-by/order-by/union/join";
+=======
+    public static final String ONLY_METRIC_TYPE_ERROR_MSG =
+            "Type (nested) percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join";
+>>>>>>> 787dc9d37 ([Enhancement] clear unsupported keys from array nested types (#24811))
 
     public boolean isHllType() {
         return isScalarType(PrimitiveType.HLL);
