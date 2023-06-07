@@ -293,15 +293,15 @@ public class InsertAnalyzer {
         // copy the table, and release database lock when synchronize table meta
         ExternalOlapTable copiedTable = new ExternalOlapTable();
         externalOlapTable.copyOnlyForQuery(copiedTable);
-        boolean shouldLockAgain = false;
-        if (database.isReadLockHeldByCurrentThread()) {
+        int lockTimes = 0;
+        while (database.isReadLockHeldByCurrentThread()) {
             database.readUnlock();
-            shouldLockAgain = true;
+            lockTimes++;
         }
         try {
             new TableMetaSyncer().syncTable(copiedTable);
         } finally {
-            if (shouldLockAgain) {
+            while (lockTimes-- > 0) {
                 database.readLock();
             }
         }
