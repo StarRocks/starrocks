@@ -35,13 +35,12 @@
 
 namespace starrocks {
 
-struct TableInfo;
-
 struct TableInfo {
     TCompressionType::type compress_type = TCompressionType::SNAPPY;
     bool enable_dictionary = true;
     std::string partition_location = "";
     std::shared_ptr<::parquet::schema::GroupNode> schema;
+    int64_t max_file_size = 1024 * 1024 * 1024; // 1GB
     TCloudConfiguration cloud_conf;
 };
 
@@ -76,7 +75,7 @@ private:
     int32_t _file_cnt = 0;
     std::string _outfile_location;
     std::vector<std::shared_ptr<starrocks::parquet::AsyncFileWriter>> _pending_commits;
-    int64_t _max_file_size = 1 * 1024 * 1024 * 1024; // 1GB
+    int64_t _max_file_size;
     std::vector<ExprContext*> _output_expr_ctxs;
     RuntimeProfile* _parent_profile;
     std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> _commit_func;

@@ -984,6 +984,9 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
 
         size_t source_dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         size_t sink_dop = request.pipeline_sink_dop();
+        if (target_table.write_single_file) {
+            sink_dop = 1;
+        }
 
         if (partition_expr_ctxs.empty()) {
             if (sink_dop != source_dop) {

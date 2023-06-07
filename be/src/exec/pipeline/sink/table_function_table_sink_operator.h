@@ -67,6 +67,9 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
+    TableInfo _make_table_info(const string& partition_location) const;
+
+private:
     const std::string _path;
     const std::string _file_format;
     const TCompressionType::type _compression_type;

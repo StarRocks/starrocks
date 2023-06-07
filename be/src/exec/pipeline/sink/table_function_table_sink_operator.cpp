@@ -122,17 +122,9 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
         LOG(INFO) << "TableFunctionTableSinkOperator::push_chunk done";
     });
 
-    TableInfo tableInfo;
-    tableInfo.schema = _parquet_file_schema;
-    tableInfo.compress_type = _compression_type;
-    tableInfo.cloud_conf = _cloud_conf;
-
-    // TODO: write single file
-
     if (_partition_exprs.empty()) {
         if (_partition_writers.empty()) {
-            tableInfo.partition_location = _path;
-            auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_exprs, _common_metrics.get(),
+            auto writer = std::make_unique<RollingAsyncParquetWriter>(_make_table_info(_path), _output_exprs, _common_metrics.get(),
                                                                       nullptr, state, _driver_sequence);
             _partition_writers.insert({"default writer", std::move(writer)});
         }
@@ -150,13 +142,24 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
     auto partition_writer = _partition_writers.find(partition_location);
     // create writer for current partition if not exists
     if (partition_writer == _partition_writers.end()) {
-        tableInfo.partition_location = partition_location;
-        auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_exprs, _common_metrics.get(),
+        auto writer = std::make_unique<RollingAsyncParquetWriter>(_make_table_info(partition_location), _output_exprs, _common_metrics.get(),
                                                                   nullptr, state, _driver_sequence);
         _partition_writers.insert({partition_location, std::move(writer)});
     }
 
     return _partition_writers[partition_location]->append_chunk(chunk.get(), state);
+}
+
+TableInfo TableFunctionTableSinkOperator::_make_table_info(const string& partition_location) const {
+    TableInfo tableInfo;
+    tableInfo.partition_location = partition_location;
+    tableInfo.schema = _parquet_file_schema;
+    tableInfo.compress_type = _compression_type;
+    tableInfo.cloud_conf = _cloud_conf;
+    if (_write_single_file) {
+        tableInfo.max_file_size = -1;
+    }
+    return tableInfo;
 }
 
 TableFunctionTableSinkOperatorFactory::TableFunctionTableSinkOperatorFactory(
