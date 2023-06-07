@@ -58,7 +58,7 @@ constexpr size_t kL0SnapshotSizeMax = 1 * 1024 * 1024;
 constexpr size_t kL0SnapshotSizeMax = 16 * 1024 * 1024;
 #endif
 constexpr size_t kLongKeySize = 64;
-constexpr size_t kMaxKeyLength = 128; // we only support key length is less than or equal to 128 bytes for now
+constexpr size_t kFixedMaxKeySize = 128;
 
 const char* const kIndexFileMagic = "IDX1";
 
@@ -3064,7 +3064,7 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
 
         int64_t slice_usage = 0;
         int64_t slice_size = 0;
-        for (int key_size = kSliceMaxFixLength + 1; key_size <= kMaxKeyLength; key_size++) {
+        for (int key_size = kSliceMaxFixLength + 1; key_size <= kFixedMaxKeySize; key_size++) {
             slice_usage += add_usage_and_size[key_size].first;
             slice_size += add_usage_and_size[key_size].second;
         }
@@ -3090,13 +3090,15 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
     } else {
         RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size));
     }
-    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kMaxKeyLength + 1, std::pair<int64_t, int64_t>(0, 0));
+    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
+                                                                std::pair<int64_t, int64_t>(0, 0));
     for (size_t i = 0; i < n; i++) {
         if (old_values[i].get_value() == NullIndexValue) {
             _size++;
             _usage += keys[i].size + kIndexValueSize;
-            add_usage_and_size[keys[i].size].first += keys[i].size + kIndexValueSize;
-            add_usage_and_size[keys[i].size].second++;
+            int64_t len = keys[i].size > kFixedMaxKeySize ? 0 : keys[i].size;
+            add_usage_and_size[len].first += keys[i].size + kIndexValueSize;
+            add_usage_and_size[len].second++;
         }
     }
 
@@ -3120,12 +3122,14 @@ Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* va
             RETURN_IF_ERROR(_l1_vec[0]->check_not_exist(n, keys, check_l1_key_size));
         }
     }
-    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kMaxKeyLength + 1, std::pair<int64_t, int64_t>(0, 0));
+    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
+                                                                std::pair<int64_t, int64_t>(0, 0));
     _size += n;
     for (size_t i = 0; i < n; i++) {
         _usage += keys[i].size + kIndexValueSize;
-        add_usage_and_size[keys[i].size].first += keys[i].size + kIndexValueSize;
-        add_usage_and_size[keys[i].size].second++;
+        int64_t len = keys[i].size > kFixedMaxKeySize ? 0 : keys[i].size;
+        add_usage_and_size[len].first += keys[i].size + kIndexValueSize;
+        add_usage_and_size[len].second++;
     }
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
 
@@ -3142,13 +3146,15 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     } else {
         RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size));
     }
-    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kMaxKeyLength + 1, std::pair<int64_t, int64_t>(0, 0));
+    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
+                                                                std::pair<int64_t, int64_t>(0, 0));
     for (size_t i = 0; i < n; i++) {
         if (old_values[i].get_value() != NullIndexValue) {
             _size--;
             _usage -= keys[i].size + kIndexValueSize;
-            add_usage_and_size[keys[i].size].first -= keys[i].size + kIndexValueSize;
-            add_usage_and_size[keys[i].size].second--;
+            int64_t len = keys[i].size > kFixedMaxKeySize ? 0 : keys[i].size;
+            add_usage_and_size[len].first -= keys[i].size + kIndexValueSize;
+            add_usage_and_size[len].second--;
         }
     }
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
