@@ -451,7 +451,9 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
         req->add_tablet_ids(tablet_ids[indexes[from + i]]);
     }
 
-    if (_cur_chunk->num_rows() < _runtime_state->chunk_size()) {
+    LOG(ERROR) << "NN_M:"<<_cur_chunk->num_rows();
+
+    if (_cur_chunk->num_rows() < 100) {
         // 2. chunk not full
         if (_request_queue.empty()) {
             return Status::OK();
@@ -501,7 +503,7 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
         }
     }
 
-    if (_cur_chunk->num_rows() < _runtime_state->chunk_size()) {
+    if (_cur_chunk->num_rows() < 100) {
         // 2. chunk not full
         if (_request_queue.empty()) {
             return Status::OK();
@@ -634,7 +636,7 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
     }
     _next_packet_seq++;
 
-    VLOG(2) << "NodeChannel[" << _load_info << "] send chunk request [rows: " << chunk->num_rows() << " eos: " << eos
+    LOG(ERROR) << "NN_NodeChannel[" << _load_info << "] send chunk request [rows: " << chunk->num_rows() << " eos: " << eos
             << "] to [" << _node_info->host << ":" << _node_info->brpc_port << "]";
 
     return Status::OK();
