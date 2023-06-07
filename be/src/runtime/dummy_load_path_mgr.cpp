@@ -1,0 +1,84 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// This file is based on code available under the Apache license here:
+//   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/load_path_mgr.cpp
+
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+#include "runtime/dummy_load_path_mgr.h"
+
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include <boost/algorithm/string/join.hpp>
+#include <string>
+
+#include "common/config.h"
+#include "fs/fs.h"
+#include "fs/fs_util.h"
+#include "gen_cpp/Types_types.h"
+#include "runtime/exec_env.h"
+#include "storage/olap_define.h"
+#include "storage/storage_engine.h"
+#include "util/thread.h"
+
+namespace starrocks {
+DummyLoadPathMgr::DummyLoadPathMgr(ExecEnv* exec_env) : _exec_env(exec_env) {}
+DummyLoadPathMgr::~DummyLoadPathMgr() = default;
+
+Status DummyLoadPathMgr::init() {
+    LOG(INFO) << "Load path configured to []";
+    return Status::OK();
+}
+
+Status DummyLoadPathMgr::allocate_dir(const std::string& db, const std::string& label, std::string* prefix) {
+    return Status::InternalError("No load path configed.");
+}
+
+void DummyLoadPathMgr::get_load_data_path(std::vector<std::string>* data_paths) {}
+
+Status DummyLoadPathMgr::get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path) {
+    *error_path = "";
+    return Status::OK();
+}
+
+std::string DummyLoadPathMgr::get_load_error_absolute_path(const std::string& file_path) {
+    return "";
+}
+
+std::string DummyLoadPathMgr::get_load_rejected_record_absolute_path(const std::string& rejected_record_dir,
+                                                                     const std::string& db, const std::string& label,
+                                                                     const int64_t id,
+                                                                     const TUniqueId& fragment_instance_id) {
+    return "";
+}
+
+} // namespace starrocks

@@ -42,20 +42,17 @@
 #include <vector>
 
 #include "common/status.h"
-#include "runtime/dummy_load_path_mgr.h"
 
 namespace starrocks {
 
 class TUniqueId;
 class ExecEnv;
 
-// In every directory, '.trash' directory is used to save data need to delete
-// daemon thread is check no used directory to delete
-class LoadPathMgr : public DummyLoadPathMgr {
+class DummyLoadPathMgr {
 public:
-    LoadPathMgr(ExecEnv* env);
+    DummyLoadPathMgr(ExecEnv* env);
 
-    ~LoadPathMgr();
+    ~DummyLoadPathMgr();
 
     Status init();
 
@@ -72,23 +69,8 @@ public:
                                                        const TUniqueId& fragment_instance_id);
 
 private:
-    bool is_too_old(time_t cur_time, const std::string& label_dir, int64_t reserve_hours);
-    void clean_one_path(const std::string& path);
-    void clean_error_log();
-    void clean();
-    void process_path(time_t now, const std::string& path, int64_t reserve_hours);
-    std::future<bool>& stop_future() { return _stop_future; }
-    static void* cleaner(void* param);
-
     ExecEnv* _exec_env;
-    std::mutex _lock;
-    std::vector<std::string> _path_vec;
-    std::promise<bool> _stop;
-    std::future<bool> _stop_future;
-    int _idx;
-    pthread_t _cleaner_id = 0;
     std::string _error_log_dir;
-    uint32_t _next_shard;
 };
 
 } // namespace starrocks

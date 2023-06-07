@@ -260,7 +260,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
-    _load_path_mgr = new LoadPathMgr(this);
+    _load_path_mgr = store_paths.empty() ? new DummyLoadPathMgr(this) : new LoadPathMgr(this);
     _broker_mgr = new BrokerMgr(this);
     _bfd_parser = BfdParser::create();
     _load_channel_mgr = new LoadChannelMgr();
@@ -297,12 +297,10 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                                          workgroup::WorkGroupScanTaskQueue::SchedEntityType::OLAP));
     _scan_executor->initialize(num_io_threads);
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
-    if (!store_paths.empty()) {
-        Status status = _load_path_mgr->init();
-        if (!status.ok()) {
-            LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
-            exit(-1);
-        }
+    Status status = _load_path_mgr->init();
+    if (!status.ok()) {
+        LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
+        exit(-1);
     }
 
 #if defined(USE_STAROS) && !defined(BE_TEST)
