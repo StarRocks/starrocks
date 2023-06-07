@@ -718,9 +718,8 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
         }
     }
 
-    public void pruneTables(OptExpression frontier,
-                            Set<OptExpression> prunedTables,
-                            Map<ColumnRefOperator, ColumnRefOperator> rewriteMapping) {
+    public PruneResult pruneTables(OptExpression frontier,
+                                   Set<OptExpression> prunedTables) {
 
         Set<OptExpression> scanOpsLeadingByFrontier = scanOps.get(frontier);
         ColumnRefSet originColumnSet = new ColumnRefSet();
@@ -730,9 +729,11 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
         List<CPNode> nodes = Stream.concat(optToGraphNode.values().stream(), hubNodes.stream())
                 .filter(node -> node.isRoot() && node.intersect(scanOpsLeadingByFrontier))
                 .collect(Collectors.toList());
+        PruneResult pruneResult = new PruneResult();
         for (CPNode node : nodes) {
-            pruneTable(node, prunedTables);
+            pruneResult.merge(pruneTable(node, prunedTables));
         }
+        return pruneResult;
     }
 
     private static class PruneResult {
@@ -881,15 +882,13 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
     }
 
     public static class Rewriter extends OptExpressionVisitor<Optional<OptExpression>, Void> {
-        private final Map<ColumnRefOperator, ColumnRefOperator> remapping;
+        private final Map<ColumnRefOperator, ScalarOperator> remapping;
         private final ReplaceColumnRefRewriter columnRefRewriter;
         private final Set<OptExpression> prunedTables;
 
-        public Rewriter(Map<ColumnRefOperator, ColumnRefOperator> remapping, Set<OptExpression> prunedTables) {
+        public Rewriter(Map<ColumnRefOperator, ScalarOperator> remapping, Set<OptExpression> prunedTables) {
             this.remapping = remapping;
-            Map<ColumnRefOperator, ScalarOperator> replaceMap = Maps.newHashMap();
-            remapping.forEach((k, v) -> replaceMap.put(v, k));
-            this.columnRefRewriter = new ReplaceColumnRefRewriter(replaceMap);
+            this.columnRefRewriter = new ReplaceColumnRefRewriter(remapping);
             this.prunedTables = prunedTables;
         }
 
@@ -985,8 +984,10 @@ public class CardinalityPreservingJoinTablePruner extends OptExpressionVisitor<B
             OptExpression parent = parentAndIdx.first;
             int idx = parentAndIdx.second;
             Set<OptExpression> prunedTables = Sets.newHashSet();
-            Map<ColumnRefOperator, ColumnRefOperator> rewriteMapping = Maps.newHashMap();
-            pruneTables(frontier, prunedTables, rewriteMapping);
+            Map<ColumnRefOperator, ScalarOperator> rewriteMapping = Maps.newHashMap();
+            PruneResult pruneResult = pruneTables(frontier, prunedTables);
+            pruneResult.getRewriteMapping().forEach((substColRef, originalColRefs) ->
+                    originalColRefs.forEach(colRef -> rewriteMapping.put(colRef, substColRef)));
             new Rewriter(rewriteMapping, prunedTables).process(frontier)
                     .ifPresent(child -> parent.setChild(idx, child));
         });
