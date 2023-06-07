@@ -219,7 +219,7 @@ public class KafkaUtil {
                         // Jprotobuf-rpc-socket throws an ExecutionException when an exception occurs.
                         // We use the error message to identify the type of exception.
                         if (e.getMessage().contains("Ocurrs time out")) {
-                             // When getting kafka info timed out, we tried again three times.
+                            // When getting kafka info timed out, we tried again three times.
                             if (++retryTimes > 3 || (retryTimes + 1) * Config.routine_load_kafka_timeout_second >
                                                                             Config.routine_load_task_timeout_second) {
                                 throw e;
