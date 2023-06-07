@@ -44,6 +44,10 @@ constexpr size_t kL0SnapshotSizeMax = 1 * 1024 * 1024;
 constexpr size_t kL0SnapshotSizeMax = 16 * 1024 * 1024;
 #endif
 constexpr size_t kLongKeySize = 64;
+<<<<<<< HEAD
+=======
+constexpr size_t kFixedMaxKeySize = 128;
+>>>>>>> 94c5041eb ([BugFix] Fix memory illegal modification (#24680))
 
 const char* const kIndexFileMagic = "IDX1";
 
@@ -2728,6 +2732,57 @@ Status PersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
             RETURN_IF_ERROR(_l1->get(n, keys, keys_info, values, &num_found, key_size));
         }
     }
+<<<<<<< HEAD
+=======
+
+    return Status::OK();
+}
+
+Status PersistentIndex::_update_usage_and_size_by_key_length(
+        std::vector<std::pair<int64_t, int64_t>>& add_usage_and_size) {
+    if (_key_size > 0) {
+        auto iter = _usage_and_size_by_key_length.find(_key_size);
+        DCHECK(iter != _usage_and_size_by_key_length.end());
+        if (iter == _usage_and_size_by_key_length.end()) {
+            std::string msg = strings::Substitute("no key_size: $0 in usage info", _key_size);
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        } else {
+            iter->second.first = std::max(0L, iter->second.first + add_usage_and_size[_key_size].first);
+            iter->second.second = std::max(0L, iter->second.second + add_usage_and_size[_key_size].second);
+        }
+    } else {
+        for (int key_size = 1; key_size <= kSliceMaxFixLength; key_size++) {
+            if (add_usage_and_size[key_size].second > 0) {
+                auto iter = _usage_and_size_by_key_length.find(key_size);
+                if (iter == _usage_and_size_by_key_length.end()) {
+                    std::string msg = strings::Substitute("no key_size: $0 in usage info", key_size);
+                    LOG(WARNING) << msg;
+                    return Status::InternalError(msg);
+                } else {
+                    iter->second.first = std::max(0L, iter->second.first + add_usage_and_size[key_size].first);
+                    iter->second.second = std::max(0L, iter->second.second + add_usage_and_size[key_size].second);
+                }
+            }
+        }
+
+        int64_t slice_usage = 0;
+        int64_t slice_size = 0;
+        for (int key_size = kSliceMaxFixLength + 1; key_size <= kFixedMaxKeySize; key_size++) {
+            slice_usage += add_usage_and_size[key_size].first;
+            slice_size += add_usage_and_size[key_size].second;
+        }
+        DCHECK(_key_size == 0);
+        auto iter = _usage_and_size_by_key_length.find(_key_size);
+        if (iter == _usage_and_size_by_key_length.end()) {
+            std::string msg = strings::Substitute("no key_size: $0 in usage info", _key_size);
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
+        iter->second.first = std::max(0L, iter->second.first + slice_usage);
+        iter->second.second = std::max(0L, iter->second.second + slice_size);
+    }
+>>>>>>> 94c5041eb ([BugFix] Fix memory illegal modification (#24680))
     return Status::OK();
 }
 
@@ -2735,6 +2790,7 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
     std::map<size_t, KeysInfo> not_founds_by_key_size;
     size_t num_found = 0;
     RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &num_found, not_founds_by_key_size));
+<<<<<<< HEAD
     _dump_snapshot |= _can_dump_directly();
     if (_l1) {
         size_t num_found_before = num_found;
@@ -2742,6 +2798,22 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
             RETURN_IF_ERROR(_l1->get(n, keys, keys_info, old_values, &num_found, key_size));
             _l0->update_overlap_info(key_size, num_found - num_found_before, keys, old_values, keys_info, false);
             num_found_before = num_found;
+=======
+    if (_get_thread_pool != nullptr) {
+        RETURN_IF_ERROR(_get_from_immutable_index_parallel(n, keys, old_values, not_founds_by_key_size));
+    } else {
+        RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size));
+    }
+    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
+                                                                std::pair<int64_t, int64_t>(0, 0));
+    for (size_t i = 0; i < n; i++) {
+        if (old_values[i].get_value() == NullIndexValue) {
+            _size++;
+            _usage += keys[i].size + kIndexValueSize;
+            int64_t len = keys[i].size > kFixedMaxKeySize ? 0 : keys[i].size;
+            add_usage_and_size[len].first += keys[i].size + kIndexValueSize;
+            add_usage_and_size[len].second++;
+>>>>>>> 94c5041eb ([BugFix] Fix memory illegal modification (#24680))
         }
     }
     _size += n - num_found;
@@ -2759,10 +2831,21 @@ Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* va
             RETURN_IF_ERROR(_l1->check_not_exist(n, keys, check_l1_key_size));
         }
     }
+<<<<<<< HEAD
     _dump_snapshot |= _can_dump_directly();
     _size += n;
     if (!_dump_snapshot) {
         RETURN_IF_ERROR(_l0->append_wal(n, keys, values));
+=======
+    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
+                                                                std::pair<int64_t, int64_t>(0, 0));
+    _size += n;
+    for (size_t i = 0; i < n; i++) {
+        _usage += keys[i].size + kIndexValueSize;
+        int64_t len = keys[i].size > kFixedMaxKeySize ? 0 : keys[i].size;
+        add_usage_and_size[len].first += keys[i].size + kIndexValueSize;
+        add_usage_and_size[len].second++;
+>>>>>>> 94c5041eb ([BugFix] Fix memory illegal modification (#24680))
     }
     return Status::OK();
 }
@@ -2772,12 +2855,29 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     size_t num_erased = 0;
     RETURN_IF_ERROR(_l0->erase(n, keys, old_values, &num_erased, not_founds_by_key_size));
     _dump_snapshot |= _can_dump_directly();
+<<<<<<< HEAD
     if (_l1) {
         size_t num_erased_before = num_erased;
         for (const auto& [key_size, keys_info] : not_founds_by_key_size) {
             RETURN_IF_ERROR(_l1->get(n, keys, keys_info, old_values, &num_erased, key_size));
             _l0->update_overlap_info(key_size, num_erased - num_erased_before, keys, old_values, keys_info, true);
             num_erased_before = num_erased;
+=======
+    if (_get_thread_pool != nullptr) {
+        RETURN_IF_ERROR(_get_from_immutable_index_parallel(n, keys, old_values, not_founds_by_key_size));
+    } else {
+        RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size));
+    }
+    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
+                                                                std::pair<int64_t, int64_t>(0, 0));
+    for (size_t i = 0; i < n; i++) {
+        if (old_values[i].get_value() != NullIndexValue) {
+            _size--;
+            _usage -= keys[i].size + kIndexValueSize;
+            int64_t len = keys[i].size > kFixedMaxKeySize ? 0 : keys[i].size;
+            add_usage_and_size[len].first -= keys[i].size + kIndexValueSize;
+            add_usage_and_size[len].second--;
+>>>>>>> 94c5041eb ([BugFix] Fix memory illegal modification (#24680))
         }
     }
     CHECK(_size >= num_erased) << strings::Substitute("_size($0) < num_erased($1)", _size, num_erased);
