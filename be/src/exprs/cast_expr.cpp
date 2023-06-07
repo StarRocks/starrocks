@@ -576,7 +576,7 @@ UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_INT, ImplicitToNumber);
 
 DIAGNOSTIC_PUSH
 #if defined(__clang__)
-DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_INT, ImplicitToNumber);
 DIAGNOSTIC_POP
@@ -599,7 +599,7 @@ UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_BIGINT, ImplicitToNumber);
 
 DIAGNOSTIC_PUSH
 #if defined(__clang__)
-DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_DOUBLE, TYPE_BIGINT, ImplicitToNumber);
@@ -622,7 +622,7 @@ UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_LARGEINT, ImplicitToNumber);
 
 DIAGNOSTIC_PUSH
 #if defined(__clang__)
-DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_DOUBLE, TYPE_LARGEINT, ImplicitToNumber);
@@ -643,7 +643,7 @@ UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_FLOAT, ImplicitToNumber);
 
 DIAGNOSTIC_PUSH
 #if defined(__clang__)
-DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
 UNARY_FN_CAST_VALID(TYPE_INT, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_FLOAT, ImplicitToNumber);
@@ -667,7 +667,7 @@ UNARY_FN_CAST_VALID(TYPE_INT, TYPE_DOUBLE, ImplicitToNumber);
 
 DIAGNOSTIC_PUSH
 #if defined(__clang__)
-DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
 UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_DOUBLE, ImplicitToNumber);

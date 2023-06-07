@@ -117,9 +117,7 @@ void PipelineTestBase::_prepare() {
 
 void PipelineTestBase::_execute() {
     Status prepare_status = _fragment_ctx->iterate_drivers(
-            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { 
-                return driver->prepare(state); 
-            });
+            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
     ASSERT_TRUE(prepare_status.ok());
 
     _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
