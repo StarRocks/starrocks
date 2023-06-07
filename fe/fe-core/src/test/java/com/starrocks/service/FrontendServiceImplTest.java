@@ -312,9 +312,13 @@ public class FrontendServiceImplTest {
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24");
-        values.add("1990-04-24");
-        values.add("1989-11-02");
         partitionValues.add(values);
+        List<String> values1 = Lists.newArrayList();
+        partitionValues.add(values1);
+        values1.add("1990-04-24");
+        List<String> values2 = Lists.newArrayList();
+        values2.add("1989-11-02");
+        partitionValues.add(values2);
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TCreatePartitionRequest request = new TCreatePartitionRequest();
@@ -338,11 +342,19 @@ public class FrontendServiceImplTest {
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1990-04-24");
-        values.add("1990-04-30");
-        values.add("1990-04-01");
-        values.add("1990-04-25");
-        values.add("1989-11-02");
         partitionValues.add(values);
+        List<String> values1 = Lists.newArrayList();
+        values1.add("1990-04-30");
+        partitionValues.add(values1);
+        List<String> values2 = Lists.newArrayList();
+        values2.add("1990-04-01");
+        partitionValues.add(values2);
+        List<String> values3 = Lists.newArrayList();
+        values3.add("1990-04-25");
+        partitionValues.add(values3);
+        List<String> values4 = Lists.newArrayList();
+        values4.add("1989-11-02");
+        partitionValues.add(values4);
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TCreatePartitionRequest request = new TCreatePartitionRequest();
@@ -366,9 +378,13 @@ public class FrontendServiceImplTest {
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("NULL");
-        values.add("0000-01-01");
-        values.add("9999-12-31");
         partitionValues.add(values);
+        List<String> values1 = Lists.newArrayList();
+        values1.add("0000-01-01");
+        partitionValues.add(values1);
+        List<String> values2 = Lists.newArrayList();
+        values2.add("9999-12-31");
+        partitionValues.add(values2);
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TCreatePartitionRequest request = new TCreatePartitionRequest();
@@ -394,9 +410,10 @@ public class FrontendServiceImplTest {
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1991-04-24");
-        values.add("1991-04-25");
         partitionValues.add(values);
-
+        List<String> values2 = Lists.newArrayList();
+        values2.add("1991-04-25");
+        partitionValues.add(values2);
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TCreatePartitionRequest request = new TCreatePartitionRequest();
         request.setDb_id(db.getId());

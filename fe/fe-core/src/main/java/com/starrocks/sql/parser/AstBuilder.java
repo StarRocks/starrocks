@@ -678,24 +678,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
         List<String> columnList = identifierList.stream().map(Identifier::getValue).collect(toList());
-        PartitionDesc partitionDesc;
         if (context.RANGE() != null) {
             for (StarRocksParser.RangePartitionDescContext rangePartitionDescContext : context.rangePartitionDesc()) {
                 final PartitionDesc rangePartitionDesc = (PartitionDesc) visit(rangePartitionDescContext);
                 partitionDescList.add(rangePartitionDesc);
             }
-            partitionDesc = new RangePartitionDesc(columnList, partitionDescList);
+            return new RangePartitionDesc(columnList, partitionDescList);
         } else if (context.LIST() != null) {
             for (StarRocksParser.ListPartitionDescContext listPartitionDescContext : context.listPartitionDesc()) {
                 final PartitionDesc listPartitionDesc = (PartitionDesc) visit(listPartitionDescContext);
                 partitionDescList.add(listPartitionDesc);
             }
-            partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
+            return new ListPartitionDesc(columnList, partitionDescList);
         } else {
-            // For hive/iceberg/hudi partition
-            partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
+            // For hive/iceberg/hudi partition & automatic partition
+            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(columnList, partitionDescList);
+            listPartitionDesc.setAutoPartitionTable(true);
+            return listPartitionDesc;
         }
-        return partitionDesc;
     }
 
     private List<String> checkAndExtractPartitionColForRange(Expr expr) {

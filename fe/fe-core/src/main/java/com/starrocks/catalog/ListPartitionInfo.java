@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.lake.StorageCacheInfo;
@@ -31,6 +32,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SinglePartitionDesc;
+import com.starrocks.thrift.TStorageMedium;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,6 +41,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,6 +67,8 @@ public class ListPartitionInfo extends PartitionInfo {
     private Map<Long, List<LiteralExpr>> idToLiteralExprValues;
     @SerializedName("idToTemp")
     private Map<Long, Boolean> idToIsTempPartition;
+    @SerializedName(value = "automaticPartition")
+    private Boolean automaticPartition = false;
 
     public ListPartitionInfo(PartitionType partitionType,
                              List<Column> partitionColumns) {
@@ -131,6 +136,15 @@ public class ListPartitionInfo extends PartitionInfo {
 
     public void setMultiValues(long partitionId, List<List<String>> multiValues) {
         this.idToMultiValues.put(partitionId, multiValues);
+    }
+
+    @Override
+    public boolean isAutomaticPartition() {
+        return automaticPartition;
+    }
+
+    public void setAutomaticPartition(Boolean automaticPartition) {
+        this.automaticPartition = automaticPartition;
     }
 
     public void setMultiLiteralExprValues(long partitionId, List<List<String>> multiValues) throws AnalysisException {
@@ -220,21 +234,27 @@ public class ListPartitionInfo extends PartitionInfo {
                 RunMode.defaultReplicationNum() : Short.parseShort(replicationNumStr);
 
         StringBuilder sb = new StringBuilder();
-        sb.append("PARTITION BY LIST(");
-        sb.append(this.partitionColumns.stream()
+        sb.append("PARTITION BY ");
+        if (!automaticPartition) {
+            sb.append("LIST");
+        }
+        sb.append("(");
+        sb.append(partitionColumns.stream()
                 .map(item -> "`" + item.getName() + "`")
                 .collect(Collectors.joining(",")));
-        sb.append(")(\n");
-        List<Long> partitionIds = getPartitionIds(false);
-        if (!this.idToValues.isEmpty()) {
-            sb.append(this.singleListPartitionSql(table, partitionIds, tableReplicationNum));
-        }
+        sb.append(")");
+        if (!automaticPartition) {
+            List<Long> partitionIds = getPartitionIds(false);
+            sb.append("(\n");
+            if (!idToValues.isEmpty()) {
+                sb.append(this.singleListPartitionSql(table, partitionIds, tableReplicationNum));
+            }
 
-        if (!this.idToMultiValues.isEmpty()) {
-            sb.append(this.multiListPartitionSql(table, partitionIds, tableReplicationNum));
+            if (!idToMultiValues.isEmpty()) {
+                sb.append(this.multiListPartitionSql(table, partitionIds, tableReplicationNum));
+            }
+            sb.append("\n)");
         }
-
-        sb.append("\n)");
         return sb.toString();
     }
 
@@ -398,5 +418,15 @@ public class ListPartitionInfo extends PartitionInfo {
             this.idToValues.put(partitionId, values);
             this.setLiteralExprValues(partitionId, values);
         }
+    }
+
+    @Override
+    public void createAutomaticShadowPartition(long partitionId, String replicateNum) {
+        idToValues.put(partitionId, Collections.emptyList());
+        idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
+        idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
+        idToInMemory.put(partitionId, false);
+        idToStorageCacheInfo.put(partitionId, new StorageCacheInfo(true,
+                Config.lake_default_storage_cache_ttl_seconds, false));
     }
 }
