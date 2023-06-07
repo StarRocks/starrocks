@@ -40,6 +40,7 @@
 
 #include <memory>
 
+#include "column/column_access_path.h"
 #include "column/schema.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
@@ -369,7 +370,7 @@ void Segment::_prepare_adapter_info() {
     }
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(uint32_t cid) {
+StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(uint32_t cid, ColumnAccessPath* path) {
     if (_column_readers[cid] == nullptr) {
         const TabletColumn& tablet_column = _tablet_schema->column(cid);
         if (!tablet_column.has_default_value() && !tablet_column.is_nullable()) {
@@ -384,7 +385,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(uint32_t 
         RETURN_IF_ERROR(default_value_iter->init(iter_opts));
         return default_value_iter;
     }
-    return _column_readers[cid]->new_iterator();
+    return _column_readers[cid]->new_iterator(path);
 }
 
 Status Segment::new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** iter, bool skip_fill_local_cache) {

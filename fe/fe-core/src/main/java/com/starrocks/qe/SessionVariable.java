@@ -719,6 +719,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if spillable_operator_mask & 2 != 0, agg operator can spill
     // if spillable_operator_mask & 4 != 0, agg distinct operator can spill
     // if spillable_operator_mask & 8 != 0, sort operator can spill
+    // if spillable_operator_mask & 16 != 0, nest loop join operator can spill
     // ...
     // default value is -1, means all operators can spill
     @VariableMgr.VarAttr(name = SPILLABLE_OPERATOR_MASK, flag = VariableMgr.INVISIBLE)
@@ -733,7 +734,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SPILL_MEM_TABLE_NUM, flag = VariableMgr.INVISIBLE)
     private int spillMemTableNum = 2;
     @VarAttr(name = SPILL_MEM_LIMIT_THRESHOLD, flag = VariableMgr.INVISIBLE)
-    private double spillMemLimitThreshold = 0.5;
+    private double spillMemLimitThreshold = 0.8;
     @VarAttr(name = SPILL_OPERATOR_MIN_BYTES, flag = VariableMgr.INVISIBLE)
     private long spillOperatorMinBytes = 1024L * 1024 * 10;
     @VarAttr(name = SPILL_OPERATOR_MAX_BYTES, flag = VariableMgr.INVISIBLE)

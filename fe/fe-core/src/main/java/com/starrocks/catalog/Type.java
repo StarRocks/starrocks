@@ -1051,20 +1051,6 @@ public abstract class Type implements Cloneable {
         }
     }
 
-    public static boolean canCastToAsFunctionParameter(Type from, Type to) {
-        if (from.isNull()) {
-            return true;
-        } else if (from.isScalarType() && to.isScalarType()) {
-            return ScalarType.canCastTo((ScalarType) from, (ScalarType) to);
-        } else if (from.isArrayType() && to.isArrayType()) {
-            return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
-        } else if (from.isMapType() && to.isMapType()) {
-            return canCastTo(from, to);
-        } else {
-            return false;
-        }
-    }
-
     public static boolean canCastTo(Type from, Type to) {
         if (from.isNull()) {
             return true;

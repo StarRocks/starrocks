@@ -63,6 +63,11 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}/starrocks
+
       - name: BRANCH INFO
         id: branch
         run: |
@@ -129,8 +134,10 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
     if: ${{ needs.be-checker.outputs.output1 == 'true' }}
     steps:
-      - name: Clean Workspace
-        uses: AutoModality/action-clean@v1.1.0
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}/starrocks
 
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -171,8 +178,10 @@ jobs:
       instance_id: ${{ steps.update-image.outputs.instance_id }}
       image_cache_id: ${{ steps.update-image.outputs.image_cache_id }}
     steps:
-      - name: Clean Workspace
-        uses: AutoModality/action-clean@v1.1.0
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}/starrocks
 
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -292,7 +301,9 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
     steps:
       - name: clean
-        run: rm -rf ${{ github.workspace }}/*
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}/starrocks
 
       - uses: dorny/paths-filter@v2
         id: java-file
@@ -353,9 +364,8 @@ jobs:
     steps:
       - name: clean
         run: |
-          set -x
-          echo ${{ github.workspace }}
-          rm -rf ${{ github.workspace }}/*
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}/starrocks
 
       - name: BRANCH INFO
         id: branch
@@ -611,8 +621,10 @@ jobs:
       BE_NODE: ${{ needs.deploy.outputs.be }}
       BASE_VERSION: ${{needs.build.outputs.base_version}}
     steps:
-      - name: Clean Workspace
-        uses: AutoModality/action-clean@v1.1.0
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}/starrocks
 
       - name: Checkout Code
         uses: actions/checkout@v3

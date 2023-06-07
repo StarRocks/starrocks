@@ -1621,6 +1621,9 @@ StatusOr<std::unique_ptr<Expr>> VectorizedCastExprFactory::create_cast_expr(Obje
         if (from_type.children.size() != to_type.children.size()) {
             return Status::NotSupported("vectorized engine not support cast struct with different number of children.");
         }
+        if (to_type.field_names.empty() || from_type.field_names.size() != to_type.field_names.size()) {
+            return Status::NotSupported("vectorized engine not support cast struct with different field of children.");
+        }
         std::vector<std::unique_ptr<Expr>> field_casts{from_type.children.size()};
         for (int i = 0; i < from_type.children.size(); ++i) {
             ASSIGN_OR_RETURN(field_casts[i],

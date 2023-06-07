@@ -48,6 +48,8 @@ public class OperationType {
     public static final short OP_RENAME_DB = 6;
 
     // 10~19 110~119 210~219 ...
+    @Deprecated
+    //Added OP_CREATE_TABLE_V2 in version 3.1, can be removed in version 3.2
     public static final short OP_CREATE_TABLE = 10;
     public static final short OP_DROP_TABLE = 11;
     public static final short OP_ADD_PARTITION = 12;
@@ -348,4 +350,7 @@ public class OperationType {
     //Backup/Restore json format log
     public static final short OP_BACKUP_JOB_V2 = 12150;
     public static final short OP_RESTORE_JOB_V2 = 12151;
+
+    // Local Meta Store
+    public static final short OP_CREATE_TABLE_V2 = 13000;
 }

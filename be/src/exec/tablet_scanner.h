@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/column_access_path.h"
 #include "common/status.h"
 #include "exec/olap_utils.h"
 #include "exprs/expr.h"
@@ -39,6 +40,7 @@ struct TabletScannerParams {
     const std::vector<ExprContext*>* conjunct_ctxs = nullptr;
 
     const std::vector<std::string>* unused_output_columns = nullptr;
+    const std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
     bool skip_aggregation = false;
     bool need_agg_finalize = true;

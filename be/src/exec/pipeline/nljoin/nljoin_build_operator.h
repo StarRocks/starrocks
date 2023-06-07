@@ -24,12 +24,12 @@ namespace starrocks::pipeline {
 
 // NLJoinBuildOperator
 // Collect data of right table into the cross-join-context
-class NLJoinBuildOperator final : public Operator {
+class NLJoinBuildOperator : public Operator {
 public:
     NLJoinBuildOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, const int32_t driver_sequence,
-                        const std::shared_ptr<NLJoinContext>& cross_join_context)
-            : Operator(factory, id, "nestloop_join_build", plan_node_id, driver_sequence),
-              _cross_join_context(cross_join_context) {
+                        const std::shared_ptr<NLJoinContext>& cross_join_context,
+                        const char* name = "nestloop_join_build")
+            : Operator(factory, id, name, plan_node_id, driver_sequence), _cross_join_context(cross_join_context) {
         _cross_join_context->ref();
     }
 
@@ -51,7 +51,8 @@ public:
 
 private:
     std::atomic<bool> _is_finished = false;
-    size_t _num_rows = 0;
+
+protected:
     const std::shared_ptr<NLJoinContext>& _cross_join_context;
 };
 
