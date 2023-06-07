@@ -289,9 +289,6 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-    // for debug
-    LOG(INFO) << "paths size in starrocks_main is " << paths.size();
-
     // Init exec env.
     EXIT_IF_ERROR(starrocks::ExecEnv::init(exec_env, paths));
     engine->set_heartbeat_flags(exec_env->heartbeat_flags());
