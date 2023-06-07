@@ -745,9 +745,15 @@ public class FileSystemManager {
                 logger.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
                 Configuration conf = new Configuration();
-                conf.set(FS_OSS_ACCESS_KEY, accessKey);
-                conf.set(FS_OSS_SECRET_KEY, secretKey);
-                conf.set(FS_OSS_ENDPOINT, endpoint);
+                if (!accessKey.isEmpty()) {
+                    conf.set(FS_OSS_ACCESS_KEY, accessKey);
+                }
+                if (!secretKey.isEmpty()) {
+                    conf.set(FS_OSS_SECRET_KEY, secretKey);
+                }
+                if (!endpoint.isEmpty()) {
+                    conf.set(FS_OSS_ENDPOINT, endpoint);
+                }
                 conf.set(FS_OSS_IMPL, "org.apache.hadoop.fs.aliyun.oss.AliyunOSSFileSystem");
                 conf.set(FS_OSS_IMPL_DISABLE_CACHE, disableCache);
                 FileSystem ossFileSystem = FileSystem.get(pathUri.getUri(), conf);
