@@ -36,6 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -283,5 +284,12 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
         }
 
         return buff.toString();
+    }
+
+    public void createAutomaticShadowPartition(long partitionId, String replicateNum) throws DdlException {
+    }
+
+    public boolean isAutomaticPartition() {
+        return false;
     }
 }
