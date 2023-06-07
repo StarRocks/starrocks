@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.starrocks.sql.optimizer.CardinalityPreservingJoinTablePruner;
+import com.starrocks.sql.optimizer.CardinalityPreservingJoinTableCollector;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.rule.tree.TreeRewriteRule;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -23,9 +23,9 @@ public class CardinalityPreservingTablePruneRule implements TreeRewriteRule {
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        CardinalityPreservingJoinTablePruner collector = new CardinalityPreservingJoinTablePruner();
+        CardinalityPreservingJoinTableCollector collector = new CardinalityPreservingJoinTableCollector();
         collector.collect(root);
         collector.rewrite();
-        return collector.getRoot().orElse(root);
+        return root;
     }
 }
