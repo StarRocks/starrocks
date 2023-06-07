@@ -112,12 +112,11 @@ public class BinaryPredicateStatisticCalculator {
                     .build();
 
             double predicateFactor;
-            double rowCountInHistogram;
             Map<String, Long> histogramTopN = columnStatistic.getHistogram().getMCV();
             // If there is a constant key in mcv, the ratio in mcv is directly used for filtering estimation.
             // If it does not hit, filter out the key that appears in mcv, and then use the cardinality estimation
             if (histogramTopN.containsKey(constantOperator.toString())) {
-                rowCountInHistogram = histogramTopN.get(constantOperator.toString());
+                double rowCountInHistogram = histogramTopN.get(constantOperator.toString());
                 predicateFactor = rowCountInHistogram / columnStatistic.getHistogram().getTotalRows();
             } else {
                 Long mostCommonValuesCount = histogramTopN.values().stream().reduce(Long::sum).orElse(0L);
@@ -142,11 +141,8 @@ public class BinaryPredicateStatisticCalculator {
             if (constant.isPresent()) {
                 Optional<Double> c = StatisticUtils.convertStatisticsToDouble(
                         constant.get().getType(), constant.get().toString());
-                if (c.isPresent()) {
-                    predicateRange = new StatisticRangeValues(c.get(), c.get(), 1);
-                } else {
-                    predicateRange = new StatisticRangeValues(NEGATIVE_INFINITY, POSITIVE_INFINITY, 1);
-                }
+                predicateRange = c.map(aDouble -> new StatisticRangeValues(aDouble, aDouble, 1))
+                        .orElseGet(() -> new StatisticRangeValues(NEGATIVE_INFINITY, POSITIVE_INFINITY, 1));
             } else {
                 predicateRange = new StatisticRangeValues(NEGATIVE_INFINITY, POSITIVE_INFINITY, 1);
             }
@@ -208,9 +204,7 @@ public class BinaryPredicateStatisticCalculator {
             Histogram estimatedHistogram = estimateLessThanWithHistogram(columnStatistic, constant.get(),
                     binaryType.equals(BinaryPredicateOperator.BinaryType.LE));
 
-            int bucketSize = estimatedHistogram.getBuckets().size();
-            long rowCountInHistogram = (bucketSize == 0 ? 0 : estimatedHistogram.getBuckets().get(bucketSize - 1).getCount())
-                    + estimatedHistogram.getMCV().values().stream().reduce(Long::sum).orElse(0L);
+            long rowCountInHistogram = estimatedHistogram.getTotalRows();
             double rowCount = statistics.getOutputRowCount()
                     * ((double) rowCountInHistogram / (double) columnStatistic.getHistogram().getTotalRows());
 
@@ -246,9 +240,7 @@ public class BinaryPredicateStatisticCalculator {
             Histogram estimatedHistogram = estimateGreaterThanWithHistogram(columnStatistic, constant.get(),
                     binaryType.equals(BinaryPredicateOperator.BinaryType.GE));
 
-            int bucketSize = estimatedHistogram.getBuckets().size();
-            long rowCountInHistogram = (bucketSize == 0 ? 0 : estimatedHistogram.getBuckets().get(bucketSize - 1).getCount())
-                    + estimatedHistogram.getMCV().values().stream().reduce(Long::sum).orElse(0L);
+            long rowCountInHistogram = estimatedHistogram.getTotalRows();
             double rowCount = statistics.getOutputRowCount()
                     * ((double) rowCountInHistogram / (double) columnStatistic.getHistogram().getTotalRows());
 
@@ -409,7 +401,6 @@ public class BinaryPredicateStatisticCalculator {
             if (bucket.getUpper() >= constantDouble && bucket.getLower() <= constantDouble) {
                 StatisticRangeValues bucketRange = new StatisticRangeValues(bucket.getLower(), bucket.getUpper(), NaN);
                 StatisticRangeValues columnRange = new StatisticRangeValues(bucket.getLower(), constantDouble, NaN);
-                double predicateFactor = bucketRange.overlapPercentWith(columnRange);
 
                 long bucketRowCount;
                 long repeat;
@@ -417,6 +408,7 @@ public class BinaryPredicateStatisticCalculator {
                     bucketRowCount = bucket.getCount() - previousTotalRowCount;
                     repeat = bucket.getUpperRepeats();
                 } else {
+                    double predicateFactor = bucketRange.overlapPercentWith(columnRange);
                     long bucketTotalRows = bucket.getCount() - bucket.getUpperRepeats() - previousTotalRowCount;
                     bucketRowCount = (long) (bucketTotalRows * predicateFactor);
                     repeat = 0;
@@ -467,7 +459,6 @@ public class BinaryPredicateStatisticCalculator {
             if (bucket.getUpper() >= constantDouble && bucket.getLower() <= constantDouble) {
                 StatisticRangeValues bucketRange = new StatisticRangeValues(bucket.getLower(), bucket.getUpper(), NaN);
                 StatisticRangeValues columnRange = new StatisticRangeValues(constantDouble, bucket.getUpper(), NaN);
-                double predicateFactor = bucketRange.overlapPercentWith(columnRange);
 
                 long bucketRowCount;
                 if (constantDouble == bucket.getUpper()) {
@@ -477,6 +468,7 @@ public class BinaryPredicateStatisticCalculator {
                         previousTotalRowCount = bucket.getCount();
                     }
                 } else {
+                    double predicateFactor = bucketRange.overlapPercentWith(columnRange);
                     long bucketTotalRows = bucket.getCount() - previousTotalRowCount;
                     bucketRowCount = (long) (bucketTotalRows * predicateFactor);
                     previousTotalRowCount = previousTotalRowCount + (bucketTotalRows - bucketRowCount);
