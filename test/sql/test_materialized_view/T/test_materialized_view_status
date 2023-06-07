@@ -1,0 +1,88 @@
+-- name: test_materialized_view_status
+CREATE TABLE `t1` (
+  `k1` date NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`k1`)
+(PARTITION p1 VALUES [("0000-01-01"), ("2023-01-01")),
+PARTITION p2 VALUES [("2023-01-01"), ("2023-02-01")),
+PARTITION p3 VALUES [("2023-02-01"), ("2023-03-01")),
+PARTITION p4 VALUES [("2023-03-01"), ("2023-04-01")),
+PARTITION p5 VALUES [("2023-04-01"), ("2023-05-01")),
+PARTITION p6 VALUES [("2023-05-01"), ("2023-06-01")))
+DISTRIBUTED BY HASH(`k1`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into t1 values ("2019-01-01",1,1),("2019-01-01",1,2),("2019-01-01",2,1),("2019-01-01",2,2),
+                      ("2023-01-11",1,1),("2023-01-11",1,2),("2023-02-11",2,1),("2023-01-11",2,2),
+                      ("2023-03-22",1,1),("2023-05-22",1,2),("2023-04-22",2,1),("2023-05-01",2,2);
+CREATE MATERIALIZED VIEW mv1
+               PARTITION BY k1
+               DISTRIBUTED BY HASH(k1) BUCKETS 10
+               REFRESH ASYNC
+               AS SELECT k1, sum(v1) as sum_v1 FROM t1 group by k1;
+select sleep(2);
+drop table t1;
+refresh materialized view mv1;
+CREATE TABLE `t1` (
+  `k1` date NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`k1`)
+(PARTITION p1 VALUES [("0000-01-01"), ("2023-01-01")),
+PARTITION p2 VALUES [("2023-01-01"), ("2023-02-01")),
+PARTITION p3 VALUES [("2023-02-01"), ("2023-03-01")),
+PARTITION p4 VALUES [("2023-03-01"), ("2023-04-01")),
+PARTITION p5 VALUES [("2023-04-01"), ("2023-05-01")),
+PARTITION p6 VALUES [("2023-05-01"), ("2023-06-01")))
+DISTRIBUTED BY HASH(`k1`) BUCKETS 2
+PROPERTIES (
+"replication_num" = "1"
+);
+ALTER MATERIALIZED VIEW mv1 ACTIVE;
+REFRESH MATERIALIZED VIEW mv1;
+select sleep(2);
+select * from mv1;
+ALTER MATERIALIZED VIEW mv1 ACTIVE;
+insert into t1 values ("2019-01-01",1,1),("2019-01-01",1,2),("2019-01-01",2,1),("2019-01-01",2,2),
+                                         ("2023-01-11",1,1),("2023-01-11",1,2),("2023-02-11",2,1),("2023-01-11",2,2),
+                                         ("2023-03-11",1,1),("2023-05-11",1,2),("2023-04-11",2,1),("2023-05-01",2,2);
+select sleep(2);
+select * from mv1;
+ALTER MATERIALIZED VIEW mv1 INACTIVE;
+REFRESH MATERIALIZED VIEW mv1;
+CREATE TABLE t1 (
+    k1 INT,
+    v1 INT,
+    v2 INT)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1)
+PROPERTIES(
+    "replication_num" = "1"
+)
+insert into t1 values (1,1,1),(1,2,2),(2,3,3),(2,3,4),(2,5,5);
+CREATE MATERIALIZED VIEW mv2
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH MANUAL
+AS SELECT k1,v1 FROM t1;
+refresh materialized view mv2;
+drop table t1;
+CREATE TABLE t1 (
+    k1 INT,
+    v1 INT,
+    v2 INT)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1)
+PROPERTIES(
+    "replication_num" = "1"
+);
+alter materialized view mv2 active;
+select sleep(2);
+select * from mv2

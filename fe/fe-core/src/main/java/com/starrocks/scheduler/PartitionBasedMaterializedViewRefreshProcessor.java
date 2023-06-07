@@ -532,7 +532,11 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         boolean force = Boolean.parseBoolean(properties.get(TaskRun.FORCE));
         int partitionTTLNumber = mvContext.getPartitionTTLNumber();
         if (force && start == null && end == null) {
-            return materializedView.getValidPartitionMap(partitionTTLNumber).keySet();
+            if (partitionInfo instanceof SinglePartitionInfo) {
+                return materializedView.getPartitionNames();
+            } else {
+                return materializedView.getValidPartitionMap(partitionTTLNumber).keySet();
+            }
         }
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
