@@ -26,6 +26,7 @@ import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
@@ -527,6 +528,8 @@ public class PrivilegeChecker {
                     checkStmtOperatePrivilege(context);
                 } else if (table.isMaterializedView()) {
                     checkMvAction(context, tableName, PrivilegeType.SELECT);
+                } else if (table instanceof TableFunctionTable) {
+                    // skip
                 } else {
                     checkTableAction(context, tableName, PrivilegeType.SELECT);
                 }

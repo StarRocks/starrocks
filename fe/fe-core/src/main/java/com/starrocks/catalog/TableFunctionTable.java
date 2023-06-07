@@ -272,6 +272,9 @@ public class TableFunctionTable extends Table {
 
     @Override
     public List<String> getPartitionColumnNames() {
+        if (partitionColumnIDs == null) {
+            return new ArrayList<>();
+        }
         return partitionColumnIDs.stream().map(id -> fullSchema.get(id).getName()).collect(Collectors.toList());
     }
 
