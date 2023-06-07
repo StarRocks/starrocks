@@ -82,7 +82,8 @@ public class SimpleScheduler {
                                           ImmutableMap<Long, ComputeNode> computeNodes,
                                           Reference<Long> backendIdRef) {
 
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING && (locations == null || backends == null)) {
+        if ((RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING)
+                && (locations == null || backends == null)) {
             return null;
         }
         LOG.debug("getHost backendID={}, backendSize={}", nodeId, backends.size());
@@ -160,17 +161,6 @@ public class SimpleScheduler {
             return new TNetworkAddress(node.getHost(), node.getBePort());
         }
         return null;
-    }
-
-    @Nullable
-    public static TNetworkAddress getBackendOrComputeNodeHost(ImmutableMap<Long, ComputeNode> computeNodes,
-                                                              ImmutableMap<Long, Backend> backendMap,
-                                                              Reference<Long> nodeIdRef) {
-        TNetworkAddress addr = getBackendHost(backendMap, nodeIdRef);
-        if (addr == null) {
-            return getComputeNodeHost(computeNodes, nodeIdRef);
-        }
-        return addr;
     }
 
     @Nullable
