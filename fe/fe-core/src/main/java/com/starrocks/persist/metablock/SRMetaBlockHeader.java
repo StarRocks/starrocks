@@ -39,10 +39,6 @@ public class SRMetaBlockHeader {
         return numJson;
     }
 
-    public String getName() {
-        return name;
-    }
-
     public SRMetaBlockID getId() {
         if (id == null) {
             return SRMetaBlockID.INVALID;

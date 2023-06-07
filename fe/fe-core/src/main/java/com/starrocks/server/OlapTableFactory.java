@@ -53,7 +53,6 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.ColocatePersistInfo;
-import com.starrocks.persist.EditLog;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -89,7 +88,6 @@ public class OlapTableFactory implements AbstractTableFactory {
     @NotNull
     public Table createTable(LocalMetastore metastore, Database db, CreateTableStmt stmt) throws DdlException {
         GlobalStateMgr stateMgr = metastore.getStateMgr();
-        EditLog editLog = metastore.getEditLog();
         ColocateTableIndex colocateTableIndex = metastore.getColocateTableIndex();
         String tableName = stmt.getTableName();
 
@@ -574,7 +572,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
                 ColocatePersistInfo info =
                         ColocatePersistInfo.createForAddTable(groupId, tableId, backendsPerBucketSeq);
-                editLog.logColocateAddTable(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(info);
                 addToColocateGroupSuccess = true;
             }
             LOG.info("Successfully create table[{};{}]", tableName, tableId);
