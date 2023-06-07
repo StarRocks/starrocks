@@ -118,8 +118,6 @@ public class GlobalTransactionMgrTest {
         metaContext.setThreadLocalInfo();
 
         masterTransMgr = masterGlobalStateMgr.getGlobalTransactionMgr();
-        masterTransMgr.setEditLog(masterGlobalStateMgr.getEditLog());
-
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
         slaveTransMgr.setEditLog(slaveGlobalStateMgr.getEditLog());
     }
