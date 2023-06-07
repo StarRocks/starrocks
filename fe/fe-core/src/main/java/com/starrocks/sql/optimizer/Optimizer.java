@@ -35,7 +35,7 @@ import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
-import com.starrocks.sql.optimizer.rule.transformation.InlineViewRule;
+import com.starrocks.sql.optimizer.rule.transformation.CardinalityPreservingTablePruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.LimitPruneTabletsRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
@@ -260,7 +260,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoAggRule());
         rootTaskContext.setRequiredColumns(requiredColumns.clone());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new InlineViewRule());
+        tree = new CardinalityPreservingTablePruneRule().rewrite(tree, rootTaskContext);
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());

@@ -12,23 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.optimizer.rule.tree;
+package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.starrocks.sql.optimizer.CardinalityPreservingJoinTablePruner;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.rule.RuleType;
-import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
+import com.starrocks.sql.optimizer.rule.tree.TreeRewriteRule;
+import com.starrocks.sql.optimizer.task.TaskContext;
 
-import java.util.List;
+public class CardinalityPreservingTablePruneRule implements TreeRewriteRule {
 
-public class PruneTableRule extends TransformationRule {
-    protected PruneTableRule() {
-        super(RuleType.TF_PRUNE_TABLE, Pattern.create(OperatorType.LOGICAL_LANDING_PAD));
-    }
     @Override
-    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        return null;
+    public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
+        CardinalityPreservingJoinTablePruner collector = new CardinalityPreservingJoinTablePruner();
+        collector.collect(root);
+        collector.rewrite();
+        return collector.getRoot().orElse(root);
     }
 }

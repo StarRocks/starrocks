@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.transformer;
 import com.google.common.base.Functions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalLandingPadOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -53,23 +52,5 @@ public class LogicalPlan {
 
     public List<ColumnRefOperator> getCorrelation() {
         return correlation;
-    }
-
-    public LogicalPlan toLandingPad() {
-        Operator rootOp = getRoot().getOp();
-        Map<ColumnRefOperator, ScalarOperator> columnRefMap;
-        if (rootOp instanceof LogicalProjectOperator) {
-            LogicalProjectOperator projectOperator = rootOp.cast();
-            columnRefMap = projectOperator.getColumnRefMap();
-        } else {
-            columnRefMap =
-                    getOutputColumn().stream().collect(Collectors.toMap(Functions.identity(), Functions.identity()));
-        }
-        LogicalLandingPadOperator landingPadOperator = new LogicalLandingPadOperator(getRoot(), columnRefMap);
-        OptExprBuilder newRootBuilder = new OptExprBuilder(
-                landingPadOperator,
-                Collections.singletonList(getRootBuilder()),
-                new ExpressionMapping(root.getScope(), root.getFieldMappings()));
-        return new LogicalPlan(newRootBuilder, getOutputColumn(), getCorrelation());
     }
 }

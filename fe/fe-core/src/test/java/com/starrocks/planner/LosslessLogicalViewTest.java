@@ -246,6 +246,13 @@ public class LosslessLogicalViewTest {
     }
 
     @Test
+    public void testBasic5() throws Exception {
+        ctx.getSessionVariable().setQueryTimeoutS(100000000);
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, "select 1 from lineorder_flat_v1");
+        System.out.println(plan);
+    }
+
+    @Test
     public void testJoin() throws Exception {
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, "select * from lineorder l inner join customer c on (c.c_custkey = l.lo_custkey)");
         System.out.println(plan);
