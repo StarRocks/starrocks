@@ -212,13 +212,13 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                      << ", mapping_schema_size=" << _schema_mapping.size();
         return false;
     }
-    if (base_chunk->num_columns() != _slot_id_to_index_map.size()) {
-        LOG(WARNING) << "base chunk does not match with _slot_id_to_index_map mapping rules. "
-                     << "base_chunk_size=" << base_chunk->num_columns()
-                     << ", slot_id_to_index_map's size=" << _slot_id_to_index_map.size();
-        return false;
-    }
     if (_has_mv_expr_context) {
+        if (base_chunk->num_columns() != _slot_id_to_index_map.size()) {
+            LOG(WARNING) << "base chunk does not match with _slot_id_to_index_map mapping rules. "
+                         << "base_chunk_size=" << base_chunk->num_columns()
+                         << ", slot_id_to_index_map's size=" << _slot_id_to_index_map.size();
+            return false;
+        }
         // init for expression evaluation only
         for (auto& iter : _slot_id_to_index_map) {
             base_chunk->set_slot_id_to_index(iter.first, iter.second);
@@ -349,13 +349,13 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                      << ", mapping_schema_size=" << _schema_mapping.size();
         return false;
     }
-    if (base_chunk->num_columns() != _slot_id_to_index_map.size()) {
-        LOG(WARNING) << "base chunk does not match with _slot_id_to_index_map mapping rules. "
-                     << "base_chunk_size=" << base_chunk->num_columns()
-                     << ", slot_id_to_index_map's size=" << _slot_id_to_index_map.size();
-        return false;
-    }
     if (_has_mv_expr_context) {
+        if (base_chunk->num_columns() != _slot_id_to_index_map.size()) {
+            LOG(WARNING) << "base chunk does not match with _slot_id_to_index_map mapping rules. "
+                         << "base_chunk_size=" << base_chunk->num_columns()
+                         << ", slot_id_to_index_map's size=" << _slot_id_to_index_map.size();
+            return false;
+        }
         // init for expression evaluation only
         for (auto& iter : _slot_id_to_index_map) {
             base_chunk->set_slot_id_to_index(iter.first, iter.second);
@@ -374,6 +374,7 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                 new_col = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
                 new_chunk->update_column_by_index(new_col, i);
             } else {
+                DCHECK(_slot_id_to_index_map.find(ref_column) != _slot_id_to_index_map.end());
                 int base_index = _slot_id_to_index_map[ref_column];
                 const TypeInfoPtr& ref_type_info = base_schema.field(base_index)->type();
                 const TypeInfoPtr& new_type_info = new_schema.field(i)->type();
