@@ -36,9 +36,6 @@ SHOW STORAGE VOLUMES like 'storage_volume_default_1';
 -- result:
 storage_volume_default_1
 -- !result
-SET storage_volume_default_2 AS DEFAULT STORAGE VOLUME;
--- result:
--- !result
 ALTER STORAGE VOLUME storage_volume_default_2 SET ("aws.s3.region"="us-west-1", "aws.s3.endpoint"="endpoint1", "enabled"="true");
 -- result:
 -- !result

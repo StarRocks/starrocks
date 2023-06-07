@@ -9,7 +9,6 @@ DESC STORAGE VOLUME 'storage_volume_default_1';
 DROP STORAGE VOLUME IF EXISTS storage_volume_default_1;
 SHOW STORAGE VOLUMES like 'storage_volume_default%';
 SHOW STORAGE VOLUMES like 'storage_volume_default_1';
-SET storage_volume_default_2 AS DEFAULT STORAGE VOLUME;
 ALTER STORAGE VOLUME storage_volume_default_2 SET ("aws.s3.region"="us-west-1", "aws.s3.endpoint"="endpoint1", "enabled"="true");
 SET storage_volume_default_2 AS DEFAULT STORAGE VOLUME;
 DESC STORAGE VOLUME 'storage_volume_default_2';
