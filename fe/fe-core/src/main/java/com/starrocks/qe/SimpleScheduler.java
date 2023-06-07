@@ -76,31 +76,33 @@ public class SimpleScheduler {
     }
 
     @Nullable
-    public static TNetworkAddress getHost(long backendId,
+    public static TNetworkAddress getHost(long nodeId,
                                           List<TScanRangeLocation> locations,
                                           ImmutableMap<Long, Backend> backends,
                                           ImmutableMap<Long, ComputeNode> computeNodes,
                                           Reference<Long> backendIdRef) {
 
-        if (locations == null || backends == null) {
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING && (locations == null || backends == null)) {
             return null;
         }
-        LOG.debug("getHost backendID={}, backendSize={}", backendId, backends.size());
+        LOG.debug("getHost backendID={}, backendSize={}", nodeId, backends.size());
 
         // TODO: need to refactor after be split into cn + dn
-        ComputeNode backend = backends.get(backendId);
-        if (backend == null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            backend = computeNodes.get(backendId);
+        ComputeNode node = null;
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            node = computeNodes.get(nodeId);
+        } else {
+            node = backends.get(nodeId);
         }
 
         lock.lock();
         try {
-            if (backend != null && backend.isAlive() && !blacklistBackends.containsKey(backendId)) {
-                backendIdRef.setRef(backendId);
-                return new TNetworkAddress(backend.getHost(), backend.getBePort());
+            if (node != null && node.isAlive() && !blacklistBackends.containsKey(nodeId)) {
+                backendIdRef.setRef(nodeId);
+                return new TNetworkAddress(node.getHost(), node.getBePort());
             } else {
                 for (TScanRangeLocation location : locations) {
-                    if (location.backend_id == backendId) {
+                    if (location.backend_id == nodeId) {
                         continue;
                     }
                     // choose the first alive backend(in analysis stage, the locations are random)
