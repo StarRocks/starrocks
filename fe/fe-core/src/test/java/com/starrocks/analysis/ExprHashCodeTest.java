@@ -58,7 +58,7 @@ public class ExprHashCodeTest {
         SelectRelation selectRelation = new SelectRelation(new SelectList(),
                 null, null, null, null);
         ExistsPredicate existsPredicate = new ExistsPredicate(new Subquery(new QueryStatement(selectRelation)), false);
-        BinaryPredicate predicate = new BinaryPredicate(BinaryPredicate.Operator.EQ, stringLiteral, stringLiteral);
+        BinaryPredicate predicate = new BinaryPredicate(BinaryType.EQ, stringLiteral, stringLiteral);
         CompoundPredicate compoundPredicate = new CompoundPredicate(CompoundPredicate.Operator.OR,
                 predicate, predicate);
         ArithmeticExpr arithmeticExpr = new ArithmeticExpr(ArithmeticExpr.Operator.ADD, intLiteral, largeIntLiteral);

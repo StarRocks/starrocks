@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -183,7 +184,7 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
 
         @Override
         public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-            if (predicate.getBinaryType() != BinaryPredicateOperator.BinaryType.EQ) {
+            if (predicate.getBinaryType() != BinaryType.EQ) {
                 return predicate;
             } else {
                 return super.visitBinaryPredicate(predicate, context);

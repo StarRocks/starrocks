@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
@@ -80,7 +81,7 @@ public class ShowTransactionStmtAnalyzer {
 
                 if (subExpr instanceof BinaryPredicate) {
                     BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
-                    if (binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
+                    if (binaryPredicate.getOp() != BinaryType.EQ) {
                         valid = false;
                         break;
                     }

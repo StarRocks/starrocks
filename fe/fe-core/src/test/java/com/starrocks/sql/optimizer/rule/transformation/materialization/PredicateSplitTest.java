@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Utils;
@@ -44,16 +45,16 @@ public class PredicateSplitTest {
         ColumnRefOperator columnRef1 = columnRefFactory.create("col1", Type.INT, false);
         ColumnRefOperator columnRef2 = columnRefFactory.create("col2", Type.INT, false);
         BinaryPredicateOperator binaryPredicate = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.EQ, columnRef1, columnRef2);
+                BinaryType.EQ, columnRef1, columnRef2);
         BinaryPredicateOperator binaryPredicate2 = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.GE, columnRef1, ConstantOperator.createInt(1));
+                BinaryType.GE, columnRef1, ConstantOperator.createInt(1));
 
         List<ScalarOperator> arguments = Lists.newArrayList();
         arguments.add(columnRef1);
         arguments.add(columnRef2);
         CallOperator callOperator = new CallOperator(FunctionSet.SUM, Type.INT, arguments);
         BinaryPredicateOperator binaryPredicate3 = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.GE, callOperator, ConstantOperator.createInt(1));
+                BinaryType.GE, callOperator, ConstantOperator.createInt(1));
         ScalarOperator andPredicate = Utils.compoundAnd(binaryPredicate, binaryPredicate2, binaryPredicate3);
         PredicateSplit result = PredicateSplit.splitPredicate(andPredicate);
         Assert.assertEquals(binaryPredicate, result.getEqualPredicates());

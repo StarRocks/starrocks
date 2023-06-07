@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
@@ -237,7 +238,7 @@ public class ExpressionTest extends PlanTestBase {
         Assert.assertTrue(castExpression instanceof CastExpr);
 
         // lambda functions
-        ScalarOperator lambdaExpr = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        ScalarOperator lambdaExpr = new BinaryPredicateOperator(BinaryType.EQ,
                 new ColumnRefOperator(100000, Type.INT, "x", true),
                 ConstantOperator.createInt(1));
         ColumnRefOperator colRef = new ColumnRefOperator(100000, Type.INT, "x", true);

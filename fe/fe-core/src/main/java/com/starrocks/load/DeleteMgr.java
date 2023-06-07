@@ -44,6 +44,7 @@ import com.google.common.collect.Sets;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.InPredicate;
@@ -510,7 +511,7 @@ public class DeleteMgr implements Writable {
             if (condition instanceof BinaryPredicate) {
                 try {
                     BinaryPredicate binaryPredicate = (BinaryPredicate) condition;
-                    if (binaryPredicate.getOp() == BinaryPredicate.Operator.EQ_FOR_NULL) {
+                    if (binaryPredicate.getOp() == BinaryType.EQ_FOR_NULL) {
                         throw new DdlException("Delete condition does not support null-safe equal currently.");
                     }
                     // delete a = null means delete nothing

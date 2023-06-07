@@ -18,6 +18,7 @@ package com.starrocks.lake.delete;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -223,7 +224,7 @@ public class DeleteTest {
             }
         };
 
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.GT, new SlotRef(null, "k1"),
+        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
         DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
@@ -289,7 +290,7 @@ public class DeleteTest {
             }
         };
 
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.GT, new SlotRef(null, "k1"),
+        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
         DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
@@ -332,7 +333,7 @@ public class DeleteTest {
         };
 
         // Not supported type
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.GT, new SlotRef(null, "v1"),
+        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "v1"),
                 new StringLiteral("[]"));
         DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
                 new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);

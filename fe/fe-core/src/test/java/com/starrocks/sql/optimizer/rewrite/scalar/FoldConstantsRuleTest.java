@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -156,44 +157,44 @@ public class FoldConstantsRuleTest {
 
     @Test
     public void applyBinary() {
-        BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryType.EQ,
                 ConstantOperator.createNull(Type.INT), ConstantOperator.createInt(1));
         assertEquals(OB_NULL, rule.apply(bpo1, null));
 
-        BinaryPredicateOperator bpo2 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo2 = new BinaryPredicateOperator(BinaryType.EQ,
                 new ColumnRefOperator(1, Type.INT, "name", true), ConstantOperator.createInt(1));
         assertEquals(bpo2, rule.apply(bpo2, null));
 
-        BinaryPredicateOperator bpo3 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo3 = new BinaryPredicateOperator(BinaryType.EQ,
                 ConstantOperator.createInt(1), ConstantOperator.createInt(1));
         assertEquals(OB_TRUE, rule.apply(bpo3, null));
 
-        BinaryPredicateOperator bpo4 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.NE,
+        BinaryPredicateOperator bpo4 = new BinaryPredicateOperator(BinaryType.NE,
                 ConstantOperator.createDate(LocalDateTime.of(2021, 1, 1, 0, 0)),
                 ConstantOperator.createDate(LocalDateTime.of(2021, 1, 1, 0, 0)));
         assertEquals(OB_FALSE, rule.apply(bpo4, null));
 
-        BinaryPredicateOperator bpo5 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator bpo5 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 ConstantOperator.createNull(Type.BOOLEAN), ConstantOperator.createNull(Type.BOOLEAN));
         assertEquals(OB_TRUE, rule.apply(bpo5, null));
 
-        BinaryPredicateOperator bpo6 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator bpo6 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 ConstantOperator.createNull(Type.BOOLEAN), ConstantOperator.createInt(1));
         assertEquals(OB_FALSE, rule.apply(bpo6, null));
 
-        BinaryPredicateOperator bpo7 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,
+        BinaryPredicateOperator bpo7 = new BinaryPredicateOperator(BinaryType.GE,
                 ConstantOperator.createInt(1), ConstantOperator.createInt(1));
         assertEquals(OB_TRUE, rule.apply(bpo7, null));
 
-        BinaryPredicateOperator bpo8 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT,
+        BinaryPredicateOperator bpo8 = new BinaryPredicateOperator(BinaryType.GT,
                 ConstantOperator.createInt(1), ConstantOperator.createInt(1));
         assertEquals(OB_FALSE, rule.apply(bpo8, null));
 
-        BinaryPredicateOperator bpo9 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE,
+        BinaryPredicateOperator bpo9 = new BinaryPredicateOperator(BinaryType.LE,
                 ConstantOperator.createInt(1), ConstantOperator.createInt(1));
         assertEquals(OB_TRUE, rule.apply(bpo9, null));
 
-        BinaryPredicateOperator bpo10 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT,
+        BinaryPredicateOperator bpo10 = new BinaryPredicateOperator(BinaryType.LT,
                 ConstantOperator.createInt(1), ConstantOperator.createInt(1));
         assertEquals(OB_FALSE, rule.apply(bpo10, null));
 

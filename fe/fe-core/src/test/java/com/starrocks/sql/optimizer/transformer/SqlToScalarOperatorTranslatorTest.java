@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.StringLiteral;
@@ -49,7 +50,7 @@ public class SqlToScalarOperatorTranslatorTest {
     public void testTranslateComplexFunction() {
         StringLiteral test = new StringLiteral("test");
         StringLiteral defaultStr = new StringLiteral("default");
-        BinaryPredicate predicate = new BinaryPredicate(BinaryPredicate.Operator.EQ, defaultStr, test);
+        BinaryPredicate predicate = new BinaryPredicate(BinaryType.EQ, defaultStr, test);
         FunctionCallExpr baseFunc = new FunctionCallExpr("if", ImmutableList.of(predicate, test, defaultStr));
         FunctionCallExpr complexFunc = baseFunc;
         for (int i = 0; i < 100; i++) {

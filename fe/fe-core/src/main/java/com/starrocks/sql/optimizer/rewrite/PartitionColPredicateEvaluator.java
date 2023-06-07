@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
@@ -100,7 +101,7 @@ public class PartitionColPredicateEvaluator {
 
         @Override
         public BitSet visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-            BinaryPredicateOperator.BinaryType type = predicate.getBinaryType();
+            BinaryType type = predicate.getBinaryType();
             ConstantOperator constantOperator = (ConstantOperator) predicate.getChild(1);
             LiteralExpr literalExpr;
             try {

@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -106,7 +107,7 @@ public class ExistentialApply2JoinRule extends TransformationRule {
         joinExpression.getInputs().add(aggExpression);
 
         // Filter
-        BinaryPredicateOperator countCheck = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator countCheck = new BinaryPredicateOperator(BinaryType.EQ,
                 countRef, ConstantOperator.createBigint(0));
         OptExpression filterExpression =
                 new OptExpression(new LogicalFilterOperator(Utils.compoundAnd(countCheck, apply.getPredicate())));
@@ -143,7 +144,7 @@ public class ExistentialApply2JoinRule extends TransformationRule {
     private List<OptExpression> transformCorrelation(OptExpression input, LogicalApplyOperator apply,
                                                      ExistsPredicateOperator epo) {
         boolean hasEqPredicate = Utils.extractConjuncts(apply.getCorrelationConjuncts()).stream()
-                .anyMatch(d -> OperatorType.BINARY.equals(d.getOpType()) && BinaryPredicateOperator.BinaryType.EQ
+                .anyMatch(d -> OperatorType.BINARY.equals(d.getOpType()) && BinaryType.EQ
                         .equals(((BinaryPredicateOperator) d).getBinaryType()));
 
         if (hasEqPredicate) {
