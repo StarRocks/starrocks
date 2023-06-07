@@ -656,30 +656,42 @@ public abstract class Type implements Cloneable {
 
     public boolean canApplyToNumeric() {
         // TODO(mofei) support sum, avg for JSON
-        return !isOnlyMetricType() && !isJsonType();
+        return !isOnlyMetricType() && !isJsonType() && !isArrayType();
     }
 
     public boolean canJoinOn() {
-        return !isOnlyMetricType() && !isJsonType();
+        return !isOnlyMetricType() && !isJsonType() && !isArrayType();
     }
 
     public boolean canGroupBy() {
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canGroupBy();
+        }
         // TODO(mofei) support group by for JSON
         return !isOnlyMetricType() && !isJsonType();
     }
 
     public boolean canOrderBy() {
         // TODO(mofei) support order by for JSON
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canOrderBy();
+        }
         return !isOnlyMetricType() && !isJsonType();
     }
 
     public boolean canPartitionBy() {
         // TODO(mofei) support partition by for JSON
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canPartitionBy();
+        }
         return !isOnlyMetricType() && !isJsonType();
     }
 
     public boolean canDistinct() {
         // TODO(mofei) support distinct by for JSON
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canDistinct();
+        }
         return !isOnlyMetricType() && !isJsonType();
     }
 
@@ -706,7 +718,7 @@ public abstract class Type implements Cloneable {
     }
 
     public static final String OnlyMetricTypeErrorMsg =
-            "Type percentile/hll/bitmap/json not support aggregation/group-by/order-by/union/join";
+            "Type (nested) percentile/hll/bitmap/json not support aggregation/group-by/order-by/union/join";
 
     public boolean isHllType() {
         return isScalarType(PrimitiveType.HLL);
