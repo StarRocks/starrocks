@@ -623,11 +623,13 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
             res.value()->tablet_writer_add_chunk(
                     &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
                     &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
+            LOG(ERROR) << "NN_12:" << tls_mem_tracker->consumption();
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
         } else {
             _stub->tablet_writer_add_chunk(
                     &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
                     &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
+            LOG(ERROR) << "NN_13:" << tls_mem_tracker->consumption();
         }
     }
     _next_packet_seq++;
