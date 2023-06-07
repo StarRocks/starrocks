@@ -35,6 +35,10 @@ select TASK_NAME, STATE, ERROR_MESSAGE from information_schema.task_runs where `
 -- result:
 test_kill	FAILED	CANCELLED
 -- !result
+drop task not_exist_task;
+-- result:
+E: (1064, 'Unexpected exception: Task not_exist_task is not exist')
+-- !result
 drop database test_drop_task_${uuid0};
 -- result:
 -- !result
