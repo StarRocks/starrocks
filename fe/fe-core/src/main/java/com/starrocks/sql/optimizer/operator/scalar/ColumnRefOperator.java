@@ -73,6 +73,13 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     @Override
+    public List<ColumnRefOperator> getColumnRefs(List<ColumnRefOperator> list) {
+        list.add(this);
+        return list;
+    }
+
+
+    @Override
     public String toString() {
         return id + ": " + name;
     }

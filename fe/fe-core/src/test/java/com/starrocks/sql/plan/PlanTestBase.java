@@ -34,6 +34,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -1054,6 +1055,12 @@ public class PlanTestBase {
 
     public static void assertContains(String text, String pattern) {
         Assert.assertTrue(text, text.contains(pattern));
+    }
+
+    public static void assertContains(String text, List<String> patterns) {
+        for (String s : patterns) {
+            Assert.assertTrue(text, text.contains(s));
+        }
     }
 
     public static void assertNotContains(String text, String pattern) {
