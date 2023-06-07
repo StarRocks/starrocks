@@ -120,7 +120,8 @@ public class AnalyzeTestUtil {
                 "  `v1` bigint NULL COMMENT \"\",\n" +
                 "  `v2` bigint NULL COMMENT \"\",\n" +
                 "  `v3` ARRAY<bigint(20)>  NULL,\n" +
-                "  `v4` ARRAY<largeint>  NULL\n" +
+                "  `v4` ARRAY<largeint>  NULL,\n" +
+                "  `v5` ARRAY<json>  NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v1`, `v2`)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
