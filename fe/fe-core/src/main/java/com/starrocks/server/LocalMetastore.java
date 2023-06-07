@@ -2063,12 +2063,11 @@ public class LocalMetastore implements ConnectorMetadata {
             partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
 
             // Automatic partitioning needs to ensure that at least one tablet is opened.
-            if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-                ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            if (partitionInfo.isAutomaticPartition()) {
                 long partitionId = getNextId();
                 String replicateNum = stmt.getProperties().getOrDefault("replication_num",
                         String.valueOf(RunMode.defaultReplicationNum()));
-                expressionRangePartitionInfo.createAutomaticShadowPartition(partitionId, replicateNum);
+                partitionInfo.createAutomaticShadowPartition(partitionId, replicateNum);
                 partitionNameToId.put(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME, partitionId);
             }
 

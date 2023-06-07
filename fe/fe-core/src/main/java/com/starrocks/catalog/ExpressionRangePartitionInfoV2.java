@@ -215,7 +215,8 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         this.serializedPartitionExprs = serializedPartitionExprs;
     }
 
-    public Boolean getAutomaticPartition() {
+    @Override
+    public boolean isAutomaticPartition() {
         return automaticPartition;
     }
 
