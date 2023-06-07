@@ -51,8 +51,6 @@
 #include "util/thread.h"
 
 namespace starrocks {
-DummyLoadPathMgr::DummyLoadPathMgr(ExecEnv* exec_env) : _exec_env(exec_env) {}
-DummyLoadPathMgr::~DummyLoadPathMgr() = default;
 
 Status DummyLoadPathMgr::init() {
     LOG(INFO) << "Load path configured to []";

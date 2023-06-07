@@ -55,7 +55,7 @@ namespace starrocks {
 static const uint32_t MAX_SHARD_NUM = 1024;
 static const std::string SHARD_PREFIX = "__shard_";
 
-LoadPathMgr::LoadPathMgr(ExecEnv* exec_env) : DummyLoadPathMgr(exec_env), _idx(0), _next_shard(0) {}
+LoadPathMgr::LoadPathMgr(ExecEnv* exec_env) : _exec_env(exec_env), _idx(0), _next_shard(0) {}
 LoadPathMgr::~LoadPathMgr() {
     _stop.set_value(true);
     pthread_join(_cleaner_id, nullptr);

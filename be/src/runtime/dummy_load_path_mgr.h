@@ -50,26 +50,23 @@ class ExecEnv;
 
 class DummyLoadPathMgr {
 public:
-    DummyLoadPathMgr(ExecEnv* env);
+    virtual ~DummyLoadPathMgr() = default;
 
-    ~DummyLoadPathMgr();
+    virtual Status init();
 
-    Status init();
+    virtual Status allocate_dir(const std::string& db, const std::string& label, std::string* prefix);
 
-    Status allocate_dir(const std::string& db, const std::string& label, std::string* prefix);
+    virtual void get_load_data_path(std::vector<std::string>* data_paths);
 
-    void get_load_data_path(std::vector<std::string>* data_paths);
-
-    Status get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path);
-    std::string get_load_error_absolute_path(const std::string& file_path);
+    virtual Status get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path);
+    virtual std::string get_load_error_absolute_path(const std::string& file_path);
     const std::string& get_load_error_file_dir() const { return _error_log_dir; }
 
-    std::string get_load_rejected_record_absolute_path(const std::string& rejected_record_dir, const std::string& db,
-                                                       const std::string& label, const int64_t id,
-                                                       const TUniqueId& fragment_instance_id);
+    virtual std::string get_load_rejected_record_absolute_path(const std::string& rejected_record_dir,
+                                                               const std::string& db, const std::string& label,
+                                                               const int64_t id, const TUniqueId& fragment_instance_id);
 
 private:
-    ExecEnv* _exec_env;
     std::string _error_log_dir;
 };
 

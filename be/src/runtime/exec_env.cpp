@@ -260,7 +260,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
-    _load_path_mgr = store_paths.empty() ? new DummyLoadPathMgr(this) : new LoadPathMgr(this);
+    _load_path_mgr = store_paths.empty() ? new DummyLoadPathMgr() : new LoadPathMgr(this);
     _broker_mgr = new BrokerMgr(this);
     _bfd_parser = BfdParser::create();
     _load_channel_mgr = new LoadChannelMgr();
