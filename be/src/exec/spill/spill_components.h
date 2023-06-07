@@ -275,7 +275,7 @@ public:
     template <class ChunkProvider>
     Status spill_partition(SerdeContext& context, SpilledPartition* partition, ChunkProvider&& provider);
 
-    int64_t mem_consumption() { return _mem_tracker->consumption(); }
+    int64_t mem_consumption() const { return _mem_tracker->consumption(); }
 
 private:
     Status _init_with_partition_nums(RuntimeState* state, int num_partitions);

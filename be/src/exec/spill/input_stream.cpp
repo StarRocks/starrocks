@@ -188,7 +188,7 @@ StatusOr<ChunkUniquePtr> BufferedInputStream::read_from_buffer() {
     }
     ChunkUniquePtr res;
     CHECK(_chunk_buffer.try_get(&res));
-    _spiller->metrics().input_stream_peak_memory_usage->add(-res->memory_usage());
+    COUNTER_ADD(_spiller->metrics().input_stream_peak_memory_usage, -res->memory_usage());
     return res;
 }
 
@@ -213,7 +213,7 @@ Status BufferedInputStream::prefetch(SerdeContext& ctx) {
 
     auto res = _input_stream->get_next(ctx);
     if (res.ok()) {
-        _spiller->metrics().input_stream_peak_memory_usage->add(res.value()->memory_usage());
+        COUNTER_ADD(_spiller->metrics().input_stream_peak_memory_usage, res.value()->memory_usage());
         _chunk_buffer.put(std::move(res.value()));
         return Status::OK();
     } else if (res.status().is_end_of_file()) {

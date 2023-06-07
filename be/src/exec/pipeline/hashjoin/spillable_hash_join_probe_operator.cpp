@@ -418,7 +418,7 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
         _current_reader.clear();
         _has_probe_remain = false;
         _builders.clear();
-        metrics.build_partition_peak_memory_usage->set(0);
+        COUNTER_SET(metrics.build_partition_peak_memory_usage, 0);
     }
 
     return nullptr;
