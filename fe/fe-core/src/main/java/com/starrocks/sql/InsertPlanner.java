@@ -38,6 +38,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.MysqlTableSink;
@@ -264,6 +265,12 @@ public class InsertPlanner {
                     sinkFragment.setHasIcebergTableSink();
                 } else { // TableFunctionTable
                     sinkFragment.setHasTableFunctionTableSink();
+                    // To sink a table function table with writeSingleFile enabled, generate only one fragment instance.
+                    // This is achieved by setting unpartitioned mode.
+                    // TODO: is this ok? in more complex cases?
+                    if (((TableFunctionTable) targetTable).isWriteSingleFile()) {
+                        sinkFragment.setDataPartition(DataPartition.UNPARTITIONED);
+                    }
                 }
 
                 sinkFragment.disableRuntimeAdaptiveDop();

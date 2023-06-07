@@ -116,7 +116,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     // specification of the partition of the input of this fragment;
     // an UNPARTITIONED fragment is executed on only a single node
     // TODO: improve this comment, "input" is a bit misleading
-    protected final DataPartition dataPartition;
+    protected DataPartition dataPartition;
 
     // specification of how the output of this fragment is partitioned (i.e., how
     // it's sent to its destination);
@@ -528,6 +528,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public DataPartition getDataPartition() {
         return dataPartition;
+    }
+
+    public void setDataPartition(DataPartition dataPartition) {
+        this.dataPartition = dataPartition;
     }
 
     public void setOutputPartition(DataPartition outputPartition) {
