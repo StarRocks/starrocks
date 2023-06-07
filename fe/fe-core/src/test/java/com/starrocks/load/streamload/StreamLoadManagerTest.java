@@ -59,7 +59,6 @@ public class StreamLoadManagerTest {
     @Before
     public void setUp() {
         globalTransactionMgr = new GlobalTransactionMgr(globalStateMgr);
-        globalTransactionMgr.setEditLog(editLog);
         FeConstants.runningUnitTest = true;
     
         try {
