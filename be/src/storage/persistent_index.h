@@ -48,6 +48,22 @@ enum CommitType {
     kAppendWAL = 2,
 };
 
+struct IOStat {
+    uint32_t get_in_shard_cnt = 0;
+    uint64_t get_in_shard_cost = 0;
+    uint64_t read_io_bytes = 0;
+    uint64_t l0_write_cost = 0;
+    uint64_t l1_read_cost = 0;
+    uint64_t flush_or_wal_cost = 0;
+
+    std::string print_str() {
+        return fmt::format(
+                "IOStat get_in_shard_cnt: {} get_in_shard_cost: {} read_io_bytes: {} l0_write_cost: {} l1_read_cost: "
+                "{} flush_or_wal_cost: {}",
+                get_in_shard_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_read_cost, flush_or_wal_cost);
+    }
+};
+
 // Use `uint8_t[8]` to store the value of a `uint64_t` to reduce memory cost in phmap
 struct IndexValue {
     uint8_t v[8];
@@ -341,8 +357,9 @@ public:
     // |values|: value array for return values
     // |num_found|: add the number of keys found in L1 to this argument
     // |key_size|: the key size of keys array
+    // |stat|: used for collect statistic
     Status get(size_t n, const Slice* keys, KeysInfo& keys_info, IndexValue* values, KeysInfo* found_keys_info,
-               size_t key_size);
+               size_t key_size, IOStat* stat = nullptr);
 
     // batch check key existence
     Status check_not_exist(size_t n, const Slice* keys, size_t key_size);
@@ -422,7 +439,7 @@ private:
                                 std::unique_ptr<ImmutableIndexShard>* shard) const;
 
     Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
-                         IndexValue* values, KeysInfo* found_keys_info) const;
+                         IndexValue* values, KeysInfo* found_keys_info, IOStat* stat) const;
 
     Status _check_not_exist_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
                                             std::unique_ptr<ImmutableIndexShard>* shard) const;
@@ -558,7 +575,9 @@ public:
     // |keys|: key array as raw buffer
     // |values|: value array
     // |old_values|: return old values for updates, or set to NullValue for inserts
-    Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values);
+    // |stat|: used for collect statistic
+    Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
+                  IOStat* stat = nullptr);
 
     // batch insert, return error if key already exists
     // |n|: size of key/value array
@@ -637,7 +656,7 @@ private:
                            int64_t apply_version, std::unique_ptr<Column> pk_column);
 
     Status _get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,
-                                     std::map<size_t, KeysInfo>& keys_info_by_key_size);
+                                     std::map<size_t, KeysInfo>& keys_info_by_key_size, IOStat* stat);
 
     Status _get_from_immutable_index_parallel(size_t n, const Slice* keys, IndexValue* values,
                                               std::map<size_t, KeysInfo>& keys_info_by_key_size);
