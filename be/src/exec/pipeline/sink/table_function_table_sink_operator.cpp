@@ -48,6 +48,7 @@ inline std::string get_partition_location(const string& path, const std::vector<
     for (size_t i = 0; i < names.size(); i++) {
         partition_location += names[i] + "=" + values[i] + "/";
     }
+    partition_location += "data_";
     return partition_location;
 }
 

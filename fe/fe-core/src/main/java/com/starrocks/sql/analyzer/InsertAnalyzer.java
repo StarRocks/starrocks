@@ -61,7 +61,7 @@ public class InsertAnalyzer {
         tables.stream().map(table -> (HiveTable) table)
                 .forEach(table -> table.useMetadataCache(false));
 
-        Table table = getTargetTable(insertStmt, session);
+        Table table = getOrMakeTargetTable(insertStmt, session);
 
         if (table instanceof MaterializedView && !insertStmt.isSystem()) {
             throw new SemanticException(
@@ -263,50 +263,9 @@ public class InsertAnalyzer {
         session.getDumpInfo().addTable(insertStmt.getTableName().getDb(), table);
     }
 
-    private static Table getTargetTable(InsertStmt insertStmt, ConnectContext session) {
+    private static Table getOrMakeTargetTable(InsertStmt insertStmt, ConnectContext session) {
         if (insertStmt.useTableFunctionAsTargetTable()) {
-            // make a TableFunctionTable from table function properties
-            Map<String, String> props = insertStmt.getTableFunctionProperties();
-            String path = props.get("path");
-            if (path == null) {
-                throw new SemanticException("Path is mandatory in table function. \"path\" = \"hdfs://path/to/your/location/prefix\"");
-            }
-            String format = props.getOrDefault("format", "parquet");
-
-            QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
-            List<Field> allFields = query.getRelationFields().getAllFields();
-
-            // fetch schema from query
-            List<Column> columns = allFields.stream().filter(Field::isVisible).map(field -> new Column(field.getName(),
-                    field.getType(), field.isNullable())).collect(Collectors.toList());
-
-            boolean writeSingleFile = Boolean.parseBoolean(props.get("single"));
-            String partitionBy = props.get("partition_by");
-            if (partitionBy == null) {
-                return new TableFunctionTable(path, format, columns, null, writeSingleFile);
-            }
-
-            if (writeSingleFile) {
-                throw new SemanticException("cannot use partition by and single simultaneously");
-            }
-
-            List<String> columnNames = columns.stream().map(Column::getName).collect(Collectors.toList());
-
-            // parse and validate partition columns
-            partitionBy = partitionBy.replaceAll("^\\(|\\)$", "");
-            List<String> partitionColumnNames = Arrays.asList(partitionBy.split(","));
-            partitionColumnNames.replaceAll(String::trim); // TODO: dedup
-
-            List<String> unmatchedPartitionColumnNames = partitionColumnNames.stream().filter(col ->
-                    !columnNames.contains(col)).collect(Collectors.toList());
-            if (!unmatchedPartitionColumnNames.isEmpty()) {
-                throw new SemanticException("partition columns expected to be a subset of " + columnNames +
-                        ", but got extra columns: " + unmatchedPartitionColumnNames);
-            }
-
-            List<Integer> partitionColumnIDs = partitionColumnNames.stream().map(columnNames::indexOf).collect(
-                    Collectors.toList());
-            return new TableFunctionTable(path, format, columns, partitionColumnIDs, false);
+            return makeTableFunctionTable(insertStmt);
         }
 
         MetaUtils.normalizationTableName(session, insertStmt.getTableName());
@@ -320,7 +279,73 @@ public class InsertAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
         }
 
-        // Database database = MetaUtils.getDatabase(catalogName, dbName);
         return MetaUtils.getTable(catalogName, dbName, tableName);
+    }
+
+    private static Table makeTableFunctionTable(InsertStmt insertStmt) {
+        // fetch schema from query
+        QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
+        List<Field> allFields = query.getRelationFields().getAllFields();
+        List<Column> columns = allFields.stream().filter(Field::isVisible).map(field -> new Column(field.getName(),
+                field.getType(), field.isNullable())).collect(Collectors.toList());
+
+        // parse table function properties
+        Map<String, String> props = insertStmt.getTableFunctionProperties();
+        String path = props.get("path");
+        String format = props.get("format");
+        boolean writeSingleFile = Boolean.parseBoolean(props.get("single"));
+        String partitionBy = props.get("partition_by");
+
+        // validate properties
+        if (path == null) {
+            throw new SemanticException(
+                    "path is mandatory in table function. \"path\" = \"hdfs://path/to/your/location/prefix\"");
+        }
+
+        if (format == null) {
+            throw new SemanticException("format is mandatory in table function. " +
+                    "Use \"path\" = \"parquet\" as only parquet format is supported now");
+        }
+
+        if (!format.equalsIgnoreCase("parquet")) {
+            throw new SemanticException("use \"path\" = \"parquet\", as only parquet format is supported now");
+        }
+
+        if (partitionBy != null && writeSingleFile) {
+            throw new SemanticException("cannot use partition by and single simultaneously");
+        }
+
+        if (partitionBy == null) {
+            // prepend `data_` if path ends with forward slash
+            if (path.endsWith("/")) {
+                path += "data_";
+            }
+            return new TableFunctionTable(path, format, columns, null, writeSingleFile);
+        }
+
+        // extra validation for using partitionBy
+        if (!path.endsWith("/")) {
+            throw new SemanticException(
+                    "To enable partition_by, path should be a directory ends with forward slash(/)");
+        }
+
+        List<String> columnNames = columns.stream().map(Column::getName).collect(Collectors.toList());
+
+        // parse and validate partition columns
+        partitionBy = partitionBy.replaceAll("^\\(|\\)$", "");
+        List<String> partitionColumnNames = Arrays.asList(partitionBy.split(","));
+        partitionColumnNames.replaceAll(String::trim);
+        partitionColumnNames = partitionColumnNames.stream().distinct().collect(Collectors.toList()); // dedup
+
+        List<String> unmatchedPartitionColumnNames = partitionColumnNames.stream().filter(col ->
+                !columnNames.contains(col)).collect(Collectors.toList());
+        if (!unmatchedPartitionColumnNames.isEmpty()) {
+            throw new SemanticException("partition columns expected to be a subset of " + columnNames +
+                    ", but got extra columns: " + unmatchedPartitionColumnNames);
+        }
+
+        List<Integer> partitionColumnIDs = partitionColumnNames.stream().map(columnNames::indexOf).collect(
+                Collectors.toList());
+        return new TableFunctionTable(path, format, columns, partitionColumnIDs, false);
     }
 }

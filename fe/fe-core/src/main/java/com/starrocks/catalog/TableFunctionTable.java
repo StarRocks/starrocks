@@ -87,12 +87,13 @@ public class TableFunctionTable extends Table {
     public TableFunctionTable(String path, String format, List<Column> columns,
                               @Nullable List<Integer> partitionColumnIDs, boolean writeSingleFile) {
         super(TableType.TABLE_FUNCTION);
+        verify(!Strings.isNullOrEmpty(path));
+        verify(!writeSingleFile || partitionColumnIDs == null);
         this.path = path;
         this.format = format;
         this.partitionColumnIDs = partitionColumnIDs;
         this.writeSingleFile = writeSingleFile;
         super.setNewFullSchema(columns);
-        verify(!writeSingleFile || partitionColumnIDs == null);
     }
 
     @Override
