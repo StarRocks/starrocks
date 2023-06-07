@@ -2217,13 +2217,16 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
     std::vector<KeyInfo> check_keys_info;
     bool filter = false;
     std::map<size_t, std::unique_ptr<BloomFilter>>::iterator bf_iter = _bf_map.find(key_size);
-    if (config::enable_parallel_get_and_bf && bf_iter != _bf_map.end()) {
+    if ((config::enable_parallel_get_and_bf || config::enable_l1_bf) && bf_iter != _bf_map.end()) {
         for (size_t i = 0; i < keys_info.size(); i++) {
             auto key_idx = keys_info.key_infos[i].first;
             auto hash = keys_info.key_infos[i].second;
             if (bf_iter->second->test_hash(hash)) {
                 check_keys_info.emplace_back(std::make_pair(key_idx, hash));
             }
+        }
+        if (stat != nullptr) {
+            stat->filter_kv_cnt += keys_info.size() - check_keys_info.size();
         }
         filter = true;
     }
@@ -2460,6 +2463,9 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
             return l1_st.status();
         }
         _l1_vec.emplace_back(std::move(l1_st).value());
+        if (_l1_to_bf.first == l1_block_path && config::enable_l1_bf) {
+            _l1_vec[0]->_bf_map.swap(_l1_to_bf.second);
+        }
         _l1_merged_num.emplace_back(-1);
         _has_l1 = true;
     }
@@ -3759,8 +3765,16 @@ Status PersistentIndex::_merge_compaction() {
     const std::string idx_file_path =
             strings::Substitute("$0/index.l1.$1.$2", _path, _version.major(), _version.minor());
     RETURN_IF_ERROR(writer->init(idx_file_path, _version, true));
-    RETURN_IF_ERROR(
-            _merge_compaction_internal(writer.get(), 0, _l1_vec.size(), _usage_and_size_by_key_length, false, nullptr));
+    std::map<size_t, std::unique_ptr<BloomFilter>> bf_map;
+    if (config::enable_l1_bf) {
+        RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), 0, _l1_vec.size(), _usage_and_size_by_key_length,
+                                                   false, &bf_map));
+        _l1_to_bf.first = idx_file_path;
+        _l1_to_bf.second.swap(bf_map);
+    } else {
+        RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), 0, _l1_vec.size(), _usage_and_size_by_key_length,
+                                                   false, nullptr));
+    }
     // _usage should be equal to total_kv_size. But they may be differen because of compatibility problem when we upgrade
     // from old version and _usage maybe not accurate.
     // so we use total_kv_size to correct the _usage.

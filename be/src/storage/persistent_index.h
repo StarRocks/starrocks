@@ -52,15 +52,17 @@ struct IOStat {
     uint32_t get_in_shard_cnt = 0;
     uint64_t get_in_shard_cost = 0;
     uint64_t read_io_bytes = 0;
+    uint64_t filter_kv_cnt = 0;
     uint64_t l0_write_cost = 0;
     uint64_t l1_read_cost = 0;
     uint64_t flush_or_wal_cost = 0;
 
     std::string print_str() {
         return fmt::format(
-                "IOStat get_in_shard_cnt: {} get_in_shard_cost: {} read_io_bytes: {} l0_write_cost: {} l1_read_cost: "
-                "{} flush_or_wal_cost: {}",
-                get_in_shard_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_read_cost, flush_or_wal_cost);
+                "IOStat get_in_shard_cnt: {} get_in_shard_cost: {} read_io_bytes: {} filter_kv_cnt: {} l0_write_cost: "
+                "{} l1_read_cost: {} flush_or_wal_cost: {}",
+                get_in_shard_cnt, get_in_shard_cost, read_io_bytes, filter_kv_cnt, l0_write_cost, l1_read_cost,
+                flush_or_wal_cost);
     }
 };
 
@@ -694,6 +696,8 @@ private:
     std::atomic<bool> _error{false};
     std::string _error_msg;
     std::vector<KeysInfo> _found_keys_info;
+    // from the latest l1 filename to bf
+    std::pair<std::string, std::map<size_t, std::unique_ptr<BloomFilter>>> _l1_to_bf;
 };
 
 } // namespace starrocks
