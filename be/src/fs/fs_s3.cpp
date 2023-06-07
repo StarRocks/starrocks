@@ -165,6 +165,7 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
     if (!aws_cloud_credential.endpoint.empty()) {
         config.endpointOverride = aws_cloud_credential.endpoint;
     }
+    config.maxConnections = config::object_storage_max_connection;
 
     ClientCacheKey client_cache_key{config, aws_cloud_configuration};
     {
