@@ -729,15 +729,18 @@ public abstract class Type implements Cloneable {
     public boolean canApplyToNumeric() {
         // TODO(mofei) support sum, avg for JSON
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType();
+                !isMapType() && !isArrayType();
     }
 
     public boolean canJoinOn() {
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType();
+                !isMapType() && !isArrayType();
     }
 
     public boolean canGroupBy() {
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canGroupBy();
+        }
         // TODO(mofei) support group by for JSON
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
                 !isMapType();
@@ -745,18 +748,27 @@ public abstract class Type implements Cloneable {
 
     public boolean canOrderBy() {
         // TODO(mofei) support order by for JSON
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canOrderBy();
+        }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
                 !isMapType();
     }
 
     public boolean canPartitionBy() {
         // TODO(mofei) support partition by for JSON
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canPartitionBy();
+        }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
                 !isMapType();
     }
 
     public boolean canDistinct() {
         // TODO(mofei) support distinct by for JSON
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().canDistinct();
+        }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
                 !isMapType();
     }
@@ -791,7 +803,7 @@ public abstract class Type implements Cloneable {
     }
 
     public static final String ONLY_METRIC_TYPE_ERROR_MSG =
-            "Type percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join";
+            "Type (nested) percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join";
 
     public boolean isHllType() {
         return isScalarType(PrimitiveType.HLL);

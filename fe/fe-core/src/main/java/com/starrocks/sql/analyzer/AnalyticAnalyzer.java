@@ -39,7 +39,11 @@ public class AnalyticAnalyzer {
                         + e.toSql() + " (in " + analyticExpr.toSql() + ")");
             }
             if (!e.getType().canPartitionBy()) {
+<<<<<<< HEAD
                 throw new SemanticException("HLL, BITMAP and PERCENTILE type can't as partition by column");
+=======
+                throw new SemanticException(e.getType().toSql() + " type can't as partition by column", e.getPos());
+>>>>>>> 787dc9d37 ([Enhancement] clear unsupported keys from array nested types (#24811))
             }
         }
 
@@ -49,7 +53,11 @@ public class AnalyticAnalyzer {
                         + e.getExpr().toSql() + " (in " + analyticExpr.toSql() + ")");
             }
             if (!e.getExpr().getType().canOrderBy()) {
+<<<<<<< HEAD
                 throw new SemanticException("HLL, BITMAP and PERCENTILE type can't as order by column");
+=======
+                throw new SemanticException(e.getExpr().getType().toString() + " type can't as order by column", e.getPos());
+>>>>>>> 787dc9d37 ([Enhancement] clear unsupported keys from array nested types (#24811))
             }
         }
 
