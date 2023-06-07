@@ -39,7 +39,7 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
         std::shared_lock<std::shared_mutex> L(lock);
 
         int64_t max_count = mem_limit / estimated_mem_usage_per_chunk_source;
-        int64_t avail_count = (max_count - running_chunk_source_count) / dop;
+        int64_t avail_count = (max_count - running_chunk_source_count) / static_cast<int64_t>(dop);
         avail_count = std::max<int64_t>(avail_count, 0);
         if (avail_count == 0 && running_chunk_source_count == 0) {
             avail_count = 1;
