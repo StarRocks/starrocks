@@ -66,6 +66,7 @@ ALTER MATERIALIZED VIEW mv1 ACTIVE;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW mv1;
+-- result:
 -- !result
 select sleep(2);
 -- result:
@@ -73,6 +74,13 @@ select sleep(2);
 -- !result
 select * from mv1;
 -- result:
+2023-01-11	4
+2019-01-01	6
+2023-05-01	2
+2023-03-22	1
+2023-05-22	1
+2023-04-22	2
+2023-02-11	2
 -- !result
 ALTER MATERIALIZED VIEW mv1 ACTIVE;
 -- result:
@@ -90,11 +98,11 @@ select * from mv1;
 -- result:
 2019-01-01	6
 2023-01-11	4
-2023-02-11	2
-2023-05-11	1
-2023-04-11	2
 2023-03-11	1
+2023-04-11	2
 2023-05-01	2
+2023-05-11	1
+2023-02-11	2
 -- !result
 ALTER MATERIALIZED VIEW mv1 INACTIVE;
 -- result:
@@ -102,4 +110,51 @@ ALTER MATERIALIZED VIEW mv1 INACTIVE;
 REFRESH MATERIALIZED VIEW mv1;
 -- result:
 E: (1064, 'Refresh materialized view failed because mv1 is not active. You can try to active it with ALTER MATERIALIZED VIEW mv1 ACTIVE.')
+-- !result
+CREATE TABLE t2 (
+    k1 INT,
+    v1 INT,
+    v2 INT)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1)
+PROPERTIES(
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t2 values (1,1,1),(1,2,2),(2,3,3),(2,3,4),(2,5,5);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv2
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+REFRESH MANUAL
+AS SELECT k1,v1 FROM t2;
+-- result:
+-- !result
+refresh materialized view mv2;
+-- result:
+-- !result
+drop table t2;
+-- result:
+-- !result
+CREATE TABLE t2 (
+    k1 INT,
+    v1 INT,
+    v2 INT)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1)
+PROPERTIES(
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+alter materialized view mv2 active;
+-- result:
+-- !result
+select sleep(2);
+-- result:
+1
+-- !result
+select * from mv2
+-- result:
 -- !result
