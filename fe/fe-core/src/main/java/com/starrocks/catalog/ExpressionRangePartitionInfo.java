@@ -158,5 +158,11 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
             expr.accept(renameVisitor, null);
         }
     }
+
+    @Override
+    public boolean isAutomaticPartition() {
+        return true;
+    }
+
 }
 

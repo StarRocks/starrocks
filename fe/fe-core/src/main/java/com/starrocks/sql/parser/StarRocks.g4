@@ -1976,7 +1976,12 @@ optimizerTrace
 partitionDesc
     : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY RANGE primaryExpression '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
+<<<<<<< HEAD
     | PARTITION BY LIST identifierList '(' (listPartitionDesc (',' listPartitionDesc)*)? ')'
+=======
+    | PARTITION BY LIST? identifierList '(' (listPartitionDesc (',' listPartitionDesc)*)? ')'
+    | PARTITION BY LIST? identifierList
+>>>>>>> 7b972b17a ([Feature] Support automatic partition by value (#24646))
     | PARTITION BY functionCall '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY functionCall
     ;

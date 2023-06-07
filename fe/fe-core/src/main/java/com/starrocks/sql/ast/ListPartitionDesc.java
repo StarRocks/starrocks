@@ -46,6 +46,9 @@ public class ListPartitionDesc extends PartitionDesc {
 
     private final List<String> partitionColNames;
 
+    // for automatic partition table is ture. otherwise is false
+    protected boolean isAutoPartitionTable = false;
+
     public ListPartitionDesc(List<String> partitionColNames,
                              List<PartitionDesc> partitionDescs) {
         super.type = PartitionType.LIST;
@@ -223,6 +226,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 listPartitionInfo.setMultiLiteralExprValues(partitionId, desc.getMultiValues());
                 listPartitionInfo.setIdToIsTempPartition(partitionId, isTemp);
             }
+            listPartitionInfo.setAutomaticPartition(isAutoPartitionTable);
             return listPartitionInfo;
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage(), e);
@@ -240,6 +244,14 @@ public class ListPartitionDesc extends PartitionDesc {
             }
         }
         return partitionColumns;
+    }
+
+    public boolean isAutoPartitionTable() {
+        return isAutoPartitionTable;
+    }
+
+    public void setAutoPartitionTable(boolean autoPartitionTable) {
+        isAutoPartitionTable = autoPartitionTable;
     }
 
     @Override

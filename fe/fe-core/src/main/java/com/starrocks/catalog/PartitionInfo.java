@@ -36,7 +36,11 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.common.FeMetaVersion;
+=======
+import com.starrocks.common.DdlException;
+>>>>>>> 7b972b17a ([Feature] Support automatic partition by value (#24646))
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -290,5 +294,12 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
         }
 
         return buff.toString();
+    }
+
+    public void createAutomaticShadowPartition(long partitionId, String replicateNum) throws DdlException {
+    }
+
+    public boolean isAutomaticPartition() {
+        return false;
     }
 }
