@@ -9,4 +9,5 @@ drop task test_kill;
 select sleep(2);
 select TASK_NAME, SCHEDULE from information_schema.tasks where `DATABASE`='test_drop_task_${uuid0}';
 select TASK_NAME, STATE, ERROR_MESSAGE from information_schema.task_runs where `DATABASE`='test_drop_task_${uuid0}';
+drop task not_exist_task;
 drop database test_drop_task_${uuid0};
