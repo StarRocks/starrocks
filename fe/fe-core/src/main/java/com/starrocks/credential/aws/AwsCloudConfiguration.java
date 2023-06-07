@@ -75,7 +75,6 @@ public class AwsCloudConfiguration extends CloudConfiguration {
         configuration.set("fs.s3a.impl", S3AFileSystem);
         configuration.set("fs.s3n.impl", S3AFileSystem);
         // Below storage using s3 compatible storage api
-        configuration.set("fs.oss.impl", S3AFileSystem);
         configuration.set("fs.ks3.impl", S3AFileSystem);
         configuration.set("fs.obs.impl", S3AFileSystem);
         configuration.set("fs.tos.impl", S3AFileSystem);

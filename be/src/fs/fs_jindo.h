@@ -70,6 +70,7 @@ public:
 
     bool option_equals(const JdoOptions_t& left, const JdoOptions_t& right);
     StatusOr<std::string> get_local_user();
+    std::tuple<std::string, std::string, std::string> get_credentials(const S3URI& uri, const FSOptions& opts);
     StatusOr<JdoSystem_t> new_client(const S3URI& uri, const FSOptions& opts);
 
 private:

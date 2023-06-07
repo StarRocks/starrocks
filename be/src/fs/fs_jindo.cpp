@@ -127,29 +127,64 @@ StatusOr<std::string> JindoClientFactory::get_local_user() {
     return username;
 }
 
-StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSOptions& opts) {
-    std::lock_guard l(_lock);
-
-    auto jdo_options = jdo_createOptions();
-    for (auto& kv : _jindo_config_map) {
-        jdo_setOption(jdo_options, kv.first.c_str(), kv.second.c_str());
-    }
-
+std::tuple<std::string, std::string, std::string> JindoClientFactory::get_credentials(const S3URI& uri,
+                                                                                      const FSOptions& opts) {
+    std::string endpoint = "";
+    std::string ak_id = "";
+    std::string ak_secret = "";
     const THdfsProperties* hdfs_properties = opts.hdfs_properties();
-    if (hdfs_properties != nullptr) {
+    if ((hdfs_properties != nullptr && hdfs_properties->__isset.cloud_configuration) ||
+        (opts.cloud_configuration != nullptr && opts.cloud_configuration->cloud_type != TCloudType::DEFAULT)) {
+        const TCloudConfiguration& t_cloud_configuration = (opts.cloud_configuration != nullptr)
+                                                                   ? *opts.cloud_configuration
+                                                                   : hdfs_properties->cloud_configuration;
+        const AliyunCloudConfiguration aliyun_cloud_configuration =
+                CloudConfigurationFactory::create_aliyun(t_cloud_configuration);
+        const AliyunCloudCredential aliyun_cloud_credential = aliyun_cloud_configuration.aliyun_cloud_credential;
+        if (!aliyun_cloud_credential.endpoint.empty()) {
+            endpoint = aliyun_cloud_credential.endpoint;
+        }
+        if (!aliyun_cloud_credential.access_key.empty()) {
+            ak_id = aliyun_cloud_credential.access_key;
+        }
+        if (!aliyun_cloud_credential.secret_key.empty()) {
+            ak_secret = aliyun_cloud_credential.secret_key;
+        }
+    } else if (hdfs_properties != nullptr) {
         if (hdfs_properties->__isset.end_point) {
-            jdo_setOption(jdo_options, OSS_ENDPOINT_KEY, hdfs_properties->end_point.c_str());
+            endpoint = hdfs_properties->end_point;
         }
         if (hdfs_properties->__isset.access_key) {
-            jdo_setOption(jdo_options, OSS_ACCESS_KEY_ID, hdfs_properties->access_key.c_str());
+            ak_id = hdfs_properties->access_key;
         }
         if (hdfs_properties->__isset.secret_key) {
-            jdo_setOption(jdo_options, OSS_ACCESS_KEY_SECRET, hdfs_properties->secret_key.c_str());
+            ak_secret = hdfs_properties->secret_key;
         }
     }
 
     if (!uri.endpoint().empty()) {
-        jdo_setOption(jdo_options, OSS_ENDPOINT_KEY, uri.endpoint().c_str());
+        endpoint = uri.endpoint();
+    }
+    return std::make_tuple(endpoint, ak_id, ak_secret);
+}
+
+StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSOptions& opts) {
+    std::lock_guard l(_lock);
+
+    auto jdo_options = jdo_createOptions();
+
+    auto [endpoint, access_key, secret_key] = get_credentials(uri, opts);
+
+    if (!access_key.empty() && !secret_key.empty()) {
+        jdo_setOption(jdo_options, OSS_ACCESS_KEY_ID, access_key.c_str());
+        jdo_setOption(jdo_options, OSS_ACCESS_KEY_SECRET, secret_key.c_str());
+    } else {
+        for (auto& kv : _jindo_config_map) {
+            jdo_setOption(jdo_options, kv.first.c_str(), kv.second.c_str());
+        }
+    }
+    if (!endpoint.empty()) {
+        jdo_setOption(jdo_options, OSS_ENDPOINT_KEY, endpoint.c_str());
     }
 
     std::string uri_prefix = uri.scheme() + "://" + uri.bucket();
