@@ -249,8 +249,6 @@ public class MysqlProto {
         context.setCapability(context.getServerCapability());
         serializer.setCapability(context.getCapability());
 
-        LOG.info("database in auth packet is {}", authPacket.getDb());
-
         // NOTE: when we behind proxy, we need random string sent by proxy.
         byte[] randomString = handshakePacket.getAuthPluginData();
         // check authenticate

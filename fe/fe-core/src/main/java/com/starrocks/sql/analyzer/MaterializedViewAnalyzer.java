@@ -358,11 +358,12 @@ public class MaterializedViewAnalyzer {
         private void genColumnAndSetIntoStmt(CreateMaterializedViewStatement statement, QueryRelation queryRelation,
                                              List<String> columnNames, Map<Column, Expr> columnExprMap) {
             List<Column> mvColumns = Lists.newArrayList();
+            Scope queryScope = statement.getQueryStatement().getQueryRelation().getScope();
+            List<Field> relationFields = queryScope.getRelationFields().getAllFields();
             List<Expr> outputExpression = queryRelation.getOutputExpression();
-            for (int i = 0; i < outputExpression.size(); ++i) {
-                Type type = AnalyzerUtils.transformTypeForMv(outputExpression.get(i).getType());
-                Column column = new Column(columnNames.get(i), type,
-                        outputExpression.get(i).isNullable());
+            for (int i = 0; i < relationFields.size(); ++i) {
+                Type type = AnalyzerUtils.transformTypeForMv(relationFields.get(i).getType());
+                Column column = new Column(columnNames.get(i), type, relationFields.get(i).isNullable());
                 // set default aggregate type, look comments in class Column
                 column.setAggregationType(AggregateType.NONE, false);
                 mvColumns.add(column);

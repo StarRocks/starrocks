@@ -12,6 +12,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [Introduction](../introduction/what_is_starrocks.md)
 - [Architecture](../introduction/Architecture.md)
+- [Shared-data StarRocks cluster](../administration/deploy_shared_data.md)
 - [Features](../introduction/Features.md)
 
 </NavBoxPartItem>
@@ -61,8 +62,10 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPartItem title="Query acceleration">
 
 - [Cost-based optimizer](../using_starrocks/Cost_based_optimizer.md)
-- [Materialized view](../using_starrocks/Materialized_view.md)
+- [Synchronous materialized view](../using_starrocks/Materialized_view-single_table.md)
+- [Asynchronous materialized views](../using_starrocks/Materialized_view.md)
 - [Colocate Join](../using_starrocks/Colocate_join.md)
+- [Query cache](../using_starrocks/query_cache.md)
 
 </NavBoxPartItem>
 <NavBoxPartItem title="Query semi-structured data">
@@ -85,6 +88,15 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [JDBC-compatible database](../data_source/catalog/jdbc_catalog.md)
 
 </NavBoxPartItem>
+<NavBoxPartItem title="Integration​">
+
+- [AWS](../integrations/authenticate_to_aws_resources.md)
+- [Microsoft Azure Storage](../integrations/authenticate_to_azure_storage.md)
+- [Google Cloud Storage](../integrations/authenticate_to_gcs.md)
+- [BI tools](../integrations/BI_integrations/Hex.md)
+- [IDE tools](../integrations/IDE_integrations/DataGrip.md)
+
+</NavBoxPartItem>
 </NavBoxPart>
 </NavBox>
 
@@ -94,8 +106,10 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [Manage a cluster](../administration/Cluster_administration.md)
 - [Scale in and out a cluster](../administration/Scale_up_down.md)
+- [Resource group](../administration/monitor_manage_big_queries.md)
+- [Privileges](../administration/privilege_overview.md)
+- [Data recovery](../administration/Data_recovery.md)
 - [Tune query performance](../administration/Query_planning.md)
-- [Manage workloads](../administration/resource_group.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -105,6 +119,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [SQL reference](../sql-reference/sql-statements/account-management/ALTER%20USER.md)
 - [Function reference](../sql-reference/sql-functions/date-time-functions/convert_tz.md)
+- [Data type](../sql-reference/sql-statements/data-types/TINYINT.md)
 
 </NavBoxPartItem>
 </NavBoxPart>

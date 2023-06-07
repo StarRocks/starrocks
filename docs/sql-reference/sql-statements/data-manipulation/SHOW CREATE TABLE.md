@@ -48,7 +48,7 @@ COMMENT "my first starrocks table"
 DISTRIBUTED BY HASH(k1) BUCKETS 10;
 ```
 
-Display the CREATE TABLE statement of `example_table`.
+Display the CREATE TABLE statement of `example_table`. Note that if you did not specify PROPERTIES when you create the table, the default properties are displayed in the output of SHOW CREATE TABLE.
 
 ```Plain
 SHOW CREATE TABLE example_db.example_table;
@@ -67,8 +67,10 @@ COMMENT "my first starrocks table"
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10 
 PROPERTIES (
 "replication_num" = "3",
-"storage_format" = "DEFAULT",
-"enable_persistent_index" = "false"
-); |
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);|
 +---------------+----------------------------------------------------------+
 ```

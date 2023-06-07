@@ -41,9 +41,10 @@ Optional. The properties of the data. Syntax:
 ```SQL
 [COLUMNS TERMINATED BY '<column_separator>'],
 [ROWS TERMINATED BY '<row_separator>'],
-[COLUMNS (<column1_name>[,<column2_name>,<column_assignment>,... ])],
+[COLUMNS (<column1_name>[, <column2_name>, <column_assignment>, ... ])],
 [WHERE <expr>],
-[PARTITION (<partition1_name>[,<partition2_name>,...])]
+[PARTITION (<partition1_name>[, <partition2_name>, ...])]
+[TEMPORARY PARTITION (<temporary_partition1_name>[, <temporary_partition2_name>, ...])]
 ```
 
 `COLUMNS TERMINATED BY`
@@ -83,6 +84,10 @@ If a StarRocks table is distributed on partitions p0, p1, p2 and p3, and you wan
 ```SQL
 PARTITION (p1, p2, p3)
 ```
+
+`TEMPORARY PARTITION`
+
+The name of the [temporary partition](../../../table_design/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).
 
 ### `job_properties`
 
@@ -261,7 +266,7 @@ CREATE TABLE example_db.example_tbl1 (
     `nationality` varchar(26) NULL COMMENT "Nationality", 
     `gender` varchar(26) NULL COMMENT "Gender", 
     `price` double NULL COMMENT "Price") 
-PRIMARY KEY (order_id,pay_dt) 
+DUPLICATE KEY (order_id,pay_dt) 
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
 ```
 
@@ -335,7 +340,7 @@ CREATE TABLE example_db.example_tbl2 (
     `nationality` varchar(26) NULL COMMENT "Nationality", 
     `price` double NULL COMMENT "Price"
 ) 
-PRIMARY KEY (order_id,pay_dt) 
+DUPLICATE KEY (order_id,pay_dt) 
 DISTRIBUTED BY HASH(order_id) BUCKETS 5; 
 ```
 
@@ -673,7 +678,7 @@ CREATE TABLE sensor.sensor_log1 (
     `sensor_type` varchar(26) NOT NULL COMMENT "sensor type"
 ) 
 ENGINE=OLAP 
-PRIMARY KEY (id) 
+DUPLICATE KEY (id) 
 DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
 ```
 
@@ -751,7 +756,7 @@ CREATE TABLE sensor.sensor_log2 (
     `data_y` long NULL COMMENT "sensor data" 
 ) 
 ENGINE=OLAP 
-PRIMARY KEY (id) 
+DUPLICATE KEY (id) 
 DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
 ```
 
@@ -831,7 +836,7 @@ CREATE TABLE sensor.sensor_log3 (
     `data_y` long NULL COMMENT "sensor data" 
 ) 
 ENGINE=OLAP 
-PRIMARY KEY (id) 
+DUPLICATE KEY (id) 
 DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
 ```
 
