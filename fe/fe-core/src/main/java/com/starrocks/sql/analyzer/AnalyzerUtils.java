@@ -859,7 +859,7 @@ public class AnalyzerUtils {
                 result.put(partitionName, addPartitionClause);
             }
         } else {
-            throw new AnalysisException("automatic partition only support expression range partition.");
+            throw new AnalysisException("automatic partition only support partition by value.");
         }
         return result;
     }
