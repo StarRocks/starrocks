@@ -164,7 +164,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
     const int n = 2;
     {
         auto pchunk = ChunkHelper::new_chunk(*sc, n);
-        Datum tmp;
+        vectorized::Datum tmp;
         string tmpstr("slice00000");
         tmp.set_slice(tmpstr);
         pchunk->columns()[0]->append_datum(tmp);
@@ -176,7 +176,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
     }
     {
         auto pchunk = ChunkHelper::new_chunk(*sc, n);
-        Datum tmp;
+        vectorized::Datum tmp;
         string tmpstr("slice00000");
         tmp.set_slice(tmpstr);
         pchunk->columns()[0]->append_datum(tmp);
