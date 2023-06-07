@@ -35,7 +35,6 @@ jobs:
 #          workflow: repo-sync.yml
 #          repo: CelerData/celerdata-enterprise
 #          inputs: '{ "PR_ID": "${{ github.event.number }}", "COMMIT_ID": "${{ steps.commit_sha.outputs.commit_sha }}", "BRANCH": "${{ github.base_ref }}" }'
-#          ref: ${{ github.base_ref }}
 #          token: ${{ secrets.PAT }}
 
       - name: sync test
@@ -44,5 +43,4 @@ jobs:
           workflow: repo-sync.yml
           repo: StarRocks/SyncTest
           inputs: '{ "PR_ID": "${{ github.event.number }}", "COMMIT_ID": "${{ steps.commit_sha.outputs.commit_sha }}", "BRANCH": "${{ github.base_ref }}" }'
-          ref: ${{ github.base_ref }}
           token: ${{ secrets.PAT }}
