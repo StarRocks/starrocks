@@ -69,13 +69,15 @@ public:
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         const auto& col = down_cast<const BitmapColumn&>(*column);
-        this->data(state) |= *(col.get_object(row_num));
+        auto* src_obj = col.get_object(row_num);
+        this->data(state) |= *src_obj;
+        src_obj->clear();
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto* col = down_cast<BitmapColumn*>(to);
         auto& bitmap = this->data(state);
-        col->append(bitmap);
+        col->append_shallow(bitmap);
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
@@ -95,7 +97,7 @@ public:
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto* col = down_cast<BitmapColumn*>(to);
         auto& bitmap = const_cast<BitmapValue&>(this->data(state));
-        col->append(std::move(bitmap));
+        col->append_shallow(bitmap);
     }
 
     std::string get_name() const override { return "bitmap_agg"; }

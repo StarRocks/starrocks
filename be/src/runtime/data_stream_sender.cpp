@@ -284,6 +284,7 @@ Status DataStreamSender::Channel::_do_send_chunk_rpc(PTransmitChunkParams* reque
     _chunk_closure->cntl.Reset();
     _chunk_closure->cntl.set_timeout_ms(_brpc_timeout_ms);
     _chunk_closure->cntl.request_attachment().append(attachment);
+    LOG(ERROR) << "MEM_20:" << tls_mem_tracker->consumption() << std::endl;
     _brpc_stub->transmit_chunk(&_chunk_closure->cntl, request, &_chunk_closure->result, _chunk_closure);
     _request_seq++;
     return Status::OK();
@@ -509,23 +510,29 @@ Status DataStreamSender::send_chunk(RuntimeState* state, Chunk* chunk) {
     }
     // Unpartition or _channel size
     if (_part_type == TPartitionType::UNPARTITIONED || _channels.size() == 1) {
+        LOG(ERROR) << "MEM_3:" << tls_mem_tracker->consumption() << std::endl;
         // We use sender request to avoid serialize chunk many times.
         // 1. create a new chunk PB to serialize
         ChunkPB* pchunk = _chunk_request.add_chunks();
         // 2. serialize input chunk to pchunk
         RETURN_IF_ERROR(serialize_chunk(chunk, pchunk, &_is_first_chunk, _channels.size()));
+        //(*chunk).clear();
+        LOG(ERROR) << "MEM_6:" << tls_mem_tracker->consumption() << std::endl;
         _current_request_bytes += pchunk->data().size();
         // 3. if request bytes exceed the threshold, send current request
         if (_current_request_bytes > _request_bytes_threshold) {
             butil::IOBuf attachment;
             construct_brpc_attachment(&_chunk_request, &attachment);
+            LOG(ERROR) << "MEM_7:" << tls_mem_tracker->consumption() << std::endl;
             for (auto idx : _channel_indices) {
                 RETURN_IF_ERROR(_channels[idx]->send_chunk_request(&_chunk_request, attachment));
             }
+            LOG(ERROR) << "MEM_8:" << tls_mem_tracker->consumption() << std::endl;
             _current_request_bytes = 0;
             _chunk_request.clear_chunks();
         }
     } else if (_part_type == TPartitionType::RANDOM) {
+        LOG(ERROR) << "MEM_4:" << tls_mem_tracker->consumption() << std::endl;
         // Round-robin batches among channels. Wait for the current channel to finish its
         // rpc before overwriting its batch.
         // 1. Get request of that channel
@@ -537,6 +544,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, Chunk* chunk) {
         }
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+        LOG(ERROR) << "MEM_5:" << tls_mem_tracker->consumption() << std::endl;
         SCOPED_TIMER(_shuffle_dispatch_timer);
         // hash-partition batch's rows across channels
         int num_channels = _channels.size();
@@ -652,6 +660,7 @@ Status DataStreamSender::serialize_chunk(const Chunk* src, ChunkPB* dst, bool* i
             res->Swap(dst);
         }
     }
+    LOG(ERROR) << "MEM_6_1:" << tls_mem_tracker->consumption() << std::endl;
     DCHECK(dst->has_uncompressed_size());
     DCHECK_EQ(dst->uncompressed_size(), dst->data().size());
 
@@ -671,6 +680,7 @@ Status DataStreamSender::serialize_chunk(const Chunk* src, ChunkPB* dst, bool* i
             Slice input(dst->data());
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
                                                       &_compression_scratch));
+            LOG(ERROR) << "MEM_6_2:" << tls_mem_tracker->consumption() << std::endl;
         } else {
             int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
@@ -683,13 +693,17 @@ Status DataStreamSender::serialize_chunk(const Chunk* src, ChunkPB* dst, bool* i
             Slice input(dst->data());
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice));
             _compression_scratch.resize(compressed_slice.size);
+            LOG(ERROR) << "MEM_6_3:" << tls_mem_tracker->consumption() << std::endl;
         }
+        LOG(ERROR) << "MEM_6_4:" << tls_mem_tracker->consumption() << std::endl;
 
         double compress_ratio = (static_cast<double>(uncompressed_size)) / _compression_scratch.size();
         if (LIKELY(compress_ratio > config::rpc_compress_ratio_threshold)) {
             dst->mutable_data()->swap(reinterpret_cast<std::string&>(_compression_scratch));
             dst->set_compress_type(_compress_type);
+            LOG(ERROR) << "MEM_6_5:" << tls_mem_tracker->consumption() << std::endl;
         }
+        LOG(ERROR) << "MEM_6_6:" << tls_mem_tracker->consumption() << std::endl;
 
         VLOG_ROW << "uncompressed size: " << uncompressed_size << ", compressed size: " << _compression_scratch.size();
     }

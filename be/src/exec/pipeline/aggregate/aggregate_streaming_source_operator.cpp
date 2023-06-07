@@ -78,7 +78,7 @@ Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(ChunkPtr* c
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     }
 
-    RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), chunk));
+    RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(100, chunk));
     return Status::OK();
 }
 

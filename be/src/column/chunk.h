@@ -77,6 +77,16 @@ public:
     // Remove all records and reset the delete state.
     void reset();
 
+    void clear() {
+        reset();
+        _columns.clear();
+        _schema.reset();
+        _cid_to_index.clear();
+        _slot_id_to_index.clear();
+        _tuple_id_to_index.clear();
+        _extra_data.reset();
+    }
+
     Status upgrade_if_overflow();
 
     Status downgrade();
@@ -201,6 +211,8 @@ public:
     //      size: 2
     // This function will copy the [3, 2] row of src to this chunk.
     void append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
+
+    void append_selective_shallow_copy(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
 
     // This function will append data from src according to the input indexes.
     // The columns of src chunk will be destroyed after append。

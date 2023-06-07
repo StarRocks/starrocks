@@ -165,6 +165,8 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
         }
     }
 
+    LOG(ERROR) << "MEM_1:" << tls_mem_tracker->consumption() << std::endl;
+
     eval_join_runtime_filters(chunk->get());
 
     if (_child_eos) {
@@ -177,6 +179,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
         if (_aggregator->hash_map_variant().size() > 0) {
             // child has iterator over, and the hashtable has data
             RETURN_IF_ERROR(_output_chunk_from_hash_map(chunk));
+            LOG(ERROR) << "MEM_2:" << tls_mem_tracker->consumption() << std::endl;
             *eos = false;
             _aggregator->process_limit(chunk);
             DCHECK_CHUNK(*chunk);
@@ -202,7 +205,7 @@ Status AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     }
 
-    RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(runtime_state()->chunk_size(), chunk));
+    RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(100, chunk));
     return Status::OK();
 }
 

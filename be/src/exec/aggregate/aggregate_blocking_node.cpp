@@ -146,13 +146,15 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
         *eos = true;
         return Status::OK();
     }
-    const auto chunk_size = runtime_state()->chunk_size();
+    const auto chunk_size = 100;
 
+    LOG(ERROR) << "NN_1:" << tls_mem_tracker->consumption();
     if (_aggregator->is_none_group_by_exprs()) {
         RETURN_IF_ERROR(_aggregator->convert_to_chunk_no_groupby(chunk));
     } else {
         RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(chunk_size, chunk));
     }
+    LOG(ERROR) << "NN_2:" << tls_mem_tracker->consumption();
 
     const int64_t old_size = (*chunk)->num_rows();
     eval_join_runtime_filters(chunk->get());
