@@ -160,7 +160,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
-    auto sc = create_key_schema({TYPE_VARCHAR});
+    auto sc = create_key_schema({OLAP_FIELD_TYPE_VARCHAR});
     const int n = 2;
     {
         auto pchunk = ChunkHelper::new_chunk(*sc, n);
