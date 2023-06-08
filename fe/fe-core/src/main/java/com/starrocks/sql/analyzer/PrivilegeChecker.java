@@ -443,7 +443,7 @@ public class PrivilegeChecker {
                                 PrivilegeType.USAGE)) {
                     forbiddenUseResourceList.add(loadJob.getResourceName());
                 }
-                loadJob.getTableNames().forEach(tableName -> {
+                loadJob.getTableNames(true).forEach(tableName -> {
                     if (!PrivilegeActions.checkTableAction(context, dbName, tableName,
                             PrivilegeType.INSERT)) {
                         forbiddenInsertTableList.add(tableName);
