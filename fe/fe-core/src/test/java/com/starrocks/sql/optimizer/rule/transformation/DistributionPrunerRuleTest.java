@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.SlotRef;
@@ -122,10 +123,10 @@ public class DistributionPrunerRuleTest {
         scanColumnMap.put(column5, new Column("shop_type", Type.CHAR, false));
 
         BinaryPredicateOperator binaryPredicateOperator1 =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, column1,
+                new BinaryPredicateOperator(BinaryType.GE, column1,
                         ConstantOperator.createDate(LocalDateTime.of(2019, 8, 22, 0, 0, 0)));
         BinaryPredicateOperator binaryPredicateOperator2 =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, column1,
+                new BinaryPredicateOperator(BinaryType.LE, column1,
                         ConstantOperator.createDate(LocalDateTime.of(2019, 8, 22, 0, 0, 0)));
 
         InPredicateOperator inPredicateOperator1 = new InPredicateOperator(column2,

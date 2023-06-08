@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -185,7 +186,7 @@ public class BinaryPredicateStatisticCalculator {
                                                              ColumnStatistic columnStatistic,
                                                              Optional<ConstantOperator> constant,
                                                              Statistics statistics,
-                                                             BinaryPredicateOperator.BinaryType binaryType) {
+                                                             BinaryType binaryType) {
         if (columnStatistic.getHistogram() == null || !constant.isPresent()) {
             StatisticRangeValues predicateRange;
             if (constant.isPresent()) {
@@ -202,7 +203,7 @@ public class BinaryPredicateStatisticCalculator {
             return estimatePredicateRange(columnRefOperator, columnStatistic, predicateRange, statistics);
         } else {
             Histogram estimatedHistogram = estimateLessThanWithHistogram(columnStatistic, constant.get(),
-                    binaryType.equals(BinaryPredicateOperator.BinaryType.LE));
+                    binaryType.equals(BinaryType.LE));
 
             long rowCountInHistogram = estimatedHistogram.getTotalRows();
             double rowCount = statistics.getOutputRowCount()
@@ -220,7 +221,7 @@ public class BinaryPredicateStatisticCalculator {
                                                                 ColumnStatistic columnStatistic,
                                                                 Optional<ConstantOperator> constant,
                                                                 Statistics statistics,
-                                                                BinaryPredicateOperator.BinaryType binaryType) {
+                                                                BinaryType binaryType) {
         if (columnStatistic.getHistogram() == null || !constant.isPresent()) {
             StatisticRangeValues predicateRange;
             if (constant.isPresent()) {
@@ -238,7 +239,7 @@ public class BinaryPredicateStatisticCalculator {
 
         } else {
             Histogram estimatedHistogram = estimateGreaterThanWithHistogram(columnStatistic, constant.get(),
-                    binaryType.equals(BinaryPredicateOperator.BinaryType.GE));
+                    binaryType.equals(BinaryType.GE));
 
             long rowCountInHistogram = estimatedHistogram.getTotalRows();
             double rowCount = statistics.getOutputRowCount()

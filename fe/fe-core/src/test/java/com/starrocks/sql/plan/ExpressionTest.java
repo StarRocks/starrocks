@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
@@ -237,7 +238,7 @@ public class ExpressionTest extends PlanTestBase {
         Assert.assertTrue(castExpression instanceof CastExpr);
 
         // lambda functions
-        ScalarOperator lambdaExpr = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        ScalarOperator lambdaExpr = new BinaryPredicateOperator(BinaryType.EQ,
                 new ColumnRefOperator(100000, Type.INT, "x", true),
                 ConstantOperator.createInt(1));
         ColumnRefOperator colRef = new ColumnRefOperator(100000, Type.INT, "x", true);
@@ -1473,7 +1474,7 @@ public class ExpressionTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertCContains(plan, "struct<col1 varchar, col2 tinyint(4), col3 tinyint(4), col4 smallint(6)>");
 
-        sql = "select row('a', 1, 2, 10000, [1, 2, 3], NULL, {'a': 1, 'b': 2})";
+        sql = "select row('a', 1, 2, 10000, [1, 2, 3], NULL, map{'a': 1, 'b': 2})";
         plan = getVerboseExplain(sql);
         assertCContains(plan, "struct<col1 varchar, col2 tinyint(4), col3 tinyint(4), col4 smallint(6), " +
                 "col5 array<tinyint(4)>, col6 boolean, col7 map<varchar,tinyint(4)>>");

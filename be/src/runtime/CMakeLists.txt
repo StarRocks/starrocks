@@ -72,6 +72,7 @@ set(RUNTIME_FILES
     memory/mem_chunk_allocator.cpp
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
+    tablets_channel.cpp
     time_types.cpp
     runtime_filter_worker.cpp
     global_dict/decoder.cpp

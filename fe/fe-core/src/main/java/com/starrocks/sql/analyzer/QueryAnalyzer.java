@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
@@ -548,7 +549,7 @@ public class QueryAnalyzer {
                         right.resolveField(new SlotRef(null, colName)).getField().getRelationAlias();
 
                 // create predicate "<left>.colName = <right>.colName"
-                BinaryPredicate resolvedUsing = new BinaryPredicate(BinaryPredicate.Operator.EQ,
+                BinaryPredicate resolvedUsing = new BinaryPredicate(BinaryType.EQ,
                         new SlotRef(leftTableName, colName), new SlotRef(rightTableName, colName));
 
                 if (joinEqual == null) {

@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LikePredicate;
@@ -614,7 +615,7 @@ public class ShowStmtAnalyzer {
 
         private void binaryPredicateHandler(Expr subExpr, String leftKey, boolean filter) {
             BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
-            if (filter && binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
+            if (filter && binaryPredicate.getOp() != BinaryType.EQ) {
                 throw new SemanticException(String.format("Only operator =|like are supported for %s", leftKey));
             }
             if (leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_LAST_CONSISTENCY_CHECK_TIME)) {

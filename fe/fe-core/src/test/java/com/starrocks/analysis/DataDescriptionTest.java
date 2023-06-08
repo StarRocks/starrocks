@@ -35,7 +35,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -130,7 +129,7 @@ public class DataDescriptionTest {
         List<Expr> params = Lists.newArrayList();
         params.add(new StringLiteral("day"));
         params.add(new SlotRef(null, "k2"));
-        BinaryPredicate predicate = new BinaryPredicate(Operator.EQ, new SlotRef(null, "k1"),
+        BinaryPredicate predicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new FunctionCallExpr(FunctionSet.ALIGNMENT_TIMESTAMP, params));
         desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
                 Lists.newArrayList("abc.txt"),
@@ -144,7 +143,7 @@ public class DataDescriptionTest {
         params.clear();
         params.add(new StringLiteral("-"));
         params.add(new StringLiteral("10"));
-        predicate = new BinaryPredicate(Operator.EQ, new SlotRef(null, "k1"),
+        predicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new FunctionCallExpr(FunctionSet.REPLACE_VALUE, params));
         desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
                 Lists.newArrayList("abc.txt"),
@@ -158,7 +157,7 @@ public class DataDescriptionTest {
         params.clear();
         params.add(new StringLiteral(""));
         params.add(new NullLiteral());
-        predicate = new BinaryPredicate(Operator.EQ, new SlotRef(null, "k1"),
+        predicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new FunctionCallExpr(FunctionSet.REPLACE_VALUE, params));
         desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
                 Lists.newArrayList("abc.txt"),
@@ -171,7 +170,7 @@ public class DataDescriptionTest {
         // data from table and set bitmap_dict
         params.clear();
         params.add(new SlotRef(null, "k2"));
-        predicate = new BinaryPredicate(Operator.EQ, new SlotRef(null, "k1"),
+        predicate = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "k1"),
                 new FunctionCallExpr("bitmap_dict", params));
         desc = new DataDescription("testTable", new PartitionNames(false, Lists.newArrayList("p1", "p2")),
                 "testHiveTable", false, Lists.newArrayList(predicate), null);

@@ -14,9 +14,18 @@
 
 package com.starrocks.pseudocluster;
 
+import com.staros.proto.AwsCredentialInfo;
+import com.staros.proto.AwsDefaultCredentialInfo;
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.SharedNothingStorageVolumeMgr;
+import com.starrocks.storagevolume.StorageVolume;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.AfterClass;
@@ -66,11 +75,45 @@ public class PseudoClusterTest {
             }
         };
 
+        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
+
+        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+        s3FsBuilder.setBucket("test-bucket");
+        s3FsBuilder.setRegion("test-region");
+        s3FsBuilder.setCredential(AwsCredentialInfo.newBuilder()
+                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()));
+        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
+
+        fsBuilder.setFsType(FileStoreType.S3);
+        fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setFsName("test-fsname");
+        fsBuilder.setS3FsInfo(s3FsInfo);
+        FileStoreInfo fsInfo = fsBuilder.build();
+
+        builder.setFsInfo(fsInfo);
+        builder.setFullPath("s3://test-bucket/1/");
+        FilePathInfo pathInfo = builder.build();
+
         new MockUp<StarOSAgent>() {
             @Mock
             public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
                 return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
+
+            @Mock
+            public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) {
+                return pathInfo;
+            }
+        };
+
+        new MockUp<SharedNothingStorageVolumeMgr>() {
+            @Mock
+            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+                return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
+
+
         };
 
         Connection connection = PseudoCluster.getInstance().getQueryConnection();

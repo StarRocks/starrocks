@@ -38,6 +38,10 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public abstract class StorageVolumeMgr {
     private static final String ENABLED = "enabled";
 
+    public static final String DEFAULT = "default";
+
+    public static final String LOCAL = "local";
+
     @SerializedName("defaultStorageVolumeId")
     protected String defaultStorageVolumeId = "";
 
@@ -197,6 +201,12 @@ public abstract class StorageVolumeMgr {
             if (tables.isEmpty()) {
                 storageVolumeToTables.remove(svId);
             }
+        }
+    }
+
+    public StorageVolume getDefaultStorageVolume() throws AnalysisException {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return getStorageVolume(getDefaultStorageVolumeId());
         }
     }
 
