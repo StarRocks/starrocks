@@ -8,7 +8,7 @@ Creates a materialized view. For usage information about materialized views, see
 >
 > Only users with the CREATE MATERIALIZED VIEW privilege in the database where the base table resides can create a materialized view.
 
-Creating a materialized view is asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of a synchronous materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) command, and view that of an asynchronous materialized view by querying the metadata tables `tasks` and `task_runs` in [Information Schema](../../../administration/information_schema.md).
+Creating a materialized view is an asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of a synchronous materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) command, and view that of an asynchronous materialized view by querying the metadata tables `tasks` and `task_runs` in [Information Schema](../../../administration/information_schema.md).
 
 StarRocks supports asynchronous materialized views from v2.4. The major differences between asynchronous materialized views and synchronous materialized views in previous versions are as follows:
 
@@ -30,7 +30,7 @@ AS
 <query_statement>
 ```
 
-Parameters in brackets [] is optional.
+Parameters in brackets [] are optional.
 
 ### Parameters
 
@@ -38,7 +38,7 @@ Parameters in brackets [] is optional.
 
 The name of the materialized view. The naming requirements are as follows:
 
-- The name must consist of letters (a-z or A-Z), numbers (0-9) or underscores (_), and it can only start with a letter.
+- The name must consist of letters (a-z or A-Z), numbers (0-9), or underscores (_), and it can only start with a letter.
 - The length of the name cannot exceed 64 characters.
 
 **COMMENT** (optional)
@@ -139,7 +139,7 @@ AS
 <query_statement>
 ```
 
-Parameters in brackets [] is optional.
+Parameters in brackets [] are optional.
 
 ### Parameters
 
@@ -147,7 +147,7 @@ Parameters in brackets [] is optional.
 
 The name of the materialized view. The naming requirements are as follows:
 
-- The name must consist of letters (a-z or A-Z), numbers (0-9) or underscores (_), and it can only start with a letter.
+- The name must consist of letters (a-z or A-Z), numbers (0-9), or underscores (_), and it can only start with a letter.
 - The length of the name cannot exceed 64 characters.
 
 > **CAUTION**
@@ -169,7 +169,7 @@ The refresh moment of the materialized view. Default value: `IMMEDIATE`. Valid v
 
 The refresh strategy of the asynchronous materialized view. Valid values:
 
-- `ASYNC`: Asynchronous refresh mode. For fixed-interval automatic refresh, you need to specify the refresh start time, refresh interval using the following units: `DAY`, `HOUR`, `MINUTE`, and `SECOND`. If you do not specify the interval, the materialized view refreshes each time the data in the base tables changes.
+- `ASYNC`: Asynchronous refresh mode. For a fixed-interval automatic refresh, you need to specify the refresh start time, refresh interval using the following units: `DAY`, `HOUR`, `MINUTE`, and `SECOND`. If you do not specify the interval, the materialized view refreshes each time the data in the base tables changes.
 - `MANUAL`: Manual refresh mode.
 
 If this parameter is not specified, the default value `MANUAL` is used.
@@ -178,7 +178,7 @@ If this parameter is not specified, the default value `MANUAL` is used.
 
 The partitioning strategy of the asynchronous materialized view. As for the current version of StarRocks, only one partition expression is supported when creating an asynchronous materialized view. Valid values:
 
-- `column_name`: The name of the column used for partitioning. Expression `PARTITION BY dt` means to partition the materialized view according to the `dt` column.
+- `column_name`: The name of the column used for partitioning. The expression `PARTITION BY dt` means to partition the materialized view according to the `dt` column.
 - date_trunc function: The function used to truncate the time unit. `PARTITION BY date_trunc("MONTH", 'dt')` means that the `dt` column is truncated to month as the unit for partitioning. The date_trunc function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`.
 
 If this parameter is not specified, no partitioning strategy is adopted by default.
@@ -215,7 +215,7 @@ The query statement to create the asynchronous materialized view.
 
 ### Query Materialized View
 
-An asynchronous materialized view is a physic table. You can operate it as any regular tables **except that you cannot directly load data into an asynchronous materialized view**.
+An asynchronous materialized view is a physic table. You can operate it as any regular table **except that you cannot directly load data into an asynchronous materialized view**.
 
 ### Automatic query rewrite with asynchronous materialized view
 
@@ -306,8 +306,8 @@ See [Asynchronous materialized view -  Rewrite queries with the asynchronous mat
   - Synchronous materialized views support only one aggregate function for each column of the base table. Query statements such as `select sum(a), min(a) from table` are not supported.
   - When creating a synchronous materialized view with an aggregate function, you must specify the GROUP BY clause, and specify at least one GROUP BY column in SELECT.
   - Synchronous materialized views do not support clauses such as JOIN, WHERE, and the HAVING clause of GROUP BY.
-  - When using ALTER TABLE DROP COLUMN to drop a specific column in a base table, you must ensure that all synchronous materialized views of the base table do not contain the dropped column, otherwise the drop operation will fail. Before you drop the column, you must first drop all synchronous materialized views that contain the column.
-  - Creating too many synchronous materialized views for a table will affect the data load efficiency. When data is being loaded to the base table, the data in synchronous materialized view and base table will be updated synchronously. If a base table contains `n` synchronous materialized views, the efficiency of loading data into the base table is about the same as the efficiency of loading data into `n` tables.
+  - When using ALTER TABLE DROP COLUMN to drop a specific column in a base table, you must ensure that all synchronous materialized views of the base table do not contain the dropped column, otherwise, the drop operation will fail. Before you drop the column, you must first drop all synchronous materialized views that contain the column.
+  - Creating too many synchronous materialized views for a table will affect the data load efficiency. When data is being loaded to the base table, the data in the synchronous materialized view and the base table will be updated synchronously. If a base table contains `n` synchronous materialized views, the efficiency of loading data into the base table is about the same as the efficiency of loading data into `n` tables.
 
 - About nested asynchronous materialized views:
 
@@ -339,14 +339,14 @@ mysql> desc duplicate_table;
 +-------+--------+------+------+---------+-------+
 ```
 
-Example 1. Create a synchronous materialized view that only contains the columns of the original table (k1, k2).
+Example 1: Create a synchronous materialized view that only contains the columns of the original table (k1, k2).
 
 ```sql
 create materialized view k1_k2 as
 select k1, k2 from duplicate_table;
 ```
 
-The materialized view contains only two columns k1, k2 without any aggregation.
+The materialized view contains only two columns k1 and k2 without any aggregation.
 
 ```plain text
 +-----------------+-------+--------+------+------+---------+-------+
@@ -357,14 +357,14 @@ The materialized view contains only two columns k1, k2 without any aggregation.
 +-----------------+-------+--------+------+------+---------+-------+
 ```
 
-Example 2. Create a synchronous materialized view sorted by k2.
+Example 2: Create a synchronous materialized view sorted by k2.
 
 ```sql
 create materialized view k2_order as
 select k2, k1 from duplicate_table order by k2;
 ```
 
-The materialized view's schema is shown below. The materialized view contains only two columns k2, k1, where column k2 is a sort column without any aggregation.
+The materialized view's schema is shown below. The materialized view contains only two columns k2 and k1, where column k2 is a sort column without any aggregation.
 
 ```plain text
 +-----------------+-------+--------+------+-------+---------+-------+
@@ -375,14 +375,14 @@ The materialized view's schema is shown below. The materialized view contains on
 +-----------------+-------+--------+------+-------+---------+-------+
 ```
 
-Example 3. Create a synchronous materialized view grouped by k1 and k2, and a SUM aggregation on k3.
+Example 3: Create a synchronous materialized view grouped by k1 and k2, and a SUM aggregation on k3.
 
 ```sql
 create materialized view k1_k2_sumk3 as
 select k1, k2, sum(k3) from duplicate_table group by k1, k2;
 ```
 
-The materialized view's schema is shown below. The materialized view contains three columns k1, k2 and sum (k3), where k1, k2 are grouped columns, and sum (k3) is the sum of the k3 columns grouped according to k1, k2.
+The materialized view's schema is shown below. The materialized view contains three columns k1, k2 and sum (k3), where k1, k2 are grouped columns, and sum (k3) is the sum of the k3 columns grouped according to k1 and k2.
 
 ```plain text
 +-----------------+-------+--------+------+-------+---------+-------+
@@ -396,7 +396,7 @@ The materialized view's schema is shown below. The materialized view contains th
 
 Because the materialized view does not declare a sort column, and it adopts an aggregation function, StarRocks supplements the grouped columns k1 and k2 by default.
 
-Example 4. Create a synchronous materialized view to remove duplicate rows.
+Example 4: Create a synchronous materialized view to remove duplicate rows.
 
 ```sql
 create materialized view deduplicate as
@@ -416,7 +416,7 @@ The materialized view's schema is shown below. The materialized view contains k1
 +-----------------+-------+--------+------+-------+---------+-------+
 ```
 
-Example 5. Create a non-aggregated synchronous materialized view that does not declare a sort column.
+Example 5: Create a non-aggregated synchronous materialized view that does not declare a sort column.
 
 The schema of the base table is shown below:
 
@@ -434,7 +434,7 @@ The schema of the base table is shown below:
 +-------+--------------+------+-------+---------+-------+
 ```
 
-The materialized view contains k3, k4, k5, k6, k7 columns, and no sort column is declared. Create the materialized view with the following statement:
+The materialized view contains k3, k4, k5, k6, and k7 columns, and no sort column is declared. Create the materialized view with the following statement:
 
 ```sql
 create materialized view mv_1 as
@@ -457,7 +457,7 @@ The materialized view's schema is as follows.
 +----------------+-------+--------------+------+-------+---------+-------+
 ```
 
-It can be observed that the `key` field of the k3, k4, and k5 columns is `true`, which indicates that they are the sort keys. The key field of the k6, k7 columns is `false`, which indicates that they are not the sort keys.
+It can be observed that the `key` field of the k3, k4, and k5 columns is `true`, which indicates that they are the sort keys. The key field of the k6, and k7 columns is `false`, which indicates that they are not the sort keys.
 
 ### Examples of asynchronous materialized views
 
