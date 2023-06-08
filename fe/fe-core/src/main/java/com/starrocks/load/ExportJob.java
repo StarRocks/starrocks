@@ -695,7 +695,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 break;
         }
         if (!isReplay) {
-            GlobalStateMgr.getCurrentState().getEditLog().logExportUpdateState(id, newState,
+            GlobalStateMgr.getCurrentState().getEditLog().logExportUpdateState(id, newState, stateChangeTime,
                     snapshotPaths, exportTempPath, exportedFiles, failMsg);
         }
         return true;
