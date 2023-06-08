@@ -715,13 +715,20 @@ public class ColocateTableBalancer extends FrontendDaemon {
                     continue;
                 }
 
-                if ((isUrgent && !globalStateMgr.getTabletChecker().isUrgentTable(db.getId(), tableId)) ||
-                        (!isUrgent && globalStateMgr.getTabletChecker().isUrgentTable(db.getId(), tableId))) {
+                if ((isUrgent && !globalStateMgr.getTabletChecker().isUrgentTable(db.getId(), tableId))) {
                     continue;
                 }
 
                 for (Partition partition : globalStateMgr.getPartitionsIncludeRecycleBin(olapTable)) {
                     partitionChecked++;
+
+                    boolean isPartitionUrgent =
+                            globalStateMgr.getTabletChecker().isPartitionUrgent(db.getId(), tableId, partition.getId());
+                    boolean isUrgentPartitionHealthy = true;
+                    if ((isUrgent && !isPartitionUrgent) || (!isUrgent && isPartitionUrgent)) {
+                        continue;
+                    }
+
                     if (partitionChecked % partitionBatchNum == 0) {
                         lockTotalTime += System.nanoTime() - lockStart;
                         // release lock, so that lock can be acquired by other threads.
@@ -742,13 +749,6 @@ public class ColocateTableBalancer extends FrontendDaemon {
                             globalStateMgr.getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
                                     partition.getId());
                     if (replicationNum == (short) -1) {
-                        continue;
-                    }
-
-                    boolean isPartitionUrgent =
-                            globalStateMgr.getTabletChecker().isPartitionUrgent(db.getId(), tableId, partition.getId());
-                    boolean isUrgentPartitionHealthy = true;
-                    if ((isUrgent && !isPartitionUrgent) || (!isUrgent && isPartitionUrgent)) {
                         continue;
                     }
 

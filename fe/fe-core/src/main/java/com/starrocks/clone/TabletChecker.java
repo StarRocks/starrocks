@@ -294,14 +294,20 @@ public class TabletChecker extends FrontendDaemon {
                         continue;
                     }
 
-                    if ((isUrgent && !isUrgentTable(dbId, table.getId())) ||
-                            (!isUrgent && isUrgentTable(dbId, table.getId()))) {
+                    if ((isUrgent && !isUrgentTable(dbId, table.getId()))) {
                         continue;
                     }
 
                     OlapTable olapTbl = (OlapTable) table;
                     for (Partition partition : globalStateMgr.getAllPartitionsIncludeRecycleBin(olapTbl)) {
                         partitionChecked++;
+
+                        boolean isPartitionUrgent = isPartitionUrgent(dbId, table.getId(), partition.getId());
+                        boolean isUrgentPartitionHealthy = true;
+                        if ((isUrgent && !isPartitionUrgent) || (!isUrgent && isPartitionUrgent)) {
+                            continue;
+                        }
+
                         if (partitionChecked % partitionBatchNum == 0) {
                             LOG.debug("partition checked reached batch value, release lock");
                             lockTotalTime += System.nanoTime() - lockStart;
@@ -320,6 +326,7 @@ public class TabletChecker extends FrontendDaemon {
                                 continue;
                             }
                         }
+
                         if (partition.getState() != PartitionState.NORMAL) {
                             // when alter job is in FINISHING state, partition state will be set to NORMAL,
                             // and we can schedule the tablets in it.
@@ -329,12 +336,6 @@ public class TabletChecker extends FrontendDaemon {
                         short replicaNum = globalStateMgr.getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(),
                                 partition.getId());
                         if (replicaNum == (short) -1) {
-                            continue;
-                        }
-
-                        boolean isPartitionUrgent = isPartitionUrgent(dbId, table.getId(), partition.getId());
-                        boolean isUrgentPartitionHealthy = true;
-                        if ((isUrgent && !isPartitionUrgent) || (!isUrgent && isPartitionUrgent)) {
                             continue;
                         }
 
