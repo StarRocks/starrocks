@@ -1,8 +1,12 @@
 # 系统变量
 
-本文介绍 StarRocks 系统支持的变量（system variables）。您可以在 MySQL 客户端通过命令 `SHOW VARIABLES` 查看变量。也可以设置（SET）变量在系统全局 (global) 范围内生效，仅在当前会话 (session) 中生效，或者仅在单个查询语句中生效。
+StarRocks 提供多个系统变量（system variables），方便您根据业务情况进行调整。本文介绍 StarRocks 支持的变量。您可以在 MySQL 客户端通过命令 `SHOW VARIABLES` 查看当前变量。也可以通过 SET 命令动态设置或者修改变量。您可以设置变量在系统全局 (global) 范围内生效，仅在当前会话 (session) 中生效，或者仅在单个查询语句中生效。
 
 StarRocks 中的变量参考 MySQL 中的变量设置，但**部分变量仅用于兼容 MySQL 客户端协议，并不产生其在 MySQL 数据库中的实际意义**。
+
+> **说明**
+>
+> 任何用户都有权限通过 SHOW VARIABLES 查看变量。任何用户都有权限设置变量在 Session 级别生效。只有拥有 System 级 OPERATE 权限的用户才可以设置变量为全局生效。全局生效的变量不影响当前会话，仅影响后续新的会话。
 
 ## 查看变量
 
@@ -16,6 +20,8 @@ SHOW VARIABLES;
 -- 查看符合匹配规则的变量。
 SHOW VARIABLES LIKE '%time_zone%';
 ```
+
+更多信息，参见 [SHOW VARIABLES](../sql-reference/sql-statements/Administration/SHOW%20VARIABLES.md)。
 
 ## 设置变量
 
@@ -39,7 +45,7 @@ SET time_zone = "Asia/Shanghai";
 SET GLOBAL query_mem_limit = 137438953472;
 ```
 
-> 说明：只有拥有 System 级 OPERATE 权限的用户才可以设置变量为全局生效。全局生效的变量不影响当前会话，仅影响后续新的会话。
+更多信息，参见 [SET](../sql-reference/sql-statements/Administration/SET.md)。
 
 只支持全局生效的变量包括：
 
@@ -106,11 +112,19 @@ SELECT /*+ SET_VAR
 
 ## 支持的变量
 
+本节以字母顺序对变量进行解释。带 `global` 标记的变量为全局变量，仅支持全局生效。其余变量既可以设置全局生效，也可设置会话级别生效。
+
 * activate_all_roles_on_login（global）
   
-  用于控制是否在用户登录时默认激活所有角色（包括默认和授予的角色）。默认值：false，表示不开启。
+  用于控制是否在用户登录时默认激活所有角色（包括默认角色和授予的角色）。该变量从 3.0 版本开始支持。
+  
+  * 开启后，在用户登录时默认激活所有角色，优先级高于通过 [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) 设置的角色。
+  
+  * 如果不开启，则会默认激活 SET DEFAULT ROLE 中设置的角色。
 
-  您还可以通过 SET ROLE 命令来手动激活拥有的角色。该变量从 3.0 版本开始支持。
+  默认值：false，表示不开启。
+
+  如果要在当前会话中激活角色，可以使用 [SET ROLE](../sql-reference/sql-statements/account-management/SET%20ROLE.md)。
 
 * auto_increment_increment
 
@@ -131,6 +145,10 @@ SELECT /*+ SET_VAR
 * character_set_database（global）
 
   StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）。
+
+* connector_io_tasks_per_scan_operator（2.5 及以后）
+
+  外表查询时每个 Scan 算子能同时下发的 I/O 任务的最大数量。取值为整数，默认值 16。目前外表查询时会使用自适应算法来调整并发 I/O 任务的数量，通过 `enable_connector_adaptive_io_tasks` 开关来控制，默认打开。
 
 * count_distinct_column_buckets（2.5 及以后）
 
@@ -155,6 +173,10 @@ SELECT /*+ SET_VAR
 * div_precision_increment
 
   用于兼容 MySQL 客户端，无实际作用。
+
+* enable_connector_adaptive_io_tasks（2.5 及以后）
+
+  外表查询时是否使用自适应策略来调整 I/O 任务的并发数。默认打开。如果未开启自适应策略，可以通过 `connector_io_tasks_per_scan_operator` 变量来手动设置外表查询时的 I/O 任务并发数。
 
 * enable_distinct_column_bucketization（2.5 及以后）
 
@@ -290,7 +312,7 @@ SELECT /*+ SET_VAR
 
   用于兼容 MySQL 客户端。无实际作用。
 
-* io_tasks_per_scan_operator (3.0 及以后)
+* io_tasks_per_scan_operator (2.5 及以后)
 
   每个 Scan 算子能同时下发的 I/0 任务的数量。如果使用远端存储系统（比如 HDFS 或 S3）且时延较长，可以增加该值。但是值过大会增加内存消耗。
 
