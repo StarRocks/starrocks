@@ -111,7 +111,6 @@ public class ShowTableStmtTest {
         Assert.assertEquals("tbl1", resultRows.get(0).get(0));
         Assert.assertEquals("StarRocks", resultRows.get(0).get(1));
         Assert.assertEquals("utf8_general_ci", resultRows.get(0).get(14));
-        Assert.assertEquals("OLAP", resultRows.get(0).get(17));
     }
 
     @Test(expected = SemanticException.class)
