@@ -126,7 +126,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | export_running_job_num_limit            | -    | 5                                               | The maximum number of data exporting tasks that can run in parallel. |
 | export_task_default_timeout_second      | s    | 7200                                            | The timeout duration for a data exporting task, in seconds.  |
 | empty_load_as_error                     | -    | TRUE                                            | Whether to return an error message "all partitions have no load data" if no data is loaded. Values:<br> - TRUE: If no data is loaded, the system displays a failure message and returns an error "all partitions have no load data". <br> - FALSE: If no data is loaded, the system displays a success message and returns OK, instead of an error. |
-|internal_service_async_thread_num        | -    | 10                                              | The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs. |
 
 #### Storage
 
@@ -382,6 +381,7 @@ BE dynamic parameters are as follows.
 | size_tiered_level_multiple | 5 | N/A | The multiple of data size between two contiguous levels in the Size-tiered Compaction strategy. |
 | size_tiered_min_level_size | 131072 | Byte | The data size of the minimum level in the Size-tiered Compaction strategy. Rowsets smaller than this value immediately trigger the data compaction. |
 | storage_page_cache_limit | 20% | N/A | The PageCache size. STRING. It can be specified as size, for example, `20G`, `20480M`, `20971520K`, or `21474836480B`. It can also be specified as the ratio (percentage) to the memory size, for example, `20%`. It takes effect only when `disable_storage_page_cache` is set to `false`. |
+|internal_service_async_thread_num        | -    | 10                                              | The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs. |
 
 ### Configure BE static parameters
 
