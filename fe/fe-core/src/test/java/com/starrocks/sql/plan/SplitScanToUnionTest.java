@@ -46,7 +46,6 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
     @MethodSource("testSplitUnionSqls")
     void testSplitUnion(String sql, List<String> patterns) throws Exception {
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, patterns);
     }
 
@@ -54,7 +53,6 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
     @MethodSource("testNotSplitUnionSqls")
     void testNotSplitUnion(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertNotContains(plan, "UNION");
     }
 
