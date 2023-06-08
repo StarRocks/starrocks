@@ -24,7 +24,7 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
 
     @Override
     public R visitQueryStatement(QueryStatement statement, C context) {
-        visitQueryRelation(statement.getQueryRelation(), context);
+        visit(statement.getQueryRelation(), context);
         return null;
     }
 

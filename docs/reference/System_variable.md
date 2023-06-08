@@ -1,8 +1,12 @@
 # System variables
 
-This section describes the variables supported by StarRocks. You can view these variables by using the `SHOW VARIABLES` command. You can also use SET to make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
+StarRocks provides many system variables that can be changed to suit your requirements. This section describes the variables supported by StarRocks. You can view these variables by running the [SHOW VARIABLES](../sql-reference/sql-statements/Administration/SHOW%20VARIABLES.md) command on your MySQL client. You can also use the [SET](../sql-reference/sql-statements/Administration/SET.md) command to dynamically set or modify variables. You can make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
 
 The variables in StarRocks refer to the variable sets in MySQL, but **some variables are only compatible with the MySQL client protocol and do not function on the MySQL database**.
+
+> **NOTE**
+>
+> Any user has the privilege to run SHOW VARIABLES and make a variable take effect at session level. However, only users with the SYSTEM-level OPERATE privilege can make a variable take effect globally. Globally effective variables do not affect the current session, only subsequent new sessions.
 
 ## View variables
 
@@ -40,8 +44,6 @@ A variable set by `SET GLOBAL var_name = xxx;` takes effect globally. Example:
 ```SQL
 SET GLOBAL query_mem_limit = 137438953472;
 ```
-
-> Note: Only users with the SYSTEM-level OPERATE privilege can set variables to be globally effective. Globally effective variables do not affect the current session, only subsequent new sessions.
 
 Variables that can **only be set globally effective** include:
 
@@ -106,11 +108,18 @@ SELECT /*+ SET_VAR
 
 ## Descriptions of variables
 
+The variables are described in alphabetical order. Variables with the `global` label can only take effect globally. Other variables can take effect either globally or for a single session.
+
 * activate_all_roles_on_login (global）
 
-  Whether to enable all roles (including default and granted roles) for all StarRocks users when they connect to the StarRocks cluster. Default value: false.
+  Whether to enable all roles (including default roles and granted roles) for a StarRocks user when the user connects to the StarRocks cluster. This variable is supported since v3.0.
+  
+  * If enabled (true), all roles of the user are activated at user login. This takes precedence over the roles set by [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md).
+  * If disabled (false), the roles set by SET DEFAULT ROLE are activated.
+  
+  Default value: false.
 
-  You can also use the SET ROLE command to activate the roles assigned to you. This variable is supported since v3.0.
+  If you want to activate the roles assigned to you in a session, use the [SET ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) command.
 
 * auto_increment_increment
 
@@ -131,6 +140,12 @@ SELECT /*+ SET_VAR
 * character_set_database (global）
 
   The character set supported by StarRocks. Only UTF8 (`utf8`) is supported.
+
+* connector_io_tasks_per_scan_operator (2.5 and later)
+
+  The maximum number of concurrent I/O tasks that can be issued by a scan operator during external table queries. The value is an integer. Default value: 16.
+
+  Currently, StarRocks can adaptively adjust the number of concurrent I/O tasks when querying external tables. This feature is controlled by the variable `enable_connector_adaptive_io_tasks`, which is enabled by default.
 
 * count_distinct_column_buckets (2.5 and later)
 
@@ -157,6 +172,12 @@ SELECT /*+ SET_VAR
 * div_precision_increment
 
   Used for MySQL client compatibility. No practical usage.
+
+* enable_connector_adaptive_io_tasks (2.5 and later)
+
+  Whether to adaptively adjust the number of concurrent I/O tasks when querying external tables. Default value: true.
+  
+  If this feature is not enabled, you can manually set the number of concurrent I/O tasks using the variable `connector_io_tasks_per_scan_operator`.
 
 * enable_distinct_column_bucketization (2.5 and later)
 
@@ -291,7 +312,7 @@ SELECT /*+ SET_VAR
 
   Used for MySQL client compatibility. No practical usage.
 
-* io_tasks_per_scan_operator (v3.0 and later)
+* io_tasks_per_scan_operator (2.5 and later)
 
   The number of concurrent I/O tasks that can be issued by a scan operator. Increase this value if you want to access remote storage systems such as HDFS or S3 but the latency is high. However, a larger value causes more memory consumption.
 
