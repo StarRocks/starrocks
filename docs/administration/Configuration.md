@@ -210,6 +210,7 @@ BE dynamic parameters are as follows:
 | tablet_max_pending_versions | 1000 | N/A | The maximum number of pending versions that are tolerable in a Primary Key table. Pending versions refer to versions that are committed but not applied yet. |
 | max_hdfs_file_handle | 1000 | N/A | The maximum number of HDFS file descriptors that can be opened. |
 | parquet_buffer_stream_reserve_size | 1048576 | Byte | The size of buffer that Parquet reader reserves for each column while reading data. |
+|internal_service_async_thread_num | 10 | N/A | The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs. |
 
 ### Configure BE static parameters
 
