@@ -43,7 +43,8 @@ inline std::string value_to_string(const ColumnPtr& column) {
     return res;
 }
 
-inline std::string get_partition_location(const string& path, const std::vector<std::string>& names, const std::vector<std::string>& values) {
+inline std::string get_partition_location(const string& path, const std::vector<std::string>& names,
+                                          const std::vector<std::string>& values) {
     std::string partition_location = path;
     for (size_t i = 0; i < names.size(); i++) {
         partition_location += names[i] + "=" + values[i] + "/";
@@ -53,13 +54,11 @@ inline std::string get_partition_location(const string& path, const std::vector<
 }
 
 Status TableFunctionTableSinkOperator::prepare(RuntimeState* state) {
-    LOG(INFO) << "TableFunctionTableSinkOperator::prepare";
     RETURN_IF_ERROR(Operator::prepare(state));
     return Status::OK();
 }
 
 void TableFunctionTableSinkOperator::close(RuntimeState* state) {
-    LOG(INFO) << "TableFunctionTableSinkOperator::close";
     for (const auto& writer : _partition_writers) {
         if (!writer.second->closed()) {
             writer.second->close(state);
@@ -92,7 +91,6 @@ bool TableFunctionTableSinkOperator::is_finished() const {
 }
 
 Status TableFunctionTableSinkOperator::set_finishing(RuntimeState* state) {
-    LOG(INFO) << "TableFunctionTableSinkOperator::set_finishing";
     for (const auto& writer : _partition_writers) {
         if (!writer.second->closed()) {
             writer.second->close(state);
@@ -114,19 +112,14 @@ Status TableFunctionTableSinkOperator::set_cancelled(RuntimeState* state) {
 }
 
 StatusOr<ChunkPtr> TableFunctionTableSinkOperator::pull_chunk(RuntimeState* state) {
-    return Status::InternalError("Shouldn't pull chunk from iceberg table sink operator");
+    return Status::InternalError("Shouldn't pull chunk from table function table sink operator");
 }
 
 Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    LOG(INFO) << "TableFunctionTableSinkOperator::push_chunk";
-    DeferOp defer([] {
-        LOG(INFO) << "TableFunctionTableSinkOperator::push_chunk done";
-    });
-
     if (_partition_exprs.empty()) {
         if (_partition_writers.empty()) {
-            auto writer = std::make_unique<RollingAsyncParquetWriter>(_make_table_info(_path), _output_exprs, _common_metrics.get(),
-                                                                      nullptr, state, _driver_sequence);
+            auto writer = std::make_unique<RollingAsyncParquetWriter>(
+                    _make_table_info(_path), _output_exprs, _common_metrics.get(), nullptr, state, _driver_sequence);
             _partition_writers.insert({"default writer", std::move(writer)});
         }
         return _partition_writers["default writer"]->append_chunk(chunk.get(), state);
@@ -143,8 +136,9 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
     auto partition_writer = _partition_writers.find(partition_location);
     // create writer for current partition if not exists
     if (partition_writer == _partition_writers.end()) {
-        auto writer = std::make_unique<RollingAsyncParquetWriter>(_make_table_info(partition_location), _output_exprs, _common_metrics.get(),
-                                                                  nullptr, state, _driver_sequence);
+        auto writer =
+                std::make_unique<RollingAsyncParquetWriter>(_make_table_info(partition_location), _output_exprs,
+                                                            _common_metrics.get(), nullptr, state, _driver_sequence);
         _partition_writers.insert({partition_location, std::move(writer)});
     }
 
@@ -157,21 +151,19 @@ TableInfo TableFunctionTableSinkOperator::_make_table_info(const string& partiti
     tableInfo.schema = _parquet_file_schema;
     tableInfo.compress_type = _compression_type;
     tableInfo.cloud_conf = _cloud_conf;
-    if (_write_single_file) {
-        tableInfo.max_file_size = -1;
-    }
     return tableInfo;
 }
 
 TableFunctionTableSinkOperatorFactory::TableFunctionTableSinkOperatorFactory(
-        const int32_t id, const string& path, const string& file_format,
-        const TCompressionType::type& compression_type, bool write_single_file, const std::vector<ExprContext*>& output_exprs, const std::vector<ExprContext*>& partition_exprs,
-        const std::vector<std::string>& column_names, const std::vector<std::string>& partition_column_names, const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx)
-        : OperatorFactory(id, "table_function_table_sink", Operator::s_pseudo_plan_node_id_for_table_function_table_sink),
+        const int32_t id, const string& path, const string& file_format, const TCompressionType::type& compression_type,
+        const std::vector<ExprContext*>& output_exprs, const std::vector<ExprContext*>& partition_exprs,
+        const std::vector<std::string>& column_names, const std::vector<std::string>& partition_column_names,
+        const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx)
+        : OperatorFactory(id, "table_function_table_sink",
+                          Operator::s_pseudo_plan_node_id_for_table_function_table_sink),
           _path(path),
           _file_format(file_format),
           _compression_type(compression_type),
-          _write_single_file(write_single_file),
           _output_exprs(output_exprs),
           _partition_exprs(partition_exprs),
           _column_names(column_names),
@@ -179,9 +171,7 @@ TableFunctionTableSinkOperatorFactory::TableFunctionTableSinkOperatorFactory(
           _cloud_conf(cloud_conf),
           _fragment_ctx(fragment_ctx) {}
 
-
 Status TableFunctionTableSinkOperatorFactory::prepare(RuntimeState* state) {
-    LOG(INFO) << "TableFunctionTableSinkOperatorFactory::prepare";
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
     RETURN_IF_ERROR(Expr::prepare(_output_exprs, state));
@@ -191,7 +181,8 @@ Status TableFunctionTableSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
 
     if (_file_format == "parquet") {
-        auto result = parquet::ParquetBuildHelper::make_schema(_column_names, _output_exprs, std::vector<parquet::FileColumnId>(_output_exprs.size()));
+        auto result = parquet::ParquetBuildHelper::make_schema(
+                _column_names, _output_exprs, std::vector<parquet::FileColumnId>(_output_exprs.size()));
         if (!result.ok()) {
             return Status::NotSupported(result.status().message());
         }
@@ -204,12 +195,12 @@ Status TableFunctionTableSinkOperatorFactory::prepare(RuntimeState* state) {
 }
 
 OperatorPtr TableFunctionTableSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    return std::make_shared<TableFunctionTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _path, _file_format, _compression_type, _write_single_file,
-                                                            _output_exprs, _partition_exprs, _partition_column_names, _cloud_conf, _fragment_ctx, _parquet_file_schema);
+    return std::make_shared<TableFunctionTableSinkOperator>(
+            this, _id, _plan_node_id, driver_sequence, _path, _file_format, _compression_type, _output_exprs,
+            _partition_exprs, _partition_column_names, _cloud_conf, _fragment_ctx, _parquet_file_schema);
 }
 
 void TableFunctionTableSinkOperatorFactory::close(RuntimeState* state) {
-    LOG(INFO) << "TableFunctionTableSinkOperatorFactory::close";
     Expr::close(_partition_exprs, state);
     Expr::close(_output_exprs, state);
     OperatorFactory::close(state);

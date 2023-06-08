@@ -54,7 +54,6 @@ import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
-import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -1124,13 +1123,6 @@ public class CoordinatorPreprocessor {
             DataSink sink = params.fragment.getSink();
             if (sink instanceof ResultSink && params.instanceExecParams.size() > 1) {
                 throw new StarRocksPlannerException("This sql plan has multi result sinks",
-                        ErrorType.INTERNAL_ERROR);
-            }
-
-            if (sink instanceof TableFunctionTableSink && (((TableFunctionTableSink) sink).isWriteSingleFile())
-                    && params.instanceExecParams.size() > 1) {
-                throw new StarRocksPlannerException(
-                        "This sql plan has multi table function table sinks, but set to write single file",
                         ErrorType.INTERNAL_ERROR);
             }
 

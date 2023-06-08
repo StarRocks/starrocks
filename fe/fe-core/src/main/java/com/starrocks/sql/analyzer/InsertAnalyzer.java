@@ -291,12 +291,16 @@ public class InsertAnalyzer {
 
         // parse table function properties
         Map<String, String> props = insertStmt.getTableFunctionProperties();
+        boolean writeSingleFile = Boolean.parseBoolean(props.get("single"));
         String path = props.get("path");
         String format = props.get("format");
-        boolean writeSingleFile = Boolean.parseBoolean(props.get("single"));
         String partitionBy = props.get("partition_by");
 
         // validate properties
+        if (writeSingleFile) {
+            throw new SemanticException("write a single file is not supported");
+        }
+
         if (path == null) {
             throw new SemanticException(
                     "path is mandatory in table function. \"path\" = \"hdfs://path/to/your/location/prefix\"");
@@ -311,16 +315,12 @@ public class InsertAnalyzer {
             throw new SemanticException("use \"path\" = \"parquet\", as only parquet format is supported now");
         }
 
-        if (partitionBy != null && writeSingleFile) {
-            throw new SemanticException("cannot use partition by and single simultaneously");
-        }
-
         if (partitionBy == null) {
             // prepend `data_` if path ends with forward slash
             if (path.endsWith("/")) {
                 path += "data_";
             }
-            return new TableFunctionTable(path, format, columns, null, writeSingleFile);
+            return new TableFunctionTable(path, format, columns, null);
         }
 
         // extra validation for using partitionBy
@@ -346,6 +346,6 @@ public class InsertAnalyzer {
 
         List<Integer> partitionColumnIDs = partitionColumnNames.stream().map(columnNames::indexOf).collect(
                 Collectors.toList());
-        return new TableFunctionTable(path, format, columns, partitionColumnIDs, false);
+        return new TableFunctionTable(path, format, columns, partitionColumnIDs);
     }
 }

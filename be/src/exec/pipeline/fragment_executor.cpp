@@ -52,13 +52,13 @@
 #include "runtime/exec_env.h"
 #include "runtime/export_sink.h"
 #include "runtime/iceberg_table_sink.h"
-#include "runtime/table_function_table_sink.h"
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/mysql_table_sink.h"
 #include "runtime/result_sink.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
+#include "runtime/table_function_table_sink.h"
 #include "util/debug/query_trace.h"
 #include "util/pretty_printer.h"
 #include "util/runtime_profile.h"
@@ -944,7 +944,6 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         DCHECK(target_table.__isset.path);
         DCHECK(target_table.__isset.file_format);
         DCHECK(target_table.__isset.columns);
-        DCHECK(target_table.__isset.write_single_file);
         DCHECK(target_table.columns.size() == output_exprs.size());
 
         std::vector<std::string> column_names;
@@ -965,40 +964,29 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                                                 runtime_state));
 
         std::vector<ExprContext*> output_expr_ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), output_exprs, &output_expr_ctxs,
-                                                runtime_state));
+        RETURN_IF_ERROR(
+                Expr::create_expr_trees(runtime_state->obj_pool(), output_exprs, &output_expr_ctxs, runtime_state));
 
         auto op = std::make_shared<TableFunctionTableSinkOperatorFactory>(
-                context->next_operator_id(),
-                thrift_sink.table_function_table_sink.target_table.path,
+                context->next_operator_id(), thrift_sink.table_function_table_sink.target_table.path,
                 thrift_sink.table_function_table_sink.target_table.file_format,
-                thrift_sink.table_function_table_sink.target_table.compression_type,
-                thrift_sink.table_function_table_sink.target_table.write_single_file,
-                output_expr_ctxs,
-                partition_expr_ctxs,
-                column_names,
-                partition_column_names,
-                thrift_sink.table_function_table_sink.cloud_configuration,
-                fragment_ctx
-        );
+                thrift_sink.table_function_table_sink.target_table.compression_type, output_expr_ctxs,
+                partition_expr_ctxs, column_names, partition_column_names,
+                thrift_sink.table_function_table_sink.cloud_configuration, fragment_ctx);
 
         size_t source_dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         size_t sink_dop = request.pipeline_sink_dop();
-        if (target_table.write_single_file) {
-            sink_dop = 1;
-        }
 
         if (partition_expr_ctxs.empty()) {
             if (sink_dop != source_dop) {
-                context->maybe_interpolate_local_passthrough_exchange_for_sink(
-                        runtime_state, std::move(op), source_dop, sink_dop);
+                context->maybe_interpolate_local_passthrough_exchange_for_sink(runtime_state, std::move(op), source_dop,
+                                                                               sink_dop);
             } else {
                 fragment_ctx->pipelines().back()->get_op_factories().emplace_back(std::move(op));
             }
         } else {
-            context->maybe_interpolate_local_key_partition_exchange_for_sink(runtime_state, op,
-                                                                             partition_expr_ctxs, source_dop,
-                                                                             sink_dop);
+            context->maybe_interpolate_local_key_partition_exchange_for_sink(runtime_state, op, partition_expr_ctxs,
+                                                                             source_dop, sink_dop);
         }
     }
 

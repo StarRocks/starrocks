@@ -29,14 +29,18 @@ namespace starrocks::pipeline {
 
 class TableFunctionTableSinkOperator final : public Operator {
 public:
-    TableFunctionTableSinkOperator(OperatorFactory* factory, const int32_t id, const int32_t plan_node_id, const int32_t driver_sequence, const string& path, const string& file_format,
-                                   const TCompressionType::type& compression_type, bool write_single_file, const std::vector<ExprContext*>& output_exprs, const std::vector<ExprContext*>& partition_exprs,
-                                   const std::vector<std::string>& partition_column_names, const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx, std::shared_ptr<::parquet::schema::GroupNode> parquet_file_schema)
+    TableFunctionTableSinkOperator(OperatorFactory* factory, const int32_t id, const int32_t plan_node_id,
+                                   const int32_t driver_sequence, const string& path, const string& file_format,
+                                   const TCompressionType::type& compression_type,
+                                   const std::vector<ExprContext*>& output_exprs,
+                                   const std::vector<ExprContext*>& partition_exprs,
+                                   const std::vector<std::string>& partition_column_names,
+                                   const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx,
+                                   std::shared_ptr<::parquet::schema::GroupNode> parquet_file_schema)
             : Operator(factory, id, "table_function_table_sink", plan_node_id, driver_sequence),
               _path(path),
               _file_format(file_format),
               _compression_type(compression_type),
-              _write_single_file(write_single_file),
               _output_exprs(output_exprs),
               _partition_exprs(partition_exprs),
               _partition_column_names(partition_column_names),
@@ -73,7 +77,6 @@ private:
     const std::string _path;
     const std::string _file_format;
     const TCompressionType::type _compression_type;
-    const bool _write_single_file;
     const std::vector<ExprContext*> _output_exprs;
     const std::vector<ExprContext*> _partition_exprs;
     const std::vector<std::string> _partition_column_names;
@@ -88,8 +91,12 @@ private:
 class TableFunctionTableSinkOperatorFactory final : public OperatorFactory {
 public:
     TableFunctionTableSinkOperatorFactory(const int32_t id, const string& path, const string& file_format,
-                                          const TCompressionType::type& compression_type, bool write_single_file, const std::vector<ExprContext*>& output_exprs, const std::vector<ExprContext*>& partition_exprs,
-                                          const std::vector<std::string>& column_names, const std::vector<std::string>& partition_column_names, const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx);
+                                          const TCompressionType::type& compression_type,
+                                          const std::vector<ExprContext*>& output_exprs,
+                                          const std::vector<ExprContext*>& partition_exprs,
+                                          const std::vector<std::string>& column_names,
+                                          const std::vector<std::string>& partition_column_names,
+                                          const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx);
 
     ~TableFunctionTableSinkOperatorFactory() override = default;
 
@@ -103,7 +110,6 @@ private:
     const std::string _path;
     const std::string _file_format;
     const TCompressionType::type _compression_type;
-    const bool _write_single_file;
     const std::vector<ExprContext*> _output_exprs;
     const std::vector<ExprContext*> _partition_exprs;
     const std::vector<std::string> _column_names;
@@ -114,4 +120,4 @@ private:
     std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;
 };
 
-} // namespace starrocks
+} // namespace starrocks::pipeline

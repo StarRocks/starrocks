@@ -377,11 +377,8 @@ struct TTableFunctionTable {
     // Compression type
     4: optional Types.TCompressionType compression_type
 
-    // Partition column ids
-    5: optional list<i32> partition_column_ids // may not set if no partitioning
-
-    // Write single file
-    6: optional bool write_single_file
+    // Partition column ids, set if partition_by used in table function
+    5: optional list<i32> partition_column_ids
 }
 
 struct TIcebergSchema {
