@@ -39,6 +39,7 @@
 #include <atomic>
 #include <shared_mutex>
 #include <sstream>
+#include <utility>
 
 #include "agent/agent_server.h"
 #include "agent/publish_version.h"
@@ -71,6 +72,7 @@
 #include "storage/txn_manager.h"
 #include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
+#include "util/time.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -134,6 +136,27 @@ template <typename T>
 void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcController* cntl_base,
                                                   const PTransmitChunkParams* request, PTransmitChunkResult* response,
                                                   google::protobuf::Closure* done) {
+    class WrapClosure : public google::protobuf::Closure {
+    public:
+        WrapClosure(google::protobuf::Closure* done, PTransmitChunkResult* response)
+                : _done(done), _response(response) {}
+        ~WrapClosure() override = default;
+        void Run() override {
+            std::unique_ptr<WrapClosure> self_guard(this);
+            const auto response_timestamp = MonotonicNanos();
+            _response->set_receiver_post_process_time(response_timestamp - _receive_timestamp);
+            if (_done != nullptr) {
+                _done->Run();
+            }
+        }
+
+    private:
+        google::protobuf::Closure* _done;
+        PTransmitChunkResult* _response;
+        const int64_t _receive_timestamp = MonotonicNanos();
+    };
+    google::protobuf::Closure* wrapped_done = new WrapClosure(done, response);
+
     auto begin_ts = MonotonicNanos();
     std::string transmit_info = "";
     auto gen_transmit_info = [&transmit_info, &request]() {
@@ -150,8 +173,6 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
     // transmit_data(), which will cause a dirty memory access.
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     auto* req = const_cast<PTransmitChunkParams*>(request);
-    const auto receive_timestamp = GetCurrentTimeNanos();
-    response->set_receive_timestamp(receive_timestamp);
     Status st;
     st.to_protobuf(response->mutable_status());
     DeferOp defer([&]() {
@@ -159,10 +180,10 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
             gen_transmit_info();
             LOG(WARNING) << "failed to " << transmit_info;
         }
-        if (done != nullptr) {
+        if (wrapped_done != nullptr) {
             // NOTE: only when done is not null, we can set response status
             st.to_protobuf(response->mutable_status());
-            done->Run();
+            wrapped_done->Run();
         }
         VLOG_ROW << transmit_info << " cost time = " << MonotonicNanos() - begin_ts;
     });
@@ -187,7 +208,7 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
         }
     }
 
-    st = _exec_env->stream_mgr()->transmit_chunk(*request, &done);
+    st = _exec_env->stream_mgr()->transmit_chunk(*request, &wrapped_done);
 }
 
 template <typename T>
