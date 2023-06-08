@@ -45,8 +45,10 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
     spill_timer = ADD_TIMER(_spiller_metrics.get(), "SpillTime");
     spill_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsSpilled", TUnit::UNIT);
     flush_timer = ADD_TIMER(_spiller_metrics.get(), "FlushTime");
+    write_io_timer = ADD_TIMER(_spiller_metrics.get(), "WriteIOTime");
     restore_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsRestored", TUnit::UNIT);
     restore_timer = ADD_TIMER(_spiller_metrics.get(), "RestoreTime");
+    read_io_timer = ADD_TIMER(_spiller_metrics.get(), "ReadIOTime");
     shuffle_timer = ADD_TIMER(_spiller_metrics.get(), "ShuffleTime");
     split_partition_timer = ADD_TIMER(_spiller_metrics.get(), "SplitPartitionTime");
 

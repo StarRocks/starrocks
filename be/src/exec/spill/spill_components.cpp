@@ -88,7 +88,10 @@ Status RawSpillerWriter::flush_task(RuntimeState* state, const MemTablePtr& mem_
     // be careful close method return a not ok status
     // then release the pending memory
     // flush
-    RETURN_IF_ERROR(block->flush());
+    {
+        SCOPED_TIMER(_spiller->metrics().write_io_timer);
+        RETURN_IF_ERROR(block->flush());
+    }
     RETURN_IF_ERROR(_spiller->block_manager()->release_block(block));
 
     {
