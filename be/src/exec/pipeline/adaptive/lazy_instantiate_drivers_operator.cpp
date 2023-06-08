@@ -109,7 +109,8 @@ void LazyInstantiateDriversOperator::close(RuntimeState* state) {
     auto* fragment_ctx = state->fragment_ctx();
     for (auto& pipeline_group : _unready_pipeline_groups) {
         for (auto& pipeline : pipeline_group.pipelines) {
-            if (typeid(*pipeline->sink_operator_factory()) != typeid(ResultSinkOperatorFactory)) {
+            auto sink_factory = pipeline->sink_operator_factory();
+            if (typeid(*sink_factory) != typeid(ResultSinkOperatorFactory)) {
                 fragment_ctx->count_down_pipeline(state);
             } else {
                 // Closing ResultSinkOperator notifies FE not to wait fetch_data anymore.
