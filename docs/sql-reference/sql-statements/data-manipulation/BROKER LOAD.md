@@ -46,12 +46,14 @@ Broker Load supports loading multiple data files at a time. In one load job, you
 
 ```SQL
 DATA INFILE ("<file_path>"[, "<file_path>" ...])
-[NEGATIVE]INTO TABLE <table_name>
+[NEGATIVE]
+INTO TABLE <table_name>
 [PARTITION (<partition1_name>[, <partition2_name> ...])]
 [TEMPORARY PARTITION (<temporary_partition1_name>[, <temporary_partition2_name> ...])]
+[COLUMNS TERMINATED BY "<column_separator>"]
+[ROWS TERMINATED BY "<row_separator>"]
 [FORMAT AS "CSV | Parquet | ORC"]
 [(fomat_type_options)]
-[COLUMNS TERMINATED BY "<column_separator>"]
 [(column_list)]
 [COLUMNS FROM PATH AS (<partition_field_name>[, <partition_field_name> ...])]
 [SET <k1=f1(v1)>[, <k2=f2(v2)> ...]]
@@ -90,12 +92,6 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
   >   - If your storage account allows access over HTTP, use the abfs protocol and write the file path as `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
   >   - If your storage account allows access over HTTPS, use the abfss protocol and write the file path as `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
 
-- `INTO TABLE`
-
-  Specifies the name of the destination StarRocks table.
-
-`data_desc` can also optionally include the following parameters:
-
 - `NEGATIVE`
 
   Revokes the loading of a specific batch of data. To achieve this, you need to load the same batch of data with the `NEGATIVE` keyword specified.
@@ -104,6 +100,12 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
   >
   > This parameter is valid only when the StarRocks table uses the Aggregate table and all its value columns are computed by the `sum` function.
 
+- `INTO TABLE`
+
+  Specifies the name of the destination StarRocks table.
+
+`data_desc` can also optionally include the following parameters:
+
 - `PARTITION`
 
    Specifies the partitions into which you want to load data. By default, if you do not specify this parameter, the source data will be loaded into all partitions of the StarRocks table.
@@ -111,6 +113,23 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 - `TEMPORARY_PARTITION`
 
   Specifies the name of the [temporary partition](../../../table_design/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).
+
+- `COLUMNS TERMINATED BY`
+
+  Specifies the column separator used in the data file. By default, if you do not specify this parameter, this parameter defaults to `\t`, indicating tab. The column separator you specify using this parameter must be the same as the column separator that is actually used in the data file. Otherwise, the load job will fail due to inadequate data quality, and its `State` will be `CANCELLED`.
+
+  Broker Load jobs are submitted according to the MySQL protocol. StarRocks and MySQL both escape characters in the load requests. Therefore, if the column separator is an invisible character such as tab, you must add a backslash (\) preceding the column separator. For example, you must input `\\t` if the column separator is `\t`, and you must input `\\n` if the column separator is `\n`. Apache Hive™ files use `\x01` as their column separator, so you must input `\\x01` if the data file is from Hive.
+
+  > **NOTE**
+  >
+  > - For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+  > - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
+
+- `ROWS TERMINATED BY`
+
+  Specifies the row separator used in the data file. By default, if you do not specify this parameter, this parameter defaults to `\n`, indicating line break. The row separator you specify using this parameter must be the same as the row separator that is actually used in the data file. Otherwise, the load job will fail due to inadequate data quality, and its `State` will be `CANCELLED`. This parameter is supported from v2.5.4 onwards.
+
+  For the usage notes about the row separator, see the usage notes for the preceding `COLUMNS TERMINATED BY` parameter.
 
 - `FORMAT AS`
 
@@ -141,17 +160,6 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
   | enclose       | Specifies the character that is used to wrap the field values in the data file according to [RFC4180](https://www.rfc-editor.org/rfc/rfc4180) when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).<br>All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. StarRocks can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.<br>If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file. |
   | escape        | Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered by StarRocks to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br>**NOTE**<br>The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br>Two examples are as follows:<ul><li>When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.</li><li>Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.</li></ul> |
 
-- `COLUMNS TERMINATED BY`
-
-  Specifies the column separator used in the data file. By default, if you do not specify this parameter, this parameter defaults to `\t`, indicating tab. The column separator you specify must be the same as the column separator used in the data file. Otherwise, the load job fails due to inadequate data quality, and its `State` is displayed as `CANCELLED`.
-
-  Broker Load jobs are submitted according to the MySQL protocol. StarRocks and MySQL both escape characters in the load requests. Therefore, if the column separator is an invisible character such as tab, you must add a backslash (\) preceding the column separator. For example, you must input `\\t` if the column separator is `\t`, and you must input `\\n` if the column separator is `\n`. Apache Hive™ files use `\x01` as their column separator, so you must input `\\x01` if the data file is from Hive.
-
-  > **NOTE**
-  >
-  > - For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
-  > - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
-
 - `column_list`
 
   Specifies the column mapping between the data file and the StarRocks table. Syntax: `(<column_name>[, <column_name> ...])`. The columns declared in `column_list` are mapped by name onto the StarRocks table columns.
@@ -164,7 +172,7 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
 - `COLUMNS FROM PATH AS`
 
-  Extracts the information about one or more partition fields from the file path you specify. This parameter is valid only when the file path contains partition fields. 
+  Extracts the information about one or more partition fields from the file path you specify. This parameter is valid only when the file path contains partition fields.
 
   For example, if the data file is stored in the path `/path/col_name=col_value/file1` in which `col_name` is a partition field and can be mapped onto a column of the StarRocks table, you can specify this parameter as `col_name`. As such, StarRocks extracts `col_value` values from the path and loads them into the StarRocks table column onto which `col_name` is mapped.
 
