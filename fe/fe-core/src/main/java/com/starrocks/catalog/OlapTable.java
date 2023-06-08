@@ -552,6 +552,7 @@ public class OlapTable extends Table {
         }
         return null;
     }
+
     public Map<Long, MaterializedIndexMeta> getVisibleIndexIdToMeta() {
         Map<Long, MaterializedIndexMeta> visibleMVs = Maps.newHashMap();
         List<MaterializedIndex> mvs = getVisibleIndex();
@@ -577,7 +578,7 @@ public class OlapTable extends Table {
         Optional<Partition> firstPartition = idToPartition.values().stream().findFirst();
         if (firstPartition.isPresent()) {
             Partition partition = firstPartition.get();
-            return partition.getAllVisibleMaterializedIndices();
+            return partition.getMaterializedIndices(IndexExtState.VISIBLE);
         }
         return Lists.newArrayList();
     }

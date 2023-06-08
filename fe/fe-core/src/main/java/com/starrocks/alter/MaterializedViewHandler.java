@@ -954,8 +954,11 @@ public class MaterializedViewHandler extends AlterHandler {
             throw new MetaNotFoundException(
                     "Materialized view [" + mvName + "] does not exist in table [" + olapTable.getName() + "]");
         }
-
         long mvIndexId = olapTable.getIndexIdByName(mvName);
+        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(mvIndexId);
+        if (indexMeta.isLogical()) {
+            return;
+        }
         int mvSchemaHash = olapTable.getSchemaHashByIndexId(mvIndexId);
         Preconditions.checkState(mvSchemaHash != -1);
 
