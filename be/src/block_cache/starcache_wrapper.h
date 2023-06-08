@@ -16,7 +16,7 @@
 
 #include "block_cache/kv_cache.h"
 #include "common/status.h"
-#include "thirdparty/starcache/src/star_cache.h"
+#include "starcache/star_cache.h"
 
 namespace starrocks {
 
@@ -39,8 +39,6 @@ public:
     Status shutdown() override;
 
 private:
-    void _load_starcache_conf();
-
     std::unique_ptr<starcache::StarCache> _cache;
 };
 

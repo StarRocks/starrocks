@@ -42,10 +42,9 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     for (auto& dir : options.disk_spaces) {
         opt.disk_dir_spaces.push_back({.path = dir.path, .quota_bytes = dir.size});
     }
-    _load_starcache_conf();
-    starcache::config::FLAGS_block_size = options.block_size;
-    starcache::config::FLAGS_enable_disk_checksum = options.checksum;
-    starcache::config::FLAGS_max_concurrent_writes = options.max_concurrent_inserts;
+    opt.block_size = options.block_size;
+    opt.enable_disk_checksum = options.checksum;
+    opt.max_concurrent_writes = options.max_concurrent_inserts;
 
     _cache = std::make_unique<starcache::StarCache>();
     return to_status(_cache->init(opt));
@@ -87,22 +86,6 @@ std::unordered_map<std::string, double> StarCacheWrapper::cache_stats() {
 
 Status StarCacheWrapper::shutdown() {
     return Status::OK();
-}
-
-void StarCacheWrapper::_load_starcache_conf() {
-    const char* starrocks_home = getenv("STARROCKS_HOME");
-    const std::string starcache_conf = "conf/starcache.conf";
-    std::string conf_file;
-    if (starrocks_home) {
-        conf_file = std::string(starrocks_home) + "/" + starcache_conf;
-    } else {
-        conf_file = starcache_conf;
-    }
-    std::filesystem::path conf_path(conf_file);
-    if (std::filesystem::exists(conf_path)) {
-        gflags::ReadFromFlagsFile(conf_path.string(), "starcache", true);
-        LOG(INFO) << "load gflag configuration file from " << conf_path.string();
-    }
 }
 
 } // namespace starrocks
