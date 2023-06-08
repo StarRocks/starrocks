@@ -425,7 +425,7 @@ public class Table extends MetaObject implements Writable {
         if (!Strings.isNullOrEmpty(comment)) {
             return comment;
         }
-        return type.name();
+        return "";
     }
 
     public void setComment(String comment) {
