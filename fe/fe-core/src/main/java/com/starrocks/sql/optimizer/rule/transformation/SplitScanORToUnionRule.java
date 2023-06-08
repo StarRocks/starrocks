@@ -68,7 +68,7 @@ public class SplitScanORToUnionRule extends TransformationRule {
             return transformImpl(input, context);
         } catch (Exception e) {
             if (LOG.isDebugEnabled()) {
-                LOG.debug("input: {}, msg: {}", input, e.getMessage());
+                LOG.debug("input: {}, msg: {}", input.explain(), e.getMessage());
             }
             return Lists.newArrayList();
         }
