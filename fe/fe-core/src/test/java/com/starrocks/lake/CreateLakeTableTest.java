@@ -16,6 +16,8 @@ package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.staros.proto.AwsCredentialInfo;
+import com.staros.proto.AwsDefaultCredentialInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
@@ -33,8 +35,11 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.SharedDataStorageVolumeMgr;
+import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -65,6 +70,20 @@ public class CreateLakeTableTest {
             @Mock
             public RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<SharedNothingStorageVolumeMgr>() {
+            @Mock
+            public StorageVolume getStorageVolume(String fsKey) throws AnalysisException {
+                S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
+                        .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
+                        .setCredential(AwsCredentialInfo.newBuilder()
+                                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()).build()).build();
+                FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME)
+                        .setFsKey("1").setFsType(FileStoreType.S3)
+                        .setS3FsInfo(s3FileStoreInfo).build();
+                return StorageVolume.fromFileStoreInfo(fsInfo);
             }
         };
     }
@@ -110,11 +129,21 @@ public class CreateLakeTableTest {
         return builder.build();
     }
 
+    private FileStoreInfo getFileStoreInfo() {
+        S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
+                .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
+                .setCredential(AwsCredentialInfo.newBuilder()
+                        .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()).build()).build();
+        return FileStoreInfo.newBuilder().setFsName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME)
+                .setFsKey("1").setFsType(FileStoreType.S3)
+                .setS3FsInfo(s3FileStoreInfo).build();
+    }
+
     @Test
     public void testCreateLakeTable(@Mocked StarOSAgent agent) throws UserException {
         new Expectations(agent) {
             {
-                agent.allocateFilePath(anyLong);
+                agent.allocateFilePath(anyString, anyLong);
                 result = getPathInfo();
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
@@ -160,7 +189,7 @@ public class CreateLakeTableTest {
     public void testCreateLakeTableWithStorageCache(@Mocked StarOSAgent agent) throws UserException {
         new Expectations() {
             {
-                agent.allocateFilePath(anyLong);
+                agent.allocateFilePath(anyString, anyLong);
                 result = getPathInfo();
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
@@ -286,7 +315,7 @@ public class CreateLakeTableTest {
     public void testExplainRowCount(@Mocked StarOSAgent agent) throws Exception {
         new Expectations(agent) {
             {
-                agent.allocateFilePath(anyLong);
+                agent.allocateFilePath(anyString, anyLong);
                 result = getPathInfo();
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();

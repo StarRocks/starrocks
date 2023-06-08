@@ -35,11 +35,14 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.staros.proto.AwsCredentialInfo;
+import com.staros.proto.AwsDefaultCredentialInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -47,10 +50,12 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -89,10 +94,13 @@ public class DropPartitionTest {
         S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
         s3FsBuilder.setBucket("test-bucket");
         s3FsBuilder.setRegion("test-region");
+        s3FsBuilder.setCredential(AwsCredentialInfo.newBuilder()
+                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()));
         S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
 
         fsBuilder.setFsType(FileStoreType.S3);
         fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setFsName("test-fsname");
         fsBuilder.setS3FsInfo(s3FsInfo);
         FileStoreInfo fsInfo = fsBuilder.build();
 
@@ -102,7 +110,7 @@ public class DropPartitionTest {
 
         new Expectations(agent) {
             {
-                agent.allocateFilePath(anyLong);
+                agent.allocateFilePath(anyString, anyLong);
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
@@ -119,6 +127,13 @@ public class DropPartitionTest {
             @Mock
             public RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<SharedNothingStorageVolumeMgr>() {
+            @Mock
+            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+                return StorageVolume.fromFileStoreInfo(fsInfo);
             }
         };
 
