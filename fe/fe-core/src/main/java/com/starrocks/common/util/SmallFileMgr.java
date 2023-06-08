@@ -569,7 +569,7 @@ public class SmallFileMgr implements Writable {
         try {
             smallFiles.addFile(smallFile.name, smallFile);
         } catch (DdlException e) {
-            LOG.warn(e);
+            LOG.warn("add file: {} failed", smallFile.name, e);
         }
     }
 
