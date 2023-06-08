@@ -101,7 +101,7 @@ private:
     using Mutex = bthread::Mutex;
 
     void _update_network_time(const TUniqueId& instance_id, const int64_t send_timestamp,
-                              const int64_t receive_timestamp);
+                              const int64_t receiver_post_process_time);
     // Update the discontinuous acked window, here are the invariants:
     // all acks received with sequence from [0, _max_continuous_acked_seqs[x]]
     // not all the acks received with sequence from [_max_continuous_acked_seqs[x]+1, _request_seqs[x]]
