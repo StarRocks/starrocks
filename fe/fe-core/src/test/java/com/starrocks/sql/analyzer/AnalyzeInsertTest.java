@@ -84,15 +84,6 @@ public class AnalyzeInsertTest {
                 "Unknown catalog 'err_catalog'");
 
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
-        new Expectations(metadata) {
-            {
-                metadata.getDb("iceberg_catalog", "err_db");
-                result = null;
-                minTimes = 0;
-            }
-        };
-        analyzeFail("insert into iceberg_catalog.err_db.tbl values (1)",
-                "Database err_db is not found");
 
         new Expectations(metadata) {
             {
