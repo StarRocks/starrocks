@@ -138,9 +138,9 @@ StarRocks 在启用 Bitmap Index 的情况下，性能更胜一筹，尤其在 Q
     sh bin/flat_insert.sh data_dir
     ```
 
-导入完成后需要等待 compaction 完成，再重新执行步骤 [4.4](#查询数据)，即查询 Bitmap Index 启动后的结果。
+导入完成后需要等待 compaction 完成，再重新执行步骤 [4.4](#查询数据)，此时就是启用 Bitmap Index 后的查询结果。
 
-可以通过 `select CANDIDATES_NUM from information_schema.be_compactions` 命令查看 compaction进度。对于 3 个 BE 节点，如下结果说明 Compaction 完成：
+可以通过 `select CANDIDATES_NUM from information_schema.be_compactions` 命令查看 compaction 进度。对于 3 个 BE 节点，如下结果说明 compaction 完成：
 
 ```SQL
 mysql> select CANDIDATES_NUM from information_schema.be_compactions;
