@@ -2558,6 +2558,7 @@ public class GlobalStateMgr {
                 sb.append(olapTable.getTableProperty().getDynamicPartitionProperty().toString());
             }
 
+<<<<<<< HEAD
             String partitionDuration =
                     olapTable.getTableProperty().getProperties().get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION);
             if (partitionDuration != null) {
@@ -2568,6 +2569,9 @@ public class GlobalStateMgr {
             }
 
             // enable storage cache && cache ttl
+=======
+            // enable storage cache && cache ttl & storage volume
+>>>>>>> f3eb9bdfa ([Feature] Create using storage volume (#24720))
             if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
 

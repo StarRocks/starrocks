@@ -1051,7 +1051,11 @@ public class AlterTest {
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
             @Mock
+<<<<<<< HEAD
             public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
+=======
+            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+>>>>>>> f3eb9bdfa ([Feature] Create using storage volume (#24720))
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
         };
@@ -1151,7 +1155,11 @@ public class AlterTest {
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
             @Mock
+<<<<<<< HEAD
             public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
+=======
+            public StorageVolume getStorageVolume(String fsKey) throws AnalysisException {
+>>>>>>> f3eb9bdfa ([Feature] Create using storage volume (#24720))
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
         };
@@ -2107,7 +2115,11 @@ public class AlterTest {
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
             @Mock
+<<<<<<< HEAD
             public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
+=======
+            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+>>>>>>> f3eb9bdfa ([Feature] Create using storage volume (#24720))
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
         };

@@ -50,7 +50,11 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
+<<<<<<< HEAD
     public StorageVolume getStorageVolume(String storageVolumeId) {
+=======
+    public StorageVolume getStorageVolume(String storageVolumeId) throws AnalysisException {
+>>>>>>> f3eb9bdfa ([Feature] Create using storage volume (#24720))
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             try {
                 FileStoreInfo fileStoreInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getFileStore(storageVolumeId);
@@ -59,7 +63,11 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 }
                 return StorageVolume.fromFileStoreInfo(fileStoreInfo);
             } catch (DdlException e) {
+<<<<<<< HEAD
                 throw new SemanticException(e.getMessage());
+=======
+                throw new AnalysisException(e.getMessage());
+>>>>>>> f3eb9bdfa ([Feature] Create using storage volume (#24720))
             }
         }
     }

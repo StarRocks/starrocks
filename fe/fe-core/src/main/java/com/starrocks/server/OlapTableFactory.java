@@ -208,11 +208,15 @@ public class OlapTableFactory implements AbstractTableFactory {
                 StorageVolume sv = null;
                 try {
                     if (volume.isEmpty()) {
+<<<<<<< HEAD
                         if (!db.getStorageVolumeId().isEmpty()) {
                             sv = svm.getStorageVolume(db.getStorageVolumeId());
                         } else {
                             sv = svm.getStorageVolumeByName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME);
                         }
+=======
+                        sv = svm.getStorageVolume(db.getStorageVolumeId());
+>>>>>>> f3eb9bdfa ([Feature] Create using storage volume (#24720))
                     } else if (volume.equals(StorageVolumeMgr.DEFAULT)) {
                         sv = svm.getDefaultStorageVolume();
                     } else {

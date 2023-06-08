@@ -209,6 +209,11 @@ public abstract class StorageVolumeMgr {
             return getStorageVolume(getDefaultStorageVolumeId());
         }
     }
+<<<<<<< HEAD
+=======
+
+    public abstract StorageVolume getStorageVolumeByName(String svKey) throws AnalysisException;
+>>>>>>> f3eb9bdfa ([Feature] Create using storage volume (#24720))
 
     public abstract StorageVolume getStorageVolumeByName(String svName) throws AnalysisException;
 

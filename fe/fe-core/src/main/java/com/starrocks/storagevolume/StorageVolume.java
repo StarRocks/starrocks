@@ -221,10 +221,13 @@ public class StorageVolume {
                 return params;
         }
     }
+<<<<<<< HEAD
 
     private void setEmptyAuthenticationIfNeeded(Map<String, String> params) {
         if (svt == StorageVolumeType.HDFS) {
             params.computeIfAbsent(HDFS_AUTHENTICATION, key -> HDFSCloudCredential.EMPTY);
         }
     }
+=======
+>>>>>>> f3eb9bdfa ([Feature] Create using storage volume (#24720))
 }
