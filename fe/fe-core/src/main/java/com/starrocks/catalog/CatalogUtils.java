@@ -11,6 +11,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.InvalidOlapTableStateException;
+>>>>>>> 6fe982a83 ([Enhancement] Detailed error message of invalid table state (#24806))
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -41,7 +46,7 @@ public class CatalogUtils {
     // check table state
     public static void checkTableState(OlapTable olapTable, String tableName) throws DdlException {
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-            throw new DdlException("Table[" + tableName + "]'s state is not NORMAL");
+            throw InvalidOlapTableStateException.of(olapTable.getState(), tableName);
         }
     }
 
