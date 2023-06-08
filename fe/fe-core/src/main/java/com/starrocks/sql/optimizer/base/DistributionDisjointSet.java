@@ -19,7 +19,22 @@ import com.google.common.collect.Maps;
 import java.util.Map;
 import java.util.function.Function;
 
-// it's a disjoint-set data structure to record derived distribution cols from equalPredicate in on clause
+// it's a disjoint-set data structure to record derived distribution cols from equalPredicate in on clause.
+// Given the following example：
+//      select * from A JOIN B ON A.a = B.b
+//      JOIN C ON B.b = C.c
+//      JOIN D ON C.c = D.d
+//      JOIN E ON D.d = E.e
+// After A JOIN B, we can use A.a and B.b to describe the distribution info.
+// After A JOIN B Join C, we can use A.a and B.b to describe the distribution info.
+// The `distributionCols` in `HashDistributionDesc` can only record one possibility, while Equivalence-related
+// information is not preserved. When performing the next JOIN operation JOIN D ON C.c = D.d, the output property
+// of the left child may A.a, and the required property is C.c. We need determine if A.a is equivalent to C.c.
+// The operation of checking if the output of the child satisfies the join condition is like a "find" operation.
+// After the join, the operation of establishing equivalence between the corresponding columns of the left and right
+// child is like a "union" operation.
+// Naturally, using a disjoint-set data structure (also known as a union-find data structure) to abstract this
+// is a suitable approach.
 public class DistributionDisjointSet {
 
     private Map<DistributionCol, DistributionCol> parent;
@@ -44,6 +59,7 @@ public class DistributionDisjointSet {
             root = parent.get(root);
         }
 
+        // path compress
         while (col != root) {
             DistributionCol next = parent.get(col);
             parent.put(col, root);

@@ -20,8 +20,27 @@ public class DistributionCol {
 
     private final int colId;
 
+    // used to record the null value in this col is distributed like normal value.
+    // true means is same with normal value.
+    // false means null value may be randomly distributed
     private final boolean nullStrict;
 
+
+    // special process for scenes:
+    // select tblC.c1, t.c1, t.max from tblC left join (
+    //      select tblB.c1, max(tbl.c2) max from tblA left join tblB on tblA.c1 = tblB.c1 group by tblB.c1
+    // ) t on tblC.c1 = t.c1
+    // The presence of non-null values in tblB.c1 satisfies the requirements for global aggregation based
+    // on the group by key tblB.c1. However, the null values do not meet the requirements. To compute the
+    // final result of the group by tblB.c1, the data needs to be exchanged based on tblB.c1 before further
+    // processing. In the second left join, when using tblC as the reference, the redundant null rows of
+    // tblB.c1 that are present in table t will not affect the final join result. Therefore, during the
+    // aggregation phase, it is possible to generate an "incorrect" aggregation result using local aggregation.
+    // However, this "incorrect" aggregation result will still produce the final correct result when left joined
+    // with tblC.
+    // When the aggStrict is false, it just means the global agg just require its child output distribution can
+    // be null relax.
+    // Apart from this specific use case, in all other scenarios, we can consider it as non-existent.
     private final boolean aggStrict;
 
     public DistributionCol(int colId, boolean nullStrict) {
