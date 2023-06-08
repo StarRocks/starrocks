@@ -125,6 +125,7 @@ public:
         const ColumnPtr& data1 = FunctionHelper::get_data_column_of_nullable(l);
         const ColumnPtr& data2 = FunctionHelper::get_data_column_of_nullable(r);
 
+        // Todo: need handle constant
         DCHECK(data1->is_array());
         DCHECK(data2->is_array());
         auto lhs_arr = down_cast<ArrayColumn&>(*data1.get());
@@ -151,49 +152,92 @@ private:
     EvalCmpZero _comparator;
 };
 
-// add this class because VectorizedNullSafeEqPredicate can't deal with complex data type in columnViewer
-class VectorizedNullSafeArrayEqPredicate final : public Predicate {
+class CommonEqualsPredicate final : public Predicate {
 public:
-    explicit VectorizedNullSafeArrayEqPredicate(const TExprNode& node) : Predicate(node) {}
-    ~VectorizedNullSafeArrayEqPredicate() override = default;
+    explicit CommonEqualsPredicate(const TExprNode& node) : Predicate(node) {}
+    ~CommonEqualsPredicate() override = default;
 
-    Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedNullSafeArrayEqPredicate(*this)); }
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CommonEqualsPredicate(*this)); }
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
+        ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, chunk));
+        ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, chunk));
+
+        if (l->only_null() || r->only_null()) {
+            return ColumnHelper::create_const_null_column(l->size());
+        }
+        auto& const1 = FunctionHelper::get_data_column_of_nullable(l);
+        auto& const2 = FunctionHelper::get_data_column_of_nullable(r);
+
+        size_t lstep = const1->is_constant() ? 0 : 1;
+        size_t rstep = const2->is_constant() ? 0 : 1;
+
+        auto& data1 = FunctionHelper::get_data_column_of_const(const1);
+        auto& data2 = FunctionHelper::get_data_column_of_const(const2);
+
+        size_t size = l->size();
+        ColumnBuilder<TYPE_BOOLEAN> builder(size);
+        for (size_t i = 0, loff = 0, roff = 0; i < size; i++) {
+            if (l->is_null(loff) || r->is_null(roff)) {
+                builder.append_null();
+            } else {
+                builder.append(data1->equals(loff, *(data2.get()), roff));
+            }
+
+            loff += lstep;
+            roff += rstep;
+        }
+        return builder.build(ColumnHelper::is_all_const({l, r}));
+    }
+};
+
+class CommonEqualsSafePredicate final : public Predicate {
+public:
+    explicit CommonEqualsSafePredicate(const TExprNode& node) : Predicate(node) {}
+    ~CommonEqualsSafePredicate() override = default;
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CommonEqualsSafePredicate(*this)); }
 
     // if v1 null and v2 null = true
     // if v1 null and v2 not null = false
     // if v1 not null and v2 null = false
     // if v1 not null and v2 not null = v1 OP v2
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
-        ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
-        ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
+        ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, chunk));
+        ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, chunk));
 
-        const ColumnPtr& data1 = FunctionHelper::get_data_column_of_nullable(l);
-        const ColumnPtr& data2 = FunctionHelper::get_data_column_of_nullable(r);
-
-        const ArrayColumn& col1 = down_cast<ArrayColumn&>(*(data1.get()));
-        const ArrayColumn& col2 = down_cast<ArrayColumn&>(*(data2.get()));
-
-        Columns list = {l, r};
-
-        size_t size = list[0]->size();
-        ColumnBuilder<TYPE_BOOLEAN> builder(size);
-        for (int row = 0; row < size; ++row) {
-            auto null1 = col1.is_null(row);
-            auto null2 = col2.is_null(row);
-
-            if (null1 & null2) {
-                // all null = true
-                builder.append(true);
-            } else if (null1 ^ null2) {
-                // one null = false
-                builder.append(false);
-            } else {
-                // all not null = value eq
-                builder.append(col1.compare_at(row, row, col2, 1) == 0);
-            }
+        if (l->only_null() && r->only_null()) {
+            return ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, l->size());
+        } else if (l->only_null() || r->only_null()) {
+            return ColumnHelper::create_const_column<TYPE_BOOLEAN>(false, l->size());
         }
 
-        return builder.build(ColumnHelper::is_all_const(list));
+        auto& const1 = FunctionHelper::get_data_column_of_nullable(l);
+        auto& const2 = FunctionHelper::get_data_column_of_nullable(r);
+
+        size_t lstep = const1->is_constant() ? 0 : 1;
+        size_t rstep = const2->is_constant() ? 0 : 1;
+
+        auto& data1 = FunctionHelper::get_data_column_of_const(const1);
+        auto& data2 = FunctionHelper::get_data_column_of_const(const2);
+
+        size_t size = l->size();
+        ColumnBuilder<TYPE_BOOLEAN> builder(size);
+        for (size_t i = 0, loff = 0, roff = 0; i < size; i++) {
+            auto ln = l->is_null(loff);
+            auto rn = r->is_null(roff);
+            if (ln & rn) {
+                builder.append(true);
+            } else if (ln ^ rn) {
+                builder.append(false);
+            } else {
+                builder.append(data1->equals(loff, *(data2.get()), roff));
+            }
+
+            loff += lstep;
+            roff += rstep;
+        }
+        return builder.build(ColumnHelper::is_all_const({l, r}));
     }
 };
 
@@ -274,10 +318,20 @@ Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
     }
 
     if (type == TYPE_ARRAY) {
-        if (node.opcode == TExprOpcode::EQ_FOR_NULL) {
-            return new VectorizedNullSafeArrayEqPredicate(node);
+        if (node.opcode == node.opcode == TExprOpcode::EQ) {
+            return new CommonEqualsPredicate(node);
+        } else if (node.opcode == TExprOpcode::EQ_FOR_NULL) {
+            return new CommonEqualsSafePredicate(node);
         } else {
             return new ArrayPredicate(node);
+        }
+    } else if (type == TYPE_MAP || type == TYPE_STRUCT) {
+        if (node.opcode == TExprOpcode::EQ) {
+            return new CommonEqualsPredicate(node);
+        } else if (node.opcode == TExprOpcode::EQ_FOR_NULL) {
+            return new CommonEqualsSafePredicate(node);
+        } else {
+            return nullptr;
         }
     } else {
         return type_dispatch_predicate<Expr*>(type, true, BinaryPredicateBuilder(), node);
