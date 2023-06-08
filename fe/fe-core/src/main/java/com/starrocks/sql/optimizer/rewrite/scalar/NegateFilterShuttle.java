@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator.CompoundType;
@@ -59,7 +60,7 @@ public class NegateFilterShuttle extends BaseScalarOperatorShuttle {
     @Override
     public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
         ScalarOperator negation;
-        if (BinaryPredicateOperator.BinaryType.EQ_FOR_NULL == predicate.getBinaryType()) {
+        if (BinaryType.EQ_FOR_NULL == predicate.getBinaryType()) {
             negation = new CompoundPredicateOperator(CompoundType.NOT, predicate);
         } else {
             negation = predicate.negative();
