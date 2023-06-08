@@ -50,9 +50,9 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 INTO TABLE <table_name>
 [PARTITION (<partition1_name>[, <partition2_name> ...])]
 [TEMPORARY PARTITION (<temporary_partition1_name>[, <temporary_partition2_name> ...])]
-[FORMAT AS "CSV | Parquet | ORC"]
 [COLUMNS TERMINATED BY "<column_separator>"]
 [ROWS TERMINATED BY "<row_separator>"]
+[FORMAT AS "CSV | Parquet | ORC"]
 [(column_list)]
 [COLUMNS FROM PATH AS (<partition_field_name>[, <partition_field_name> ...])]
 [SET <k1=f1(v1)>[, <k2=f2(v2)> ...]]
@@ -82,15 +82,15 @@ INTO TABLE <table_name>
   >
   > 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
 
+- `NEGATIVE`
+
+  用于撤销某一批已经成功导入的数据。如果想要撤销某一批已经成功导入的数据，可以通过指定 `NEGATIVE` 关键字来导入同一批数据。
+  
 - `INTO TABLE`
 
   用于指定目标 StarRocks 表的名称。
 
 `data_desc` 中的可选参数如下：
-
-- `NEGATIVE`
-
-  用于撤销某一批已经成功导入的数据。如果想要撤销某一批已经成功导入的数据，可以通过指定 `NEGATIVE` 关键字来导入同一批数据。
 
   > **说明**
   >
@@ -103,10 +103,6 @@ INTO TABLE <table_name>
 - `TEMPORARY_PARTITION`
 
   指定要把数据导入哪些[临时分区](../../../table_design/Temporary_partition.md)。
-
-- `FORMAT AS`
-
-  用于指定源数据文件的格式。取值包括 `CSV`、`Parquet` 和 `ORC`。如果不指定该参数，则默认通过 `file_path` 参数中指定的文件扩展名（**.csv**、**.parquet**、和 **.orc**）来判断文件格式。
 
 - `COLUMNS TERMINATED BY`
 
@@ -124,6 +120,10 @@ INTO TABLE <table_name>
   用于指定源数据文件中的行分隔符。如果不指定该参数，则默认行分隔符为 `\n`，即换行符。必须确保这里指定的行分隔符与源数据文件中的行分隔符一致；否则，导入作业会因数据质量错误而失败，作业状态 (`State`) 会显示为 `CANCELLED`。该参数从 2.5.4 版本开始支持。
 
   其他注意事项和使用条件与上文通过 `COLUMNS TERMINATED BY` 指定列分隔符相同。
+
+- `FORMAT AS`
+
+  用于指定源数据文件的格式。取值包括 `CSV`、`Parquet` 和 `ORC`。如果不指定该参数，则默认通过 `file_path` 参数中指定的文件扩展名（**.csv**、**.parquet**、和 **.orc**）来判断文件格式。
 
 - `column_list`
 
