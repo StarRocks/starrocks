@@ -223,29 +223,41 @@ void GroupReader::collect_io_ranges(std::vector<SharedBufferedInputStream::IORan
     int64_t end = 0;
     for (const auto& column : _param.read_cols) {
         auto schema_node = _param.file_metadata->schema().get_stored_column_by_idx(column.col_idx_in_parquet);
-        _collect_field_io_range(*schema_node, ranges, &end);
+        _collect_field_io_range(*schema_node, column.col_type_in_chunk, ranges, &end);
     }
     *end_offset = end;
 }
 
-void GroupReader::_collect_field_io_range(const ParquetField& field,
+void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
                                           std::vector<SharedBufferedInputStream::IORange>* ranges,
                                           int64_t* end_offset) {
     // 1. We collect column io ranges for each row group to make up the shared buffer, so we get column
     // metadata (such as page offset and compressed_size) from _row_group_meta directly rather than file_metadata.
     // 2. For map or struct columns, the physical_column_index indicates the real column index in rows group meta,
-    // and it may not be equal to col_idx_in_chunk.
-    // 3. For array type, the physical_column_index is 0, we need to iterate the children and
-    // collect their io ranges.
-    if (field.type.type == PrimitiveType::TYPE_ARRAY || field.type.type == PrimitiveType::TYPE_STRUCT) {
-        for (auto& child : field.children) {
-            _collect_field_io_range(child, ranges, end_offset);
+    // and it may not be equal to col_idx_in_chunk. For array type, the physical_column_index is 0,
+    // we need to iterate the children and collect their io ranges.
+    // 3. For subfield pruning, we collect io range based on col_type which is pruned by fe.
+    if (field.type.type == PrimitiveType::TYPE_ARRAY) {
+        _collect_field_io_range(field.children[0], col_type.children[0], ranges, end_offset);
+    } else if (field.type.type == PrimitiveType::TYPE_STRUCT) {
+        std::vector<int32_t> subfield_pos(col_type.children.size());
+        ColumnReader::get_subfield_pos_with_pruned_type(field, col_type, _param.case_sensitive, subfield_pos);
+
+        for (size_t i = 0; i < col_type.children.size(); i++) {
+            if (subfield_pos[i] == -1) {
+                continue;
+            }
+            _collect_field_io_range(field.children[subfield_pos[i]], col_type.children[i], ranges, end_offset);
         }
     } else if (field.type.type == PrimitiveType::TYPE_MAP) {
         // ParquetFiled Map -> Map<Struct<key,value>>
         DCHECK(field.children[0].type.type == TYPE_STRUCT);
+        auto index = 0;
         for (auto& child : field.children[0].children) {
-            _collect_field_io_range(child, ranges, end_offset);
+            if ((!col_type.children[index].is_unknown_type())) {
+                _collect_field_io_range(child, col_type.children[index], ranges, end_offset);
+            }
+            ++index;
         }
     } else {
         auto& column = _row_group_metadata->columns[field.physical_column_index].meta_data;

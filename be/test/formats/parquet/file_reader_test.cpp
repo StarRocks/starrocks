@@ -1272,6 +1272,12 @@ TEST_F(FileReaderTest, TestReadStruct) {
     ASSERT_TRUE(status.ok());
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    std::vector<SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
+
+    // c1, c2.f1, c2.f2, c2.f3, c3, c4.e1, c4.e2, B1
+    EXPECT_EQ(ranges.size(), 8);
 
     auto chunk = std::make_shared<vectorized::Chunk>();
     chunk->append_column(vectorized::ColumnHelper::create_column(c1, true), chunk->num_columns());
@@ -1348,6 +1354,12 @@ TEST_F(FileReaderTest, TestReadStructSubField) {
     ASSERT_TRUE(status.ok());
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    std::vector<SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
+
+    // c1, c2.f1, c2.f3, c3, c4.e2, B1
+    EXPECT_EQ(ranges.size(), 6);
 
     auto chunk = std::make_shared<vectorized::Chunk>();
     chunk->append_column(vectorized::ColumnHelper::create_column(c1, true), chunk->num_columns());
@@ -1602,8 +1614,8 @@ TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
 
-    // c1, c2.key, c2.value, c3.key, c3.value.key, c3.value.value, c4.key. c4.value
-    EXPECT_EQ(ranges.size(), 8);
+    // c1, c2.key, c3.value.key, c4.value
+    EXPECT_EQ(ranges.size(), 4);
 
     EXPECT_EQ(file_reader->_file_metadata->num_rows(), 8);
     TypeDescriptor type_map(PrimitiveType::TYPE_MAP);

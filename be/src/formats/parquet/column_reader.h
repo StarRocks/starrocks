@@ -38,6 +38,10 @@ public:
     static Status create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                          std::unique_ptr<ColumnReader>* reader);
 
+    // for struct type without schema change
+    static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
+                                                  bool case_sensitive, std::vector<int32_t>& pos);
+
     virtual ~ColumnReader() = default;
 
     virtual Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* column) = 0;
