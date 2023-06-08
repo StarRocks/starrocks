@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.catalog.system.starrocks;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
@@ -26,7 +27,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -53,12 +53,12 @@ import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
 import com.starrocks.thrift.TSchemaTableType;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -98,6 +98,10 @@ public class GrantsTo {
         if (request.getType().equals(TGrantsToType.USER)) {
             Set<UserIdentity> userIdentities = authorizationManager.getAllUserIdentities();
             for (UserIdentity userIdentity : userIdentities) {
+                if (userIdentity.equals(UserIdentity.ROOT)) {
+                    continue;
+                }
+
                 Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> privileges =
                         authorizationManager.getMergedTypeToPrivilegeEntryListByUser(userIdentity);
                 Set<TGetGrantsToRolesOrUserItem> items =
@@ -107,6 +111,10 @@ public class GrantsTo {
         } else {
             List<String> roles = authorizationManager.getAllRoles();
             for (String grantee : roles) {
+                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_NAMES.contains(grantee)) {
+                    continue;
+                }
+
                 Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> privileges =
                         authorizationManager.getTypeToPrivilegeEntryListByRole(grantee);
                 Set<TGetGrantsToRolesOrUserItem> items = getGrantItems(authorizationManager, grantee, privileges);
@@ -123,17 +131,20 @@ public class GrantsTo {
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         Set<TGetGrantsToRolesOrUserItem> items = new HashSet<>();
-        for (Map.Entry<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> privEntryMaps : privileges.entrySet()) {
-            for (PrivilegeCollection.PrivilegeEntry privilegeEntry : privEntryMaps.getValue()) {
+        for (Map.Entry<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> privEntry : privileges.entrySet()) {
+            for (PrivilegeCollection.PrivilegeEntry privilegeEntry : privEntry.getValue()) {
                 Set<List<String>> objects = new HashSet<>();
-                switch (privEntryMaps.getKey()) {
+                switch (privEntry.getKey()) {
                     case CATALOG: {
                         CatalogPEntryObject catalogPEntryObject = (CatalogPEntryObject) privilegeEntry.getObject();
                         if (catalogPEntryObject.getId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
-                            objects.add(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, null, null));
-                            Map<String, Catalog> catalogMap = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs();
-                            for (Catalog catalog : catalogMap.values()) {
-                                objects.add(Lists.newArrayList(catalog.getName(), null, null));
+                            List<String> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
+                                    .stream().filter(catalogName ->
+                                            !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
+                                    ).collect(Collectors.toList());
+                            catalogs.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                            for (String catalogName : catalogs) {
+                                objects.add(Lists.newArrayList(catalogName, null, null));
                             }
                         } else {
                             String catalogName = getCatalogName(catalogPEntryObject.getId());
@@ -148,18 +159,14 @@ public class GrantsTo {
                     case DATABASE: {
                         DbPEntryObject dbPEntryObject = (DbPEntryObject) privilegeEntry.getObject();
                         if (dbPEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
-                            List<String> catalogs = new ArrayList<>(GlobalStateMgr.getCurrentState().getCatalogMgr()
-                                    .getCatalogs().keySet());
+                            List<String> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
+                                    .stream().filter(catalogName ->
+                                            !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
+                                    ).collect(Collectors.toList());
                             catalogs.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
 
                             for (String catalogName : catalogs) {
-                                for (String dbName : metadataMgr.listDbNames(catalogName)) {
-                                    Database database = metadataMgr.getDb(catalogName, dbName);
-                                    if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
-                                        continue;
-                                    }
-                                    objects.add(Lists.newArrayList(catalogName, dbName, null));
-                                }
+                                objects.addAll(expandAllDatabases(metadataMgr, catalogName));
                             }
                         } else {
                             String catalogName = getCatalogName(dbPEntryObject.getCatalogId());
@@ -168,14 +175,7 @@ public class GrantsTo {
                             }
 
                             if (dbPEntryObject.getUUID().equalsIgnoreCase(PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
-                                List<String> dbNames = metadataMgr.listDbNames(catalogName);
-                                for (String dbName : dbNames) {
-                                    Database database = metadataMgr.getDb(catalogName, dbName);
-                                    if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
-                                        continue;
-                                    }
-                                    objects.add(Lists.newArrayList(catalogName, database.getFullName(), null));
-                                }
+                                objects.addAll(expandAllDatabases(metadataMgr, catalogName));
                             } else {
                                 Database database;
                                 if (CatalogMgr.isInternalCatalog(catalogName)) {
@@ -203,26 +203,21 @@ public class GrantsTo {
                     case MATERIALIZED_VIEW: {
                         TablePEntryObject tablePEntryObject = (TablePEntryObject) privilegeEntry.getObject();
                         if (tablePEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
-                            List<String> catalogs = new ArrayList<>(GlobalStateMgr.getCurrentState().getCatalogMgr()
-                                    .getCatalogs().keySet());
+                            List<String> catalogs = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().keySet()
+                                    .stream().filter(catalogName ->
+                                            !CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)
+                                    ).collect(Collectors.toList());
                             catalogs.add(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
 
                             for (String catalogName : catalogs) {
-                                for (String dbName : metadataMgr.listDbNames(catalogName)) {
+                                List<String> dbNames = metadataMgr.listDbNames(catalogName);
+                                for (String dbName : dbNames) {
                                     Database database = metadataMgr.getDb(catalogName, dbName);
                                     if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
                                         continue;
                                     }
-                                    for (Table table : database.getTables()) {
-                                        if (privEntryMaps.getKey().equals(ObjectType.VIEW) && !(table instanceof View)) {
-                                            continue;
-                                        } else if (privEntryMaps.getKey().equals(ObjectType.MATERIALIZED_VIEW)
-                                                && !table.isMaterializedView()) {
-                                            continue;
-                                        }
 
-                                        objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
-                                    }
+                                    objects.addAll(expandAllTables(metadataMgr, catalogName, dbName, privEntry.getKey()));
                                 }
                             }
                         } else {
@@ -239,16 +234,8 @@ public class GrantsTo {
                                     if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
                                         continue;
                                     }
-                                    for (Table table : database.getTables()) {
-                                        if (privEntryMaps.getKey().equals(ObjectType.VIEW) && !(table instanceof View)) {
-                                            continue;
-                                        } else if (privEntryMaps.getKey().equals(ObjectType.MATERIALIZED_VIEW)
-                                                && !table.isMaterializedView()) {
-                                            continue;
-                                        }
 
-                                        objects.add(Lists.newArrayList(catalogName, database.getFullName(), table.getName()));
-                                    }
+                                    objects.addAll(expandAllTables(metadataMgr, catalogName, dbName, privEntry.getKey()));
                                 }
                             } else {
                                 Database database;
@@ -267,20 +254,19 @@ public class GrantsTo {
                                     continue;
                                 }
 
+                                String dbName = database.getFullName();
                                 if (tablePEntryObject.getTableUUID().equalsIgnoreCase(
                                         PrivilegeBuiltinConstants.ALL_TABLES_UUID)) {
-                                    for (Table table : database.getTables()) {
-                                        if (privEntryMaps.getKey().equals(ObjectType.VIEW) && !(table instanceof View)) {
-                                            continue;
-                                        } else if (privEntryMaps.getKey().equals(ObjectType.MATERIALIZED_VIEW)
-                                                && !table.isMaterializedView()) {
-                                            continue;
-                                        }
-                                        objects.add(Lists.newArrayList(catalogName, database.getFullName(), table.getName()));
-                                    }
+                                    objects.addAll(expandAllTables(metadataMgr, catalogName, dbName, privEntry.getKey()));
                                 } else {
-                                    Table table = database.getTable(Long.parseLong(tablePEntryObject.getTableUUID()));
-                                    objects.add(Lists.newArrayList(catalogName, database.getFullName(), table.getName()));
+                                    Table table;
+                                    if (CatalogMgr.isInternalCatalog(tablePEntryObject.getCatalogId())) {
+                                        table = database.getTable((Long.parseLong(tablePEntryObject.getTableUUID())));
+                                        objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
+                                    } else {
+                                        String tableName = ExternalCatalog.getTableNameFromUUID(tablePEntryObject.getTableUUID());
+                                        objects.add(Lists.newArrayList(catalogName, dbName, tableName));
+                                    }
                                 }
                             }
                         }
@@ -406,7 +392,7 @@ public class GrantsTo {
                                 continue;
                             }
                         } else {
-                            String storageVolumeName = getStorageVolumeName(storageVolumeId);
+                            String storageVolumeName = storageVolumeMgr.getStorageVolume(storageVolumeId).getName();
                             if (storageVolumeName == null) {
                                 continue;
                             }
@@ -417,21 +403,20 @@ public class GrantsTo {
                 }
 
                 ActionSet actionSet = privilegeEntry.getActionSet();
-                List<PrivilegeType> privilegeTypes = authorizationManager.analyzeActionSet(privEntryMaps.getKey(), actionSet);
+                List<PrivilegeType> privilegeTypes = authorizationManager.analyzeActionSet(privEntry.getKey(), actionSet);
 
-                for (PrivilegeType privilegeType : privilegeTypes) {
-                    for (List<String> object : objects) {
-                        TGetGrantsToRolesOrUserItem tGetGrantsToRolesOrUserItem = new TGetGrantsToRolesOrUserItem();
-                        tGetGrantsToRolesOrUserItem.setGrantee(grantee);
-                        tGetGrantsToRolesOrUserItem.setObject_catalog(object.get(0));
-                        tGetGrantsToRolesOrUserItem.setObject_database(object.get(1));
-                        tGetGrantsToRolesOrUserItem.setObject_name(object.get(2));
-                        tGetGrantsToRolesOrUserItem.setObject_type(privEntryMaps.getKey().name().replace("_", " "));
-                        tGetGrantsToRolesOrUserItem.setPrivilege_type(privilegeType.name().replace("_", " "));
-                        tGetGrantsToRolesOrUserItem.setIs_grantable(privilegeEntry.isWithGrantOption());
+                for (List<String> object : objects) {
+                    TGetGrantsToRolesOrUserItem tGetGrantsToRolesOrUserItem = new TGetGrantsToRolesOrUserItem();
+                    tGetGrantsToRolesOrUserItem.setGrantee(grantee);
+                    tGetGrantsToRolesOrUserItem.setObject_catalog(object.get(0));
+                    tGetGrantsToRolesOrUserItem.setObject_database(object.get(1));
+                    tGetGrantsToRolesOrUserItem.setObject_name(object.get(2));
+                    tGetGrantsToRolesOrUserItem.setObject_type(privEntry.getKey().name().replace("_", " "));
+                    tGetGrantsToRolesOrUserItem.setPrivilege_type(Joiner.on(", ").join(privilegeTypes.stream().map(
+                            privilegeType -> privilegeType.name().replace("_", " ")).collect(Collectors.toList())));
+                    tGetGrantsToRolesOrUserItem.setIs_grantable(privilegeEntry.isWithGrantOption());
 
-                        items.add(tGetGrantsToRolesOrUserItem);
-                    }
+                    items.add(tGetGrantsToRolesOrUserItem);
                 }
             }
         }
@@ -453,11 +438,42 @@ public class GrantsTo {
         return catalogName;
     }
 
-    private static String getStorageVolumeName(String storageVolumeId) {
-        try {
-            return GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolume(storageVolumeId).getName();
-        } catch (AnalysisException e) {
-            return null;
+    private static Set<List<String>> expandAllDatabases(MetadataMgr metadataMgr, String catalogName) {
+        Set<List<String>> objects = new HashSet<>();
+
+        List<String> dbNames = metadataMgr.listDbNames(catalogName);
+        for (String dbName : dbNames) {
+            Database database = metadataMgr.getDb(catalogName, dbName);
+            if (database.isSystemDatabase() || database.getFullName().equals("_statistics_")) {
+                continue;
+            }
+            objects.add(Lists.newArrayList(catalogName, database.getFullName(), null));
         }
+        return objects;
+    }
+
+    private static Set<List<String>> expandAllTables(MetadataMgr metadataMgr, String catalogName, String dbName,
+                                                     ObjectType objectType) {
+        Set<List<String>> objects = new HashSet<>();
+
+        List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            for (String tableName : tableNames) {
+                Table table = metadataMgr.getTable(catalogName, dbName, tableName);
+                if (objectType.equals(ObjectType.VIEW) && !(table instanceof View)) {
+                    continue;
+                } else if (objectType.equals(ObjectType.MATERIALIZED_VIEW)
+                        && !table.isMaterializedView()) {
+                    continue;
+                }
+
+                objects.add(Lists.newArrayList(catalogName, dbName, table.getName()));
+            }
+        } else {
+            for (String tableName : tableNames) {
+                objects.add(Lists.newArrayList(catalogName, dbName, tableName));
+            }
+        }
+        return objects;
     }
 }

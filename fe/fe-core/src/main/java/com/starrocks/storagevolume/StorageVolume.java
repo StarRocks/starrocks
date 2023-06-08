@@ -19,13 +19,13 @@ import com.google.gson.Gson;
 import com.staros.proto.AwsCredentialInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.parquet.Strings;
 
 import java.util.ArrayList;
@@ -61,7 +61,7 @@ public class StorageVolume {
     private boolean enabled;
 
     public StorageVolume(String id, String name, String svt, List<String> locations,
-                         Map<String, String> params, boolean enabled, String comment) throws AnalysisException {
+                         Map<String, String> params, boolean enabled, String comment) {
         this.id = id;
         this.name = name;
         this.svt = toStorageVolumeType(svt);
@@ -70,7 +70,7 @@ public class StorageVolume {
         this.enabled = enabled;
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
         if (!isValidCloudConfiguration()) {
-            throw new AnalysisException("Storage params is not valid");
+            throw new SemanticException("Storage params is not valid");
         }
         this.params = new HashMap<>(params);
     }
@@ -86,12 +86,12 @@ public class StorageVolume {
         this.params = new HashMap<>(sv.params);
     }
 
-    public void setCloudConfiguration(Map<String, String> params) throws AnalysisException {
+    public void setCloudConfiguration(Map<String, String> params) {
         Map<String, String> newParams = new HashMap<>(this.params);
         newParams.putAll(params);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams);
         if (!isValidCloudConfiguration()) {
-            throw new AnalysisException("Storage params is not valid");
+            throw new SemanticException("Storage params is not valid");
         }
         this.params = newParams;
     }
@@ -160,7 +160,7 @@ public class StorageVolume {
 
     public static FileStoreInfo createFileStoreInfo(String name, String svt,
                                                     List<String> locations, Map<String, String> params,
-                                                    boolean enabled, String comment) throws AnalysisException {
+                                                    boolean enabled, String comment) {
         StorageVolume sv = new StorageVolume("", name, svt, locations, params, enabled, comment);
         return sv.toFileStoreInfo();
     }
@@ -173,7 +173,7 @@ public class StorageVolume {
         return builder.build();
     }
 
-    public static StorageVolume fromFileStoreInfo(FileStoreInfo fsInfo) throws AnalysisException {
+    public static StorageVolume fromFileStoreInfo(FileStoreInfo fsInfo) {
         String svt = fsInfo.getFsType().toString();
         Map<String, String> params = getParamsFromFileStoreInfo(fsInfo);
         return new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,

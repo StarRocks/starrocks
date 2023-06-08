@@ -212,7 +212,7 @@ public abstract class StorageVolumeMgr {
 
     public abstract StorageVolume getStorageVolumeByName(String svKey) throws AnalysisException;
 
-    public abstract StorageVolume getStorageVolume(String storageVolumeId) throws AnalysisException;
+    public abstract StorageVolume getStorageVolume(String storageVolumeId);
 
     public abstract List<String> listStorageVolumeNames() throws DdlException;
 
