@@ -272,6 +272,11 @@ public class AnalyzeCreateTableTest {
     }
 
     @Test
+    public void testRandomDistributionForAggKeyDefault() {
+        analyzeFail("create table table1 (col1 char(10) not null, col2 bigint sum) engine=olap aggregate key(col1)");
+    }
+
+    @Test
     public void testRandomDistributionForAggKey() {
         analyzeSuccess("create table table1 (col1 char(10) not null, col2 bigint sum) engine=olap aggregate key(col1) " +
                 "distributed by random");
