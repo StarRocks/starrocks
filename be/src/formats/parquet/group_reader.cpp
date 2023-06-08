@@ -82,6 +82,13 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     Filter chunk_filter(count, 1);
     DCHECK_EQ(active_chunk->num_rows(), count);
 
+    // dict filter chunk
+    {
+        SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
+        SCOPED_RAW_TIMER(&_param.stats->group_dict_filter_ns);
+        has_filter = _dict_filter_ctx.filter_chunk(&active_chunk, &chunk_filter);
+    }
+
     // row id filter
     if ((nullptr != _need_skip_rowids) && !_need_skip_rowids->empty()) {
         std::int64_t current_chunk_base_row = _row_group_first_row + _raw_rows_read - count;
@@ -92,13 +99,6 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             chunk_filter[*start_iter - current_chunk_base_row] = 0;
             has_filter = true;
         }
-    }
-
-    // dict filter chunk
-    {
-        SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
-        SCOPED_RAW_TIMER(&_param.stats->group_dict_filter_ns);
-        has_filter = _dict_filter_ctx.filter_chunk(&active_chunk, &chunk_filter);
     }
 
     // other filter that not dict

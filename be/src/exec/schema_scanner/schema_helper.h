@@ -79,8 +79,7 @@ public:
 
     static Status get_grants_to(const std::string& ip, const int32_t port,
                                 const TGetGrantsToRolesOrUserRequest& request,
-                                TGetGrantsToRolesOrUserResponse* response,
-                                int timeout_ms);
+                                TGetGrantsToRolesOrUserResponse* response, int timeout_ms);
 };
 
 template <LogicalType SlotType>

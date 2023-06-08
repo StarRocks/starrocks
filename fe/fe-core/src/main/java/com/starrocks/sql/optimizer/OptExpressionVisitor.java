@@ -265,4 +265,8 @@ public abstract class OptExpressionVisitor<R, C> {
     public R visitPhysicalStreamAgg(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
+
+    public R visitPhysicalTableFunctionTableScan(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
 }

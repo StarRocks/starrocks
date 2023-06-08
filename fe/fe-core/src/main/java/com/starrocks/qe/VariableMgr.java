@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -47,6 +48,11 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
@@ -62,6 +68,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Field;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.Lock;
@@ -338,6 +345,90 @@ public class VariableMgr {
             replayGlobalVariableV2(info);
         } finally {
             WLOCK.unlock();
+        }
+    }
+
+    public static void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        Map<String, String> m = new HashMap<>();
+        Map<String, String> g = new HashMap<>();
+        try {
+            for (Field field : SessionVariable.class.getDeclaredFields()) {
+                field.setAccessible(true);
+                VarAttr attr = field.getAnnotation(VarAttr.class);
+                if (attr == null || (attr.flag() & SESSION_ONLY) == SESSION_ONLY) {
+                    continue;
+                }
+                switch (field.getType().getSimpleName()) {
+                    case "boolean":
+                    case "int":
+                    case "long":
+                    case "float":
+                    case "double":
+                    case "String":
+                        m.put(attr.name(), field.get(DEFAULT_SESSION_VARIABLE).toString());
+                        break;
+                    default:
+                        // Unsupported type variable.
+                        throw new IOException("invalid type: " + field.getType().getSimpleName());
+                }
+            }
+
+            for (Field field : GlobalVariable.class.getDeclaredFields()) {
+                field.setAccessible(true);
+                VarAttr attr = field.getAnnotation(VarAttr.class);
+                if (attr == null || (attr.flag() & GLOBAL) != GLOBAL) {
+                    continue;
+                }
+                switch (field.getType().getSimpleName()) {
+                    case "boolean":
+                    case "int":
+                    case "long":
+                    case "float":
+                    case "double":
+                    case "String":
+                        g.put(attr.name(), field.get(null).toString());
+                        break;
+                    default:
+                        // Unsupported type variable.
+                        throw new IOException("invalid type: " + field.getType().getSimpleName());
+                }
+            }
+
+        } catch (Exception e) {
+            throw new IOException("failed to write session variable: " + e.getMessage());
+        }
+
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.VARIABLE_MGR, 1 + m.size() + 1 + g.size());
+
+        writer.writeJson(m.size());
+        for (Map.Entry<String, String> e : m.entrySet()) {
+            writer.writeJson(new VariableInfo(e.getKey(), e.getValue()));
+        }
+
+        writer.writeJson(g.size());
+        for (Map.Entry<String, String> e : g.entrySet()) {
+            writer.writeJson(new VariableInfo(e.getKey(), e.getValue()));
+        }
+        writer.close();
+    }
+
+    public static void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        try {
+            int sessionVarSize = reader.readInt();
+            for (int i = 0; i < sessionVarSize; ++i) {
+                VariableInfo v = reader.readJson(VariableInfo.class);
+                VarContext varContext = getVarContext(v.name);
+                setValue(varContext.getObj(), varContext.getField(), v.variable);
+            }
+
+            int globalVarSize = reader.readInt();
+            for (int i = 0; i < globalVarSize; ++i) {
+                VariableInfo v = reader.readJson(VariableInfo.class);
+                VarContext varContext = getVarContext(v.name);
+                setValue(varContext.getObj(), varContext.getField(), v.variable);
+            }
+        } catch (DdlException e) {
+            throw new IOException(e);
         }
     }
 
@@ -654,5 +745,17 @@ public class VariableMgr {
             ctx = CTX_BY_VAR_NAME.get(ALIASES.get(name));
         }
         return ctx;
+    }
+
+    private static class VariableInfo {
+        @SerializedName(value = "n")
+        private String name;
+        @SerializedName(value = "v")
+        private String variable;
+
+        public VariableInfo(String name, String variable) {
+            this.name = name;
+            this.variable = variable;
+        }
     }
 }

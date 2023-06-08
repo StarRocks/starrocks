@@ -104,7 +104,6 @@ public class DeleteHandlerTest {
         FeConstants.runningUnitTest = true;
 
         globalTransactionMgr = new GlobalTransactionMgr(globalStateMgr);
-        globalTransactionMgr.setEditLog(editLog);
         connectContext.setGlobalStateMgr(globalStateMgr);
         deleteHandler = new DeleteMgr();
         auth = AccessTestUtil.fetchAdminAccess();

@@ -135,6 +135,9 @@ struct TTypeNode {
 
     // only used for structs; has struct_fields.size() corresponding child types
     3: optional list<TStructField> struct_fields
+
+    // only used for structs; for output use
+    4: optional bool is_named
 }
 
 // A flattened representation of a tree of column types obtained by depth-first
@@ -386,7 +389,8 @@ enum TTableType {
     VIEW = 20,
     MATERIALIZED_VIEW,
     FILE_TABLE,
-    DELTALAKE_TABLE
+    DELTALAKE_TABLE,
+    TABLE_FUNCTION_TABLE
 }
 
 enum TKeysType {

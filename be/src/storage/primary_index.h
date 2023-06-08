@@ -65,7 +65,7 @@ public:
     // old position to |deletes|.
     //
     // [not thread-safe]
-    void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes);
+    void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes, IOStat* stat = nullptr);
 
     void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                 DeletesMap* deletes);
@@ -149,7 +149,7 @@ private:
     Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks);
 
     void _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
-                                       uint32_t idx_end, DeletesMap* deletes);
+                                       uint32_t idx_end, DeletesMap* deletes, IOStat* stat);
 
     void _erase_persistent_index(const Column& key_col, DeletesMap* deletes);
 

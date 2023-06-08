@@ -54,31 +54,33 @@ public class SRMetaBlockReader {
     // For backward compatibility reason
     private final String oldManagerClassName = "com.starrocks.privilege.PrivilegeManager";
 
-    public SRMetaBlockReader(DataInputStream dis, SRMetaBlockID id) {
+    public SRMetaBlockReader(DataInputStream dis, SRMetaBlockID id) throws IOException {
         this.checkedInputStream = new CheckedInputStream(dis, new CRC32());
         this.id = id;
         this.header = null;
         this.numJsonRead = 0;
+
+        String s = Text.readStringWithChecksum(checkedInputStream);
+        header = GsonUtils.GSON.fromJson(s, SRMetaBlockHeader.class);
     }
 
     @Deprecated
-    public SRMetaBlockReader(DataInputStream dis, String name) {
+    public SRMetaBlockReader(DataInputStream dis, String name) throws IOException {
         this.checkedInputStream = new CheckedInputStream(dis, new CRC32());
         this.id = SRMetaBlockID.INVALID;
         this.header = null;
         this.numJsonRead = 0;
+
+        String s = Text.readStringWithChecksum(checkedInputStream);
+        header = GsonUtils.GSON.fromJson(s, SRMetaBlockHeader.class);
     }
 
-    private String readJsonText() throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        if (numJsonRead == 0) {
-            // read header and check for name
-            String s = Text.readStringWithChecksum(checkedInputStream);
-            header = GsonUtils.GSON.fromJson(s, SRMetaBlockHeader.class);
-            if (!header.getId().equals(id)) {
-                throw new SRMetaBlockException(
-                        "Invalid meta block header, expect " + header.getId().name() + " actual " + id.name());
-            }
-        } else if (numJsonRead >= header.getNumJson()) {
+    public SRMetaBlockHeader getHeader() {
+        return header;
+    }
+
+    private String readJsonText() throws IOException, SRMetaBlockEOFException {
+        if (numJsonRead >= header.getNumJson()) {
             throw new SRMetaBlockEOFException(String.format(
                     "Read json more than expect: %d >= %d", numJsonRead, header.getNumJson()));
         }
@@ -106,10 +108,10 @@ public class SRMetaBlockReader {
         }
         if (numJsonRead < header.getNumJson()) {
             // discard the rest of data for compatibility
-            // normally it's because this FE has just rollbacked from a higher version that would produce more metadata
+            // normally it's because this FE has just rollback from a higher version that would produce more metadata
             int rest = header.getNumJson() - numJsonRead;
             LOG.warn("Meta block for {} read {} json < total {} json, will skip the rest {} json",
-                    header.getName(), numJsonRead, header.getNumJson(), rest);
+                    header.getId().name(), numJsonRead, header.getNumJson(), rest);
             for (int i = 0; i != rest; ++i) {
                 LOG.warn("skip {} json: {}", i, Text.readStringWithChecksum(checkedInputStream));
             }

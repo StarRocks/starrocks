@@ -105,6 +105,10 @@ public class StorageVolume {
         return id;
     }
 
+    public String getName() {
+        return name;
+    }
+
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
     }

@@ -8,13 +8,13 @@ Review the information in this section before upgrading, and perform any recomme
 
 ### StarRocks versions
 
-The version of StarRocks is represented by three numbers in the form **Major.Minor.Patch**, for example, `2.5.4`. The first number represents the major version of StarRocks, the second number represents the minor version, and the third number represents the patch version. Currently, v2.2 and v2.5 are the Long-term Support (LTS) versions. Their support duration lasts more than half a year.
+The version of StarRocks is represented by three numbers in the form **Major.Minor.Patch**, for example, `2.5.4`. The first number represents the major version of StarRocks, the second number represents the minor version, and the third number represents the patch version. StarRocks provides Long-term Support (LTS) for certain versions. Their support duration lasts more than half a year.
 
 | **StarRocks version** | **Is the LTS version** |
 | --------------------- | ---------------------- |
 | v2.0.x                | No                     |
 | v2.1.x                | No                     |
-| v2.2.x                | Yes                    |
+| v2.2.x                | No                     |
 | v2.3.x                | No                     |
 | v2.4.x                | No                     |
 | v2.5.x                | Yes                    |

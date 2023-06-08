@@ -59,7 +59,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                             PrivilegeType.CREATE_EXTERNAL_CATALOG,
                             PrivilegeType.REPOSITORY,
                             PrivilegeType.CREATE_RESOURCE_GROUP,
-                            PrivilegeType.CREATE_GLOBAL_FUNCTION))
+                            PrivilegeType.CREATE_GLOBAL_FUNCTION,
+                            PrivilegeType.CREATE_STORAGE_VOLUME))
 
                     .put(ObjectType.USER, ImmutableList.of(
                             PrivilegeType.IMPERSONATE))
@@ -97,6 +98,11 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                     .put(ObjectType.GLOBAL_FUNCTION, ImmutableList.of(
                             PrivilegeType.USAGE,
                             PrivilegeType.DROP))
+
+                    .put(ObjectType.STORAGE_VOLUME, ImmutableList.of(
+                            PrivilegeType.DROP,
+                            PrivilegeType.ALTER,
+                            PrivilegeType.USAGE))
                     .build();
 
     public static final String UNEXPECTED_TYPE = "unexpected type ";
@@ -154,6 +160,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
 
             case RESOURCE_GROUP:
                 return ResourceGroupPEntryObject.generate(mgr, objectTokens);
+
+            case STORAGE_VOLUME:
+                return StorageVolumePEntryObject.generate(mgr, objectTokens);
 
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());

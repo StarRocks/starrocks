@@ -315,7 +315,7 @@ Status Rowset::_remove_delta_column_group_files(std::shared_ptr<FileSystem> fs) 
     return Status::OK();
 }
 
-Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id) {
+Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id, int64_t version) {
     for (int i = 0; i < num_segments(); ++i) {
         std::string dst_link_path = segment_file_path(dir, new_rowset_id, i);
         std::string src_file_path = segment_file_path(_rowset_path, rowset_id(), i);
@@ -343,11 +343,11 @@ Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id) {
             VLOG(1) << "success to link " << src_file_path << " to " << dst_link_path;
         }
     }
-    RETURN_IF_ERROR(_link_delta_column_group_files(dir));
+    RETURN_IF_ERROR(_link_delta_column_group_files(dir, version));
     return Status::OK();
 }
 
-Status Rowset::_link_delta_column_group_files(const std::string& dir) {
+Status Rowset::_link_delta_column_group_files(const std::string& dir, int64_t version) {
     if (num_segments() > 0) {
         std::filesystem::path schema_hash_path(_rowset_path);
         std::filesystem::path data_dir_path = schema_hash_path.parent_path().parent_path().parent_path().parent_path();
@@ -362,7 +362,7 @@ Status Rowset::_link_delta_column_group_files(const std::string& dir) {
             DeltaColumnGroupList list;
             RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(data_dir->get_meta(), _rowset_meta->tablet_id(),
                                                                        _rowset_meta->get_rowset_seg_id() + i, 0,
-                                                                       INT64_MAX, &list));
+                                                                       version, &list));
             for (const auto& dcg : list) {
                 std::string src_file_path = dcg->column_file(_rowset_path);
                 std::string dst_link_path = dcg->column_file(dir);
@@ -493,6 +493,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.global_dictmaps = options.global_dictmaps;
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
     seg_options.runtime_range_pruner = options.runtime_range_pruner;
+    seg_options.column_access_paths = options.column_access_paths;
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
     }

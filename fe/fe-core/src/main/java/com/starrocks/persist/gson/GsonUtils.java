@@ -71,32 +71,48 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.backup.SnapshotInfo;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AnyArrayType;
 import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
+import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.FileTable;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveResource;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiResource;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergResource;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCResource;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OdbcCatalogResource;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.PseudoType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Resource;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.View;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -132,6 +148,7 @@ import com.starrocks.privilege.MaterializedViewPEntryObject;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.ResourceGroupPEntryObject;
 import com.starrocks.privilege.ResourcePEntryObject;
+import com.starrocks.privilege.StorageVolumePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.privilege.ViewPEntryObject;
@@ -200,7 +217,8 @@ public class GsonUtils {
                     .registerSubtype(RangePartitionInfo.class, "RangePartitionInfo")
                     .registerSubtype(ListPartitionInfo.class, "ListPartitionInfo")
                     .registerSubtype(SinglePartitionInfo.class, "SinglePartitionInfo")
-                    .registerSubtype(ExpressionRangePartitionInfo.class, "ExpressionRangePartitionInfo");
+                    .registerSubtype(ExpressionRangePartitionInfo.class, "ExpressionRangePartitionInfo")
+                    .registerSubtype(ExpressionRangePartitionInfoV2.class, "ExpressionRangePartitionInfoV2");
 
     // runtime adapter for class "Resource"
     private static final RuntimeTypeAdapterFactory<Resource> RESOURCE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
@@ -252,8 +270,19 @@ public class GsonUtils {
 
     private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Table> TABLE_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(com.starrocks.catalog.Table.class, "clazz")
+            .registerSubtype(EsTable.class, "EsTable")
+            .registerSubtype(ExternalOlapTable.class, "ExternalOlapTable")
+            .registerSubtype(FileTable.class, "FileTable")
+            .registerSubtype(HiveTable.class, "HiveTable")
+            .registerSubtype(HudiTable.class, "HudiTable")
+            .registerSubtype(IcebergTable.class, "IcebergTable")
+            .registerSubtype(JDBCTable.class, "JDBCTable")
+            .registerSubtype(LakeMaterializedView.class, "LakeMaterializedView")
             .registerSubtype(LakeTable.class, "LakeTable")
-            .registerSubtype(LakeMaterializedView.class, "LakeMaterializedView");
+            .registerSubtype(MaterializedView.class, "MaterializedView")
+            .registerSubtype(MysqlTable.class, "MysqlTable")
+            .registerSubtype(OlapTable.class, "OlapTable")
+            .registerSubtype(View.class, "View");
 
     private static final RuntimeTypeAdapterFactory<SnapshotInfo> SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(SnapshotInfo.class, "clazz")
@@ -270,7 +299,8 @@ public class GsonUtils {
                     .registerSubtype(GlobalFunctionPEntryObject.class, "GlobalFunctionPEntryObject")
                     .registerSubtype(FunctionPEntryObject.class, "FunctionPEntryObject")
                     .registerSubtype(CatalogPEntryObject.class, "CatalogPEntryObject")
-                    .registerSubtype(ResourceGroupPEntryObject.class, "ResourceGroupPEntryObject");
+                    .registerSubtype(ResourceGroupPEntryObject.class, "ResourceGroupPEntryObject")
+                    .registerSubtype(StorageVolumePEntryObject.class, "StorageVolumePEntryObject");
 
     private static final RuntimeTypeAdapterFactory<SecurityIntegration> SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(SecurityIntegration.class, "clazz")
@@ -312,6 +342,12 @@ public class GsonUtils {
                     .registerSubtype(RestoreJob.class, "RestoreJob")
                     .registerSubtype(LakeRestoreJob.class, "LakeRestoreJob");
 
+    public static final RuntimeTypeAdapterFactory<Function> FUNCTION_TYPE_RUNTIME_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(Function.class, "clazz")
+                    .registerSubtype(ScalarFunction.class, "ScalarFunction")
+                    .registerSubtype(AggregateFunction.class, "AggregateFunction")
+                    .registerSubtype(TableFunction.class, "TableFunction");
+
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -335,11 +371,6 @@ public class GsonUtils {
 
     private static final JsonDeserializer<PrimitiveType> PRIMITIVE_TYPE_DESERIALIZER = new PrimitiveTypeDeserializer();
 
-    private static final JsonDeserializer<MapType> MAP_TYPE_JSON_DESERIALIZER = new MapType.MapTypeDeserializer();
-
-    private static final JsonDeserializer<StructType> STRUCT_TYPE_JSON_DESERIALIZER =
-            new StructType.StructTypeDeserializer();
-
     // the builder of GSON instance.
     // Add any other adapters if necessary.
     private static final GsonBuilder GSON_BUILDER = new GsonBuilder()
@@ -349,11 +380,9 @@ public class GsonUtils {
             .registerTypeHierarchyAdapter(Table.class, new GuavaTableAdapter())
             .registerTypeHierarchyAdapter(Multimap.class, new GuavaMultimapAdapter())
             .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
-            // specified subclass deserializer must be ahead of superclass,
-            // because when doing GsonBuilder::create(), the order will be reversed,
-            // and gson::getDelegateAdapter will skip the factory ahead of super TypeAdapterFactory factory.
-            .registerTypeAdapter(MapType.class, MAP_TYPE_JSON_DESERIALIZER)
-            .registerTypeAdapter(StructType.class, STRUCT_TYPE_JSON_DESERIALIZER)
+            // For call constructor with selectedFields
+            .registerTypeAdapter(MapType.class, new MapType.MapTypeDeserializer())
+            .registerTypeAdapter(StructType.class, new StructType.StructTypeDeserializer())
             .registerTypeAdapterFactory(COLUMN_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(DISTRIBUTION_INFO_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(RESOURCE_TYPE_ADAPTER_FACTORY)
@@ -374,6 +403,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(ROUTINE_LOAD_PROGRESS_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ROUTINE_LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ABSTRACT_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(FUNCTION_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)

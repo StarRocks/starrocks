@@ -34,7 +34,7 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.persist.EditLog;
+import com.starrocks.server.GlobalStateMgr;
 
 // This new Id generator is just same as TransactionIdGenerator.
 // But we can't just use TransactionIdGenerator to replace the old globalStateMgr's 'nextId' for compatibility reason.
@@ -45,15 +45,9 @@ public class CatalogIdGenerator {
     private long nextId;
     private long batchEndId;
 
-    private EditLog editLog;
-
     public CatalogIdGenerator(long initValue) {
         nextId = initValue + 1;
         batchEndId = initValue;
-    }
-
-    public void setEditLog(EditLog editLog) {
-        this.editLog = editLog;
     }
 
     // performance is more quickly
@@ -62,10 +56,7 @@ public class CatalogIdGenerator {
             return nextId++;
         } else {
             batchEndId = batchEndId + BATCH_ID_INTERVAL;
-            if (editLog != null) {
-                // add this check just for unit test
-                editLog.logSaveNextId(batchEndId);
-            }
+            GlobalStateMgr.getCurrentState().getEditLog().logSaveNextId(batchEndId);
             return nextId++;
         }
     }

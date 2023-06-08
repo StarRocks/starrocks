@@ -65,6 +65,7 @@ private:
     void _update_counter();
     void _update_realtime_counter(Chunk* chunk);
     void _decide_chunk_size(bool has_predicate);
+    Status _init_column_access_paths(Schema* schema);
 
 private:
     TabletReaderParams _params{};
@@ -97,6 +98,8 @@ private:
 
     // slot descriptors for each one of |output_columns|.
     std::vector<SlotDescriptor*> _query_slots;
+
+    std::unordered_map<uint32_t, ColumnAccessPathPtr> _column_access_paths;
 
     // The following are profile meatures
     int64_t _num_rows_read = 0;

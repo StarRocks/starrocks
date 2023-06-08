@@ -45,7 +45,8 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    void mark_need_spill() override;
+    bool spillable() const override { return true; }
+    void set_execute_mode(int performance_level) override;
 
 private:
     void set_spill_strategy(spill::SpillStrategy strategy) { _join_builder->set_spill_strategy(strategy); }

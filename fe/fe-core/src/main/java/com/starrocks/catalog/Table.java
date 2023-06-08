@@ -111,7 +111,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         @SerializedName("FILE")
         FILE,
         @SerializedName("LAKE_MATERIALIZED_VIEW") // for backward and rollback compatibility
-        CLOUD_NATIVE_MATERIALIZED_VIEW;
+        CLOUD_NATIVE_MATERIALIZED_VIEW,
+        @SerializedName("TABLE_FUNCTION")
+        TABLE_FUNCTION;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -241,6 +243,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public String getName() {
         return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     public String getTableIdentifier() {
@@ -465,6 +471,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
+        for (Column column : fullSchema) {
+            this.nameToColumn.put(column.getName(), column);
+        }
         relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
@@ -549,7 +558,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         if (!Strings.isNullOrEmpty(comment)) {
             return comment;
         }
-        return type.name();
+        return "";
     }
 
     public void setComment(String comment) {

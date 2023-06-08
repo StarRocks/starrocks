@@ -1422,7 +1422,12 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
             index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
         }
     } else {
-        index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
+        std::unique_ptr<IOStat> iostat = std::make_unique<IOStat>();
+        MonotonicStopWatch watch;
+        watch.start();
+        index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, iostat.get());
+        LOG(INFO) << "primary index upsert tid: " << tablet_id << ", cost: " << watch.elapsed_time() << ", "
+                  << iostat->print_str();
     }
 
     return Status::OK();
@@ -2394,7 +2399,7 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
     root.AddMember("rowsets_count", rowsets_count, root.GetAllocator());
 
     rapidjson::Value last_version_value;
-    std::string last_version_str = strings::Substitute("$1_$2", last_version.major(), last_version.minor());
+    std::string last_version_str = strings::Substitute("$0_$1", last_version.major(), last_version.minor());
     rowsets_count.SetString(last_version_str.c_str(), last_version_str.size(), root.GetAllocator());
     root.AddMember("last_version", last_version_value, root.GetAllocator());
 
@@ -2804,7 +2809,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, st
     for (int i = 0; i < rowsets.size(); i++) {
         auto& src_rowset = *rowsets[i];
         RowsetId rid = StorageEngine::instance()->next_rowset_id();
-        auto st = src_rowset.link_files_to(_tablet.schema_hash_path(), rid);
+        auto st = src_rowset.link_files_to(_tablet.schema_hash_path(), rid, version.major());
         if (!st.ok()) {
             return st;
         }

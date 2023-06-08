@@ -366,6 +366,8 @@ int main(int argc, char** argv) {
     heartbeat_thrift_server->join();
 
     exec_env->agent_server()->stop();
+
+    starrocks::ExecEnv::stop(exec_env);
     engine->stop();
     delete engine;
     starrocks::ExecEnv::destroy(exec_env);

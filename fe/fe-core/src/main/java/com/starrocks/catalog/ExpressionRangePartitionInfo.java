@@ -140,7 +140,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
                 }.getType());
         List<Expr> partitionExprs = new ArrayList<>();
         for (GsonUtils.ExpressionSerializedObject expressionSql : expressionSerializedObjects) {
-            if (expressionSql.expressionSql != null) {
+            if (expressionSql != null && expressionSql.expressionSql != null) {
                 partitionExprs.add(SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
             }
         }
@@ -200,5 +200,11 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
             expr.accept(renameVisitor, null);
         }
     }
+
+    @Override
+    public boolean isAutomaticPartition() {
+        return true;
+    }
+
 }
 

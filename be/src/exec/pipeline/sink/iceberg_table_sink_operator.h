@@ -44,7 +44,6 @@ public:
               _cloud_conf(cloud_conf),
               _iceberg_table(iceberg_table),
               _parquet_file_schema(std::move(schema)),
-              _fragment_ctx(fragment_ctx),
               _output_expr(output_expr_ctxs),
               _partition_expr(partition_output_expr) {}
 
@@ -83,7 +82,6 @@ private:
 
     IcebergTableDescriptor* _iceberg_table;
     std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;
-    FragmentContext* _fragment_ctx = nullptr;
     std::vector<ExprContext*> _output_expr;
     std::vector<ExprContext*> _partition_expr;
     std::unordered_map<std::string, std::unique_ptr<starrocks::RollingAsyncParquetWriter>> _partition_writers;

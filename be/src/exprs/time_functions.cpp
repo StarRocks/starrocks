@@ -14,6 +14,7 @@
 
 #include "exprs/time_functions.h"
 
+#include <algorithm>
 #include <string_view>
 
 #include "column/column_helper.h"
@@ -2361,4 +2362,147 @@ StatusOr<ColumnPtr> TimeFunctions::make_date(FunctionContext* context, const Col
 
     return result.build(ColumnHelper::is_all_const(columns));
 }
+
+// last_day
+StatusOr<ColumnPtr> TimeFunctions::last_day(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_DATETIME> data_column(columns[0]);
+    auto size = columns[0]->size();
+
+    ColumnBuilder<TYPE_DATE> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        DateValue date = (DateValue)data_column.value(row);
+        date.set_end_of_month(); // default month
+        result.append(date);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+Status TimeFunctions::_error_date_part() {
+    return Status::InvalidArgument("avaiable data_part parameter is year/month/quarter");
+}
+
+StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format_const(std::string& format_content, FunctionContext* context,
+                                                               const Columns& columns) {
+    ColumnViewer<TYPE_DATETIME> data_column(columns[0]);
+    auto size = columns[0]->size();
+
+    ColumnBuilder<TYPE_DATE> result(size);
+    if (format_content == "year") {
+        for (int row = 0; row < size; ++row) {
+            if (data_column.is_null(row)) {
+                result.append_null();
+                continue;
+            }
+            DateValue date = (DateValue)data_column.value(row);
+            date.set_end_of_year();
+            result.append(date);
+        }
+    } else if (format_content == "quarter") {
+        for (int row = 0; row < size; ++row) {
+            if (data_column.is_null(row)) {
+                result.append_null();
+                continue;
+            }
+            DateValue date = (DateValue)data_column.value(row);
+            date.set_end_of_quarter();
+            result.append(date);
+        }
+    } else if (format_content == "month") {
+        for (int row = 0; row < size; ++row) {
+            if (data_column.is_null(row)) {
+                result.append_null();
+                continue;
+            }
+            DateValue date = (DateValue)data_column.value(row);
+            date.set_end_of_month();
+            result.append(date);
+        }
+    } else {
+        return _error_date_part();
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_DATETIME> data_column(columns[0]);
+    ColumnViewer<TYPE_VARCHAR> format_column(columns[1]);
+    auto size = columns[0]->size();
+
+    ColumnBuilder<TYPE_DATE> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_column.is_null(row) || format_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        DateValue date = (DateValue)data_column.value(row);
+        Slice format_content = format_column.value(row);
+        std::transform(format_content.data, format_content.data + format_content.size, format_content.data,
+                       [](auto x) { return std::tolower(x); });
+
+        if (format_content == "year") {
+            date.set_end_of_year();
+        } else if (format_content == "quarter") {
+            date.set_end_of_quarter();
+        } else if (format_content == "month") {
+            date.set_end_of_month();
+        } else {
+            return _error_date_part();
+        }
+        result.append(date);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::last_day_with_format(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 2);
+    auto* state = reinterpret_cast<LastDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (state->const_optional) {
+        std::string format_content = state->optional_content;
+        return _last_day_with_format_const(format_content, context, columns);
+    }
+    return _last_day_with_format(context, columns);
+}
+
+Status TimeFunctions::last_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = new LastDayCtx();
+    context->set_function_state(scope, state);
+
+    if (!context->is_notnull_constant_column(1)) {
+        return Status::OK();
+    }
+
+    state->const_optional = true;
+    ColumnPtr column = context->get_constant_column(1);
+    Slice optional = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
+    std::transform(optional.data, optional.data + optional.size, optional.data, [](auto x) { return std::tolower(x); });
+    if (!(optional == "year" || optional == "month" || optional == "quarter")) {
+        return _error_date_part();
+    }
+    state->optional_content = optional;
+    return Status::OK();
+}
+
+Status TimeFunctions::last_day_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* ctx = reinterpret_cast<LastDayCtx*>(context->get_function_state(scope));
+    if (ctx != nullptr) {
+        delete ctx;
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks

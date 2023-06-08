@@ -33,6 +33,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyPartitionInfo;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
@@ -138,12 +140,15 @@ public class LocalMetaStoreTest {
     public void testLoadClusterV2() throws Exception {
         LocalMetastore localMetaStore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
                 GlobalStateMgr.getCurrentRecycleBin(),
-                GlobalStateMgr.getCurrentColocateIndex(),
-                GlobalStateMgr.getCurrentSystemInfo());
+                GlobalStateMgr.getCurrentColocateIndex());
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        localMetaStore.save(image.getDataOutputStream());
 
-        localMetaStore.loadClusterV2(image.getDataInputStream(), 0);
+        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream(), SRMetaBlockID.LOCAL_META_STORE);
+        localMetaStore.load(reader);
+        reader.close();
+
         Assert.assertNotNull(localMetaStore.getDb(SystemId.INFORMATION_SCHEMA_DB_ID));
         Assert.assertNotNull(localMetaStore.getDb(InfoSchemaDb.DATABASE_NAME));
         Assert.assertNotNull(localMetaStore.getDb(SystemId.STARROCKS_DB_ID));

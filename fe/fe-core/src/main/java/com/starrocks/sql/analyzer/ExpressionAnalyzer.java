@@ -18,6 +18,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -437,10 +438,6 @@ public class ExpressionAnalyzer {
         public Void visitCollectionElementExpr(CollectionElementExpr node, Scope scope) {
             Expr expr = node.getChild(0);
             Expr subscript = node.getChild(1);
-            if (!expr.getType().isArrayType() && !expr.getType().isMapType()) {
-                throw new SemanticException("cannot subscript type " + expr.getType()
-                        + " because it is not an array or a map", expr.getPos());
-            }
             if (expr.getType().isArrayType()) {
                 if (!subscript.getType().isNumericType()) {
                     throw new SemanticException("array subscript must have type integer", subscript.getPos());
@@ -453,7 +450,7 @@ public class ExpressionAnalyzer {
                 } catch (AnalysisException e) {
                     throw new SemanticException(e.getMessage());
                 }
-            } else {
+            } else if (expr.getType().isMapType()) {
                 try {
                     if (subscript.getType().getPrimitiveType() !=
                             ((MapType) expr.getType()).getKeyType().getPrimitiveType()) {
@@ -463,6 +460,24 @@ public class ExpressionAnalyzer {
                 } catch (AnalysisException e) {
                     throw new SemanticException(e.getMessage());
                 }
+            } else if (expr.getType().isStructType()) {
+                if (!(subscript instanceof IntLiteral)) {
+                    throw new SemanticException("struct subscript must have integer pos", subscript.getPos());
+                }
+                long index = ((IntLiteral) subscript).getValue();
+                long fieldSize = ((StructType) expr.getType()).getFields().size();
+                if (fieldSize < Math.abs(index)) {
+                    throw new SemanticException("the pos is out of struct subfields", subscript.getPos());
+                } else if (index == 0) {
+                    throw new SemanticException("the pos can't set to zero", subscript.getPos());
+                }
+
+                index = index > 0 ? index - 1 : fieldSize + index;
+                StructField structField = ((StructType) expr.getType()).getFields().get((int) index);
+                node.setType(structField.getType());
+            } else {
+                throw new SemanticException("cannot subscript type " + expr.getType()
+                        + " because it is not an array or a map or a struct", expr.getPos());
             }
 
             return null;
@@ -536,7 +551,8 @@ public class ExpressionAnalyzer {
                 Expr child = node.getChild(i);
                 if (child.getType().isBoolean() || child.getType().isNull()) {
                     // do nothing
-                } else if (!session.getSessionVariable().isEnableStrictType() && Type.canCastTo(child.getType(), Type.BOOLEAN)) {
+                } else if (!session.getSessionVariable().isEnableStrictType() &&
+                        Type.canCastTo(child.getType(), Type.BOOLEAN)) {
                     node.getChildren().set(i, new CastExpr(Type.BOOLEAN, child));
                 } else {
                     throw new SemanticException(child.toSql() + " can not be converted to boolean type.");
@@ -990,6 +1006,17 @@ public class ExpressionAnalyzer {
                     fn = Expr.getBuiltinFunction(FunctionSet.ARRAY_CONCAT, argumentTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 }
+            } else if (FunctionSet.NAMED_STRUCT.equals(fnName)) {
+                // deriver struct type
+                fn = Expr.getBuiltinFunction(FunctionSet.NAMED_STRUCT, argumentTypes,
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                fn = fn.copy();
+                ArrayList<StructField> sf = Lists.newArrayList();
+                for (int i = 0; i < node.getChildren().size(); i = i + 2) {
+                    StringLiteral literal = (StringLiteral) node.getChild(i);
+                    sf.add(new StructField(literal.getStringValue(), node.getChild(i + 1).getType()));
+                }
+                fn.setRetType(new StructType(sf));
             } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(fnName, argumentTypes)) {
                 // Since the priority of decimal version is higher than double version (according functionId),
                 // and in `Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF` mode, `Expr.getBuiltinFunction` always
@@ -1031,7 +1058,7 @@ public class ExpressionAnalyzer {
 
             for (int i = 0; i < fn.getNumArgs(); i++) {
                 if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
-                        !Type.canCastToAsFunctionParameter(argumentTypes[i], fn.getArgs()[i])) {
+                        !Type.canCastTo(argumentTypes[i], fn.getArgs()[i])) {
                     String msg = String.format("No matching function with signature: %s(%s)", fnName,
                             node.getParams().isStar() ? "*" :
                                     Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
@@ -1043,7 +1070,7 @@ public class ExpressionAnalyzer {
                 Type varType = fn.getArgs()[fn.getNumArgs() - 1];
                 for (int i = fn.getNumArgs(); i < argumentTypes.length; i++) {
                     if (!argumentTypes[i].matchesType(varType) &&
-                            !Type.canCastToAsFunctionParameter(argumentTypes[i], varType)) {
+                            !Type.canCastTo(argumentTypes[i], varType)) {
                         String msg = String.format("Variadic function %s(%s) can't support type: %s", fnName,
                                 Arrays.stream(fn.getArgs()).map(Type::toSql).collect(Collectors.joining(", ")),
                                 argumentTypes[i]);
@@ -1146,6 +1173,38 @@ public class ExpressionAnalyzer {
                     }
                     break;
                 }
+                case FunctionSet.NAMED_STRUCT: {
+                    if (node.getChildren().size() < 2) {
+                        throw new SemanticException(fnName + " should have at least two inputs", node.getPos());
+                    }
+                    if (node.getChildren().size() % 2 != 0) {
+                        throw new SemanticException(fnName + " arguments must be in name/value pairs", node.getPos());
+                    }
+
+                    Set<String> check = Sets.newHashSet();
+                    for (int i = 0; i < node.getChildren().size(); i = i + 2) {
+                        if (!(node.getChild(i) instanceof StringLiteral)) {
+                            throw new SemanticException(
+                                    "The " + (i + 1) + "-th input of named_struct must be string literal",
+                                    node.getPos());
+                        }
+
+                        String name = ((StringLiteral) node.getChild(i)).getValue();
+                        if (check.contains(name)) {
+                            throw new SemanticException("named_struct contains duplicate subfield name: " +
+                                    name + " at " + (i + 1) + "-th input", node.getPos());
+                        }
+
+                        check.add(name);
+                    }
+                    break;
+                }
+                case FunctionSet.ROW: {
+                    if (node.getChildren().size() < 1) {
+                        throw new SemanticException(fnName + " should have at least one input.", node.getPos());
+                    }
+                    break;
+                }
             }
         }
 
@@ -1175,7 +1234,7 @@ public class ExpressionAnalyzer {
 
             ExpressionMapping expressionMapping =
                     new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
-                            com.google.common.collect.Lists.newArrayList());
+                            Lists.newArrayList());
 
             ScalarOperator format = SqlToScalarOperatorTranslator.translate(node.getChild(1), expressionMapping,
                     new ColumnRefFactory());

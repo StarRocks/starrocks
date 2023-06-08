@@ -23,6 +23,7 @@ import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
@@ -63,6 +64,10 @@ public interface PBackendService {
 
     @ProtobufRPC(serviceName = "PBackendService", methodName = "get_pulsar_info", onceTalkTimeout = 600000)
     Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request);
+
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "get_file_schema",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 600000)
+    Future<PGetFileSchemaResult> getFileSchema(PGetFileSchemaRequest request);
 
     @ProtobufRPC(serviceName = "PBackendService", methodName = "submit_mv_maintenance_task", onceTalkTimeout = 60000,
             attachmentHandler = ThriftClientAttachmentHandler.class)

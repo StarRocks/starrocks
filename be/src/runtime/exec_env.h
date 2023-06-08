@@ -111,6 +111,7 @@ public:
     // Initial exec environment. must call this to init all
     static Status init(ExecEnv* env, const std::vector<StorePath>& store_paths);
     static bool is_init();
+    static void stop(ExecEnv* exec_env);
     static void destroy(ExecEnv* exec_env);
 
     /// Returns the first created exec env instance. In a normal starrocks, this is
@@ -172,11 +173,7 @@ public:
     std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
 
     PriorityThreadPool* thread_pool() { return _thread_pool; }
-    workgroup::ScanExecutor* scan_executor_without_workgroup() { return _scan_executor_without_workgroup; }
     workgroup::ScanExecutor* scan_executor_with_workgroup() { return _scan_executor_with_workgroup; }
-    workgroup::ScanExecutor* connector_scan_executor_without_workgroup() {
-        return _connector_scan_executor_without_workgroup;
-    }
     workgroup::ScanExecutor* connector_scan_executor_with_workgroup() {
         return _connector_scan_executor_with_workgroup;
     }
@@ -186,7 +183,6 @@ public:
     PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool; }
     PriorityThreadPool* query_rpc_pool() { return _query_rpc_pool; }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
-    starrocks::pipeline::DriverExecutor* driver_executor() { return _driver_executor; }
     starrocks::pipeline::DriverExecutor* wg_driver_executor() { return _wg_driver_executor; }
     LoadPathMgr* load_path_mgr() { return _load_path_mgr; }
     BfdParser* bfd_parser() const { return _bfd_parser; }
@@ -241,6 +237,7 @@ public:
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
+    void _stop();
     void _destroy();
     void _reset_tracker();
     template <class... Args>
@@ -312,9 +309,7 @@ private:
 
     PriorityThreadPool* _thread_pool = nullptr;
 
-    workgroup::ScanExecutor* _scan_executor_without_workgroup = nullptr;
     workgroup::ScanExecutor* _scan_executor_with_workgroup = nullptr;
-    workgroup::ScanExecutor* _connector_scan_executor_without_workgroup = nullptr;
     workgroup::ScanExecutor* _connector_scan_executor_with_workgroup = nullptr;
 
     PriorityThreadPool* _udf_call_pool = nullptr;
@@ -323,7 +318,6 @@ private:
     PriorityThreadPool* _query_rpc_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
-    pipeline::DriverExecutor* _driver_executor = nullptr;
     pipeline::DriverExecutor* _wg_driver_executor = nullptr;
     pipeline::DriverLimiter* _driver_limiter = nullptr;
     int64_t _max_executor_threads = 0; // Max thread number of executor

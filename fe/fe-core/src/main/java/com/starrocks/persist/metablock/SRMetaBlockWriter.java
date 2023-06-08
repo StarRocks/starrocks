@@ -25,7 +25,7 @@ import java.util.zip.CheckedOutputStream;
 
 /**
  * Save object to output stream as the following format.
- *
+ * <p>
  * +------------------+
  * |     header       | {"numJson": 10, "name": "AuthenticationManager"}
  * +------------------+
@@ -39,7 +39,7 @@ import java.util.zip.CheckedOutputStream;
  * +------------------+
  * |      footer      | {"checksum": xxx}
  * +------------------+
- *
+ * <p>
  * Usage see com.starrocks.persist.metablock.SRMetaBlockTest#testSimple()
  */
 public class SRMetaBlockWriter {
@@ -47,6 +47,7 @@ public class SRMetaBlockWriter {
     private final SRMetaBlockHeader header;
     private int numJsonWritten;
 
+    @Deprecated
     public SRMetaBlockWriter(DataOutputStream dos, String name, int numJson) throws SRMetaBlockException {
         if (numJson <= 0) {
             throw new SRMetaBlockException(String.format("invalid numJson: %d", numJson));
@@ -69,7 +70,7 @@ public class SRMetaBlockWriter {
         // always check if write more than expect
         if (numJsonWritten >= header.getNumJson()) {
             throw new SRMetaBlockException(String.format(
-                    "About to write json more than expect: %d >= %d", numJsonWritten, header.getNumJson()));
+                    "About to write json more than expect %d, actual %d", header.getNumJson(), numJsonWritten));
         }
         if (numJsonWritten == 0) {
             // write header

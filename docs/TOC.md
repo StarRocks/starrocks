@@ -42,6 +42,7 @@
     + [Data distribution](./table_design/Data_distribution.md)
     + [Automatic partitioning](./table_design/automatic_partitioning.md)
     + [Dynamic partitioning](./table_design/dynamic_partitioning.md)
+    + [Temporary partition](./table_design/Temporary_partition.md)
   + [Data compression](./table_design/data_compression.md)
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
@@ -118,6 +119,7 @@
       + [Query queue](./administration/query_queues.md)
       + [Query management](./administration/Query_management.md)
       + [Memory management](./administration/Memory_management.md)
+      + [Spill to disk](./administration/spill_to_disk.md)
       + [Load balance](./administration/Load_balance.md)
       + [Replica](./administration/Replica.md)
       + [Blacklist](./administration/Blacklist.md)
@@ -308,6 +310,7 @@
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
         + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
         + [MAP](./sql-reference/sql-statements/data-types/Map.md)
+        + [STRUCT](./sql-reference/sql-statements/data-types/STRUCT.md)
 
     + [Keywords](./sql-reference/sql-statements/keywords.md)
     + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
@@ -443,7 +446,7 @@
       + [to_binary](/sql-reference/sql-functions/binary-functions/to_binary.md)
       + [from_binary](/sql-reference/sql-functions/binary-functions/from_binary.md)
     + Conditional Functions
-      + [case_when](./sql-reference/sql-functions/condition-functions/case_when.md)
+      + [case](./sql-reference/sql-functions/condition-functions/case_when.md)
       + [coalesce](./sql-reference/sql-functions/condition-functions/coalesce.md)
       + [if](./sql-reference/sql-functions/condition-functions/if.md)
       + [ifnull](./sql-reference/sql-functions/condition-functions/ifnull.md)
@@ -503,6 +506,7 @@
       + [next_day](./sql-reference/sql-functions/date-time-functions/next_day.md)
       + [now](./sql-reference/sql-functions/date-time-functions/now.md)
       + [previous_day](./sql-reference/sql-functions/date-time-functions/previous_day.md)
+      + [last_day](./sql-reference/sql-functions/date-time-functions/last_day.md)
       + [quarter](./sql-reference/sql-functions/date-time-functions/quarter.md)
       + [second](./sql-reference/sql-functions/date-time-functions/second.md)
       + [seconds_add](./sql-reference/sql-functions/date-time-functions/seconds_add.md)

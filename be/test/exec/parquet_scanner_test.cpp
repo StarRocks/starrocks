@@ -29,6 +29,7 @@
 #include "runtime/types.h"
 #include "testutil/assert.h"
 #include "testutil/desc_tbl_helper.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -273,8 +274,8 @@ class ParquetScannerTest : public ::testing::Test {
 
     template <bool is_nullable>
     ChunkPtr get_chunk(const std::vector<std::string>& columns_from_file,
-                              const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs,
-                              std::string specific_file, size_t expected_rows) {
+                       const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs, std::string specific_file,
+                       size_t expected_rows) {
         std::vector<std::string> file_names{std::move(specific_file)};
         const std::vector<std::string>& column_names = columns_from_file;
 
@@ -300,6 +301,30 @@ class ParquetScannerTest : public ::testing::Test {
         validate(scanner, expected_rows, check);
 
         return result;
+    }
+
+    void check_schema(const std::string& path,
+                      const std::vector<std::pair<std::string, LogicalType>>& expected_schema) {
+        RuntimeProfile* profile = _obj_pool.add(new RuntimeProfile("test_prof", true));
+        ScannerCounter* counter = _obj_pool.add(new ScannerCounter());
+        auto query_globals = TQueryGlobals();
+        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), query_globals, nullptr));
+
+        auto ranges = generate_ranges({path}, 0, {});
+        TBrokerScanRange* broker_scan_range = _obj_pool.add(new TBrokerScanRange());
+        broker_scan_range->ranges = ranges;
+
+        auto scanner = ParquetScanner(state, profile, *broker_scan_range, counter, true);
+        ASSERT_OK(scanner.open());
+        DeferOp defer([&scanner] { scanner.close(); });
+
+        std::vector<SlotDescriptor> schema;
+        ASSERT_OK(scanner.get_schema(&schema));
+        ASSERT_EQ(schema.size(), expected_schema.size());
+        for (size_t i = 0; i < expected_schema.size(); ++i) {
+            ASSERT_EQ(schema[i].col_name(), expected_schema[i].first);
+            ASSERT_EQ(schema[i].type().type, expected_schema[i].second);
+        }
     }
 
     void SetUp() override {
@@ -640,6 +665,40 @@ TEST_F(ParquetScannerTest, int96_timestamp) {
             std::string expect = expected[i];
             EXPECT_EQ(expect, result);
         }
+    }
+}
+
+TEST_F(ParquetScannerTest, get_file_schema) {
+    const std::vector<std::pair<std::string, std::vector<std::pair<std::string, LogicalType>>>> test_cases = {
+            {test_exec_dir + "/test_data/parquet_data/int96_timestamp.parquet", {{"col_datetime", TYPE_DATETIME}}},
+            {test_exec_dir + "/test_data/parquet_data/data_json.parquet",
+             {{"col_json_int8", TYPE_INT},
+              {"col_json_int16", TYPE_INT},
+              {"col_json_int32", TYPE_INT},
+              {"col_json_int64", TYPE_BIGINT},
+              {"col_json_uint8", TYPE_INT},
+              {"col_json_uint16", TYPE_INT},
+              {"col_json_uint32", TYPE_BIGINT},
+              {"col_json_uint64", TYPE_BIGINT},
+              {"col_json_timestamp", TYPE_DATETIME},
+              {"col_json_float32", TYPE_FLOAT},
+              {"col_json_float64", TYPE_DOUBLE},
+              {"col_json_bool", TYPE_BOOLEAN},
+              {"col_json_string", TYPE_VARCHAR},
+              // complex type is treat as VARCHAR now.
+              {"col_json_list", TYPE_VARCHAR},
+              {"col_json_map", TYPE_VARCHAR},
+              {"col_json_map_timestamp", TYPE_VARCHAR},
+              {"col_json_struct", TYPE_VARCHAR},
+              {"col_json_list_list", TYPE_VARCHAR},
+              {"col_json_map_list", TYPE_VARCHAR},
+              {"col_json_list_struct", TYPE_VARCHAR},
+              {"col_json_struct_struct", TYPE_VARCHAR},
+              {"col_json_struct_string", TYPE_VARCHAR},
+              {"col_json_json_string", TYPE_VARCHAR}}}};
+
+    for (const auto& test_case : test_cases) {
+        check_schema(test_case.first, test_case.second);
     }
 }
 

@@ -579,6 +579,8 @@ The mapping between the target database and StarRocks varies based on the type o
 
 ## (Deprecated) Hive external table
 
+Before using Hive external tables, make sure JDK 1.8 has been installed on your servers.
+
 ### Create a Hive resource
 
 A Hive resource corresponds to a Hive cluster. You must configure the Hive cluster used by StarRocks, such as the Hive metastore address. You must specify the Hive resource that is used by the Hive external table.
@@ -753,8 +755,8 @@ Make sure that StarRocks has permissions to access the metadata service (such as
 
 ### Precautions
 
-* The Iceberg external table can be used to query only the following types of data:
-  * Versions 1 (Analytic Data Tables) tables. Versions 2 (Row-level Deletes) tables are not supported. For the differences between Versions 1 tables and Versions 2 tables, see [Iceberg Table Spec](https://iceberg.apache.org/spec/).
+* Iceberg external tables can be used to query only the following types of data:
+  * Iceberg v1 tables (Analytic Data Tables). From v3.0 onwards, ORC-formatted Iceberg v2 (Row-level Deletes) tables are supported. For the differences between Iceberg v1 tables and Iceberg v2 tables, see [Iceberg Table Spec](https://iceberg.apache.org/spec/).
   * Tables that are compressed in gzip (default format), Zstd, LZ4, or Snappy format.
   * Files that are stored in Parquet or ORC format.
 

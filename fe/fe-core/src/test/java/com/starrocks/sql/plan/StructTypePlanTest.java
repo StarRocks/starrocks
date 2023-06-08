@@ -56,19 +56,12 @@ public class StructTypePlanTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "0:UNION\n" +
                 "  |  \n" +
-                "  |----6:EXCHANGE\n" +
+                "  |----4:EXCHANGE\n" +
                 "  |    \n" +
-                "  3:EXCHANGE");
+                "  2:EXCHANGE");
         sql = "select c2 from test1 union all select c2_0 from test1";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "2:Project\n" +
-                "  |  <slot 6> : CAST(3: c2 AS struct<col0 int(11), col1 varchar(10)>)\n" +
-                "  |  \n" +
-                "  1:OlapScanNode", "0:UNION\n" +
-                "  |  \n" +
-                "  |----6:EXCHANGE\n" +
-                "  |    \n" +
-                "  3:EXCHANGE");
+        assertContains(plan, "CAST(3: c2 AS struct<a int(11), b varchar(10)>)");
     }
 
     @Test

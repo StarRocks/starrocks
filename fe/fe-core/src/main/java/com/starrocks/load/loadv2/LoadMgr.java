@@ -68,6 +68,7 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.TransactionStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -385,6 +386,25 @@ public class LoadMgr implements Writable {
     }
 
     public void removeOldLoadJob() {
+        // 1. record failed insert job
+        for (Map.Entry<Long, LoadJob> entry : idToLoadJob.entrySet()) {
+            LoadJob job = entry.getValue();
+            if (job.getJobType() != EtlJobType.INSERT) {
+                continue;
+            }
+            TransactionStatus st = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelState(job.getDbId(), job.getLabel());
+            if (st == TransactionStatus.UNKNOWN) {
+                try {
+                    recordFinishedOrCacnelledLoadJob(
+                            job.getId(), EtlJobType.INSERT, "Cancelled since transaction status unknown", "");
+                    LOG.info("abort job: {} since transaction status unknown", job.getLabel());
+                } catch (UserException e) {
+                    LOG.warn("failed to abort job: {}", job.getLabel(), e);
+                }
+            }
+        }
+
+        // 2. clean expired load job
         long currentTimeMs = System.currentTimeMillis();
 
         writeLock();
@@ -732,24 +752,19 @@ public class LoadMgr implements Writable {
         return checksum;
     }
 
-    public void loadLoadJobsV2JsonFormat(DataInputStream in) throws IOException,
-            SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(in, SRMetaBlockID.LOAD_MGR);
-        try {
-            int size = reader.readInt();
-            long now = System.currentTimeMillis();
-            while (size-- > 0) {
-                LoadJob loadJob = reader.readJson(LoadJob.class);
-                // discard expired job right away
-                if (isJobExpired(loadJob, now)) {
-                    LOG.info("discard expired job: {}", loadJob);
-                    continue;
-                }
-
-                putLoadJob(loadJob);
+    public void loadLoadJobsV2JsonFormat(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int size = reader.readInt();
+        long now = System.currentTimeMillis();
+        while (size-- > 0) {
+            LoadJob loadJob = reader.readJson(LoadJob.class);
+            // discard expired job right away
+            if (isJobExpired(loadJob, now)) {
+                LOG.info("discard expired job: {}", loadJob);
+                continue;
             }
-        } finally {
-            reader.close();
+
+            putLoadJob(loadJob);
         }
     }
 

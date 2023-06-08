@@ -215,6 +215,7 @@ import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.FunctionArgsDef;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRevokeClause;
@@ -677,24 +678,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
         List<String> columnList = identifierList.stream().map(Identifier::getValue).collect(toList());
-        PartitionDesc partitionDesc;
         if (context.RANGE() != null) {
             for (StarRocksParser.RangePartitionDescContext rangePartitionDescContext : context.rangePartitionDesc()) {
                 final PartitionDesc rangePartitionDesc = (PartitionDesc) visit(rangePartitionDescContext);
                 partitionDescList.add(rangePartitionDesc);
             }
-            partitionDesc = new RangePartitionDesc(columnList, partitionDescList);
+            return new RangePartitionDesc(columnList, partitionDescList);
         } else if (context.LIST() != null) {
             for (StarRocksParser.ListPartitionDescContext listPartitionDescContext : context.listPartitionDesc()) {
                 final PartitionDesc listPartitionDesc = (PartitionDesc) visit(listPartitionDescContext);
                 partitionDescList.add(listPartitionDesc);
             }
-            partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
+            return new ListPartitionDesc(columnList, partitionDescList);
         } else {
-            // For hive/iceberg/hudi partition
-            partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
+            // For hive/iceberg/hudi partition & automatic partition
+            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(columnList, partitionDescList);
+            listPartitionDesc.setAutoPartitionTable(true);
+            return listPartitionDesc;
         }
-        return partitionDesc;
     }
 
     private List<String> checkAndExtractPartitionColForRange(Expr expr) {
@@ -1587,7 +1588,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException(PARSER_ERROR_MSG.feConfigDisable("enable_experimental_mv"), NodePosition.ZERO);
         }
 
-        return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments, comment, refreshSchemeDesc,
+        return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments, comment,
+                refreshSchemeDesc,
                 expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement, createPos(context));
     }
 
@@ -1642,7 +1644,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.statusDesc() != null) {
             status = context.statusDesc().getText();
         }
+        // swap table
+        SwapTableClause swapTableClause = null;
+        if (context.swapTableClause() != null) {
+            swapTableClause = (SwapTableClause) visit(context.swapTableClause());
+        }
         return new AlterMaterializedViewStmt(mvName, newMvName, refreshSchemeDesc, modifyTablePropertiesClause, status,
+                swapTableClause,
                 createPos(context));
     }
 
@@ -4306,6 +4314,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitFileTableFunction(StarRocksParser.FileTableFunctionContext context) {
+        Map<String, String> properties = getPropertyList(context.propertyList());
+        return new FileTableFunctionRelation(properties, NodePosition.ZERO);
+    }
+
+    @Override
     public ParseNode visitRowConstructor(StarRocksParser.RowConstructorContext context) {
         ArrayList<Expr> row = new ArrayList<>(visit(context.expressionList().expression(), Expr.class));
         return new ValueList(row, createPos(context));
@@ -6576,6 +6590,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private Map<String, String> getProperties(StarRocksParser.PropertiesContext context) {
+        Map<String, String> properties = new HashMap<>();
+        if (context != null && context.property() != null) {
+            List<Property> propertyList = visit(context.property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return properties;
+    }
+
+
+    private Map<String, String> getPropertyList(StarRocksParser.PropertyListContext context) {
         Map<String, String> properties = new HashMap<>();
         if (context != null && context.property() != null) {
             List<Property> propertyList = visit(context.property(), Property.class);

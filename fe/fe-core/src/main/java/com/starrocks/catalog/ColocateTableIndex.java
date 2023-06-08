@@ -52,6 +52,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
@@ -178,15 +179,15 @@ public class ColocateTableIndex implements Writable {
         this.lock.writeLock().unlock();
     }
 
-    public void addTableToGroup(Database db,
+    public boolean addTableToGroup(Database db,
                                 OlapTable olapTable, String colocateGroup, boolean expectLakeTable)
             throws DdlException {
         if (Strings.isNullOrEmpty(colocateGroup)) {
-            return;
+            return false;
         }
 
         if (olapTable.isCloudNativeTableOrMaterializedView() != expectLakeTable) {
-            return;
+            return false;
         }
 
         String fullGroupName = db.getId() + "_" + colocateGroup;
@@ -210,6 +211,7 @@ public class ColocateTableIndex implements Writable {
                         new ColocateTableIndex.GroupId(db.getId(), colocateGrpIdInOtherDb.grpId),
                 false /* isReplay */);
         olapTable.setColocateGroup(colocateGroup);
+        return true;
     }
 
     // NOTICE: call 'addTableToGroup()' will not modify 'group2BackendsPerBucketSeq'
@@ -577,7 +579,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     public GroupId changeGroup(long dbId, OlapTable tbl, String oldGroup, String newGroup, GroupId assignedGroupId,
-            boolean isReplay) throws DdlException {
+                               boolean isReplay) throws DdlException {
         writeLock();
         try {
             if (!Strings.isNullOrEmpty(oldGroup)) {
@@ -790,25 +792,20 @@ public class ColocateTableIndex implements Writable {
     }
 
     public void saveColocateTableIndexV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, ColocateTableIndex.class.getName(), 1);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.COLOCATE_TABLE_INDEX, 1);
         writer.writeJson(this);
         writer.close();
     }
 
-    public void loadColocateTableIndexV2(DataInputStream dis) throws IOException, SRMetaBlockException,
-            SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, ColocateTableIndex.class.getName());
-        try {
-            ColocateTableIndex data = reader.readJson(ColocateTableIndex.class);
-            this.groupName2Id = data.groupName2Id;
-            this.group2Tables = data.group2Tables;
-            this.table2Group = data.table2Group;
-            this.group2Schema = data.group2Schema;
-            this.group2BackendsPerBucketSeq = data.group2BackendsPerBucketSeq;
-            this.unstableGroups = data.unstableGroups;
-        } finally {
-            reader.close();
-        }
+    public void loadColocateTableIndexV2(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        ColocateTableIndex data = reader.readJson(ColocateTableIndex.class);
+        this.groupName2Id = data.groupName2Id;
+        this.group2Tables = data.group2Tables;
+        this.table2Group = data.table2Group;
+        this.group2Schema = data.group2Schema;
+        this.group2BackendsPerBucketSeq = data.group2BackendsPerBucketSeq;
+        this.unstableGroups = data.unstableGroups;
 
         constructLakeGroups(GlobalStateMgr.getCurrentState());
         LOG.info("finished replay colocateTableIndex from image");
@@ -827,7 +824,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     public GroupId checkColocateSchemaWithGroupInOtherDb(String toCreateGroupName, long dbId,
-                                                      OlapTable toCreateTable) throws DdlException {
+                                                         OlapTable toCreateTable) throws DdlException {
         try {
             readLock();
             List<GroupId> sameOrigNameGroups = getOtherGroupsWithSameOrigNameUnlocked(toCreateGroupName, dbId);
@@ -1035,7 +1032,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     public void updateLakeTableColocationInfo(OlapTable olapTable, boolean isJoin,
-            GroupId expectGroupId) throws DdlException {
+                                              GroupId expectGroupId) throws DdlException {
         if (olapTable == null || !olapTable.isCloudNativeTable()) { // skip non-lake table
             return;
         }

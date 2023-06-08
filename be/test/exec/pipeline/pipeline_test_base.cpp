@@ -19,6 +19,7 @@
 #include "column/nullable_column.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/workgroup/work_group.h"
 #include "exprs/function_context.h"
 #include "storage/chunk_helper.h"
 #include "types/date_value.h"
@@ -87,6 +88,7 @@ void PipelineTestBase::_prepare() {
     _fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
                                            _request.query_options, _request.query_globals, _exec_env));
+    _fragment_ctx->set_workgroup(workgroup::WorkGroupManager::instance()->get_default_workgroup());
 
     _fragment_future = _fragment_ctx->finish_future();
     _runtime_state = _fragment_ctx->runtime_state();
@@ -119,7 +121,7 @@ void PipelineTestBase::_execute() {
     ASSERT_TRUE(prepare_status.ok());
 
     _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
-        exec_env->driver_executor()->submit(driver.get());
+        exec_env->wg_driver_executor()->submit(driver.get());
         return Status::OK();
     });
 }

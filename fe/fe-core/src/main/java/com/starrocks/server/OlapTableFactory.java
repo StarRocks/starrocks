@@ -53,7 +53,6 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.ColocatePersistInfo;
-import com.starrocks.persist.EditLog;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -89,7 +88,6 @@ public class OlapTableFactory implements AbstractTableFactory {
     @NotNull
     public Table createTable(LocalMetastore metastore, Database db, CreateTableStmt stmt) throws DdlException {
         GlobalStateMgr stateMgr = metastore.getStateMgr();
-        EditLog editLog = metastore.getEditLog();
         ColocateTableIndex colocateTableIndex = metastore.getColocateTableIndex();
         String tableName = stmt.getTableName();
 
@@ -131,15 +129,14 @@ public class OlapTableFactory implements AbstractTableFactory {
             partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
 
             // Automatic partitioning needs to ensure that at least one tablet is opened.
-            if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-                ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            if (partitionInfo.isAutomaticPartition()) {
                 long partitionId = metastore.getNextId();
                 String replicateNum = String.valueOf(RunMode.defaultReplicationNum());
                 if (stmt.getProperties() != null) {
                     replicateNum = stmt.getProperties().getOrDefault("replication_num",
                             String.valueOf(RunMode.defaultReplicationNum()));
                 }
-                expressionRangePartitionInfo.createAutomaticShadowPartition(partitionId, replicateNum);
+                partitionInfo.createAutomaticShadowPartition(partitionId, replicateNum);
                 partitionNameToId.put(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME, partitionId);
             }
 
@@ -194,11 +191,6 @@ public class OlapTableFactory implements AbstractTableFactory {
             table = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
         } else if (stmt.isOlapEngine()) {
-            if (distributionInfo.getBucketNum() == 0) {
-                int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
-                distributionInfo.setBucketNum(bucketNum);
-            }
-
             RunMode runMode = RunMode.getCurrentRunMode();
             String volume = (properties != null) ? properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME) : null;
 
@@ -304,11 +296,6 @@ public class OlapTableFactory implements AbstractTableFactory {
             throw new DdlException(e.getMessage());
         }
 
-        if (table.hasAutoIncrementColumn() && stmt.isOlapEngine()
-                && RunMode.allowCreateLakeTable()) {
-            throw new DdlException("Table with AUTO_INCREMENT column can not be lake table");
-        }
-
         // replicated storage
         table.setEnableReplicatedStorage(
                 PropertyAnalyzer.analyzeBooleanProp(
@@ -364,7 +351,16 @@ public class OlapTableFactory implements AbstractTableFactory {
         String colocateGroup = null;
         try {
             colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-            colocateTableIndex.addTableToGroup(db, table, colocateGroup, false /* expectLakeTable */);
+            boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
+                                                colocateGroup, false /* expectLakeTable */);
+            if (table instanceof ExternalOlapTable == false && addedToColocateGroup) {
+                // Colocate table should keep the same bucket number accross the partitions
+                DistributionInfo defaultDistributionInfo = table.getDefaultDistributionInfo();
+                if (defaultDistributionInfo.getBucketNum() == 0) {
+                    int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                    defaultDistributionInfo.setBucketNum(bucketNum);
+                }
+            }
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
@@ -575,7 +571,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
                 ColocatePersistInfo info =
                         ColocatePersistInfo.createForAddTable(groupId, tableId, backendsPerBucketSeq);
-                editLog.logColocateAddTable(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(info);
                 addToColocateGroupSuccess = true;
             }
             LOG.info("Successfully create table[{};{}]", tableName, tableId);

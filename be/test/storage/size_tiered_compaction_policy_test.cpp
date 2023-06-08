@@ -1428,9 +1428,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_large_dup_base_rowset) {
     ASSERT_EQ(4, tablet->version_count());
 
     config::max_segment_file_size = 1024 * 128;
-    DeferOp defer([&]() {
-        config::max_segment_file_size = 1073741824;
-    });
+    DeferOp defer([&]() { config::max_segment_file_size = 1073741824; });
 
     {
         auto res = compact(tablet);
@@ -1483,9 +1481,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_large_dup_base_rowset_force_compact)
     ASSERT_EQ(4, tablet->version_count());
 
     config::max_segment_file_size = 1024 * 128;
-    DeferOp defer([&]() {
-        config::max_segment_file_size = 1073741824;
-    });
+    DeferOp defer([&]() { config::max_segment_file_size = 1073741824; });
 
     {
         auto res = compact(tablet);

@@ -27,8 +27,7 @@ public:
     ExceptOutputSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                std::shared_ptr<ExceptContext> except_ctx, const int32_t dependency_index)
             : SourceOperator(factory, id, "except_output_source", plan_node_id, driver_sequence),
-              _except_ctx(std::move(except_ctx)),
-              _dependency_index(dependency_index) {
+              _except_ctx(std::move(except_ctx)) {
         _except_ctx->ref();
     }
 
@@ -44,7 +43,6 @@ public:
 
 private:
     std::shared_ptr<ExceptContext> _except_ctx;
-    const int32_t _dependency_index;
 };
 
 class ExceptOutputSourceOperatorFactory final : public SourceOperatorFactory {

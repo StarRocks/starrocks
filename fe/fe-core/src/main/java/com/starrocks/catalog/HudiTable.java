@@ -26,6 +26,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
@@ -94,16 +95,20 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         COW, MOR, UNKNOWN
     }
 
-    private String resourceName;
     private String catalogName;
+    @SerializedName(value = "dn")
     private String hiveDbName;
+    @SerializedName(value = "tn")
     private String hiveTableName;
-
+    @SerializedName(value = "rn")
+    private String resourceName;
+    @SerializedName(value = "pcn")
     private List<String> partColumnNames = Lists.newArrayList();
     // dataColumnNames stores all the non-partition columns of the hudi table,
     // consistent with the order defined in the hudi table
+    @SerializedName(value = "dcn")
     private List<String> dataColumnNames = Lists.newArrayList();
-
+    @SerializedName(value = "prop")
     private Map<String, String> hudiProperties = Maps.newHashMap();
 
     public HudiTable() {

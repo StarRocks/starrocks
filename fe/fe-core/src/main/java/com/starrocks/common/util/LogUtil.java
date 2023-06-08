@@ -21,6 +21,9 @@ import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
 
+import java.util.Arrays;
+import java.util.stream.Collectors;
+
 public class LogUtil {
 
     public static void logConnectionInfoToAuditLogAndQueryQueue(ConnectContext ctx, MysqlAuthPacket authPacket) {
@@ -44,5 +47,11 @@ public class LogUtil {
         queryDetail.setDatabase(authPacket == null ? "null" : authPacket.getDb());
         queryDetail.setErrorMessage(ctx.getState().getErrorMessage());
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
+    }
+
+    public static String getCurrentStackTrace() {
+        return Arrays.stream(Thread.currentThread().getStackTrace())
+                .map(stack -> "        " + stack.toString())
+                .collect(Collectors.joining(System.lineSeparator(), System.lineSeparator(), ""));
     }
 }

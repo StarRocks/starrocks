@@ -14,7 +14,6 @@
 
 package com.starrocks.server;
 
-import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
@@ -29,91 +28,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     public static final String BUILTIN_STORAGE_VOLUME = "builtin_storage_volume";
-
-    public String createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
-                                      Optional<Boolean> enabled, String comment)
-            throws AlreadyExistsException, AnalysisException, DdlException {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (exists(name)) {
-                throw new AlreadyExistsException(String.format("Storage volume '%s' already exists", name));
-            }
-            FileStoreInfo fileStoreInfo = StorageVolume.createFileStoreInfo(name, svType,
-                    locations, params, enabled.orElse(true), comment);
-            return GlobalStateMgr.getCurrentState().getStarOSAgent().addFileStore(fileStoreInfo);
-        }
-    }
-
-    @Override
-    public void removeStorageVolume(String name) throws AnalysisException, DdlException {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            StorageVolume sv = getStorageVolumeByName(name);
-            Preconditions.checkState(sv != null,
-                    "Storage volume '%s' does not exist", name);
-            Preconditions.checkState(!defaultStorageVolumeId.equals(sv.getId()),
-                    "default storage volume can not be removed");
-            Set<Long> dbs = storageVolumeToDbs.get(sv.getId());
-            Set<Long> tables = storageVolumeToTables.get(sv.getId());
-            Preconditions.checkState(dbs == null && tables == null,
-                    "Storage volume '%s' is referenced by dbs or tables, dbs: %s, tables: %s",
-                    name, dbs != null ? dbs.toString() : "[]", tables != null ? tables.toString() : "[]");
-            GlobalStateMgr.getCurrentState().getStarOSAgent().removeFileStoreByName(name);
-        }
-    }
-
-    @Override
-    public void updateStorageVolume(String name, Map<String, String> params,
-                                    Optional<Boolean> enabled, String comment) throws DdlException, AnalysisException {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            StorageVolume sv = getStorageVolumeByName(name);
-            Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", name);
-
-            if (enabled.isPresent()) {
-                boolean enabledValue = enabled.get();
-                if (!enabledValue) {
-                    Preconditions.checkState(!sv.getId().equals(defaultStorageVolumeId),
-                            "Default volume can not be disabled");
-                }
-                sv.setEnabled(enabledValue);
-            }
-
-            if (!comment.isEmpty()) {
-                sv.setComment(comment);
-            }
-
-            if (!params.isEmpty()) {
-                sv.setCloudConfiguration(params);
-            }
-
-            GlobalStateMgr.getCurrentState().getStarOSAgent().updateFileStore(sv.toFileStoreInfo());
-        }
-    }
-
-    @Override
-    public void setDefaultStorageVolume(String svKey) throws AnalysisException, DdlException {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            StorageVolume sv = getStorageVolumeByName(svKey);
-            Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svKey);
-            Preconditions.checkState(sv.getEnabled(), "Storage volume '%s' is disabled", svKey);
-            this.defaultStorageVolumeId = sv.getId();
-        }
-    }
-
-    @Override
-    public boolean exists(String svKey) throws DdlException {
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            try {
-                StorageVolume sv = getStorageVolumeByName(svKey);
-                return sv != null;
-            } catch (AnalysisException e) {
-                throw new DdlException(e.getMessage());
-            }
-        }
-    }
 
     @Override
     public StorageVolume getStorageVolumeByName(String svKey) throws AnalysisException {
@@ -131,8 +49,8 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
-    public StorageVolume getStorageVolume(String storageVolumeId) throws AnalysisException {
-        // TODO: should be supported by staros. We use id for persistence, storage volume needs to be get by id.
+    public StorageVolume getStorageVolume(String storageVolumeId) {
+        // TODO: should be supported by staros. We use id for persistence, storage volume needs to be got by id.
         return null;
     }
 
@@ -142,6 +60,25 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             return GlobalStateMgr.getCurrentState().getStarOSAgent().listFileStore()
                     .stream().map(FileStoreInfo::getFsName).collect(Collectors.toList());
         }
+    }
+
+    @Override
+    protected String createInternalNoLock(String name, String svType, List<String> locations,
+                                          Map<String, String> params, Optional<Boolean> enabled, String comment)
+            throws AnalysisException, DdlException {
+        FileStoreInfo fileStoreInfo = StorageVolume.createFileStoreInfo(name, svType,
+                locations, params, enabled.orElse(true), comment);
+        return GlobalStateMgr.getCurrentState().getStarOSAgent().addFileStore(fileStoreInfo);
+    }
+
+    @Override
+    protected void updateInternalNoLock(StorageVolume sv) throws DdlException {
+        GlobalStateMgr.getCurrentState().getStarOSAgent().updateFileStore(sv.toFileStoreInfo());
+    }
+
+    @Override
+    protected void removeInternalNoLock(StorageVolume sv) throws DdlException {
+        GlobalStateMgr.getCurrentState().getStarOSAgent().removeFileStoreByName(sv.getName());
     }
 
     public void createOrUpdateBuiltinStorageVolume() throws DdlException, AnalysisException, AlreadyExistsException {

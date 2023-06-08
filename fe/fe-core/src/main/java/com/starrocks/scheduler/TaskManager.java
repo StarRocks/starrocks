@@ -30,6 +30,11 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.meta.LimitExceededException;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -496,6 +501,21 @@ public class TaskManager {
         return checksum;
     }
 
+    public void loadTasksV2(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        int size = reader.readInt();
+        while (size-- > 0) {
+            Task task = reader.readJson(Task.class);
+            replayCreateTask(task);
+        }
+
+        size = reader.readInt();
+        while (size-- > 0) {
+            TaskRunStatus status = reader.readJson(TaskRunStatus.class);
+            replayCreateTaskRun(status);
+        }
+    }
+
     public long saveTasks(DataOutputStream dos, long checksum) throws IOException {
         SerializeData data = new SerializeData();
         data.tasks = new ArrayList<>(nameToTaskMap.values());
@@ -518,6 +538,24 @@ public class TaskManager {
             Text.writeString(dos, s);
         }
         return checksum;
+    }
+
+    public void saveTasksV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        taskRunManager.getTaskRunHistory().forceGC();
+        List<TaskRunStatus> runStatusList = showTaskRunStatus(null);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.TASK_MGR,
+                2 + nameToTaskMap.size() + runStatusList.size());
+        writer.writeJson(nameToTaskMap.size());
+        for (Task task : nameToTaskMap.values()) {
+            writer.writeJson(task);
+        }
+
+        writer.writeJson(runStatusList.size());
+        for (TaskRunStatus status : runStatusList) {
+            writer.writeJson(status);
+        }
+
+        writer.close();
     }
 
     public List<TaskRunStatus> showTaskRunStatus(String dbName) {
@@ -546,7 +584,7 @@ public class TaskManager {
     /**
      * Return the last refresh TaskRunStatus for the task which the source type is MV.
      * The iteration order is by the task refresh time:
-     *      PendingTaskRunMap > RunningTaskRunMap > TaskRunHistory
+     * PendingTaskRunMap > RunningTaskRunMap > TaskRunHistory
      * TODO: Maybe only return needed MVs rather than all MVs.
      */
     public Map<String, TaskRunStatus> showMVLastRefreshTaskRunStatus(String dbName) {

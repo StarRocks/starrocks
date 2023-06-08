@@ -229,6 +229,8 @@ public:
 
     void remove_increment_map_by_table_id(int64_t table_id);
 
+    bool get_need_write_cluster_id() { return _need_write_cluster_id; }
+
 protected:
     static StorageEngine* _s_instance;
 
@@ -247,7 +249,7 @@ private:
 
     // Some check methods
     Status _check_file_descriptor_number();
-    Status _check_all_root_path_cluster_id(bool need_write_cluster_id);
+    Status _check_all_root_path_cluster_id();
     Status _judge_and_update_effective_cluster_id(int32_t cluster_id);
 
     bool _delete_tablets_on_unused_root_path();
@@ -389,6 +391,8 @@ private:
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 
     std::mutex _auto_increment_mutex;
+
+    bool _need_write_cluster_id = true;
 
     StorageEngine(const StorageEngine&) = delete;
     const StorageEngine& operator=(const StorageEngine&) = delete;

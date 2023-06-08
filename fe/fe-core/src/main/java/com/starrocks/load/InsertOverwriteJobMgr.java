@@ -37,7 +37,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -260,15 +259,10 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable {
         writer.close();
     }
 
-    public void load(DataInputStream dis) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR);
-        try {
-            InsertOverwriteJobMgr catalog = reader.readJson(InsertOverwriteJobMgr.class);
-            overwriteJobMap = catalog.overwriteJobMap;
-            tableToOverwriteJobs = catalog.tableToOverwriteJobs;
-            runningJobs = catalog.runningJobs;
-        } finally {
-            reader.close();
-        }
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        InsertOverwriteJobMgr catalog = reader.readJson(InsertOverwriteJobMgr.class);
+        overwriteJobMap = catalog.overwriteJobMap;
+        tableToOverwriteJobs = catalog.tableToOverwriteJobs;
+        runningJobs = catalog.runningJobs;
     }
 }

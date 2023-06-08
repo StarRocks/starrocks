@@ -30,7 +30,7 @@ public class StructTypeTest {
     @Test
     public void testUnnamedStruct() {
         StructType type = new StructType(Lists.newArrayList(Type.INT, Type.DATETIME));
-        Assert.assertEquals("struct<col0 int(11), col1 datetime>", type.toSql());
+        Assert.assertEquals("struct<col1 int(11), col2 datetime>", type.toSql());
     }
 
     @Test
@@ -99,7 +99,7 @@ public class StructTypeTest {
                 new StructField("st", ScalarType.createType(PrimitiveType.INT)),
                 new StructField("cc", c1)
         ));
-        Assert.assertTrue(root.matchesType(diffName));
+        Assert.assertFalse(root.matchesType(diffName));
 
         // Different field type
         StructType diffType = new StructType(Lists.newArrayList(
