@@ -19,6 +19,9 @@ import com.starrocks.mysql.security.LdapSecurity;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.parquet.Strings;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+
 import static com.starrocks.mysql.privilege.AuthPlugin.AUTHENTICATION_LDAP_SIMPLE;
 
 public class LDAPAuthenticationProvider implements AuthenticationProvider {
@@ -33,13 +36,22 @@ public class LDAPAuthenticationProvider implements AuthenticationProvider {
     }
 
     @Override
-    public void authenticate(String user, String host, byte[] password, byte[] randomString,
+    public void authenticate(String user, String host, byte[] remotePassword, byte[] randomString,
                              UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
         String userForAuthPlugin = authenticationInfo.getTextForAuthPlugin();
+        //clear password terminate string
+        byte[] clearPassword = remotePassword;
+        if (remotePassword[remotePassword.length - 1] == 0) {
+            clearPassword = Arrays.copyOf(remotePassword, remotePassword.length - 1);
+        }
         if (!Strings.isNullOrEmpty(userForAuthPlugin)) {
-            LdapSecurity.checkPassword(userForAuthPlugin, new String(password));
+            if (!LdapSecurity.checkPassword(userForAuthPlugin, new String(clearPassword, StandardCharsets.UTF_8))) {
+                throw new AuthenticationException("Failed to authenticate for [user: " + user + "] by ldap");
+            }
         } else {
-            LdapSecurity.checkPasswordByRoot(user, new String(password));
+            if (!LdapSecurity.checkPasswordByRoot(user, new String(clearPassword, StandardCharsets.UTF_8))) {
+                throw new AuthenticationException("Failed to authenticate for [user: " + user + "] by ldap");
+            }
         }
     }
 
