@@ -332,10 +332,9 @@ public class InsertAnalyzer {
         List<String> columnNames = columns.stream().map(Column::getName).collect(Collectors.toList());
 
         // parse and validate partition columns
-        partitionBy = partitionBy.replaceAll("^\\(|\\)$", "");
         List<String> partitionColumnNames = Arrays.asList(partitionBy.split(","));
         partitionColumnNames.replaceAll(String::trim);
-        partitionColumnNames = partitionColumnNames.stream().distinct().collect(Collectors.toList()); // dedup
+        partitionColumnNames = partitionColumnNames.stream().distinct().collect(Collectors.toList());
 
         List<String> unmatchedPartitionColumnNames = partitionColumnNames.stream().filter(col ->
                 !columnNames.contains(col)).collect(Collectors.toList());

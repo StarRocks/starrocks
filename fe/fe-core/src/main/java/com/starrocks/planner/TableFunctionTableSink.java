@@ -4,11 +4,9 @@ package com.starrocks.planner;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.thrift.TCloudConfiguration;
-import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableFunctionTableSink;
 
 public class TableFunctionTableSink extends DataSink {
