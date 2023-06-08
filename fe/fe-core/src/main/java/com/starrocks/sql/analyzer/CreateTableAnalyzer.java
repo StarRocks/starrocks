@@ -341,7 +341,7 @@ public class CreateTableAnalyzer {
 
             // analyze distribution
             if (distributionDesc == null) {
-                if (keysDesc.getKeysType() != KeysType.DUP_KEYS ) {
+                if (keysDesc.getKeysType() != KeysType.DUP_KEYS) {
                     throw new SemanticException("Random distribution must be used in DUP_KEYS.");
                 }
                 if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
