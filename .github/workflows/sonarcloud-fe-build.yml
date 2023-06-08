@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - 'branch*'
+      - 'branch-[0-9].[0-9]'
     paths:
       - 'fe/**.java'
       - 'fe/**.xml'
@@ -13,6 +13,9 @@ on:
       - opened
       - reopened
       - synchronize
+    branches:
+      - main
+      - 'branch-[0-9].[0-9]'
     paths:
       - 'fe/**.java'
       - 'fe/**.xml'
