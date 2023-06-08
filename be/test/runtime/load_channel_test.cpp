@@ -24,6 +24,7 @@
 #include "fs/fs_util.h"
 #include "runtime/lake_tablets_channel.h"
 #include "runtime/load_channel_mgr.h"
+#include "runtime/local_tablets_channel.h"
 #include "runtime/mem_tracker.h"
 #include "serde/protobuf_serde.h"
 #include "storage/chunk_helper.h"
@@ -210,7 +211,6 @@ protected:
         // Check segment file
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
         auto path = _location_provider->segment_location(tablet_id, filename);
-        std::cerr << path << '\n';
 
         ASSIGN_OR_ABORT(auto seg, Segment::open(fs, path, 0, _tablet_schema.get()));
 
@@ -369,6 +369,7 @@ TEST_F(LoadChannelTestForLakeTablet, test_write_concurrently) {
         finish_request.set_index_id(kIndexId);
         finish_request.set_sender_id(sender_id);
         finish_request.set_eos(true);
+        finish_request.set_wait_all_sender_close(true);
         finish_request.set_packet_seq(kLookCount);
         finish_request.add_partition_ids(10);
         finish_request.add_partition_ids(11);
@@ -458,6 +459,7 @@ TEST_F(LoadChannelTestForLakeTablet, test_abort) {
 }
 
 TEST_F(LoadChannelTestForLakeTablet, test_incremental_open) {
+    std::shared_ptr<TabletsChannel> ch;
     {
         PTabletWriterOpenRequest open_request = _open_request;
         PTabletWriterOpenResult open_response;
@@ -465,15 +467,24 @@ TEST_F(LoadChannelTestForLakeTablet, test_incremental_open) {
         open_request.set_is_incremental(true);
         _load_channel->open(nullptr, open_request, &open_response, nullptr);
         ASSERT_EQ(TStatusCode::OK, open_response.status().status_code()) << open_response.status().error_msgs(0);
+        ch = _load_channel->get_tablets_channel(kIndexId);
+        ASSERT_NE(nullptr, ch.get());
+        // not a local tablet channel
+        ASSERT_EQ(nullptr, dynamic_cast<LocalTabletsChannel*>(ch.get()));
     }
 
     {
         PTabletWriterOpenRequest open_request = _open_request;
         PTabletWriterOpenResult open_response;
         open_request.set_is_incremental(true);
+        // open again with incremental info.
         _load_channel->open(nullptr, open_request, &open_response, nullptr);
-        EXPECT_EQ(TStatusCode::NOT_IMPLEMENTED_ERROR, open_response.status().status_code());
-        EXPECT_EQ("incremental open not supported by this tablets channel", open_response.status().error_msgs(0));
+        EXPECT_EQ(TStatusCode::OK, open_response.status().status_code()) << open_response.status().error_msgs(0);
+
+        auto ch2 = _load_channel->get_tablets_channel(kIndexId);
+        ASSERT_NE(nullptr, ch2.get());
+        // the channels are the same
+        ASSERT_EQ(ch, ch2);
     }
 }
 

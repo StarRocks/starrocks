@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <sstream>
 #include <string>
 
@@ -60,6 +61,15 @@ public:
     virtual void cancel() = 0;
 
     virtual void abort() = 0;
+
+    virtual void abort(const std::vector<int64_t>& tablet_ids) = 0;
+
+    // timeout: in microseconds
+    virtual bool drain_senders(int64_t timeout, const std::string& log_msg);
+
+protected:
+    // counter of remaining senders
+    std::atomic<int> _num_remaining_senders = 0;
 };
 
 struct TabletsChannelKey {
