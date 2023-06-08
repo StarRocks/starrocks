@@ -96,7 +96,7 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
         sql = "select * from orders where (O_ORDERKEY < 1 and O_CLERK = 'a') or (O_COMMENT = 'c' and O_CUSTKEY <=> null)";
         arguments = Arguments.of(sql, ImmutableList.of("UNION",
                 "PREDICATES: 1: O_ORDERKEY < 1, 7: O_CLERK = 'a'",
-                "PREDICATES: 9: O_COMMENT = 'c', 2: O_CUSTKEY <=> NULL, 1: O_ORDERKEY >= 1, 7: O_CLERK != 'a'"));
+                "PREDICATES: 9: O_COMMENT = 'c', 2: O_CUSTKEY <=> NULL, NOT ((1: O_ORDERKEY < 1) AND (7: O_CLERK = 'a'))"));
         list.add(arguments);
 
         sql = "select * from orders where ((O_COMMENT = 'c' and O_CUSTKEY in (1, 100, 1000)) " +
@@ -104,7 +104,7 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
         arguments = Arguments.of(sql, ImmutableList.of("UNION",
                 "PREDICATES: 1: O_ORDERKEY IN (200, 300)",
                 "PREDICATES: 9: O_COMMENT = 'c', 2: O_CUSTKEY IN (1, 100, 1000), 1: O_ORDERKEY NOT IN",
-                "PREDICATES: 7: O_CLERK = 'a', 1: O_ORDERKEY NOT IN (200, 300), 9: O_COMMENT != 'c', 2: O_CUSTKEY NOT IN"));
+                "PREDICATES: 7: O_CLERK = 'a', 1: O_ORDERKEY NOT IN (200, 300), NOT"));
         list.add(arguments);
 
         sql = "select max(p_type) from part where p_name = 'a' or p_size = 1 group by p_name";
