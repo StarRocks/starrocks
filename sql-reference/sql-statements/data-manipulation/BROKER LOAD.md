@@ -91,15 +91,15 @@ INTO TABLE <table_name>
   >   - 如果您的存储账号支持通过 HTTP 协议进行访问，请使用 abfs 文件协议，文件路径格式为 `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
   >   - 如果您的存储账号支持通过 HTTPS 协议进行访问，请使用 abfss 文件协议，文件路径格式为 `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
 
+- `NEGATIVE`
+
+  用于撤销某一批已经成功导入的数据。如果想要撤销某一批已经成功导入的数据，可以通过指定 `NEGATIVE` 关键字来导入同一批数据。
+  
 - `INTO TABLE`
 
   用于指定目标 StarRocks 表的名称。
 
 `data_desc` 中的可选参数如下：
-
-- `NEGATIVE`
-
-  用于撤销某一批已经成功导入的数据。如果想要撤销某一批已经成功导入的数据，可以通过指定 `NEGATIVE` 关键字来导入同一批数据。
 
   > **说明**
   >
@@ -112,6 +112,23 @@ INTO TABLE <table_name>
 - `TEMPORARY_PARTITION`
 
   指定要把数据导入哪些[临时分区](../../../table_design/Temporary_partition.md)。
+
+- `COLUMNS TERMINATED BY`
+
+  用于指定源数据文件中的列分隔符。如果不指定该参数，则默认列分隔符为 `\t`，即 Tab。必须确保这里指定的列分隔符与源数据文件中的列分隔符一致；否则，导入作业会因数据质量错误而失败，作业状态 (`State`) 会显示为 `CANCELLED`。
+
+  需要注意的是，Broker Load 通过 MySQL 协议提交导入请求，除了 StarRocks 会做转义处理以外，MySQL 协议也会做转义处理。因此，如果列分隔符是 Tab 等不可见字符，则需要在列分隔字符前面多加一个反斜线 (\\)。例如，如果列分隔符是 `\t`，这里必须输入 `\\t`；如果列分隔符是 `\n`，这里必须输入 `\\n`。Apache Hive™ 文件的列分隔符为 `\x01`，因此，如果源数据文件是 Hive 文件，这里必须传入 `\\x01`。
+
+  > **说明**
+  >
+  > - StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
+  > - 空值 (null) 用 `\N` 表示。比如，数据文件一共有三列，其中某行数据的第一列、第三列数据分别为 `a` 和 `b`，第二列没有数据，则第二列需要用 `\N` 来表示空值，写作 `a,\N,b`，而不是 `a,,b`。`a,,b` 表示第二列是一个空字符串。
+
+- `ROWS TERMINATED BY`
+
+  用于指定源数据文件中的行分隔符。如果不指定该参数，则默认行分隔符为 `\n`，即换行符。必须确保这里指定的行分隔符与源数据文件中的行分隔符一致；否则，导入作业会因数据质量错误而失败，作业状态 (`State`) 会显示为 `CANCELLED`。该参数从 2.5.4 版本开始支持。
+
+  其他注意事项和使用条件与上文通过 `COLUMNS TERMINATED BY` 指定列分隔符相同。
 
 - `FORMAT AS`
 
@@ -141,23 +158,6 @@ INTO TABLE <table_name>
   | trim_space  | 用于指定是否去除 CSV 文件中列分隔符前后的空格。取值类型：BOOLEAN。默认值：`false`。<br>有些数据库在导出数据为 CSV 文件时，会在列分隔符的前后添加一些空格。根据位置的不同，这些空格可以称为“前导空格”或者“尾随空格”。通过设置该参数，可以使 StarRocks 在导入数据时删除这些不必要的空格。<br>需要注意的是，StarRocks 不会去除被 `enclose` 指定字符括起来的字段内的空格（包括字段的前导空格和尾随空格）。例如，列分隔符是竖线 (<code class="language-text">&#124;</code>)，`enclose` 指定的字符是双引号 (`"`)：<br><code class="language-text">&#124;"Love StarRocks"&#124;</code> <br><code class="language-text">&#124;" Love StarRocks "&#124;</code> <br><code class="language-text">&#124; "Love StarRocks" &#124;</code> <br>如果设置 `trim_space` 为 `true`，则 StarRocks 处理后的结果数据如下：<br><code class="language-text">&#124;"Love StarRocks"&#124;</code> <br><code class="language-text">&#124;" Love StarRocks "&#124;</code> <br><code class="language-text">&#124;"Love StarRocks"&#124;</code> |
   | enclose     | 根据 [RFC4180](https://www.rfc-editor.org/rfc/rfc4180)，用于指定把 CSV 文件中的字段括起来的字符。取值类型：单字节字符。默认值：`NONE`。最常用 `enclose` 字符为单引号 (`'`) 或双引号 (`"`)。<br>被 `enclose` 指定字符括起来的字段内的所有特殊字符（包括行分隔符、列分隔符等）均看做是普通符号。比 RFC4180 标准更进一步的是，StarRocks 提供的 `enclose` 属性支持设置任意单个字节的字符。<br>如果一个字段内包含了 `enclose` 指定字符，则可以使用同样的字符对 `enclose` 指定字符进行转义。例如，在设置了`enclose` 为双引号 (`"`) 时，字段值 `a "quoted" c` 在 CSV 文件中应该写作 `"a ""quoted"" c"`。 |
   | escape      | 指定用于转义的字符。用来转义各种特殊字符，比如行分隔符、列分隔符、转义符、`enclose` 指定字符等，使 StarRocks 把这些特殊字符当做普通字符而解析成字段值的一部分。取值类型：单字节字符。默认值：`NONE`。最常用的 `escape` 字符为斜杠 (`\`)，在 SQL 语句中应该写作双斜杠 (`\\`)。<br>**说明**<br>`escape` 指定字符同时作用于 `enclose` 指定字符的内部和外部。<br>以下为两个示例：<ul><li>当设置 `enclose` 为双引号 (`"`) 、`escape` 为斜杠 (`\`) 时，StarRocks 会把 `"say \"Hello world\""` 解析成一个字段值 `say "Hello world"`。</li><li>假设列分隔符为逗号 (`,`) ，当设置 `escape` 为斜杠 (`\`) ，StarRocks 会把 `a, b\, c` 解析成 `a` 和 `b, c` 两个字段值。</li></ul> |
-
-- `COLUMNS TERMINATED BY`
-
-  用于指定源数据文件中的列分隔符。如果不指定该参数，则默认列分隔符为 `\t`，即 Tab。必须确保这里指定的列分隔符与源数据文件中的列分隔符一致；否则，导入作业会因数据质量错误而失败，作业状态 (`State`) 会显示为 `CANCELLED`。
-
-  需要注意的是，Broker Load 通过 MySQL 协议提交导入请求，除了 StarRocks 会做转义处理以外，MySQL 协议也会做转义处理。因此，如果列分隔符是 Tab 等不可见字符，则需要在列分隔字符前面多加一个反斜线 (\\)。例如，如果列分隔符是 `\t`，这里必须输入 `\\t`；如果列分隔符是 `\n`，这里必须输入 `\\n`。Apache Hive™ 文件的列分隔符为 `\x01`，因此，如果源数据文件是 Hive 文件，这里必须传入 `\\x01`。
-
-  > **说明**
-  >
-  > - StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
-  > - 空值 (null) 用 `\N` 表示。比如，数据文件一共有三列，其中某行数据的第一列、第三列数据分别为 `a` 和 `b`，第二列没有数据，则第二列需要用 `\N` 来表示空值，写作 `a,\N,b`，而不是 `a,,b`。`a,,b` 表示第二列是一个空字符串。
-
-- `ROWS TERMINATED BY`
-
-  用于指定源数据文件中的行分隔符。如果不指定该参数，则默认行分隔符为 `\n`，即换行符。必须确保这里指定的行分隔符与源数据文件中的行分隔符一致；否则，导入作业会因数据质量错误而失败，作业状态 (`State`) 会显示为 `CANCELLED`。该参数从 2.5.4 版本开始支持。
-
-  其他注意事项和使用条件与上文通过 `COLUMNS TERMINATED BY` 指定列分隔符相同。
 
 - `column_list`
 
