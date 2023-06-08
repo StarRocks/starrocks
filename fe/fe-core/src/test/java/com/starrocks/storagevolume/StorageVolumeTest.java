@@ -29,6 +29,7 @@ import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.credential.hdfs.HDFSCloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -169,13 +170,13 @@ public class StorageVolumeTest {
         try {
             StorageVolume sv = new StorageVolume("1", "test", "s3", Arrays.asList("s3://abc"),
                     storageParams, true, "");
-        } catch (AnalysisException e) {
+        } catch (SemanticException e) {
             Assert.assertTrue(e.getMessage().contains("Storage params is not valid"));
         }
     }
 
     @Test
-    public void testHDFSSimpleCredential() throws AnalysisException {
+    public void testHDFSSimpleCredential() {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put("hadoop.security.authentication", "simple");
         storageParams.put("username", "username");
@@ -239,13 +240,13 @@ public class StorageVolumeTest {
         try {
             StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
                     storageParams, true, "");
-        } catch (AnalysisException e) {
+        } catch (SemanticException e) {
             Assert.assertTrue(e.getMessage().contains("Storage params is not valid"));
         }
     }
 
     @Test
-    public void testFromFileStoreInfo() throws AnalysisException {
+    public void testFromFileStoreInfo() {
         AwsSimpleCredentialInfo simpleCredentialInfo = AwsSimpleCredentialInfo.newBuilder()
                 .setAccessKey("ak").setAccessKeySecret("sk").build();
         AwsCredentialInfo credentialInfo = AwsCredentialInfo.newBuilder().setSimpleCredential(simpleCredentialInfo).build();

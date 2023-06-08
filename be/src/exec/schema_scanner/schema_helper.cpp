@@ -159,10 +159,11 @@ Status SchemaHelper::get_role_edges(const std::string& ip, const int32_t port, c
 
 Status SchemaHelper::get_grants_to(const std::string& ip, const int32_t port,
                                    const TGetGrantsToRolesOrUserRequest& request,
-                                   TGetGrantsToRolesOrUserResponse* response) {
+                                   TGetGrantsToRolesOrUserResponse* response, int timeout_ms) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
             ip, port,
-            [&request, &response](FrontendServiceConnection& client) { client->getGrantsTo(*response, request); });
+            [&request, &response](FrontendServiceConnection& client) { client->getGrantsTo(*response, request); },
+            timeout_ms);
 }
 
 void fill_data_column_with_null(Column* data_column) {
