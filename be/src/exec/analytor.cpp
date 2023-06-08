@@ -110,12 +110,12 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _agg_intput_columns.resize(agg_size);
     _agg_fn_types.resize(agg_size);
     _agg_states_offsets.resize(agg_size);
-    _cume_function_index.resize(0);
+    _partition_size_required_function_index.resize(0);
 
     bool has_outer_join_child = analytic_node.__isset.has_outer_join_child && analytic_node.has_outer_join_child;
 
     _has_lead_lag_function = false;
-    _has_cume_function = false;
+    _should_set_partition_size = false;
     for (int i = 0; i < agg_size; ++i) {
         const TExpr& desc = analytic_node.analytic_functions[i];
         const TFunction& fn = desc.nodes[0].fn;
@@ -140,13 +140,13 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             _need_partition_materializing = true;
         }
 
-        if (fn.name.function_name == "cume_dist" || fn.name.function_name == "percent_rank") {
+        if (require_partition_size(fn.name.function_name)) {
             if (!state->enable_pipeline_engine()) {
                 return Status::NotSupported(strings::Substitute(
                         "The $0 window function is only supported by the pipeline engine.", fn.name.function_name));
             }
-            _has_cume_function = true;
-            _cume_function_index.emplace_back(i);
+            _should_set_partition_size = true;
+            _partition_size_required_function_index.emplace_back(i);
             _need_partition_materializing = true;
         }
 
@@ -656,8 +656,8 @@ void Analytor::reset_state_for_next_partition() {
     DCHECK_GE(_current_row_position, 0);
 }
 
-void Analytor::set_partition_size_for_cume_function() {
-    for (auto i : _cume_function_index) {
+void Analytor::set_partition_size_for_function() {
+    for (auto i : _partition_size_required_function_index) {
         auto& state = *reinterpret_cast<CumeDistState*>(_managed_fn_states[0]->mutable_data() + _agg_states_offsets[i]);
         state.count = _partition_end - _partition_start;
     }
