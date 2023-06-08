@@ -83,7 +83,6 @@ TEST_MODULE=".*"
 HELP=0
 WITH_AWS=OFF
 USE_STAROS=OFF
-WITH_CACHELIB=ON
 WITH_GCOV=OFF
 while true; do
     case "$1" in
@@ -132,8 +131,18 @@ if [ ! -d ${CMAKE_BUILD_DIR} ]; then
     mkdir -p ${CMAKE_BUILD_DIR}
 fi
 
+# The `WITH_CACHELIB` just controls whether cachelib is compiled in, while starcache is controlled by "USE_STAROS".
+# This option will soon be deprecated.
+if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+    # force turn off cachelib on arm platform
+    WITH_CACHELIB=OFF
+elif [[ -z ${WITH_CACHELIB} ]]; then
+    WITH_CACHELIB=OFF
+fi
+
+WITH_STARCACHE=ON
+
 source ${STARROCKS_HOME}/bin/common.sh
-update_submodules
 
 cd ${CMAKE_BUILD_DIR}
 if [ "${USE_STAROS}" == "ON"  ]; then
@@ -150,6 +159,7 @@ if [ "${USE_STAROS}" == "ON"  ]; then
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
               -DUSE_STAROS=${USE_STAROS} -DWITH_GCOV=${WITH_GCOV} \
               -DWITH_CACHELIB=${WITH_CACHELIB} \
+              -DWITH_STARCACHE=${WITH_STARCACHE} \
               -DSTARCACHE_THIRDPARTY_DIR=${STARROCKS_THIRDPARTY}/installed \
               -DSTARCACHE_SKIP_INSTALL=ON \
               -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
@@ -165,6 +175,7 @@ else
               -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
               -DWITH_GCOV=${WITH_GCOV} \
               -DWITH_CACHELIB=${WITH_CACHELIB} \
+              -DWITH_STARCACHE=${WITH_STARCACHE} \
               -DSTARCACHE_THIRDPARTY_DIR=${STARROCKS_THIRDPARTY}/installed \
               -DSTARCACHE_SKIP_INSTALL=ON \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
