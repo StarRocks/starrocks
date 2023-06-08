@@ -64,7 +64,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 public class KafkaUtil {
     private static final Logger LOG = LogManager.getLogger(KafkaUtil.class);
@@ -216,7 +215,9 @@ public class KafkaUtil {
                         result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
                     } catch (Exception e) {
                         LOG.warn("failed to send proxy request to " + address + " err " + e.getMessage());
-                        if (e instanceof TimeoutException) {
+                        // Jprotobuf-rpc-socket throws an ExecutionException when an exception occurs.
+                        // We use the error message to identify the type of exception.
+                        if (e.getMessage().contains("Ocurrs time out")) {
                             // When getting kafka info timed out, we tried again three times.
                             if (++retryTimes > 3 || (retryTimes + 1) * Config.routine_load_kafka_timeout_second >
                                                                             Config.routine_load_task_timeout_second) {
