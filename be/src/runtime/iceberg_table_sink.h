@@ -42,10 +42,8 @@ public:
     std::vector<TExpr> get_output_expr() const { return _t_output_expr; }
 
 private:
-    RuntimeState* _state;
     ObjectPool* _pool;
     const std::vector<TExpr>& _t_output_expr;
-    int _chunk_size;
     std::vector<ExprContext*> _output_expr_ctxs;
     RuntimeProfile* _profile = nullptr;
 };

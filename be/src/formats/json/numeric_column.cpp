@@ -28,7 +28,7 @@ static inline bool checked_cast(const FromType& from, ToType* to) {
     // Needs to covnert long and int128_t to double to compare, so disable compiler's complain
     DIAGNOSTIC_PUSH
 #if defined(__clang__)
-    DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+    DIAGNOSTIC_IGNORE("-Wimplicit-int-float-conversion")
 #endif
     return (from < std::numeric_limits<ToType>::lowest() || from > std::numeric_limits<ToType>::max());
     DIAGNOSTIC_POP

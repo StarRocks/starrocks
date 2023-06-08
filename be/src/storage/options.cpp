@@ -180,7 +180,7 @@ Status parse_conf_block_cache_paths(const std::string& config_path, std::vector<
             LOG(WARNING) << "invalid block cache path. path=" << item;
             continue;
         }
-        paths->emplace_back(std::move(local_path.string()));
+        paths->emplace_back(local_path.string());
     }
     if ((path_vec.size() != paths->size() && !config::ignore_broken_disk)) {
         LOG(WARNING) << "fail to parse block_cache_disk_path config. value=[" << config_path << "]";

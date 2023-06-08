@@ -629,4 +629,4 @@ TEST_F(FileWriterTest, TestWriteNestedArray) {
     Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-} // namespace starrocks
+} // namespace starrocks::parquet

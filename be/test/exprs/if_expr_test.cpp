@@ -82,7 +82,7 @@ TEST_F(VectorizedIfExprTest, ifArray) {
 
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-        if(ptr->is_nullable()) {
+        if (ptr->is_nullable()) {
             ptr = down_cast<NullableColumn*>(ptr.get())->data_column();
         }
         ASSERT_TRUE(ptr->is_array());
@@ -93,7 +93,7 @@ TEST_F(VectorizedIfExprTest, ifArray) {
 }
 
 TEST_F(VectorizedIfExprTest, ifConstTrue) {
-    for(auto desc : tttype_desc) {
+    for (auto desc : tttype_desc) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
@@ -118,7 +118,7 @@ TEST_F(VectorizedIfExprTest, ifConstTrue) {
 }
 
 TEST_F(VectorizedIfExprTest, ifAllFalse) {
-    for(auto desc : tttype_desc) {
+    for (auto desc : tttype_desc) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
@@ -143,7 +143,7 @@ TEST_F(VectorizedIfExprTest, ifAllFalse) {
 }
 
 TEST_F(VectorizedIfExprTest, ifNull) {
-    for(auto desc : tttype_desc) {
+    for (auto desc : tttype_desc) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);

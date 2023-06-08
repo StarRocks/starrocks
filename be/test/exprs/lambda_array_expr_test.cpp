@@ -53,9 +53,7 @@ ColumnPtr build_int_column(const std::vector<int>& values) {
 
 class VectorizedLambdaFunctionExprTest : public ::testing::Test {
 public:
-    void SetUp() override {
-        create_array_expr();
-    }
+    void SetUp() override { create_array_expr(); }
 
     static TExprNode create_expr_node();
 

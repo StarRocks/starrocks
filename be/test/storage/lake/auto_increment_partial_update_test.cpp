@@ -275,7 +275,7 @@ TEST_F(AutoIncrementPartialUpdateTest, test_resolve_conflict) {
     std::vector<int64_t> auto_increment_ids;
     auto_increment_ids.resize(kChunkSize);
     std::iota(auto_increment_ids.begin(), auto_increment_ids.end(), 1);
-    
+
     auto chunk0 = generate_data(auto_increment_ids, false);
     auto chunk1 = generate_data(auto_increment_ids, true);
     auto indexes = std::vector<uint32_t>(kChunkSize);

@@ -741,12 +741,11 @@ TEST_F(FileReaderTest, TestGetNext) {
 }
 
 TEST_F(FileReaderTest, TestGetNextWithSkipID) {
-    int64_t ids[]= {1};
+    int64_t ids[] = {1};
     std::set<std::int64_t> need_skip_rowids(ids, ids + 1);
     auto file = _create_file(_file1_path);
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(_file1_path),
-                                                    nullptr, &need_skip_rowids);
+    auto file_reader = std::make_shared<FileReader>(
+            config::vector_chunk_size, file.get(), std::filesystem::file_size(_file1_path), nullptr, &need_skip_rowids);
     // init
     auto* ctx = _create_file1_base_context();
     Status status = file_reader->init(ctx);

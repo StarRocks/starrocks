@@ -46,7 +46,6 @@ public:
     ~IcebergDeleteBuilderTest() override = default;
 
 protected:
-
     std::string _parquet_delete_path = "./be/test/exec/test_data/parquet_scanner/parquet_delete_file.parquet";
     std::string _parquet_data_path = "parquet_data_file.parquet";
 
@@ -60,4 +59,4 @@ TEST_F(IcebergDeleteBuilderTest, TestParquetBuilder) {
     ASSERT_EQ(1, _need_skip_rowids.size());
 }
 
-}
+} // namespace starrocks

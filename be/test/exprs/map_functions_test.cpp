@@ -550,7 +550,8 @@ PARALLEL_TEST(MapFunctionsTest, test_distinct_map_keys) {
         nest_offsets->get_data().push_back(2);
         nest_offsets->get_data().push_back(4);
 
-        auto nest_map = MapColumn::create(std::move(nest_keys), std::move(ColumnHelper::cast_to_nullable_column(column)), nest_offsets);
+        auto nest_map = MapColumn::create(std::move(nest_keys),
+                                          std::move(ColumnHelper::cast_to_nullable_column(column)), nest_offsets);
         auto res = MapFunctions::distinct_map_keys(nullptr, {nest_map}).value();
 
         ASSERT_EQ("{1:{4:66}}", res->debug_item(0));
@@ -618,7 +619,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_concat) {
 
     auto only_null_column = ColumnHelper::create_const_null_column(5);
 
-    auto const_column =  ConstColumn::create(map_column_nullable->clone_shared(), 5);
+    auto const_column = ConstColumn::create(map_column_nullable->clone_shared(), 5);
 
     {
         auto result = MapFunctions::map_concat(nullptr, {map_column_nullable, map_column_not_nullable}).value();
@@ -637,7 +638,9 @@ PARALLEL_TEST(MapFunctionsTest, test_map_concat) {
         EXPECT_STREQ(result->debug_string().c_str(), "[{1:44,2:55,4:66}, {2:77,3:88}, {3:NULL}, {}, {}]");
     }
     {
-        auto result = MapFunctions::map_concat(nullptr, {map_column_not_nullable, map_column_not_nullable, map_column_nullable}).value();
+        auto result = MapFunctions::map_concat(nullptr,
+                                               {map_column_not_nullable, map_column_not_nullable, map_column_nullable})
+                              .value();
         EXPECT_TRUE(result->is_nullable());
         EXPECT_STREQ(result->debug_string().c_str(), "[{2:55,4:66,11:44,1:44}, {2:77,3:88}, {3:NULL}, {}, {}]");
     }
@@ -664,12 +667,16 @@ PARALLEL_TEST(MapFunctionsTest, test_map_concat) {
     {
         auto result = MapFunctions::map_concat(nullptr, {const_column}).value();
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_STREQ(result->debug_string().c_str(), "[{2:55,4:66,11:44}, {2:55,4:66,11:44}, {2:55,4:66,11:44}, {2:55,4:66,11:44}, {2:55,4:66,11:44}]");
+        EXPECT_STREQ(result->debug_string().c_str(),
+                     "[{2:55,4:66,11:44}, {2:55,4:66,11:44}, {2:55,4:66,11:44}, {2:55,4:66,11:44}, {2:55,4:66,11:44}]");
     }
     {
-        auto result = MapFunctions::map_concat(nullptr, {const_column, only_null_column,map_column_not_nullable}).value();
+        auto result =
+                MapFunctions::map_concat(nullptr, {const_column, only_null_column, map_column_not_nullable}).value();
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_STREQ(result->debug_string().c_str(), "[{1:44,2:55,4:66,11:44}, {2:77,3:88,4:66,11:44}, {3:NULL,2:55,4:66,11:44}, {2:55,4:66,11:44}, {2:55,4:66,11:44}]");
+        EXPECT_STREQ(result->debug_string().c_str(),
+                     "[{1:44,2:55,4:66,11:44}, {2:77,3:88,4:66,11:44}, {3:NULL,2:55,4:66,11:44}, {2:55,4:66,11:44}, "
+                     "{2:55,4:66,11:44}]");
     }
 }
 
