@@ -297,7 +297,8 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
         _insert_txn_partition_map_unlocked(transaction_id, partition_id);
         LOG(INFO) << "Commit txn successfully. "
                   << " tablet: " << tablet_id << ", txn_id: " << key.second << ", rowsetid: " << rowset_ptr->rowset_id()
-                  << " #segment:" << rowset_ptr->num_segments() << " #delfile:" << rowset_ptr->num_delete_files();
+                  << " #segment:" << rowset_ptr->num_segments() << " #delfile:" << rowset_ptr->num_delete_files()
+                  << " #uptfiles:" << rowset_ptr->num_update_files();
     }
     return Status::OK();
 }
