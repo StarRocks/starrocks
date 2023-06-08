@@ -111,7 +111,7 @@ public class SRMetaBlockReader {
             // normally it's because this FE has just rollback from a higher version that would produce more metadata
             int rest = header.getNumJson() - numJsonRead;
             LOG.warn("Meta block for {} read {} json < total {} json, will skip the rest {} json",
-                    header.getName(), numJsonRead, header.getNumJson(), rest);
+                    header.getId().name(), numJsonRead, header.getNumJson(), rest);
             for (int i = 0; i != rest; ++i) {
                 LOG.warn("skip {} json: {}", i, Text.readStringWithChecksum(checkedInputStream));
             }

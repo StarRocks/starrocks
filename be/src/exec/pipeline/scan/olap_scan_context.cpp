@@ -21,6 +21,11 @@
 namespace starrocks::pipeline {
 
 /// OlapScanContext.
+
+const std::vector<ColumnAccessPathPtr>* OlapScanContext::column_access_paths() const {
+    return &_scan_node->column_access_paths();
+}
+
 void OlapScanContext::attach_shared_input(int32_t operator_seq, int32_t source_index) {
     auto key = std::make_pair(operator_seq, source_index);
     VLOG_ROW << fmt::format("attach_shared_input ({}, {}), active {}", operator_seq, source_index,

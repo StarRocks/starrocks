@@ -17,13 +17,13 @@
 #include "storage/rowset/column_iterator.h"
 
 namespace starrocks {
+class ColumnAccessPath;
 
 class MapColumnIterator final : public ColumnIterator {
 public:
     MapColumnIterator(std::unique_ptr<ColumnIterator> nulls, std::unique_ptr<ColumnIterator> offsets,
-                      std::unique_ptr<ColumnIterator> keys, std::unique_ptr<ColumnIterator> values);
-    MapColumnIterator(ColumnIterator* null_iterator, ColumnIterator* offsets_iterator, ColumnIterator* keys_iterator,
-                      ColumnIterator* values_iterator);
+                      std::unique_ptr<ColumnIterator> keys, std::unique_ptr<ColumnIterator> values,
+                      std::vector<ColumnAccessPath*> paths);
 
     ~MapColumnIterator() override = default;
 
@@ -53,6 +53,10 @@ private:
     std::unique_ptr<ColumnIterator> _offsets;
     std::unique_ptr<ColumnIterator> _keys;
     std::unique_ptr<ColumnIterator> _values;
+    std::vector<ColumnAccessPath*> _paths;
+
+    bool _access_keys;
+    bool _access_values;
 };
 
 } // namespace starrocks

@@ -320,6 +320,9 @@ public:
     bool enable_sort_spill() const {
         return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::SORT);
     }
+    bool enable_nl_join_spill() const {
+        return _query_options.spillable_operator_mask & (1LL << TSpillableOperatorType::NL_JOIN);
+    }
 
     int32_t spill_mem_table_size() const { return _query_options.spill_mem_table_size; }
 

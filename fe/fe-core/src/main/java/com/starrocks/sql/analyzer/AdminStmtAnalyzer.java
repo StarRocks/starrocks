@@ -18,6 +18,7 @@ import com.google.common.base.Enums;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -240,8 +241,8 @@ public class AdminStmtAnalyzer {
             }
 
             BinaryPredicate binaryPredicate = (BinaryPredicate) where;
-            BinaryPredicate.Operator op = binaryPredicate.getOp();
-            if (op != BinaryPredicate.Operator.EQ && op != BinaryPredicate.Operator.NE) {
+            BinaryType op = binaryPredicate.getOp();
+            if (op != BinaryType.EQ && op != BinaryType.NE) {
                 return false;
             }
             adminShowReplicaStatusStmt.setOp(op);

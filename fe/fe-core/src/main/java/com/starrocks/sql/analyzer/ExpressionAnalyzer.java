@@ -438,10 +438,6 @@ public class ExpressionAnalyzer {
         public Void visitCollectionElementExpr(CollectionElementExpr node, Scope scope) {
             Expr expr = node.getChild(0);
             Expr subscript = node.getChild(1);
-            if (!expr.getType().isArrayType() && !expr.getType().isMapType()) {
-                throw new SemanticException("cannot subscript type " + expr.getType()
-                        + " because it is not an array or a map", expr.getPos());
-            }
             if (expr.getType().isArrayType()) {
                 if (!subscript.getType().isNumericType()) {
                     throw new SemanticException("array subscript must have type integer", subscript.getPos());
@@ -454,7 +450,7 @@ public class ExpressionAnalyzer {
                 } catch (AnalysisException e) {
                     throw new SemanticException(e.getMessage());
                 }
-            } else {
+            } else if (expr.getType().isMapType()) {
                 try {
                     if (subscript.getType().getPrimitiveType() !=
                             ((MapType) expr.getType()).getKeyType().getPrimitiveType()) {
@@ -464,6 +460,24 @@ public class ExpressionAnalyzer {
                 } catch (AnalysisException e) {
                     throw new SemanticException(e.getMessage());
                 }
+            } else if (expr.getType().isStructType()) {
+                if (!(subscript instanceof IntLiteral)) {
+                    throw new SemanticException("struct subscript must have integer pos", subscript.getPos());
+                }
+                long index = ((IntLiteral) subscript).getValue();
+                long fieldSize = ((StructType) expr.getType()).getFields().size();
+                if (fieldSize < Math.abs(index)) {
+                    throw new SemanticException("the pos is out of struct subfields", subscript.getPos());
+                } else if (index == 0) {
+                    throw new SemanticException("the pos can't set to zero", subscript.getPos());
+                }
+
+                index = index > 0 ? index - 1 : fieldSize + index;
+                StructField structField = ((StructType) expr.getType()).getFields().get((int) index);
+                node.setType(structField.getType());
+            } else {
+                throw new SemanticException("cannot subscript type " + expr.getType()
+                        + " because it is not an array or a map or a struct", expr.getPos());
             }
 
             return null;
@@ -570,8 +584,7 @@ public class ExpressionAnalyzer {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
 
-            Type compatibleType =
-                    TypeManager.getCompatibleTypeForBinary(node.getOp().isNotRangeComparison(), type1, type2);
+            Type compatibleType = TypeManager.getCompatibleTypeForBinary(node.getOp(), type1, type2);
             // check child type can be cast
             final String ERROR_MSG = "Column type %s does not support binary predicate operation";
             if (!Type.canCastTo(type1, compatibleType)) {
@@ -1044,7 +1057,7 @@ public class ExpressionAnalyzer {
 
             for (int i = 0; i < fn.getNumArgs(); i++) {
                 if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
-                        !Type.canCastToAsFunctionParameter(argumentTypes[i], fn.getArgs()[i])) {
+                        !Type.canCastTo(argumentTypes[i], fn.getArgs()[i])) {
                     String msg = String.format("No matching function with signature: %s(%s)", fnName,
                             node.getParams().isStar() ? "*" :
                                     Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
@@ -1056,7 +1069,7 @@ public class ExpressionAnalyzer {
                 Type varType = fn.getArgs()[fn.getNumArgs() - 1];
                 for (int i = fn.getNumArgs(); i < argumentTypes.length; i++) {
                     if (!argumentTypes[i].matchesType(varType) &&
-                            !Type.canCastToAsFunctionParameter(argumentTypes[i], varType)) {
+                            !Type.canCastTo(argumentTypes[i], varType)) {
                         String msg = String.format("Variadic function %s(%s) can't support type: %s", fnName,
                                 Arrays.stream(fn.getArgs()).map(Type::toSql).collect(Collectors.joining(", ")),
                                 argumentTypes[i]);

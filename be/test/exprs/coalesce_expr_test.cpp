@@ -140,7 +140,7 @@ TEST_F(VectorizedCoalesceExprTest, coalesceNull) {
         {
             Chunk chunk;
             ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
-            if(ptr->is_nullable()) {
+            if (ptr->is_nullable()) {
                 ptr = down_cast<NullableColumn*>(ptr.get())->data_column();
             }
             ASSERT_TRUE(ptr->is_numeric());

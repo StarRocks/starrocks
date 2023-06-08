@@ -559,7 +559,8 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
             LOG(INFO) << "commit rowset tablet:" << _tablet.tablet_id() << " version:" << version
                       << " txn_id: " << rowset->txn_id() << " " << rowset->rowset_id().to_string()
                       << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id() << " #seg:" << rowset->num_segments()
-                      << " #delfile:" << rowset->num_delete_files() << " #row:" << rowset->num_rows()
+                      << " #delfile:" << rowset->num_delete_files() << " #uptfile:" << rowset->num_update_files()
+                      << " #row:" << rowset->num_rows()
                       << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
                       << " #pending:" << _pending_commits.size();
             _try_commit_pendings_unlocked();
@@ -1422,7 +1423,12 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
             index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
         }
     } else {
-        index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
+        std::unique_ptr<IOStat> iostat = std::make_unique<IOStat>();
+        MonotonicStopWatch watch;
+        watch.start();
+        index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, iostat.get());
+        LOG(INFO) << "primary index upsert tid: " << tablet_id << ", cost: " << watch.elapsed_time() << ", "
+                  << iostat->print_str();
     }
 
     return Status::OK();
@@ -2550,8 +2556,8 @@ int64_t TabletUpdates::get_average_row_size() {
 }
 
 std::string TabletUpdates::RowsetStats::to_string() const {
-    return strings::Substitute("[seg:$0 row:$1 del:$2 bytes:$3 compaction:$4]", num_segments, num_rows, num_dels,
-                               byte_size, compaction_score);
+    return strings::Substitute("[seg:$0 row:$1 del:$2 bytes:$3 compaction:$4 partial_update_by_column:$5]",
+                               num_segments, num_rows, num_dels, byte_size, compaction_score, partial_update_by_column);
 }
 
 std::string TabletUpdates::debug_string() const {

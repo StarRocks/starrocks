@@ -1107,9 +1107,6 @@ public class GlobalStateMgr {
         journalWriter = new JournalWriter(journal, journalQueue);
 
         editLog = new EditLog(journalQueue);
-        this.globalTransactionMgr.setEditLog(editLog);
-        this.idGenerator.setEditLog(editLog);
-        this.localMetastore.setEditLog(editLog);
     }
 
     // wait until FE is ready.
@@ -2570,7 +2567,7 @@ public class GlobalStateMgr {
                 sb.append(olapTable.getTableProperty().getDynamicPartitionProperty().toString());
             }
 
-            // enable storage cache && cache ttl
+            // enable storage cache && cache ttl & storage volume
             if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
 
@@ -2582,6 +2579,10 @@ public class GlobalStateMgr {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)
+                        .append("\" = \"");
+                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)).append("\"");
 
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
                         .append(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)
@@ -3173,7 +3174,6 @@ public class GlobalStateMgr {
 
     public void setEditLog(EditLog editLog) {
         this.editLog = editLog;
-        localMetastore.setEditLog(editLog);
     }
 
     public void setJournal(Journal journal) {

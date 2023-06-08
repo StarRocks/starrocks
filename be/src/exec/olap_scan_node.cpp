@@ -77,6 +77,15 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
                 std::min(_olap_scan_node.max_parallel_scan_instance_num, _io_tasks_per_scan_operator);
     }
 
+    if (_olap_scan_node.__isset.column_access_paths) {
+        for (int i = 0; i < _olap_scan_node.column_access_paths.size(); ++i) {
+            auto path = std::make_unique<ColumnAccessPath>();
+            if (path->init(_olap_scan_node.column_access_paths[i], state, _pool).ok()) {
+                _column_access_paths.emplace_back(std::move(path));
+            }
+        }
+    }
+
     _estimate_scan_and_output_row_bytes();
 
     return Status::OK();

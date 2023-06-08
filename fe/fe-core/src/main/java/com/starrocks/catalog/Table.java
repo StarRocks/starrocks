@@ -558,7 +558,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         if (!Strings.isNullOrEmpty(comment)) {
             return comment;
         }
-        return type.name();
+        return "";
     }
 
     public void setComment(String comment) {

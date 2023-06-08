@@ -187,7 +187,7 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
     // if all is well and input stream enable prefetch and not eof
     if (!_stream->eof()) {
         _running_restore_tasks++;
-        auto restore_task = [this, state, guard, trace = TraceInfo(state)]() {
+        auto restore_task = [this, guard, trace = TraceInfo(state)]() {
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
             RETURN_IF(!guard.scoped_begin(), Status::OK());
             auto defer = DeferOp([&]() { _running_restore_tasks--; });

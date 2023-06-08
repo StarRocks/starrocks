@@ -55,4 +55,6 @@ public class  PrivilegeBuiltinConstants {
     public static final long GLOBAL_FUNCTION_DEFAULT_DATABASE_ID = -4; // global function default database id
 
     public static final long ALL_RESOURCE_GROUP_ID = -1; // -1 represent all resource group
+
+    public static final String ALL_STORAGE_VOLUMES_ID = "ALL_STORAGE_VOLUMES_ID";
 }

@@ -916,12 +916,16 @@ CONF_Bool(block_cache_report_stats, "false");
 // will be inserted 1/2 from the end of the LRU, 2 means 1/4 from the end of the LRU, and so on.
 // It is only useful for the cachelib engine currently.
 CONF_Int64(block_cache_lru_insertion_point, "1");
-// cachelib, starcache
-CONF_String(block_cache_engine, "starcache");
+// Block cache engines, alternatives: cachelib, starcache.
+// Set the default value empty to indicate whether it is manully configured by users.
+// If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
+CONF_String(block_cache_engine, "");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 CONF_mInt64(l0_max_mem_usage, "67108864");  // 64MB
+// if l0_mem_size exceeds this value, l0 need snapshot
+CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
 CONF_mInt64(max_tmp_l1_num, "10");
 CONF_mBool(enable_parallel_get_and_bf, "true");
 
@@ -969,4 +973,7 @@ CONF_mBool(enable_pk_value_column_zonemap, "true");
 // Used by default mv resource group
 CONF_Double(default_mv_resource_group_memory_limit, "0.8");
 CONF_Int32(default_mv_resource_group_cpu_limit, "1");
+
+// Max size of key columns size of primary key table, default value is 128 bytes
+CONF_mInt32(primary_key_limit_size, "128");
 } // namespace starrocks::config

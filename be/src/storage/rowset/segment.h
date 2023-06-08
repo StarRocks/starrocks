@@ -54,6 +54,7 @@
 
 namespace starrocks {
 
+class ColumnAccessPath;
 class TabletSchema;
 class ShortKeyIndexDecoder;
 
@@ -116,7 +117,7 @@ public:
     uint64_t id() const { return _segment_id; }
 
     // TODO: remove this method, create `ColumnIterator` via `ColumnReader`.
-    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(uint32_t cid);
+    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(uint32_t cid, ColumnAccessPath* path = nullptr);
 
     Status new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** iter, bool skip_fill_local_cache);
 

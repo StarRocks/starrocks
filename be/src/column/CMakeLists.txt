@@ -20,6 +20,7 @@ add_library(Column STATIC
         chunk.cpp
         chunk_extra_data.cpp
         column.cpp
+        column_access_path.cpp
         column_helper.cpp
         column_viewer.cpp
         const_column.cpp

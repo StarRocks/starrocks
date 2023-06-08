@@ -64,6 +64,7 @@ import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
@@ -204,6 +205,9 @@ public class OlapTable extends Table {
 
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
+
+    @SerializedName(value = "storageVolumeId")
+    protected String storageVolumeId = "";
 
     protected BinlogConfig curBinlogConfig;
 
@@ -382,6 +386,14 @@ public class OlapTable extends Table {
 
     public OlapTableState getState() {
         return state;
+    }
+
+    public void setStorageVolumeId(String storageVolumeId) {
+        this.storageVolumeId = storageVolumeId;
+    }
+
+    public String getStorageVolumeId() {
+        return storageVolumeId;
     }
 
     public List<Index> getIndexes() {
@@ -1713,8 +1725,7 @@ public class OlapTable extends Table {
 
     public void checkStableAndNormal() throws DdlException {
         if (state != OlapTableState.NORMAL) {
-            throw new DdlException("Table[" + name + "]'s state is " + state.toString() + " not NORMAL."
-                    + "Do not allow create materialized view");
+            throw InvalidOlapTableStateException.of(state, getName());
         }
         // check if all tablets are healthy, and no tablet is in tablet scheduler
         long unhealthyTabletId = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
@@ -1882,7 +1893,7 @@ public class OlapTable extends Table {
 
     // Determine which situation supports importing and automatically creating partitions
     public Boolean supportedAutomaticPartition() {
-        return partitionInfo.getType() == PartitionType.EXPR_RANGE;
+        return partitionInfo.isAutomaticPartition();
     }
 
     public Boolean isBinlogEnabled() {
@@ -2395,9 +2406,15 @@ public class OlapTable extends Table {
         properties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, isInMemory().toString());
 
         Map<String, String> tableProperty = getTableProperty().getProperties();
-        if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
-                    tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+        if (tableProperty != null) {
+            if (tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
+                        tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+            }
+            if (tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
+                        tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME));
+            }
         }
         return properties;
     }

@@ -19,17 +19,16 @@ import com.google.gson.Gson;
 import com.staros.proto.AwsCredentialInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.parquet.Strings;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,7 +61,7 @@ public class StorageVolume {
     private boolean enabled;
 
     public StorageVolume(String id, String name, String svt, List<String> locations,
-                         Map<String, String> params, boolean enabled, String comment) throws AnalysisException {
+                         Map<String, String> params, boolean enabled, String comment) {
         this.id = id;
         this.name = name;
         this.svt = toStorageVolumeType(svt);
@@ -71,7 +70,7 @@ public class StorageVolume {
         this.enabled = enabled;
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
         if (!isValidCloudConfiguration()) {
-            throw new AnalysisException("Storage params is not valid");
+            throw new SemanticException("Storage params is not valid");
         }
         this.params = new HashMap<>(params);
     }
@@ -87,12 +86,12 @@ public class StorageVolume {
         this.params = new HashMap<>(sv.params);
     }
 
-    public void setCloudConfiguration(Map<String, String> params) throws AnalysisException {
+    public void setCloudConfiguration(Map<String, String> params) {
         Map<String, String> newParams = new HashMap<>(this.params);
         newParams.putAll(params);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams);
         if (!isValidCloudConfiguration()) {
-            throw new AnalysisException("Storage params is not valid");
+            throw new SemanticException("Storage params is not valid");
         }
         this.params = newParams;
     }
@@ -161,7 +160,7 @@ public class StorageVolume {
 
     public static FileStoreInfo createFileStoreInfo(String name, String svt,
                                                     List<String> locations, Map<String, String> params,
-                                                    boolean enabled, String comment) throws AnalysisException {
+                                                    boolean enabled, String comment) {
         StorageVolume sv = new StorageVolume("", name, svt, locations, params, enabled, comment);
         return sv.toFileStoreInfo();
     }
@@ -169,44 +168,16 @@ public class StorageVolume {
     public FileStoreInfo toFileStoreInfo() {
         FileStoreInfo fsInfo = cloudConfiguration.toFileStoreInfo();
         FileStoreInfo.Builder builder = fsInfo.toBuilder();
-        builder.setFsKey(id).setFsName(this.name).setComment(this.comment).setEnabled(this.enabled);
-        switch (svt) {
-            case S3:
-                S3FileStoreInfo s3FileStoreInfo = fsInfo.getS3FsInfo();
-                String[] bucketAndPrefix = getBucketAndPrefix();
-                s3FileStoreInfo = s3FileStoreInfo.toBuilder()
-                        .setBucket(bucketAndPrefix[0]).setPathPrefix(bucketAndPrefix[1]).build();
-                builder.setS3FsInfo(s3FileStoreInfo);
-                break;
-            case HDFS:
-                // TODO
-                break;
-            case UNKNOWN:
-                break;
-        }
+        builder.setFsKey(id).setFsName(this.name).setComment(this.comment).setEnabled(this.enabled)
+                .addAllLocations(locations).build();
         return builder.build();
     }
 
-    public static StorageVolume fromFileStoreInfo(FileStoreInfo fsInfo) throws AnalysisException {
+    public static StorageVolume fromFileStoreInfo(FileStoreInfo fsInfo) {
         String svt = fsInfo.getFsType().toString();
         Map<String, String> params = getParamsFromFileStoreInfo(fsInfo);
-        List<String> locations = getLocationsFromFileStoreInfo(fsInfo);
         return new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
-                locations, params, fsInfo.getEnabled(), fsInfo.getComment());
-    }
-
-    public static List<String> getLocationsFromFileStoreInfo(FileStoreInfo fsInfo) {
-        switch (fsInfo.getFsType()) {
-            case S3:
-                return new ArrayList<>(Arrays.asList(
-                        "S3://" + fsInfo.getS3FsInfo().getBucket() + "/" + fsInfo.getS3FsInfo().getPathPrefix()));
-            case HDFS:
-                // TODO
-            case AZBLOB:
-                // TODO
-            default:
-                return new ArrayList<>();
-        }
+                fsInfo.getLocationsList(), params, fsInfo.getEnabled(), fsInfo.getComment());
     }
 
     public static Map<String, String> getParamsFromFileStoreInfo(FileStoreInfo fsInfo) {
@@ -245,16 +216,5 @@ public class StorageVolume {
             default:
                 return params;
         }
-    }
-
-    private String[] getBucketAndPrefix() {
-        // path pattern: s3://default-bucket/1/12003/
-        String path = locations.get(0).substring(S3_PREFIX.length());
-        int index = path.indexOf('/');
-        if (index < 0) {
-            return new String[] {path, ""};
-        }
-
-        return new String[] {path.substring(0, index), path.substring(index + 1)};
     }
 }

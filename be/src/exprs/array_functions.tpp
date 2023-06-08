@@ -274,9 +274,13 @@ public:
 
 private:
     template <typename HashSet>
-    static ColumnPtr _array_overlap(const Columns& columns) {
-        size_t chunk_size = columns[0]->size();
+    static ColumnPtr _array_overlap(const Columns& original_columns) {
+        size_t chunk_size = original_columns[0]->size();
         auto result_column = BooleanColumn::create(chunk_size, 0);
+        Columns columns;
+        for (const auto& col : original_columns) {
+            columns.push_back(ColumnHelper::unpack_and_duplicate_const_column(chunk_size, col));
+        }
 
         bool is_nullable = false;
         bool has_null = false;
@@ -403,12 +407,17 @@ public:
 
 private:
     template <typename HashSet>
-    static ColumnPtr _array_intersect(const Columns& columns) {
-        if (columns.size() == 1) {
-            return columns[0];
+    static ColumnPtr _array_intersect(const Columns& original_columns) {
+        if (original_columns.size() == 1) {
+            return original_columns[0];
         }
 
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+        RETURN_IF_COLUMNS_ONLY_NULL(original_columns);
+
+        Columns columns;
+        for (const auto& col : original_columns) {
+            columns.push_back(ColumnHelper::unpack_and_duplicate_const_column(col->size(), col));
+        }
 
         size_t chunk_size = columns[0]->size();
         bool is_nullable = false;

@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.rule;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
@@ -104,58 +105,58 @@ public class ListPartitionPrunerTest {
     public void testBinaryPredicate() throws AnalysisException {
         // date_col = "2021-01-01"
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, dateColumn,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, dateColumn,
                 ConstantOperator.createDate(LocalDateTime.of(2021, 1, 1, 0, 0, 0))));
         Assert.assertEquals(Lists.newArrayList(0L, 1L, 2L), pruner.prune());
         // date_col < "2021-01-02"
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT, dateColumn,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, dateColumn,
                 ConstantOperator.createDate(LocalDateTime.of(2021, 1, 2, 0, 0, 0))));
         Assert.assertEquals(Lists.newArrayList(0L, 1L, 2L), pruner.prune());
         // date_col >= "2021-01-03" and date_col <= "2021-01-03"
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, dateColumn,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GE, dateColumn,
                 ConstantOperator.createDate(LocalDateTime.of(2021, 1, 3, 0, 0, 0))));
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, dateColumn,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LE, dateColumn,
                 ConstantOperator.createDate(LocalDateTime.of(2021, 1, 3, 0, 0, 0))));
         Assert.assertEquals(Lists.newArrayList(6L, 7L, 8L), pruner.prune());
         // date_col > "2021-01-03"
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT, dateColumn,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GT, dateColumn,
                 ConstantOperator.createDate(LocalDateTime.of(2021, 1, 3, 0, 0, 0))));
         Assert.assertEquals(Lists.newArrayList(), pruner.prune());
         // date_col <= "2020-12-31"
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, dateColumn,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LE, dateColumn,
                 ConstantOperator.createDate(LocalDateTime.of(2020, 12, 31, 0, 0, 0))));
         Assert.assertEquals(Lists.newArrayList(), pruner.prune());
 
         // int_col = 0
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, intColumn,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, intColumn,
                 ConstantOperator.createInt(0)));
         Assert.assertEquals(Lists.newArrayList(0L, 3L, 6L), pruner.prune());
         // int_col >= 1
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, intColumn,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GE, intColumn,
                 ConstantOperator.createInt(1)));
         Assert.assertEquals(Lists.newArrayList(1L, 2L, 4L, 5L, 7L, 8L), pruner.prune());
         // int_col < 0
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT, intColumn,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, intColumn,
                 ConstantOperator.createInt(0)));
         Assert.assertEquals(Lists.newArrayList(), pruner.prune());
         // int_col >= 4
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, intColumn,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GE, intColumn,
                 ConstantOperator.createInt(4)));
         Assert.assertEquals(Lists.newArrayList(), pruner.prune());
 
         // date_col >= "2021-01-02" and int_col < 2
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, dateColumn,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GE, dateColumn,
                 ConstantOperator.createDate(LocalDateTime.of(2021, 1, 2, 0, 0, 0))));
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT, intColumn,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, intColumn,
                 ConstantOperator.createInt(2)));
         Assert.assertEquals(Lists.newArrayList(3L, 4L, 6L, 7L), pruner.prune());
     }
@@ -228,7 +229,7 @@ public class ListPartitionPrunerTest {
         // int_col1 + int_col2 = 10
         conjuncts.clear();
         conjuncts.add(new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.EQ,
+                BinaryType.EQ,
                 new CallOperator("add", Type.BIGINT, Lists.newArrayList(intCol1, intCol2)),
                 ConstantOperator.createInt(10)));
         Assert.assertEquals(null, pruner.prune());
@@ -241,7 +242,7 @@ public class ListPartitionPrunerTest {
         conjuncts.clear();
         notEvalConjuncts.clear();
         conjuncts.add(new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.EQ,
+                BinaryType.EQ,
                 new CallOperator("add", Type.BIGINT, Lists.newArrayList(intCol2, ConstantOperator.createInt(1))),
                 ConstantOperator.createInt(11)));
         Assert.assertEquals(null, pruner.prune());
@@ -252,9 +253,9 @@ public class ListPartitionPrunerTest {
 
         // int_col2 = 10 and int_col_not_part = 0
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ,
                 Lists.newArrayList(intCol2, ConstantOperator.createInt(10))));
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, intColNotPart,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, intColNotPart,
                 ConstantOperator.createInt(0)));
         Assert.assertEquals(Lists.newArrayList(0L, 2L), pruner.prune());
     }
@@ -331,9 +332,9 @@ public class ListPartitionPrunerTest {
         conjuncts.clear();
         conjuncts.add(new CompoundPredicateOperator(
                 CompoundPredicateOperator.CompoundType.OR,
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, dateColumn,
+                new BinaryPredicateOperator(BinaryType.EQ, dateColumn,
                         ConstantOperator.createDate(LocalDateTime.of(2021, 1, 1, 0, 0, 0))),
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, intColumn,
+                new BinaryPredicateOperator(BinaryType.EQ, intColumn,
                         ConstantOperator.createInt(2))));
         Assert.assertEquals(Lists.newArrayList(0L, 1L, 2L, 5L, 8L), pruner.prune());
 
@@ -341,7 +342,7 @@ public class ListPartitionPrunerTest {
         conjuncts.clear();
         conjuncts.add(new CompoundPredicateOperator(
                 CompoundPredicateOperator.CompoundType.OR,
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT, dateColumn,
+                new BinaryPredicateOperator(BinaryType.GT, dateColumn,
                         ConstantOperator.createDate(LocalDateTime.of(2021, 1, 2, 0, 0, 0))),
                 new IsNullPredicateOperator(false, intColumn)));
         Assert.assertEquals(Lists.newArrayList(6L, 7L, 8L, 9L), pruner.prune());
@@ -350,7 +351,7 @@ public class ListPartitionPrunerTest {
         conjuncts.clear();
         conjuncts.add(new CompoundPredicateOperator(
                 CompoundPredicateOperator.CompoundType.OR,
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT, dateColumn,
+                new BinaryPredicateOperator(BinaryType.LT, dateColumn,
                         ConstantOperator.createDate(LocalDateTime.of(2021, 1, 2, 0, 0, 0))),
                 new CompoundPredicateOperator(
                         CompoundPredicateOperator.CompoundType.OR,
@@ -364,34 +365,34 @@ public class ListPartitionPrunerTest {
     public void testCastTypePredicate() throws AnalysisException {
         // date_col = "2021-01-01"
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ,
                 new CastOperator(Type.DATETIME, dateColumn),
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 1, 0, 0, 0))));
         Assert.assertEquals(Lists.newArrayList(0L, 1L, 2L), pruner.prune());
         // date_col < "2021-01-02"
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT,
                 new CastOperator(Type.DATETIME, dateColumn),
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 2, 0, 0, 0))));
         Assert.assertEquals(Lists.newArrayList(0L, 1L, 2L), pruner.prune());
         // date_col >= "2021-01-03" and date_col <= "2021-01-03"
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GE,
                 new CastOperator(Type.DATETIME, dateColumn),
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 3, 0, 0, 0))));
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LE,
                 new CastOperator(Type.DATETIME, dateColumn),
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 3, 0, 0, 0))));
         Assert.assertEquals(Lists.newArrayList(6L, 7L, 8L), pruner.prune());
         // date_col > "2021-01-03"
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GT,
                 new CastOperator(Type.DATETIME, dateColumn),
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 3, 0, 0, 0))));
         Assert.assertEquals(Lists.newArrayList(), pruner.prune());
         // date_col <= "2020-12-31"
         conjuncts.clear();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LE,
                 new CastOperator(Type.DATETIME, dateColumn),
                 ConstantOperator.createDatetime(LocalDateTime.of(2020, 12, 31, 0, 0, 0))));
         Assert.assertEquals(Lists.newArrayList(), pruner.prune());
@@ -428,7 +429,7 @@ public class ListPartitionPrunerTest {
         columnToNullPartitions = new HashMap<>();
         columnToNullPartitions.put(operator, new HashSet<>());
         conjuncts = Lists.newArrayList();
-        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT, intColumn,
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GT, intColumn,
                 ConstantOperator.createInt(1000)));
         pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
         Assert.assertNull(pruner.prune());

@@ -159,6 +159,8 @@ public:
 
     const std::vector<Field>& sub_fields() const { return *_sub_fields; }
 
+    bool has_sub_fields() const { return _sub_fields != nullptr; }
+
     ColumnPtr create_column() const;
 
     void set_uid(ColumnUID uid) { _uid = uid; }

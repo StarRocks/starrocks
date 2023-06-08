@@ -1161,7 +1161,8 @@ Status PrimaryIndex::_build_persistent_values(uint32_t rssid, const vector<uint3
 const Slice* PrimaryIndex::_build_persistent_keys(const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                                                   std::vector<Slice>* key_slices) const {
     if (pks.is_binary()) {
-        return reinterpret_cast<const Slice*>(pks.raw_data());
+        const Slice* vkeys = reinterpret_cast<const Slice*>(pks.raw_data());
+        return vkeys + idx_begin;
     } else {
         const uint8_t* keys = pks.raw_data();
         for (size_t i = idx_begin; i < idx_end; i++) {
@@ -1183,7 +1184,8 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
 }
 
 void PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                                 uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) {
+                                                 uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes,
+                                                 IOStat* stat) {
     uint32_t n = idx_end - idx_begin;
     std::vector<Slice> keys;
     std::vector<uint64_t> values;
@@ -1192,7 +1194,7 @@ void PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_
     const Slice* vkeys = _build_persistent_keys(pks, idx_begin, idx_end, &keys);
     _build_persistent_values(rssid, rowid_start, idx_begin, idx_end, &values);
     _persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(values.data()),
-                              reinterpret_cast<IndexValue*>(old_values.data()));
+                              reinterpret_cast<IndexValue*>(old_values.data()), stat);
     for (unsigned long old : old_values) {
         if ((old != NullIndexValue) && (old >> 32) == rssid) {
             LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid;
@@ -1270,10 +1272,10 @@ Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const Column& 
     return insert(rssid, rids, pks);
 }
 
-void PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes) {
+void PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes, IOStat* stat) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     if (_persistent_index != nullptr) {
-        _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes);
+        _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes, stat);
     } else {
         _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes);
     }
@@ -1283,7 +1285,7 @@ void PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pk
                           DeletesMap* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     if (_persistent_index != nullptr) {
-        _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
+        _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr);
     } else {
         _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
     }

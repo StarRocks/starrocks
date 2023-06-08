@@ -21,7 +21,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryPredicate.Operator;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.NullLiteral;
@@ -381,7 +381,7 @@ public class DataDescription implements ParseNode {
                         + "Expr: " + columnExpr.toSql());
             }
             BinaryPredicate predicate = (BinaryPredicate) columnExpr;
-            if (predicate.getOp() != Operator.EQ) {
+            if (predicate.getOp() != BinaryType.EQ) {
                 throw new AnalysisException("Mapping function expr only support the column or eq binary predicate. "
                         + "The mapping operator error, op: " + predicate.getOp());
             }

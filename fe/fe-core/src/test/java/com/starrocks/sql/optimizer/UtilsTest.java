@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
@@ -163,7 +164,7 @@ public class UtilsTest {
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
                         ConstantOperator.createBoolean(false),
                         new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
-                                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                                new BinaryPredicateOperator(BinaryType.EQ,
                                         new ColumnRefOperator(3, Type.INT, "hello", true),
                                         ConstantOperator.createInt(1)),
                                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,

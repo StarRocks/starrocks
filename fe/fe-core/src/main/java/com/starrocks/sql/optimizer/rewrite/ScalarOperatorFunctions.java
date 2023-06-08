@@ -35,6 +35,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.re2j.Pattern;
 import com.starrocks.analysis.DecimalLiteral;
@@ -63,7 +64,10 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.time.format.ResolverStyle;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.IsoFields;
 import java.time.temporal.TemporalAdjusters;
+import java.time.temporal.TemporalUnit;
+import java.util.Map;
 import java.util.Set;
 
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
@@ -99,10 +103,25 @@ public class ScalarOperatorFunctions {
     private static final int DAY_OF_YEAR_MIN = 1;
     private static final int DAY_OF_YEAR_MAX = 366;
 
+    private static final LocalDateTime TIME_SLICE_START = LocalDateTime.of(1, 1, 1, 0, 0);
+
+    private static final Map<String, TemporalUnit> TIME_SLICE_UNIT_MAPPING;
+
     static {
         for (int shiftBy = 0; shiftBy < CONSTANT_128; ++shiftBy) {
             INT_128_MASK1_ARR1[shiftBy] = INT_128_OPENER.subtract(BigInteger.ONE).shiftRight(shiftBy + 1);
         }
+
+        TIME_SLICE_UNIT_MAPPING = ImmutableMap.<String, TemporalUnit>builder()
+            .put("second", ChronoUnit.SECONDS)
+            .put("minute", ChronoUnit.MINUTES)
+            .put("hour", ChronoUnit.HOURS)
+            .put("day", ChronoUnit.DAYS)
+            .put("month", ChronoUnit.MONTHS)
+            .put("year", ChronoUnit.YEARS)
+            .put("week", ChronoUnit.WEEKS)
+            .put("quarter", IsoFields.QUARTER_YEARS)
+            .build();
     }
 
     /**
@@ -514,6 +533,37 @@ public class ScalarOperatorFunctions {
         }
 
         return ConstantOperator.createDate(ld.atTime(0, 0, 0));
+    }
+
+    @ConstantFunction(name = "time_slice", argTypes = {DATETIME, INT, VARCHAR}, returnType = DATETIME)
+    public static ConstantOperator timeSlice(ConstantOperator datetime, ConstantOperator interval, ConstantOperator unit) {
+        return timeSlice(datetime, interval, unit, ConstantOperator.createVarchar("floor"));
+    }
+
+    @ConstantFunction(name = "time_slice", argTypes = {DATETIME, INT, VARCHAR, VARCHAR}, returnType = DATETIME)
+    public static ConstantOperator timeSlice(ConstantOperator datetime, ConstantOperator interval,
+                                             ConstantOperator unit, ConstantOperator boundary) {
+        TemporalUnit timeUnit = TIME_SLICE_UNIT_MAPPING.get(unit.getVarchar());
+        if (timeUnit == null) {
+            throw new IllegalArgumentException(unit + " not supported in time_slice unit param");
+        }
+        boolean isEnd;
+        switch (boundary.getVarchar()) {
+            case "floor":
+                isEnd = false;
+                break;
+            case "ceil":
+                isEnd = true;
+                break;
+            default:
+                throw new IllegalArgumentException(boundary + " not supported in time_slice boundary param");
+        }
+        long duration = TIME_SLICE_START.until(datetime.getDatetime(), timeUnit);
+        long epoch = duration - (duration % interval.getInt());
+        if (isEnd) {
+            epoch += interval.getInt();
+        }
+        return ConstantOperator.createDatetime(TIME_SLICE_START.plus(epoch, timeUnit));
     }
 
     /**

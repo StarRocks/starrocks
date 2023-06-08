@@ -14,6 +14,7 @@
 
 #include "exprs/time_functions.h"
 
+#include <algorithm>
 #include <string_view>
 
 #include "column/column_helper.h"
@@ -2381,28 +2382,50 @@ StatusOr<ColumnPtr> TimeFunctions::last_day(FunctionContext* context, const Colu
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+Status TimeFunctions::_error_date_part() {
+    return Status::InvalidArgument("avaiable data_part parameter is year/month/quarter");
+}
+
 StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format_const(std::string& format_content, FunctionContext* context,
                                                                const Columns& columns) {
     ColumnViewer<TYPE_DATETIME> data_column(columns[0]);
     auto size = columns[0]->size();
 
     ColumnBuilder<TYPE_DATE> result(size);
-    for (int row = 0; row < size; ++row) {
-        if (data_column.is_null(row)) {
-            result.append_null();
-            continue;
-        }
-
-        DateValue date = (DateValue)data_column.value(row);
-        if (format_content == "year") {
+    if (format_content == "year") {
+        for (int row = 0; row < size; ++row) {
+            if (data_column.is_null(row)) {
+                result.append_null();
+                continue;
+            }
+            DateValue date = (DateValue)data_column.value(row);
             date.set_end_of_year();
-        } else if (format_content == "quarter") {
-            date.set_end_of_quarter();
-        } else {
-            date.set_end_of_month();
+            result.append(date);
         }
-        result.append(date);
+    } else if (format_content == "quarter") {
+        for (int row = 0; row < size; ++row) {
+            if (data_column.is_null(row)) {
+                result.append_null();
+                continue;
+            }
+            DateValue date = (DateValue)data_column.value(row);
+            date.set_end_of_quarter();
+            result.append(date);
+        }
+    } else if (format_content == "month") {
+        for (int row = 0; row < size; ++row) {
+            if (data_column.is_null(row)) {
+                result.append_null();
+                continue;
+            }
+            DateValue date = (DateValue)data_column.value(row);
+            date.set_end_of_month();
+            result.append(date);
+        }
+    } else {
+        return _error_date_part();
     }
+
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
@@ -2420,17 +2443,17 @@ StatusOr<ColumnPtr> TimeFunctions::_last_day_with_format(FunctionContext* contex
 
         DateValue date = (DateValue)data_column.value(row);
         Slice format_content = format_column.value(row);
-        if (!(format_content == "year" || format_content == "month" || format_content == "quarter")) {
-            Status::InvalidArgument("last day optional in {month, quarter, year}, but optional is " +
-                                    format_content.to_string());
-        }
+        std::transform(format_content.data, format_content.data + format_content.size, format_content.data,
+                       [](auto x) { return std::tolower(x); });
 
         if (format_content == "year") {
             date.set_end_of_year();
         } else if (format_content == "quarter") {
             date.set_end_of_quarter();
-        } else {
+        } else if (format_content == "month") {
             date.set_end_of_month();
+        } else {
+            return _error_date_part();
         }
         result.append(date);
     }
@@ -2462,9 +2485,9 @@ Status TimeFunctions::last_day_prepare(FunctionContext* context, FunctionContext
     state->const_optional = true;
     ColumnPtr column = context->get_constant_column(1);
     Slice optional = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
+    std::transform(optional.data, optional.data + optional.size, optional.data, [](auto x) { return std::tolower(x); });
     if (!(optional == "year" || optional == "month" || optional == "quarter")) {
-        return Status::InvalidArgument("last day optional in {month, quarter, year}, but optional is " +
-                                       optional.to_string());
+        return _error_date_part();
     }
     state->optional_content = optional;
     return Status::OK();

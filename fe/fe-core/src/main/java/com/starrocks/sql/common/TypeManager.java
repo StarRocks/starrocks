@@ -17,15 +17,18 @@ package com.starrocks.sql.common;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -96,16 +99,17 @@ public class TypeManager {
         if (t1.getFields().size() != t1.getFields().size()) {
             return Type.INVALID;
         }
-        List<Type> fieldTypes = Lists.newArrayList();
+        ArrayList<StructField> fields = Lists.newArrayList();
         for (int i = 0; i < t1.getFields().size(); ++i) {
             Type fieldCommon = getCommonSuperType(t1.getField(i).getType(), t2.getField(i).getType());
             if (!fieldCommon.isValid()) {
                 return Type.INVALID;
             }
-            fieldTypes.add(fieldCommon);
+
+            // default t1's field name
+            fields.add(new StructField(t1.getField(i).getName(), fieldCommon));
         }
-        // TODO(alvin): needed to assign field names for this struct type
-        return new StructType(fieldTypes);
+        return new StructType(fields);
     }
 
     public static Expr addCastExpr(Expr expr, Type targetType) {
@@ -175,12 +179,12 @@ public class TypeManager {
         return compatibleType;
     }
 
-    public static Type getCompatibleTypeForBinary(boolean isNotRangeComparison, Type type1, Type type2) {
+    public static Type getCompatibleTypeForBinary(BinaryType type, Type type1, Type type2) {
         // 1. Many join on-clause use string = int predicate, follow mysql will cast to double, but
         //    starrocks cast to double will lose precision, the predicate result will error
         // 2. Why only support equivalence and unequivalence expression cast to string? Because string order is different
         //    with number order, like: '12' > '2' is false, but 12 > 2 is true
-        if (isNotRangeComparison) {
+        if (type.isNotRangeComparison()) {
             if ((type1.isStringType() && type2.isExactNumericType()) ||
                     (type1.isExactNumericType() && type2.isStringType())) {
                 return Type.STRING;

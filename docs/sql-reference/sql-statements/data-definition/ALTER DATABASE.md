@@ -35,11 +35,9 @@ The database's default data quota and the default replica quota are 2^63-1.
 
     ```SQL
     ALTER DATABASE example_db SET DATA QUOTA 10995116277760;
-    -- The above units are bytes, equivalent to the following statement
+    -- The above unit is bytes, equivalent to the following statement.
     ALTER DATABASE example_db SET DATA QUOTA 10T;
-    
     ALTER DATABASE example_db SET DATA QUOTA 100G;
-    
     ALTER DATABASE example_db SET DATA QUOTA 200M;
     ```
 

@@ -23,7 +23,7 @@ namespace starrocks {
 class StructColumnIterator final : public ColumnIterator {
 public:
     StructColumnIterator(std::unique_ptr<ColumnIterator> null_iter,
-                         std::vector<std::unique_ptr<ColumnIterator>> field_iters);
+                         std::vector<std::unique_ptr<ColumnIterator>> field_iters, std::vector<uint8_t> access_flags);
 
     ~StructColumnIterator() override = default;
 
@@ -51,24 +51,32 @@ public:
 private:
     std::unique_ptr<ColumnIterator> _null_iter;
     std::vector<std::unique_ptr<ColumnIterator>> _field_iters;
+    std::vector<uint8_t> _access_flags;
 };
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_struct_iter(std::unique_ptr<ColumnIterator> null_iter,
-                                                             std::vector<std::unique_ptr<ColumnIterator>> field_iters) {
-    return std::make_unique<StructColumnIterator>(std::move(null_iter), std::move(field_iters));
+                                                             std::vector<std::unique_ptr<ColumnIterator>> field_iters,
+                                                             std::vector<uint8_t> access_flags) {
+    return std::make_unique<StructColumnIterator>(std::move(null_iter), std::move(field_iters),
+                                                  std::move(access_flags));
 }
 
 StructColumnIterator::StructColumnIterator(std::unique_ptr<ColumnIterator> null_iter,
-                                           std::vector<std::unique_ptr<ColumnIterator>> field_iters)
-        : _null_iter(std::move(null_iter)), _field_iters(std::move(field_iters)) {}
+                                           std::vector<std::unique_ptr<ColumnIterator>> field_iters,
+                                           std::vector<uint8_t> access_flags)
+        : _null_iter(std::move(null_iter)),
+          _field_iters(std::move(field_iters)),
+          _access_flags(std::move(access_flags)) {}
 
 Status StructColumnIterator::init(const ColumnIteratorOptions& opts) {
     if (_null_iter != nullptr) {
         RETURN_IF_ERROR(_null_iter->init(opts));
     }
+
     for (auto& iter : _field_iters) {
         RETURN_IF_ERROR(iter->init(opts));
     }
+
     return Status::OK();
 }
 
@@ -93,9 +101,19 @@ Status StructColumnIterator::next_batch(size_t* n, Column* dst) {
     // Read all fields
     // TODO(Alvin): _field_iters may have different order with struct_column
     // FIXME:
+    auto fields = struct_column->fields();
     for (int i = 0; i < _field_iters.size(); ++i) {
-        auto num_to_read = *n;
-        RETURN_IF_ERROR(_field_iters[i]->next_batch(&num_to_read, struct_column->fields()[i].get()));
+        if (_access_flags[i]) {
+            auto num_to_read = *n;
+            RETURN_IF_ERROR(_field_iters[i]->next_batch(&num_to_read, fields[i].get()));
+        }
+    }
+
+    // todo: unpack struct in scan, and don't need append default values
+    for (int i = 0; i < _field_iters.size(); ++i) {
+        if (!_access_flags[i]) {
+            fields[i]->append_default(*n);
+        }
     }
 
     return Status::OK();
@@ -118,8 +136,19 @@ Status StructColumnIterator::next_batch(const SparseRange& range, Column* dst) {
         down_cast<NullableColumn*>(dst)->update_has_null();
     }
     // Read all fields
+    size_t row_count = 0;
+    auto fields = struct_column->fields();
     for (int i = 0; i < _field_iters.size(); ++i) {
-        RETURN_IF_ERROR(_field_iters[i]->next_batch(range, struct_column->fields()[i].get()));
+        if (_access_flags[i]) {
+            RETURN_IF_ERROR(_field_iters[i]->next_batch(range, fields[i].get()));
+            row_count = fields[i]->size();
+        }
+    }
+
+    for (int i = 0; i < _field_iters.size(); ++i) {
+        if (!_access_flags[i]) {
+            fields[i]->append_default(row_count);
+        }
     }
     return Status::OK();
 }
@@ -137,14 +166,19 @@ Status StructColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t
     } else {
         struct_column = down_cast<StructColumn*>(values);
     }
-    if (_null_iter != nullptr) {
-        RETURN_IF_ERROR(_null_iter->fetch_values_by_rowid(rowids, size, null_column));
-    }
 
     // read all fields
+    auto fields = struct_column->fields();
     for (int i = 0; i < _field_iters.size(); ++i) {
-        auto& col = struct_column->fields()[i];
-        RETURN_IF_ERROR(_field_iters[i]->fetch_values_by_rowid(rowids, size, col.get()));
+        if (_access_flags[i]) {
+            RETURN_IF_ERROR(_field_iters[i]->fetch_values_by_rowid(rowids, size, fields[i].get()));
+        }
+    }
+
+    for (int i = 0; i < _field_iters.size(); ++i) {
+        if (!_access_flags[i]) {
+            fields[i]->append_default(size);
+        }
     }
     return Status::OK();
 }

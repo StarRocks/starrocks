@@ -67,6 +67,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
@@ -253,8 +254,7 @@ public class AlterJobMgr {
             // check table state
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getState() != OlapTableState.NORMAL) {
-                throw new DdlException("Table[" + table.getName() + "]'s state is not NORMAL. "
-                        + "Do not allow doing DROP ops");
+                throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
             }
             // drop materialized view
             materializedViewHandler.processDropMaterializedView(stmt, db, olapTable);
@@ -701,8 +701,7 @@ public class AlterJobMgr {
             olapTable = (OlapTable) table;
 
             if (olapTable.getState() != OlapTableState.NORMAL) {
-                throw new DdlException("The state of \"" + table.getName() + "\" is " + olapTable.getState().name()
-                                       + ". Alter operation is only permitted if NORMAL");
+                throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
             }
 
             if (currentAlterOps.hasSchemaChangeOp()) {
@@ -1083,7 +1082,7 @@ public class AlterJobMgr {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
         List<ModifyPartitionInfo> modifyPartitionInfos = Lists.newArrayList();
         if (olapTable.getState() != OlapTableState.NORMAL) {
-            throw new DdlException("Table[" + olapTable.getName() + "]'s state is not NORMAL");
+            throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
         }
 
         for (String partitionName : partitionNames) {

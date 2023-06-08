@@ -112,12 +112,8 @@ public class GlobalTransactionMgrTest {
         fakeTransactionIDGenerator = new FakeTransactionIDGenerator();
         masterGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
         slaveGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
-
         masterTransMgr = masterGlobalStateMgr.getGlobalTransactionMgr();
-        masterTransMgr.setEditLog(masterGlobalStateMgr.getEditLog());
-
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
-        slaveTransMgr.setEditLog(slaveGlobalStateMgr.getEditLog());
 
         UtFrameUtils.setUpForPersistTest();
     }

@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.operator;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
@@ -94,7 +95,7 @@ public class ColumnFilterConverterTest {
 
     @Test
     public void convertColumnFilterNormal() {
-        ScalarOperator root1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        ScalarOperator root1 = new BinaryPredicateOperator(BinaryType.EQ,
                 new ColumnRefOperator(1, Type.INT, "age", true),
                 ConstantOperator.createInt(1));
 
@@ -108,11 +109,11 @@ public class ColumnFilterConverterTest {
 
         ScalarOperator root4 = ConstantOperator.createBoolean(true);
 
-        ScalarOperator root5 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        ScalarOperator root5 = new BinaryPredicateOperator(BinaryType.EQ,
                 ConstantOperator.createInt(2),
                 ConstantOperator.createInt(1));
 
-        ScalarOperator root6 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        ScalarOperator root6 = new BinaryPredicateOperator(BinaryType.EQ,
                 new ColumnRefOperator(4, Type.INT, "value1", true),
                 new ColumnRefOperator(5, Type.INT, "value2", true));
 
@@ -164,7 +165,7 @@ public class ColumnFilterConverterTest {
 
     @Test
     public void convertColumnFilterExpr() {
-        List<ScalarOperator> list = buildOperator("day", BinaryPredicateOperator.BinaryType.EQ);
+        List<ScalarOperator> list = buildOperator("day", BinaryType.EQ);
         Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list);
         assertEquals(0, result.size());
 
@@ -175,24 +176,24 @@ public class ColumnFilterConverterTest {
 
     @Test
     public void convertColumnFilterExprBinaryType() {
-        List<ScalarOperator> listEq = buildOperator("day", BinaryPredicateOperator.BinaryType.EQ);
+        List<ScalarOperator> listEq = buildOperator("day", BinaryType.EQ);
         OlapTable olapTable = buildOlapTable("day");
         Map<String, PartitionColumnFilter> resultEq = ColumnFilterConverter.convertColumnFilter(listEq, olapTable);
         assertEquals(1, resultEq.size());
 
-        List<ScalarOperator> listGe = buildOperator("day", BinaryPredicateOperator.BinaryType.GE);
+        List<ScalarOperator> listGe = buildOperator("day", BinaryType.GE);
         Map<String, PartitionColumnFilter> resultGe = ColumnFilterConverter.convertColumnFilter(listGe, olapTable);
         assertEquals(1, resultGe.size());
 
-        List<ScalarOperator> listGt = buildOperator("day", BinaryPredicateOperator.BinaryType.GT);
+        List<ScalarOperator> listGt = buildOperator("day", BinaryType.GT);
         Map<String, PartitionColumnFilter> resultGt = ColumnFilterConverter.convertColumnFilter(listGt, olapTable);
         assertEquals(1, resultGt.size());
 
-        List<ScalarOperator> listLe = buildOperator("day", BinaryPredicateOperator.BinaryType.LE);
+        List<ScalarOperator> listLe = buildOperator("day", BinaryType.LE);
         Map<String, PartitionColumnFilter> resultLe = ColumnFilterConverter.convertColumnFilter(listLe, olapTable);
         assertEquals(1, resultLe.size());
 
-        List<ScalarOperator> listLt = buildOperator("day", BinaryPredicateOperator.BinaryType.LT);
+        List<ScalarOperator> listLt = buildOperator("day", BinaryType.LT);
         Map<String, PartitionColumnFilter> resultLt = ColumnFilterConverter.convertColumnFilter(listLt, olapTable);
         assertEquals(1, resultLt.size());
     }
@@ -201,25 +202,25 @@ public class ColumnFilterConverterTest {
     public void convertColumnFilterExprDateTruncContains() {
         OlapTable olapTable = buildOlapTable("month");
 
-        List<ScalarOperator> listDay = buildOperator("day", BinaryPredicateOperator.BinaryType.EQ);
+        List<ScalarOperator> listDay = buildOperator("day", BinaryType.EQ);
         Map<String, PartitionColumnFilter> resultDay = ColumnFilterConverter.convertColumnFilter(listDay, olapTable);
         assertEquals(1, resultDay.size());
 
-        List<ScalarOperator> listWeek = buildOperator("week", BinaryPredicateOperator.BinaryType.EQ);
+        List<ScalarOperator> listWeek = buildOperator("week", BinaryType.EQ);
         Map<String, PartitionColumnFilter> resultWeek = ColumnFilterConverter.convertColumnFilter(listWeek, olapTable);
         assertEquals(0, resultWeek.size());
 
-        List<ScalarOperator> listMonth = buildOperator("month", BinaryPredicateOperator.BinaryType.EQ);
+        List<ScalarOperator> listMonth = buildOperator("month", BinaryType.EQ);
         Map<String, PartitionColumnFilter> resultMonth =
                 ColumnFilterConverter.convertColumnFilter(listMonth, olapTable);
         assertEquals(1, resultMonth.size());
 
-        List<ScalarOperator> listYear = buildOperator("year", BinaryPredicateOperator.BinaryType.EQ);
+        List<ScalarOperator> listYear = buildOperator("year", BinaryType.EQ);
         Map<String, PartitionColumnFilter> resultYear = ColumnFilterConverter.convertColumnFilter(listYear, olapTable);
         assertEquals(0, resultYear.size());
     }
 
-    private List<ScalarOperator> buildOperator(String timeKey, BinaryPredicateOperator.BinaryType binaryType) {
+    private List<ScalarOperator> buildOperator(String timeKey, BinaryType binaryType) {
         List<ScalarOperator> arguments = new ArrayList<>(2);
         arguments.add(ConstantOperator.createVarchar(timeKey));
         arguments.add(new ColumnRefOperator(2, Type.INT, "date_col", true));
@@ -260,7 +261,7 @@ public class ColumnFilterConverterTest {
         ConstantOperator constantOperator = new ConstantOperator("JT2921712368984", Type.VARCHAR);
         argument.add(columnRefOperator);
         argument.add(constantOperator);
-        ScalarOperator predicate = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, argument);
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, argument);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test").getTable("bill_detail");
         ExpressionRangePartitionInfoV2 partitionInfo = (ExpressionRangePartitionInfoV2) ((OlapTable) table).getPartitionInfo();

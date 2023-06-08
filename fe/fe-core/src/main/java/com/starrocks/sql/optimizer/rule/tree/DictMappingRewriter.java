@@ -34,7 +34,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
 import java.util.List;
 
-import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.EQ_FOR_NULL;
+import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
 
 // Rewrite ScalarOperator as DictMappingOperator
 // if a ScalarOperator support dictionary optimization, we will rewrite it to DictMappingOperator

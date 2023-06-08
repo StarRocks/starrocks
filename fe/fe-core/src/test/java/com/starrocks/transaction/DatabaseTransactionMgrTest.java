@@ -86,10 +86,8 @@ public class DatabaseTransactionMgrTest {
         slaveGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
 
         masterTransMgr = masterGlobalStateMgr.getGlobalTransactionMgr();
-        masterTransMgr.setEditLog(masterGlobalStateMgr.getEditLog());
 
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
-        slaveTransMgr.setEditLog(slaveGlobalStateMgr.getEditLog());
 
         lableToTxnId = addTransactionToTransactionMgr();
     }

@@ -40,7 +40,6 @@ import com.starrocks.connector.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -323,10 +322,6 @@ public class CreateTableAnalyzer {
                         throw new SemanticException(e.getMessage());
                     }
                 } else if (partitionDesc instanceof ExpressionPartitionDesc) {
-                    if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                        throw new SemanticException("Cloud native table does not support automatic partition");
-                    }
-
                     ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
                     try {
                         expressionPartitionDesc.analyze(columnDefs, properties);

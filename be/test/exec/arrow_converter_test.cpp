@@ -1262,7 +1262,6 @@ static std::shared_ptr<arrow::Array> create_map_array(int64_t num_elements, cons
     return builder.Finish().ValueOrDie();
 }
 
-
 static std::shared_ptr<arrow::Array> create_struct_array(int elemnts_num, bool is_null) {
     auto int1_builder = std::make_shared<arrow::Int32Builder>();
     auto str_builder = std::make_shared<arrow::StringBuilder>();
@@ -1275,7 +1274,8 @@ static std::shared_ptr<arrow::Array> create_struct_array(int elemnts_num, bool i
 
     auto data_type = std::make_shared<arrow::StructType>(fields);
 
-    arrow::TypeTraits<arrow::StructType>::BuilderType builder(data_type, arrow::default_memory_pool(), {int1_builder, str_builder, int2_builder});
+    arrow::TypeTraits<arrow::StructType>::BuilderType builder(data_type, arrow::default_memory_pool(),
+                                                              {int1_builder, str_builder, int2_builder});
 
     for (int i = 0; i < elemnts_num; i++) {
         if (is_null && i % 2 == 0) {
@@ -1574,7 +1574,6 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct_less_column) {
     ASSERT_EQ(st_col->debug_item(3), "{col1:3,col2:'char-3',col3:30,col4:NULL}");
     ASSERT_EQ(st_col->debug_item(9), "{col1:9,col2:'char-9',col3:90,col4:NULL}");
 }
-
 
 PARALLEL_TEST(ArrowConverterTest, test_convert_struct_more_column) {
     TypeDescriptor struct_type(TYPE_STRUCT);

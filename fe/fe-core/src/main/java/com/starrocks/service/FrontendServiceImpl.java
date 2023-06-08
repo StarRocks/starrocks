@@ -42,17 +42,13 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ExpressionRangePartitionInfo;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
@@ -87,6 +83,7 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.UnauthorizedException;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
@@ -129,7 +126,6 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.FrontendService;
@@ -154,6 +150,7 @@ import com.starrocks.thrift.TDBPrivDesc;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
 import com.starrocks.thrift.TFinishTaskRequest;
@@ -204,7 +201,6 @@ import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TMaterializedViewStatus;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TNodeInfo;
 import com.starrocks.thrift.TNodesInfo;
 import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTablePartition;
@@ -247,6 +243,8 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -1741,87 +1739,20 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setStatus(errorStatus);
             return result;
         }
-        // Now only supports the case of automatically creating single partition
-        if (request.partition_values.size() != 1) {
-            errorStatus.setError_msgs(Lists.newArrayList(
-                    "automatic partition only support single column partition."));
-            result.setStatus(errorStatus);
-            return result;
-        }
-        List<String> partitionValues = request.partition_values.get(0);
 
+        // Now only supports the case of automatically creating single range partition
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
-            errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support expression range partition."));
-            result.setStatus(errorStatus);
-            return result;
-        }
-        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-        List<Expr> partitionExprs = expressionRangePartitionInfo.getPartitionExprs();
-        if (partitionExprs.size() != 1) {
-            errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support one expression partitionExpr."));
-            result.setStatus(errorStatus);
-            return result;
-        }
-        Expr expr = partitionExprs.get(0);
-        if (!(expr instanceof FunctionCallExpr)) {
-            errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support FunctionCallExpr"));
-            result.setStatus(errorStatus);
-            return result;
-        }
-        FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-        String fnName = functionCallExpr.getFnName().getFunction();
-        long interval = 1;
-        String granularity;
-        if (fnName.equals(FunctionSet.DATE_TRUNC)) {
-            List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
-            if (paramsExprs.size() != 2) {
-                errorStatus.setError_msgs(Lists.newArrayList("date_trunc params exprs size should be 2."));
-                result.setStatus(errorStatus);
-                return result;
-            }
-            Expr granularityExpr = paramsExprs.get(0);
-            if (!(granularityExpr instanceof StringLiteral)) {
-                errorStatus.setError_msgs(Lists.newArrayList("date_trunc granularity is not string literal."));
-                result.setStatus(errorStatus);
-                return result;
-            }
-            StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
-            granularity = granularityLiteral.getStringValue();
-        } else if (fnName.equals(FunctionSet.TIME_SLICE)) {
-            List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
-            if (paramsExprs.size() != 4) {
-                errorStatus.setError_msgs(Lists.newArrayList("time_slice params exprs size should be 4."));
-                result.setStatus(errorStatus);
-                return result;
-            }
-            Expr intervalExpr = paramsExprs.get(1);
-            if (!(intervalExpr instanceof IntLiteral)) {
-                errorStatus.setError_msgs(Lists.newArrayList("time_slice interval is not int literal."));
-                result.setStatus(errorStatus);
-                return result;
-            }
-            Expr granularityExpr = paramsExprs.get(2);
-            if (!(granularityExpr instanceof StringLiteral)) {
-                errorStatus.setError_msgs(Lists.newArrayList("time_slice granularity is not string literal."));
-                result.setStatus(errorStatus);
-                return result;
-            }
-            StringLiteral granularityLiteral = (StringLiteral) granularityExpr;
-            IntLiteral intervalLiteral = (IntLiteral) intervalExpr;
-            granularity = granularityLiteral.getStringValue();
-            interval = intervalLiteral.getLongValue();
-        } else {
-            errorStatus.setError_msgs(Lists.newArrayList("automatic partition only support data_trunc function."));
+        if (partitionInfo.isRangePartition() && olapTable.getPartitionColumnNames().size() != 1) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    "automatic partition only support single column for range partition."));
             result.setStatus(errorStatus);
             return result;
         }
 
         Map<String, AddPartitionClause> addPartitionClauseMap;
         try {
-            Column firstPartitionColumn = expressionRangePartitionInfo.getPartitionColumns().get(0);
             addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
-                    partitionValues, interval, granularity, firstPartitionColumn.getType());
+                    request.partition_values);
         } catch (AnalysisException ex) {
             errorStatus.setError_msgs(Lists.newArrayList(ex.getMessage()));
             result.setStatus(errorStatus);
@@ -1853,6 +1784,69 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             Partition partition = table.getPartition(partitionName);
             TOlapTablePartition tPartition = new TOlapTablePartition();
             tPartition.setId(partition.getId());
+            buildPartitionInfo(olapTable, partitions, partition, tPartition);
+            // tablet
+            int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), ((OlapTable) table).writeQuorum());
+            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                if (olapTable.isCloudNativeTable()) {
+                    for (Tablet tablet : index.getTablets()) {
+                        LakeTablet cloudNativeTablet = (LakeTablet) tablet;
+                        try {
+                            // use default warehouse nodes
+                            long primaryId = cloudNativeTablet.getPrimaryComputeNodeId();
+                            tablets.add(new TTabletLocation(tablet.getId(), Collections.singletonList(primaryId)));
+                        } catch (UserException exception) {
+                            errorStatus.setError_msgs(Lists.newArrayList(
+                                    "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
+                                            + tablet.getId() + ", backends: none"));
+                            result.setStatus(errorStatus);
+                            return result;
+                        }
+                    }
+                } else {
+                    for (Tablet tablet : index.getTablets()) {
+                        // we should ensure the replica backend is alive
+                        // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
+                        LocalTablet localTablet = (LocalTablet) tablet;
+                        Multimap<Replica, Long> bePathsMap =
+                                localTablet.getNormalReplicaBackendPathMap(olapTable.getClusterId());
+                        if (bePathsMap.keySet().size() < quorum) {
+                            errorStatus.setError_msgs(Lists.newArrayList(
+                                    "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
+                                            + tablet.getId() + ", backends: " +
+                                            Joiner.on(",").join(localTablet.getBackends())));
+                            result.setStatus(errorStatus);
+                            return result;
+                        }
+                        // replicas[0] will be the primary replica
+                        // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable
+                        List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
+                        tablets.add(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
+                                .collect(Collectors.toList())));
+                    }
+                }
+            }
+        }
+        result.setPartitions(partitions);
+        result.setTablets(tablets);
+
+        // build nodes
+        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(olapTable.getClusterId());
+        result.setNodes(nodesInfo.nodes);
+        result.setStatus(new TStatus(OK));
+        return result;
+    }
+
+    private static List<TExprNode> literalExprsToTExprNodes(List<LiteralExpr> values) {
+        return values.stream()
+                .map(value -> value.treeToThrift().getNodes().get(0))
+                .collect(Collectors.toList());
+    }
+
+    private static void buildPartitionInfo(OlapTable olapTable, List<TOlapTablePartition> partitions,
+                                           Partition partition, TOlapTablePartition tPartition) {
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
             Range<PartitionKey> range = rangePartitionInfo.getRange(partition.getId());
             int partColNum = rangePartitionInfo.getPartitionColumns().size();
@@ -1870,51 +1864,39 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             range.upperEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
                 }
             }
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
-                        index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
-                tPartition.setNum_buckets(index.getTablets().size());
-            }
-            partitions.add(tPartition);
-            // tablet
-            int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), ((OlapTable) table).writeQuorum());
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                for (Tablet tablet : index.getTablets()) {
-                    // we should ensure the replica backend is alive
-                    // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
-                    LocalTablet localTablet = (LocalTablet) tablet;
-                    Multimap<Replica, Long> bePathsMap =
-                            localTablet.getNormalReplicaBackendPathMap(olapTable.getClusterId());
-                    if (bePathsMap.keySet().size() < quorum) {
-                        errorStatus.setError_msgs(Lists.newArrayList(
-                                "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                        + tablet.getId() + ", backends: " +
-                                        Joiner.on(",").join(localTablet.getBackends())));
-                        result.setStatus(errorStatus);
-                        return result;
-                    }
-                    // replicas[0] will be the primary replica
-                    // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable
-                    List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
-                    tablets.add(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
-                            .collect(Collectors.toList())));
-                }
-            }
-        }
-        result.setPartitions(partitions);
-        result.setTablets(tablets);
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) olapTable.getPartitionInfo();
+            List<List<TExprNode>> inKeysExprNodes = new ArrayList<>();
 
-        // build nodes
-        List<TNodeInfo> nodeInfos = Lists.newArrayList();
-        TNodesInfo nodesInfo = new TNodesInfo();
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(olapTable.getClusterId());
-        for (Long id : systemInfoService.getBackendIds(false)) {
-            Backend backend = systemInfoService.getBackend(id);
-            nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
+            List<List<LiteralExpr>> multiValues = listPartitionInfo.getMultiLiteralExprValues().get(partition.getId());
+            if (multiValues != null && !multiValues.isEmpty()) {
+                inKeysExprNodes = multiValues.stream()
+                        .map(values -> values.stream()
+                                .map(value -> value.treeToThrift().getNodes().get(0))
+                                .collect(Collectors.toList()))
+                        .collect(Collectors.toList());
+                tPartition.setIn_keys(inKeysExprNodes);
+            }
+
+            List<LiteralExpr> values = listPartitionInfo.getLiteralExprValues().get(partition.getId());
+            if (values != null && !values.isEmpty()) {
+                inKeysExprNodes = values.stream()
+                        .map(value -> Lists.newArrayList(value).stream()
+                                .map(value1 -> value1.treeToThrift().getNodes().get(0))
+                                .collect(Collectors.toList()))
+                        .collect(Collectors.toList());
+            }
+
+            if (!inKeysExprNodes.isEmpty()) {
+                tPartition.setIn_keys(inKeysExprNodes);
+            }
         }
-        result.setNodes(nodeInfos);
-        result.setStatus(new TStatus(OK));
-        return result;
+        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
+                    index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
+            tPartition.setNum_buckets(index.getTablets().size());
+        }
+        partitions.add(tPartition);
     }
 
     @Override

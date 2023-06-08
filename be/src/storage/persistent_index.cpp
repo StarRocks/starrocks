@@ -51,14 +51,8 @@ constexpr size_t kPackSize = 16;
 constexpr size_t kPagePackLimit = (kPageSize - kPageHeaderSize) / kPackSize;
 constexpr size_t kBucketSizeMax = 256;
 constexpr size_t kMinEnableBFKVNum = 10000000;
-// if l0_mem_size exceeds this value, l0 need snapshot
-#if BE_TEST
-constexpr size_t kL0SnapshotSizeMax = 1 * 1024 * 1024;
-#else
-constexpr size_t kL0SnapshotSizeMax = 16 * 1024 * 1024;
-#endif
 constexpr size_t kLongKeySize = 64;
-constexpr size_t kMaxKeyLength = 128; // we only support key length is less than or equal to 128 bytes for now
+constexpr size_t kFixedMaxKeySize = 128;
 
 const char* const kIndexFileMagic = "IDX1";
 
@@ -2111,7 +2105,7 @@ Status ImmutableIndex::_get_in_varlen_shard(size_t shard_idx, size_t n, const Sl
 }
 
 Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
-                                     IndexValue* values, KeysInfo* found_keys_info) const {
+                                     IndexValue* values, KeysInfo* found_keys_info, IOStat* stat) const {
     const auto& shard_info = _shards[shard_idx];
     if (shard_info.size == 0 || shard_info.npage == 0 || keys_info.size() == 0) {
         return Status::OK();
@@ -2119,6 +2113,9 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
     std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
     CHECK(shard->pages.size() * kPageSize == shard_info.bytes) << "illegal shard size";
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->pages.data(), shard_info.bytes));
+    if (stat != nullptr) {
+        stat->read_io_bytes += shard_info.bytes;
+    }
     if (shard_info.key_size != 0) {
         return _get_in_fixlen_shard(shard_idx, n, keys, keys_info, values, found_keys_info, &shard);
     } else {
@@ -2211,7 +2208,7 @@ static void split_keys_info_by_shard(std::vector<KeyInfo>& keys_info, std::vecto
 }
 
 Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, IndexValue* values,
-                           KeysInfo* found_keys_info, size_t key_size) {
+                           KeysInfo* found_keys_info, size_t key_size, IOStat* stat) {
     auto iter = _shard_info_by_length.find(key_size);
     if (iter == _shard_info_by_length.end()) {
         return Status::OK();
@@ -2239,15 +2236,27 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
         } else {
             split_keys_info_by_shard(keys_info.key_infos, keys_info_by_shard);
         }
+        MonotonicStopWatch watch;
+        watch.start();
         for (size_t i = 0; i < nshard; i++) {
-            RETURN_IF_ERROR(
-                    _get_in_shard(shard_off + i, n, keys, keys_info_by_shard[i].key_infos, values, found_keys_info));
+            RETURN_IF_ERROR(_get_in_shard(shard_off + i, n, keys, keys_info_by_shard[i].key_infos, values,
+                                          found_keys_info, stat));
+        }
+        if (stat != nullptr) {
+            stat->get_in_shard_cnt += nshard;
+            stat->get_in_shard_cost += watch.elapsed_time();
         }
     } else {
+        MonotonicStopWatch watch;
+        watch.start();
         if (filter) {
-            RETURN_IF_ERROR(_get_in_shard(shard_off, n, keys, check_keys_info, values, found_keys_info));
+            RETURN_IF_ERROR(_get_in_shard(shard_off, n, keys, check_keys_info, values, found_keys_info, stat));
         } else {
-            RETURN_IF_ERROR(_get_in_shard(shard_off, n, keys, keys_info.key_infos, values, found_keys_info));
+            RETURN_IF_ERROR(_get_in_shard(shard_off, n, keys, keys_info.key_infos, values, found_keys_info, stat));
+        }
+        if (stat != nullptr) {
+            stat->get_in_shard_cnt++;
+            stat->get_in_shard_cost += watch.elapsed_time();
         }
     }
     return Status::OK();
@@ -2831,7 +2840,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
                 RETURN_IF_ERROR(_merge_compaction());
             }
             // if l1 is empty, and l0 memory usage is large enough
-        } else if (l0_mem_size > kL0SnapshotSizeMax) {
+        } else if (l0_mem_size > config::l0_snapshot_size) {
             // do flush l0
             _flushed = true;
             RETURN_IF_ERROR(_flush_l0());
@@ -2883,7 +2892,7 @@ Status PersistentIndex::on_commited() {
 }
 
 Status PersistentIndex::_get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,
-                                                  std::map<size_t, KeysInfo>& keys_info_by_key_size) {
+                                                  std::map<size_t, KeysInfo>& keys_info_by_key_size, IOStat* stat) {
     if (_l1_vec.empty()) {
         return Status::OK();
     }
@@ -2898,7 +2907,7 @@ Status PersistentIndex::_get_from_immutable_index(size_t n, const Slice* keys, I
             }
             KeysInfo found_keys_info;
             // get data from tmp_l1
-            RETURN_IF_ERROR(_l1_vec[i - 1]->get(n, keys, keys_info, values, &found_keys_info, key_size));
+            RETURN_IF_ERROR(_l1_vec[i - 1]->get(n, keys, keys_info, values, &found_keys_info, key_size, stat));
             if (found_keys_info.size() != 0) {
                 std::sort(found_keys_info.key_infos.begin(), found_keys_info.key_infos.end());
                 // modify keys_info
@@ -2940,7 +2949,7 @@ Status PersistentIndex::get_from_one_immutable_index(size_t n, const Slice* keys
                                                      KeysInfo* keys_info, KeysInfo* found_keys_info, size_t idx,
                                                      size_t key_size) {
     DCHECK(_l1_vec.size() > idx);
-    auto st = _l1_vec[idx]->get(n, keys, *keys_info, values, found_keys_info, key_size);
+    auto st = _l1_vec[idx]->get(n, keys, *keys_info, values, found_keys_info, key_size, nullptr);
     std::unique_lock<std::mutex> ul(_lock);
     if (!st.ok()) {
         std::string msg =
@@ -3011,7 +3020,7 @@ Status PersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
     if (_get_thread_pool != nullptr) {
         return _get_from_immutable_index_parallel(n, keys, values, not_founds_by_key_size);
     }
-    return _get_from_immutable_index(n, keys, values, not_founds_by_key_size);
+    return _get_from_immutable_index(n, keys, values, not_founds_by_key_size, nullptr);
 }
 
 Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values) {
@@ -3064,7 +3073,7 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
 
         int64_t slice_usage = 0;
         int64_t slice_size = 0;
-        for (int key_size = kSliceMaxFixLength + 1; key_size <= kMaxKeyLength; key_size++) {
+        for (int key_size = kSliceMaxFixLength + 1; key_size <= kFixedMaxKeySize; key_size++) {
             slice_usage += add_usage_and_size[key_size].first;
             slice_size += add_usage_and_size[key_size].second;
         }
@@ -3081,27 +3090,44 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
     return Status::OK();
 }
 
-Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values) {
+Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
+                               IOStat* stat) {
     std::map<size_t, KeysInfo> not_founds_by_key_size;
     size_t num_found = 0;
+    MonotonicStopWatch watch;
+    watch.start();
     RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &num_found, not_founds_by_key_size));
+    if (stat != nullptr) {
+        stat->l0_write_cost += watch.elapsed_time();
+        watch.reset();
+    }
     if (_get_thread_pool != nullptr) {
         RETURN_IF_ERROR(_get_from_immutable_index_parallel(n, keys, old_values, not_founds_by_key_size));
     } else {
-        RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size));
+        RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size, stat));
     }
-    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kMaxKeyLength + 1, std::pair<int64_t, int64_t>(0, 0));
+    if (stat != nullptr) {
+        stat->l1_read_cost += watch.elapsed_time();
+        watch.reset();
+    }
+    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
+                                                                std::pair<int64_t, int64_t>(0, 0));
     for (size_t i = 0; i < n; i++) {
         if (old_values[i].get_value() == NullIndexValue) {
             _size++;
             _usage += keys[i].size + kIndexValueSize;
-            add_usage_and_size[keys[i].size].first += keys[i].size + kIndexValueSize;
-            add_usage_and_size[keys[i].size].second++;
+            int64_t len = keys[i].size > kFixedMaxKeySize ? 0 : keys[i].size;
+            add_usage_and_size[len].first += keys[i].size + kIndexValueSize;
+            add_usage_and_size[len].second++;
         }
     }
 
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
-    return _flush_advance_or_append_wal(n, keys, values);
+    Status st = _flush_advance_or_append_wal(n, keys, values);
+    if (stat != nullptr) {
+        stat->flush_or_wal_cost += watch.elapsed_time();
+    }
+    return st;
 }
 
 Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
@@ -3120,12 +3146,14 @@ Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* va
             RETURN_IF_ERROR(_l1_vec[0]->check_not_exist(n, keys, check_l1_key_size));
         }
     }
-    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kMaxKeyLength + 1, std::pair<int64_t, int64_t>(0, 0));
+    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
+                                                                std::pair<int64_t, int64_t>(0, 0));
     _size += n;
     for (size_t i = 0; i < n; i++) {
         _usage += keys[i].size + kIndexValueSize;
-        add_usage_and_size[keys[i].size].first += keys[i].size + kIndexValueSize;
-        add_usage_and_size[keys[i].size].second++;
+        int64_t len = keys[i].size > kFixedMaxKeySize ? 0 : keys[i].size;
+        add_usage_and_size[len].first += keys[i].size + kIndexValueSize;
+        add_usage_and_size[len].second++;
     }
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
 
@@ -3140,15 +3168,17 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     if (_get_thread_pool != nullptr) {
         RETURN_IF_ERROR(_get_from_immutable_index_parallel(n, keys, old_values, not_founds_by_key_size));
     } else {
-        RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size));
+        RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size, nullptr));
     }
-    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kMaxKeyLength + 1, std::pair<int64_t, int64_t>(0, 0));
+    std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
+                                                                std::pair<int64_t, int64_t>(0, 0));
     for (size_t i = 0; i < n; i++) {
         if (old_values[i].get_value() != NullIndexValue) {
             _size--;
             _usage -= keys[i].size + kIndexValueSize;
-            add_usage_and_size[keys[i].size].first -= keys[i].size + kIndexValueSize;
-            add_usage_and_size[keys[i].size].second--;
+            int64_t len = keys[i].size > kFixedMaxKeySize ? 0 : keys[i].size;
+            add_usage_and_size[len].first -= keys[i].size + kIndexValueSize;
+            add_usage_and_size[len].second--;
         }
     }
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
@@ -3255,7 +3285,7 @@ size_t PersistentIndex::_dump_bound() {
 // TODO: maybe build snapshot is better than append wals when almost
 // operations are upsert or erase
 bool PersistentIndex::_can_dump_directly() {
-    return _dump_bound() <= kL0SnapshotSizeMax;
+    return _dump_bound() <= config::l0_snapshot_size;
 }
 
 bool PersistentIndex::_need_flush_advance() {

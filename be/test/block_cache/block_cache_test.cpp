@@ -30,34 +30,70 @@ class BlockCacheTest : public ::testing::Test {
 protected:
     static void SetUpTestCase() {
         ASSERT_TRUE(fs::create_directories("./ut_dir/block_disk_cache").ok());
-        BlockCache* cache = BlockCache::instance();
-
-        CacheOptions options;
-        options.mem_space_size = 20 * 1024 * 1024;
-        size_t quota = 500 * 1024 * 1024;
-        options.disk_spaces.push_back({.path = "./ut_dir/block_disk_cache", .size = quota});
-        options.block_size = block_size;
-        options.engine = "starcache";
-        Status status = cache->init(options);
-        ASSERT_TRUE(status.ok());
     }
 
     static void TearDownTestCase() {
         ASSERT_TRUE(fs::remove_all("./ut_dir").ok());
-        BlockCache* cache = BlockCache::instance();
-        cache->shutdown();
     }
 
     void SetUp() override {}
     void TearDown() override {}
 };
 
-TEST_F(BlockCacheTest, hybrid_cache) {
+TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
     std::unique_ptr<BlockCache> cache(new BlockCache);
     const size_t block_size = 1024 * 1024;
 
     CacheOptions options;
     options.mem_space_size = 20 * 1024 * 1024;
+    size_t quota = 500 * 1024 * 1024;
+    options.disk_spaces.push_back({.path = "./ut_dir/final_entry_not_exist", .size = quota});
+    options.block_size = block_size;
+    options.max_concurrent_inserts = 100000;
+#ifdef WITH_STARCACHE
+    options.engine = "starcache";
+#else
+    options.engine = "cachelib";
+#endif
+    Status status = cache->init(options);
+    ASSERT_TRUE(status.ok());
+
+    const size_t batch_size = block_size - 1234;
+    const size_t rounds = 3;
+    const std::string cache_key = "test_file";
+
+    // write cache
+    off_t offset = 0;
+    for (size_t i = 0; i < rounds; ++i) {
+        char ch = 'a' + i % 26;
+        std::string value(batch_size, ch);
+        Status st = cache->write_cache(cache_key + std::to_string(i), 0, batch_size, value.c_str());
+        ASSERT_TRUE(st.ok());
+        offset += batch_size;
+    }
+
+    // read cache
+    offset = 0;
+    for (size_t i = 0; i < rounds; ++i) {
+        char ch = 'a' + i % 26;
+        std::string expect_value(batch_size, ch);
+        char value[batch_size] = {0};
+        auto res = cache->read_cache(cache_key + std::to_string(i), 0, batch_size, value);
+        ASSERT_TRUE(res.status().ok());
+        ASSERT_EQ(memcmp(value, expect_value.c_str(), batch_size), 0);
+        offset += batch_size;
+    }
+
+    cache->shutdown();
+}
+
+#ifdef WITH_STARCACHE
+TEST_F(BlockCacheTest, hybrid_cache) {
+    std::unique_ptr<BlockCache> cache(new BlockCache);
+    const size_t block_size = 1024 * 1024;
+
+    CacheOptions options;
+    options.mem_space_size = 10 * 1024 * 1024;
     size_t quota = 500 * 1024 * 1024;
     options.disk_spaces.push_back({.path = "./ut_dir/block_disk_cache", .size = quota});
     options.block_size = block_size;
@@ -142,49 +178,7 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
 
     cache->shutdown();
 }
-
-TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
-    std::unique_ptr<BlockCache> cache(new BlockCache);
-    const size_t block_size = 1024 * 1024;
-
-    CacheOptions options;
-    options.mem_space_size = 20 * 1024 * 1024;
-    size_t quota = 500 * 1024 * 1024;
-    options.disk_spaces.push_back({.path = "./ut_dir/final_entry_not_exist", .size = quota});
-    options.block_size = block_size;
-    options.max_concurrent_inserts = 100000;
-    options.engine = "starcache";
-    Status status = cache->init(options);
-    ASSERT_TRUE(status.ok());
-
-    const size_t batch_size = block_size - 1234;
-    const size_t rounds = 3;
-    const std::string cache_key = "test_file";
-
-    // write cache
-    off_t offset = 0;
-    for (size_t i = 0; i < rounds; ++i) {
-        char ch = 'a' + i % 26;
-        std::string value(batch_size, ch);
-        Status st = cache->write_cache(cache_key + std::to_string(i), 0, batch_size, value.c_str());
-        ASSERT_TRUE(st.ok());
-        offset += batch_size;
-    }
-
-    // read cache
-    offset = 0;
-    for (size_t i = 0; i < rounds; ++i) {
-        char ch = 'a' + i % 26;
-        std::string expect_value(batch_size, ch);
-        char value[batch_size] = {0};
-        auto res = cache->read_cache(cache_key + std::to_string(i), 0, batch_size, value);
-        ASSERT_TRUE(res.status().ok());
-        ASSERT_EQ(memcmp(value, expect_value.c_str(), batch_size), 0);
-        offset += batch_size;
-    }
-
-    cache->shutdown();
-}
+#endif
 
 #ifdef WITH_CACHELIB
 TEST_F(BlockCacheTest, custom_lru_insertion_point) {

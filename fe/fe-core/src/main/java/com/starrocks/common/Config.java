@@ -2353,4 +2353,16 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long stream_load_profile_collect_second = 10; //10s
+
+    /**
+     * If set to <= 0, means that no limitation.
+     */
+    @ConfField(mutable = true)
+    public static int max_upload_task_per_be = 0;
+
+    /**
+     * If set to <= 0, means that no limitation.
+     */
+    @ConfField(mutable = true)
+    public static int max_download_task_per_be = 0;
 }

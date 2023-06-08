@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Memo;
@@ -60,7 +61,7 @@ public class PushDownAggRuleTest {
 
         OptExpression filter = new OptExpression(new LogicalFilterOperator(
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                        new BinaryPredicateOperator(BinaryType.EQ,
                                 new ColumnRefOperator(1, Type.INT, "id", true),
                                 ConstantOperator.createInt(1)),
                         new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT,
@@ -85,7 +86,7 @@ public class PushDownAggRuleTest {
 
         assertEquals(OperatorType.LOGICAL_FILTER, list.get(0).getInputs().get(0).getOp().getOpType());
 
-        assertEquals(BinaryPredicateOperator.BinaryType.EQ,
+        assertEquals(BinaryType.EQ,
                 ((BinaryPredicateOperator) ((LogicalFilterOperator) list.get(0).getInputs().get(0).getOp())
                         .getPredicate()).getBinaryType());
     }

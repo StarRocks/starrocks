@@ -14,6 +14,7 @@
 
 #include "storage/rowset/map_column_iterator.h"
 
+#include "column/column_access_path.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "storage/rowset/scalar_column_iterator.h"
@@ -21,16 +22,13 @@
 namespace starrocks {
 
 MapColumnIterator::MapColumnIterator(std::unique_ptr<ColumnIterator> nulls, std::unique_ptr<ColumnIterator> offsets,
-                                     std::unique_ptr<ColumnIterator> keys, std::unique_ptr<ColumnIterator> values)
-        : _nulls(std::move(nulls)), _offsets(std::move(offsets)), _keys(std::move(keys)), _values(std::move(values)) {}
-
-MapColumnIterator::MapColumnIterator(ColumnIterator* nulls_iterator, ColumnIterator* offsets_iterator,
-                                     ColumnIterator* keys_iterator, ColumnIterator* values_iterator) {
-    _nulls.reset(nulls_iterator);
-    _offsets.reset(offsets_iterator);
-    _keys.reset(keys_iterator);
-    _values.reset(values_iterator);
-}
+                                     std::unique_ptr<ColumnIterator> keys, std::unique_ptr<ColumnIterator> values,
+                                     std::vector<ColumnAccessPath*> paths)
+        : _nulls(std::move(nulls)),
+          _offsets(std::move(offsets)),
+          _keys(std::move(keys)),
+          _values(std::move(values)),
+          _paths(std::move(paths)) {}
 
 Status MapColumnIterator::init(const ColumnIteratorOptions& opts) {
     if (_nulls != nullptr) {
@@ -39,6 +37,26 @@ Status MapColumnIterator::init(const ColumnIteratorOptions& opts) {
     RETURN_IF_ERROR(_offsets->init(opts));
     RETURN_IF_ERROR(_keys->init(opts));
     RETURN_IF_ERROR(_values->init(opts));
+
+    if (_paths.empty()) {
+        _access_keys = true;
+        _access_values = true;
+        return Status::OK();
+    }
+
+    _access_keys = false;
+    _access_values = false;
+
+    for (const auto& p : _paths) {
+        if (p->is_key()) {
+            _access_keys |= true;
+        }
+
+        if (p->is_offset()) {
+            _access_keys |= false;
+        }
+    }
+
     return Status::OK();
 }
 
@@ -80,8 +98,18 @@ Status MapColumnIterator::next_batch(size_t* n, Column* dst) {
     num_to_read = end_offset - num_to_read;
 
     // 3. Read elements
-    RETURN_IF_ERROR(_keys->next_batch(&num_to_read, map_column->keys_column().get()));
-    RETURN_IF_ERROR(_values->next_batch(&num_to_read, map_column->values_column().get()));
+    if (_access_keys) {
+        RETURN_IF_ERROR(_keys->next_batch(&num_to_read, map_column->keys_column().get()));
+    } else {
+        // todo: unpack struct in scan, and don't need append default values
+        map_column->keys_column()->append_default(num_to_read);
+    }
+
+    if (_access_values) {
+        RETURN_IF_ERROR(_values->next_batch(&num_to_read, map_column->values_column().get()));
+    } else {
+        map_column->values_column()->append_default(num_to_read);
+    }
 
     return Status::OK();
 }
@@ -112,6 +140,7 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
     // array column can be nested, range may be empty
     DCHECK(range.empty() || (range.begin() == _offsets->get_current_ordinal()));
     SparseRange element_read_range;
+    size_t num_to_read = 0;
     while (iter.has_more()) {
         Range r = iter.next(to_read);
 
@@ -136,7 +165,7 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
         RETURN_IF_ERROR(_offsets->next_batch(size_read_range, offsets));
         size_t curr_array_size = offsets->size();
 
-        size_t num_to_read = end_offset;
+        num_to_read = end_offset;
         for (size_t i = prev_array_size; i < curr_array_size; ++i) {
             end_offset += data[i];
             data[i] = end_offset;
@@ -148,8 +177,17 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
 
     // if array column is nullable, element_read_range may be empty
     DCHECK(element_read_range.empty() || (element_read_range.begin() == _keys->get_current_ordinal()));
-    RETURN_IF_ERROR(_keys->next_batch(element_read_range, map_column->keys_column().get()));
-    RETURN_IF_ERROR(_values->next_batch(element_read_range, map_column->values_column().get()));
+    if (_access_keys) {
+        RETURN_IF_ERROR(_keys->next_batch(element_read_range, map_column->keys_column().get()));
+    } else {
+        map_column->keys_column()->append_default(num_to_read);
+    }
+
+    if (_access_values) {
+        RETURN_IF_ERROR(_values->next_batch(element_read_range, map_column->values_column().get()));
+    } else {
+        map_column->values_column()->append_default(num_to_read);
+    }
 
     return Status::OK();
 }
@@ -179,6 +217,7 @@ Status MapColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t si
     auto* offsets = map_column->offsets_column().get();
     offsets->reserve(offsets->size() + array_size.size());
     size_t offset = offsets->get_data().back();
+    size_t start = offset;
     for (size_t i = 0; i < array_size.size(); ++i) {
         offset += array_size.get_data()[i];
         offsets->append(offset);
@@ -191,11 +230,24 @@ Status MapColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t si
         size_t size_to_read = array_size.get_data()[i];
 
         RETURN_IF_ERROR(_keys->seek_to_ordinal(element_ordinal));
-        RETURN_IF_ERROR(_keys->next_batch(&size_to_read, map_column->keys_column().get()));
+        if (_access_keys) {
+            RETURN_IF_ERROR(_keys->next_batch(&size_to_read, map_column->keys_column().get()));
+        }
 
         RETURN_IF_ERROR(_values->seek_to_ordinal(element_ordinal));
-        RETURN_IF_ERROR(_values->next_batch(&size_to_read, map_column->values_column().get()));
+        if (_access_values) {
+            RETURN_IF_ERROR(_values->next_batch(&size_to_read, map_column->values_column().get()));
+        }
     }
+
+    if (!_access_keys) {
+        map_column->keys_column()->append_default(offset - start);
+    }
+
+    if (!_access_values) {
+        map_column->values_column()->append_default(offset - start);
+    }
+
     return Status::OK();
 }
 

@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -109,7 +110,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
         }
 
         joinOnPredicate.add(
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, inPredicate.getChildren()));
+                new BinaryPredicateOperator(BinaryType.EQ, inPredicate.getChildren()));
 
         List<ColumnRefOperator> correlationColumnRefs = Utils.extractColumnRef(inPredicate.getChild(0));
         correlationColumnRefs.addAll(apply.getCorrelationColumnRefs());

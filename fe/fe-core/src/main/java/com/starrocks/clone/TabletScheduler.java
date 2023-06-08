@@ -66,6 +66,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -1772,7 +1773,7 @@ public class TabletScheduler extends FrontendDaemon {
         public synchronized long takeSlot(long pathHash) throws SchedException {
             if (pathHash == -1) {
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("path hash is not set.", new Exception());
+                    LOG.debug("path hash is not set. current stack trace: {}", LogUtil.getCurrentStackTrace());
                 }
                 throw new SchedException(Status.UNRECOVERABLE, "path hash is not set");
             }
