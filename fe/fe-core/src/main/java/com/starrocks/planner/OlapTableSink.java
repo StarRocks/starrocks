@@ -421,7 +421,7 @@ public class OlapTableSink extends DataSink {
         partitionParam.setEnable_automatic_partition(enableAutomaticPartition);
 
         PartitionType partType = table.getPartitionInfo().getType();
-        if (idToAssociatedMetas.size() > 0) {
+        if (idToAssociatedMetas != null && idToAssociatedMetas.size() > 0) {
             Preconditions.checkState(table.hasAssociatedTables());
             partitionParam.setEnable_associated_tables(true);
         }

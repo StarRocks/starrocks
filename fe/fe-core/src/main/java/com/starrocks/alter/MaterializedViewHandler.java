@@ -977,14 +977,17 @@ public class MaterializedViewHandler extends AlterHandler {
      */
     private long dropMaterializedView(String mvName, OlapTable olapTable) {
         long mvIndexId = olapTable.getIndexIdByName(mvName);
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-        for (Partition partition : olapTable.getPartitions()) {
-            MaterializedIndex rollupIndex = partition.getIndex(mvIndexId);
-            // delete rollup index
-            partition.deleteRollupIndex(mvIndexId);
-            // remove tablets from inverted index
-            for (Tablet tablet : rollupIndex.getTablets()) {
-                invertedIndex.deleteTablet(tablet.getId());
+        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(mvIndexId);
+        if (!indexMeta.isLogical()) {
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+            for (Partition partition : olapTable.getPartitions()) {
+                MaterializedIndex rollupIndex = partition.getIndex(mvIndexId);
+                // delete rollup index
+                partition.deleteRollupIndex(mvIndexId);
+                // remove tablets from inverted index
+                for (Tablet tablet : rollupIndex.getTablets()) {
+                    invertedIndex.deleteTablet(tablet.getId());
+                }
             }
         }
         olapTable.deleteIndexInfo(mvName);
