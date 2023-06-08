@@ -36,6 +36,8 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.staros.proto.AwsCredentialInfo;
+import com.staros.proto.AwsDefaultCredentialInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
@@ -76,6 +78,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -102,6 +105,7 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -1009,10 +1013,13 @@ public class AlterTest {
         S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
         s3FsBuilder.setBucket("test-bucket");
         s3FsBuilder.setRegion("test-region");
+        s3FsBuilder.setCredential(AwsCredentialInfo.newBuilder()
+                        .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()));
         S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
 
         fsBuilder.setFsType(FileStoreType.S3);
         fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setFsName("test-fsname");
         fsBuilder.setS3FsInfo(s3FsInfo);
         FileStoreInfo fsInfo = fsBuilder.build();
 
@@ -1022,7 +1029,7 @@ public class AlterTest {
 
         new Expectations() {
             {
-                agent.allocateFilePath(anyLong);
+                agent.allocateFilePath(anyString, anyLong);
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
@@ -1039,6 +1046,13 @@ public class AlterTest {
             @Mock
             public RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<SharedNothingStorageVolumeMgr>() {
+            @Mock
+            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+                return StorageVolume.fromFileStoreInfo(fsInfo);
             }
         };
 
@@ -1096,6 +1110,9 @@ public class AlterTest {
         S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
         s3FsBuilder.setBucket("test-bucket");
         s3FsBuilder.setRegion("test-region");
+        fsBuilder.setFsName("test-fsname");
+        s3FsBuilder.setCredential(AwsCredentialInfo.newBuilder()
+                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()));
         S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
 
         fsBuilder.setFsType(FileStoreType.S3);
@@ -1109,7 +1126,7 @@ public class AlterTest {
 
         new Expectations() {
             {
-                agent.allocateFilePath(anyLong);
+                agent.allocateFilePath(anyString, anyLong);
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
@@ -1129,6 +1146,13 @@ public class AlterTest {
             @Mock
             public RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<SharedNothingStorageVolumeMgr>() {
+            @Mock
+            public StorageVolume getStorageVolume(String fsKey) throws AnalysisException {
+                return StorageVolume.fromFileStoreInfo(fsInfo);
             }
         };
 
@@ -2046,10 +2070,13 @@ public class AlterTest {
         S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
         s3FsBuilder.setBucket("test-bucket");
         s3FsBuilder.setRegion("test-region");
+        s3FsBuilder.setCredential(AwsCredentialInfo.newBuilder()
+                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()));
         S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
 
         fsBuilder.setFsType(FileStoreType.S3);
         fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setFsName("test-fsname");
         fsBuilder.setS3FsInfo(s3FsInfo);
         FileStoreInfo fsInfo = fsBuilder.build();
 
@@ -2059,7 +2086,7 @@ public class AlterTest {
 
         new Expectations() {
             {
-                agent.allocateFilePath(anyLong);
+                agent.allocateFilePath(anyString, anyLong);
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
@@ -2075,6 +2102,13 @@ public class AlterTest {
             @Mock
             public RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<SharedNothingStorageVolumeMgr>() {
+            @Mock
+            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+                return StorageVolume.fromFileStoreInfo(fsInfo);
             }
         };
 

@@ -50,8 +50,17 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
 
     @Override
     public StorageVolume getStorageVolume(String storageVolumeId) throws AnalysisException {
-        // TODO: should be supported by staros. We use id for persistence, storage volume needs to be got by id.
-        return null;
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            try {
+                FileStoreInfo fileStoreInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getFileStore(storageVolumeId);
+                if (fileStoreInfo == null) {
+                    return null;
+                }
+                return StorageVolume.fromFileStoreInfo(fileStoreInfo);
+            } catch (DdlException e) {
+                throw new AnalysisException(e.getMessage());
+            }
+        }
     }
 
     @Override

@@ -15,6 +15,8 @@
 package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
+import com.staros.proto.AwsCredentialInfo;
+import com.staros.proto.AwsDefaultCredentialInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
@@ -39,6 +41,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.FastByteArrayOutputStream;
@@ -48,7 +51,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.SharedDataStorageVolumeMgr;
+import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.utframe.StarRocksAssert;
@@ -76,7 +83,6 @@ public class LakeMaterializedViewTest {
 
     @BeforeClass
     public static void setUp() throws Exception {
-        Config.run_mode = "shared_data";
         Config.enable_experimental_mv = true;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         cluster = PseudoCluster.getInstance();
@@ -88,6 +94,51 @@ public class LakeMaterializedViewTest {
             @Mock
             public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
                 return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+            }
+
+            @Mock
+            public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) {
+                FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+                FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
+
+                S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+                s3FsBuilder.setBucket("test-bucket");
+                s3FsBuilder.setRegion("test-region");
+                s3FsBuilder.setCredential(AwsCredentialInfo.newBuilder()
+                        .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()));
+                S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
+
+                fsBuilder.setFsType(FileStoreType.S3);
+                fsBuilder.setFsKey("test-bucket");
+                fsBuilder.setFsName("test-fsname");
+                fsBuilder.setS3FsInfo(s3FsInfo);
+                FileStoreInfo fsInfo = fsBuilder.build();
+
+                builder.setFsInfo(fsInfo);
+                builder.setFullPath("s3://test-bucket/1/");
+                FilePathInfo pathInfo = builder.build();
+                return pathInfo;
+            }
+        };
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<SharedNothingStorageVolumeMgr>() {
+            @Mock
+            public StorageVolume getStorageVolume(String fsKey) throws AnalysisException {
+                S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
+                        .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
+                        .setCredential(AwsCredentialInfo.newBuilder()
+                                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()).build()).build();
+                FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME)
+                        .setFsKey("1").setFsType(FileStoreType.S3)
+                        .setS3FsInfo(s3FileStoreInfo).build();
+                return StorageVolume.fromFileStoreInfo(fsInfo);
             }
         };
 
@@ -108,7 +159,6 @@ public class LakeMaterializedViewTest {
     @AfterClass
     public static void tearDown() {
         PseudoCluster.getInstance().shutdown(true);
-        Config.run_mode = "shared_nothing";
     }
 
     @Test

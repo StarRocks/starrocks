@@ -139,7 +139,18 @@ public class StarOSAgent {
 
     public FileStoreInfo getFileStoreByName(String fsName) throws DdlException {
         try {
-            return client.getFileStore(fsName, serviceId);
+            return client.getFileStoreByName(fsName, serviceId);
+        } catch (StarClientException e) {
+            if (e.getCode() == StatusCode.NOT_EXIST) {
+                return null;
+            }
+            throw new DdlException("Failed to get file store", e);
+        }
+    }
+
+    public FileStoreInfo getFileStore(String fsKey) throws DdlException {
+        try {
+            return client.getFileStore(fsKey, serviceId);
         } catch (StarClientException e) {
             if (e.getCode() == StatusCode.NOT_EXIST) {
                 return null;
@@ -175,6 +186,17 @@ public class StarOSAgent {
                 throw new DdlException("Invalid cloud native storage type: " + Config.cloud_native_storage_type);
             }
             FilePathInfo pathInfo = client.allocateFilePath(serviceId, fsType, Long.toString(tableId));
+            LOG.debug("Allocate file path from starmgr: {}", pathInfo);
+            return pathInfo;
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to allocate file path from StarMgr", e);
+        }
+    }
+
+    public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) throws DdlException {
+        try {
+            FilePathInfo pathInfo = client.allocateFilePath(serviceId,
+                     storageVolumeId, Long.toString(tableId));
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
         } catch (StarClientException e) {
