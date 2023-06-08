@@ -35,8 +35,25 @@ public class NegateFilterShuttle extends BaseScalarOperatorShuttle {
     }
 
     @Override
-    public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
-        throw new IllegalArgumentException("scalarOperator " + scalarOperator + "can't be negated");
+    public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+        ScalarOperator negation;
+        if (CompoundType.NOT == predicate.getCompoundType()) {
+            negation = predicate.getChild(0);
+            if (predicate.getChild(0).isNullable()) {
+                return new CompoundPredicateOperator(CompoundType.OR, negation,
+                        new IsNullPredicateOperator(predicate.getChild(0)));
+            } else {
+                return negation;
+            }
+
+        } else {
+            negation = new CompoundPredicateOperator(CompoundType.NOT, predicate);
+            if (predicate.isNullable()) {
+                return new CompoundPredicateOperator(CompoundType.OR, negation, new IsNullPredicateOperator(predicate));
+            } else {
+                return negation;
+            }
+        }
     }
 
     @Override
