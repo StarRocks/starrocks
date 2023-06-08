@@ -15,9 +15,9 @@
 #include "table_function_table_sink.h"
 
 #include "exprs/expr.h"
+#include "glog/logging.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
-#include "glog/logging.h"
 
 namespace starrocks {
 
