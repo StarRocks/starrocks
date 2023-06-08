@@ -738,7 +738,6 @@ If you want to load all data from `example5.csv` into `table5` with Kerberos aut
 LOAD LABEL test_db.label5
 (
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example5.csv")
-    NEGATIVE
     INTO TABLE table5
     COLUMNS TERMINATED BY "\t"
 )
