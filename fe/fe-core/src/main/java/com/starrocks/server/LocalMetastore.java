@@ -117,8 +117,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
+=======
+import com.starrocks.common.InvalidOlapTableStateException;
+>>>>>>> 6fe982a83 ([Enhancement] Detailed error message of invalid table state (#24806))
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
@@ -1281,7 +1285,7 @@ public class LocalMetastore implements ConnectorMetadata {
         boolean isTempPartition = clause.isTempPartition();
 
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-            throw new DdlException("Table[" + olapTable.getName() + "]'s state is not NORMAL");
+            throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
         }
 
         if (!olapTable.checkPartitionNameExist(partitionName, isTempPartition)) {
@@ -3727,7 +3731,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-                throw new DdlException("Table' state is not NORMAL: " + olapTable.getState());
+                throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
             }
 
             if (!truncateEntireTable) {
@@ -3793,7 +3797,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
 
             if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-                throw new DdlException("Table' state is not NORMAL: " + olapTable.getState());
+                throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
             }
 
             // check partitions

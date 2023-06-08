@@ -53,6 +53,7 @@ public class FeConstants {
     // default scheduler interval is 10 seconds
     public static int default_scheduler_interval_millisecond = 10000;
 
+<<<<<<< HEAD
     // general model
     // Current meta data version. Use this version to write journals and image
     // for community meta version
@@ -67,4 +68,19 @@ public class FeConstants {
     public static boolean USE_MOCK_DICT_MANAGER = false;
 
     public static final int default_tablet_number = 128;
+=======
+    public static final String DOCUMENT_SHOW_ALTER =
+            "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER";
+    public static final String DOCUMENT_SHOW_ALTER_MATERIALIZED_VIEW =
+            "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation" +
+                    "/SHOW%20ALTER%20MATERIALIZED%20VIEW";
+    public static final String DOCUMENT_SHOW_BACKUP =
+            "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP";
+    public static final String DOCUMENT_SHOW_RESTORE =
+            "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20RESTORE";
+
+    public static String getNodeNotFoundError(boolean chooseComputeNode) {
+        return chooseComputeNode ? COMPUTE_NODE_NOT_FOUND_ERROR : BACKEND_NODE_NOT_FOUND_ERROR;
+    }
+>>>>>>> 6fe982a83 ([Enhancement] Detailed error message of invalid table state (#24806))
 }
