@@ -33,7 +33,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
@@ -892,7 +892,7 @@ public class QueryAnalyzer {
 
             Table table = null;
             if (tableRelation.isSyncMVQuery()) {
-                Pair<Table, MaterializedIndex> materializedIndex =
+                Pair<Table, MaterializedIndexMeta> materializedIndex =
                         metadataMgr.getMaterializedViewIndex(catalogName, dbName, tbName);
                 if (materializedIndex != null) {
                     Table mvTable = materializedIndex.first;
@@ -903,7 +903,7 @@ public class QueryAnalyzer {
                         database.readLock();
                         OlapTable mvOlapTable = ((OlapTable) mvTable).copyOnlyForQuery();
                         // Copy the necessary olap table meta to avoid changing original meta;
-                        mvOlapTable.setBaseIndexId(materializedIndex.second.getId());
+                        mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
                         table = mvOlapTable;
                     } finally {
                         database.readUnlock();
