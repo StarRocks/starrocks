@@ -275,12 +275,12 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     /**
      * Return the real table names by table ids.
      * The method is invoked by 'checkAuth' when authorization info is null in job.
-     * Also it is invoked by 'gatherAuthInfo' which saves the auth info in the constructor of job.
+     * It is also invoked by 'gatherAuthInfo' which saves the auth info in the constructor of job.
      * Throw MetaNofFoundException when table name could not be found.
      *
      * @return
      */
-    public abstract Set<String> getTableNames() throws MetaNotFoundException;
+    public abstract Set<String> getTableNames(boolean noThrow) throws MetaNotFoundException;
 
     // return true if the corresponding transaction is done(COMMITTED, FINISHED, CANCELLED)
     public boolean isTxnDone() {
@@ -583,7 +583,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         // check auth, In new RBAC framework, cancel load and show load will be checked in PrivilegeCheckerV2
         if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             try {
-                Set<String> tableNames = getTableNames();
+                Set<String> tableNames = getTableNames(true);
                 if (tableNames.isEmpty()) {
                     // forward compatibility
                     if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), db.getFullName(),
