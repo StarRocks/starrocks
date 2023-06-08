@@ -1399,7 +1399,7 @@ public class StmtExecutor {
         } else {
             transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                     database.getId(),
-                    targetTable.getAssociatedTableIds(),
+                    Lists.newArrayList(targetTable.getId()),
                     label,
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                             FrontendOptions.getLocalHostAddress()),

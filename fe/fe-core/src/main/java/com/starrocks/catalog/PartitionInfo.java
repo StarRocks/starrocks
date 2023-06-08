@@ -111,6 +111,7 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
     public boolean isRangePartition() {
         return type == PartitionType.RANGE || type == PartitionType.EXPR_RANGE || type == PartitionType.EXPR_RANGE_V2;
     }
+
     public boolean isPartitioned() {
         return type != PartitionType.UNPARTITIONED;
     }

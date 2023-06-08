@@ -241,7 +241,7 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_MATERIALIZED_INDEX_META: {
                     CreateMaterializedIndexMetaInfo info = (CreateMaterializedIndexMetaInfo) journal.getData();
-                    LOG.info("Begin to unprotect create materialized view. db = " + info.getDbName()
+                    LOG.info("Begin to unprotect create sync materialized view. db = " + info.getDbName()
                                     + " tableName = " + info.getTableName()
                             + " indexName = " + info.getTableName()
                                     + " create materialized index id=" + info.getIndexMeta().getIndexId());

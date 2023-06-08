@@ -822,6 +822,22 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_true(load_finished, "show bitmap_index timeout")
 
+    def wait_materialized_view_finish(self):
+        """
+        wait materialized view job finish and return status
+        """
+        status = ""
+        show_sql = "SHOW ALTER MATERIALIZED VIEW"
+        while True:
+            res = self.execute_sql(show_sql, "dml", False)
+            print(res)
+            status = res["result"][-1][8]
+            if status == "FINISHED" or status == "CANCELLED" or status == "":
+                break
+            time.sleep(0.5)
+        time.sleep(10)
+        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
     def wait_alter_table_finish(self, alter_type="COLUMN"):
         """
         wait alter table job finish and return status

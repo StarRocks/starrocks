@@ -42,11 +42,9 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -56,7 +54,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.stream.Collectors;
 
 /**
  * Internal representation of partition-related metadata.
@@ -95,7 +92,6 @@ public class Partition extends MetaObject implements Writable {
      */
     @SerializedName(value = "idToShadowIndex")
     private Map<Long, MaterializedIndex> idToShadowIndex = Maps.newHashMap();
-
 
     /**
      * committed version(hash): after txn is committed, set committed version(hash)
@@ -230,42 +226,8 @@ public class Partition extends MetaObject implements Writable {
         return distributionInfo;
     }
 
-    public void createLogicalRollupIndex(Database db,
-                                         MaterializedIndex index,
-                                         long associatedTableId,
-                                         String partName) throws DdlException {
-        Preconditions.checkNotNull(index);
-        index.setState(MaterializedIndex.IndexState.LOGICAL);
-        OlapTable targetTable = (OlapTable) db.getTable(associatedTableId);
-        Preconditions.checkNotNull(targetTable);
-        Partition targetPartition;
-        if (targetTable.getPartitionInfo().isPartitioned()) {
-            Preconditions.checkNotNull(partName);
-            targetPartition = targetTable.getPartition(partName);
-            if (targetPartition == null) {
-                throw new DdlException("Please ensure the partition " + partName + " is created " +
-                        "in the target table " + targetPartition.getName());
-            }
-        } else {
-            targetPartition = targetTable.getPartitions().iterator().next();
-        }
-        Preconditions.checkNotNull(targetPartition);
-        long targetPartitionId = targetPartition.getId();
-        TStorageMedium medium = targetTable.getPartitionInfo()
-                .getDataProperty(targetPartition.getId()).getStorageMedium();
-        int schemaHash = targetTable.getSchemaHashByIndexId(targetTable.getBaseIndexId());
-        TabletMeta tabletMeta = new TabletMeta(db.getId(), targetTable.getId(),
-                        targetPartitionId, index.getId(), schemaHash, medium);
-        for (Tablet targetTablet : targetPartition.getBaseIndex().getTablets()) {
-            index.addTablet(targetTablet, tabletMeta);
-        }
-        index.setTargetPartitionId(targetPartition.getId());
-        index.setTargetTableId(associatedTableId);
-        createRollupIndex(index);
-    }
-
     public void createRollupIndex(MaterializedIndex mIndex) {
-        if (mIndex.getState().isVisible() || mIndex.getState().isLogical()) {
+        if (mIndex.getState().isVisible()) {
             this.idToVisibleRollupIndex.put(mIndex.getId(), mIndex);
         } else {
             this.idToShadowIndex.put(mIndex.getId(), mIndex);
@@ -311,45 +273,23 @@ public class Partition extends MetaObject implements Writable {
         }
     }
 
-    // TODO: by default we don't output logical materialized views.
     public List<MaterializedIndex> getMaterializedIndices(IndexExtState extState) {
         List<MaterializedIndex> indices = Lists.newArrayList();
         switch (extState) {
             case ALL:
                 indices.add(baseIndex);
-                indices.addAll(getVisibleMaterializedIndicesWithoutLogical());
+                indices.addAll(idToVisibleRollupIndex.values());
                 indices.addAll(idToShadowIndex.values());
                 break;
             case VISIBLE:
                 indices.add(baseIndex);
-                indices.addAll(getVisibleMaterializedIndicesWithoutLogical());
+                indices.addAll(idToVisibleRollupIndex.values());
                 break;
             case SHADOW:
                 indices.addAll(idToShadowIndex.values());
             default:
                 break;
         }
-        return indices;
-    }
-    private List<MaterializedIndex> getVisibleMaterializedIndicesWithoutLogical() {
-        return idToVisibleRollupIndex.values().stream().filter(x -> !x.isLogical())
-                .collect(Collectors.toList());
-    }
-
-    // All MVs with logical states.
-    public List<MaterializedIndex> getAllMaterializedIndices() {
-        List<MaterializedIndex> indices = Lists.newArrayList();
-        indices.add(baseIndex);
-        indices.addAll(idToVisibleRollupIndex.values());
-        indices.addAll(idToShadowIndex.values());
-        return indices;
-    }
-
-    // Visible MVs with logical states.
-    public List<MaterializedIndex> getAllVisibleMaterializedIndices() {
-        List<MaterializedIndex> indices = Lists.newArrayList();
-        indices.add(baseIndex);
-        indices.addAll(idToVisibleRollupIndex.values());
         return indices;
     }
 
@@ -360,7 +300,7 @@ public class Partition extends MetaObject implements Writable {
             case VISIBLE:
                 return 1 + idToVisibleRollupIndex.size();
             case SHADOW:
-                return idToShadowIndex.size();
+                return idToVisibleRollupIndex.size();
             default:
                 return 0;
         }
@@ -404,6 +344,10 @@ public class Partition extends MetaObject implements Writable {
         // And the test case can continue to execute the logic of 'select best roll up'
         return ((visibleVersion != PARTITION_INIT_VERSION)
                 || FeConstants.runningUnitTest);
+    }
+
+    public boolean isFirstLoad() {
+        return visibleVersion == PARTITION_INIT_VERSION + 1;
     }
 
     /*
@@ -520,30 +464,24 @@ public class Partition extends MetaObject implements Writable {
         }
 
         Partition partition = (Partition) obj;
-        if (idToVisibleRollupIndex != partition.idToVisibleRollupIndex &&
-                !equals(idToVisibleRollupIndex, partition.idToVisibleRollupIndex)) {
-            return false;
+        if (idToVisibleRollupIndex != partition.idToVisibleRollupIndex) {
+            if (idToVisibleRollupIndex.size() != partition.idToVisibleRollupIndex.size()) {
+                return false;
+            }
+            for (Entry<Long, MaterializedIndex> entry : idToVisibleRollupIndex.entrySet()) {
+                long key = entry.getKey();
+                if (!partition.idToVisibleRollupIndex.containsKey(key)) {
+                    return false;
+                }
+                if (!entry.getValue().equals(partition.idToVisibleRollupIndex.get(key))) {
+                    return false;
+                }
+            }
         }
 
         return (visibleVersion == partition.visibleVersion)
                 && (baseIndex.equals(partition.baseIndex)
                 && distributionInfo.equals(partition.distributionInfo));
-    }
-
-    private boolean equals(Map<Long, MaterializedIndex> l1, Map<Long, MaterializedIndex> l2) {
-        if (l1.size() != l2.size()) {
-            return false;
-        }
-        for (Entry<Long, MaterializedIndex> entry : l1.entrySet()) {
-            long key = entry.getKey();
-            if (!l2.containsKey(key)) {
-                return false;
-            }
-            if (!entry.getValue().equals(l2.get(key))) {
-                return false;
-            }
-        }
-        return true;
     }
 
     @Override
@@ -557,6 +495,7 @@ public class Partition extends MetaObject implements Writable {
 
         int rollupCount = (idToVisibleRollupIndex != null) ? idToVisibleRollupIndex.size() : 0;
         buffer.append("rollup count: ").append(rollupCount).append("; ");
+
         if (idToVisibleRollupIndex != null) {
             for (Map.Entry<Long, MaterializedIndex> entry : idToVisibleRollupIndex.entrySet()) {
                 buffer.append("rollup_index: ").append(entry.getValue().toString()).append("; ");

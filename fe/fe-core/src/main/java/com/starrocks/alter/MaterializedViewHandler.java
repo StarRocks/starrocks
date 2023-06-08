@@ -95,6 +95,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -248,13 +249,6 @@ public class MaterializedViewHandler extends AlterHandler {
                                               Database db,
                                               OlapTable baseTable,
                                               List<Column> mvColumns) throws DdlException {
-        Map<String, String> mvProperties = stmt.getProperties();
-        boolean isPopulate = PropertyAnalyzer.analyzeBooleanProp(mvProperties,
-                PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_POPULATE, true);
-        if (isPopulate) {
-            throw new DdlException("Cannot populate history data if target table is set.");
-        }
-
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TableName target = stmt.getTargetTableName();
         Table targetTable = db.getTable(target.getTbl());
@@ -370,7 +364,7 @@ public class MaterializedViewHandler extends AlterHandler {
         } else {
             RandomDistributionInfo randomDistributionInfo = (RandomDistributionInfo) distributionInfo;
             if (randomDistributionInfo.getBucketNum() != baseTable.getDefaultDistributionInfo().getBucketNum()) {
-                throw new DdlException("Base table's distribution keys's bucket number should be the" +
+                throw new DdlException("Base table's distribution keys' bucket number should be the" +
                     " same with the target table: " + targetOlapTable);
             }
         }
@@ -381,12 +375,6 @@ public class MaterializedViewHandler extends AlterHandler {
 
         db.writeLock();
         try {
-            for (Partition partition : baseTable.getPartitions()) {
-                String partName = partition.getName();
-                MaterializedIndex rollupIndex = new MaterializedIndex(mvIndexId, IndexState.LOGICAL);
-                partition.createLogicalRollupIndex(db, rollupIndex, targetTableId, partName);
-            }
-
             // get short key column count
             short mvShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(mvColumns, stmt.getProperties());
             baseTable.setIndexMeta(mvIndexId, stmt.getMVName(), mvColumns, 0 /* initial schema version */,
@@ -402,7 +390,7 @@ public class MaterializedViewHandler extends AlterHandler {
                     new CreateMaterializedIndexMetaInfo(db.getFullName(), baseTable.getName(),
                             stmt.getMVName(), mvIndexMeta);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateMaterializedIndexMetaInfo(info);
-            LOG.info("create logical materialized success:", mvIndexMeta.toString());
+            LOG.info("create logical materialized success:", mvIndexMeta.getIndexId());
         } catch (Exception e) {
             throw new DdlException("create logical materialized failed:", e);
         } finally {
@@ -625,9 +613,9 @@ public class MaterializedViewHandler extends AlterHandler {
                     throw new DdlException("Table [" + addMVClause.getMVName() + "] already exists, ");
                 }
 
-                List<MaterializedIndex> visibleMaterializedViews = ((OlapTable) tbl).getVisibleIndex();
-                for (MaterializedIndex mvIdx : visibleMaterializedViews) {
-                    if (((OlapTable) tbl).getIndexNameById(mvIdx.getId()).equals(addMVClause.getMVName())) {
+                Collection<MaterializedIndexMeta> visibleMaterializedViews = ((OlapTable) tbl).getVisibleIndexIdToMeta().values();
+                for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
+                    if (((OlapTable) tbl).getIndexNameById(mvMeta.getIndexId()).equals(addMVClause.getMVName())) {
                         throw new DdlException("Materialized view[" + addMVClause.getMVName() + "] already exists");
                     }
                 }
@@ -966,8 +954,11 @@ public class MaterializedViewHandler extends AlterHandler {
             throw new MetaNotFoundException(
                     "Materialized view [" + mvName + "] does not exist in table [" + olapTable.getName() + "]");
         }
-
         long mvIndexId = olapTable.getIndexIdByName(mvName);
+        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(mvIndexId);
+        if (indexMeta.isLogical()) {
+            return;
+        }
         int mvSchemaHash = olapTable.getSchemaHashByIndexId(mvIndexId);
         Preconditions.checkState(mvSchemaHash != -1);
 
@@ -986,14 +977,17 @@ public class MaterializedViewHandler extends AlterHandler {
      */
     private long dropMaterializedView(String mvName, OlapTable olapTable) {
         long mvIndexId = olapTable.getIndexIdByName(mvName);
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-        for (Partition partition : olapTable.getPartitions()) {
-            MaterializedIndex rollupIndex = partition.getIndex(mvIndexId);
-            // delete rollup index
-            partition.deleteRollupIndex(mvIndexId);
-            // remove tablets from inverted index
-            for (Tablet tablet : rollupIndex.getTablets()) {
-                invertedIndex.deleteTablet(tablet.getId());
+        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(mvIndexId);
+        if (!indexMeta.isLogical()) {
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+            for (Partition partition : olapTable.getPartitions()) {
+                MaterializedIndex rollupIndex = partition.getIndex(mvIndexId);
+                // delete rollup index
+                partition.deleteRollupIndex(mvIndexId);
+                // remove tablets from inverted index
+                for (Tablet tablet : rollupIndex.getTablets()) {
+                    invertedIndex.deleteTablet(tablet.getId());
+                }
             }
         }
         olapTable.deleteIndexInfo(mvName);
