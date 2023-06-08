@@ -2113,6 +2113,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void replayCreateMaterializedIndexMeta(String dbName, String tableName, String indexName,
                                                   MaterializedIndexMeta indexMeta) {
+        LOG.info("start to replay create sync materialized view {}", indexName);
         Database db = this.fullNameToDb.get(dbName);
         if (db == null) {
             return;
@@ -2121,18 +2122,17 @@ public class LocalMetastore implements ConnectorMetadata {
         if (table == null) {
             return;
         }
-        if (!isCheckpointThread()) {
-            try {
-                db.writeLock();
-                table.addMaterializedIndexMeta(indexName, indexMeta);
-                table.rebuildFullSchema();
-                table.lastSchemaUpdateTime.set(System.currentTimeMillis());
-                LOG.info("replay create sync materialized view {}", indexName);
-            } catch (Exception e) {
-                LOG.warn("replay create sync materialized view {} failed: {}", indexName, e);
-            } finally {
-                db.writeUnlock();
-            }
+
+        try {
+            db.writeLock();
+            table.addMaterializedIndexMeta(indexName, indexMeta);
+            table.rebuildFullSchema();
+            table.lastSchemaUpdateTime.set(System.currentTimeMillis());
+            LOG.info("replay create sync materialized view {}", indexName);
+        } catch (Exception e) {
+            LOG.warn("replay create sync materialized view {} failed: {}", indexName, e);
+        } finally {
+            db.writeUnlock();
         }
     }
 
