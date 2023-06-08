@@ -406,20 +406,15 @@ bool MapColumn::equals(size_t left, const starrocks::Column& rhs, size_t right) 
         return false;
     }
 
-    auto lhs_keys = ColumnHelper::get_data_column(_keys.get());
-    auto lhs_values = ColumnHelper::get_data_column(_values.get());
-    auto rhs_keys = ColumnHelper::get_data_column(rhs_map._keys.get());
-    auto rhs_values = ColumnHelper::get_data_column(rhs_map._values.get());
-
     for (uint32_t i = lhs_offset; i < lhs_end; ++i) {
         bool found = false;
         for (uint32_t j = rhs_offset; j < rhs_end; ++j) {
-            if (!lhs_keys->equals(i, *rhs_keys, j)) {
+            if (!_keys->equals(i, *(rhs_map._keys.get()), j)) {
                 continue;
             }
 
             // So two keys is the same
-            if (!lhs_values->equals(i, *rhs_values, j)) {
+            if (!_values->equals(i, *(rhs_map._values.get()), j)) {
                 return false;
             }
             found = true;
