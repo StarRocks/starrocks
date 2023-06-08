@@ -209,10 +209,11 @@ void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
 }
 
 void SinkBuffer::_update_network_time(const TUniqueId& instance_id, const int64_t send_timestamp,
-                                      const int64_t receive_timestamp) {
-    _last_receive_time = MonotonicNanos();
+                                      const int64_t receive_process_time) {
+    const int64_t receive_response_time = MonotonicNanos();
+    _last_receive_time = receive_response_time;
     int32_t concurrency = _num_in_flight_rpcs[instance_id.lo];
-    int64_t time_usage = receive_timestamp - send_timestamp;
+    int64_t time_usage = receive_response_time - send_timestamp - receive_process_time;
     _network_times[instance_id.lo].update(time_usage, concurrency);
     _rpc_cumulative_time += time_usage;
     _rpc_count++;
@@ -323,7 +324,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         }
 
         auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
-                {instance_id, request.params->sequence(), GetCurrentTimeNanos()});
+                {instance_id, request.params->sequence(), MonotonicNanos()});
         if (_first_send_time == -1) {
             _first_send_time = MonotonicNanos();
         }
@@ -355,7 +356,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             } else {
                 _try_to_send_rpc(ctx.instance_id, [&]() {
                     _process_send_window(ctx.instance_id, ctx.sequence);
-                    _update_network_time(ctx.instance_id, ctx.send_timestamp, result.receive_timestamp());
+                    _update_network_time(ctx.instance_id, ctx.send_timestamp, result.receive_process_time());
                 });
             }
             --_total_in_flight_rpc;
