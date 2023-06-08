@@ -188,6 +188,8 @@ public class TypeManager {
             if ((type1.isStringType() && type2.isExactNumericType()) ||
                     (type1.isExactNumericType() && type2.isStringType())) {
                 return Type.STRING;
+            } else if (type1.isComplexType() || type2.isComplexType()) {
+                return Type.getCommonType(type1, type2);
             }
         }
 
