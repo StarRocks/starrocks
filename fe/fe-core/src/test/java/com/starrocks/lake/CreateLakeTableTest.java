@@ -251,6 +251,15 @@ public class CreateLakeTableTest {
             Assert.assertFalse(partition2StorageCacheInfo.isEnableStorageCache());
             Assert.assertEquals(0L, partition2StorageCacheInfo.getStorageCacheTtlS());
         }
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.auto_partition (key1 date, key2 varchar(10), key3 int)\n" +
+                        "partition by date_trunc(\"day\", key1) distributed by hash(key2) buckets 3;"));
+
+        // `day` function is not supported
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "create table lake_test.auto_partition (key1 date, key2 varchar(10), key3 int)\n" +
+                        "partition by day(key1) distributed by hash(key2) buckets 3;"));
     }
 
     @Test
@@ -271,13 +280,6 @@ public class CreateLakeTableTest {
                         "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
                                 "distributed by hash(key1) buckets 3\n" +
                                 " properties('enable_storage_cache' = 'false', 'storage_cache_ttl' = '2592000');"));
-
-        // disable auto partition
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
-                "Cloud native table does not support automatic partition",
-                () -> createTable(
-                        "create table lake_test.auto_partition (key1 date, key2 varchar(10), key3 int)\n" +
-                                "partition by date_trunc(\"day\", key1) distributed by hash(key2) buckets 3;"));
     }
 
     @Test
