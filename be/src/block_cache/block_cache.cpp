@@ -21,7 +21,9 @@
 #ifdef WITH_CACHELIB
 #include "block_cache/cachelib_wrapper.h"
 #endif
+#ifdef WITH_STARCACHE
 #include "block_cache/starcache_wrapper.h"
+#endif
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/statusor.h"
@@ -62,15 +64,19 @@ Status BlockCache::init(const CacheOptions& options) {
         }
     }
     _block_size = std::min(options.block_size, MAX_BLOCK_SIZE);
-    if (options.engine == "starcache") {
-        _kv_cache = std::make_unique<StarCacheWrapper>();
-        LOG(INFO) << "init starcache engine, block_size: " << _block_size;
 #ifdef WITH_CACHELIB
-    } else if (options.engine == "cachelib") {
+    if (options.engine == "cachelib") {
         _kv_cache = std::make_unique<CacheLibWrapper>();
         LOG(INFO) << "init cachelib engine, block_size: " << _block_size;
+    }
 #endif
-    } else {
+#ifdef WITH_STARCACHE
+    if (options.engine == "starcache") {
+        _kv_cache = std::make_unique<StarCacheWrapper>();
+        LOG(INFO) << "init starcache block engine";
+    }
+#endif
+    if (!_kv_cache) {
         LOG(ERROR) << "unsupported block cache engine: " << options.engine;
         return Status::NotSupported("unsupported block cache engine");
     }
