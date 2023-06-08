@@ -2362,5 +2362,100 @@ public class CreateMaterializedViewTest {
         starRocksAssert.dropTable("emps");
         starRocksAssert.dropTable("depts");
     }
+
+    @Test
+    public void testMvOnUnion() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `customer_nullable_1` (\n" +
+                "  `c_custkey` int(11) NULL COMMENT \"\",\n" +
+                "  `c_name` varchar(26) NULL COMMENT \"\",\n" +
+                "  `c_address` varchar(41) NULL COMMENT \"\",\n" +
+                "  `c_city` varchar(11) NULL COMMENT \"\",\n" +
+                "  `c_nation` varchar(16) NULL COMMENT \"\",\n" +
+                "  `c_region` varchar(13) NULL COMMENT \"\",\n" +
+                "  `c_phone` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "  `c_mktsegment` varchar(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c_custkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `customer_nullable_2` (\n" +
+                "  `c_custkey` int(11) NULL COMMENT \"\",\n" +
+                "  `c_name` varchar(26) NULL COMMENT \"\",\n" +
+                "  `c_address` varchar(41) NULL COMMENT \"\",\n" +
+                "  `c_city` varchar(11) NULL COMMENT \"\",\n" +
+                "  `c_nation` varchar(16) NULL COMMENT \"\",\n" +
+                "  `c_region` varchar(13) NULL COMMENT \"\",\n" +
+                "  `c_phone` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "  `c_mktsegment` varchar(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c_custkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE `customer_nullable_3` (\n" +
+                "  `c_custkey` int(11)  NULL COMMENT \"\",\n" +
+                "  `c_name` varchar(26)  NULL COMMENT \"\",\n" +
+                "  `c_address` varchar(41)  NULL COMMENT \"\",\n" +
+                "  `c_city` varchar(11)  NULL COMMENT \"\",\n" +
+                "  `c_nation` varchar(16)  NULL COMMENT \"\",\n" +
+                "  `c_region` varchar(13)  NULL COMMENT \"\",\n" +
+                "  `c_phone` varchar(16) NOT NULL COMMENT \"\",\n" +
+                "  `c_mktsegment` varchar(11) NOT NULL COMMENT \"\",\n" +
+                "  `c_total` decimal(19,6) null default \"0.0\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c_custkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        starRocksAssert.withMaterializedView("\n" +
+                "create materialized view customer_mv\n" +
+                "distributed by hash(`custkey`)\n" +
+                "as\n" +
+                "\n" +
+                "select\n" +
+                "\tc_custkey custkey,\n" +
+                "\tc_name name,\n" +
+                "\tc_phone phone,\n" +
+                "\t0 total,\n" +
+                "\t c_mktsegment segment\n" +
+                "from customer_nullable_1\n" +
+                "\n" +
+                "union all\n" +
+                "\n" +
+                "select\n" +
+                "\tc_custkey custkey,\n" +
+                "\tnull name,\n" +
+                "\tnull phone,\n" +
+                "\t0 total,\n" +
+                "\t c_mktsegment segment\n" +
+                "from customer_nullable_2\n" +
+                "\n" +
+                "union all\n" +
+                "\n" +
+                "select\n" +
+                "\tc_custkey custkey,\n" +
+                "\tnull name,\n" +
+                "\tnull phone,\n" +
+                "\tc_total total,\n" +
+                "\t c_mktsegment segment\n" +
+                "from customer_nullable_3;");
+
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
+
+        MaterializedView mv = (MaterializedView) db.getTable("customer_mv");
+        Assert.assertTrue(mv.getColumn("total").getType().isDecimalOfAnyVersion());
+        Assert.assertFalse(mv.getColumn("segment").isAllowNull());
+    }
 }
 

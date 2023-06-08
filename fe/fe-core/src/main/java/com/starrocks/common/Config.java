@@ -631,7 +631,7 @@ public class Config extends ConfigBase {
      * the create table request will run at most (m * n * tablet_create_timeout_second) before timeout.
      */
     @ConfField(mutable = true)
-    public static int tablet_create_timeout_second = 1;
+    public static int tablet_create_timeout_second = 10;
 
     /**
      * minimal intervals between two publish version action
@@ -2033,4 +2033,16 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static boolean enable_execute_script_on_frontend = true;
+
+    /**
+     * If set to <= 0, means that no limitation.
+     */
+    @ConfField(mutable = true)
+    public static int max_upload_task_per_be = 0;
+
+    /**
+     * If set to <= 0, means that no limitation.
+     */
+    @ConfField(mutable = true)
+    public static int max_download_task_per_be = 0;
 }
