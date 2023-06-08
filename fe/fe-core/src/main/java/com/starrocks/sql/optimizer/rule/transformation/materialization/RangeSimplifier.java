@@ -20,6 +20,7 @@ import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -93,7 +94,7 @@ public class RangeSimplifier {
                         Preconditions.checkState(!columnPredicates.isEmpty());
                         BinaryPredicateOperator binary = (BinaryPredicateOperator) columnPredicates.get(0);
                         BinaryPredicateOperator eqBinary = new BinaryPredicateOperator(
-                                BinaryPredicateOperator.BinaryType.EQ,
+                                BinaryType.EQ,
                                 binary.getChild(0), columnRange.lowerEndpoint());
                         rewrittenRangePredicates.add(eqBinary);
                     } else {
@@ -189,7 +190,7 @@ public class RangeSimplifier {
                 && range.lowerEndpoint() == range.upperEndpoint();
     }
 
-    private <C extends Comparable<C>> Range<C> range(BinaryPredicateOperator.BinaryType type, C value) {
+    private <C extends Comparable<C>> Range<C> range(BinaryType type, C value) {
         switch (type) {
             case EQ:
                 return Range.singleton(value);

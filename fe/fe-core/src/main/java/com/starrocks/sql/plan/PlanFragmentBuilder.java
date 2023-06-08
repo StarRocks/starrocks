@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
@@ -1147,7 +1148,7 @@ public class PlanFragmentBuilder {
                 ConstantOperator constantOperator = (ConstantOperator) predicate.getChildren().get(1);
                 if (predicate instanceof BinaryPredicateOperator) {
                     BinaryPredicateOperator binaryPredicateOperator = (BinaryPredicateOperator) predicate;
-                    if (binaryPredicateOperator.getBinaryType() == BinaryPredicateOperator.BinaryType.EQ) {
+                    if (binaryPredicateOperator.getBinaryType() == BinaryType.EQ) {
                         switch (columnRefOperator.getName()) {
                             case "TABLE_SCHEMA":
                             case "DATABASE_NAME":
@@ -1197,17 +1198,17 @@ public class PlanFragmentBuilder {
                     }
                     // support be_logs.timestamp filter
                     if (columnRefOperator.getName().equals("TIMESTAMP")) {
-                        BinaryPredicateOperator.BinaryType opType = binaryPredicateOperator.getBinaryType();
-                        if (opType == BinaryPredicateOperator.BinaryType.EQ) {
+                        BinaryType opType = binaryPredicateOperator.getBinaryType();
+                        if (opType == BinaryType.EQ) {
                             scanNode.setLogStartTs(constantOperator.getBigint());
                             scanNode.setLogEndTs(constantOperator.getBigint() + 1);
-                        } else if (opType == BinaryPredicateOperator.BinaryType.GT) {
+                        } else if (opType == BinaryType.GT) {
                             scanNode.setLogStartTs(constantOperator.getBigint() + 1);
-                        } else if (opType == BinaryPredicateOperator.BinaryType.GE) {
+                        } else if (opType == BinaryType.GE) {
                             scanNode.setLogStartTs(constantOperator.getBigint());
-                        } else if (opType == BinaryPredicateOperator.BinaryType.LT) {
+                        } else if (opType == BinaryType.LT) {
                             scanNode.setLogEndTs(constantOperator.getBigint());
-                        } else if (opType == BinaryPredicateOperator.BinaryType.LE) {
+                        } else if (opType == BinaryType.LE) {
                             scanNode.setLogEndTs(constantOperator.getBigint() + 1);
                         }
                     }

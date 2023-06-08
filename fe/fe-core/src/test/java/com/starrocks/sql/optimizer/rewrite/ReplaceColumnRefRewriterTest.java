@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -51,7 +52,7 @@ public class ReplaceColumnRefRewriterTest {
         ColumnRefOperator columnRef2 = createColumnRef(2);
         ColumnRefOperator columnRef3 = createColumnRef(3);
 
-        BinaryPredicateOperator binary = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, columnRef2,
+        BinaryPredicateOperator binary = new BinaryPredicateOperator(BinaryType.EQ, columnRef2,
                 ConstantOperator.createInt(1));
 
         operatorMap.put(columnRef1, binary);
@@ -63,7 +64,7 @@ public class ReplaceColumnRefRewriterTest {
         Assert.assertTrue(target instanceof BinaryPredicateOperator);
         BinaryPredicateOperator rewritten = (BinaryPredicateOperator) target;
 
-        BinaryPredicateOperator result = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, columnRef3,
+        BinaryPredicateOperator result = new BinaryPredicateOperator(BinaryType.EQ, columnRef3,
                 ConstantOperator.createInt(1));
         Assert.assertEquals(result, rewritten);
 

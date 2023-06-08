@@ -18,6 +18,7 @@ package com.starrocks.load;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
@@ -116,14 +117,14 @@ public class BrokerFileGroupTest {
         // k1 = bitmap_dict(k1)
         SlotRef slotRef1 = new SlotRef(null, "k1");
         List<Expr> params1 = Lists.newArrayList(slotRef1);
-        BinaryPredicate predicate1 = new BinaryPredicate(BinaryPredicate.Operator.EQ, slotRef1,
+        BinaryPredicate predicate1 = new BinaryPredicate(BinaryType.EQ, slotRef1,
                 new FunctionCallExpr("bitmap_dict", params1));
 
         // k3 = k2 + 1
         SlotRef slotRef2 = new SlotRef(null, "k2");
         SlotRef slotRef3 = new SlotRef(null, "k3");
         BinaryPredicate predicate2 = new BinaryPredicate(
-                BinaryPredicate.Operator.EQ, slotRef3,
+                BinaryType.EQ, slotRef3,
                 new ArithmeticExpr(ArithmeticExpr.Operator.ADD, slotRef2, new IntLiteral(1, Type.INT)));
         DataDescription desc = new DataDescription("olapTable", null, "hiveTable", false,
                 Lists.newArrayList(predicate1, predicate2), null);

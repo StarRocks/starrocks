@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -90,19 +91,19 @@ public class MvUtilsTest {
         ColumnRefOperator columnRef2 = columnRefFactory.create("col2", Type.INT, false);
         ColumnRefOperator columnRef3 = columnRefFactory.create("col3", Type.INT, false);
         BinaryPredicateOperator binaryPredicate = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.EQ, columnRef1, columnRef2);
+                BinaryType.EQ, columnRef1, columnRef2);
 
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
         Table table1 = db.getTable("t0");
         LogicalScanOperator scanOperator1 = new LogicalOlapScanOperator(table1);
         BinaryPredicateOperator binaryPredicate2 = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.GE, columnRef1, ConstantOperator.createInt(1));
+                BinaryType.GE, columnRef1, ConstantOperator.createInt(1));
         scanOperator1.setPredicate(binaryPredicate2);
         OptExpression scanExpr = OptExpression.create(scanOperator1);
         Table table2 = db.getTable("t1");
         LogicalScanOperator scanOperator2 = new LogicalOlapScanOperator(table2);
         BinaryPredicateOperator binaryPredicate3 = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.GE, columnRef2, ConstantOperator.createInt(1));
+                BinaryType.GE, columnRef2, ConstantOperator.createInt(1));
         scanOperator2.setPredicate(binaryPredicate3);
         OptExpression scanExpr2 = OptExpression.create(scanOperator2);
         LogicalJoinOperator joinOperator = new LogicalJoinOperator(JoinOperator.INNER_JOIN, binaryPredicate);
@@ -122,7 +123,7 @@ public class MvUtilsTest {
         Assert.assertFalse(MvUtils.isAllEqualInnerOrCrossJoin(joinExpr4));
 
         BinaryPredicateOperator binaryPredicate4 = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.EQ, columnRef1, columnRef3);
+                BinaryType.EQ, columnRef1, columnRef3);
         LogicalJoinOperator joinOperator4 = new LogicalJoinOperator(JoinOperator.INNER_JOIN,
                 Utils.compoundAnd(binaryPredicate, binaryPredicate4));
         OptExpression joinExpr5 = OptExpression.create(joinOperator4, scanExpr, scanExpr2);
@@ -152,16 +153,16 @@ public class MvUtilsTest {
         ColumnRefOperator columnRef1 = columnRefFactory.create("col1", Type.INT, false);
         ColumnRefOperator columnRef2 = columnRefFactory.create("col2", Type.INT, false);
         BinaryPredicateOperator binaryPredicate = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.GT, columnRef1, ConstantOperator.createInt(1));
+                BinaryType.GT, columnRef1, ConstantOperator.createInt(1));
         BinaryPredicateOperator binaryPredicate2 = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.GE, columnRef1, ConstantOperator.createInt(2));
+                BinaryType.GE, columnRef1, ConstantOperator.createInt(2));
         ScalarOperator canonizedPredicate = MvUtils.canonizePredicateForRewrite(binaryPredicate);
         Assert.assertEquals(binaryPredicate2, canonizedPredicate);
         BinaryPredicateOperator binaryPredicate3 = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.LT, columnRef2, ConstantOperator.createInt(1));
+                BinaryType.LT, columnRef2, ConstantOperator.createInt(1));
         ScalarOperator canonizedPredicate2 = MvUtils.canonizePredicateForRewrite(binaryPredicate3);
         BinaryPredicateOperator binaryPredicate4 = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.LE, columnRef2, ConstantOperator.createInt(0));
+                BinaryType.LE, columnRef2, ConstantOperator.createInt(0));
         Assert.assertEquals(binaryPredicate4, canonizedPredicate2);
 
         CompoundPredicateOperator compound1 = new CompoundPredicateOperator(
@@ -182,7 +183,7 @@ public class MvUtilsTest {
                 CompoundPredicateOperator.CompoundType.NOT, binaryPredicate);
         ScalarOperator canonizedPredicate5 = MvUtils.canonizePredicateForRewrite(compound5);
         BinaryPredicateOperator binaryPredicate5 = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.LE, columnRef1, ConstantOperator.createInt(1));
+                BinaryType.LE, columnRef1, ConstantOperator.createInt(1));
         Assert.assertEquals(binaryPredicate5, canonizedPredicate5);
     }
 }

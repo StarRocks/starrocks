@@ -21,6 +21,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -404,7 +405,7 @@ public class FragmentNormalizer {
             return !((BetweenPredicate) expr).isNotBetween();
         }
         if (expr instanceof BinaryPredicate) {
-            return ((BinaryPredicate) expr).getOp() != BinaryPredicate.Operator.EQ_FOR_NULL;
+            return ((BinaryPredicate) expr).getOp() != BinaryType.EQ_FOR_NULL;
         }
         return true;
     }
@@ -431,7 +432,7 @@ public class FragmentNormalizer {
         Preconditions.checkArgument(minKey != null && maxKey != null);
         if (expr instanceof BinaryPredicate) {
             BinaryPredicate predicate = (BinaryPredicate) expr;
-            if (predicate.getOp() == BinaryPredicate.Operator.EQ_FOR_NULL) {
+            if (predicate.getOp() == BinaryType.EQ_FOR_NULL) {
                 return result;
             }
             LiteralExpr rhs = (LiteralExpr) predicate.getChild(1);

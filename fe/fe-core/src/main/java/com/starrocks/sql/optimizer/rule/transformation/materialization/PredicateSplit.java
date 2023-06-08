@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -88,7 +89,7 @@ public class PredicateSplit {
                 BinaryPredicateOperator binary = (BinaryPredicateOperator) scalarOperator;
                 ScalarOperator leftChild = scalarOperator.getChild(0);
                 ScalarOperator rightChild = scalarOperator.getChild(1);
-                BinaryPredicateOperator.BinaryType binaryType = binary.getBinaryType();
+                BinaryType binaryType = binary.getBinaryType();
                 if (binaryType.isEqual() && leftChild.isColumnRef() && rightChild.isColumnRef()) {
                     columnEqualityPredicates.add(scalarOperator);
                 } else if (binaryType.isEqualOrRange() && leftChild.isColumnRef() && rightChild.isConstantRef()) {

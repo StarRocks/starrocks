@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
@@ -231,7 +232,7 @@ public class ListPartitionPruner implements PartitionPruner {
                 new ScalarOperatorToExpr.FormatterContext(new HashMap<>());
         LiteralExpr literal = (LiteralExpr) ScalarOperatorToExpr.buildExecExpression(rightChild, formatterContext);
 
-        BinaryPredicateOperator.BinaryType type = binaryPredicate.getBinaryType();
+        BinaryType type = binaryPredicate.getBinaryType();
         switch (type) {
             case EQ:
                 // SlotRef = Literal
@@ -273,12 +274,12 @@ public class ListPartitionPruner implements PartitionPruner {
                 LiteralExpr upperBoundKey = null;
                 LiteralExpr lowerBoundKey = null;
 
-                if (type == BinaryPredicateOperator.BinaryType.LE || type == BinaryPredicateOperator.BinaryType.LT) {
+                if (type == BinaryType.LE || type == BinaryType.LT) {
                     // SlotRef <[=] Literal
                     if (literal.compareLiteral(firstKey) < 0) {
                         return Sets.newHashSet();
                     }
-                    if (type == BinaryPredicateOperator.BinaryType.LE) {
+                    if (type == BinaryType.LE) {
                         upperInclusive = true;
                     }
                     if (literal.compareLiteral(lastKey) <= 0) {
@@ -294,7 +295,7 @@ public class ListPartitionPruner implements PartitionPruner {
                     if (literal.compareLiteral(lastKey) > 0) {
                         return Sets.newHashSet();
                     }
-                    if (type == BinaryPredicateOperator.BinaryType.GE) {
+                    if (type == BinaryType.GE) {
                         lowerInclusive = true;
                     }
                     if (literal.compareLiteral(firstKey) >= 0) {

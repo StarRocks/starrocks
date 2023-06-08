@@ -36,7 +36,7 @@ package com.starrocks.task;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryPredicate.Operator;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
@@ -158,7 +158,7 @@ public class PushTask extends AgentTask {
                         BinaryPredicate binaryPredicate = (BinaryPredicate) condition;
                         String columnName = ((SlotRef) binaryPredicate.getChild(0)).getColumnName();
                         String value = ((LiteralExpr) binaryPredicate.getChild(1)).getStringValue();
-                        Operator op = binaryPredicate.getOp();
+                        BinaryType op = binaryPredicate.getOp();
                         tCondition.setColumn_name(columnName);
                         tCondition.setCondition_op(op.toString());
                         conditionValues.add(value);

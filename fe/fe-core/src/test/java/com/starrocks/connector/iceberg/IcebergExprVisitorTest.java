@@ -16,6 +16,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -80,7 +81,7 @@ public class IcebergExprVisitorTest {
         ConstantOperator value = ConstantOperator.createDate(LocalDate.parse("2022-11-11").atTime(0, 0, 0, 0));
         long epochDay = value.getDatetime().toLocalDate().toEpochDay();
         convertedExpr = converter.convert(Lists.newArrayList(
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, K3, value)), context);
+                new BinaryPredicateOperator(BinaryType.EQ, K3, value)), context);
         expectedExpr = Expressions.equal("k3", epochDay);
         Assert.assertEquals("Generated equal expression should be correct",
                 expectedExpr.toString(), convertedExpr.toString());
@@ -89,7 +90,7 @@ public class IcebergExprVisitorTest {
         value = ConstantOperator.createDatetime(LocalDateTime.of(2022, 11, 11, 11, 11, 11));
         long epochSec = value.getDatetime().toEpochSecond(OffsetDateTime.now().getOffset());
         convertedExpr = converter.convert(Lists.newArrayList(
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, K4, value)), context);
+                new BinaryPredicateOperator(BinaryType.EQ, K4, value)), context);
         expectedExpr = Expressions.equal("k4", TimeUnit.MICROSECONDS.convert(epochSec, TimeUnit.SECONDS));
         Assert.assertEquals("Generated equal expression should be correct",
                 expectedExpr.toString(), convertedExpr.toString());
@@ -97,7 +98,7 @@ public class IcebergExprVisitorTest {
         // notEqual
         value = ConstantOperator.createBoolean(true);
         convertedExpr = converter.convert(Lists.newArrayList(
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.NE, K5, value)), context);
+                new BinaryPredicateOperator(BinaryType.NE, K5, value)), context);
         expectedExpr = Expressions.notEqual("k5", true);
         Assert.assertEquals("Generated notEqual expression should be correct",
                 expectedExpr.toString(), convertedExpr.toString());
@@ -105,28 +106,28 @@ public class IcebergExprVisitorTest {
         // lessThan
         value = ConstantOperator.createInt(5);
         convertedExpr = converter.convert(Lists.newArrayList(
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT, K2, value)), context);
+                new BinaryPredicateOperator(BinaryType.LT, K2, value)), context);
         expectedExpr = Expressions.lessThan("k2", value.getInt());
         Assert.assertEquals("Generated lessThan expression should be correct",
                 expectedExpr.toString(), convertedExpr.toString());
 
         // lessThanOrEqual
         convertedExpr = converter.convert(Lists.newArrayList(
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, K2, value)), context);
+                new BinaryPredicateOperator(BinaryType.LE, K2, value)), context);
         expectedExpr = Expressions.lessThanOrEqual("k2", value.getInt());
         Assert.assertEquals("Generated lessThanOrEqual expression should be correct",
                 expectedExpr.toString(), convertedExpr.toString());
 
         // greaterThan
         convertedExpr = converter.convert(Lists.newArrayList(
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT, K2, value)), context);
+                new BinaryPredicateOperator(BinaryType.GT, K2, value)), context);
         expectedExpr = Expressions.greaterThan("k2", value.getInt());
         Assert.assertEquals("Generated greaterThan expression should be correct",
                 expectedExpr.toString(), convertedExpr.toString());
 
         // greaterThanOrEqual
         convertedExpr = converter.convert(Lists.newArrayList(
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, K2, value)), context);
+                new BinaryPredicateOperator(BinaryType.GE, K2, value)), context);
         expectedExpr = Expressions.greaterThanOrEqual("k2", value.getInt());
         Assert.assertEquals("Generated greaterThanOrEqual expression should be correct",
                 expectedExpr.toString(), convertedExpr.toString());
@@ -165,9 +166,9 @@ public class IcebergExprVisitorTest {
 
         // or
         BinaryPredicateOperator op1 = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.GT, K1, ConstantOperator.createInt(10));
+                BinaryType.GT, K1, ConstantOperator.createInt(10));
         BinaryPredicateOperator op2 = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.LT, K1, ConstantOperator.createInt(5));
+                BinaryType.LT, K1, ConstantOperator.createInt(5));
 
         Expression expression1 = converter.convert(Lists.newArrayList(op1), context);
         Expression expression2 = converter.convert(Lists.newArrayList(op2), context);
