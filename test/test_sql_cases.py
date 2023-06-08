@@ -123,6 +123,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         # -------------------------------------------
 
         # replace all db_name with each run
+        self.case_info = case_info
         sql_list = self._init_data(case_info.sql)
         print("[case name]: ", case_info.name)
         print("[case file]: ", case_info.file)

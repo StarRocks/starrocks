@@ -152,7 +152,7 @@ if __name__ == "__main__":
         "--nologcapture",
     ]
 
-    if not skip_reruns:
+    if not skip_reruns and not record:
         argv.extend([
             "--with-flaky",
             "--force-flaky",
