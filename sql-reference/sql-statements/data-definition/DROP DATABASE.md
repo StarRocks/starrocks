@@ -7,9 +7,9 @@
 ## 语法
 
 ```sql
--- 2.0以前版本
+-- 2.0 之前版本
 DROP DATABASE [IF EXISTS] [FORCE] db_name
---2.0及以后版本
+-- 2.0 及以后版本
 DROP DATABASE [IF EXISTS] db_name [FORCE]
 ```
 
