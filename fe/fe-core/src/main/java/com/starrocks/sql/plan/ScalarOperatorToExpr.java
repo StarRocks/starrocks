@@ -283,47 +283,9 @@ public class ScalarOperatorToExpr {
         }
 
         public Expr visitBinaryPredicate(BinaryPredicateOperator predicate, FormatterContext context) {
-            BinaryPredicate call;
-            switch (predicate.getBinaryType()) {
-                case EQ:
-                    call = new BinaryPredicate(BinaryPredicate.Operator.EQ,
-                            buildExpr.build(predicate.getChildren().get(0), context),
-                            buildExpr.build(predicate.getChildren().get(1), context));
-                    break;
-                case NE:
-                    call = new BinaryPredicate(BinaryPredicate.Operator.NE,
-                            buildExpr.build(predicate.getChildren().get(0), context),
-                            buildExpr.build(predicate.getChildren().get(1), context));
-                    break;
-                case GE:
-                    call = new BinaryPredicate(BinaryPredicate.Operator.GE,
-                            buildExpr.build(predicate.getChildren().get(0), context),
-                            buildExpr.build(predicate.getChildren().get(1), context));
-                    break;
-                case GT:
-                    call = new BinaryPredicate(BinaryPredicate.Operator.GT,
-                            buildExpr.build(predicate.getChildren().get(0), context),
-                            buildExpr.build(predicate.getChildren().get(1), context));
-                    break;
-                case LE:
-                    call = new BinaryPredicate(BinaryPredicate.Operator.LE,
-                            buildExpr.build(predicate.getChildren().get(0), context),
-                            buildExpr.build(predicate.getChildren().get(1), context));
-                    break;
-                case LT:
-                    call = new BinaryPredicate(BinaryPredicate.Operator.LT,
-                            buildExpr.build(predicate.getChildren().get(0), context),
-                            buildExpr.build(predicate.getChildren().get(1), context));
-                    break;
-                case EQ_FOR_NULL:
-                    call = new BinaryPredicate(BinaryPredicate.Operator.EQ_FOR_NULL,
-                            buildExpr.build(predicate.getChildren().get(0), context),
-                            buildExpr.build(predicate.getChildren().get(1), context));
-                    break;
-                default:
-                    return null;
-            }
-
+            BinaryPredicate call = new BinaryPredicate(predicate.getBinaryType(),
+                    buildExpr.build(predicate.getChildren().get(0), context),
+                    buildExpr.build(predicate.getChildren().get(1), context));
             call.setType(Type.BOOLEAN);
             return call;
         }

@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -116,9 +117,9 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
         List<BinaryPredicateOperator> lessPredicates =
                 filters.stream().filter(op -> op instanceof BinaryPredicateOperator)
                         .map(ScalarOperator::<BinaryPredicateOperator>cast)
-                        .filter(op -> Objects.equals(BinaryPredicateOperator.BinaryType.LE, op.getBinaryType()) ||
-                                Objects.equals(BinaryPredicateOperator.BinaryType.LT, op.getBinaryType()) ||
-                                Objects.equals(BinaryPredicateOperator.BinaryType.EQ, op.getBinaryType()))
+                        .filter(op -> Objects.equals(BinaryType.LE, op.getBinaryType()) ||
+                                Objects.equals(BinaryType.LT, op.getBinaryType()) ||
+                                Objects.equals(BinaryType.EQ, op.getBinaryType()))
                         .filter(op -> Objects.equals(windowCol, op.getChild(0)))
                         .filter(op -> op.getChild(1) instanceof ConstantOperator)
                         .collect(Collectors.toList());

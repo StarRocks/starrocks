@@ -16,6 +16,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
@@ -98,7 +99,7 @@ public class ShowTableStmt extends ShowStmt {
         where = where.substitute(aliasMap);
         // where databases_name = currentdb
         Expr whereDbEQ = new BinaryPredicate(
-                BinaryPredicate.Operator.EQ,
+                BinaryType.EQ,
                 new SlotRef(TABLE_NAME, "TABLE_SCHEMA"),
                 new StringLiteral(db));
         // old where + and + db where

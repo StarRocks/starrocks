@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.operator.operator;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
@@ -67,17 +68,17 @@ public class CompoundPredicateOperatorTest {
         CallOperator call1 = new CallOperator(FunctionSet.SUM, Type.BIGINT, ImmutableList.of(constA));
         CallOperator call2 = new CallOperator(FunctionSet.ADD, Type.BIGINT, ImmutableList.of(constA, constA));
 
-        BinaryPredicateOperator gt1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT, col1, col2);
-        BinaryPredicateOperator gt2 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT, col3, col4);
+        BinaryPredicateOperator gt1 = new BinaryPredicateOperator(BinaryType.GT, col1, col2);
+        BinaryPredicateOperator gt2 = new BinaryPredicateOperator(BinaryType.GT, col3, col4);
 
-        BinaryPredicateOperator lt1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT, col4, col6);
-        BinaryPredicateOperator lt2 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT, col5, col6);
+        BinaryPredicateOperator lt1 = new BinaryPredicateOperator(BinaryType.LT, col4, col6);
+        BinaryPredicateOperator lt2 = new BinaryPredicateOperator(BinaryType.LT, col5, col6);
 
-        BinaryPredicateOperator ge1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, col1, constA);
-        BinaryPredicateOperator ge2 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, col4, constB);
+        BinaryPredicateOperator ge1 = new BinaryPredicateOperator(BinaryType.GE, col1, constA);
+        BinaryPredicateOperator ge2 = new BinaryPredicateOperator(BinaryType.GE, col4, constB);
 
-        BinaryPredicateOperator le1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, col1, call1);
-        BinaryPredicateOperator le2 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, col2, call2);
+        BinaryPredicateOperator le1 = new BinaryPredicateOperator(BinaryType.LE, col1, call1);
+        BinaryPredicateOperator le2 = new BinaryPredicateOperator(BinaryType.LE, col2, call2);
 
         CompoundPredicateOperator and1 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, gt1, gt2);
         CompoundPredicateOperator and2 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, lt1, lt2);

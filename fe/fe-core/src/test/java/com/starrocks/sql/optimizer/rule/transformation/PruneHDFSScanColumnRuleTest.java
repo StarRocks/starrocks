@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
@@ -66,7 +67,7 @@ public class PruneHDFSScanColumnRuleTest {
         OptExpression scan = new OptExpression(
                 new LogicalIcebergScanOperator(table,
                         scanColumnMap, Maps.newHashMap(), -1,
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                        new BinaryPredicateOperator(BinaryType.EQ,
                                 new ColumnRefOperator(1, Type.INT, "id", true),
                                 ConstantOperator.createInt(1))));
 
@@ -125,7 +126,7 @@ public class PruneHDFSScanColumnRuleTest {
         OptExpression scan = new OptExpression(
                 new LogicalHudiScanOperator(table,
                         scanColumnMap, Maps.newHashMap(), -1,
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                        new BinaryPredicateOperator(BinaryType.EQ,
                                 new ColumnRefOperator(1, Type.INT, "id", true),
                                 ConstantOperator.createInt(1))));
 

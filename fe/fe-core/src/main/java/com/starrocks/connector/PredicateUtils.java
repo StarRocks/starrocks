@@ -18,6 +18,7 @@ package com.starrocks.connector;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LiteralExpr;
@@ -48,7 +49,7 @@ public class PredicateUtils {
     private static void buildStatsPredicate(Analyzer analyzer,
                                             SlotRef slotRef,
                                             BinaryPredicate binaryPred,
-                                            BinaryPredicate.Operator op,
+                                            BinaryType op,
                                             TupleDescriptor minMaxTuple,
                                             List<Expr> minMaxConjuncts) {
         Expr literal = binaryPred.getChild(1);
@@ -93,9 +94,9 @@ public class PredicateUtils {
         if (BinaryPredicate.IS_RANGE_PREDICATE.apply(binaryPred)) {
             buildStatsPredicate(analyzer, slotRef, binaryPred, binaryPred.getOp(), minMaxTuple, minMaxConjuncts);
         } else if (BinaryPredicate.IS_EQ_PREDICATE.apply(binaryPred)) {
-            buildStatsPredicate(analyzer, slotRef, binaryPred, BinaryPredicate.Operator.GE, minMaxTuple,
+            buildStatsPredicate(analyzer, slotRef, binaryPred, BinaryType.GE, minMaxTuple,
                     minMaxConjuncts);
-            buildStatsPredicate(analyzer, slotRef, binaryPred, BinaryPredicate.Operator.LE, minMaxTuple,
+            buildStatsPredicate(analyzer, slotRef, binaryPred, BinaryType.LE, minMaxTuple,
                     minMaxConjuncts);
         }
     }
@@ -132,9 +133,9 @@ public class PredicateUtils {
 
         Preconditions.checkState(min != null);
         Preconditions.checkState(max != null);
-        BinaryPredicate minBound = new BinaryPredicate(BinaryPredicate.Operator.GE,
+        BinaryPredicate minBound = new BinaryPredicate(BinaryType.GE,
                 children.get(0).clone(), min.clone());
-        BinaryPredicate maxBound = new BinaryPredicate(BinaryPredicate.Operator.LE,
+        BinaryPredicate maxBound = new BinaryPredicate(BinaryType.LE,
                 children.get(0).clone(), max.clone());
         buildStatsPredicate(analyzer, slotRef, minBound, minBound.getOp(), minMaxTuple, minMaxConjuncts);
         buildStatsPredicate(analyzer, slotRef, maxBound, maxBound.getOp(), minMaxTuple, minMaxConjuncts);

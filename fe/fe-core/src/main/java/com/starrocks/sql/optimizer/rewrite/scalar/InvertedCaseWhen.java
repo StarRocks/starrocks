@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -386,7 +387,7 @@ public class InvertedCaseWhen {
 
         @Override
         public Optional<ScalarOperator> visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-            BinaryPredicateOperator.BinaryType binaryType = predicate.getBinaryType();
+            BinaryType binaryType = predicate.getBinaryType();
             if (!binaryType.isEqual() && !binaryType.isNotEqual()) {
                 return Optional.empty();
             }

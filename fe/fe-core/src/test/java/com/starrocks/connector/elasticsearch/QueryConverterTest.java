@@ -16,6 +16,7 @@
 package com.starrocks.connector.elasticsearch;
 
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -113,13 +114,13 @@ public class QueryConverterTest {
     public void testTranslateRangePredicate() {
         SlotRef valueSlotRef = mockSlotRef("value", Type.INT);
         IntLiteral intLiteral = new IntLiteral(1000);
-        Expr leExpr = new BinaryPredicate(BinaryPredicate.Operator.LE, valueSlotRef, intLiteral);
-        Expr ltExpr = new BinaryPredicate(BinaryPredicate.Operator.LT, valueSlotRef, intLiteral);
-        Expr geExpr = new BinaryPredicate(BinaryPredicate.Operator.GE, valueSlotRef, intLiteral);
-        Expr gtExpr = new BinaryPredicate(BinaryPredicate.Operator.GT, valueSlotRef, intLiteral);
+        Expr leExpr = new BinaryPredicate(BinaryType.LE, valueSlotRef, intLiteral);
+        Expr ltExpr = new BinaryPredicate(BinaryType.LT, valueSlotRef, intLiteral);
+        Expr geExpr = new BinaryPredicate(BinaryType.GE, valueSlotRef, intLiteral);
+        Expr gtExpr = new BinaryPredicate(BinaryType.GT, valueSlotRef, intLiteral);
 
-        Expr eqExpr = new BinaryPredicate(BinaryPredicate.Operator.EQ, valueSlotRef, intLiteral);
-        Expr neExpr = new BinaryPredicate(BinaryPredicate.Operator.NE, valueSlotRef, intLiteral);
+        Expr eqExpr = new BinaryPredicate(BinaryType.EQ, valueSlotRef, intLiteral);
+        Expr neExpr = new BinaryPredicate(BinaryType.NE, valueSlotRef, intLiteral);
         Assert.assertEquals("{\"range\":{\"value\":{\"lt\":1000}}}",
                 queryConverter.convert(ltExpr).toString());
         Assert.assertEquals("{\"range\":{\"value\":{\"lte\":1000}}}",
@@ -140,8 +141,8 @@ public class QueryConverterTest {
         SlotRef col2SlotRef = mockSlotRef("col2", Type.INT);
 
         IntLiteral intLiteral2 = new IntLiteral(200);
-        BinaryPredicate bp1 = new BinaryPredicate(BinaryPredicate.Operator.EQ, col1SlotRef, intLiteral1);
-        BinaryPredicate bp2 = new BinaryPredicate(BinaryPredicate.Operator.GT, col2SlotRef, intLiteral2);
+        BinaryPredicate bp1 = new BinaryPredicate(BinaryType.EQ, col1SlotRef, intLiteral1);
+        BinaryPredicate bp2 = new BinaryPredicate(BinaryType.GT, col2SlotRef, intLiteral2);
         CompoundPredicate andPredicate =
                 new CompoundPredicate(CompoundPredicate.Operator.AND, bp1, bp2);
         Assert.assertEquals("{\"bool\":{\"must\":[{\"term\":{\"col1\":100}},{\"range\":{\"col2\":{\"gt\":200}}}]}}",

@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -62,7 +63,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
 
         List<ScalarOperator> args = Lists.newArrayList();
         if (operator.hasCase()) {
-            args.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, operator.getCaseClause(),
+            args.add(new BinaryPredicateOperator(BinaryType.EQ, operator.getCaseClause(),
                     operator.getWhenClause(0)));
         } else {
             args.add(operator.getWhenClause(0));
@@ -287,9 +288,9 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
 
         // like a in ("xxxx");
         if (predicate.isNotIn()) {
-            return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.NE, predicate.getChildren());
+            return new BinaryPredicateOperator(BinaryType.NE, predicate.getChildren());
         } else {
-            return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, predicate.getChildren());
+            return new BinaryPredicateOperator(BinaryType.EQ, predicate.getChildren());
         }
     }
 
@@ -299,7 +300,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate,
                                                ScalarOperatorRewriteContext context) {
         if (predicate.getChild(0).isVariable() && predicate.getChild(0).equals(predicate.getChild(1))) {
-            if (predicate.getBinaryType().equals(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL)) {
+            if (predicate.getBinaryType().equals(BinaryType.EQ_FOR_NULL)) {
                 return ConstantOperator.createBoolean(true);
             }
         }

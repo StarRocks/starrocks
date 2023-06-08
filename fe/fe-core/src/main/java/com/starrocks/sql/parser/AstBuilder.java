@@ -25,6 +25,7 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.CaseExpr;
@@ -3967,7 +3968,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             IntLiteral rightValue = new IntLiteral(selectValue);
             SlotRef leftSlotRef = new SlotRef(qualifyTableName, "__QUALIFY__VALUE");
 
-            BinaryPredicate.Operator op = getComparisonOperator(((TerminalNode) context.comparisonOperator()
+            BinaryType op = getComparisonOperator(((TerminalNode) context.comparisonOperator()
                     .getChild(0)).getSymbol());
             return new SelectRelation(selectListOuter, subqueryRelation,
                     new BinaryPredicate(op, leftSlotRef, rightValue), null, null, createPos(context));
@@ -4412,7 +4413,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitScalarSubquery(StarRocksParser.ScalarSubqueryContext context) {
-        BinaryPredicate.Operator op = getComparisonOperator(((TerminalNode) context.comparisonOperator().getChild(0))
+        BinaryType op = getComparisonOperator(((TerminalNode) context.comparisonOperator().getChild(0))
                 .getSymbol());
         Subquery subquery = new Subquery(new QueryStatement((QueryRelation) visit(context.queryRelation())));
         return new BinaryPredicate(op, (Expr) visit(context.booleanExpression()), subquery, createPos(context));
@@ -5099,27 +5100,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitComparison(StarRocksParser.ComparisonContext context) {
-        BinaryPredicate.Operator op = getComparisonOperator(((TerminalNode) context.comparisonOperator().getChild(0))
+        BinaryType op = getComparisonOperator(((TerminalNode) context.comparisonOperator().getChild(0))
                 .getSymbol());
         return new BinaryPredicate(op, (Expr) visit(context.left), (Expr) visit(context.right), createPos(context));
     }
 
-    private static BinaryPredicate.Operator getComparisonOperator(Token symbol) {
+    private static BinaryType getComparisonOperator(Token symbol) {
         switch (symbol.getType()) {
             case StarRocksParser.EQ:
-                return BinaryPredicate.Operator.EQ;
+                return BinaryType.EQ;
             case StarRocksParser.NEQ:
-                return BinaryPredicate.Operator.NE;
+                return BinaryType.NE;
             case StarRocksParser.LT:
-                return BinaryPredicate.Operator.LT;
+                return BinaryType.LT;
             case StarRocksParser.LTE:
-                return BinaryPredicate.Operator.LE;
+                return BinaryType.LE;
             case StarRocksParser.GT:
-                return BinaryPredicate.Operator.GT;
+                return BinaryType.GT;
             case StarRocksParser.GTE:
-                return BinaryPredicate.Operator.GE;
+                return BinaryType.GE;
             default:
-                return BinaryPredicate.Operator.EQ_FOR_NULL;
+                return BinaryType.EQ_FOR_NULL;
         }
     }
 

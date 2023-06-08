@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.ConstantOperatorUtils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -76,7 +77,7 @@ public class DefaultPredicateSelectivityEstimator {
         @Override
         public Optional<Double> visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
             Preconditions.checkState(predicate.getChildren().size() == 2);
-            BinaryPredicateOperator.BinaryType binaryType = predicate.getBinaryType();
+            BinaryType binaryType = predicate.getBinaryType();
             ScalarOperator leftChild = predicate.getChild(0);
             ScalarOperator rightChild = predicate.getChild(1);
             ColumnStatistic leftChildStatistic = ExpressionStatisticCalculator.calculate(leftChild, statistics);
@@ -88,21 +89,21 @@ public class DefaultPredicateSelectivityEstimator {
                 //because can't check
                 return Optional.of(SELECTIVITY_MAX);
             }
-            if (binaryType.equals(BinaryPredicateOperator.BinaryType.EQ)) {
+            if (binaryType.equals(BinaryType.EQ)) {
                 return computeEquals(binaryType, leftChild, rightChild, leftChildStatistic, rightChildStatistic);
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.NE)) {
-                Optional<Double> op = computeEquals(BinaryPredicateOperator.BinaryType.EQ,
+            } else if (binaryType.equals(BinaryType.NE)) {
+                Optional<Double> op = computeEquals(BinaryType.EQ,
                         leftChild, rightChild, leftChildStatistic, rightChildStatistic);
                 return op.map(aDouble -> 1 - aDouble);
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT)) {
+            } else if (binaryType.equals(BinaryType.LT)) {
                 return computeLessOrGreat(binaryType, leftChild, rightChild, leftChildStatistic, rightChildStatistic);
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE)) {
+            } else if (binaryType.equals(BinaryType.LE)) {
                 return computeLessOrGreat(binaryType, leftChild, rightChild, leftChildStatistic, rightChildStatistic);
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GT)) {
+            } else if (binaryType.equals(BinaryType.GT)) {
                 return computeLessOrGreat(binaryType, leftChild, rightChild, leftChildStatistic, rightChildStatistic);
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GE)) {
+            } else if (binaryType.equals(BinaryType.GE)) {
                 return computeLessOrGreat(binaryType, leftChild, rightChild, leftChildStatistic, rightChildStatistic);
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL)) {
+            } else if (binaryType.equals(BinaryType.EQ_FOR_NULL)) {
                 return computeEquals(binaryType, leftChild, rightChild, leftChildStatistic, rightChildStatistic);
             } else {
                 return Optional.empty();
@@ -148,7 +149,7 @@ public class DefaultPredicateSelectivityEstimator {
          * @param rightChildStatistic column statistic for right ScalarOperator
          * @return an optional double value to get the percentage of predicate selectivity
          */
-        private Optional<Double> computeEquals(BinaryPredicateOperator.BinaryType binaryType,
+        private Optional<Double> computeEquals(BinaryType binaryType,
                                                ScalarOperator leftChild, ScalarOperator rightChild,
                                                ColumnStatistic leftChildStatistic,
                                                ColumnStatistic rightChildStatistic) {
@@ -193,7 +194,7 @@ public class DefaultPredicateSelectivityEstimator {
          * @param rightChildStatistic column statistic for right ScalarOperator
          * @return an optional double value to get the percentage of predicate selectivity
          */
-        private Optional<Double> computeLessOrGreat(BinaryPredicateOperator.BinaryType binaryType,
+        private Optional<Double> computeLessOrGreat(BinaryType binaryType,
                                                     ScalarOperator leftChild, ScalarOperator rightChild,
                                                     ColumnStatistic leftChildStatistic,
                                                     ColumnStatistic rightChildStatistic) {
@@ -226,17 +227,17 @@ public class DefaultPredicateSelectivityEstimator {
          * @return if no overlap return true, else return false
          */
         private boolean isLessOrGreatValueNoOverlap(double doubleValue, ColumnStatistic columnStatistic,
-                                                    BinaryPredicateOperator.BinaryType binaryType) {
-            if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT) &&
+                                                    BinaryType binaryType) {
+            if (binaryType.equals(BinaryType.LT) &&
                     doubleValue <= columnStatistic.getMinValue()) {
                 return true;
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE) &&
+            } else if (binaryType.equals(BinaryType.LE) &&
                     doubleValue < columnStatistic.getMinValue()) {
                 return true;
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GT) &&
+            } else if (binaryType.equals(BinaryType.GT) &&
                     doubleValue >= columnStatistic.getMaxValue()) {
                 return true;
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GE) &&
+            } else if (binaryType.equals(BinaryType.GE) &&
                     doubleValue > columnStatistic.getMaxValue()) {
                 return true;
             } else {
@@ -254,17 +255,17 @@ public class DefaultPredicateSelectivityEstimator {
          */
         private boolean isLessOrGreatValueCompleteOverlap(double doubleValue,
                                                           ColumnStatistic columnStatistic,
-                                                          BinaryPredicateOperator.BinaryType binaryType) {
-            if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT) &&
+                                                          BinaryType binaryType) {
+            if (binaryType.equals(BinaryType.LT) &&
                     doubleValue > columnStatistic.getMaxValue()) {
                 return true;
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE) &&
+            } else if (binaryType.equals(BinaryType.LE) &&
                     doubleValue >= columnStatistic.getMaxValue()) {
                 return true;
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GT) &&
+            } else if (binaryType.equals(BinaryType.GT) &&
                     doubleValue < columnStatistic.getMinValue()) {
                 return true;
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GE) &&
+            } else if (binaryType.equals(BinaryType.GE) &&
                     doubleValue <= columnStatistic.getMinValue()) {
                 return true;
             } else {
@@ -281,10 +282,10 @@ public class DefaultPredicateSelectivityEstimator {
          * @param leftChildStatistic column statistic for left ScalarOperator
          * @return an optional double value to get the percentage of predicate selectivity
          */
-        private Optional<Double> evaluateLessOrGreatInRange(BinaryPredicateOperator.BinaryType binaryType,
+        private Optional<Double> evaluateLessOrGreatInRange(BinaryType binaryType,
                                                             double doubleValue, ColumnStatistic leftChildStatistic) {
             //can optimize if we have histogram
-            if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT)) {
+            if (binaryType.equals(BinaryType.LT)) {
                 if (doubleValue == leftChildStatistic.getMaxValue()) {
                     return Optional.of(1.0 / leftChildStatistic.getDistinctValuesCount());
                 } else {
@@ -292,7 +293,7 @@ public class DefaultPredicateSelectivityEstimator {
                             (doubleValue - leftChildStatistic.getMinValue()) /
                                     (leftChildStatistic.getMaxValue() - leftChildStatistic.getMinValue()));
                 }
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE)) {
+            } else if (binaryType.equals(BinaryType.LE)) {
                 if (doubleValue == leftChildStatistic.getMinValue()) {
                     return Optional.of(1.0 / leftChildStatistic.getDistinctValuesCount());
                 } else {
@@ -300,7 +301,7 @@ public class DefaultPredicateSelectivityEstimator {
                             (doubleValue - leftChildStatistic.getMinValue()) /
                                     (leftChildStatistic.getMaxValue() - leftChildStatistic.getMinValue()));
                 }
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GT)) {
+            } else if (binaryType.equals(BinaryType.GT)) {
                 if (doubleValue == leftChildStatistic.getMinValue()) {
                     return Optional.of(1.0 - 1.0 / leftChildStatistic.getDistinctValuesCount());
                 } else {
@@ -308,7 +309,7 @@ public class DefaultPredicateSelectivityEstimator {
                             (leftChildStatistic.getMaxValue() - doubleValue) /
                                     (leftChildStatistic.getMaxValue() - leftChildStatistic.getMinValue()));
                 }
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GE)) {
+            } else if (binaryType.equals(BinaryType.GE)) {
                 if (doubleValue == leftChildStatistic.getMaxValue()) {
                     return Optional.of(1.0 / leftChildStatistic.getDistinctValuesCount());
                 } else {
@@ -330,7 +331,7 @@ public class DefaultPredicateSelectivityEstimator {
          * @return an optional double value to get the percentage of predicate selectivity. if
          */
         private Optional<Double> evaluateBinaryForExpression(
-                BinaryPredicateOperator.BinaryType binaryType,
+                BinaryType binaryType,
                 ColumnStatistic leftChildStatistic, ColumnStatistic rightChildStatistic) {
             double minLeft = leftChildStatistic.getMinValue();
             double maxLeft = leftChildStatistic.getMaxValue();
@@ -344,7 +345,7 @@ public class DefaultPredicateSelectivityEstimator {
             // if no overlap return SELECTIVITY_MIN
             // else if overlap return SELECTIVITY_MAX
             // else return SELECTIVITY_EQUALS.
-            if (binaryType.equals(BinaryPredicateOperator.BinaryType.EQ)) {
+            if (binaryType.equals(BinaryType.EQ)) {
                 if ((maxLeft < minRight) || (maxRight < minLeft)) {
                     return Optional.of(SELECTIVITY_MIN);
                 } else if ((minLeft == minRight) && (maxLeft == maxRight) && allNotNull
@@ -353,7 +354,7 @@ public class DefaultPredicateSelectivityEstimator {
                 } else {
                     return Optional.of(SELECTIVITY_EQUALS);
                 }
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT)) {
+            } else if (binaryType.equals(BinaryType.LT)) {
                 if (minLeft >= maxRight) {
                     return Optional.of(SELECTIVITY_MIN);
                 } else if ((maxLeft < minRight) && allNotNull) {
@@ -361,7 +362,7 @@ public class DefaultPredicateSelectivityEstimator {
                 } else {
                     return Optional.of(SELECTIVITY_EQUALS);
                 }
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE)) {
+            } else if (binaryType.equals(BinaryType.LE)) {
                 if (minLeft > maxRight) {
                     return Optional.of(SELECTIVITY_MIN);
                 } else if ((maxLeft <= minRight) && allNotNull) {
@@ -369,7 +370,7 @@ public class DefaultPredicateSelectivityEstimator {
                 } else {
                     return Optional.of(SELECTIVITY_EQUALS);
                 }
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GT)) {
+            } else if (binaryType.equals(BinaryType.GT)) {
                 if (maxLeft <= minRight) {
                     return Optional.of(SELECTIVITY_MIN);
                 } else if ((minLeft > maxRight) && allNotNull) {
@@ -377,7 +378,7 @@ public class DefaultPredicateSelectivityEstimator {
                 } else {
                     return Optional.of(SELECTIVITY_EQUALS);
                 }
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GE)) {
+            } else if (binaryType.equals(BinaryType.GE)) {
                 if (maxLeft < minRight) {
                     return Optional.of(SELECTIVITY_MIN);
                 } else if ((minLeft >= maxRight) && allNotNull) {
@@ -385,7 +386,7 @@ public class DefaultPredicateSelectivityEstimator {
                 } else {
                     return Optional.of(SELECTIVITY_EQUALS);
                 }
-            } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL)) {
+            } else if (binaryType.equals(BinaryType.EQ_FOR_NULL)) {
                 if (((maxLeft < minRight) || (maxRight < minLeft)) && allNotNull) {
                     return Optional.of(SELECTIVITY_MIN);
                 } else if ((minLeft == minRight) && (maxLeft == maxRight) && allNotNull

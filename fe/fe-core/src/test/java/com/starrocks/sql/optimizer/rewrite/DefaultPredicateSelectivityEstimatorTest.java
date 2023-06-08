@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -197,17 +198,17 @@ public class DefaultPredicateSelectivityEstimatorTest {
         ConstantOperator constantOperatorInt3 = ConstantOperator.createInt(100);
         ConstantOperator constantOperatorInt4 = ConstantOperator.createInt(101);
 
-        BinaryPredicateOperator intEfn0 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator intEfn0 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v1, constantOperatorInt0);
-        BinaryPredicateOperator intEfn1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator intEfn1 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v1, constantOperatorInt1);
-        BinaryPredicateOperator intEfn2 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator intEfn2 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v1, constantOperatorInt2);
-        BinaryPredicateOperator intEfn3 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator intEfn3 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v1, constantOperatorInt3);
-        BinaryPredicateOperator intEfn4 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator intEfn4 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v1, constantOperatorInt4);
-        BinaryPredicateOperator intEfn5 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator intEfn5 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v1, ConstantOperator.createNull(Type.NULL));
 
         assertEquals(defaultPredicateSelectivityEstimator.estimate(intEfn0, statistics), 0.0, 0.0);
@@ -229,17 +230,17 @@ public class DefaultPredicateSelectivityEstimatorTest {
         ConstantOperator constantOperatorDt4 =
                 ConstantOperator.createDatetime(LocalDateTime.of(2003, 10, 12, 13, 15, 25));
 
-        BinaryPredicateOperator dtEfn0 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator dtEfn0 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v7, constantOperatorDt0);
-        BinaryPredicateOperator dtEfn1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator dtEfn1 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v7, constantOperatorDt1);
-        BinaryPredicateOperator dtEfn2 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator dtEfn2 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v7, constantOperatorDt2);
-        BinaryPredicateOperator dtEfn3 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator dtEfn3 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v7, constantOperatorDt3);
-        BinaryPredicateOperator dtEfn4 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator dtEfn4 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v7, constantOperatorDt4);
-        BinaryPredicateOperator dtEfn5 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator dtEfn5 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v7, ConstantOperator.createNull(Type.NULL));
 
         assertEquals(defaultPredicateSelectivityEstimator.estimate(dtEfn0, statistics), 0.0, 0.0);
@@ -253,9 +254,9 @@ public class DefaultPredicateSelectivityEstimatorTest {
         ConstantOperator constantOperatorBool0 = ConstantOperator.createBoolean(false);
         ConstantOperator constantOperatorBool1 = ConstantOperator.createBoolean(true);
         //e.g. v4 <=> false(0)
-        BinaryPredicateOperator boolEfn0 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator boolEfn0 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v4, constantOperatorBool0);
-        BinaryPredicateOperator boolEfn1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator boolEfn1 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v4, constantOperatorBool1);
 
         assertEquals(defaultPredicateSelectivityEstimator.estimate(boolEfn0, statistics), 0.0, 0.0);
@@ -263,7 +264,7 @@ public class DefaultPredicateSelectivityEstimatorTest {
 
         //expression
         BinaryPredicateOperator expressionEfn0 =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                         v1, v4);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(expressionEfn0, statistics), 0.33, 0.004);
     }
@@ -567,7 +568,7 @@ public class DefaultPredicateSelectivityEstimatorTest {
         BinaryPredicateOperator strLg0 = BinaryPredicateOperator.le(v8, constantOperatorStr0);
         BinaryPredicateOperator strGt0 = BinaryPredicateOperator.gt(v8, constantOperatorStr0);
         BinaryPredicateOperator strGe0 = BinaryPredicateOperator.ge(v8, constantOperatorStr0);
-        BinaryPredicateOperator strEfn0 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator strEfn0 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v8, constantOperatorStr0);
 
         assertEquals(defaultPredicateSelectivityEstimator.estimate(strEq0, statistics), 1.0, 0.0);
@@ -595,7 +596,7 @@ public class DefaultPredicateSelectivityEstimatorTest {
         BinaryPredicateOperator strLg0 = BinaryPredicateOperator.le(v9, constantOperatorStr0);
         BinaryPredicateOperator strGt0 = BinaryPredicateOperator.gt(v9, constantOperatorStr0);
         BinaryPredicateOperator strGe0 = BinaryPredicateOperator.ge(v9, constantOperatorStr0);
-        BinaryPredicateOperator strEfn0 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+        BinaryPredicateOperator strEfn0 = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                 v9, constantOperatorStr0);
 
         assertEquals(defaultPredicateSelectivityEstimator.estimate(strEq0, statistics), 0.0, 0.0);

@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Function;
@@ -242,7 +243,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
         List<ScalarOperator> onPredicateList = Lists.newArrayList();
         for (int index = 0; index < onPredicateLeftColumns.size(); ++index) {
             // Build on predicate for new inner join.
-            ScalarOperator onPredicate = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+            ScalarOperator onPredicate = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                     onPredicateLeftColumns.get(index), onPredicateRightColumns.get(index));
             onPredicateList.add(onPredicate);
         }

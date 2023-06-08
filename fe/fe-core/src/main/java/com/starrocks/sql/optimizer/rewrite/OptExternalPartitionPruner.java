@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
@@ -286,9 +287,9 @@ public class OptExternalPartitionPruner {
             ScalarOperator leftChild = binaryPredicateOperator.getChild(0);
             ScalarOperator rightChild = binaryPredicateOperator.getChild(1);
             if (binaryPredicateOperator.getBinaryType().isEqual()) {
-                minMaxConjuncts.add(buildMinMaxConjunct(BinaryPredicateOperator.BinaryType.LE,
+                minMaxConjuncts.add(buildMinMaxConjunct(BinaryType.LE,
                         leftChild, rightChild, operator, context));
-                minMaxConjuncts.add(buildMinMaxConjunct(BinaryPredicateOperator.BinaryType.GE,
+                minMaxConjuncts.add(buildMinMaxConjunct(BinaryType.GE,
                         leftChild, rightChild, operator, context));
             } else if (binaryPredicateOperator.getBinaryType().isRange()) {
                 minMaxConjuncts.add(buildMinMaxConjunct(binaryPredicateOperator.getBinaryType(),
@@ -309,16 +310,16 @@ public class OptExternalPartitionPruner {
             }
             Preconditions.checkState(min != null);
 
-            BinaryPredicateOperator minBound = buildMinMaxConjunct(BinaryPredicateOperator.BinaryType.GE,
+            BinaryPredicateOperator minBound = buildMinMaxConjunct(BinaryType.GE,
                     inPredicateOperator.getChild(0), min, operator, context);
-            BinaryPredicateOperator maxBound = buildMinMaxConjunct(BinaryPredicateOperator.BinaryType.LE,
+            BinaryPredicateOperator maxBound = buildMinMaxConjunct(BinaryType.LE,
                     inPredicateOperator.getChild(0), max, operator, context);
             minMaxConjuncts.add(minBound);
             minMaxConjuncts.add(maxBound);
         }
     }
 
-    private static BinaryPredicateOperator buildMinMaxConjunct(BinaryPredicateOperator.BinaryType type,
+    private static BinaryPredicateOperator buildMinMaxConjunct(BinaryType type,
                                                                ScalarOperator left, ScalarOperator right,
                                                                LogicalScanOperator operator,
                                                                OptimizerContext context) throws AnalysisException {

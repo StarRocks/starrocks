@@ -22,6 +22,7 @@ import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
@@ -434,31 +435,31 @@ public final class SqlToScalarOperatorTranslator {
         public ScalarOperator visitBinaryPredicate(BinaryPredicate node, Context context) {
             switch (node.getOp()) {
                 case EQ:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                    return new BinaryPredicateOperator(BinaryType.EQ,
                             visit(node.getChild(0), context.clone(node)),
                             visit(node.getChild(1), context.clone(node)));
                 case NE:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.NE,
+                    return new BinaryPredicateOperator(BinaryType.NE,
                             visit(node.getChild(0), context.clone(node)),
                             visit(node.getChild(1), context.clone(node)));
                 case GT:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT,
+                    return new BinaryPredicateOperator(BinaryType.GT,
                             visit(node.getChild(0), context.clone(node)),
                             visit(node.getChild(1), context.clone(node)));
                 case GE:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,
+                    return new BinaryPredicateOperator(BinaryType.GE,
                             visit(node.getChild(0), context.clone(node)),
                             visit(node.getChild(1), context.clone(node)));
                 case LT:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT,
+                    return new BinaryPredicateOperator(BinaryType.LT,
                             visit(node.getChild(0), context.clone(node)),
                             visit(node.getChild(1), context.clone(node)));
                 case LE:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE,
+                    return new BinaryPredicateOperator(BinaryType.LE,
                             visit(node.getChild(0), context.clone(node)),
                             visit(node.getChild(1), context.clone(node)));
                 case EQ_FOR_NULL:
-                    return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                    return new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                             visit(node.getChild(0), context.clone(node)),
                             visit(node.getChild(1), context.clone(node)));
                 default:

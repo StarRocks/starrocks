@@ -23,6 +23,7 @@ import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
@@ -188,14 +189,14 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                     .put(Join.Type.IMPLICIT, JoinOperator.INNER_JOIN)
                     .build();
 
-    private static final ImmutableMap<ComparisonExpression.Operator, BinaryPredicate.Operator> COMPARISON_OPERATOR_MAP =
-            ImmutableMap.<ComparisonExpression.Operator, BinaryPredicate.Operator>builder().
-                    put(ComparisonExpression.Operator.EQUAL, BinaryPredicate.Operator.EQ)
-                    .put(ComparisonExpression.Operator.LESS_THAN, BinaryPredicate.Operator.LT)
-                    .put(ComparisonExpression.Operator.LESS_THAN_OR_EQUAL, BinaryPredicate.Operator.LE)
-                    .put(ComparisonExpression.Operator.GREATER_THAN, BinaryPredicate.Operator.GT)
-                    .put(ComparisonExpression.Operator.GREATER_THAN_OR_EQUAL, BinaryPredicate.Operator.GE)
-                    .put(ComparisonExpression.Operator.NOT_EQUAL, BinaryPredicate.Operator.NE)
+    private static final ImmutableMap<ComparisonExpression.Operator, BinaryType> COMPARISON_OPERATOR_MAP =
+            ImmutableMap.<ComparisonExpression.Operator, BinaryType>builder().
+                    put(ComparisonExpression.Operator.EQUAL, BinaryType.EQ)
+                    .put(ComparisonExpression.Operator.LESS_THAN, BinaryType.LT)
+                    .put(ComparisonExpression.Operator.LESS_THAN_OR_EQUAL, BinaryType.LE)
+                    .put(ComparisonExpression.Operator.GREATER_THAN, BinaryType.GT)
+                    .put(ComparisonExpression.Operator.GREATER_THAN_OR_EQUAL, BinaryType.GE)
+                    .put(ComparisonExpression.Operator.NOT_EQUAL, BinaryType.NE)
                     .build();
 
     private static final ImmutableMap<ArithmeticBinaryExpression.Operator, ArithmeticExpr.Operator> BINARY_OPERATOR_MAP =
@@ -844,7 +845,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitComparisonExpression(ComparisonExpression node, ParseTreeContext context) {
-        BinaryPredicate.Operator binaryOp = COMPARISON_OPERATOR_MAP.get(node.getOperator());
+        BinaryType binaryOp = COMPARISON_OPERATOR_MAP.get(node.getOperator());
         if (binaryOp == null) {
             throw new SemanticException("Do not support the comparison type %s", node.getOperator());
         }

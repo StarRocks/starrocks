@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -41,13 +42,13 @@ public class ScalarEquivalenceExtractorTest {
 
     @Test
     public void equivalentReplaceEQTransit() {
-        BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryType.EQ,
                 COLUMN_A, COLUMN_B);
-        BinaryPredicateOperator bpo2 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo2 = new BinaryPredicateOperator(BinaryType.EQ,
                 COLUMN_B, COLUMN_C);
-        BinaryPredicateOperator bpo3 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo3 = new BinaryPredicateOperator(BinaryType.EQ,
                 COLUMN_B, CONSTANT_2);
-        BinaryPredicateOperator bpo4 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo4 = new BinaryPredicateOperator(BinaryType.EQ,
                 COLUMN_C, CONSTANT_3);
 
         ScalarEquivalenceExtractor equivalence = new ScalarEquivalenceExtractor();
@@ -58,22 +59,22 @@ public class ScalarEquivalenceExtractorTest {
 
         assertEquals(4, list.size());
         assertTrue(list.contains(
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, COLUMN_A, CONSTANT_2)));
+                new BinaryPredicateOperator(BinaryType.EQ, COLUMN_A, CONSTANT_2)));
         assertTrue(list.contains(
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, COLUMN_A, CONSTANT_3)));
+                new BinaryPredicateOperator(BinaryType.EQ, COLUMN_A, CONSTANT_3)));
         assertTrue(list.contains(
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, COLUMN_A, COLUMN_B)));
+                new BinaryPredicateOperator(BinaryType.EQ, COLUMN_A, COLUMN_B)));
         assertTrue(list.contains(
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, COLUMN_A, COLUMN_C)));
+                new BinaryPredicateOperator(BinaryType.EQ, COLUMN_A, COLUMN_C)));
     }
 
     @Test
     public void equivalentReplaceLTTransit() {
-        BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryType.EQ,
                 COLUMN_A, COLUMN_B);
-        BinaryPredicateOperator bpo2 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo2 = new BinaryPredicateOperator(BinaryType.EQ,
                 COLUMN_B, COLUMN_C);
-        BinaryPredicateOperator bpo3 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT,
+        BinaryPredicateOperator bpo3 = new BinaryPredicateOperator(BinaryType.LT,
                 COLUMN_B, CONSTANT_1);
 
         ScalarEquivalenceExtractor equivalence = new ScalarEquivalenceExtractor();
@@ -84,18 +85,18 @@ public class ScalarEquivalenceExtractorTest {
 
         assertEquals(3, list.size());
         assertTrue(list.contains(
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT, COLUMN_A, CONSTANT_1)));
+                new BinaryPredicateOperator(BinaryType.LT, COLUMN_A, CONSTANT_1)));
         assertTrue(
-                list.contains(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, COLUMN_A, COLUMN_B)));
+                list.contains(new BinaryPredicateOperator(BinaryType.EQ, COLUMN_A, COLUMN_B)));
         assertTrue(
-                list.contains(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, COLUMN_A, COLUMN_C)));
+                list.contains(new BinaryPredicateOperator(BinaryType.EQ, COLUMN_A, COLUMN_C)));
     }
 
     @Test
     public void equivalentReplaceLTFunctionTransit() {
-        BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryType.EQ,
                 COLUMN_A, COLUMN_B);
-        BinaryPredicateOperator bpo2 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT,
+        BinaryPredicateOperator bpo2 = new BinaryPredicateOperator(BinaryType.LT,
                 COLUMN_B, new CallOperator("abs", Type.INT, Lists.newArrayList(ConstantOperator.createInt(2))));
 
         ScalarEquivalenceExtractor equivalence = new ScalarEquivalenceExtractor();
@@ -106,17 +107,17 @@ public class ScalarEquivalenceExtractorTest {
 
         assertEquals(2, list.size());
         assertTrue(list.contains(
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT, COLUMN_A,
+                new BinaryPredicateOperator(BinaryType.LT, COLUMN_A,
                         new CallOperator("abs", Type.INT, Lists.newArrayList(ConstantOperator.createInt(2))))));
         assertTrue(
-                list.contains(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, COLUMN_A, COLUMN_B)));
+                list.contains(new BinaryPredicateOperator(BinaryType.EQ, COLUMN_A, COLUMN_B)));
     }
 
     @Test
     public void equivalentReplaceLTFunctionRefTransit() {
-        BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryType.EQ,
                 COLUMN_A, COLUMN_B);
-        BinaryPredicateOperator bpo2 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT,
+        BinaryPredicateOperator bpo2 = new BinaryPredicateOperator(BinaryType.LT,
                 COLUMN_B, new CallOperator("abs", Type.INT, Lists.newArrayList(COLUMN_C)));
 
         ScalarEquivalenceExtractor equivalence = new ScalarEquivalenceExtractor();
@@ -127,14 +128,14 @@ public class ScalarEquivalenceExtractorTest {
 
         assertEquals(1, list.size());
         assertTrue(
-                list.contains(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, COLUMN_A, COLUMN_B)));
+                list.contains(new BinaryPredicateOperator(BinaryType.EQ, COLUMN_A, COLUMN_B)));
     }
 
     @Test
     public void equivalentReplaceEQFunctionNest() {
-        BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryType.EQ,
                 COLUMN_A, new CallOperator("abs", Type.INT, Lists.newArrayList(COLUMN_C)));
-        BinaryPredicateOperator bpo2 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo2 = new BinaryPredicateOperator(BinaryType.EQ,
                 COLUMN_C, new CallOperator("abs", Type.INT, Lists.newArrayList(CONSTANT_2)));
 
         ScalarEquivalenceExtractor equivalence = new ScalarEquivalenceExtractor();
@@ -145,15 +146,15 @@ public class ScalarEquivalenceExtractorTest {
 
         assertEquals(1, list.size());
         assertTrue(
-                list.contains(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, COLUMN_A,
+                list.contains(new BinaryPredicateOperator(BinaryType.EQ, COLUMN_A,
                         new CallOperator("abs", Type.INT, Lists.newArrayList(COLUMN_C)))));
     }
 
     @Test
     public void equivalentReplaceEQFunctionTransit() {
-        BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryType.EQ,
                 COLUMN_A, new CallOperator("abs", Type.INT, Lists.newArrayList(COLUMN_C)));
-        BinaryPredicateOperator bpo2 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo2 = new BinaryPredicateOperator(BinaryType.EQ,
                 COLUMN_C, CONSTANT_2);
 
         ScalarEquivalenceExtractor equivalence = new ScalarEquivalenceExtractor();
@@ -165,17 +166,17 @@ public class ScalarEquivalenceExtractorTest {
 
         assertEquals(2, list.size());
         assertTrue(
-                list.contains(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, COLUMN_A,
+                list.contains(new BinaryPredicateOperator(BinaryType.EQ, COLUMN_A,
                         new CallOperator("abs", Type.INT, Lists.newArrayList(COLUMN_C)))));
         assertTrue(
-                list.contains(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, COLUMN_A,
+                list.contains(new BinaryPredicateOperator(BinaryType.EQ, COLUMN_A,
                         new CallOperator("abs", Type.INT, Lists.newArrayList(CONSTANT_2)))));
     }
 
     @Test
     public void equivalentReplaceInTransit() {
         BinaryPredicateOperator bpo1 =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, COLUMN_A, COLUMN_C);
+                new BinaryPredicateOperator(BinaryType.EQ, COLUMN_A, COLUMN_C);
         InPredicateOperator bpo2 = new InPredicateOperator(COLUMN_C, CONSTANT_2, CONSTANT_1);
 
         ScalarEquivalenceExtractor equivalence = new ScalarEquivalenceExtractor();
@@ -186,14 +187,14 @@ public class ScalarEquivalenceExtractorTest {
 
         assertEquals(2, list.size());
         assertTrue(
-                list.contains(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, COLUMN_A, COLUMN_C)));
+                list.contains(new BinaryPredicateOperator(BinaryType.EQ, COLUMN_A, COLUMN_C)));
         assertTrue(
                 list.contains(new InPredicateOperator(COLUMN_A, CONSTANT_2, CONSTANT_1)));
     }
 
     @Test
     public void equivalentReplaceInFunctionTransit() {
-        BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+        BinaryPredicateOperator bpo1 = new BinaryPredicateOperator(BinaryType.EQ,
                 COLUMN_A, new CallOperator("abs", Type.INT, Lists.newArrayList(COLUMN_C)));
         InPredicateOperator bpo2 = new InPredicateOperator(COLUMN_C, CONSTANT_2, CONSTANT_1);
 
@@ -204,7 +205,7 @@ public class ScalarEquivalenceExtractorTest {
         Set<ScalarOperator> list = equivalence.getEquivalentScalar(COLUMN_A);
 
         assertEquals(1, list.size());
-        assertTrue(list.contains(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, COLUMN_A,
+        assertTrue(list.contains(new BinaryPredicateOperator(BinaryType.EQ, COLUMN_A,
                 new CallOperator("abs", Type.INT, Lists.newArrayList(COLUMN_C)))));
     }
 }

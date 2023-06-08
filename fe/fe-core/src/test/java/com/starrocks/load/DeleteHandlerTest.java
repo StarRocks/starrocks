@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
@@ -197,7 +198,7 @@ public class DeleteHandlerTest {
 
     @Test(expected = DdlException.class)
     public void testUnQuorumTimeout() throws DdlException, QueryStateException {
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.GT, new SlotRef(null, "k1"),
+        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
         DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
@@ -223,7 +224,7 @@ public class DeleteHandlerTest {
 
     @Test
     public void testQuorumTimeout() throws DdlException, QueryStateException {
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.GT, new SlotRef(null, "k1"),
+        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
         DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
@@ -278,7 +279,7 @@ public class DeleteHandlerTest {
 
     @Test
     public void testNormalTimeout() throws DdlException, QueryStateException {
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.GT, new SlotRef(null, "k1"),
+        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
         DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
@@ -335,7 +336,7 @@ public class DeleteHandlerTest {
 
     @Test(expected = DdlException.class)
     public void testCommitFail(@Mocked MarkedCountDownLatch countDownLatch) throws DdlException, QueryStateException {
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.GT, new SlotRef(null, "k1"),
+        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
         DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
@@ -400,7 +401,7 @@ public class DeleteHandlerTest {
     @Test
     public void testPublishFail(@Mocked MarkedCountDownLatch countDownLatch, @Mocked AgentTaskExecutor taskExecutor)
             throws DdlException, QueryStateException {
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.GT, new SlotRef(null, "k1"),
+        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
         DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),
@@ -464,7 +465,7 @@ public class DeleteHandlerTest {
 
     @Test
     public void testNormal(@Mocked MarkedCountDownLatch countDownLatch) throws DdlException, QueryStateException {
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.GT, new SlotRef(null, "k1"),
+        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
         DeleteStmt deleteStmt = new DeleteStmt(new TableName("test_db", "test_tbl"),

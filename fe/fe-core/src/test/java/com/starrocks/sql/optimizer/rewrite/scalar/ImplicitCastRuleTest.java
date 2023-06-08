@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.PrimitiveType;
@@ -104,7 +105,7 @@ public class ImplicitCastRuleTest {
     @Test
     public void testBinaryPredicate() {
         BinaryPredicateOperator op =
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                new BinaryPredicateOperator(BinaryType.EQ,
                         ConstantOperator.createVarchar("1"), ConstantOperator.createInt(1));
 
         ImplicitCastRule rule = new ImplicitCastRule();
@@ -122,10 +123,10 @@ public class ImplicitCastRuleTest {
     @Test
     public void testEqualForNullBinaryPredicateWithConstNull() {
         BinaryPredicateOperator[] ops = new BinaryPredicateOperator[] {
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                         ConstantOperator.createVarchar("a"),
                         ConstantOperator.createNull(Type.DOUBLE)),
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                         ConstantOperator.createNull(Type.DOUBLE),
                         ConstantOperator.createVarchar("a")),
         };
@@ -144,19 +145,19 @@ public class ImplicitCastRuleTest {
     @Test
     public void testEqualForNullBinaryPredicateWithoutConstNull() {
         BinaryPredicateOperator[] ops = new BinaryPredicateOperator[] {
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                         ConstantOperator.createDate(LocalDateTime.of(2022, Month.JANUARY, 01, 0, 0, 0)),
                         new ColumnRefOperator(1, Type.DATE, "date_col", true)
                 ),
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                         new ColumnRefOperator(1, Type.DATE, "date_col", true),
                         ConstantOperator.createInt(20220111)
                 ),
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                         ConstantOperator.createVarchar("2022-01-01"),
                         new ColumnRefOperator(1, Type.DATE, "date_col", true)
                 ),
-                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
                         new ColumnRefOperator(1, Type.DATE, "date_col", true),
                         ConstantOperator.createVarchar("2022-01-01")
                 ),

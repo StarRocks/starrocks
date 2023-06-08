@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -51,12 +52,12 @@ public class BetweenToCompoundRuleTest {
                 ((CompoundPredicateOperator) result).getCompoundType());
 
         assertEquals(OperatorType.BINARY, result.getChild(0).getOpType());
-        assertEquals(BinaryPredicateOperator.BinaryType.GE,
+        assertEquals(BinaryType.GE,
                 ((BinaryPredicateOperator) result.getChild(0)).getBinaryType());
         assertEquals(OperatorType.VARIABLE, result.getChild(0).getChild(0).getOpType());
         assertEquals(OperatorType.CONSTANT, result.getChild(0).getChild(1).getOpType());
 
-        assertEquals(BinaryPredicateOperator.BinaryType.LE,
+        assertEquals(BinaryType.LE,
                 ((BinaryPredicateOperator) result.getChild(1)).getBinaryType());
         assertEquals(OperatorType.VARIABLE, result.getChild(1).getChild(0).getOpType());
         assertEquals(OperatorType.VARIABLE, result.getChild(1).getChild(1).getOpType());
@@ -82,12 +83,12 @@ public class BetweenToCompoundRuleTest {
                 ((CompoundPredicateOperator) result).getCompoundType());
 
         assertEquals(OperatorType.BINARY, result.getChild(0).getOpType());
-        assertEquals(BinaryPredicateOperator.BinaryType.LT,
+        assertEquals(BinaryType.LT,
                 ((BinaryPredicateOperator) result.getChild(0)).getBinaryType());
         assertEquals(OperatorType.VARIABLE, result.getChild(0).getChild(0).getOpType());
         assertEquals(OperatorType.CONSTANT, result.getChild(0).getChild(1).getOpType());
 
-        assertEquals(BinaryPredicateOperator.BinaryType.GT,
+        assertEquals(BinaryType.GT,
                 ((BinaryPredicateOperator) result.getChild(1)).getBinaryType());
         assertEquals(OperatorType.VARIABLE, result.getChild(1).getChild(0).getOpType());
         assertEquals(OperatorType.VARIABLE, result.getChild(1).getChild(1).getOpType());

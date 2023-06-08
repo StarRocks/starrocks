@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.operator;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DateLiteral;
@@ -341,8 +342,8 @@ public class ColumnFilterConverter {
         @Override
         public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate,
                                                    Map<String, PartitionColumnFilter> context) {
-            if (BinaryPredicateOperator.BinaryType.NE == predicate.getBinaryType()
-                    || BinaryPredicateOperator.BinaryType.EQ_FOR_NULL == predicate.getBinaryType()) {
+            if (BinaryType.NE == predicate.getBinaryType()
+                    || BinaryType.EQ_FOR_NULL == predicate.getBinaryType()) {
                 return predicate;
             }
 

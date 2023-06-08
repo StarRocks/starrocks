@@ -387,8 +387,7 @@ public class SimpleExpressionAnalyzer {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
 
-            Type compatibleType =
-                    TypeManager.getCompatibleTypeForBinary(node.getOp().isNotRangeComparison(), type1, type2);
+            Type compatibleType = TypeManager.getCompatibleTypeForBinary(node.getOp(), type1, type2);
             // check child type can be cast
             final String ERROR_MSG = "Column type %s does not support binary predicate operation.";
             if (!Type.canCastTo(type1, compatibleType)) {
