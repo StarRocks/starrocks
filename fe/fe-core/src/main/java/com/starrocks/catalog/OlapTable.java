@@ -64,6 +64,7 @@ import com.starrocks.clone.TabletScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
@@ -1724,8 +1725,7 @@ public class OlapTable extends Table {
 
     public void checkStableAndNormal() throws DdlException {
         if (state != OlapTableState.NORMAL) {
-            throw new DdlException("Table[" + name + "]'s state is " + state.toString() + " not NORMAL."
-                    + "Do not allow create materialized view");
+            throw InvalidOlapTableStateException.of(state, getName());
         }
         // check if all tablets are healthy, and no tablet is in tablet scheduler
         long unhealthyTabletId = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),

@@ -701,8 +701,7 @@ public class AlterJobMgr {
             olapTable = (OlapTable) table;
 
             if (olapTable.getState() != OlapTableState.NORMAL) {
-                throw new DdlException("The state of \"" + table.getName() + "\" is " + olapTable.getState().name()
-                                       + ". Alter operation is only permitted if NORMAL");
+                throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
             }
 
             if (currentAlterOps.hasSchemaChangeOp()) {
