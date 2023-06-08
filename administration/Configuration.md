@@ -377,7 +377,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | size_tiered_min_level_size                            | 131072      | Byte   | Size-tiered Compaction 策略中，最小 level 的大小，小于此数值的 rowset 会直接触发 compaction。 |
 | storage_page_cache_limit | 20% | N/A | PageCache 的容量，STRING，可写为容量大小，例如： `20G`、`20480M`、`20971520K` 或 `21474836480B`。也可以写为 PageCache 占系统内存的比例，例如，`20%`。该参数仅在 `disable_storage_page_cache` 为 `false` 时生效。|
 |max_compaction_concurrency|-1| N/A | Compaction 线程数上限（即 BaseCompaction + CumulativeCompaction 的最大并发）。该参数防止 Compaction 占用过多内存。 -1 代表没有限制。0 表示不允许 compaction。|
-|internal_service_async_thread_num|10|单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。|
+| internal_service_async_thread_num | 10 | N/A | 单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。|
 
 ### 配置 BE 静态参数
 
@@ -441,7 +441,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |load_process_max_memory_limit_bytes|107374182400|单节点上所有的导入线程占据的内存上限，100GB。|
 |load_process_max_memory_limit_percent|30|单节点上所有的导入线程占据的内存上限比例。|
 |sync_tablet_meta|FALSE|存储引擎是否开 sync 保留到磁盘上。|
-|routine_load_thread_pool_size|10|例行导入的线程池数目。|
+|routine_load_thread_pool_size|10|Routine Load 的线程池数目。|
 |brpc_max_body_size|2147483648|BRPC 最大的包容量，单位为 Byte。|
 |tablet_map_shard_size|32|Tablet 分组数。|
 |enable_bitmap_union_disk_format_with_set|FALSE|Bitmap 新存储格式，可以优化 bitmap_union 性能。|
