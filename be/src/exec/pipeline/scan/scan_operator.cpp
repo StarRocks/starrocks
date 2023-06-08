@@ -458,7 +458,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                     // We must reset rowsets of Morsel to captured delta rowsets, because TabletReader now
                     // created from rowsets passed in to itself instead of capturing it from TabletManager again.
                     morsel->set_from_version(delta_version);
-                    morsel->set_rowsets(delta_rowsets);
+                    morsel->set_delta_rowsets(std::move(delta_rowsets));
                     break;
                 } else {
                     ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
@@ -472,7 +472,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                 auto [delta_verrsion, delta_rowsets] = _cache_operator->delta_version_and_rowsets(lane_owner);
                 if (!delta_rowsets.empty()) {
                     morsel->set_from_version(delta_verrsion);
-                    morsel->set_rowsets(delta_rowsets);
+                    morsel->set_delta_rowsets(std::move(delta_rowsets));
                 }
                 break;
             }

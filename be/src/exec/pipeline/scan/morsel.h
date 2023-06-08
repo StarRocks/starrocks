@@ -83,7 +83,14 @@ public:
     int64_t from_version() { return _from_version; }
 
     void set_rowsets(const std::vector<RowsetSharedPtr>& rowsets) { _rowsets = &rowsets; }
-    const std::vector<RowsetSharedPtr>& rowsets() const { return *_rowsets; }
+    void set_delta_rowsets(std::vector<RowsetSharedPtr>&& delta_rowsets) { _delta_rowsets = std::move(delta_rowsets); }
+    const std::vector<RowsetSharedPtr>& rowsets() const {
+        if (_delta_rowsets.has_value()) {
+            return _delta_rowsets.value();
+        } else {
+            return *_rowsets;
+        }
+    }
 
 private:
     int32_t _plan_node_id;
@@ -92,6 +99,7 @@ private:
     static const std::vector<RowsetSharedPtr> kEmptyRowsets;
     // _rowsets is owned by MorselQueue, whose lifecycle is longer than that of Morsel.
     const std::vector<RowsetSharedPtr>* _rowsets = &kEmptyRowsets;
+    std::optional<std::vector<RowsetSharedPtr>> _delta_rowsets;
 };
 
 class ScanMorsel : public Morsel {
