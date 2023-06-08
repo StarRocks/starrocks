@@ -108,9 +108,9 @@ public class DistributionSpec {
             }
 
             if (requiredCol.isNullStrict()) {
-                return nullStrictDisjointSet.isConnected(requiredCol, existDistributionCol);
+                return nullStrictDisjointSet.isEquivalent(requiredCol, existDistributionCol);
             } else {
-                return nullRelaxDisjointSet.isConnected(requiredCol, existDistributionCol.getNullRelaxCol());
+                return nullRelaxDisjointSet.isEquivalent(requiredCol, existDistributionCol.getNullRelaxCol());
             }
         }
 
