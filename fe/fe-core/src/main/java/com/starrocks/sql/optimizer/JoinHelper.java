@@ -32,7 +32,7 @@ import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.EQ_FOR_NULL;
+import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
 
 public class JoinHelper {
     private final JoinOperator type;
