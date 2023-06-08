@@ -244,10 +244,10 @@ import org.apache.thrift.TException;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -1791,15 +1791,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 if (olapTable.isCloudNativeTable()) {
                     for (Tablet tablet : index.getTablets()) {
                         LakeTablet cloudNativeTablet = (LakeTablet) tablet;
-                        Set<Long> backendIds = cloudNativeTablet.getBackendIds();
-                        if (backendIds.isEmpty()) {
+                        try {
+                            // use default warehouse nodes
+                            long primaryId = cloudNativeTablet.getPrimaryComputeNodeId();
+                            tablets.add(new TTabletLocation(tablet.getId(), Collections.singletonList(primaryId)));
+                        } catch (UserException exception) {
                             errorStatus.setError_msgs(Lists.newArrayList(
                                     "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                    + tablet.getId() + ", backends: none"));
+                                            + tablet.getId() + ", backends: none"));
                             result.setStatus(errorStatus);
                             return result;
                         }
-                        tablets.add(new TTabletLocation(tablet.getId(), new ArrayList<>(backendIds)));
                     }
                 } else {
                     for (Tablet tablet : index.getTablets()) {
