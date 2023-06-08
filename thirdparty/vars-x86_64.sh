@@ -44,3 +44,9 @@ ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releas
 ASYNC_PROFILER_NAME="async-profiler-2.9-linux-x64.tar.gz"
 ASYNC_PROFILER_SOURCE="async-profiler-2.9-linux-x64"
 ASYNC_PROFILER_MD5SUM="29127cee36b7acf069d31603b4558361"
+
+# starcache
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v2.0.0/x86_64/starcache.tar.gz"
+STARCACHE_NAME="starcache.tar.gz"
+STARCACHE_SOURCE="starcache"
+STARCACHE_MD5SUM="72c74853ca8b520491aecba901ffff95"
