@@ -375,6 +375,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | tablet_max_pending_versions                           | 1000        | N/A    | PrimaryKey 表允许 committed 未 apply 的最大版本数。                 |
 | max_hdfs_file_handle                                  | 1000        | N/A    | 最多可以打开的 HDFS 文件句柄数量。                             |
 | parquet_buffer_stream_reserve_size                    | 1048576     | Byte   | Parquet reader在读取时为每个列预留的内存空间。               |
+|internal_service_async_thread_num                      | 10          | N/A    | 单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。|
 
 ### 配置 BE 静态参数
 
