@@ -450,6 +450,8 @@ vectorized_functions = [
      'LikePredicate::like_close'],
     [60020, 'REGEXP', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'LikePredicate::regex', 'LikePredicate::regex_prepare',
      'LikePredicate::regex_close'],
+    [60021, 'REGEXP', 'BOOLEAN', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'LikePredicate::regex', 'LikePredicate::regex_prepare',
+     'LikePredicate::regex_close'],
 
     # 70xxx: condition functions
     # In fact, condition function will use condition express, not function. There just support
