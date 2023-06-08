@@ -1891,7 +1891,31 @@ public class PrivilegeCheckerV2Test {
         // SHOW LOAD STMT
         String showLoadSql = "SHOW LOAD FROM db1";
         statement = UtFrameUtils.parseStmtWithNewParser(showLoadSql, starRocksAssert.getCtx());
+<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/sql/analyzer/PrivilegeCheckerV2Test.java
         PrivilegeCheckerV2.check(statement, ctx);
+=======
+        PrivilegeChecker.check(statement, ctx);
+
+        // Test cancel load and table doesn't exist
+        createSql = "LOAD LABEL db1.job_name2" +
+                "(DATA INFILE('hdfs://test:8080/user/starrocks/data/input/example1.csv') " +
+                "INTO TABLE tbl_not_exist) " +
+                "WITH RESOURCE 'my_spark'" +
+                "('username' = 'test_name','password' = 'pwd') " +
+                "PROPERTIES ('timeout' = '3600');";
+        ctxToRoot();
+        String createTblStmtStr = "create table db1.tbl_not_exist(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
+                "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
+        starRocksAssert.withLoad(createSql);
+        starRocksAssert.dropTable("db1.tbl_not_exist");
+        ctxToTestUser();
+        grantRevokeSqlAsRoot("grant USAGE on resource 'my_spark' to test;");
+        statement = UtFrameUtils.parseStmtWithNewParser(
+                "CANCEL LOAD FROM db1 WHERE LABEL = 'job_name2'", starRocksAssert.getCtx());
+        PrivilegeChecker.check(statement, ctx);
+        grantRevokeSqlAsRoot("revoke USAGE on resource 'my_spark' from test;");
+>>>>>>> 0dfff78e4 ([BugFix] Fix cancel load failure because of non existed table (#24922)):fe/fe-core/src/test/java/com/starrocks/sql/analyzer/PrivilegeCheckerTest.java
     }
 
     @Test
