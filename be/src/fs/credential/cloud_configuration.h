@@ -41,6 +41,17 @@ public:
     }
 };
 
+class AliyunCloudCredential final : public CloudCredential {
+public:
+    std::string access_key;
+    std::string secret_key;
+    std::string endpoint;
+
+    bool operator==(const AliyunCloudCredential& rhs) const {
+        return access_key == rhs.access_key && secret_key == rhs.secret_key && endpoint == rhs.endpoint;
+    }
+};
+
 class CloudConfiguration {
 public:
     virtual ~CloudConfiguration() = default;
@@ -55,5 +66,13 @@ public:
     AWSCloudCredential aws_cloud_credential;
     bool enable_path_style_access = false;
     bool enable_ssl = true;
+};
+
+class AliyunCloudConfiguration final : public CloudConfiguration {
+public:
+    bool operator==(const AliyunCloudConfiguration& rhs) const {
+        return aliyun_cloud_credential == rhs.aliyun_cloud_credential;
+    }
+    AliyunCloudCredential aliyun_cloud_credential;
 };
 } // namespace starrocks

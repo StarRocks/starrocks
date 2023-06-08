@@ -19,7 +19,8 @@ enum TCloudType {
     DEFAULT,
     AWS,
     AZURE,
-    GCP
+    GCP,
+    ALIYUN
 }
 
 struct TCloudProperty {

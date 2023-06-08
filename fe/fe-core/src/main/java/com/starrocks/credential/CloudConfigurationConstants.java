@@ -93,4 +93,9 @@ public class CloudConfigurationConstants {
     public static final String HDFS_KERBEROS_PRINCIPAL = "kerberos_principal";
     public static final String HDFS_KERBEROS_KEYTAB = "kerberos_keytab";
     public static final String HDFS_KERBEROS_KEYTAB_CONTENT = "kerberos_keytab_content";
+
+    // Credential for Aliyun OSS
+    public static final String ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";
+    public static final String ALIYUN_OSS_SECRET_KEY = "aliyun.oss.secret_key";
+    public static final String ALIYUN_OSS_ENDPOINT = "aliyun.oss.endpoint";
 }
