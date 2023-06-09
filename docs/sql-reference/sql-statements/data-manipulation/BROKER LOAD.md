@@ -92,6 +92,12 @@ INTO TABLE <table_name>
   >   - If your storage account allows access over HTTP, use the abfs protocol and write the file path as `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
   >   - If your storage account allows access over HTTPS, use the abfss protocol and write the file path as `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
 
+- `INTO TABLE`
+
+  Specifies the name of the destination StarRocks table.
+
+`data_desc` can also optionally include the following parameters:
+
 - `NEGATIVE`
 
   Revokes the loading of a specific batch of data. To achieve this, you need to load the same batch of data with the `NEGATIVE` keyword specified.
@@ -99,12 +105,6 @@ INTO TABLE <table_name>
   > **NOTE**
   >
   > This parameter is valid only when the StarRocks table uses the Aggregate table and all its value columns are computed by the `sum` function.
-
-- `INTO TABLE`
-
-  Specifies the name of the destination StarRocks table.
-
-`data_desc` can also optionally include the following parameters:
 
 - `PARTITION`
 
