@@ -81,10 +81,6 @@ INTO TABLE <table_name>
   >**注意**
   >
   > 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
-
-- `NEGATIVE`
-
-  用于撤销某一批已经成功导入的数据。如果想要撤销某一批已经成功导入的数据，可以通过指定 `NEGATIVE` 关键字来导入同一批数据。
   
 - `INTO TABLE`
 
@@ -95,6 +91,10 @@ INTO TABLE <table_name>
   > **说明**
   >
   > 该参数仅适用于目标 StarRocks 表使用聚合模型、并且所有 Value 列的聚合函数均为 `sum` 的情况。
+
+- `NEGATIVE`
+
+  用于撤销某一批已经成功导入的数据。如果想要撤销某一批已经成功导入的数据，可以通过指定 `NEGATIVE` 关键字来导入同一批数据。
 
 - `PARTITION`
 
