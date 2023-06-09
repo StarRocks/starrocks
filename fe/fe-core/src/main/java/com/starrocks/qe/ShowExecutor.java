@@ -637,7 +637,7 @@ public class ShowExecutor {
                     for (int i = 0; i < 15; ++i) {
                         row.add(null);
                     }
-                    row.add(table.getComment());
+                    row.add(table.getDisplayComment());
                     rows.add(row);
                 }
             } finally {

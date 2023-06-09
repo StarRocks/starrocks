@@ -9,6 +9,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -85,5 +86,23 @@ public class CatalogUtils {
         } finally {
             db.readUnlock();
         }
+    }
+
+    public static String addEscapeCharacter(String comment) {
+        if (StringUtils.isEmpty(comment)) {
+            return comment;
+        }
+        StringBuilder output = new StringBuilder();
+        for (int i = 0; i < comment.length(); i++) {
+            char c = comment.charAt(i);
+
+            if (c == '\\' || c == '"') {
+                output.append('\\');
+                output.append(c);
+            } else {
+                output.append(c);
+            }
+        }
+        return output.toString();
     }
 }
