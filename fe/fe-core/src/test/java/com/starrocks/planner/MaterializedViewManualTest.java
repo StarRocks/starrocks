@@ -184,7 +184,8 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "time_slice(`dt`, INTERVAL 5 minute) AS `ts`\n" +
                 "FROM `test_partition_expr_tbl1`\n" +
                 "WHERE `dt` >= '2023-04-10 17:00:00' and `dt` < '2023-04-10 18:00:00'\n" +
-                "group by ts").nonMatch("test_partition_expr_mv1");
+                "group by ts")
+                .match("test_partition_expr_mv1");
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
     }
 
