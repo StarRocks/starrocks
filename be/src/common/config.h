@@ -112,6 +112,14 @@ CONF_Int32(push_worker_count_high_priority, "3");
 // The count of thread to publish version per transaction
 CONF_mInt32(transaction_publish_version_worker_count, "0");
 
+<<<<<<< HEAD
+=======
+// The count of thread to apply rowset in primary key table
+// 0 means apply worker count is equal to cpu core count
+CONF_mInt32(transaction_apply_worker_count, "0");
+CONF_mInt32(get_pindex_worker_count, "0");
+
+>>>>>>> 5f93150d4 ([BugFix] Set _get_pindex_thread_pool as a global thread pool (#24980))
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
 // The count of thread to delete.

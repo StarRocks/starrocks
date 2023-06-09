@@ -58,6 +58,9 @@ UpdateManager::~UpdateManager() {
         // should be shutdown.
         _apply_thread_pool->shutdown();
     }
+    if (_get_pindex_thread_pool) {
+        _get_pindex_thread_pool->shutdown();
+    }
     clear_cache();
     if (_compaction_state_mem_tracker) {
         _compaction_state_mem_tracker.reset();
@@ -74,8 +77,23 @@ UpdateManager::~UpdateManager() {
 }
 
 Status UpdateManager::init() {
+<<<<<<< HEAD
     auto st = ThreadPoolBuilder("update_apply").build(&_apply_thread_pool);
     return st;
+=======
+    int max_thread_cnt = CpuInfo::num_cores();
+    if (config::transaction_apply_worker_count > 0) {
+        max_thread_cnt = config::transaction_apply_worker_count;
+    }
+    RETURN_IF_ERROR(ThreadPoolBuilder("update_apply").set_max_threads(max_thread_cnt).build(&_apply_thread_pool));
+
+    int max_get_thread_cnt =
+            config::get_pindex_worker_count > max_thread_cnt ? config::get_pindex_worker_count : max_thread_cnt * 2;
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("get_pindex").set_max_threads(max_get_thread_cnt).build(&_get_pindex_thread_pool));
+
+    return Status::OK();
+>>>>>>> 5f93150d4 ([BugFix] Set _get_pindex_thread_pool as a global thread pool (#24980))
 }
 
 Status UpdateManager::get_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
