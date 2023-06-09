@@ -115,13 +115,11 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
             if (colocateIndex.isGroupUnstable(leftGroupId) || colocateIndex.isGroupUnstable(rightGroupId)) {
                 return false;
             }
-
-            if (leftLocalDistributionDesc.getDistributionCols().size()
-                    != rightLocalDistributionDesc.getDistributionCols().size()) {
-                String msg = "Failed to enforce the output property of children in the join operator. " +
-                        "left child distribution info %s, right child distribution info %s";
-                throw new IllegalArgumentException(String.format(msg, leftLocalDistributionSpec, rightLocalDistributionSpec));
-            }
+            checkState(leftLocalDistributionDesc.getDistributionCols().size()
+                    == rightLocalDistributionDesc.getDistributionCols().size(),
+                    "Failed to enforce the output property of children in the join operator. " +
+                            "left child distribution info %s, right child distribution info %s",
+                    leftLocalDistributionSpec, rightLocalDistributionSpec);
         }
 
         for (int i = 0; i < leftLocalDistributionDesc.getDistributionCols().size(); ++i) {
