@@ -1394,15 +1394,15 @@ public class EditLog {
         }
     }
 
-    public void logExportUpdateState(long jobId, ExportJob.JobState newState,
+    public void logExportUpdateState(long jobId, ExportJob.JobState newState, long stateChangeTime,
                                      List<Pair<TNetworkAddress, String>> snapshotPaths, String exportTempPath,
                                      Set<String> exportedFiles, ExportFailMsg failMsg) {
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState,
+            ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState, stateChangeTime,
                     snapshotPaths, exportTempPath, exportedFiles, failMsg);
             logJsonObject(OperationType.OP_EXPORT_UPDATE_INFO_V2, updateInfo);
         } else {
-            ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState,
+            ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState, stateChangeTime,
                     snapshotPaths, exportTempPath, exportedFiles, failMsg);
             logEdit(OperationType.OP_EXPORT_UPDATE_INFO, updateInfo);
         }
