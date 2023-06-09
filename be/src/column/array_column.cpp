@@ -214,6 +214,10 @@ Status ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
 }
 
 void ArrayColumn::remove_first_n_values(size_t count) {
+    if (count >= _offsets->size()) {
+        count = _offsets->size() - 1;
+    }
+
     size_t offset = _offsets->get_data()[count];
     _elements->remove_first_n_values(offset);
     _offsets->remove_first_n_values(count);
