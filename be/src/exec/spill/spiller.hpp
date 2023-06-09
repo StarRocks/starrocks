@@ -32,7 +32,7 @@
 namespace starrocks::spill {
 template <class TaskExecutor, class MemGuard>
 Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard) {
-    SCOPED_TIMER(_metrics.spill_timer);
+    SCOPED_TIMER(_metrics.append_data_timer);
     RETURN_IF_ERROR(task_status());
     DCHECK(!chunk->is_empty());
     DCHECK(!is_full());
@@ -57,7 +57,7 @@ Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&&
 template <class Processer, class TaskExecutor, class MemGuard>
 Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, SpillHashColumn* hash_column,
                                   Processer&& processer, TaskExecutor&& executor, MemGuard&& guard) {
-    SCOPED_TIMER(_metrics.spill_timer);
+    SCOPED_TIMER(_metrics.append_data_timer);
     RETURN_IF_ERROR(task_status());
     DCHECK(!chunk->is_empty());
     COUNTER_UPDATE(_metrics.spill_rows, chunk->num_rows());
@@ -173,7 +173,7 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
 
 template <class TaskExecutor, class MemGuard>
 StatusOr<ChunkPtr> SpillerReader::restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-    SCOPED_TIMER(_spiller->metrics().restore_timer);
+    SCOPED_TIMER(_spiller->metrics().restore_from_buffer_timer);
     ASSIGN_OR_RETURN(auto chunk, _stream->get_next(_spill_read_ctx));
     RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));
     _read_rows += chunk->num_rows();

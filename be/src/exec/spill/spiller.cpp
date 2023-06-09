@@ -42,28 +42,26 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
     _spiller_metrics = std::make_shared<RuntimeProfile>("SpillerMetrics");
     profile->add_child(_spiller_metrics.get(), true, nullptr);
 
-    spill_timer = ADD_TIMER(_spiller_metrics.get(), "SpillTime");
+    append_data_timer = ADD_TIMER(_spiller_metrics.get(), "AppendDataTime");
     spill_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsSpilled", TUnit::UNIT);
     flush_timer = ADD_TIMER(_spiller_metrics.get(), "FlushTime");
     write_io_timer = ADD_TIMER(_spiller_metrics.get(), "WriteIOTime");
     restore_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsRestored", TUnit::UNIT);
-    restore_timer = ADD_TIMER(_spiller_metrics.get(), "RestoreTime");
+    restore_from_buffer_timer = ADD_TIMER(_spiller_metrics.get(), "RestoreTime");
     read_io_timer = ADD_TIMER(_spiller_metrics.get(), "ReadIOTime");
-    shuffle_timer = ADD_TIMER(_spiller_metrics.get(), "ShuffleTime");
-    split_partition_timer = ADD_TIMER(_spiller_metrics.get(), "SplitPartitionTime");
-
     flush_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesFlushToDisk", TUnit::BYTES);
     restore_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesRestoreFromDisk", TUnit::BYTES);
     serialize_timer = ADD_TIMER(_spiller_metrics.get(), "SerializeTime");
     deserialize_timer = ADD_TIMER(_spiller_metrics.get(), "DeserializeTime");
-
-    restore_from_mem_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsRestoreFromMemory", TUnit::UNIT);
-    restore_from_mem_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesRestoreFromMemory", TUnit::UNIT);
-
     mem_table_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
             "MemTablePeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     input_stream_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
             "InputStreamPeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+
+    shuffle_timer = ADD_TIMER(_spiller_metrics.get(), "ShuffleTime");
+    split_partition_timer = ADD_TIMER(_spiller_metrics.get(), "SplitPartitionTime");
+    restore_from_mem_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsRestoreFromMemory", TUnit::UNIT);
+    restore_from_mem_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesRestoreFromMemory", TUnit::UNIT);
     partition_writer_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
             "PartitionWriterPeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
 }
