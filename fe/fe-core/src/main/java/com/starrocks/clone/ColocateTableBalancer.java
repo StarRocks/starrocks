@@ -154,7 +154,7 @@ public class ColocateTableBalancer extends MasterDaemon {
      */
     protected void runAfterCatalogReady() {
         relocateAndBalanceGroup();
-        matchGroup();
+        matchGroups();
     }
 
     /*
@@ -282,163 +282,210 @@ public class ColocateTableBalancer extends MasterDaemon {
         return hasBad && st == TabletStatus.COLOCATE_REDUNDANT;
     }
 
+    private long doMatchOneGroup(GroupId groupId,
+                                 boolean isUrgent,
+                                 GlobalStateMgr globalStateMgr,
+                                 ColocateTableIndex colocateIndex,
+                                 TabletScheduler tabletScheduler) {
+        long checkStartTime = System.currentTimeMillis();
+        long lockTotalTime = 0;
+        List<Long> tableIds = colocateIndex.getAllTableIds(groupId);
+        Database db = globalStateMgr.getDbIncludeRecycleBin(groupId.dbId);
+        if (db == null) {
+            return lockTotalTime;
+        }
+
+        List<Set<Long>> backendBucketsSeq = colocateIndex.getBackendsPerBucketSeqSet(groupId);
+        if (backendBucketsSeq.isEmpty()) {
+            return lockTotalTime;
+        }
+
+        boolean isGroupStable = true;
+        // set the config to a local variable to avoid config params changed.
+        int partitionBatchNum = Config.tablet_checker_partition_batch_num;
+        int partitionChecked = 0;
+        db.readLock();
+        long lockStart = System.nanoTime();
+        try {
+            TABLE:
+            for (Long tableId : tableIds) {
+                OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
+                if (olapTable == null || !colocateIndex.isColocateTable(olapTable.getId())) {
+                    continue;
+                }
+
+                if ((isUrgent && !globalStateMgr.getTabletChecker().isUrgentTable(db.getId(), tableId))) {
+                    continue;
+                }
+
+                for (Partition partition : globalStateMgr.getPartitionsIncludeRecycleBin(olapTable)) {
+                    partitionChecked++;
+
+                    boolean isPartitionUrgent =
+                            globalStateMgr.getTabletChecker().isPartitionUrgent(db.getId(), tableId, partition.getId());
+                    boolean isUrgentPartitionHealthy = true;
+                    if ((isUrgent && !isPartitionUrgent) || (!isUrgent && isPartitionUrgent)) {
+                        continue;
+                    }
+
+                    if (partitionChecked % partitionBatchNum == 0) {
+                        lockTotalTime += System.nanoTime() - lockStart;
+                        // release lock, so that lock can be acquired by other threads.
+                        db.readUnlock();
+                        db.readLock();
+                        lockStart = System.nanoTime();
+                        if (globalStateMgr.getDbIncludeRecycleBin(groupId.dbId) == null) {
+                            return lockTotalTime;
+                        }
+                        if (globalStateMgr.getTableIncludeRecycleBin(db, olapTable.getId()) == null) {
+                            continue TABLE;
+                        }
+                        if (globalStateMgr.getPartitionIncludeRecycleBin(olapTable, partition.getId()) == null) {
+                            continue;
+                        }
+                    }
+                    short replicationNum =
+                            globalStateMgr.getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
+                                    partition.getId());
+                    if (replicationNum == (short) -1) {
+                        continue;
+                    }
+
+                    long visibleVersion = partition.getVisibleVersion();
+                    // Here we only get VISIBLE indexes. All other indexes are not queryable.
+                    // So it does not matter if tablets of other indexes are not matched.
+                    for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                        Preconditions.checkState(backendBucketsSeq.size() == index.getTablets().size(),
+                                backendBucketsSeq.size() + " v.s. " + index.getTablets().size());
+                        int idx = 0;
+                        for (Long tabletId : index.getTabletIdsInOrder()) {
+                            LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
+                            Set<Long> bucketsSeq = backendBucketsSeq.get(idx);
+                            // Tablet has already been scheduled, no need to schedule again
+                            if (!tabletScheduler.containsTablet(tablet.getId())) {
+                                Preconditions.checkState(bucketsSeq.size() == replicationNum,
+                                        bucketsSeq.size() + " vs. " + replicationNum);
+                                TabletStatus st = tablet.getColocateHealthStatus(visibleVersion,
+                                        replicationNum, bucketsSeq);
+                                if (st != TabletStatus.HEALTHY) {
+                                    isGroupStable = false;
+                                    Priority colocateUnhealthyPrio = Priority.HIGH;
+                                    if (isPartitionUrgent) {
+                                        colocateUnhealthyPrio = Priority.VERY_HIGH;
+                                        isUrgentPartitionHealthy = false;
+                                    }
+
+                                    // We should also check if the tablet is ready to be repaired like
+                                    // `TabletChecker` did. Slightly delay the repair action can avoid unnecessary
+                                    // clone in situation like temporarily restart BE Nodes.
+                                    if (tablet.readyToBeRepaired(st, colocateUnhealthyPrio)) {
+                                        LOG.debug("get unhealthy tablet {} in colocate table. status: {}",
+                                                tablet.getId(), st);
+                                        TabletSchedCtx tabletCtx = new TabletSchedCtx(
+                                                TabletSchedCtx.Type.REPAIR, db.getClusterName(),
+                                                db.getId(), tableId, partition.getId(), index.getId(),
+                                                tablet.getId(),
+                                                System.currentTimeMillis());
+                                        // the tablet status will be checked and set again when being scheduled
+                                        tabletCtx.setTabletStatus(st);
+                                        // using HIGH priority, because we want to stabilize the colocate group
+                                        // as soon as possible
+                                        tabletCtx.setOrigPriority(colocateUnhealthyPrio);
+                                        tabletCtx.setTabletOrderIdx(idx);
+                                        tabletCtx.setColocateGroupId(groupId);
+                                        tabletCtx.setTablet(tablet);
+                                        ColocateRelocationInfo info = group2ColocateRelocationInfo.get(groupId);
+                                        tabletCtx.setRelocationForRepair(info != null
+                                                && info.getRelocationForRepair()
+                                                && st == TabletStatus.COLOCATE_MISMATCH);
+
+                                        // For bad replica, we ignore the size limit of scheduler queue
+                                        AddResult res = tabletScheduler.addTablet(tabletCtx,
+                                                needToForceRepair(st, tablet,
+                                                        bucketsSeq) || isPartitionUrgent /* forcefully add or not */);
+                                        if (res == AddResult.LIMIT_EXCEED) {
+                                            // tablet in scheduler exceed limit, skip this group and check next one.
+                                            LOG.info("number of scheduling tablets in tablet scheduler"
+                                                    + " exceed to limit. stop colocate table check");
+                                            break TABLE;
+                                        }
+                                        if (res == AddResult.ADDED && tabletCtx.getRelocationForRepair()) {
+                                            LOG.info("add tablet relocation task to scheduler, tablet id: {}, " +
+                                                            "bucket sequence before: {}, bucket sequence now: {}",
+                                                    tableId,
+                                                    info != null ? info.getLastBackendsPerBucketSeq().get(idx) :
+                                                            Lists.newArrayList(),
+                                                    bucketsSeq);
+                                        }
+                                    }
+                                } else {
+                                    tablet.setLastStatusCheckTime(checkStartTime);
+                                }
+                            } else {
+                                // tablet maybe added to scheduler because of balance between local disks,
+                                // in this case we shouldn't mark the group unstable
+                                if (tablet.getColocateHealthStatus(visibleVersion, replicationNum, bucketsSeq)
+                                        != TabletStatus.HEALTHY) {
+                                    isGroupStable = false;
+                                }
+                            }
+                            idx++;
+                        } // end for tablets
+                    } // end for materialize indexes
+
+                    if (isUrgentPartitionHealthy && isPartitionUrgent) {
+                        globalStateMgr.getTabletChecker().removeFromUrgentTable(
+                                new TabletChecker.RepairTabletInfo(db.getId(), tableId,
+                                        Lists.newArrayList(partition.getId())));
+                    }
+                } // end for partitions
+            } // end for tables
+
+            // mark group as stable or unstable
+            if (isGroupStable) {
+                colocateIndex.markGroupStable(groupId, true);
+            } else {
+                colocateIndex.markGroupUnstable(groupId, true);
+            }
+        } finally {
+            lockTotalTime += System.nanoTime() - lockStart;
+            db.readUnlock();
+        }
+
+        return lockTotalTime;
+    }
+
+    private long matchOneGroupUrgent(GroupId groupId,
+                                     GlobalStateMgr globalStateMgr,
+                                     ColocateTableIndex colocateIndex,
+                                     TabletScheduler tabletScheduler) {
+        return doMatchOneGroup(groupId, true, globalStateMgr, colocateIndex, tabletScheduler);
+    }
+
+    private long matchOneGroupNonUrgent(GroupId groupId,
+                                        GlobalStateMgr globalStateMgr,
+                                        ColocateTableIndex colocateIndex,
+                                        TabletScheduler tabletScheduler) {
+        return doMatchOneGroup(groupId, false, globalStateMgr, colocateIndex, tabletScheduler);
+    }
+
     /*
      * Check every tablet of a group, if replica's location does not match backends in group, relocating those
      * replicas, and mark that group as unstable.
      * If every replicas match the backends in group, mark that group as stable.
      */
-    private void matchGroup() {
+    private void matchGroups() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         ColocateTableIndex colocateIndex = globalStateMgr.getColocateTableIndex();
         TabletScheduler tabletScheduler = globalStateMgr.getTabletScheduler();
-        long checkStartTime = System.currentTimeMillis();
 
         long start = System.nanoTime();
         long lockTotalTime = 0;
-        long lockStart;
         // check each group
         Set<GroupId> groupIds = colocateIndex.getAllGroupIds();
-        GROUP:
         for (GroupId groupId : groupIds) {
-            List<Long> tableIds = colocateIndex.getAllTableIds(groupId);
-            Database db = globalStateMgr.getDbIncludeRecycleBin(groupId.dbId);
-            if (db == null) {
-                continue;
-            }
-
-            List<Set<Long>> backendBucketsSeq = colocateIndex.getBackendsPerBucketSeqSet(groupId);
-            if (backendBucketsSeq.isEmpty()) {
-                continue;
-            }
-
-            boolean isGroupStable = true;
-            // set the config to a local variable to avoid config params changed.
-            int partitionBatchNum = Config.tablet_checker_partition_batch_num;
-            int partitionChecked = 0;
-            db.readLock();
-            lockStart = System.nanoTime();
-            try {
-                TABLE:
-                for (Long tableId : tableIds) {
-                    OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
-                    if (olapTable == null || !colocateIndex.isColocateTable(olapTable.getId())) {
-                        continue;
-                    }
-
-                    for (Partition partition : globalStateMgr.getPartitionsIncludeRecycleBin(olapTable)) {
-                        partitionChecked++;
-                        if (partitionChecked % partitionBatchNum == 0) {
-                            lockTotalTime += System.nanoTime() - lockStart;
-                            // release lock, so that lock can be acquired by other threads.
-                            LOG.debug("partition checked reached batch value, release lock");
-                            db.readUnlock();
-                            db.readLock();
-                            LOG.debug("balancer get lock again");
-                            lockStart = System.nanoTime();
-                            if (globalStateMgr.getDbIncludeRecycleBin(groupId.dbId) == null) {
-                                continue GROUP;
-                            }
-                            if (globalStateMgr.getTableIncludeRecycleBin(db, olapTable.getId()) == null) {
-                                continue TABLE;
-                            }
-                            if (globalStateMgr.getPartitionIncludeRecycleBin(olapTable, partition.getId()) == null) {
-                                continue;
-                            }
-                        }
-                        short replicationNum =
-                                globalStateMgr.getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
-                                        partition.getId());
-                        if (replicationNum == (short) -1) {
-                            continue;
-                        }
-                        long visibleVersion = partition.getVisibleVersion();
-                        // Here we only get VISIBLE indexes. All other indexes are not queryable.
-                        // So it does not matter if tablets of other indexes are not matched.
-                        for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                            Preconditions.checkState(backendBucketsSeq.size() == index.getTablets().size(),
-                                    backendBucketsSeq.size() + " v.s. " + index.getTablets().size());
-                            int idx = 0;
-                            for (Long tabletId : index.getTabletIdsInOrder()) {
-                                LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
-                                Set<Long> bucketsSeq = backendBucketsSeq.get(idx);
-                                // Tablet has already been scheduled, no need to schedule again
-                                if (!tabletScheduler.containsTablet(tablet.getId())) {
-                                    Preconditions.checkState(bucketsSeq.size() == replicationNum,
-                                            bucketsSeq.size() + " vs. " + replicationNum);
-                                    TabletStatus st = tablet.getColocateHealthStatus(visibleVersion,
-                                            replicationNum, bucketsSeq);
-                                    if (st != TabletStatus.HEALTHY) {
-                                        isGroupStable = false;
-                                        Priority colocateUnhealthyPrio = Priority.HIGH;
-                                        // We should also check if the tablet is ready to be repaired like
-                                        // `TabletChecker` did. Slightly delay the repair action can avoid unnecessary
-                                        // clone in situation like temporarily restart BE Nodes.
-                                        if (tablet.readyToBeRepaired(st, colocateUnhealthyPrio)) {
-                                            LOG.debug("get unhealthy tablet {} in colocate table. status: {}",
-                                                    tablet.getId(), st);
-                                            TabletSchedCtx tabletCtx = new TabletSchedCtx(
-                                                    TabletSchedCtx.Type.REPAIR, db.getClusterName(),
-                                                    db.getId(), tableId, partition.getId(), index.getId(),
-                                                    tablet.getId(),
-                                                    System.currentTimeMillis());
-                                            // the tablet status will be checked and set again when being scheduled
-                                            tabletCtx.setTabletStatus(st);
-                                            // using HIGH priority, because we want to stabilize the colocate group
-                                            // as soon as possible
-                                            tabletCtx.setOrigPriority(colocateUnhealthyPrio);
-                                            tabletCtx.setTabletOrderIdx(idx);
-                                            tabletCtx.setColocateGroupId(groupId);
-                                            tabletCtx.setTablet(tablet);
-                                            ColocateRelocationInfo info = group2ColocateRelocationInfo.get(groupId);
-                                            tabletCtx.setRelocationForRepair(info != null
-                                                    && info.getRelocationForRepair()
-                                                    && st == TabletStatus.COLOCATE_MISMATCH);
-
-                                            // For bad replica, we ignore the size limit of scheduler queue
-                                            AddResult res = tabletScheduler.addTablet(tabletCtx,
-                                                    needToForceRepair(st, tablet, bucketsSeq) /* forcefully add or not */);
-                                            if (res == AddResult.LIMIT_EXCEED) {
-                                                // tablet in scheduler exceed limit, skip this group and check next one.
-                                                LOG.info("number of scheduling tablets in tablet scheduler"
-                                                        + " exceed to limit. stop colocate table check");
-                                                break TABLE;
-                                            }
-                                            if (res == AddResult.ADDED && tabletCtx.getRelocationForRepair()) {
-                                                LOG.info("add tablet relocation task to scheduler, tablet id: {}, " +
-                                                                "bucket sequence before: {}, bucket sequence now: {}",
-                                                        tableId,
-                                                        info != null ? info.getLastBackendsPerBucketSeq().get(idx) :
-                                                                Lists.newArrayList(),
-                                                        bucketsSeq);
-                                            }
-                                        }
-                                    } else {
-                                        tablet.setLastStatusCheckTime(checkStartTime);
-                                    }
-                                } else {
-                                    // tablet maybe added to scheduler because of balance between local disks,
-                                    // in this case we shouldn't mark the group unstable
-                                    if (tablet.getColocateHealthStatus(visibleVersion, replicationNum, bucketsSeq)
-                                            != TabletStatus.HEALTHY) {
-                                        isGroupStable = false;
-                                    }
-                                }
-                                idx++;
-                            }
-                        }
-                    }
-                } // end for tables
-
-                // mark group as stable or unstable
-                if (isGroupStable) {
-                    colocateIndex.markGroupStable(groupId, true);
-                } else {
-                    colocateIndex.markGroupUnstable(groupId, true);
-                }
-            } finally {
-                lockTotalTime += System.nanoTime() - lockStart;
-                db.readUnlock();
-            }
+            lockTotalTime += matchOneGroupUrgent(groupId, globalStateMgr, colocateIndex, tabletScheduler);
+            lockTotalTime += matchOneGroupNonUrgent(groupId, globalStateMgr, colocateIndex, tabletScheduler);
         } // end for groups
 
         long cost = (System.nanoTime() - start) / 1000000;
