@@ -50,10 +50,10 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 INTO TABLE <table_name>
 [PARTITION (<partition1_name>[, <partition2_name> ...])]
 [TEMPORARY PARTITION (<temporary_partition1_name>[, <temporary_partition2_name> ...])]
-[FORMAT AS "CSV | Parquet | ORC"]
-[(fomat_type_options)]
 [COLUMNS TERMINATED BY "<column_separator>"]
 [ROWS TERMINATED BY "<row_separator>"]
+[FORMAT AS "CSV | Parquet | ORC"]
+[(fomat_type_options)]
 [(column_list)]
 [COLUMNS FROM PATH AS (<partition_field_name>[, <partition_field_name> ...])]
 [SET <k1=f1(v1)>[, <k2=f2(v2)> ...]]
@@ -90,10 +90,6 @@ INTO TABLE <table_name>
   > - 从 Data Lake Storage Gen2 导入数据时，需要使用 abfs 或 abfss 作为文件协议访问目标数据：
   >   - 如果您的存储账号支持通过 HTTP 协议进行访问，请使用 abfs 文件协议，文件路径格式为 `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
   >   - 如果您的存储账号支持通过 HTTPS 协议进行访问，请使用 abfss 文件协议，文件路径格式为 `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
-
-- `NEGATIVE`
-
-  用于撤销某一批已经成功导入的数据。如果想要撤销某一批已经成功导入的数据，可以通过指定 `NEGATIVE` 关键字来导入同一批数据。
   
 - `INTO TABLE`
 
@@ -104,6 +100,10 @@ INTO TABLE <table_name>
   > **说明**
   >
   > 该参数仅适用于目标 StarRocks 表使用聚合模型、并且所有 Value 列的聚合函数均为 `sum` 的情况。
+
+- `NEGATIVE`
+
+  用于撤销某一批已经成功导入的数据。如果想要撤销某一批已经成功导入的数据，可以通过指定 `NEGATIVE` 关键字来导入同一批数据。
 
 - `PARTITION`
 
