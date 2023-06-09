@@ -257,6 +257,7 @@ public class AnalyzeCreateTableTest {
         analyzeSuccess(sql);
     }
 
+    @Test
     public void testRandomDistribution() {
         analyzeSuccess("create table table1 (col1 char(10) not null) engine=olap duplicate key(col1) distributed by random");
         analyzeSuccess("create table table1 (col1 char(10) not null) engine=olap duplicate key(col1) " +
@@ -268,6 +269,23 @@ public class AnalyzeCreateTableTest {
         analyzeSuccess("create external table table1 (col1 char(10) not null) engine=olap distributed by hash(col1) buckets 10");
         analyzeSuccess("create external table table1 (col1 char(10) not null) engine=olap " +
                 "distributed by random buckets 10");
+    }
+
+    @Test
+    public void testRandomDistributionForAggKeyDefault() {
+        analyzeFail("create table table1 (col1 char(10) not null, col2 bigint sum) engine=olap aggregate key(col1)");
+    }
+
+    @Test
+    public void testRandomDistributionForAggKey() {
+        analyzeSuccess("create table table1 (col1 char(10) not null, col2 bigint sum) engine=olap aggregate key(col1) " +
+                "distributed by random");
+        analyzeSuccess("create table table1 (col1 char(10) not null, col2 bigint sum) engine=olap aggregate key(col1) " +
+                "distributed by random buckets 10");
+        analyzeFail("create table table1 (col1 char(10) not null, col2 bigint replace) engine=olap aggregate key(col1) " +
+                "distributed by random buckets 10");
+        analyzeFail("create table table1 (col1 char(10) not null, col2 bigint REPLACE_IF_NOT_NULL) " +
+                "engine=olap aggregate key(col1) distributed by random buckets 10");
     }
 
     @Test
