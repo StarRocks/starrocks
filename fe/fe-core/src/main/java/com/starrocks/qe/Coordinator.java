@@ -2387,6 +2387,8 @@ public class Coordinator {
                 instanceProfile.removeInfoString("Address");
             });
             fragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
+            Counter backendNum = fragmentProfile.addCounter("BackendNum", TUnit.UNIT, null);
+            backendNum.setValue(backendAddresses.size());
 
             // Setup number of instance
             Counter counter = fragmentProfile.addCounter("InstanceNum", TUnit.UNIT);
@@ -2413,6 +2415,7 @@ public class Coordinator {
             RuntimeProfile.removeRedundantMinMaxMetrics(fragmentProfile);
         }
 
+<<<<<<< HEAD
         // Set backend number
         for (int i = 0; i < fragments.size(); i++) {
             PlanFragment fragment = fragments.get(i);
@@ -2427,6 +2430,10 @@ public class Coordinator {
             backendNum.setValue(networkAddresses.size());
         }
 
+=======
+        long queryAllocatedMemoryUsage = 0;
+        long queryDeallocatedMemoryUsage = 0;
+>>>>>>> e9179917b ([BugFix] Make pipeline_driver's total_timer exclude the prepare time (#24899))
         // Calculate ExecutionTotalTime, which comprising all operator's sync time and async time
         // We can get Operator's sync time from OperatorTotalTime, and for async time, only ScanOperator and
         // ExchangeOperator have async operations, we can get async time from ScanTime(for ScanOperator) and
