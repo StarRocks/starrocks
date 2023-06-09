@@ -18,7 +18,7 @@ package com.starrocks.connector;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
@@ -104,7 +104,7 @@ public interface ConnectorMetadata {
      * @param tblName - the string represents the table name
      * @return a Table instance
      */
-    default Pair<Table, MaterializedIndex> getMaterializedViewIndex(String dbName, String tblName) {
+    default Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String tblName) {
         return null;
     }
 
