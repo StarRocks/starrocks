@@ -608,7 +608,6 @@ public:
 
         const Column* delta_column = args[1].get();
         DCHECK(delta_column->is_constant());
-        DCHECK(!delta_column->only_null());
         if (!delta_column->only_null() && !delta_column->empty()) {
             this->data(state).delta = ColumnHelper::get_const_value<LogicalType::TYPE_INT>(args[1]);
         }

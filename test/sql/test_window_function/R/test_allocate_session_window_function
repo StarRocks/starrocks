@@ -78,7 +78,7 @@ select c0, c1, allocate_session(c0, 2) over (partition by c1 order by c0) from t
 -- !result
 select c0, c1, allocate_session(c0, c1) over (partition by c1 order by c0) from t0 order by c1 limit 10;
 -- result:
-E: (1064, 'Getting analyzing error at line 1, column 36. Detail message: The delta parameter (parameter 2) of ALLOCATE_SESSION must be a constant: allocate_session(`test_db_dd39d8d3ac9347d3a7a7965373e30039`.`t0`.`c0`, `test_db_dd39d8d3ac9347d3a7a7965373e30039`.`t0`.`c1`).')
+[REGEX] *analyzing error*
 -- !result
 select sum(session), count(session) from (select c0, c1, allocate_session(c0, 2) over (partition by c1 order by c0) as session from t0) tb;
 -- result:
