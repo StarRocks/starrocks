@@ -44,9 +44,6 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     private List<ScalarOperator> prunedPartitionPredicates;
 
-    // record if this scan is derived from SplitScanORToUnionRule
-    private boolean fromSplitOR;
-
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
         this(table, Maps.newHashMap(), Maps.newHashMap(), null, Operator.DEFAULT_LIMIT, null);
@@ -130,10 +127,6 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     public List<ScalarOperator> getPrunedPartitionPredicates() {
         return prunedPartitionPredicates;
-    }
-
-    public boolean isFromSplitOR() {
-        return fromSplitOR;
     }
 
     @Override
@@ -232,9 +225,5 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             return this;
         }
 
-        public Builder setFromSplitOR(boolean fromSplitOR) {
-            builder.fromSplitOR = fromSplitOR;
-            return this;
-        }
     }
 }
