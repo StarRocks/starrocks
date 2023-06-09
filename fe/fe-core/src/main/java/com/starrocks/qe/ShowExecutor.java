@@ -69,6 +69,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetadataViewer;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -425,7 +426,7 @@ public class ShowExecutor {
         MetaUtils.checkDbNullAndReport(db, dbName);
 
         List<MaterializedView> materializedViews = Lists.newArrayList();
-        List<Pair<OlapTable, MaterializedIndex>> singleTableMVs = Lists.newArrayList();
+        List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
         db.readLock();
         try {
             PatternMatcher matcher = null;
@@ -464,16 +465,16 @@ public class ShowExecutor {
                     materializedViews.add(mvTable);
                 } else if (Table.TableType.OLAP == table.getType()) {
                     OlapTable olapTable = (OlapTable) table;
-                    List<MaterializedIndex> visibleMaterializedViews = olapTable.getVisibleIndex();
+                    List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
                     long baseIdx = olapTable.getBaseIndexId();
-                    for (MaterializedIndex mvIdx : visibleMaterializedViews) {
-                        if (baseIdx == mvIdx.getId()) {
+                    for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
+                        if (baseIdx == mvMeta.getIndexId()) {
                             continue;
                         }
-                        if (matcher != null && !matcher.match(olapTable.getIndexNameById(mvIdx.getId()))) {
+                        if (matcher != null && !matcher.match(olapTable.getIndexNameById(mvMeta.getIndexId()))) {
                             continue;
                         }
-                        singleTableMVs.add(Pair.create(olapTable, mvIdx));
+                        singleTableMVs.add(Pair.create(olapTable, mvMeta));
                     }
                 }
             }
@@ -515,7 +516,7 @@ public class ShowExecutor {
     public static List<List<String>> listMaterializedViewStatus(
             String dbName,
             List<MaterializedView> materializedViews,
-            List<Pair<OlapTable, MaterializedIndex>> singleTableMVs) {
+            List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs) {
         List<List<String>> rowSets = Lists.newArrayList();
 
         // Now there are two MV cases:
@@ -560,15 +561,15 @@ public class ShowExecutor {
             rowSets.add(resultRow);
         }
 
-        for (Pair<OlapTable, MaterializedIndex> singleTableMV : singleTableMVs) {
+        for (Pair<OlapTable, MaterializedIndexMeta> singleTableMV : singleTableMVs) {
             OlapTable olapTable = singleTableMV.first;
-            MaterializedIndex mvIdx = singleTableMV.second;
+            MaterializedIndexMeta mvMeta = singleTableMV.second;
 
+            long mvId = mvMeta.getIndexId();
             ArrayList<String> resultRow = new ArrayList<>();
-            MaterializedIndexMeta mvMeta = olapTable.getVisibleIndexIdToMeta().get(mvIdx.getId());
-            resultRow.add(String.valueOf(mvIdx.getId()));
+            resultRow.add(String.valueOf(mvId));
             resultRow.add(dbName);
-            resultRow.add(olapTable.getIndexNameById(mvIdx.getId()));
+            resultRow.add(olapTable.getIndexNameById(mvId));
             // refresh_type
             resultRow.add("ROLLUP");
             // is_active
@@ -584,9 +585,15 @@ public class ShowExecutor {
             // task run status
             setTaskRunStatus(resultRow, null);
             // rows
-            resultRow.add(String.valueOf(mvIdx.getRowCount()));
+            if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
+                Partition partition = olapTable.getPartitions().iterator().next();
+                MaterializedIndex index = partition.getIndex(mvId);
+                resultRow.add(String.valueOf(index.getRowCount()));
+            } else {
+                resultRow.add(String.valueOf(0L));
+            }
             if (mvMeta.getOriginStmt() == null) {
-                String mvName = olapTable.getIndexNameById(mvIdx.getId());
+                String mvName = olapTable.getIndexNameById(mvId);
                 resultRow.add(buildCreateMVSql(olapTable, mvName, mvMeta));
             } else {
                 resultRow.add(mvMeta.getOriginStmt().replace("\n", "").replace("\t", "")
@@ -1089,12 +1096,12 @@ public class ShowExecutor {
                     for (Table tbl : db.getTables()) {
                         if (tbl.getType() == Table.TableType.OLAP) {
                             OlapTable olapTable = (OlapTable) tbl;
-                            List<MaterializedIndex> visibleMaterializedViews = olapTable.getVisibleIndex();
-                            for (MaterializedIndex mvIdx : visibleMaterializedViews) {
-                                if (olapTable.getIndexNameById(mvIdx.getId()).equals(showStmt.getTable())) {
-                                    MaterializedIndexMeta mvMeta = olapTable.getVisibleIndexIdToMeta().get(mvIdx.getId());
+                            List<MaterializedIndexMeta> visibleMaterializedViews =
+                                    olapTable.getVisibleIndexMetas();
+                            for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
+                                if (olapTable.getIndexNameById(mvMeta.getIndexId()).equals(showStmt.getTable())) {
                                     if (mvMeta.getOriginStmt() == null) {
-                                        String mvName = olapTable.getIndexNameById(mvIdx.getId());
+                                        String mvName = olapTable.getIndexNameById(mvMeta.getIndexId());
                                         rows.add(Lists.newArrayList(showStmt.getTable(), buildCreateMVSql(olapTable,
                                                 mvName, mvMeta), "utf8", "utf8_general_ci"));
                                     } else {
