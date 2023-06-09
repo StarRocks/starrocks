@@ -45,8 +45,8 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 [NEGATIVE]
 INTO TABLE <table_name>
 [PARTITION (<partition_name>[, <partition_name> ...])]
-[FORMAT AS "CSV | Parquet | ORC"]
 [COLUMNS TERMINATED BY "<column_separator>"]
+[FORMAT AS "CSV | Parquet | ORC"]
 [(column_list)]
 [COLUMNS FROM PATH AS (<partition_field_name>[, <partition_field_name> ...])]
 [SET <k1=f1(v1)>[, <k2=f2(v2)> ...]]
@@ -90,10 +90,6 @@ INTO TABLE <table_name>
 
   指定要把数据导入哪些分区。如果不指定该参数，则默认导入到 StarRocks 表所在的所有分区中。
 
-- `FORMAT AS`
-
-  用于指定源数据文件的格式。取值包括 `CSV`、`Parquet` 和 `ORC`。如果不指定该参数，则默认通过 `file_path` 参数中指定的文件扩展名（**.csv**、**.parquet**、和 **.orc**）来判断文件格式。
-
 - `COLUMNS TERMINATED BY`
 
   用于指定源数据文件中的列分隔符。如果不指定该参数，则默认列分隔符为 `\t`，即 Tab。必须确保这里指定的列分隔符与源数据文件中的列分隔符一致；否则，导入作业会因数据质量错误而失败，作业状态 (`State`) 会显示为 `CANCELLED`。
@@ -104,6 +100,10 @@ INTO TABLE <table_name>
   >
   > - StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
   > - 空值 (null) 用 `\N` 表示。比如，数据文件一共有三列，其中某行数据的第一列、第三列数据分别为 `a` 和 `b`，第二列没有数据，则第二列需要用 `\N` 来表示空值，写作 `a,\N,b`，而不是 `a,,b`。`a,,b` 表示第二列是一个空字符串。
+
+- `FORMAT AS`
+
+  用于指定源数据文件的格式。取值包括 `CSV`、`Parquet` 和 `ORC`。如果不指定该参数，则默认通过 `file_path` 参数中指定的文件扩展名（**.csv**、**.parquet**、和 **.orc**）来判断文件格式。
 
 - `column_list`
 
