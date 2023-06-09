@@ -82,6 +82,12 @@ INTO TABLE <table_name>
   > **NOTICE**
   > Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
 
+- `INTO TABLE`
+
+  Specifies the name of the destination StarRocks table.
+
+`data_desc` can also optionally include the following parameters:
+
 - `NEGATIVE`
 
   Revokes the loading of a specific batch of data. To achieve this, you need to load the same batch of data with the `NEGATIVE` keyword specified.
@@ -89,12 +95,6 @@ INTO TABLE <table_name>
   > **NOTE**
   >
   > This parameter is valid only when the StarRocks table uses the Aggregate table and all its value columns are computed by the `sum` function.
-
-- `INTO TABLE`
-
-  Specifies the name of the destination StarRocks table.
-
-`data_desc` can also optionally include the following parameters:
 
 - `PARTITION`
 
