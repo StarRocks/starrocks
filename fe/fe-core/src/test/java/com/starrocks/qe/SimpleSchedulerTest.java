@@ -40,10 +40,13 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRangeLocation;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -125,7 +128,61 @@ public class SimpleSchedulerTest {
             // BackendId not exists and location not exists
             Assert.assertNull(SimpleScheduler.getHost(3, emptyLocations, immutableThreeBackends, null, ref));
         }
+    }
 
+    @Test
+    public void testGetHostWithBackendIdInSharedDataMode() {
+        // locations
+        List<TScanRangeLocation> locations = new ArrayList<TScanRangeLocation>();
+        TScanRangeLocation locationA = new TScanRangeLocation();
+        locationA.setBackend_id(0);
+        locations.add(locationA);
+
+        // backends
+        Backend backendA = new Backend(0, "addressA", 0);
+        backendA.updateOnce(0, 0, 0);
+        Backend backendB = new Backend(1, "addressB", 0);
+        backendB.updateOnce(0, 0, 0);
+        Backend backendC = new Backend(2, "addressC", 0);
+        backendC.updateOnce(0, 0, 0);
+
+        Map<Long, Backend> backends = Maps.newHashMap();
+        backends.put((long) 0, backendA);
+        backends.put((long) 1, backendB);
+        backends.put((long) 2, backendC);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        ImmutableMap<Long, Backend> immutableBackends = null;
+
+        {
+            // backendA in locations is alive
+            backendA.setAlive(true);
+            backendB.setAlive(true);
+            backendC.setAlive(true);
+            immutableBackends = ImmutableMap.copyOf(backends);
+
+            Assert.assertEquals(
+                    SimpleScheduler.getHost(0, locations, immutableBackends, ImmutableMap.of(), ref).hostname,
+                    "addressA");
+        }
+
+        {
+            // backendA in locations is not alive
+            backendA.setAlive(false);
+            backendB.setAlive(false);
+            backendC.setAlive(true);
+            immutableBackends = ImmutableMap.copyOf(backends);
+
+            Assert.assertEquals(
+                    SimpleScheduler.getHost(0, locations, immutableBackends, ImmutableMap.of(), ref).hostname,
+                    "addressC");
+        }
     }
 
     // Comment out these code temporatily.
