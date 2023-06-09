@@ -140,6 +140,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
     @SerializedName("id")
     private long id;
     private UUID queryId;
+    @SerializedName("qd")
+    private String queryIdString;
     @SerializedName("dd")
     private long dbId;
     @SerializedName("td")
@@ -208,6 +210,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this();
         this.id = jobId;
         this.queryId = queryId;
+        this.queryIdString = queryId.toString();
     }
 
     public void setJob(ExportStmt stmt) throws UserException {
@@ -665,10 +668,10 @@ public class ExportJob implements Writable, GsonPostProcessable {
     }
 
     public synchronized boolean updateState(JobState newState) {
-        return this.updateState(newState, false);
+        return this.updateState(newState, false, System.currentTimeMillis());
     }
 
-    public synchronized boolean updateState(JobState newState, boolean isReplay) {
+    public synchronized boolean updateState(JobState newState, boolean isReplay, long stateChangeTime) {
         if (isExportDone()) {
             LOG.warn("export job state is finished or cancelled");
             return false;
@@ -680,11 +683,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 progress = 0;
                 break;
             case EXPORTING:
-                startTimeMs = System.currentTimeMillis();
+                startTimeMs = stateChangeTime;
                 break;
             case FINISHED:
             case CANCELLED:
-                finishTimeMs = System.currentTimeMillis();
+                finishTimeMs = stateChangeTime;
                 progress = 100;
                 break;
             default:
@@ -692,7 +695,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 break;
         }
         if (!isReplay) {
-            GlobalStateMgr.getCurrentState().getEditLog().logExportUpdateState(id, newState,
+            GlobalStateMgr.getCurrentState().getEditLog().logExportUpdateState(id, newState, stateChangeTime,
                     snapshotPaths, exportTempPath, exportedFiles, failMsg);
         }
         return true;
@@ -1019,6 +1022,9 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
+        if (!Strings.isNullOrEmpty(queryIdString)) {
+            queryId = UUID.fromString(queryIdString);
+        }
         isReplayed = true;
         GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
         Database db = null;
@@ -1070,6 +1076,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
         long jobId;
         @SerializedName("state")
         JobState state;
+        @SerializedName("stateChangeTime")
+        long stateChangeTime;
         @SerializedName("snapshotPaths")
         List<Pair<NetworkAddress, String>> snapshotPaths;
         @SerializedName("exportTempPath")
@@ -1088,10 +1096,12 @@ public class ExportJob implements Writable, GsonPostProcessable {
             this.failMsg = new ExportFailMsg();
         }
 
-        public ExportUpdateInfo(long jobId, JobState state, List<Pair<TNetworkAddress, String>> snapshotPaths,
-                String exportTempPath, Set<String> exportedFiles, ExportFailMsg failMsg) {
+        public ExportUpdateInfo(long jobId, JobState state, long stateChangeTime,
+                                List<Pair<TNetworkAddress, String>> snapshotPaths,
+                                String exportTempPath, Set<String> exportedFiles, ExportFailMsg failMsg) {
             this.jobId = jobId;
             this.state = state;
+            this.stateChangeTime = stateChangeTime;
             this.snapshotPaths = serialize(snapshotPaths);
             this.exportTempPath = exportTempPath;
             this.exportedFiles = exportedFiles;

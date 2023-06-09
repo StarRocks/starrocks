@@ -341,11 +341,12 @@ public class ExportMgr {
         }
     }
 
+    @Deprecated
     public void replayUpdateJobState(long jobId, ExportJob.JobState newState) {
         writeLock();
         try {
             ExportJob job = idToJob.get(jobId);
-            job.updateState(newState, true);
+            job.updateState(newState, true, System.currentTimeMillis());
             if (isJobExpired(job, System.currentTimeMillis())) {
                 LOG.info("remove expired job: {}", job);
                 idToJob.remove(jobId);
@@ -359,7 +360,7 @@ public class ExportMgr {
         writeLock();
         try {
             ExportJob job = idToJob.get(info.jobId);
-            job.updateState(info.state, true);
+            job.updateState(info.state, true, info.stateChangeTime);
             if (isJobExpired(job, System.currentTimeMillis())) {
                 LOG.info("remove expired job: {}", job);
                 idToJob.remove(info.jobId);
