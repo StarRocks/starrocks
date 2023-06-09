@@ -104,7 +104,7 @@ INTO TABLE <table_name>
 
   > **NOTE**
   >
-  > This parameter is valid only when the StarRocks table uses the Aggregate table and all its value columns are computed by the `sum` function.
+  > This parameter is valid only when the StarRocks table is an Aggregate table and all its value columns are computed by the `sum` function.
 
 - `PARTITION`
 
