@@ -21,6 +21,7 @@ import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.LakeTableAlterJobV2Builder;
 import com.starrocks.backup.Status;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
@@ -200,6 +201,14 @@ public class LakeTable extends OlapTable {
     public String getComment() {
         if (!Strings.isNullOrEmpty(comment)) {
             return comment;
+        }
+        return TableType.OLAP.name();
+    }
+
+    @Override
+    public String getDisplayComment() {
+        if (!Strings.isNullOrEmpty(comment)) {
+            return CatalogUtils.addEscapeCharacter(comment);
         }
         return TableType.OLAP.name();
     }

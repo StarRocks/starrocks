@@ -836,14 +836,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             StringBuilder colSb = new StringBuilder();
             colSb.append(column.getName());
             if (!Strings.isNullOrEmpty(column.getComment())) {
-                colSb.append(" COMMENT ").append("\"").append(column.getComment()).append("\"");
+                colSb.append(" COMMENT ").append("\"").append(column.getDisplayComment()).append("\"");
             }
             colDef.add(colSb.toString());
         }
         sb.append(Joiner.on(", ").join(colDef));
         sb.append(")");
         if (!Strings.isNullOrEmpty(this.getComment())) {
-            sb.append("\nCOMMENT \"").append(this.getComment()).append("\"");
+            sb.append("\nCOMMENT \"").append(this.getDisplayComment()).append("\"");
         }
 
         // partition
