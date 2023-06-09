@@ -696,7 +696,7 @@ public class ShowExecutor {
                     // Create_options
                     row.add("");
                     // Comment
-                    row.add(table.getComment());
+                    row.add(table.getDisplayComment());
 
                     rows.add(row);
                 }
@@ -798,6 +798,7 @@ public class ShowExecutor {
     private String toMysqlDDL(Column column) {
         StringBuilder sb = new StringBuilder();
         sb.append("  `").append(column.getName()).append("` ");
+<<<<<<< HEAD
         switch (column.getType().getPrimitiveType()) {
             case TINYINT:
                 sb.append("tinyint(4)");
@@ -832,6 +833,13 @@ public class ShowExecutor {
                 break;
             default:
                 sb.append("binary(1048576)");
+=======
+        sb.append(column.getType().toSql());
+        sb.append(" DEFAULT NULL");
+
+        if (!Strings.isNullOrEmpty(column.getComment())) {
+            sb.append(" COMMENT \"").append(column.getDisplayComment()).append("\"");
+>>>>>>> fc49e7d43 ([BugFix] fix comment lost escape character (#24909))
         }
         sb.append(" DEFAULT NULL");
         return sb.toString();
@@ -939,7 +947,7 @@ public class ShowExecutor {
                             defaultValue,
                             aggType,
                             "",
-                            col.getComment()));
+                            col.getDisplayComment()));
                 } else {
                     // Field Type Null Key Default Extra
                     rows.add(Lists.newArrayList(columnName,
@@ -1896,7 +1904,7 @@ public class ShowExecutor {
         // Comment
         String comment = catalog.getComment();
         if (comment != null) {
-            createCatalogSql.append("comment \"").append(catalog.getComment()).append("\"\n");
+            createCatalogSql.append("comment \"").append(catalog.getDisplayComment()).append("\"\n");
         }
 
         Map<String, String> clonedConfig = new HashMap<>(catalog.getConfig());

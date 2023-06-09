@@ -8,6 +8,7 @@ import com.staros.proto.ShardStorageInfo;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.LakeTableAlterJobV2Builder;
 import com.starrocks.backup.Status;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -188,4 +189,37 @@ public class LakeTable extends OlapTable {
         }
         return Status.OK;
     }
+<<<<<<< HEAD
+=======
+
+    // used in colocate table index, return an empty list for LakeTable
+    @Override
+    public List<List<Long>> getArbitraryTabletBucketsSeq() throws DdlException {
+        return Lists.newArrayList();
+    }
+
+    public List<Long> getShardGroupIds() {
+        List<Long> shardGroupIds = new ArrayList<>();
+        for (Partition p : getAllPartitions()) {
+            shardGroupIds.add(p.getShardGroupId());
+        }
+        return shardGroupIds;
+    }
+
+    @Override
+    public String getComment() {
+        if (!Strings.isNullOrEmpty(comment)) {
+            return comment;
+        }
+        return TableType.OLAP.name();
+    }
+
+    @Override
+    public String getDisplayComment() {
+        if (!Strings.isNullOrEmpty(comment)) {
+            return CatalogUtils.addEscapeCharacter(comment);
+        }
+        return TableType.OLAP.name();
+    }
+>>>>>>> fc49e7d43 ([BugFix] fix comment lost escape character (#24909))
 }
