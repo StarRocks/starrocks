@@ -115,6 +115,7 @@ CONF_mInt32(transaction_publish_version_worker_count, "0");
 // The count of thread to apply rowset in primary key table
 // 0 means apply worker count is equal to cpu core count
 CONF_mInt32(transaction_apply_worker_count, "0");
+CONF_mInt32(get_pindex_worker_count, "0");
 
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
