@@ -43,11 +43,13 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -253,13 +255,20 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 addPartitionClauses.add(new AddPartitionClause(rangePartitionDesc, null, null, false));
             } else {
                 // construct distribution desc
-                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) olapTable.getDefaultDistributionInfo();
-                List<String> distColumnNames = new ArrayList<>();
-                for (Column distributionColumn : hashDistributionInfo.getDistributionColumns()) {
-                    distColumnNames.add(distributionColumn.getName());
+                DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+                DistributionDesc distributionDesc = null;
+                if (distributionInfo instanceof HashDistributionInfo) {
+                    HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
+                    List<String> distColumnNames = new ArrayList<>();
+                    for (Column distributionColumn : hashDistributionInfo.getDistributionColumns()) {
+                        distColumnNames.add(distributionColumn.getName());
+                    }
+                    distributionDesc = new HashDistributionDesc(dynamicPartitionProperty.getBuckets(),
+                            distColumnNames);
+                } else {
+                    RandomDistributionInfo randomDistributionInfo = (RandomDistributionInfo) distributionInfo;
+                    distributionDesc = randomDistributionInfo.toDistributionDesc();
                 }
-                DistributionDesc distributionDesc = new HashDistributionDesc(dynamicPartitionProperty.getBuckets(),
-                                                                             distColumnNames);
 
                 // add partition according to partition desc and distribution desc
                 addPartitionClauses.add(new AddPartitionClause(rangePartitionDesc, distributionDesc, null, false));
