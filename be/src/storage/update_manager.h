@@ -86,6 +86,7 @@ public:
     void on_rowset_cancel(Tablet* tablet, Rowset* rowset);
 
     ThreadPool* apply_thread_pool() { return _apply_thread_pool.get(); }
+    ThreadPool* get_pindex_thread_pool() { return _get_pindex_thread_pool.get(); }
 
     DynamicCache<uint64_t, PrimaryIndex>& index_cache() { return _index_cache; }
 
@@ -156,6 +157,7 @@ private:
     std::unique_ptr<MemTracker> _delta_column_group_cache_mem_tracker;
 
     std::unique_ptr<ThreadPool> _apply_thread_pool;
+    std::unique_ptr<ThreadPool> _get_pindex_thread_pool;
 
     UpdateManager(const UpdateManager&) = delete;
     const UpdateManager& operator=(const UpdateManager&) = delete;
