@@ -39,6 +39,10 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudType;
+import com.starrocks.credential.aws.AWSCloudConfiguration;
+import com.starrocks.credential.aws.AWSCloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -48,32 +52,18 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.thrift.TCloudConfiguration;
-import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.thrift.THdfsScanNode;
-import com.starrocks.thrift.THdfsScanRange;
-import com.starrocks.thrift.TIcebergDeleteFile;
-import com.starrocks.thrift.TIcebergFileContent;
-import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TPlanNode;
-import com.starrocks.thrift.TPlanNodeType;
-import com.starrocks.thrift.TScanRange;
-import com.starrocks.thrift.TScanRangeLocation;
-import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.*;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.aws.AwsProperties;
+import org.apache.iceberg.aws.s3.S3FileIO;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -368,11 +358,18 @@ public class IcebergScanNode extends ScanNode {
             msg.hdfs_scan_node.setMin_max_sql_predicates(minMaxSqlPredicate);
         }
 
-        if (srIcebergTable != null) {
-            msg.hdfs_scan_node.setTable_name(srIcebergTable.getRemoteTableName());
-        }
+        msg.hdfs_scan_node.setTable_name(srIcebergTable.getRemoteTableName());
 
-        if (cloudConfiguration != null) {
+        // Try to get tabular signed temporary credential
+        Map<String, String> copiedFileIOProperties = new HashMap<>(srIcebergTable.getNativeTable().io().properties());
+        CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForTabular(copiedFileIOProperties);
+        if (tabularTempCloudConfiguration.getCloudType() == CloudType.AWS) {
+            // If we build CloudConfiguration succeed, means we can use tabular signed temp credentials
+            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+            cloudConfiguration.toThrift(tCloudConfiguration);
+            msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
+        } else if (cloudConfiguration != null) {
             TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
             cloudConfiguration.toThrift(tCloudConfiguration);
             msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);

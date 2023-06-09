@@ -23,6 +23,7 @@ import com.starrocks.credential.hdfs.HDFSCloudConfigurationFactory;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.aws.AwsProperties;
 
 import java.util.Map;
 
@@ -56,6 +57,26 @@ public abstract class CloudConfigurationFactory {
         cloudConfiguration = factory.buildForStorage();
         if (cloudConfiguration != null) {
             return cloudConfiguration;
+        }
+
+        return buildDefaultCloudConfiguration();
+    }
+
+    public static CloudConfiguration buildCloudConfigurationForTabular(Map<String, String> properties) {
+        String tmpAk = properties.getOrDefault(AwsProperties.S3FILEIO_ACCESS_KEY_ID, null);
+        String tmpSk = properties.getOrDefault(AwsProperties.S3FILEIO_SECRET_ACCESS_KEY, null);
+        String tmpSessionToken = properties.getOrDefault(AwsProperties.S3FILEIO_SESSION_TOKEN, null);
+        String region = properties.getOrDefault(AwsProperties.CLIENT_REGION, null);
+        if (tmpAk != null && tmpSk != null && tmpSessionToken != null && region != null) {
+            properties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, tmpAk);
+            properties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, tmpSk);
+            properties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, tmpSessionToken);
+            properties.put(CloudConfigurationConstants.AWS_S3_REGION, region);
+            CloudConfigurationFactory factory = new AWSCloudConfigurationFactory(properties);
+            CloudConfiguration cloudConfiguration = factory.buildForStorage();
+            if (cloudConfiguration != null) {
+                return cloudConfiguration;
+            }
         }
 
         return buildDefaultCloudConfiguration();
