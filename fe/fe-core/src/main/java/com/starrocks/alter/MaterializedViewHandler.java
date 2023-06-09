@@ -45,6 +45,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -438,9 +439,9 @@ public class MaterializedViewHandler extends AlterHandler {
                     throw new DdlException("Table [" + addMVClause.getMVName() + "] already exists, ");
                 }
 
-                List<MaterializedIndex> visibleMaterializedViews = ((OlapTable) tbl).getVisibleIndex();
-                for (MaterializedIndex mvIdx : visibleMaterializedViews) {
-                    if (((OlapTable) tbl).getIndexNameById(mvIdx.getId()).equals(addMVClause.getMVName())) {
+                List<MaterializedIndexMeta> visibleMaterializedViews = ((OlapTable) tbl).getVisibleIndexMetas();
+                for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
+                    if (((OlapTable) tbl).getIndexNameById(mvMeta.getIndexId()).equals(addMVClause.getMVName())) {
                         throw new DdlException("Materialized view[" + addMVClause.getMVName() + "] already exists");
                     }
                 }

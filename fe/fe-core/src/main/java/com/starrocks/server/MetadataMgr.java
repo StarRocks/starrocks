@@ -21,7 +21,7 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
@@ -217,11 +217,9 @@ public class MetadataMgr {
         return connectorTable;
     }
 
-    public Pair<Table, MaterializedIndex> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {
+    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        Pair<Table, MaterializedIndex> materializedIndex =
-                connectorMetadata.map(metadata -> metadata.getMaterializedViewIndex(dbName, tblName)).orElse(null);
-        return materializedIndex;
+        return connectorMetadata.map(metadata -> metadata.getMaterializedViewIndex(dbName, tblName)).orElse(null);
     }
 
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {

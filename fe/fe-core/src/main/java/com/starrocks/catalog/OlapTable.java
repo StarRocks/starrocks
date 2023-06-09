@@ -560,33 +560,26 @@ public class OlapTable extends Table {
         return null;
     }
 
-    public Map<Long, MaterializedIndexMeta> getVisibleIndexIdToMeta() {
-        Map<Long, MaterializedIndexMeta> visibleMVs = Maps.newHashMap();
+    public List<MaterializedIndexMeta> getVisibleIndexMetas() {
+        List<MaterializedIndexMeta> visibleMVs = Lists.newArrayList();
         List<MaterializedIndex> mvs = getVisibleIndex();
         for (MaterializedIndex mv : mvs) {
-            visibleMVs.put(mv.getId(), indexIdToMeta.get(mv.getId()));
+            if (!indexIdToMeta.containsKey(mv.getId())) {
+                continue;
+            }
+            visibleMVs.add(indexIdToMeta.get(mv.getId()));
         }
         return visibleMVs;
     }
 
-    public List<MaterializedIndex> getVisibleIndex() {
+    // Fetch the 1th partition's MaterializedViewIndex which should be not used directly.
+    private List<MaterializedIndex> getVisibleIndex() {
         Optional<Partition> firstPartition = idToPartition.values().stream().findFirst();
         if (firstPartition.isPresent()) {
             Partition partition = firstPartition.get();
             return partition.getMaterializedIndices(IndexExtState.VISIBLE);
         }
         return Lists.newArrayList();
-    }
-
-    public Column getVisibleColumn(String columnName) {
-        for (MaterializedIndexMeta meta : getVisibleIndexIdToMeta().values()) {
-            for (Column column : meta.getSchema()) {
-                if (column.getName().equalsIgnoreCase(columnName)) {
-                    return column;
-                }
-            }
-        }
-        return null;
     }
 
     // this is only for schema change.
@@ -1554,7 +1547,6 @@ public class OlapTable extends Table {
         }
 
         baseIndexId = in.readLong();
-
 
         // read indexes
         if (in.readBoolean()) {
