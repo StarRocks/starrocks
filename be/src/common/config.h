@@ -843,6 +843,8 @@ CONF_mInt64(experimental_lake_segment_gc_max_retries, "3");
 CONF_mBool(experimental_lake_enable_fast_gc, "true");
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
+CONF_mBool(lake_enable_aggressive_gc, "true");
+CONF_mBool(lake_aggressive_gc_high_priority, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 

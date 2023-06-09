@@ -30,6 +30,7 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
+#include "storage/lake/delta_writer.h"
 #include "storage/lake/gc.h"
 #include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/join_path.h"
@@ -605,8 +606,12 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
         new_metadata->mutable_compaction_inputs()->Clear();
     }
 
-    if (base_metadata->compaction_inputs_size() > 0) {
-        new_metadata->set_prev_compaction_version(base_metadata->version());
+    if (new_metadata->orphan_files_size() > 0) {
+        new_metadata->mutable_orphan_files()->Clear();
+    }
+
+    if (base_metadata->compaction_inputs_size() > 0 || base_metadata->orphan_files_size() > 0) {
+        new_metadata->set_prev_garbage_version(base_metadata->version());
     }
 
     auto init_st = log_applier->init();
@@ -701,6 +706,23 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
             LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_vlog_location(v) << ": " << st;
         }
     }
+
+    if (config::lake_enable_aggressive_gc && DeltaWriter::io_threads() != nullptr) {
+        auto tablet_mgr = tablet->tablet_mgr();
+        auto tablet_id = new_metadata->id();
+        auto old_version = new_version - config::lake_gc_metadata_max_versions;
+        auto priority = config::lake_aggressive_gc_high_priority ? ThreadPool::HIGH_PRIORITY : ThreadPool::LOW_PRIORITY;
+        auto may_has_garbage_file = old_version <= new_metadata->prev_garbage_version();
+        (void)DeltaWriter::io_threads()->submit_func(
+                [=]() {
+                    if (may_has_garbage_file) {
+                        (void)delete_garbage_files(tablet_mgr, tablet_id, old_version);
+                    }
+                    (void)tablet_mgr->delete_tablet_metadata(tablet_id, old_version);
+                },
+                priority);
+    }
+
     return compaction_score(*new_metadata);
 }
 
