@@ -933,6 +933,9 @@ vectorized_functions = [
     [150282, 'array_contains_all', 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'], 'ArrayFunctions::array_contains_all'],
 
     [150300, 'array_filter', 'ANY_ARRAY',   ['ANY_ARRAY', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_filter'],
+    [150301, 'all_match', 'BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::all_match'],
+    [150302, 'any_match', 'BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::any_match'],
+
 
     [150311, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_sortby<TYPE_BOOLEAN>'],
     [150312, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_TINYINT'],   'ArrayFunctions::array_sortby<TYPE_TINYINT>'],
