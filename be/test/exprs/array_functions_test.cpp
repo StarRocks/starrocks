@@ -5315,7 +5315,6 @@ TEST_F(ArrayFunctionsTest, array_match_nullable) {
     src_column->append_datum(DatumArray{(int8_t)0, Datum()});
     src_column->append_datum(DatumArray{});
 
-
     auto dest_column = ArrayMatch<true>::process(nullptr, {src_column});
     ASSERT_TRUE(dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 7);
@@ -5326,7 +5325,6 @@ TEST_F(ArrayFunctionsTest, array_match_nullable) {
     ASSERT_TRUE(dest_column->get(4).get_int8());
     ASSERT_TRUE(dest_column->get(5).is_null());
     ASSERT_FALSE(dest_column->get(6).get_int8());
-
 
     dest_column = ArrayMatch<false>::process(nullptr, {src_column});
     ASSERT_TRUE(dest_column->is_nullable());
@@ -5360,7 +5358,6 @@ TEST_F(ArrayFunctionsTest, array_match_not_null) {
     ASSERT_TRUE(dest_column->get(4).get_int8());
     ASSERT_TRUE(dest_column->get(5).is_null());
     ASSERT_FALSE(dest_column->get(6).get_int8());
-
 
     dest_column = ArrayMatch<false>::process(nullptr, {src_column});
     ASSERT_TRUE(dest_column->is_nullable());
