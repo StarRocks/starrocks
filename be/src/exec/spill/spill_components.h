@@ -277,12 +277,17 @@ public:
     template <class ChunkProvider>
     Status spill_partition(SerdeContext& context, SpilledPartition* partition, ChunkProvider&& provider);
 
+<<<<<<< HEAD
     int64_t mem_consumption() const { return _mem_tracker->consumption(); }
 
 private:
     Status _init_with_partition_nums(RuntimeState* state, int num_partitions);
     // prepare and acquire mem_table for each partition in _id_to_partitions
     Status _prepare_partitions(RuntimeState* state);
+=======
+private:
+    Status _init_with_partition_nums(RuntimeState* state, int num_partitions);
+>>>>>>> b13e1e269 ([Enhancement] merge small chunks when split partition in spillable hash join (#24831))
 
     // split partition by hash
     // hash-based partitioning can have significant degradation in the case of heavily skewed data.

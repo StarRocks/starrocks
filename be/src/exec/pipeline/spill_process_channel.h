@@ -121,6 +121,7 @@ private:
     UnboundedBlockingQueue<SpillProcessTask> _spill_tasks;
     SpillProcessTask _current_task;
     SpillProcessChannelFactory* _parent;
+<<<<<<< HEAD
 };
 
 class SpillProcessTasksBuilder {
@@ -158,6 +159,8 @@ private:
     std::shared_ptr<spill::IOTaskExecutor> _io_executor;
     std::vector<SpillProcessTask> _spill_tasks;
     SpillProcessTask _final_task;
+=======
+>>>>>>> b13e1e269 ([Enhancement] merge small chunks when split partition in spillable hash join (#24831))
 };
 
 } // namespace starrocks

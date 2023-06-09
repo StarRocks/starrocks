@@ -39,10 +39,19 @@ bool SpillableAggregateBlockingSinkOperator::is_finished() const {
 }
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
+<<<<<<< HEAD
     auto defer_set_finishing = DeferOp([this]() {
         _aggregator->spill_channel()->set_finishing();
         _is_finished = true;
     });
+=======
+    auto defer_set_finishing = DeferOp([this]() { _aggregator->spill_channel()->set_finishing(); });
+    if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
+        _is_finished = true;
+        RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
+        return Status::OK();
+    }
+>>>>>>> b13e1e269 ([Enhancement] merge small chunks when split partition in spillable hash join (#24831))
 
     // cancel spill task
     if (state->is_cancelled()) {
