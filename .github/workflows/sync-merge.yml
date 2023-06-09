@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - 'branch-[0-9].[0-9]'
 
     types:
       - closed

@@ -4,10 +4,8 @@ on:
   pull_request:
     branches:
       - main
-#      - branch-2.3
-#      - branch-2.4
-#      - branch-2.5
-#      - branch-3.0
+      - 'branch-[0-9].[0-9]'
+
     types:
       - opened
 
