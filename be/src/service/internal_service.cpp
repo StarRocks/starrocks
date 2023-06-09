@@ -22,13 +22,6 @@
 #include "service/internal_service.h"
 
 #include <atomic>
-<<<<<<< HEAD
-=======
-#include <memory>
-#include <shared_mutex>
-#include <sstream>
-#include <utility>
->>>>>>> 3897e2f44 ([Enhancement] Decorrelate the NetworkTime calculation from the system clocks (#24858))
 
 #include "brpc/errno.pb.h"
 #include "common/closure_guard.h"
@@ -102,21 +95,6 @@ template <typename T>
 void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController* cntl_base,
                                                  const PTransmitChunkParams* request, PTransmitChunkResult* response,
                                                  google::protobuf::Closure* done) {
-<<<<<<< HEAD
-    VLOG_ROW << "transmit data: " << (uint64_t)(request) << " fragment_instance_id=" << print_id(request->finst_id())
-             << " node=" << request->node_id() << " begin";
-=======
-    auto task = [=]() { this->_transmit_chunk(cntl_base, request, response, done); };
-    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
-        ClosureGuard closure_guard(done);
-        Status::ServiceUnavailable("submit transmit_chunk task failed").to_protobuf(response->mutable_status());
-    }
-}
-
-template <typename T>
-void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcController* cntl_base,
-                                                  const PTransmitChunkParams* request, PTransmitChunkResult* response,
-                                                  google::protobuf::Closure* done) {
     class WrapClosure : public google::protobuf::Closure {
     public:
         WrapClosure(google::protobuf::Closure* done, PTransmitChunkResult* response)
@@ -137,43 +115,15 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
         const int64_t _receive_timestamp = MonotonicNanos();
     };
     google::protobuf::Closure* wrapped_done = new WrapClosure(done, response);
-
-    auto begin_ts = MonotonicNanos();
-    std::string transmit_info = "";
-    auto gen_transmit_info = [&transmit_info, &request]() {
-        transmit_info = "transmit data: " + std::to_string((uint64_t)(request)) +
-                        " fragment_instance_id=" + print_id(request->finst_id()) +
-                        " node=" + std::to_string(request->node_id());
-    };
-    if (VLOG_ROW_IS_ON) {
-        gen_transmit_info();
-    }
-    VLOG_ROW << transmit_info << " begin";
->>>>>>> 3897e2f44 ([Enhancement] Decorrelate the NetworkTime calculation from the system clocks (#24858))
+    VLOG_ROW << "transmit data: " << (uint64_t)(request) << " fragment_instance_id=" << print_id(request->finst_id())
+             << " node=" << request->node_id() << " begin";
     // NOTE: we should give a default value to response to avoid concurrent risk
     // If we don't give response here, stream manager will call done->Run before
     // transmit_data(), which will cause a dirty memory access.
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     auto* req = const_cast<PTransmitChunkParams*>(request);
-<<<<<<< HEAD
     const auto receive_timestamp = GetCurrentTimeNanos();
     response->set_receive_timestamp(receive_timestamp);
-=======
-    Status st;
-    st.to_protobuf(response->mutable_status());
-    DeferOp defer([&]() {
-        if (!st.ok()) {
-            gen_transmit_info();
-            LOG(WARNING) << "failed to " << transmit_info;
-        }
-        if (wrapped_done != nullptr) {
-            // NOTE: only when done is not null, we can set response status
-            st.to_protobuf(response->mutable_status());
-            wrapped_done->Run();
-        }
-        VLOG_ROW << transmit_info << " cost time = " << MonotonicNanos() - begin_ts;
-    });
->>>>>>> 3897e2f44 ([Enhancement] Decorrelate the NetworkTime calculation from the system clocks (#24858))
     if (cntl->request_attachment().size() > 0) {
         const butil::IOBuf& io_buf = cntl->request_attachment();
         size_t offset = 0;
@@ -183,23 +133,18 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
             offset += chunk->data_size();
         }
     }
-<<<<<<< HEAD
     Status st;
     st.to_protobuf(response->mutable_status());
-    st = _exec_env->stream_mgr()->transmit_chunk(*request, &done);
+    st = _exec_env->stream_mgr()->transmit_chunk(*request, &wrapped_done);
     if (!st.ok()) {
         LOG(WARNING) << "transmit_data failed, message=" << st.get_error_msg()
                      << ", fragment_instance_id=" << print_id(request->finst_id()) << ", node=" << request->node_id();
     }
-    if (done != nullptr) {
+    if (wrapped_done != nullptr) {
         // NOTE: only when done is not null, we can set response status
         st.to_protobuf(response->mutable_status());
-        done->Run();
+        wrapped_done->Run();
     }
-=======
-
-    st = _exec_env->stream_mgr()->transmit_chunk(*request, &wrapped_done);
->>>>>>> 3897e2f44 ([Enhancement] Decorrelate the NetworkTime calculation from the system clocks (#24858))
 }
 
 template <typename T>
