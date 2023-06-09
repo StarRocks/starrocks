@@ -88,11 +88,11 @@ Status BitmapIndexReader::_do_load(const IndexReadOptions& opts, const BitmapInd
     return Status::OK();
 }
 
-Status BitmapIndexReader::new_iterator(BitmapIndexIterator** iterator) {
+Status BitmapIndexReader::new_iterator(BitmapIndexIterator** iterator, const IndexReadOptions& opts) {
     std::unique_ptr<IndexedColumnIterator> dict_iter;
     std::unique_ptr<IndexedColumnIterator> bitmap_iter;
-    RETURN_IF_ERROR(_dict_column_reader->new_iterator(&dict_iter));
-    RETURN_IF_ERROR(_bitmap_column_reader->new_iterator(&bitmap_iter));
+    RETURN_IF_ERROR(_dict_column_reader->new_iterator(&dict_iter, opts));
+    RETURN_IF_ERROR(_bitmap_column_reader->new_iterator(&bitmap_iter, opts));
     *iterator = new BitmapIndexIterator(this, std::move(dict_iter), std::move(bitmap_iter), _has_null, bitmap_nums());
     return Status::OK();
 }
