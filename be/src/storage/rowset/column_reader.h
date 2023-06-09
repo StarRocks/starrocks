@@ -106,7 +106,7 @@ public:
 
     // Caller should free returned iterator after unused.
     // TODO: StatusOr<std::unique_ptr<ColumnIterator>> new_bitmap_index_iterator()
-    Status new_bitmap_index_iterator(BitmapIndexIterator** iterator, bool skip_fill_local_cache);
+    Status new_bitmap_index_iterator(const IndexReadOptions& options, BitmapIndexIterator** iterator);
 
     // Seek to the first entry in the column.
     Status seek_to_first(OrdinalPageIndexIterator* iter);
@@ -173,7 +173,7 @@ private:
 
     Status _load_zonemap_index(bool skip_fill_local_cache);
     Status _load_ordinal_index(bool skip_fill_local_cache);
-    Status _load_bitmap_index(bool skip_fill_local_cache);
+    Status _load_bitmap_index(const IndexReadOptions& options);
     Status _load_bloom_filter_index(bool skip_fill_local_cache);
 
     Status _parse_zone_map(const ZoneMapPB& zm, ZoneMapDetail* detail) const;

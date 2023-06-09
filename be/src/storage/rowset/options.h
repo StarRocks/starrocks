@@ -53,12 +53,13 @@ public:
 
 class IndexReadOptions {
 public:
-    FileSystem* fs = nullptr;
-    std::string file_name = "";
     bool use_page_cache = false;
     bool kept_in_memory = false;
     // for lake tablet
     bool skip_fill_local_cache = false;
+    std::string file_name = "";
+    OlapReaderStatistics* stats = nullptr;
+    FileSystem* fs = nullptr;
 };
 
 } // namespace starrocks
