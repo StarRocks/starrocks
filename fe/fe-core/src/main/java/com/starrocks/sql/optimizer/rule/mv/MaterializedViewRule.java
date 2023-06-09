@@ -186,15 +186,15 @@ public class MaterializedViewRule extends Rule {
 
     private Map<Long, List<Column>> selectValidMVs(LogicalOlapScanOperator scanOperator, int relationId) {
         OlapTable table = (OlapTable) scanOperator.getTable();
-        Map<Long, MaterializedIndexMeta> candidateIndexIdToMeta = table.getVisibleIndexIdToMeta();
+
+        List<MaterializedIndexMeta> candidateIndexIdToMeta = table.getVisibleIndexMetas();
         // column name -> column id
         Map<String, Integer> queryScanNodeColumnNameToIds = queryRelIdToColumnNameIds.get(relationId);
 
-        Iterator<Map.Entry<Long, MaterializedIndexMeta>> iterator = candidateIndexIdToMeta.entrySet().iterator();
+        Iterator<MaterializedIndexMeta> iterator = candidateIndexIdToMeta.iterator();
         while (iterator.hasNext()) {
-            Map.Entry<Long, MaterializedIndexMeta> entry = iterator.next();
-            Long mvIdx = entry.getKey();
-            MaterializedIndexMeta mvMeta = entry.getValue();
+            MaterializedIndexMeta mvMeta = iterator.next();
+            long mvIdx = mvMeta.getIndexId();
 
             // Ignore original query index.
             if (mvIdx == scanOperator.getSelectedIndexId()) {
@@ -255,14 +255,13 @@ public class MaterializedViewRule extends Rule {
              * So, we need to compensate those kinds of index in following step.
              *
              */
-            compensateCandidateIndex(candidateIndexIdToMeta, table.getVisibleIndexIdToMeta(),
+            compensateCandidateIndex(candidateIndexIdToMeta, table.getVisibleIndexMetas(),
                     table);
 
-            iterator = candidateIndexIdToMeta.entrySet().iterator();
+            iterator = candidateIndexIdToMeta.iterator();
             while (iterator.hasNext()) {
-                Map.Entry<Long, MaterializedIndexMeta> entry = iterator.next();
-                Long mvIdx = entry.getKey();
-                MaterializedIndexMeta mvMeta = entry.getValue();
+                MaterializedIndexMeta mvMeta = iterator.next();
+                Long mvIdx = mvMeta.getIndexId();
 
                 if (!checkOutputColumns(queryRelIdToColumnNameIds.get(relationId),
                         queryRelIdToScanNodeOutputColumnIds.get(relationId), mvIdx, mvMeta)) {
@@ -272,8 +271,8 @@ public class MaterializedViewRule extends Rule {
         }
 
         Map<Long, List<Column>> result = Maps.newHashMap();
-        for (Map.Entry<Long, MaterializedIndexMeta> entry : candidateIndexIdToMeta.entrySet()) {
-            result.put(entry.getKey(), entry.getValue().getSchema());
+        for (MaterializedIndexMeta indexMeta : candidateIndexIdToMeta) {
+            result.put(indexMeta.getIndexId(), indexMeta.getSchema());
         }
         return result;
     }
@@ -684,13 +683,14 @@ public class MaterializedViewRule extends Rule {
         return true;
     }
 
-    private void compensateCandidateIndex(Map<Long, MaterializedIndexMeta> candidateIndexIdToMeta, Map<Long,
-            MaterializedIndexMeta> allVisibleIndexes, OlapTable table) {
+    private void compensateCandidateIndex(List<MaterializedIndexMeta> candidateIndexIdToMetas,
+                                          List<MaterializedIndexMeta> allVisibleIndexes,
+                                          OlapTable table) {
         int keySizeOfBaseIndex = table.getKeyColumnsByIndexId(table.getBaseIndexId()).size();
-        for (Map.Entry<Long, MaterializedIndexMeta> index : allVisibleIndexes.entrySet()) {
-            long mvIndexId = index.getKey();
+        for (MaterializedIndexMeta index : allVisibleIndexes) {
+            long mvIndexId = index.getIndexId();
             if (table.getKeyColumnsByIndexId(mvIndexId).size() == keySizeOfBaseIndex) {
-                candidateIndexIdToMeta.put(mvIndexId, index.getValue());
+                candidateIndexIdToMetas.add(index);
             }
         }
     }

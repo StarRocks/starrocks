@@ -2394,7 +2394,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public Pair<Table, MaterializedIndex> getMaterializedViewIndex(String dbName, String indexName) {
+    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String indexName) {
         Database database = getDb(dbName);
         if (database == null) {
             return null;

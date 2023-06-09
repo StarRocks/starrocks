@@ -653,18 +653,18 @@ public class Database extends MetaObject implements Writable {
         return null;
     }
 
-    public Pair<Table, MaterializedIndex> getMaterializedViewIndex(String mvName) {
+    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String mvName) {
         // TODO: add an index to speed it up.
         for (Table table : idToTable.values()) {
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
-                for (MaterializedIndex mvIndex : olapTable.getVisibleIndex()) {
-                    String indexName = olapTable.getIndexNameById(mvIndex.getId());
+                for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
+                    String indexName = olapTable.getIndexNameById(mvMeta.getIndexId());
                     if (indexName == null) {
                         continue;
                     }
                     if (indexName.equals(mvName)) {
-                        return Pair.create(table, mvIndex);
+                        return Pair.create(table, mvMeta);
                     }
                 }
             }
