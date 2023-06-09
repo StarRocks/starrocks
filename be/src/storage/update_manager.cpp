@@ -86,7 +86,11 @@ UpdateManager::~UpdateManager() {
 }
 
 Status UpdateManager::init() {
-    auto st = ThreadPoolBuilder("update_apply").build(&_apply_thread_pool);
+    int max_thread_cnt = CpuInfo::num_cores();
+    if (config::transaction_apply_worker_count > 0) {
+        max_thread_cnt = config::transaction_apply_worker_count;
+    }
+    auto st = ThreadPoolBuilder("update_apply").set_max_threads(max_thread_cnt).build(&_apply_thread_pool);
     return st;
 }
 
