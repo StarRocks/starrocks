@@ -53,6 +53,12 @@ public class TypeManager {
         if (t1.isStructType() && t2.isStructType()) {
             return getCommonStructType((StructType) t1, (StructType) t2);
         }
+        if (t1.isBoolean() && t2.isComplexType()) {
+            return t2;
+        }
+        if (t1.isComplexType() && t2.isBoolean()) {
+            return t1;
+        }
         if (t1.isNull() || t2.isNull()) {
             return t1.isNull() ? t2 : t1;
         }
