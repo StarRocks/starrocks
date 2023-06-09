@@ -49,8 +49,8 @@ static const std::string AWS_S3_ENABLE_PATH_STYLE_ACCESS = "aws.s3.enable_path_s
      */
 static const std::string AWS_S3_ENABLE_SSL = "aws.s3.enable_ssl";
 
-static const std::string ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key_id";
-static const std::string ALIYUN_OSS_SECRET_KEY = "aliyun.oss.access_key_secret";
+static const std::string ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";
+static const std::string ALIYUN_OSS_SECRET_KEY = "aliyun.oss.secret_key";
 static const std::string ALIYUN_OSS_ENDPOINT = "aliyun.oss.endpoint";
 
 class CloudConfigurationFactory {
