@@ -39,6 +39,15 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.stream.Collectors;
 
+// For sql like:
+//      select * from tbl where col1 > 100 and (col2 = 1 or col3 =2 or col4 = 4), the (col2 = 1 or col3 =2 or col4 = 4)
+// predicate can actually filter lots of rows, but our index doesn't support this predicate. We can transform it to:
+//      select * from tbl where  col1 > 100 and col2 = 1
+//      union all
+//      select * from tbl where col1 > 100 and col3 = 2 and (col2 !=1 or col2 is null)
+//      union all
+//      select * from tbl where col1 > 100 and col4 = 4 and (col2 !=1 or col2 is null) and (col3 != 2 or col3 is null)
+// Every scanNode has an equivalent predicate can use index to filter lots of rows.
 public class SplitScanORToUnionRule extends TransformationRule {
     private static final Logger LOG = LogManager.getLogger(SplitScanORToUnionRule.class);
     private static final double SELECTIVITY_THRESHOLD = 0.035;
