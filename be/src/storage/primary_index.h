@@ -53,10 +53,17 @@ public:
     // old position to |deletes|.
     //
     // [not thread-safe]
+<<<<<<< HEAD
     void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, DeletesMap* deletes);
 
     void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
                 uint32_t idx_end, DeletesMap* deletes);
+=======
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes, IOStat* stat = nullptr);
+
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                  DeletesMap* deletes);
+>>>>>>> 5f93150d4 ([BugFix] Set _get_pindex_thread_pool as a global thread pool (#24980))
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
@@ -69,8 +76,13 @@ public:
     // |failed| rowids of output segment's rows that failed to replace
     //
     // [not thread-safe]
+<<<<<<< HEAD
     [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
                                       const vector<uint32_t>& src_rssid, vector<uint32_t>* failed);
+=======
+    [[maybe_unused]] Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                        const vector<uint32_t>& src_rssid, vector<uint32_t>* failed);
+>>>>>>> 5f93150d4 ([BugFix] Set _get_pindex_thread_pool as a global thread pool (#24980))
 
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
     // input rowsets' rowid greater than the max src rssid, this indicates that the row of output rowset is
@@ -82,16 +94,27 @@ public:
     // |failed| rowids of output segment's rows that failed to replace
     //
     // [not thread-safe]
+<<<<<<< HEAD
     void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, const uint32_t max_src_rssid,
                      vector<uint32_t>* failed);
+=======
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
+                       vector<uint32_t>* failed);
+>>>>>>> 5f93150d4 ([BugFix] Set _get_pindex_thread_pool as a global thread pool (#24980))
 
     // |key_col| contains the *encoded* primary keys to be deleted from this index.
     // The position of deleted keys will be appended into |new_deletes|.
     //
     // [not thread-safe]
+<<<<<<< HEAD
     void erase(const vectorized::Column& pks, DeletesMap* deletes);
 
     void get(const vectorized::Column& pks, std::vector<uint64_t>* rowids) const;
+=======
+    Status erase(const Column& pks, DeletesMap* deletes);
+
+    Status get(const Column& pks, std::vector<uint64_t>* rowids) const;
+>>>>>>> 5f93150d4 ([BugFix] Set _get_pindex_thread_pool as a global thread pool (#24980))
 
     Status prepare(const EditVersion& version, size_t n);
 
@@ -135,6 +158,7 @@ private:
 
     Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks);
 
+<<<<<<< HEAD
     void _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
                                        uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes);
 
@@ -147,6 +171,20 @@ private:
                                                     const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes);
     void _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
                                    const uint32_t max_src_rssid, vector<uint32_t>* deletes);
+=======
+    Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
+                                         uint32_t idx_end, DeletesMap* deletes, IOStat* stat);
+
+    Status _erase_persistent_index(const Column& key_col, DeletesMap* deletes);
+
+    Status _get_from_persistent_index(const Column& key_col, std::vector<uint64_t>* rowids) const;
+
+    // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
+    [[maybe_unused]] Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                                      const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes);
+    Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                     const uint32_t max_src_rssid, vector<uint32_t>* deletes);
+>>>>>>> 5f93150d4 ([BugFix] Set _get_pindex_thread_pool as a global thread pool (#24980))
 
     std::mutex _lock;
     std::atomic<bool> _loaded{false};

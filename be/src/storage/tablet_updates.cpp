@@ -899,6 +899,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     EditVersion latest_applied_version;
     st = get_latest_applied_version(&latest_applied_version);
 
+<<<<<<< HEAD
     for (uint32_t i = 0; i < rowset->num_segments(); i++) {
         state.load_upserts(rowset.get(), i);
         auto& upserts = state.upserts();
@@ -913,6 +914,40 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
                 LOG(ERROR) << msg;
                 _set_error(msg);
                 return;
+=======
+    if (rowset->rowset_meta()->get_meta_pb().delfile_idxes_size() == 0) {
+        for (uint32_t i = 0; i < rowset->num_segments(); i++) {
+            state.load_upserts(rowset.get(), i);
+            auto& upserts = state.upserts();
+            if (upserts[i] != nullptr) {
+                // used for auto increment delete-partial update conflict
+                std::unique_ptr<Column> delete_pks = nullptr;
+                // apply partial rowset segment
+                st = state.apply(&_tablet, rowset.get(), rowset_id, i, latest_applied_version, index, delete_pks);
+                if (!st.ok()) {
+                    manager->update_state_cache().remove(state_entry);
+                    std::string msg =
+                            strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                                st.to_string(), debug_string());
+                    LOG(ERROR) << msg;
+                    _set_error(msg);
+                    return;
+                }
+                st = _do_update(rowset_id, i, conditional_column, upserts, index, tablet_id, &new_deletes);
+                if (!st.ok()) {
+                    manager->update_state_cache().remove(state_entry);
+                    std::string msg =
+                            strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                                st.to_string(), debug_string());
+                    LOG(ERROR) << msg;
+                    _set_error(msg);
+                    return;
+                }
+                manager->index_cache().update_object_size(index_entry, index.memory_usage());
+                if (delete_pks != nullptr) {
+                    index.erase(*delete_pks, &new_deletes);
+                }
+>>>>>>> 5f93150d4 ([BugFix] Set _get_pindex_thread_pool as a global thread pool (#24980))
             }
             _do_update(rowset_id, i, conditional_column, upserts, index, tablet_id, &new_deletes);
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
@@ -920,12 +955,87 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         state.release_upserts(i);
     }
 
+<<<<<<< HEAD
     for (uint32_t i = 0; i < rowset->num_delete_files(); i++) {
         state.load_deletes(rowset.get(), i);
         auto& deletes = state.deletes();
         delete_op += deletes[i]->size();
         index.erase(*deletes[i], &new_deletes);
         state.release_deletes(i);
+=======
+        // two states
+        // 1. upgrade from old version. delfile_idxes in rowset meta is empty, we still need to load delete files
+        // 2. pure upsert. no delete files, the following logic will be skip
+        for (uint32_t i = 0; i < rowset->num_delete_files(); i++) {
+            state.load_deletes(rowset.get(), i);
+            auto& deletes = state.deletes();
+            delete_op += deletes[i]->size();
+            index.erase(*deletes[i], &new_deletes);
+            state.release_deletes(i);
+        }
+    } else {
+        uint32_t delfile_num = rowset->rowset_meta()->get_meta_pb().delfile_idxes_size();
+        uint32_t upsert_num = rowset->num_segments();
+        DCHECK(rowset->num_delete_files() == delfile_num);
+
+        uint32_t loaded_delfile = 0;
+        uint32_t loaded_upsert = 0;
+        uint32_t i = 0;
+        while (i < delfile_num + upsert_num) {
+            uint32_t del_idx = delfile_num + upsert_num;
+            if (loaded_delfile < delfile_num) {
+                del_idx = rowset->rowset_meta()->get_meta_pb().delfile_idxes(loaded_delfile);
+            }
+            while (i < del_idx) {
+                state.load_upserts(rowset.get(), loaded_upsert);
+                auto& upserts = state.upserts();
+                if (upserts[loaded_upsert] != nullptr) {
+                    // used for auto increment delete-partial update conflict
+                    std::unique_ptr<Column> delete_pks = nullptr;
+                    // apply partial rowset segment
+                    st = state.apply(&_tablet, rowset.get(), rowset_id, loaded_upsert, latest_applied_version, index,
+                                     delete_pks);
+                    if (!st.ok()) {
+                        manager->update_state_cache().remove(state_entry);
+                        std::string msg = strings::Substitute(
+                                "_apply_rowset_commit error: apply rowset update state failed: $0 $1", st.to_string(),
+                                debug_string());
+                        LOG(ERROR) << msg;
+                        _set_error(msg);
+                        return;
+                    }
+                    st = _do_update(rowset_id, loaded_upsert, conditional_column, upserts, index, tablet_id,
+                                    &new_deletes);
+                    if (!st.ok()) {
+                        manager->update_state_cache().remove(state_entry);
+                        std::string msg = strings::Substitute(
+                                "_apply_rowset_commit error: apply rowset update state failed: $0 $1", st.to_string(),
+                                debug_string());
+                        LOG(ERROR) << msg;
+                        _set_error(msg);
+                        return;
+                    }
+                    manager->index_cache().update_object_size(index_entry, index.memory_usage());
+                    if (delete_pks != nullptr) {
+                        index.erase(*delete_pks, &new_deletes);
+                    }
+                }
+                i++;
+                loaded_upsert++;
+                state.release_upserts(i);
+            }
+            if (loaded_delfile < delfile_num) {
+                DCHECK(i == del_idx);
+                state.load_deletes(rowset.get(), loaded_delfile);
+                auto& deletes = state.deletes();
+                delete_op += deletes[loaded_delfile]->size();
+                index.erase(*deletes[loaded_delfile], &new_deletes);
+                state.release_deletes(loaded_delfile);
+                i++;
+                loaded_delfile++;
+            }
+        }
+>>>>>>> 5f93150d4 ([BugFix] Set _get_pindex_thread_pool as a global thread pool (#24980))
     }
 
     PersistentIndexMetaPB index_meta;
@@ -1169,7 +1279,7 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
         read_column_ids.push_back(condition_column);
 
         std::vector<uint64_t> old_rowids(upserts[upsert_idx]->size());
-        index.get(*upserts[upsert_idx], &old_rowids);
+        RETURN_IF_ERROR(index.get(*upserts[upsert_idx], &old_rowids));
         bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int id) { return -1 == id; });
         if (!non_old_value) {
             std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
@@ -1180,7 +1290,12 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
             auto old_unordered_column =
                     ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             old_columns[0] = old_unordered_column->clone_empty();
+<<<<<<< HEAD
             get_column_values(read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns);
+=======
+            RETURN_IF_ERROR(
+                    get_column_values(read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns, nullptr));
+>>>>>>> 5f93150d4 ([BugFix] Set _get_pindex_thread_pool as a global thread pool (#24980))
             auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
@@ -1193,7 +1308,11 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
             std::vector<std::unique_ptr<vectorized::Column>> new_columns(1);
             auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             new_columns[0] = new_column->clone_empty();
+<<<<<<< HEAD
             get_column_values(read_column_ids, false, new_rowids_by_rssid, &new_columns);
+=======
+            RETURN_IF_ERROR(get_column_values(read_column_ids, false, new_rowids_by_rssid, &new_columns, nullptr));
+>>>>>>> 5f93150d4 ([BugFix] Set _get_pindex_thread_pool as a global thread pool (#24980))
 
             int idx_begin = 0;
             int upsert_idx_step = 0;
@@ -1204,8 +1323,8 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
                 } else {
                     int r = old_column->compare_at(j, j, *new_columns[0].get(), -1);
                     if (r > 0) {
-                        index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
-                                     idx_begin + upsert_idx_step, new_deletes);
+                        RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
+                                                     idx_begin + upsert_idx_step, new_deletes));
 
                         idx_begin = j + 1;
                         upsert_idx_step = 0;
@@ -1219,14 +1338,23 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
             }
 
             if (idx_begin < old_column->size()) {
-                index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin, idx_begin + upsert_idx_step,
-                             new_deletes);
+                RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
+                                             idx_begin + upsert_idx_step, new_deletes));
             }
         } else {
-            index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
+            RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes));
         }
     } else {
+<<<<<<< HEAD
         index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
+=======
+        std::unique_ptr<IOStat> iostat = std::make_unique<IOStat>();
+        MonotonicStopWatch watch;
+        watch.start();
+        RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, iostat.get()));
+        LOG(INFO) << "primary index upsert tid: " << tablet_id << ", cost: " << watch.elapsed_time() << ", "
+                  << iostat->print_str();
+>>>>>>> 5f93150d4 ([BugFix] Set _get_pindex_thread_pool as a global thread pool (#24980))
     }
 
     return Status::OK();
