@@ -480,7 +480,7 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
     _cur_chunk->append_selective(*input, indexes.data(), from, size);
     for (size_t index_i = 0; index_i < tablet_ids.size(); ++index_i) {
         auto req = _rpc_request.mutable_requests(index_i);
-        for (size_t i = 0; i < size; ++i) {
+        for (size_t i = from; i < size; ++i) {
             req->add_tablet_ids(tablet_ids[index_i][indexes[from + i]]);
         }
     }

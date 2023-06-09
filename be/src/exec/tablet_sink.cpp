@@ -235,7 +235,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 
     // open all channels
     RETURN_IF_ERROR(_init_node_channels(state));
-
+    VLOG(2) << "colocate_mv_index:" << (_colocate_mv_index ? "1" : "0");
     std::vector<IndexChannel*> index_channels;
     for (const auto& channel : _channels) {
         index_channels.emplace_back(channel.get());
@@ -593,8 +593,8 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     StarRocksMetrics::instance()->load_bytes_total.increment(serialize_size);
 
     SCOPED_TIMER(_send_data_timer);
-    return _tablet_sink_sender->send_chunk(_schema, _partitions, _tablet_indexes, _validate_select_idx,
-                                           _index_id_partition_ids, chunk);
+    return _tablet_sink_sender->send_chunk(_schema.get(), _partitions, _tablet_indexes, _validate_select_idx,
+                                            _index_id_partition_ids, chunk);
 }
 
 Status OlapTableSink::_fill_auto_increment_id(Chunk* chunk) {

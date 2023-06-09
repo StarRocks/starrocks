@@ -84,7 +84,7 @@ public:
     ~TabletSinkColocateSender() = default;
 
 public:
-    Status send_chunk(std::shared_ptr<OlapTableSchemaParam> schema, const std::vector<OlapTablePartition*>& partitions,
+    Status send_chunk(const OlapTableSchemaParam* schema, const std::vector<OlapTablePartition*>& partitions,
                       const std::vector<uint32_t>& tablet_indexes, const std::vector<uint16_t>& validate_select_idx,
                       std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id, Chunk* chunkk) override;
 
@@ -104,7 +104,11 @@ public:
     bool is_close_done() override;
 
 private:
-    bool _colocate_mv_index{false};
+    Status _send_chunks(const OlapTableSchemaParam* schema, Chunk* chunk,
+                        const std::vector<std::vector<int64_t>>& index_tablet_ids,
+                        const std::vector<uint16_t>& selection_idx);
+    bool _colocate_mv_index{true};
+    std::vector<std::vector<int64_t>> _index_tablet_ids;
 };
 
 } // namespace stream_load

@@ -234,6 +234,7 @@ private:
     std::vector<uint32_t> _tablet_indexes;
     // Store the output expr comput result column
     std::unique_ptr<Chunk> _output_chunk;
+    bool _open_done{false};
 
     std::unique_ptr<TabletSinkSender> _tablet_sink_sender;
 
