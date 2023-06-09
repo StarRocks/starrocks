@@ -98,7 +98,10 @@ struct TPlanFragmentDestination {
   1: required Types.TUniqueId fragment_instance_id
 
   // ... which is being executed on this server
-  2: required Types.TNetworkAddress server
+
+  // 'deprecated_server' changed from required to optional in version 3.2
+  // can be removed in version 4.0
+  2: optional Types.TNetworkAddress deprecated_server
   3: optional Types.TNetworkAddress brpc_server
 
   4: optional i32 pipeline_driver_sequence
