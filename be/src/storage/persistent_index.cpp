@@ -2908,48 +2908,50 @@ Status PersistentIndex::_get_from_immutable_index(size_t n, const Slice* keys, I
 
 class GetFromImmutableIndexTask : public Runnable {
 public:
-    GetFromImmutableIndexTask(size_t num, size_t idx, size_t key_size, const Slice* keys, IndexValue* values,
-                              KeysInfo* keys_info, PersistentIndex* index)
+    GetFromImmutableIndexTask(size_t num, size_t idx, const Slice* keys, IndexValue* values,
+                              std::map<size_t, KeysInfo>* keys_info_by_key_size, PersistentIndex* index)
             : _num(num),
               _idx(idx),
-              _key_size(key_size),
               _keys(keys),
               _values(values),
-              _keys_info(keys_info),
+              _keys_info_by_key_size(keys_info_by_key_size),
               _index(index) {}
 
     void run() override {
-        _index->get_from_one_immutable_index(_num, _keys, _values, _keys_info, &_found_keys_info, _idx, _key_size);
+        _index->get_from_one_immutable_index(_num, _keys, _values, _keys_info_by_key_size, &_found_keys_info, _idx);
     }
 
 private:
     size_t _num;
     size_t _idx;
-    size_t _key_size;
     const Slice* _keys;
     IndexValue* _values;
-    KeysInfo* _keys_info;
+    std::map<size_t, KeysInfo>* _keys_info_by_key_size;
     KeysInfo _found_keys_info;
     PersistentIndex* _index;
 };
 
 Status PersistentIndex::get_from_one_immutable_index(size_t n, const Slice* keys, IndexValue* values,
-                                                     KeysInfo* keys_info, KeysInfo* found_keys_info, size_t idx,
-                                                     size_t key_size) {
+                                                     std::map<size_t, KeysInfo>* _keys_info_by_key_size,
+                                                     KeysInfo* found_keys_info, size_t idx) {
     DCHECK(_l1_vec.size() > idx);
-    auto st = _l1_vec[idx]->get(n, keys, *keys_info, values, found_keys_info, key_size, nullptr);
-    std::unique_lock<std::mutex> ul(_lock);
-    if (!st.ok()) {
-        std::string msg =
-                strings::Substitute("get from one immutableindex failed, l1 idx: $0, status: $1", idx, st.to_string());
-        LOG(ERROR) << msg;
-        _set_error(true, msg);
+    Status st;
+    for (auto& [key_size, keys_info] : (*_keys_info_by_key_size)) {
+        st = _l1_vec[idx]->get(n, keys, keys_info, values, found_keys_info, key_size, nullptr);
+        if (!st.ok()) {
+            std::string msg = strings::Substitute("get from one immutableindex failed, l1 idx: $0, status: $1", idx,
+                                                  st.to_string());
+            LOG(ERROR) << msg;
+            _set_error(true, msg);
+            break;
+        }
     }
+    std::unique_lock<std::mutex> ul(_lock);
     _running_get_task--;
+    _found_keys_info[idx].key_infos.swap(found_keys_info->key_infos);
     if (_running_get_task == 0) {
         _get_task_finished.notify_all();
     }
-    _found_keys_info[idx].key_infos.swap(found_keys_info->key_infos);
     return st;
 }
 
@@ -2959,42 +2961,48 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
         return Status::OK();
     }
 
+    for (auto& [_, keys_info] : keys_info_by_key_size) {
+        std::sort(keys_info.key_infos.begin(), keys_info.key_infos.end());
+    }
+
     std::unique_lock<std::mutex> ul(_lock);
     std::map<size_t, KeysInfo>::iterator iter;
     std::string error_msg;
-    for (iter = keys_info_by_key_size.begin(); iter != keys_info_by_key_size.end(); iter++) {
-        if (iter->second.size() == 0) {
-            break;
+    //for (iter = keys_info_by_key_size.begin(); iter != keys_info_by_key_size.end(); iter++) {
+    //    if (iter->second.size() == 0) {
+    //        break;
+    //    }
+    //    size_t key_size = iter->first;
+    std::vector<std::vector<uint64_t>> get_values(_l1_vec.size(), std::vector<uint64_t>(n, NullIndexValue));
+    _found_keys_info.resize(_l1_vec.size());
+    for (size_t i = 0; i < _l1_vec.size(); i++) {
+        GetFromImmutableIndexTask task(n, i, keys, reinterpret_cast<IndexValue*>(get_values[i].data()),
+                                       &keys_info_by_key_size, this);
+        std::shared_ptr<Runnable> r(std::make_shared<GetFromImmutableIndexTask>(task));
+        auto st = StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->submit(std::move(r));
+        if (!st.ok()) {
+            error_msg = strings::Substitute("get from immutable index failed: $0", st.to_string());
+            LOG(ERROR) << error_msg;
+            return st;
         }
-        size_t key_size = iter->first;
-        std::vector<std::vector<uint64_t>> get_values(_l1_vec.size(), std::vector<uint64_t>(n, NullIndexValue));
-        _found_keys_info.resize(_l1_vec.size());
-        for (size_t i = 0; i < _l1_vec.size(); i++) {
-            GetFromImmutableIndexTask task(n, i, key_size, keys, reinterpret_cast<IndexValue*>(get_values[i].data()),
-                                           &(iter->second), this);
-            std::shared_ptr<Runnable> r(std::make_shared<GetFromImmutableIndexTask>(task));
-            auto st = StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->submit(std::move(r));
-            if (!st.ok()) {
-                error_msg = strings::Substitute("get from immutable index failed: $0", st.to_string());
-                LOG(ERROR) << error_msg;
-                return st;
-            }
-            _running_get_task++;
-        }
-        _get_task_finished.wait(ul, [&] { return _running_get_task == 0; });
-        if (is_error()) {
-            LOG(ERROR) << _error_msg;
-            return Status::InternalError(_error_msg);
-        }
+        _running_get_task++;
+    }
+    while (_running_get_task != 0) {
+        _get_task_finished.wait(ul);
+    }
+    if (is_error()) {
+        LOG(ERROR) << _error_msg;
+        return Status::InternalError(_error_msg);
+    }
 
-        // wait all task finished
-        for (int i = 0; i < _l1_vec.size(); i++) {
-            for (int j = 0; j < _found_keys_info[i].size(); j++) {
-                auto key_idx = _found_keys_info[i].key_infos[j].first;
-                values[key_idx] = get_values[i][key_idx];
-            }
+    // wait all task finished
+    for (int i = 0; i < _l1_vec.size(); i++) {
+        for (int j = 0; j < _found_keys_info[i].size(); j++) {
+            auto key_idx = _found_keys_info[i].key_infos[j].first;
+            values[key_idx] = get_values[i][key_idx];
         }
     }
+    //}
     _found_keys_info.clear();
 
     return Status::OK();

@@ -567,8 +567,9 @@ public:
     // |values|: value array for return values
     Status get(size_t n, const Slice* keys, IndexValue* values);
 
-    Status get_from_one_immutable_index(size_t n, const Slice* keys, IndexValue* values, KeysInfo* keys_info,
-                                        KeysInfo* found_keys_info, size_t idx, size_t key_size);
+    Status get_from_one_immutable_index(size_t n, const Slice* keys, IndexValue* values,
+                                        std::map<size_t, KeysInfo>* _keys_info_by_key_size, KeysInfo* found_keys_info,
+                                        size_t idx);
 
     // batch upsert
     // |n|: size of key/value array
