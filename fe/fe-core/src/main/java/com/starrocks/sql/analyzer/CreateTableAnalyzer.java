@@ -342,7 +342,7 @@ public class CreateTableAnalyzer {
             // analyze distribution
             if (distributionDesc == null) {
                 if (keysDesc.getKeysType() != KeysType.DUP_KEYS) {
-                    throw new SemanticException("Random distribution must be used in DUP_KEYS.");
+                    throw new SemanticException("Currently only support default distribution in DUP_KEYS");
                 }
                 if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
                     if (properties == null) {
@@ -356,7 +356,7 @@ public class CreateTableAnalyzer {
             }
             if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS 
                     && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
-                throw new SemanticException("Random distribution must be used in DUP_KEYS or AGG_KEYS",
+                throw new SemanticException("Random distribution must be used in DUP_KEYS or AGG_KEYS without replace",
                         distributionDesc.getPos());
             }
             distributionDesc.analyze(columnSet);
