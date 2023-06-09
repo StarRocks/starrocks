@@ -64,10 +64,12 @@ struct CastFn {
 };
 
 // All cast implements
-#define SELF_CAST(FROM_TYPE)                                                    \
-    template <bool AllowThrowException>                                         \
-    struct CastFn<FROM_TYPE, FROM_TYPE, AllowThrowException> {                  \
-        static ColumnPtr cast_fn(ColumnPtr& column) { return column->clone(); } \
+#define SELF_CAST(FROM_TYPE)                                   \
+    template <bool AllowThrowException>                        \
+    struct CastFn<FROM_TYPE, FROM_TYPE, AllowThrowException> { \
+        static ColumnPtr cast_fn(ColumnPtr& column) {          \
+            return column->clone();                            \
+        }                                                      \
     };
 
 #define UNARY_FN_CAST(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                        \
@@ -1060,10 +1062,12 @@ static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
 }
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_TIME, cast_from_string_to_time_fn);
 
-#define DEFINE_CAST_CONSTRUCT(CLASS)             \
-    CLASS(const TExprNode& node) : Expr(node) {} \
-    virtual ~CLASS(){};                          \
-    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS(*this)); }
+#define DEFINE_CAST_CONSTRUCT(CLASS)                       \
+    CLASS(const TExprNode& node) : Expr(node) {}           \
+    virtual ~CLASS(){};                                    \
+    virtual Expr* clone(ObjectPool* pool) const override { \
+        return pool->add(new CLASS(*this));                \
+    }
 
 // vectorized cast expr
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
@@ -1445,7 +1449,6 @@ static std::unique_ptr<Expr> create_slot_ref(const TypeDescriptor& type) {
     ref_node.slot_ref.tuple_id = 0;
     return std::make_unique<ColumnRef>(ref_node);
 }
-
 
 StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
     auto column = ColumnHelper::create_column(_type, true);

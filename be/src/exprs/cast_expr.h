@@ -156,7 +156,7 @@ private:
 //  cast map{1: NULL} to map<int, ARRAY<int>>
 class MustNullExpr final : public Expr {
 public:
-    MustNullExpr(const TExprNode& node): Expr(node) {}
+    MustNullExpr(const TExprNode& node) : Expr(node) {}
 
     MustNullExpr(const MustNullExpr& rhs) : Expr(rhs) {}
 
