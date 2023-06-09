@@ -280,9 +280,6 @@ public:
 private:
     Status _init_with_partition_nums(RuntimeState* state, int num_partitions);
 
-    template <class ChunkProvider>
-    Status _spill_partition(SerdeContext& context, SpilledPartition* partition, ChunkProvider&& provider);
-
     // split partition by hash
     // hash-based partitioning can have significant degradation in the case of heavily skewed data.
     // TODO:
