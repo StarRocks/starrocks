@@ -986,6 +986,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_filter(FunctionContext* context, const
     return ArrayFilter::process(context, columns);
 }
 
+<<<<<<< HEAD
 class ArrayArithmeticImpl {
 public:
     using ArithmeticType = typename ArrayFunctions::ArithmeticType;
@@ -1509,6 +1510,14 @@ StatusOr<ColumnPtr> ArrayFunctions::array_max_datetime([[maybe_unused]] Function
 StatusOr<ColumnPtr> ArrayFunctions::array_max_varchar([[maybe_unused]] FunctionContext* context,
                                                       const Columns& columns) {
     return ArrayFunctions::template array_max<TYPE_VARCHAR>(columns);
+=======
+StatusOr<ColumnPtr> ArrayFunctions::all_match(FunctionContext* context, const Columns& columns) {
+    return ArrayMatch<false>::process(context, columns);
+}
+
+StatusOr<ColumnPtr> ArrayFunctions::any_match(FunctionContext* context, const Columns& columns) {
+    return ArrayMatch<true>::process(context, columns);
+>>>>>>> abd1732092 ([Feature] support any/all_match() for arrays (#24692))
 }
 
 StatusOr<ColumnPtr> ArrayFunctions::concat(FunctionContext* ctx, const Columns& columns) {

@@ -142,6 +142,8 @@ public class ExpressionAnalyzer {
         if (expr instanceof FunctionCallExpr) {
             if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ANY_MATCH) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ALL_MATCH) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_SORTBY)) {
                 return true;
             } else if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM)) {
@@ -169,6 +171,7 @@ public class ExpressionAnalyzer {
     private Expr rewriteHighOrderFunction(Expr expr) {
         Preconditions.checkState(expr instanceof FunctionCallExpr);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+<<<<<<< HEAD
         if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER)
                 && functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
             // array_filter(lambda_func_expr, arr1...) -> array_filter(arr1, array_map(lambda_func_expr, arr1...))
@@ -191,6 +194,60 @@ public class ExpressionAnalyzer {
             functionCallExpr.addChild(arrayMap);
             functionCallExpr.setType(arr1.getType());
             return arrayMap;
+=======
+        if (!(functionCallExpr.getChild(0) instanceof LambdaFunctionExpr)) {
+            return;
+        }
+        switch (functionCallExpr.getFnName().getFunction()) {
+            case FunctionSet.ARRAY_FILTER: {
+                // array_filter(lambda_func_expr, arr1...) -> array_filter(arr1, array_map(lambda_func_expr, arr1...))
+                FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
+                        Lists.newArrayList(functionCallExpr.getChildren()));
+                arrayMap.setType(Type.ARRAY_BOOLEAN);
+                Expr arr1 = functionCallExpr.getChild(1);
+                functionCallExpr.clearChildren();
+                functionCallExpr.addChild(arr1);
+                functionCallExpr.addChild(arrayMap);
+                visitor.visit(arrayMap, scope);
+                break;
+            }
+            case FunctionSet.ALL_MATCH:
+            case FunctionSet.ANY_MATCH: {
+                // func(lambda_func_expr, arr1...) -> func(array_map(lambda_func_expr, arr1...))
+                FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
+                        Lists.newArrayList(functionCallExpr.getChildren()));
+                arrayMap.setType(Type.ARRAY_BOOLEAN);
+                functionCallExpr.clearChildren();
+                functionCallExpr.addChild(arrayMap);
+                visitor.visit(arrayMap, scope);
+                break;
+            }
+            case FunctionSet.ARRAY_SORTBY: {
+                // array_sortby(lambda_func_expr, arr1...) -> array_sortby(arr1, array_map(lambda_func_expr, arr1...))
+                FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
+                        Lists.newArrayList(functionCallExpr.getChildren()));
+                Expr arr1 = functionCallExpr.getChild(1);
+                functionCallExpr.clearChildren();
+                functionCallExpr.addChild(arr1);
+                functionCallExpr.addChild(arrayMap);
+                functionCallExpr.setType(arr1.getType());
+                visitor.visit(arrayMap, scope);
+                break;
+            }
+            case FunctionSet.MAP_FILTER:
+                // map_filter((k,v)->(k,expr),map) -> map_filter(map, map_values(map_apply((k,v)->(k,expr),map)))
+                FunctionCallExpr mapApply = new FunctionCallExpr(FunctionSet.MAP_APPLY,
+                        Lists.newArrayList(functionCallExpr.getChildren()));
+                Expr map = functionCallExpr.getChild(1);
+                visitor.visit(mapApply, scope);
+
+                FunctionCallExpr mapValues = new FunctionCallExpr(FunctionSet.MAP_VALUES, Lists.newArrayList(mapApply));
+                visitor.visit(mapValues, scope);
+                functionCallExpr.clearChildren();
+                functionCallExpr.addChild(map);
+                functionCallExpr.addChild(mapValues);
+                break;
+>>>>>>> abd1732092 ([Feature] support any/all_match() for arrays (#24692))
         }
         return null;
     }
@@ -1098,6 +1155,147 @@ public class ExpressionAnalyzer {
             return null;
         }
 
+<<<<<<< HEAD
+=======
+        private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {
+            switch (fnName) {
+                case FunctionSet.TIME_SLICE:
+                case FunctionSet.DATE_SLICE:
+                    if (!(node.getChild(1) instanceof IntLiteral)) {
+                        throw new SemanticException(
+                                fnName + " requires second parameter must be a constant interval", node.getPos());
+                    }
+                    if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
+                        throw new SemanticException(
+                                fnName + " requires second parameter must be greater than 0", node.getPos());
+                    }
+                    break;
+                case FunctionSet.ARRAY_FILTER:
+                    if (node.getChildren().size() != 2) {
+                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions",
+                                node.getPos());
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName +
+                                " should be an array or a lambda function", node.getPos());
+                    }
+                    if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                        throw new SemanticException("The second input of " + fnName +
+                                " should be an array or a lambda function", node.getPos());
+                    }
+                    // force the second array be of Type.ARRAY_BOOLEAN
+                    if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
+                        throw new SemanticException("The second input of array_filter " +
+                                node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>", node.getPos());
+                    }
+                    break;
+                case FunctionSet.ALL_MATCH:
+                case FunctionSet.ANY_MATCH:
+                    if (node.getChildren().size() != 1) {
+                        throw new SemanticException(fnName + " should have a input array", node.getPos());
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName + " should be an array",
+                                node.getPos());
+                    }
+                    // force the second array be of Type.ARRAY_BOOLEAN
+                    if (!Type.canCastTo(node.getChild(0).getType(), Type.ARRAY_BOOLEAN)) {
+                        throw new SemanticException("The second input of " + fnName +
+                                node.getChild(0).getType().toString() + "  can't cast to ARRAY<BOOL>", node.getPos());
+                    }
+                    break;
+                case FunctionSet.ARRAY_SORTBY:
+                    if (node.getChildren().size() != 2) {
+                        throw new SemanticException(fnName + " should have 2 array inputs or lambda functions",
+                                node.getPos());
+                    }
+                    if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName +
+                                " should be an array or a lambda function", node.getPos());
+                    }
+                    if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                        throw new SemanticException("The second input of " + fnName +
+                                " should be an array or a lambda function", node.getPos());
+                    }
+                    break;
+                case FunctionSet.ARRAY_GENERATE:
+                    if (node.getChildren().size() < 1 || node.getChildren().size() > 3) {
+                        throw new SemanticException(fnName + " has wrong input numbers");
+                    }
+                    for (Expr expr : node.getChildren()) {
+                        if ((expr instanceof SlotRef) && node.getChildren().size() != 3) {
+                            throw new SemanticException(fnName + " with IntColumn doesn't support default parameters");
+                        }
+                        if (!(expr instanceof IntLiteral) && !(expr instanceof LargeIntLiteral) &&
+                                !(expr instanceof SlotRef) && !(expr instanceof NullLiteral)) {
+                            throw new SemanticException(fnName + "'s parameter only support Integer");
+                        }
+                    }
+                    break;
+                case FunctionSet.MAP_FILTER:
+                    if (node.getChildren().size() != 2) {
+                        throw new SemanticException(fnName + " should have 2 inputs, " +
+                                "but there are just " + node.getChildren().size() + " inputs.");
+                    }
+                    if (!node.getChild(0).getType().isMapType() && !node.getChild(0).getType().isNull()) {
+                        throw new SemanticException("The first input of " + fnName +
+                                " should be a map or a lambda function.");
+                    }
+                    if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                        throw new SemanticException("The second input of " + fnName +
+                                " should be a array or a lambda function.");
+                    }
+                    // force the second array be of Type.ARRAY_BOOLEAN
+                    if (!Type.canCastTo(node.getChild(1).getType(), Type.ARRAY_BOOLEAN)) {
+                        throw new SemanticException("The second input of map_filter " +
+                                node.getChild(1).getType().toString() + "  can't cast to ARRAY<BOOL>");
+                    }
+                    break;
+                case FunctionSet.ARRAY_AGG: {
+                    for (int i = 1; i < argumentTypes.length; ++i) {
+                        if (argumentTypes[i].isComplexType()) {
+                            throw new SemanticException("array_agg can't support order by nested types, " +
+                                    "but " + i + "-th input is " + argumentTypes[i].toSql());
+                        }
+                    }
+                    break;
+                }
+                case FunctionSet.NAMED_STRUCT: {
+                    if (node.getChildren().size() < 2) {
+                        throw new SemanticException(fnName + " should have at least two inputs", node.getPos());
+                    }
+                    if (node.getChildren().size() % 2 != 0) {
+                        throw new SemanticException(fnName + " arguments must be in name/value pairs", node.getPos());
+                    }
+
+                    Set<String> check = Sets.newHashSet();
+                    for (int i = 0; i < node.getChildren().size(); i = i + 2) {
+                        if (!(node.getChild(i) instanceof StringLiteral)) {
+                            throw new SemanticException(
+                                    "The " + (i + 1) + "-th input of named_struct must be string literal",
+                                    node.getPos());
+                        }
+
+                        String name = ((StringLiteral) node.getChild(i)).getValue();
+                        if (check.contains(name)) {
+                            throw new SemanticException("named_struct contains duplicate subfield name: " +
+                                    name + " at " + (i + 1) + "-th input", node.getPos());
+                        }
+
+                        check.add(name);
+                    }
+                    break;
+                }
+                case FunctionSet.ROW: {
+                    if (node.getChildren().size() < 1) {
+                        throw new SemanticException(fnName + " should have at least one input.", node.getPos());
+                    }
+                    break;
+                }
+            }
+        }
+
+>>>>>>> abd1732092 ([Feature] support any/all_match() for arrays (#24692))
         private Function getStrToDateFunction(FunctionCallExpr node, Type[] argumentTypes) {
             /*
              * @TODO: Determine the return type of this function

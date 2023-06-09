@@ -166,6 +166,7 @@ public class FunctionAnalyzer {
             }
         }
 
+<<<<<<< HEAD
         if (fnName.getFunction().equals(FunctionSet.ARRAYS_OVERLAP)) {
             if (functionCallExpr.getChildren().size() != 2) {
                 throw new SemanticException("arrays_overlap only support 2 parameters");
@@ -184,6 +185,8 @@ public class FunctionAnalyzer {
             }
         }
 
+=======
+>>>>>>> abd1732092 ([Feature] support any/all_match() for arrays (#24692))
         if (fnName.getFunction().equals(FunctionSet.RETENTION)) {
             if (!arg.getType().isArrayType()) {
                 throw new SemanticException("retention only support Array<BOOLEAN>");
