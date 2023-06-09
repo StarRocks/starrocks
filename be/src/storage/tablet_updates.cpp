@@ -2086,7 +2086,10 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     size_t total_bytes = 0;
     size_t total_rows_after_compaction = 0;
     size_t total_bytes_after_compaction = 0;
+<<<<<<< HEAD
     bool has_partial_update_by_column = false;
+=======
+>>>>>>> c19691bd0 ([Enhancement] Make pk table compaction's rowset size threshold large and configurable (#23843))
     int64_t total_score = -config::update_compaction_size_threshold;
     vector<CompactionEntry> candidates;
     {
@@ -2128,11 +2131,14 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         size_t new_bytes = total_bytes_after_compaction + e.bytes * (e.num_rows - e.num_dels) / e.num_rows;
         if (info->inputs.size() > 0 && (new_rows > compaction_result_rows_threashold * 3 / 2 ||
                                         new_bytes > config::update_compaction_size_threshold * 3 / 2)) {
+<<<<<<< HEAD
             break;
         }
         // Partial update generate empty rowset, compact them first.
         // Or partial update by column will trigger too many useless compaction cost.
         if (info->inputs.size() > 1 && has_partial_update_by_column) {
+=======
+>>>>>>> c19691bd0 ([Enhancement] Make pk table compaction's rowset size threshold large and configurable (#23843))
             break;
         }
         info->inputs.push_back(e.rowsetid);
