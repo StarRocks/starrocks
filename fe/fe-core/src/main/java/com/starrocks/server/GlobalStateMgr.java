@@ -2424,15 +2424,14 @@ public class GlobalStateMgr {
                 StringBuilder colSb = new StringBuilder();
                 colSb.append(column.getName());
                 if (!Strings.isNullOrEmpty(column.getComment())) {
-                    colSb.append(" COMMENT ").append("\"").append(column.getComment()).append("\"");
+                    colSb.append(" COMMENT ").append("\"").append(column.getDisplayComment()).append("\"");
                 }
                 colDef.add(colSb.toString());
             }
             sb.append(Joiner.on(", ").join(colDef));
             sb.append(")");
-            if (!Strings.isNullOrEmpty(view.getComment())) {
-                sb.append(" COMMENT \"").append(view.getComment()).append("\"");
-            }
+            addTableComment(sb, view);
+
             sb.append(" AS ").append(view.getInlineViewDef()).append(";");
             createTableStmt.add(sb.toString());
             return;
@@ -2495,9 +2494,7 @@ public class GlobalStateMgr {
                 }
             }
             sb.append(Joiner.on(", ").join(keysColumnNames)).append(")");
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // partition
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -2703,9 +2700,8 @@ public class GlobalStateMgr {
             sb.append("\n)");
         } else if (table.getType() == TableType.MYSQL) {
             MysqlTable mysqlTable = (MysqlTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
+
             // properties
             sb.append("\nPROPERTIES (\n");
             sb.append("\"host\" = \"").append(mysqlTable.getHost()).append("\",\n");
@@ -2717,9 +2713,8 @@ public class GlobalStateMgr {
             sb.append(")");
         } else if (table.getType() == TableType.BROKER) {
             BrokerTable brokerTable = (BrokerTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
+
             // properties
             sb.append("\nPROPERTIES (\n");
             sb.append("\"broker_name\" = \"").append(brokerTable.getBrokerName()).append("\",\n");
@@ -2735,9 +2730,7 @@ public class GlobalStateMgr {
             }
         } else if (table.getType() == TableType.ELASTICSEARCH) {
             EsTable esTable = (EsTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // partition
             PartitionInfo partitionInfo = esTable.getPartitionInfo();
@@ -2772,9 +2765,7 @@ public class GlobalStateMgr {
             sb.append(")");
         } else if (table.getType() == TableType.HIVE) {
             HiveTable hiveTable = (HiveTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // properties
             sb.append("\nPROPERTIES (\n");
@@ -2790,17 +2781,14 @@ public class GlobalStateMgr {
             FileTable fileTable = (FileTable) table;
             Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
             CloudCredentialUtil.maskCloudCredential(clonedFileProperties);
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
+
             sb.append("\nPROPERTIES (\n");
             sb.append(new PrintableMap<>(clonedFileProperties, " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.HUDI) {
             HudiTable hudiTable = (HudiTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // properties
             sb.append("\nPROPERTIES (\n");
@@ -2810,9 +2798,7 @@ public class GlobalStateMgr {
             sb.append("\n)");
         } else if (table.getType() == TableType.ICEBERG) {
             IcebergTable icebergTable = (IcebergTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // properties
             sb.append("\nPROPERTIES (\n");
@@ -2822,9 +2808,7 @@ public class GlobalStateMgr {
             sb.append("\n)");
         } else if (table.getType() == TableType.JDBC) {
             JDBCTable jdbcTable = (JDBCTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // properties
             sb.append("\nPROPERTIES (\n");
@@ -2885,6 +2869,12 @@ public class GlobalStateMgr {
                 sb.append(");");
                 createRollupStmt.add(sb.toString());
             }
+        }
+    }
+
+    private static void addTableComment(StringBuilder sb, Table table) {
+        if (!Strings.isNullOrEmpty(table.getComment())) {
+            sb.append("\nCOMMENT \"").append(table.getDisplayComment()).append("\"");
         }
     }
 
