@@ -279,6 +279,10 @@ public class TabletScheduler extends MasterDaemon {
             return AddResult.LIMIT_EXCEED;
         }
 
+        if (force) {
+            LOG.debug("forcefully add tablet {} to table scheduler pending queue", tablet.getTabletId());
+        }
+
         allTabletIds.add(tablet.getTabletId());
         pendingTablets.offer(tablet);
         return AddResult.ADDED;
