@@ -1189,14 +1189,20 @@ public class CoordinatorPreprocessor {
                     // dest bucket may be pruned, these bucket dest should be set an invalid value
                     // and will be deal with in BE's DataStreamSender
                     dest.fragment_instance_id = new TUniqueId(-1, -1);
-                    dest.server = dummyServer;
+
+                    // NOTE(zc): can be removed in version 4.0
+                    dest.setDeprecated_server(dummyServer);
+
                     dest.setBrpc_server(dummyServer);
 
                     for (FInstanceExecParam instanceExecParams : destParams.instanceExecParams) {
                         Integer driverSeq = instanceExecParams.bucketSeqToDriverSeq.get(bucketSeq);
                         if (driverSeq != null) {
                             dest.fragment_instance_id = instanceExecParams.instanceId;
-                            dest.server = toRpcHost(instanceExecParams.host);
+
+                            // NOTE(zc): can be removed in version 4.0
+                            dest.setDeprecated_server(instanceExecParams.host);
+
                             dest.setBrpc_server(SystemInfoService.toBrpcHost(instanceExecParams.host));
                             if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
                                 dest.setPipeline_driver_sequence(driverSeq);
@@ -1213,7 +1219,10 @@ public class CoordinatorPreprocessor {
                 for (int j = 0; j < destParams.instanceExecParams.size(); ++j) {
                     TPlanFragmentDestination dest = new TPlanFragmentDestination();
                     dest.fragment_instance_id = destParams.instanceExecParams.get(j).instanceId;
-                    dest.server = toRpcHost(destParams.instanceExecParams.get(j).host);
+
+                    // NOTE(zc): can be removed in version 4.0
+                    dest.setDeprecated_server(destParams.instanceExecParams.get(j).host);
+
                     dest.setBrpc_server(SystemInfoService.toBrpcHost(destParams.instanceExecParams.get(j).host));
                     params.destinations.add(dest);
                 }
@@ -1262,14 +1271,20 @@ public class CoordinatorPreprocessor {
                         // dest bucket may be pruned, these bucket dest should be set an invalid value
                         // and will be deal with in BE's DataStreamSender
                         dest.fragment_instance_id = new TUniqueId(-1, -1);
-                        dest.server = dummyServer;
+
+                        // NOTE(zc): can be removed in version 4.0
+                        dest.setDeprecated_server(dummyServer);
+
                         dest.setBrpc_server(dummyServer);
 
                         for (FInstanceExecParam instanceExecParams : destParams.instanceExecParams) {
                             Integer driverSeq = instanceExecParams.bucketSeqToDriverSeq.get(bucketSeq);
                             if (driverSeq != null) {
                                 dest.fragment_instance_id = instanceExecParams.instanceId;
-                                dest.server = toRpcHost(instanceExecParams.host);
+
+                                // NOTE(zc): can be removed in version 4.0
+                                dest.setDeprecated_server(instanceExecParams.host);
+
                                 dest.setBrpc_server(SystemInfoService.toBrpcHost(instanceExecParams.host));
                                 if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
                                     dest.setPipeline_driver_sequence(driverSeq);
@@ -1286,7 +1301,9 @@ public class CoordinatorPreprocessor {
                     for (int j = 0; j < destParams.instanceExecParams.size(); ++j) {
                         TPlanFragmentDestination dest = new TPlanFragmentDestination();
                         dest.fragment_instance_id = destParams.instanceExecParams.get(j).instanceId;
-                        dest.server = toRpcHost(destParams.instanceExecParams.get(j).host);
+                        // NOTE(zc): can be removed in version 4.0
+                        dest.setDeprecated_server(destParams.instanceExecParams.get(j).host);
+
                         dest.setBrpc_server(SystemInfoService.toBrpcHost(destParams.instanceExecParams.get(j).host));
                         multiSink.getDestinations().get(i).add(dest);
                     }
@@ -1321,19 +1338,6 @@ public class CoordinatorPreprocessor {
 
     private int getFragmentBucketNum(PlanFragmentId fragmentId) {
         return fragmentIdToBucketNumMap.get(fragmentId);
-    }
-
-    public TNetworkAddress toRpcHost(TNetworkAddress host) throws Exception {
-        ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
-                host.getHostname(), host.getPort());
-        if (computeNode == null) {
-            computeNode =
-                    GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
-            if (computeNode == null) {
-                throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
-            }
-        }
-        return new TNetworkAddress(computeNode.getHost(), computeNode.getBeRpcPort());
     }
 
     private String backendInfosString(boolean chooseComputeNode) {
@@ -1664,7 +1668,6 @@ public class CoordinatorPreprocessor {
                     Preconditions.checkState(instanceExecParams.size() == destinations.size());
                     TPlanFragmentDestination ndes = destinations.get(fragmentIndex);
 
-                    Preconditions.checkState(ndes.getServer().equals(toRpcHost(instanceExecParam.host)));
                     newDestinations.add(Lists.newArrayList(ndes));
                 }
 
