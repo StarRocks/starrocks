@@ -282,6 +282,10 @@ public class AnalyzeCreateTableTest {
                 "distributed by random");
         analyzeSuccess("create table table1 (col1 char(10) not null, col2 bigint sum) engine=olap aggregate key(col1) " +
                 "distributed by random buckets 10");
+        analyzeFail("create table table1 (col1 char(10) not null, col2 bigint replace) engine=olap aggregate key(col1) " +
+                "distributed by random buckets 10");
+        analyzeFail("create table table1 (col1 char(10) not null, col2 bigint REPLACE_IF_NOT_NULL) " +
+                "engine=olap aggregate key(col1) distributed by random buckets 10");
     }
 
     @Test
