@@ -93,6 +93,7 @@ import com.starrocks.transaction.TransactionState;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import shadedelta.com.github.mjakubowski84.parquet4s.Col;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -401,6 +402,11 @@ public class OlapTableSink extends DataSink {
 
         if (!inKeysExprNodes.isEmpty()) {
             tPartition.setIn_keys(inKeysExprNodes);
+        }
+
+        if (partition.getName().startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+            tPartition.setIs_shadow_partition(true);
+            tPartition.setIn_keys(Collections.emptyList());
         }
     }
 

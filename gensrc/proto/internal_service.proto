@@ -101,7 +101,8 @@ message PTransmitDataResult {
 
 message PTransmitChunkResult {
     optional StatusPB status = 1;
-    optional int64 receive_timestamp = 2;
+    optional int64 receive_timestamp = 2; // Deprecated
+    optional int64 receiver_post_process_time = 3;
 };
 
 message PTransmitRuntimeFilterForwardTarget {
