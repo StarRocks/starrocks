@@ -62,9 +62,9 @@ public:
     bool _set_failed = false;
 };
 
-class PrimaryKeyPublishTest : public testing::Test {
+class LakePrimaryKeyPublishTest : public testing::Test {
 public:
-    PrimaryKeyPublishTest() {
+    LakePrimaryKeyPublishTest() {
         _location_provider = std::make_unique<TestLocationProvider>(kTestGroupPath);
         _update_manager = std::make_unique<UpdateManager>(_location_provider.get());
         _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), _update_manager.get(), 1024 * 1024);
@@ -195,7 +195,7 @@ protected:
     int64_t _partition_id = next_id();
 };
 
-TEST_F(PrimaryKeyPublishTest, test_write_read_success) {
+TEST_F(LakePrimaryKeyPublishTest, test_write_read_success) {
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
 
@@ -254,7 +254,7 @@ TEST_F(PrimaryKeyPublishTest, test_write_read_success) {
     }
 }
 
-TEST_F(PrimaryKeyPublishTest, test_write_multitime_check_result) {
+TEST_F(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -275,7 +275,7 @@ TEST_F(PrimaryKeyPublishTest, test_write_multitime_check_result) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
 }
 
-TEST_F(PrimaryKeyPublishTest, test_write_fail_retry) {
+TEST_F(LakePrimaryKeyPublishTest, test_write_fail_retry) {
     std::vector<ChunkPtr> chunks;
     for (int i = 0; i < 5; i++) {
         chunks.emplace_back(gen_data(kChunkSize, i, true));
@@ -341,7 +341,11 @@ TEST_F(PrimaryKeyPublishTest, test_write_fail_retry) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 5);
 }
 
-TEST_F(PrimaryKeyPublishTest, test_publish_multi_times) {
+TEST_F(LakePrimaryKeyPublishTest, test_publish_multi_times) {
+    auto saved_max_versions = config::lake_gc_metadata_max_versions;
+    // Prevent the old tablet metadata files been removed
+     config::lake_gc_metadata_max_versions = 10;
+
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
     auto txns = std::vector<int64_t>();
     auto version = 1;
@@ -369,9 +373,11 @@ TEST_F(PrimaryKeyPublishTest, test_publish_multi_times) {
     // advince publish should fail, because version + 1 don't exist
     ASSERT_ERROR(_tablet_manager->publish_version(tablet_id, version + 1, version + 2, &txns.back(), 1).status());
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
+
+    config::lake_gc_metadata_max_versions = saved_max_versions;
 }
 
-TEST_F(PrimaryKeyPublishTest, test_publish_concurrent) {
+TEST_F(LakePrimaryKeyPublishTest, test_publish_concurrent) {
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -399,7 +405,7 @@ TEST_F(PrimaryKeyPublishTest, test_publish_concurrent) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
 }
 
-TEST_F(PrimaryKeyPublishTest, test_resolve_conflict) {
+TEST_F(LakePrimaryKeyPublishTest, test_resolve_conflict) {
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -443,7 +449,7 @@ TEST_F(PrimaryKeyPublishTest, test_resolve_conflict) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
 }
 
-TEST_F(PrimaryKeyPublishTest, test_write_read_success_multiple_tablet) {
+TEST_F(LakePrimaryKeyPublishTest, test_write_read_success_multiple_tablet) {
     auto [chunk0, indexes_1] = gen_data_and_index(kChunkSize * 1, 0, false);
     auto [chunk1, indexes_2] = gen_data_and_index(kChunkSize * 2, 1, false);
 
