@@ -25,6 +25,7 @@ class MemTracker;
 class SlotDescriptor;
 class Chunk;
 class TabletSchema;
+class ThreadPool;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -65,6 +66,9 @@ public:
     // Does NOT take the ownership of |tablet_manager| and |mem_tracker|
     static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t max_buffer_size,
                       MemTracker* mem_tracker);
+
+    // Return the thread pool used for performing write IO.
+    static ThreadPool* io_threads();
 
     explicit DeltaWriter(DeltaWriterImpl* impl) : _impl(impl) {}
 

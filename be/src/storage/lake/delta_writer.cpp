@@ -614,4 +614,14 @@ std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, 
             new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, max_buffer_size, mem_tracker));
 }
 
+ThreadPool* DeltaWriter::io_threads() {
+    if (UNLIKELY(StorageEngine::instance() == nullptr)) {
+        return nullptr;
+    }
+    if (UNLIKELY(StorageEngine::instance()->memtable_flush_executor() == nullptr)) {
+        return nullptr;
+    }
+    return StorageEngine::instance()->memtable_flush_executor()->get_thread_pool();
+}
+
 } // namespace starrocks::lake

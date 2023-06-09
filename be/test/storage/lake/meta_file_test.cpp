@@ -175,7 +175,7 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     EXPECT_TRUE(meta_st.ok());
 
     // clear all delvec meta element so that all element in
-    // version_to_delvec map will also be removed
+    // version_to_file map will also be removed
     // in this case, delvecs meta map has only one element [key=(segment=1234, value=(version=12, offset=0, size=35)]
     // delvec_to_file has also one element [key=(version=12), value=(delvec_file=xxx)]
     // after clearing,  delvecs meta map will have nothing, and element in delvec_to_file will also be useless
@@ -199,14 +199,14 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     // validate delvec file record with version 12 been removed
     MetaFileReader reader5(s_tablet_manager->tablet_metadata_location(tablet_id, new_version), false);
     EXPECT_TRUE(reader5.load().ok());
-    auto version_to_delvec_map = (*meta_st)->delvec_meta().version_to_delvec();
-    EXPECT_EQ(version_to_delvec_map.size(), 1);
+    auto version_to_file_map = (*meta_st)->delvec_meta().version_to_file();
+    EXPECT_EQ(version_to_file_map.size(), 1);
 
-    auto iter2 = version_to_delvec_map.find(version2);
-    EXPECT_TRUE(iter2 == version_to_delvec_map.end());
+    auto iter2 = version_to_file_map.find(version2);
+    EXPECT_TRUE(iter2 == version_to_file_map.end());
 
-    iter2 = version_to_delvec_map.find(new_version);
-    EXPECT_TRUE(iter2 != version_to_delvec_map.end());
+    iter2 = version_to_file_map.find(new_version);
+    EXPECT_TRUE(iter2 != version_to_file_map.end());
 }
 
 } // namespace starrocks::lake
