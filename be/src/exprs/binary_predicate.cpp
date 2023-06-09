@@ -19,6 +19,7 @@
 #include "column/column_viewer.h"
 #include "column/type_traits.h"
 #include "exprs/binary_function.h"
+#include "exprs/unary_function.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
@@ -191,6 +192,10 @@ public:
     }
 };
 
+DEFINE_UNARY_FN_WITH_IMPL(isNullImpl, v) {
+    return v;
+}
+
 class CommonEqualsSafePredicate final : public Predicate {
 public:
     explicit CommonEqualsSafePredicate(const TExprNode& node) : Predicate(node) {}
@@ -208,8 +213,20 @@ public:
 
         if (l->only_null() && r->only_null()) {
             return ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, l->size());
-        } else if (l->only_null() || r->only_null()) {
-            return ColumnHelper::create_const_column<TYPE_BOOLEAN>(false, l->size());
+        }
+
+        auto is_null_predicate = [&] (const ColumnPtr& column) {
+            if (!column->is_nullable() || !column->has_null()) {
+                return ColumnHelper::create_const_column<TYPE_BOOLEAN>(false, column->size());
+            }
+            auto col = ColumnHelper::as_raw_column<NullableColumn>(column)->null_column();
+            return VectorizedStrictUnaryFunction<isNullImpl>::evaluate<TYPE_NULL, TYPE_BOOLEAN>(col);
+        };
+
+        if (l->only_null()) {
+            return is_null_predicate(r);
+        } else if (r->only_null()) {
+            return is_null_predicate(l);
         }
 
         auto& const1 = FunctionHelper::get_data_column_of_nullable(l);
@@ -318,7 +335,7 @@ Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
     }
 
     if (type == TYPE_ARRAY) {
-        if (node.opcode == node.opcode == TExprOpcode::EQ) {
+        if (node.opcode == TExprOpcode::EQ) {
             return new CommonEqualsPredicate(node);
         } else if (node.opcode == TExprOpcode::EQ_FOR_NULL) {
             return new CommonEqualsSafePredicate(node);
