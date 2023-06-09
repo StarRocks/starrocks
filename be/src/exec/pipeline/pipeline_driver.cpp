@@ -181,12 +181,6 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _input_empty_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
     _output_full_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
     _pending_finish_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
-    _total_timer_sw->start();
-    _pending_timer_sw->start();
-    _precondition_block_timer_sw->start();
-    _input_empty_timer_sw->start();
-    _output_full_timer_sw->start();
-    _pending_finish_timer_sw->start();
 
     return Status::OK();
 }
@@ -433,6 +427,15 @@ void PipelineDriver::mark_precondition_ready(RuntimeState* runtime_state) {
         op->set_precondition_ready(runtime_state);
         submit_operators();
     }
+}
+
+void PipelineDriver::start_timers() {
+    _total_timer_sw->start();
+    _pending_timer_sw->start();
+    _precondition_block_timer_sw->start();
+    _input_empty_timer_sw->start();
+    _output_full_timer_sw->start();
+    _pending_finish_timer_sw->start();
 }
 
 void PipelineDriver::submit_operators() {
