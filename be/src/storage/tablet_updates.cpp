@@ -1865,7 +1865,7 @@ int64_t TabletUpdates::get_compaction_score() {
         }
         rowsets = _edit_version_infos[_apply_version_idx]->rowsets;
     }
-    int64_t total_score = -_compaction_cost_seek;
+    int64_t total_score = -config::update_compaction_size_threshold;
     bool has_error = false;
     {
         std::lock_guard lg(_rowset_stats_lock);
@@ -1912,7 +1912,6 @@ static string int_list_to_string(const vector<uint32_t>& l) {
     return ret;
 }
 
-static const size_t compaction_result_bytes_threashold = 1000000000;
 static const size_t compaction_result_rows_threashold = 10000000;
 
 Status TabletUpdates::compaction(MemTracker* mem_tracker) {
@@ -1942,7 +1941,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     size_t total_bytes = 0;
     size_t total_rows_after_compaction = 0;
     size_t total_bytes_after_compaction = 0;
-    int64_t total_score = -_compaction_cost_seek;
+    int64_t total_score = -config::update_compaction_size_threshold;
     vector<CompactionEntry> candidates;
     {
         std::lock_guard lg(_rowset_stats_lock);
@@ -1980,7 +1979,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         size_t new_rows = total_rows_after_compaction + e.num_rows - e.num_dels;
         size_t new_bytes = total_bytes_after_compaction + e.bytes * (e.num_rows - e.num_dels) / e.num_rows;
         if (info->inputs.size() > 0 && (new_rows > compaction_result_rows_threashold * 3 / 2 ||
-                                        new_bytes > compaction_result_bytes_threashold * 3 / 2)) {
+                                        new_bytes > config::update_compaction_size_threshold * 3 / 2)) {
             break;
         }
         info->inputs.push_back(e.rowsetid);
@@ -1989,7 +1988,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         total_bytes += e.bytes;
         total_rows_after_compaction = new_rows;
         total_bytes_after_compaction = new_bytes;
-        if (total_bytes_after_compaction > compaction_result_bytes_threashold ||
+        if (total_bytes_after_compaction > config::update_compaction_size_threshold ||
             total_rows_after_compaction > compaction_result_rows_threashold ||
             info->inputs.size() >= config::max_update_compaction_num_singleton_deltas) {
             break;
@@ -2257,8 +2256,8 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
 }
 
 void TabletUpdates::_calc_compaction_score(RowsetStats* stats) {
-    if (stats->num_rows < 10) {
-        stats->compaction_score = _compaction_cost_seek;
+    if (stats->num_rows == 0) {
+        stats->compaction_score = config::update_compaction_size_threshold;
         return;
     }
     // TODO(cbl): estimate read/write cost, currently just use fixed value
@@ -2266,7 +2265,8 @@ void TabletUpdates::_calc_compaction_score(RowsetStats* stats) {
     const int64_t cost_record_read = 4;
     // use double to prevent overflow
     auto delete_bytes = (int64_t)(stats->byte_size * (double)stats->num_dels / stats->num_rows);
-    stats->compaction_score = _compaction_cost_seek + (cost_record_read + cost_record_write) * delete_bytes -
+    stats->compaction_score = config::update_compaction_size_threshold +
+                              (cost_record_read + cost_record_write) * delete_bytes -
                               cost_record_write * stats->byte_size;
 }
 
