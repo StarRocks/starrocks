@@ -24,9 +24,11 @@
 #include "storage/chunk_iterator.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
+#include "storage/update_manager.h"
 #include "util/bit_util.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
@@ -2366,9 +2368,6 @@ PersistentIndex::~PersistentIndex() {
             l1->clear();
         }
     }
-    if (_get_thread_pool != nullptr) {
-        _get_thread_pool->shutdown();
-    }
 }
 
 // Create a new empty PersistentIndex
@@ -2792,15 +2791,6 @@ Status PersistentIndex::prepare(const EditVersion& version, size_t n) {
 
     if (config::enable_parallel_get_and_bf) {
         _need_bloom_filter = true;
-        if (n > _size / 4 && n > kMinEnableBFKVNum) {
-            RETURN_IF_ERROR(ThreadPoolBuilder("get_kv_thread")
-                                    .set_min_threads(1)
-                                    .set_max_threads(config::l0_l1_merge_ratio)
-                                    .set_max_queue_size(4096)
-                                    .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
-                                    .build(&_get_thread_pool));
-            LOG(INFO) << "get kv thread num: " << _get_thread_pool->num_threads();
-        }
     }
     _set_error(false, "");
     return Status::OK();
@@ -2885,9 +2875,7 @@ Status PersistentIndex::on_commited() {
     _dump_snapshot = false;
     _flushed = false;
     _need_bloom_filter = false;
-    if (_get_thread_pool != nullptr) {
-        _get_thread_pool->shutdown();
-    }
+
     return Status::OK();
 }
 
@@ -2970,7 +2958,6 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
     if (_l1_vec.empty()) {
         return Status::OK();
     }
-    DCHECK(_get_thread_pool != nullptr);
 
     std::unique_lock<std::mutex> ul(_lock);
     std::map<size_t, KeysInfo>::iterator iter;
@@ -2986,7 +2973,7 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
             GetFromImmutableIndexTask task(n, i, key_size, keys, reinterpret_cast<IndexValue*>(get_values[i].data()),
                                            &(iter->second), this);
             std::shared_ptr<Runnable> r(std::make_shared<GetFromImmutableIndexTask>(task));
-            auto st = _get_thread_pool->submit(std::move(r));
+            auto st = StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->submit(std::move(r));
             if (!st.ok()) {
                 error_msg = strings::Substitute("get from immutable index failed: $0", st.to_string());
                 LOG(ERROR) << error_msg;
@@ -3017,7 +3004,7 @@ Status PersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
     std::map<size_t, KeysInfo> not_founds_by_key_size;
     size_t num_found = 0;
     RETURN_IF_ERROR(_l0->get(n, keys, values, &num_found, not_founds_by_key_size));
-    if (_get_thread_pool != nullptr) {
+    if (config::enable_parallel_get_and_bf) {
         return _get_from_immutable_index_parallel(n, keys, values, not_founds_by_key_size);
     }
     return _get_from_immutable_index(n, keys, values, not_founds_by_key_size, nullptr);
@@ -3101,7 +3088,7 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
         stat->l0_write_cost += watch.elapsed_time();
         watch.reset();
     }
-    if (_get_thread_pool != nullptr) {
+    if (config::enable_parallel_get_and_bf) {
         RETURN_IF_ERROR(_get_from_immutable_index_parallel(n, keys, old_values, not_founds_by_key_size));
     } else {
         RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size, stat));
@@ -3165,7 +3152,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     size_t num_erased = 0;
     RETURN_IF_ERROR(_l0->erase(n, keys, old_values, &num_erased, not_founds_by_key_size));
     _dump_snapshot |= _can_dump_directly();
-    if (_get_thread_pool != nullptr) {
+    if (config::enable_parallel_get_and_bf) {
         RETURN_IF_ERROR(_get_from_immutable_index_parallel(n, keys, old_values, not_founds_by_key_size));
     } else {
         RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size, nullptr));

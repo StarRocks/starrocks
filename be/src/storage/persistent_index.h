@@ -688,7 +688,6 @@ private:
     bool _need_bloom_filter = false;
 
     mutable std::mutex _lock;
-    std::unique_ptr<ThreadPool> _get_thread_pool;
     std::condition_variable _get_task_finished;
     size_t _running_get_task = 0;
     std::atomic<bool> _error{false};
