@@ -77,13 +77,19 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
 `data_desc` can also optionally include the following parameters:
 
+- `INTO TABLE`
+
+  Specifies the name of the destination StarRocks table.
+
+`data_desc` can also optionally include the following parameters:
+
 - `NEGATIVE`
 
   Revokes the loading of a specific batch of data. To achieve this, you need to load the same batch of data with the `NEGATIVE` keyword specified.
 
   > **NOTE**
   >
-  > This parameter is valid only when the StarRocks table uses the Aggregate Key model and all its value columns are computed by the `sum` function.
+  > This parameter is valid only when the StarRocks table uses the Aggregate table and all its value columns are computed by the `sum` function.
 
 - `PARTITION`
 
