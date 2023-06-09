@@ -361,5 +361,4 @@ TEST(SortingTest, merge_sorted_stream) {
         }
     }
 }
-
 } // namespace starrocks
