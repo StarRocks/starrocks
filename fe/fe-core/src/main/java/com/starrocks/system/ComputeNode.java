@@ -482,6 +482,10 @@ public class ComputeNode implements IComputable, Writable {
             if (hbResponse.getRebootTime() > this.lastStartTime) {
                 this.lastStartTime = hbResponse.getRebootTime();
                 isChanged = true;
+                // reboot time change means the BE has been restarted
+                // but alive state may be not changed since the BE may be restarted in a short time
+                // we need notify coordinator to cancel query
+                becomeDead = true;
             }
 
             if (this.cpuCores != hbResponse.getCpuCores()) {
