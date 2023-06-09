@@ -801,6 +801,9 @@ CONF_Int64(max_length_for_to_base64, "200000");
 // Used by bitmap functions
 CONF_Int64(max_length_for_bitmap_function, "1000000");
 
+// if l0_mem_size exceeds this value, l0 need snapshot
+CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
+
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
 
