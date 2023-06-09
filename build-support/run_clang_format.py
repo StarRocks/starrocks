@@ -81,7 +81,6 @@ def _check_dir(arguments, source_dir, exclude_globs):
             # if any clang-format reported a parse error, bubble it
             returncode, stdout, stderr = res
             if returncode != 0:
-                print(stderr)
                 sys.exit(returncode)
             checker_args.append((filename, stdout))
 
@@ -105,7 +104,8 @@ def _check_dir(arguments, source_dir, exclude_globs):
         finally:
             pool.terminate()
             pool.join()
-        sys.exit(1 if error else 0)
+        if error:
+            sys.exit(1)
 
 
 if __name__ == "__main__":
