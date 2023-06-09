@@ -125,14 +125,12 @@ std::string TabletManager::tablet_latest_metadata_cache_key(int64_t tablet_id) {
     return fmt::format("TL{}", tablet_id);
 }
 
-bool TabletManager::fill_metacache(std::string_view key, CacheValue* ptr, int size) {
+void TabletManager::fill_metacache(std::string_view key, CacheValue* ptr, int size) {
     Cache::Handle* handle = _metacache->insert(CacheKey(key), ptr, size, cache_value_deleter);
     if (handle == nullptr) {
         delete ptr;
-        return false;
     } else {
         _metacache->release(handle);
-        return true;
     }
 }
 
@@ -200,7 +198,7 @@ SegmentPtr TabletManager::lookup_segment(std::string_view key) {
 void TabletManager::cache_segment(std::string_view key, SegmentPtr segment) {
     auto mem_cost = segment->mem_usage();
     auto value = std::make_unique<CacheValue>(std::move(segment));
-    (void)fill_metacache(key, value.release(), (int)mem_cost);
+    fill_metacache(key, value.release(), (int)mem_cost);
 }
 
 DelVectorPtr TabletManager::lookup_delvec(std::string_view key) {
@@ -217,7 +215,7 @@ DelVectorPtr TabletManager::lookup_delvec(std::string_view key) {
 void TabletManager::cache_delvec(std::string_view key, DelVectorPtr delvec) {
     auto mem_cost = delvec->memory_usage();
     auto value = std::make_unique<CacheValue>(std::move(delvec));
-    (void)fill_metacache(key, value.release(), (int)mem_cost);
+    fill_metacache(key, value.release(), (int)mem_cost);
 }
 
 void TabletManager::erase_metacache(std::string_view key) {
@@ -330,8 +328,7 @@ Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
     // put into metacache
     auto metadata_location = tablet_metadata_location(metadata->id(), metadata->version());
     auto value_ptr = std::make_unique<CacheValue>(metadata);
-    bool inserted = fill_metacache(metadata_location, value_ptr.release(), static_cast<int>(metadata->SpaceUsedLong()));
-    LOG_IF(WARNING, !inserted) << "Failed to put into meta cache " << metadata_location;
+    fill_metacache(metadata_location, value_ptr.release(), static_cast<int>(metadata->SpaceUsedLong()));
     cache_tablet_latest_metadata(metadata);
     return Status::OK();
 }
@@ -362,8 +359,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
     ASSIGN_OR_RETURN(auto ptr, load_tablet_metadata(path, fill_cache));
     if (fill_cache) {
         auto value_ptr = std::make_unique<CacheValue>(ptr);
-        bool inserted = fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
-        LOG_IF(WARNING, !inserted) << "Failed to put tablet metadata into cache " << path;
+        fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
     }
     return ptr;
 }
@@ -421,8 +417,7 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fil
     ASSIGN_OR_RETURN(auto ptr, load_txn_log(path, fill_cache));
     if (fill_cache) {
         auto value_ptr = std::make_unique<CacheValue>(ptr);
-        bool inserted = fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
-        LOG_IF(WARNING, !inserted) << "Failed to cache " << path;
+        fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
     }
     return ptr;
 }
@@ -451,8 +446,7 @@ Status TabletManager::put_txn_log(TxnLogPtr log) {
 
     // put txnlog into cache
     auto value_ptr = std::make_unique<CacheValue>(log);
-    bool inserted = fill_metacache(txn_log_path, value_ptr.release(), static_cast<int>(log->SpaceUsedLong()));
-    LOG_IF(WARNING, !inserted) << "Failed to put txnlog into cache " << txn_log_path;
+    fill_metacache(txn_log_path, value_ptr.release(), static_cast<int>(log->SpaceUsedLong()));
     return Status::OK();
 }
 
@@ -525,7 +519,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
                     schema = std::move(schema_or).value();
                     // Save the schema into the in-memory cache, use the schema id as the cache key
                     auto cache_value = std::make_unique<CacheValue>(schema);
-                    (void)fill_metacache(cache_key, cache_value.release(), 0);
+                    fill_metacache(cache_key, cache_value.release(), 0);
                     return std::move(schema);
                 } else if (schema_or.status().is_not_found()) {
                     // version 3.0 will not generate the tablet schema file, ignore the not found error and
@@ -575,7 +569,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
     // Save the schema into the in-memory cache
     auto cache_value = std::make_unique<CacheValue>(schema);
     auto cache_size = inserted ? (int)schema->mem_usage() : 0;
-    (void)fill_metacache(cache_key, cache_value.release(), cache_size);
+    fill_metacache(cache_key, cache_value.release(), cache_size);
     return schema;
 }
 
@@ -833,7 +827,7 @@ Status TabletManager::create_schema_file(int64_t tablet_id, const TabletSchemaPB
         }
         auto cache_value = std::make_unique<CacheValue>(schema);
         auto cache_size = inserted ? (int)schema->mem_usage() : 0;
-        (void)fill_metacache(cache_key, cache_value.release(), cache_size);
+        fill_metacache(cache_key, cache_value.release(), cache_size);
     }
     return Status::OK();
 }
