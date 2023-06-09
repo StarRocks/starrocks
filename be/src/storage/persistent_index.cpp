@@ -2922,7 +2922,7 @@ Status PersistentIndex::get_from_one_immutable_index(size_t n, const Slice* keys
     DCHECK(_l1_vec.size() > idx);
     Status st;
     for (auto& [key_size, keys_info] : (*_keys_info_by_key_size)) {
-        st = _l1_vec[idx]->get(n, keys, keys_info, values, found_keys_info, key_size, nullptr);
+        st = _l1_vec[idx]->get(n, keys, keys_info, values, found_keys_info, key_size);
         if (!st.ok()) {
             std::string msg = strings::Substitute("get from one immutableindex failed, l1 idx: $0, status: $1", idx,
                                                   st.to_string());
@@ -3064,10 +3064,6 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
     std::map<size_t, KeysInfo> not_founds_by_key_size;
     size_t num_found = 0;
     RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &num_found, not_founds_by_key_size));
-    if (stat != nullptr) {
-        stat->l0_write_cost += watch.elapsed_time();
-        watch.reset();
-    }
     if (config::enable_parallel_get_and_bf) {
         RETURN_IF_ERROR(_get_from_immutable_index_parallel(n, keys, old_values, not_founds_by_key_size));
     } else {
