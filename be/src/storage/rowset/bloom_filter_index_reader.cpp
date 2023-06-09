@@ -86,7 +86,8 @@ void BloomFilterIndexReader::_reset() {
 
 Status BloomFilterIndexReader::new_iterator(std::unique_ptr<BloomFilterIndexIterator>* iterator) {
     std::unique_ptr<IndexedColumnIterator> bf_iter;
-    RETURN_IF_ERROR(_bloom_filter_reader->new_iterator(&bf_iter));
+    IndexReadOptions options;
+    RETURN_IF_ERROR(_bloom_filter_reader->new_iterator(&bf_iter, options));
     iterator->reset(new BloomFilterIndexIterator(this, std::move(bf_iter)));
     return Status::OK();
 }
