@@ -2659,4 +2659,30 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " left join locations on emps.locationid = locations.locationid where emps.deptno < 5 or emps.deptno > 20");
         }
     }
+
+    @Test
+    public void testTimeSliceRewrite() throws Exception {
+        starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t_time_slice` (\n" +
+            "    `dt` datetime NOT NULL COMMENT \"\",\n" +
+            "    `c1` int(11) NOT NULL COMMENT \"\"\n" +
+            ") ENGINE=OLAP\n" +
+            "DUPLICATE KEY(`dt`)\n" +
+            "COMMENT \"OLAP\"\n" +
+            "PARTITION BY RANGE(`dt`)\n" +
+            "(\n" +
+            "    PARTITION p1 VALUES [(\"2023-06-01\"), (\"2023-06-02\")),\n" +
+            "    PARTITION p2 VALUES [(\"2023-06-02\"), (\"2023-06-03\")),\n" +
+            "    PARTITION p3 VALUES [(\"2023-06-03\"), (\"2023-06-04\"))\n" +
+            ")\n" +
+            "DISTRIBUTED BY HASH(`c1`) BUCKETS 1\n" +
+            "PROPERTIES (\n" +
+            "    \"replication_num\" = \"1\",\n" +
+            "    \"in_memory\" = \"false\"\n" +
+            ")");
+
+        String mv = "SELECT time_slice(dt, interval 5 minute) as t, sum(c1) FROM t_time_slice GROUP BY t";
+        testRewriteOK(mv, "SELECT time_slice(dt, interval 5 minute) as t FROM t_time_slice " +
+            "WHERE dt BETWEEN '2023-06-01' AND '2023-06-02' GROUP BY t");
+        starRocksAssert.dropTable("t_time_slice");
+    }
 }
