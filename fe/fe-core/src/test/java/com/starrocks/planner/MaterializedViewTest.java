@@ -2685,4 +2685,26 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             "WHERE dt BETWEEN '2023-06-01' AND '2023-06-02' GROUP BY t");
         starRocksAssert.dropTable("t_time_slice");
     }
+
+    @Test
+    public void testCountDistinctRollupAgg() throws Exception {
+        {
+            String mv = "select empid, deptno, locationid, count(distinct name) as s\n"
+                + "from emps group by empid, deptno, locationid";
+            String query = "select empid, count(distinct name) as s\n"
+                + "from emps where deptno=1 and locationid=1 "
+                + "group by empid ";
+            testRewriteOK(mv, query);
+        }
+
+        {
+            String mv = "select empid, deptno, locationid, count(distinct name) as s\n"
+                + "from emps group by empid, deptno, locationid";
+            String query = "select empid, count(distinct name) as s\n"
+                + "from emps where deptno=1 \n"
+                + "group by empid ";
+            testRewriteFail(mv, query);
+        }
+
+    }
 }
