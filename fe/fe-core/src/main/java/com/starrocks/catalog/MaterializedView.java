@@ -402,6 +402,478 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     public boolean isLoadTriggeredRefresh() {
         AsyncRefreshContext asyncRefreshContext = this.refreshScheme.asyncRefreshContext;
         return this.refreshScheme.getType() == MaterializedView.RefreshType.ASYNC &&
+<<<<<<< HEAD
                 asyncRefreshContext.step == 0 &&  null == asyncRefreshContext.timeUnit;
+=======
+                asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
+    }
+
+    public boolean isForceExternalTableQueryRewrite() {
+        return tableProperty.getForceExternalTableQueryRewrite();
+    }
+
+    public boolean shouldTriggeredRefreshBy(String dbName, String tableName) {
+        if (!isLoadTriggeredRefresh()) {
+            return false;
+        }
+        TableProperty tableProperty = getTableProperty();
+        if (tableProperty == null) {
+            return true;
+        }
+        List<TableName> excludedTriggerTables = tableProperty.getExcludedTriggerTables();
+        if (excludedTriggerTables == null) {
+            return true;
+        }
+        for (TableName tables : excludedTriggerTables) {
+            if (tables.getDb() == null) {
+                if (tables.getTbl().equals(tableName)) {
+                    return false;
+                }
+            } else {
+                if (tables.getDb().equals(dbName) && tables.getTbl().equals(tableName)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    protected void appendUniqueProperties(StringBuilder sb) {
+        Preconditions.checkNotNull(sb);
+
+        // storageMedium
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                .append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM).append("\" = \"");
+        sb.append(getStorageMedium()).append("\"");
+
+        // storageCooldownTime
+        Map<String, String> properties = this.getTableProperty().getProperties();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
+                    .append("\" = \"");
+            sb.append(TimeUtils.longToTimeString(
+                    Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)))).append("\"");
+        }
+    }
+
+    public String getMaterializedViewDdlStmt(boolean simple) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE MATERIALIZED VIEW `").append(getName()).append("` (");
+        List<String> colDef = Lists.newArrayList();
+        for (Column column : getBaseSchema()) {
+            StringBuilder colSb = new StringBuilder();
+            colSb.append(column.getName());
+            if (!Strings.isNullOrEmpty(column.getComment())) {
+                colSb.append(" COMMENT ").append("\"").append(column.getDisplayComment()).append("\"");
+            }
+            colDef.add(colSb.toString());
+        }
+        sb.append(Joiner.on(", ").join(colDef));
+        sb.append(")");
+        if (!Strings.isNullOrEmpty(this.getComment())) {
+            sb.append("\nCOMMENT \"").append(this.getDisplayComment()).append("\"");
+        }
+
+        // partition
+        PartitionInfo partitionInfo = this.getPartitionInfo();
+        if (!(partitionInfo instanceof SinglePartitionInfo)) {
+            sb.append("\n").append(partitionInfo.toSql(this, null));
+        }
+
+        // distribution
+        DistributionInfo distributionInfo = this.getDefaultDistributionInfo();
+        sb.append("\n").append(distributionInfo.toSql());
+
+        // refresh scheme
+        MvRefreshScheme refreshScheme = this.getRefreshScheme();
+        if (refreshScheme == null) {
+            sb.append("\nREFRESH ").append("UNKNOWN");
+        } else {
+            if (refreshScheme.getMoment().equals(RefreshMoment.DEFERRED)) {
+                sb.append(String.format("\nREFRESH %s %s", refreshScheme.getMoment(), refreshScheme.getType()));
+            } else {
+                sb.append("\nREFRESH ").append(refreshScheme.getType());
+            }
+        }
+        if (refreshScheme != null && refreshScheme.getType() == RefreshType.ASYNC) {
+            AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
+            if (asyncRefreshContext.isDefineStartTime()) {
+                sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
+                                .format(DateUtils.DATE_TIME_FORMATTER))
+                        .append("\")");
+            }
+            if (asyncRefreshContext.getTimeUnit() != null) {
+                sb.append(" EVERY(INTERVAL ").append(asyncRefreshContext.getStep()).append(" ")
+                        .append(asyncRefreshContext.getTimeUnit()).append(")");
+            }
+        }
+
+        // properties
+        sb.append("\nPROPERTIES (\n");
+
+        // replicationNum
+        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
+        sb.append(getDefaultReplicationNum()).append("\"");
+
+        Map<String, String> properties = this.getTableProperty().getProperties();
+        // replicated storage
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)).append("\"");
+        }
+
+        // partition TTL
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)).append("\"");
+        }
+
+        // auto refresh partitions limit
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)).append("\"");
+        }
+
+        // partition refresh number
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)).append("\"");
+        }
+
+        // excluded trigger tables
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)).append("\"");
+        }
+
+        // force_external_table_query_rewrite
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
+                    PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE).append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)).append("\"");
+        }
+        // mv_rewrite_staleness
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
+                    PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND).append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)).append("\"");
+        }
+
+        // unique constraints
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)).append("\"");
+        }
+
+        // foreign keys constraints
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                    .append("\" = \"");
+            sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(getForeignKeyConstraints()))
+                    .append("\"");
+        }
+
+        // colocateTable
+        if (colocateGroup != null) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)
+                    .append("\" = \"");
+            sb.append(colocateGroup).append("\"");
+        }
+
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
+                    PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP).append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)).append("\"");
+        }
+
+        appendUniqueProperties(sb);
+
+        sb.append("\n)");
+        String define = this.getSimpleDefineSql();
+        if (StringUtils.isEmpty(define) || !simple) {
+            define = this.getViewDefineSql();
+        }
+        sb.append("\nAS ").append(define);
+        sb.append(";");
+        return sb.toString();
+    }
+
+    private static final ImmutableSet<String> NEED_SHOW_PROPS;
+
+    static {
+        NEED_SHOW_PROPS = new ImmutableSet.Builder<String>()
+                .add(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
+                .add(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
+                .add(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
+                .add(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
+                .add(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
+                .build();
+    }
+
+    public Map<String, String> getMaterializedViewPropMap() {
+
+        Map<String, String> propsMap = new HashMap<>();
+        // replicationNum
+        Short replicationNum = this.getDefaultReplicationNum();
+        propsMap.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(replicationNum));
+
+        // storageMedium
+        String storageMedium = this.getStorageMedium();
+        propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium);
+        Map<String, String> properties = this.getTableProperty().getProperties();
+
+        // maxMVRewriteStaleness
+        propsMap.put(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND, String.valueOf(maxMVRewriteStaleness));
+
+        // NEED_SHOW_PROPS
+        NEED_SHOW_PROPS.forEach(prop -> {
+            if (properties.containsKey(prop)) {
+                if (prop.equals(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)) {
+                    propsMap.put(prop, TimeUtils.longToTimeString(
+                            Long.parseLong(properties.get(prop))));
+                } else {
+                    propsMap.put(prop, properties.get(prop));
+                }
+            }
+        });
+        return propsMap;
+    }
+
+    public boolean containsBaseTable(TableName tableName) {
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            if (tableName.getDb() == null) {
+                if (tableName.getTbl().equals(baseTableInfo.getTableName())) {
+                    return true;
+                }
+            } else {
+                if (tableName.getTbl().equals(baseTableInfo.getTableName()) &&
+                        tableName.getDb().equals(baseTableInfo.getDbName())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean supportPartialPartitionQueryRewriteForExternalTable(Table table) {
+        return table.isHiveTable();
+    }
+
+    public Set<String> getPartitionNamesToRefreshForMv() {
+        PartitionInfo partitionInfo = getPartitionInfo();
+
+        boolean forceExternalTableQueryRewrite = isForceExternalTableQueryRewrite();
+        if (partitionInfo instanceof SinglePartitionInfo) {
+            // for non-partitioned materialized view
+            for (BaseTableInfo tableInfo : baseTableInfos) {
+                Table table = tableInfo.getTable();
+
+                // we can not judge whether mv based on external table is update-to-date,
+                // because we do not know that any changes in external table.
+                if (!table.isNativeTableOrMaterializedView()) {
+                    if (forceExternalTableQueryRewrite) {
+                        if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
+                            // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
+                            continue;
+                        }
+                    } else {
+                        return getPartitionNames();
+                    }
+                }
+                Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true);
+                if (CollectionUtils.isNotEmpty(partitionNames)) {
+                    return getPartitionNames();
+                }
+            }
+        } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            // partitions to refresh
+            // 1. dropped partitions
+            // 2. newly added partitions
+            // 3. partitions loaded with new data
+            return getPartitionNamesToRefreshForPartitionedMv();
+        } else {
+            throw UnsupportedException.unsupportedException("unsupported partition info type:"
+                    + partitionInfo.getClass().getName());
+        }
+        return Sets.newHashSet();
+    }
+
+    private Set<String> getPartitionNamesToRefreshForPartitionedMv() {
+        Expr partitionExpr = getPartitionRefTableExprs().get(0);
+        Pair<Table, Column> partitionInfo = getPartitionTableAndColumn();
+        // if non-partition-by table has changed, should refresh all mv partitions
+        if (partitionInfo == null) {
+            setInactiveAndReason("partition configuration changed");
+            LOG.warn("mark mv:{} inactive for get partition info failed", name);
+            throw new RuntimeException(String.format("getting partition info failed for mv: %s", name));
+        }
+        Table partitionTable = partitionInfo.first;
+        boolean forceExternalTableQueryRewrite = isForceExternalTableQueryRewrite();
+        for (BaseTableInfo tableInfo : baseTableInfos) {
+            Table table = tableInfo.getTable();
+            if (!table.isNativeTableOrMaterializedView()) {
+                if (forceExternalTableQueryRewrite) {
+                    // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
+                    if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
+                        return Sets.newHashSet();
+                    }
+                } else {
+                    return getPartitionNames();
+                }
+            }
+            if (table.getTableIdentifier().equals(partitionTable.getTableIdentifier())) {
+                continue;
+            }
+            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true);
+            if (CollectionUtils.isNotEmpty(partitionNames)) {
+                return getPartitionNames();
+            }
+        }
+        // check partition-by table
+        Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
+        Map<String, Range<PartitionKey>> basePartitionMap;
+        try {
+            basePartitionMap = PartitionUtil.getPartitionRange(partitionTable,
+                    partitionInfo.second);
+        } catch (UserException e) {
+            LOG.warn("Materialized view compute partition difference with base table failed.", e);
+            return getPartitionNames();
+        }
+        Map<String, Range<PartitionKey>> mvPartitionMap = getRangePartitionMap();
+        PartitionDiff partitionDiff = getPartitionDiff(partitionExpr, partitionInfo.second,
+                basePartitionMap, mvPartitionMap);
+        needRefreshMvPartitionNames.addAll(partitionDiff.getDeletes().keySet());
+        for (String deleted : partitionDiff.getDeletes().keySet()) {
+            mvPartitionMap.remove(deleted);
+        }
+        needRefreshMvPartitionNames.addAll(partitionDiff.getAdds().keySet());
+        mvPartitionMap.putAll(partitionDiff.getAdds());
+
+        Map<String, Set<String>> baseToMvNameRef = SyncPartitionUtils
+                .generatePartitionRefMap(basePartitionMap, mvPartitionMap);
+        Map<String, Set<String>> mvToBaseNameRef = SyncPartitionUtils
+                .generatePartitionRefMap(mvPartitionMap, basePartitionMap);
+
+        Set<String> baseChangedPartitionNames = getUpdatedPartitionNamesOfTable(partitionTable, true);
+        if (baseChangedPartitionNames == null) {
+            return mvToBaseNameRef.keySet();
+        }
+        if (partitionExpr instanceof SlotRef) {
+            for (String basePartitionName : baseChangedPartitionNames) {
+                needRefreshMvPartitionNames.addAll(baseToMvNameRef.get(basePartitionName));
+            }
+        } else if (partitionExpr instanceof FunctionCallExpr) {
+            for (String baseChangedPartitionName : baseChangedPartitionNames) {
+                needRefreshMvPartitionNames.addAll(baseToMvNameRef.get(baseChangedPartitionName));
+            }
+            // because the relation of partitions between materialized view and base partition table is n : m,
+            // should calculate the candidate partitions recursively.
+            SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
+                    baseToMvNameRef, mvToBaseNameRef);
+        }
+        return needRefreshMvPartitionNames;
+    }
+
+    private PartitionDiff getPartitionDiff(Expr partitionExpr, Column partitionColumn,
+                                           Map<String, Range<PartitionKey>> basePartitionMap,
+                                           Map<String, Range<PartitionKey>> mvPartitionMap) {
+        if (partitionExpr instanceof SlotRef) {
+            return SyncPartitionUtils.calcSyncSamePartition(basePartitionMap, mvPartitionMap);
+        } else if (partitionExpr instanceof FunctionCallExpr) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
+            String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
+            return SyncPartitionUtils.calcSyncRollupPartition(basePartitionMap, mvPartitionMap,
+                    granularity, partitionColumn.getPrimitiveType());
+        } else {
+            throw UnsupportedException.unsupportedException("unsupported partition expr:" + partitionExpr);
+        }
+    }
+
+    public Pair<Table, Column> getPartitionTableAndColumn() {
+        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            return null;
+        }
+        Expr partitionExpr = getPartitionRefTableExprs().get(0);
+        List<SlotRef> slotRefs = Lists.newArrayList();
+        partitionExpr.collect(SlotRef.class, slotRefs);
+        Preconditions.checkState(slotRefs.size() == 1);
+        SlotRef partitionSlotRef = slotRefs.get(0);
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            Table table = baseTableInfo.getTable();
+            if (partitionSlotRef.getTblNameWithoutAnalyzed().getTbl().equals(table.getName())) {
+                return Pair.create(table, table.getColumn(partitionSlotRef.getColumnName()));
+            }
+        }
+        String baseTableNames = baseTableInfos.stream()
+                .map(tableInfo -> tableInfo.getTable().getName()).collect(Collectors.joining(","));
+        throw new RuntimeException(
+                String.format("can not find partition info for mv:%s on base tables:%s", name, baseTableNames));
+    }
+
+    public ExecPlan getMaintenancePlan() {
+        return maintenancePlan;
+    }
+
+    public void setMaintenancePlan(ExecPlan maintenancePlan) {
+        this.maintenancePlan = maintenancePlan;
+    }
+
+    public MVRewriteContextCache getPlanContext() {
+        return mvRewriteContextCache;
+    }
+
+    public void setPlanContext(MVRewriteContextCache mvRewriteContextCache) {
+        this.mvRewriteContextCache = mvRewriteContextCache;
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        Map<String, String> properties = super.getProperties();
+        // For materialized view, add into session variables into properties.
+        if (super.getTableProperty() != null && super.getTableProperty().getProperties() != null) {
+            for (Map.Entry<String, String> entry : super.getTableProperty().getProperties().entrySet()) {
+                if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                    String varKey = entry.getKey().substring(
+                            PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                    properties.put(varKey, entry.getValue());
+                }
+            }
+        }
+        return properties;
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        this.serializedPartitionRefTableExprs = new ArrayList<>();
+        if (partitionRefTableExprs != null) {
+            for (Expr partitionExpr : partitionRefTableExprs) {
+                if (partitionExpr != null) {
+                    serializedPartitionRefTableExprs.add(new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
+                }
+            }
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
+        partitionRefTableExprs = new ArrayList<>();
+        if (serializedPartitionRefTableExprs != null) {
+            for (GsonUtils.ExpressionSerializedObject expressionSql : serializedPartitionRefTableExprs) {
+                if (expressionSql != null) {
+                    partitionRefTableExprs.add(SqlParser.parseSqlToExpr(expressionSql.expressionSql, SqlModeHelper.MODE_DEFAULT));
+                }
+            }
+        }
+>>>>>>> fc49e7d43 ([BugFix] fix comment lost escape character (#24909))
     }
 }

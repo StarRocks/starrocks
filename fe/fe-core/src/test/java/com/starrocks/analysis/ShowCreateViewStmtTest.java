@@ -9,6 +9,16 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.statistic.StatsConstants;
+>>>>>>> fc49e7d43 ([BugFix] fix comment lost escape character (#24909))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -63,8 +73,29 @@ public class ShowCreateViewStmtTest {
                         "DISTRIBUTED BY HASH(`c1`, `c2`) BUCKETS 2\n" +
                         "PROPERTIES(\n" +
                         "\"replication_num\" = \"1\",\n" +
+<<<<<<< HEAD
                         "\"in_memory\" = \"false\",\n" +
                         "\"storage_format\" = \"default\"\n" +
+=======
+                        "\"in_memory\" = \"false\"\n" +
+                        ");")
+                .withTable("CREATE TABLE `comment_test` (\n" +
+                        "  `a` varchar(125) NULL COMMENT \"\\\\'abc'\",\n" +
+                        "  `b` varchar(125) NULL COMMENT 'abc \"ef\" abc',\n" +
+                        "  `c` varchar(123) NULL COMMENT \"abc \\\"ef\\\" abc\",\n" +
+                        "  `d` varchar(123) NULL COMMENT \"\\\\abc\",\n" +
+                        "  `e` varchar(123) NULL COMMENT '\\\\\\\\\"'\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`a`)\n" +
+                        "COMMENT \"abc \\\"ef\\\" 'abc' \\\\abc\"\n" +
+                        "DISTRIBUTED BY HASH(`a`) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"compression\" = \"LZ4\"\n" +
+>>>>>>> fc49e7d43 ([BugFix] fix comment lost escape character (#24909))
                         ");");
     }
 
@@ -92,9 +123,15 @@ public class ShowCreateViewStmtTest {
         List<String> res = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
                 null, null, false, false);
+<<<<<<< HEAD
         Assert.assertEquals("CREATE VIEW `test_view` (k1 COMMENT \"dt\", k2, v1) COMMENT \"view comment\" " +
                 "AS SELECT `test`.`tbl1`.`k1` AS `k1`, `test`.`tbl1`.`k2` AS `k2`," +
                 " `test`.`tbl1`.`v1` AS `v1` FROM `test`.`tbl1`;", res.get(0));
+=======
+        Assert.assertEquals("CREATE VIEW `test_view` (k1 COMMENT \"dt\", k2, v1)\n" +
+                "COMMENT \"view comment\" AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`\n" +
+                "FROM `test`.`tbl1`;", res.get(0));
+>>>>>>> fc49e7d43 ([BugFix] fix comment lost escape character (#24909))
     }
 
     @Test
@@ -144,5 +181,16 @@ public class ShowCreateViewStmtTest {
         DropTableStmt dropViewStmt = new DropTableStmt(
                 false, new TableName("test", "v2"), true, true);
         GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
+    }
+
+    @Test
+    public void testDdlComment() {
+        List<Table> tables = GlobalStateMgr.getCurrentState().getDb("test").getTables();
+        Table commentTest = tables.stream().filter(table -> table.getName().equals("comment_test")).findFirst().get();
+        List<String> res = Lists.newArrayList();
+        GlobalStateMgr.getDdlStmt("test", commentTest, res,
+                null, null, false, false);
+        StatementBase stmt = SqlParser.parse(res.get(0), connectContext.getSessionVariable()).get(0);
+        Assert.assertTrue(stmt instanceof CreateTableStmt);
     }
 }

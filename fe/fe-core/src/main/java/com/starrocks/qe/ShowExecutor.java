@@ -617,11 +617,47 @@ public class ShowExecutor {
                     row.add(table.getName());
                     // Engine
                     row.add(table.getEngine());
+<<<<<<< HEAD
                     // version, ra
                     for (int i = 0; i < 15; ++i) {
                         row.add(null);
                     }
                     row.add(table.getComment());
+=======
+                    // Version
+                    row.add(null);
+                    // Row_format
+                    row.add("");
+                    // Rows
+                    row.add(String.valueOf(info.getTable_rows()));
+                    // Avg_row_length
+                    row.add(String.valueOf(info.getAvg_row_length()));
+                    // Data_length
+                    row.add(String.valueOf(info.getData_length()));
+                    // Max_data_length
+                    row.add(null);
+                    // Index_length
+                    row.add(null);
+                    // Data_free
+                    row.add(null);
+                    // Auto_increment
+                    row.add(null);
+                    // Create_time
+                    row.add(DateUtils.formatTimeStampInSeconds(table.getCreateTime(), currentTimeZoneId));
+                    // Update_time
+                    row.add(DateUtils.formatTimeStampInSeconds(info.getUpdate_time(), currentTimeZoneId));
+                    // Check_time
+                    row.add(null);
+                    // Collation
+                    row.add(InformationSchemaDataSource.UTF8_GENERAL_CI);
+                    // Checksum
+                    row.add(null);
+                    // Create_options
+                    row.add("");
+                    // Comment
+                    row.add(table.getDisplayComment());
+
+>>>>>>> fc49e7d43 ([BugFix] fix comment lost escape character (#24909))
                     rows.add(row);
                 }
             } finally {
@@ -663,6 +699,68 @@ public class ShowExecutor {
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showStmt.getDb());
         }
+<<<<<<< HEAD
+=======
+        Table table = metadataMgr.getTable(catalogName, dbName, tableName);
+        if (table == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+        }
+
+        // create table catalogName.dbName.tableName (
+        StringBuilder createTableSql = new StringBuilder();
+        createTableSql.append("CREATE TABLE ")
+                .append("`").append(tableName).append("`")
+                .append(" (\n");
+
+        // Columns
+        List<String> columns = table.getFullSchema().stream().map(
+                this::toMysqlDDL).collect(Collectors.toList());
+        createTableSql.append(String.join(",\n", columns))
+                .append("\n)");
+
+        // Partition column names
+        if (table.getType() != JDBC && !table.isUnPartitioned()) {
+            createTableSql.append("\nPARTITION BY ( ")
+                    .append(String.join(", ", table.getPartitionColumnNames()))
+                    .append(" )");
+        }
+
+        // Location
+        String location = null;
+        if (table.isHiveTable() || table.isHudiTable()) {
+            location = ((HiveMetaStoreTable) table).getTableLocation();
+        } else if (table.isIcebergTable()) {
+            location = ((IcebergTable) table).getTableLocation();
+        } else if (table.isDeltalakeTable()) {
+            location = ((DeltaLakeTable) table).getTableLocation();
+        }
+
+        if (!Strings.isNullOrEmpty(location)) {
+            createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
+        }
+
+        List<List<String>> rows = Lists.newArrayList();
+        rows.add(Lists.newArrayList(tableName, createTableSql.toString()));
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private String toMysqlDDL(Column column) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("  `").append(column.getName()).append("` ");
+        sb.append(column.getType().toSql());
+        sb.append(" DEFAULT NULL");
+
+        if (!Strings.isNullOrEmpty(column.getComment())) {
+            sb.append(" COMMENT \"").append(column.getDisplayComment()).append("\"");
+        }
+
+        return sb.toString();
+    }
+
+    private void showCreateInternalCatalogTable(ShowCreateTableStmt showStmt) throws AnalysisException {
+        Database db = connectContext.getGlobalStateMgr().getDb(showStmt.getDb());
+        MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
+>>>>>>> fc49e7d43 ([BugFix] fix comment lost escape character (#24909))
         List<List<String>> rows = Lists.newArrayList();
         db.readLock();
         try {
@@ -757,7 +855,7 @@ public class ShowExecutor {
                             defaultValue,
                             aggType,
                             "",
-                            col.getComment()));
+                            col.getDisplayComment()));
                 } else {
                     // Field Type Null Key Default Extra
                     rows.add(Lists.newArrayList(columnName,
@@ -1661,4 +1759,69 @@ public class ShowExecutor {
 
         return returnRows;
     }
+<<<<<<< HEAD
+=======
+
+    private void handleShowCreateExternalCatalog() throws AnalysisException {
+        ShowCreateExternalCatalogStmt showStmt = (ShowCreateExternalCatalogStmt) stmt;
+        String catalogName = showStmt.getCatalogName();
+        List<List<String>> rows = Lists.newArrayList();
+        if (InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(catalogName)) {
+            resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+            return;
+        }
+
+        Catalog catalog = connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
+        if (catalog == null) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+        }
+
+        // Create external catalog catalogName (
+        StringBuilder createCatalogSql = new StringBuilder();
+        createCatalogSql.append("CREATE EXTERNAL CATALOG ")
+                .append("`").append(catalogName).append("`")
+                .append("\n");
+
+        // Comment
+        String comment = catalog.getComment();
+        if (comment != null) {
+            createCatalogSql.append("comment \"").append(catalog.getDisplayComment()).append("\"\n");
+        }
+        Map<String, String> clonedConfig = new HashMap<>(catalog.getConfig());
+        CloudCredentialUtil.maskCloudCredential(clonedConfig);
+        // Properties
+        createCatalogSql.append("PROPERTIES (")
+                .append(new PrintableMap<>(clonedConfig, " = ", true, true))
+                .append("\n)");
+        rows.add(Lists.newArrayList(catalogName, createCatalogSql.toString()));
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private void handleShowStorageVolumes() throws DdlException {
+        ShowStorageVolumesStmt showStmt = (ShowStorageVolumesStmt) stmt;
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        StorageVolumeMgr storageVolumeMgr = globalStateMgr.getStorageVolumeMgr();
+        List<String> storageVolumeNames = storageVolumeMgr.listStorageVolumeNames();
+        PatternMatcher matcher = null;
+        List<List<String>> rows = Lists.newArrayList();
+        if (!showStmt.getPattern().isEmpty()) {
+            matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
+                    CaseSensibility.TABLE.getCaseSensibility());
+        }
+        PatternMatcher finalMatcher = matcher;
+        storageVolumeNames = storageVolumeNames.stream()
+                .filter(storageVolumeName -> finalMatcher == null || finalMatcher.match(storageVolumeName))
+                .filter(storageVolumeName -> PrivilegeActions.checkAnyActionOnStorageVolume(connectContext, storageVolumeName))
+                .collect(Collectors.toList());
+        for (String storageVolumeName : storageVolumeNames) {
+            rows.add(Lists.newArrayList(storageVolumeName));
+        }
+        resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
+    }
+
+    private void handleDescStorageVolume() throws AnalysisException {
+        DescStorageVolumeStmt desc = (DescStorageVolumeStmt) stmt;
+        resultSet = new ShowResultSet(desc.getMetaData(), desc.getResultRows());
+    }
+>>>>>>> fc49e7d43 ([BugFix] fix comment lost escape character (#24909))
 }

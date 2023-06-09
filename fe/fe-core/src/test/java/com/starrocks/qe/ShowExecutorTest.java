@@ -204,6 +204,10 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = "TEST MATERIALIZED VIEW";
 
+                mv.getDisplayComment();
+                minTimes = 0;
+                result = "TEST MATERIALIZED VIEW";
+
                 mv.getPartitionInfo();
                 minTimes = 0;
                 result = new ExpressionRangePartitionInfo(

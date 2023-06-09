@@ -2,8 +2,19 @@
 
 package com.starrocks.lake;
 
+<<<<<<< HEAD
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardStorageInfo;
+=======
+import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
+import com.starrocks.alter.AlterJobV2Builder;
+import com.starrocks.alter.LakeTableAlterJobV2Builder;
+import com.starrocks.backup.Status;
+import com.starrocks.catalog.CatalogUtils;
+>>>>>>> fc49e7d43 ([BugFix] fix comment lost escape character (#24909))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -123,5 +134,13 @@ public class LakeTable extends OlapTable {
     public Runnable delete(boolean replay) {
         GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this);
         return new DeleteTableTask(this);
+    }
+
+    @Override
+    public String getDisplayComment() {
+        if (!Strings.isNullOrEmpty(comment)) {
+            return CatalogUtils.addEscapeCharacter(comment);
+        }
+        return TableType.OLAP.name();
     }
 }

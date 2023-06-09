@@ -379,6 +379,15 @@ public class Table extends MetaObject implements Writable {
         return type.name();
     }
 
+    // Attention: cause the remove escape character in parser phase, when you want to print the
+    // comment, you need add the escape character back
+    public String getDisplayComment() {
+        if (!Strings.isNullOrEmpty(comment)) {
+            return CatalogUtils.addEscapeCharacter(comment);
+        }
+        return "";
+    }
+
     public void setComment(String comment) {
         this.comment = Strings.nullToEmpty(comment);
     }
