@@ -176,6 +176,39 @@ public class AnalyzeExprTest {
     }
 
     @Test
+    public void testLambdaFunctionArrayMatch() {
+        analyzeSuccess("select all_match((x,y) -> x < y, null, [4,5,6])");
+        analyzeSuccess("select all_match((x,y) -> x < y, [], [])");
+        analyzeSuccess("select all_match((x,y) -> x < y, null, [])");
+        analyzeSuccess("select all_match((x,y) -> x < y, null, null)");
+        analyzeSuccess("select any_match((x,y) -> x < y, null, [4,5,6])");
+        analyzeSuccess("select any_match((x,y) -> x < y, [], [])");
+        analyzeSuccess("select any_match((x,y) -> x < y, null, [])");
+        analyzeSuccess("select any_match((x,y) -> x < y, null, null)");
+        analyzeSuccess("select all_match([0],x->1)");
+        analyzeSuccess("select any_match([0],x->1)");
+        analyzeSuccess("select any_match([],x->1)");
+        analyzeSuccess("select any_match(null)");
+        analyzeSuccess("select any_match([])");
+        analyzeSuccess("select all_match([])");
+
+        analyzeFail("select all_match((x,y) -> x < y, []);");
+        analyzeFail("select all_match((x,y) -> x < y, [],{});");
+        analyzeFail("select all_match([],null)");
+        analyzeFail("select all_match({})");
+        analyzeFail("select all_match()");
+        analyzeFail("select all_match(null,[])");
+        analyzeFail("select all_match(null,null)");
+        analyzeFail("select any_match((x,y) -> x < y, []);");
+        analyzeFail("select any_match((x,y) -> x < y, [],{});");
+        analyzeFail("select any_match([],null)");
+        analyzeFail("select any_match({})");
+        analyzeFail("select any_match()");
+        analyzeFail("select any_match(null,[])");
+        analyzeFail("select any_match(null,null)");
+        analyzeFail("select all_match([[]])");
+    }
+    @Test
     public void testLambdaFunctionMapApply() {
         analyzeSuccess("select map_apply((k,v)->(k+1,length(v)), col_map) from " +
                 "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'']) as col_map " +
