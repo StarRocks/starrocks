@@ -1287,7 +1287,7 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const vectoriz
     return st;
 }
 
-Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks uint32_t idx_begin,
+Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
                             uint32_t idx_end, DeletesMap* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
