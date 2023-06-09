@@ -95,6 +95,7 @@ public class OperationType {
     // 30~39 130~139 230~239 ...
     // load job for only hadoop load
     public static final short OP_EXPORT_CREATE = 36;
+    @Deprecated
     public static final short OP_EXPORT_UPDATE_STATE = 37;
     public static final short OP_EXPORT_UPDATE_INFO = 38;
 
