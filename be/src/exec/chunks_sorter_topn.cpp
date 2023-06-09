@@ -84,7 +84,7 @@ Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
     return Status::OK();
 }
 
-Status ChunksSorterTopn::done(RuntimeState* state) {
+Status ChunksSorterTopn::do_done(RuntimeState* state) {
     auto& raw_chunks = _raw_chunks.chunks;
     if (!raw_chunks.empty()) {
         RETURN_IF_ERROR(_sort_chunks(state));
