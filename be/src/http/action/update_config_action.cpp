@@ -124,6 +124,13 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             auto tablet_mgr = _exec_env->lake_tablet_manager();
             if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
         });
+        _config_callback.emplace("transaction_apply_worker_count", [&]() {
+            int max_thread_cnt = CpuInfo::num_cores();
+            if (config::transaction_apply_worker_count > 0) {
+                max_thread_cnt = config::transaction_apply_worker_count;
+            }
+            StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(max_thread_cnt);
+        });
     });
 
     Status s = config::set_config(name, value);
