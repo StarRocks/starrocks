@@ -1511,6 +1511,14 @@ StatusOr<ColumnPtr> ArrayFunctions::array_max_varchar([[maybe_unused]] FunctionC
     return ArrayFunctions::template array_max<TYPE_VARCHAR>(columns);
 }
 
+StatusOr<ColumnPtr> ArrayFunctions::all_match(FunctionContext* context, const Columns& columns) {
+    return ArrayMatch<false>::process(context, columns);
+}
+
+StatusOr<ColumnPtr> ArrayFunctions::any_match(FunctionContext* context, const Columns& columns) {
+    return ArrayMatch<true>::process(context, columns);
+}
+
 StatusOr<ColumnPtr> ArrayFunctions::concat(FunctionContext* ctx, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
