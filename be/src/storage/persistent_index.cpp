@@ -2968,11 +2968,6 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
     std::unique_lock<std::mutex> ul(_lock);
     std::map<size_t, KeysInfo>::iterator iter;
     std::string error_msg;
-    //for (iter = keys_info_by_key_size.begin(); iter != keys_info_by_key_size.end(); iter++) {
-    //    if (iter->second.size() == 0) {
-    //        break;
-    //    }
-    //    size_t key_size = iter->first;
     std::vector<std::vector<uint64_t>> get_values(_l1_vec.size(), std::vector<uint64_t>(n, NullIndexValue));
     _found_keys_info.resize(_l1_vec.size());
     for (size_t i = 0; i < _l1_vec.size(); i++) {
@@ -3002,7 +2997,6 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
             values[key_idx] = get_values[i][key_idx];
         }
     }
-    //}
     _found_keys_info.clear();
 
     return Status::OK();
