@@ -1184,7 +1184,7 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
 }
 
 Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                                   uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes, ) {
+                                                   uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) {
     Status st;
     uint32_t n = idx_end - idx_begin;
     std::vector<Slice> keys;
@@ -1279,7 +1279,7 @@ Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const Column& 
     return insert(rssid, rids, pks);
 }
 
-Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes, ) {
+Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
@@ -1295,7 +1295,7 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
-        st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr);
+        st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
     } else {
         _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
     }
