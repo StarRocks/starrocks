@@ -158,7 +158,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
         }
     }
 
-    // 4. clear delvel file name record in version_to_file if it's not refered any more
+    // 4. clear delvec file record in version_to_file if it's not refered any more
     // collect all versions still refered
     std::set<int64_t> refered_versions;
     for (const auto& item : _tablet_meta->delvec_meta().delvecs()) {
