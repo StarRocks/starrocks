@@ -2961,10 +2961,6 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
         return Status::OK();
     }
 
-    for (auto& [_, keys_info] : keys_info_by_key_size) {
-        std::sort(keys_info.key_infos.begin(), keys_info.key_infos.end());
-    }
-
     std::unique_lock<std::mutex> ul(_lock);
     std::map<size_t, KeysInfo>::iterator iter;
     std::string error_msg;
