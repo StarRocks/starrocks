@@ -60,8 +60,8 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
 
     shuffle_timer = ADD_TIMER(_spiller_metrics.get(), "ShuffleTime");
     split_partition_timer = ADD_TIMER(_spiller_metrics.get(), "SplitPartitionTime");
-    restore_from_mem_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsRestoreFromMemory", TUnit::UNIT);
-    restore_from_mem_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesRestoreFromMemory", TUnit::UNIT);
+    restore_from_mem_table_rows = ADD_COUNTER(_spiller_metrics.get(), "RowsRestoreFromMemTable", TUnit::UNIT);
+    restore_from_mem_table_bytes = ADD_COUNTER(_spiller_metrics.get(), "BytesRestoreFromMemTable", TUnit::UNIT);
     partition_writer_peak_memory_usage = _spiller_metrics->AddHighWaterMarkCounter(
             "PartitionWriterPeakMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
 }

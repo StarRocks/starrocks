@@ -98,7 +98,8 @@ StatusOr<ChunkUniquePtr> UnionAllSpilledInputStream::get_next(SerdeContext& cont
 // The raw chunk input stream. all chunks are in memory.
 class RawChunkInputStream final : public SpillInputStream {
 public:
-    RawChunkInputStream(std::vector<ChunkPtr> chunks) : _chunks(std::move(chunks)) {}
+    RawChunkInputStream(std::vector<ChunkPtr> chunks, Spiller* spiller)
+            : _chunks(std::move(chunks)), _spiller(spiller) {}
     StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) override;
 
     bool is_ready() override { return true; };
@@ -114,6 +115,7 @@ public:
 private:
     size_t read_idx{};
     std::vector<ChunkPtr> _chunks;
+    Spiller* _spiller = nullptr;
 };
 
 StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(SerdeContext& context) {
@@ -136,8 +138,8 @@ InputStreamPtr SpillInputStream::union_all(std::vector<InputStreamPtr>& _streams
     return std::make_shared<UnionAllSpilledInputStream>(_streams);
 }
 
-InputStreamPtr SpillInputStream::as_stream(std::vector<ChunkPtr> chunks) {
-    return std::make_shared<RawChunkInputStream>(chunks);
+InputStreamPtr SpillInputStream::as_stream(std::vector<ChunkPtr> chunks, Spiller* spiller) {
+    return std::make_shared<RawChunkInputStream>(chunks, spiller);
 }
 
 class BufferedInputStream : public SpillInputStream {

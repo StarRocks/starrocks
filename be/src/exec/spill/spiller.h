@@ -80,9 +80,9 @@ struct SpillProcessMetrics {
     // time spent to split partitions, only used in join operator
     RuntimeProfile::Counter* split_partition_timer = nullptr;
     // data bytes restored from mem table in memory, only used in join operator
-    RuntimeProfile::Counter* restore_from_mem_bytes = nullptr;
+    RuntimeProfile::Counter* restore_from_mem_table_bytes = nullptr;
     // the number of rows restored from mem table in memory, only used in join operator
-    RuntimeProfile::Counter* restore_from_mem_rows = nullptr;
+    RuntimeProfile::Counter* restore_from_mem_table_rows = nullptr;
     // peak memory usage of partition writer, only used in join operator
     RuntimeProfile::HighWaterMarkCounter* partition_writer_peak_memory_usage = nullptr;
 };

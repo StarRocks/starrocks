@@ -68,9 +68,9 @@ Status UnorderedMemTable::flush(FlushCallBack callback) {
 
 StatusOr<std::shared_ptr<SpillInputStream>> UnorderedMemTable::as_input_stream(bool shared) {
     if (shared) {
-        return SpillInputStream::as_stream(_chunks);
+        return SpillInputStream::as_stream(_chunks, _spiller);
     } else {
-        return SpillInputStream::as_stream(std::move(_chunks));
+        return SpillInputStream::as_stream(std::move(_chunks), _spiller);
     }
 }
 
