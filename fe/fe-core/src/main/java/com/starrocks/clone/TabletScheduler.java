@@ -111,9 +111,6 @@ import java.util.stream.Stream;
 public class TabletScheduler extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletScheduler.class);
 
-    // handle at most BATCH_NUM tablets in one loop
-    private static final int MIN_BATCH_NUM = 50;
-
     // the minimum interval of updating cluster statistics and priority of tablet info
     private static final long STAT_UPDATE_INTERVAL_MS = 20L * 1000L; // 20s
 
@@ -294,6 +291,10 @@ public class TabletScheduler extends FrontendDaemon {
                 && (pendingTablets.size() > Config.tablet_sched_max_scheduling_tablets
                 || runningTablets.size() > Config.tablet_sched_max_scheduling_tablets)) {
             return AddResult.LIMIT_EXCEED;
+        }
+
+        if (force) {
+            LOG.debug("forcefully add tablet {} to table scheduler pending queue", tablet.getTabletId());
         }
 
         allTabletIds.add(tablet.getTabletId());

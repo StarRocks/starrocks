@@ -45,6 +45,8 @@ import java.util.List;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AdminStmtAnalyzer {
+    public static final long DEFAULT_PRIORITY_REPAIR_TIMEOUT_SEC = 4 * 3600L;
+
     public static void analyze(StatementBase statementBase, ConnectContext session) {
         new AdminStmtAnalyzerVisitor().analyze(statementBase, session);
     }
@@ -181,7 +183,7 @@ public class AdminStmtAnalyzer {
                 }
                 adminRepairTableStmt.setPartitions(partitionNames);
             }
-            adminRepairTableStmt.setTimeoutSec(4 * 3600L); // default 4 hours
+            adminRepairTableStmt.setTimeoutSec(DEFAULT_PRIORITY_REPAIR_TIMEOUT_SEC); // default 4 hours
             return null;
         }
 
