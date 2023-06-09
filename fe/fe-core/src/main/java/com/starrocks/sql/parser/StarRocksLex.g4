@@ -385,10 +385,6 @@ DIGIT_IDENTIFIER
     : DIGIT (LETTER | DIGIT | '_')+
     ;
 
-QUOTED_IDENTIFIER
-    : '"' ( ~'"' | '""' )* '"'
-    ;
-
 BACKQUOTED_IDENTIFIER
     : '`' ( ~'`' | '``' )* '`'
     ;
