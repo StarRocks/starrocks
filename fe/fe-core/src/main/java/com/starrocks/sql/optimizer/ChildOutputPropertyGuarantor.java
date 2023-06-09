@@ -116,7 +116,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                 return false;
             }
             checkState(leftLocalDistributionDesc.getDistributionCols().size()
-                    == rightLocalDistributionDesc.getDistributionCols().size(),
+                            == rightLocalDistributionDesc.getDistributionCols().size(),
                     "Failed to enforce the output property of children in the join operator. " +
                             "left child distribution info %s, right child distribution info %s",
                     leftLocalDistributionSpec, rightLocalDistributionSpec);
