@@ -85,7 +85,9 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const Chun
     SCOPED_TIMER(_aggregator->agg_compute_timer());
     // try to build hash table if has group by keys
     if (!_aggregator->is_none_group_by_exprs()) {
+        LOG(ERROR) << "MM_9: " << tls_mem_tracker->consumption();
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size, _agg_group_by_with_limit));
+        LOG(ERROR) << "MM_10: " << tls_mem_tracker->consumption();
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
     }
 
@@ -106,6 +108,7 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const Chun
             RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
         }
     }
+    LOG(ERROR) << "MM_11: " << tls_mem_tracker->consumption();
 
     _aggregator->update_num_input_rows(chunk_size);
     RETURN_IF_ERROR(_aggregator->check_has_error());

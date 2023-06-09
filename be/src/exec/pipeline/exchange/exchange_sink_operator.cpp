@@ -488,6 +488,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
         }
         send_chunk = &temp_chunk;
     }
+    LOG(ERROR) << "NN_3: " << tls_mem_tracker->consumption();
 
     if (_part_type == TPartitionType::UNPARTITIONED || _num_shuffles == 1) {
         if (_chunk_request == nullptr) {
@@ -503,6 +504,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
                 has_not_pass_through = true;
             }
         }
+        LOG(ERROR) << "NN_4: " << tls_mem_tracker->consumption();
 
         // And if we find if there are other channels can not pass through, we have to use old way.
         // Do serialization once, and send serialized data.
@@ -517,7 +519,9 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
             // 3. if request bytes exceede the threshold, send current request
             if (_current_request_bytes > config::max_transmit_batched_bytes) {
                 butil::IOBuf attachment;
+                LOG(ERROR) << "NN_14: " << tls_mem_tracker->consumption();
                 int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
+                LOG(ERROR) << "NN_15: " << tls_mem_tracker->consumption();
                 for (auto idx : _channel_indices) {
                     if (!_channels[idx]->use_pass_through()) {
                         PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
@@ -657,13 +661,17 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
         if (*is_first_chunk) {
             _encode_context = serde::EncodeContext::get_encode_context_shared_ptr(src->columns().size(), _encode_level);
             StatusOr<ChunkPB> res = Status::OK();
+            LOG(ERROR) << "NN_5: " << tls_mem_tracker->consumption();
             TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src, _encode_context));
+            LOG(ERROR) << "NN_6: " << tls_mem_tracker->consumption();
             RETURN_IF_ERROR(res);
             res->Swap(dst);
             *is_first_chunk = false;
         } else {
             StatusOr<ChunkPB> res = Status::OK();
+            LOG(ERROR) << "NN_7: " << tls_mem_tracker->consumption();
             TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize_without_meta(*src, _encode_context));
+            LOG(ERROR) << "NN_8: " << tls_mem_tracker->consumption();
             RETURN_IF_ERROR(res);
             res->Swap(dst);
         }
@@ -687,8 +695,10 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
         if (use_compression_pool(_compress_codec->type())) {
             Slice compressed_slice;
             Slice input(dst->data());
+            LOG(ERROR) << "NN_9: " << tls_mem_tracker->consumption();
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
                                                       &_compression_scratch));
+            LOG(ERROR) << "NN_10: " << tls_mem_tracker->consumption();
         } else {
             int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
@@ -699,8 +709,11 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
             Slice compressed_slice{_compression_scratch.data(), _compression_scratch.size()};
 
             Slice input(dst->data());
+            LOG(ERROR) << "NN_11: " << tls_mem_tracker->consumption();
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice));
+            LOG(ERROR) << "NN_12: " << tls_mem_tracker->consumption();
             _compression_scratch.resize(compressed_slice.size);
+            LOG(ERROR) << "NN_13: " << tls_mem_tracker->consumption();
         }
 
         double compress_ratio = (static_cast<double>(uncompressed_size)) / _compression_scratch.size();

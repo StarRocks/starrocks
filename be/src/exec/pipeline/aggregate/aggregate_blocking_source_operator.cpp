@@ -46,7 +46,9 @@ StatusOr<ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(RuntimeState* sta
     if (_aggregator->is_none_group_by_exprs()) {
         RETURN_IF_ERROR(_aggregator->convert_to_chunk_no_groupby(&chunk));
     } else {
+        LOG(ERROR) << "MM_12: " << tls_mem_tracker->consumption();
         RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(chunk_size, &chunk));
+        LOG(ERROR) << "MM_13: " << tls_mem_tracker->consumption();
     }
 
     const int64_t old_size = chunk->num_rows();

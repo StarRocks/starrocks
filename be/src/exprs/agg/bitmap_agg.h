@@ -19,6 +19,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
+#include "runtime/current_thread.h"
 #include "types/bitmap_value.h"
 
 namespace starrocks {
@@ -70,12 +71,14 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         const auto& col = down_cast<const BitmapColumn&>(*column);
         this->data(state) |= *(col.get_object(row_num));
+        LOG(ERROR) << "MM_6: " << tls_mem_tracker->consumption();
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto* col = down_cast<BitmapColumn*>(to);
         auto& bitmap = this->data(state);
         col->append(bitmap);
+        LOG(ERROR) << "NN_2: " << tls_mem_tracker->consumption();
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
@@ -95,7 +98,9 @@ public:
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto* col = down_cast<BitmapColumn*>(to);
         auto& bitmap = const_cast<BitmapValue&>(this->data(state));
+        LOG(ERROR) << "MM_7: " << tls_mem_tracker->consumption();
         col->append(std::move(bitmap));
+        LOG(ERROR) << "MM_8: " << tls_mem_tracker->consumption();
     }
 
     std::string get_name() const override { return "bitmap_agg"; }

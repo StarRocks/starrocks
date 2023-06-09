@@ -65,7 +65,9 @@ StatusOr<ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(RuntimeState* st
     // Even if it is streaming mode, the purpose of reading from hash table is to
     // correctly process the state of hash table(_is_ht_eos)
     ChunkPtr chunk = std::make_shared<Chunk>();
+    LOG(ERROR) << "NN_1: " << tls_mem_tracker->consumption();
     RETURN_IF_ERROR(_output_chunk_from_hash_map(&chunk, state));
+    LOG(ERROR) << "NN_3: " << tls_mem_tracker->consumption();
     eval_runtime_bloom_filters(chunk.get());
     DCHECK_CHUNK(chunk);
     return std::move(chunk);

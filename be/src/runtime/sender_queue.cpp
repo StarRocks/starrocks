@@ -108,8 +108,10 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, C
             RETURN_IF_ERROR(get_block_compression_codec(pchunk.compress_type(), &codec));
             uncompressed_size = pchunk.uncompressed_size();
             TRY_CATCH_BAD_ALLOC(uncompressed_buffer->resize(uncompressed_size));
+            LOG(ERROR) << "MM_1:" << tls_mem_tracker->consumption();
             Slice output{uncompressed_buffer->data(), uncompressed_size};
             RETURN_IF_ERROR(codec->decompress(pchunk.data(), &output));
+            LOG(ERROR) << "MM_2:" << tls_mem_tracker->consumption();
         }
         {
             SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
@@ -117,6 +119,7 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, C
                 std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
                 serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk, _recvr->get_encode_level());
                 ASSIGN_OR_RETURN(*chunk, des.deserialize(buff));
+                LOG(ERROR) << "MM_3:" << tls_mem_tracker->consumption();
             });
         }
     }

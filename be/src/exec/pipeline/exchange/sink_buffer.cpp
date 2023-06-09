@@ -87,6 +87,7 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
     }
     {
         auto& instance_id = request.fragment_instance_id;
+        LOG(ERROR) << "NN_16: " << tls_mem_tracker->consumption();
         RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() { _buffers[instance_id.lo].push(request); }));
     }
 

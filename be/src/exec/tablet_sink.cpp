@@ -442,7 +442,9 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
 
     SCOPED_TIMER(_parent->_pack_chunk_timer);
     // 1. append data
+    LOG(ERROR) << "MM_23: " << tls_mem_tracker->consumption();
     _cur_chunk->append_selective(*input, indexes.data(), from, size);
+    LOG(ERROR) << "MM_24: " << tls_mem_tracker->consumption();
     auto req = _rpc_request.mutable_requests(0);
     for (size_t i = 0; i < size; ++i) {
         req->add_tablet_ids(tablet_ids[indexes[from + i]]);
@@ -524,6 +526,7 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
 }
 
 Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
+    LOG(ERROR) << "MM_25: " << tls_mem_tracker->consumption();
     if (eos) {
         if (_request_queue.empty()) {
             if (_cur_chunk.get() == nullptr) {
@@ -583,6 +586,7 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
 
     _mem_tracker->consume(_add_batch_closures[_current_request_index]->request_size);
 
+    LOG(ERROR) << "MM_26: " << tls_mem_tracker->consumption();
     if (_enable_colocate_mv_index) {
         request.set_is_repeated_chunk(true);
         if (UNLIKELY(request.ByteSizeLong() > _parent->_rpc_http_min_size)) {
@@ -619,9 +623,11 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
                     &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
         } else {
+            LOG(ERROR) << "MM_27: " << tls_mem_tracker->consumption();
             _stub->tablet_writer_add_chunk(
                     &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
                     &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
+            LOG(ERROR) << "MM_28: " << tls_mem_tracker->consumption();
         }
     }
     _next_packet_seq++;
@@ -1328,6 +1334,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     DCHECK(chunk->num_rows() > 0);
     size_t num_rows = chunk->num_rows();
     size_t serialize_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
+    LOG(ERROR) << "MM_20: " << tls_mem_tracker->consumption();
 
     {
         SCOPED_TIMER(_prepare_data_timer);
@@ -1548,6 +1555,7 @@ Status OlapTableSink::_send_chunk_with_colocate_index(Chunk* chunk) {
 }
 
 Status OlapTableSink::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel, std::vector<uint16_t>& selection_idx) {
+    LOG(ERROR) << "MM_21: " << tls_mem_tracker->consumption();
     Status err_st = Status::OK();
     for (auto& it : channel->_node_channels) {
         int64_t be_id = it.first;
@@ -1569,6 +1577,7 @@ Status OlapTableSink::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel, s
             }
         }
         NodeChannel* node = it.second.get();
+        LOG(ERROR) << "MM_22: " << tls_mem_tracker->consumption();
         auto st = node->add_chunk(chunk, _tablet_ids, _node_select_idx, 0, _node_select_idx.size());
 
         if (!st.ok()) {
