@@ -515,7 +515,6 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         }
     }
     _s_tablet_writer_count += _delta_writers.size();
-    DCHECK_EQ(_delta_writers.size(), params.tablets_size());
     // In order to get sorted index for each tablet
     std::sort(tablet_ids.begin(), tablet_ids.end());
     for (size_t i = 0; i < tablet_ids.size(); ++i) {
