@@ -275,6 +275,10 @@ CONF_mString(storage_page_cache_limit, "20%");
 CONF_mBool(disable_storage_page_cache, "false");
 // whether to enable the bitmap index memory cache
 CONF_mBool(enable_bitmap_memory_page_cache, "false");
+// whether to enable the zonemap index memory cache
+CONF_mBool(enable_zonemap_index_memory_page_cache, "false");
+// whether to enable the ordinal index memory cache
+CONF_mBool(enable_ordinal_index_memory_page_cache, "false");
 // whether to disable column pool
 CONF_Bool(disable_column_pool, "false");
 
