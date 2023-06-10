@@ -151,7 +151,7 @@ public:
     Timestamp _timestamp;
 };
 
-TimestampValue TimestampValue::create(int year, int month, int day, int hour, int minute, int second, int microsecond=0) {
+TimestampValue TimestampValue::create(int year, int month, int day, int hour, int minute, int second, int microsecond = 0) {
     TimestampValue ts;
     ts.from_timestamp(year, month, day, hour, minute, second, microsecond);
     return ts;
