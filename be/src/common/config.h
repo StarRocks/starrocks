@@ -989,4 +989,9 @@ CONF_mInt32(finish_publish_version_internal, "100");
 
 CONF_mInt32(get_txn_status_internal_sec, "30");
 
+// If your sort key cardinality is very high,
+// You could enable this config to speed up the point lookup query,
+// otherwise, StarRocks will use zone map for one column filter
+CONF_mBool(enable_short_key_for_one_column_filter, "false");
+
 } // namespace starrocks::config
