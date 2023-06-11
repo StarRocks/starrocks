@@ -218,6 +218,21 @@ Status MapColumn::update_rows(const Column& src, const uint32_t* indexes) {
     return Status::OK();
 }
 
+void MapColumn::remove_first_n_values(size_t count) {
+    if (count >= _offsets->size()) {
+        count = _offsets->size() - 1;
+    }
+
+    size_t offset = _offsets->get_data()[count];
+    _keys->remove_first_n_values(offset);
+    _values->remove_first_n_values(offset);
+    _offsets->remove_first_n_values(count);
+
+    for (size_t i = 0; i < _offsets->size(); i++) {
+        _offsets->get_data()[i] -= offset;
+    }
+}
+
 uint32_t MapColumn::serialize(size_t idx, uint8_t* pos) {
     uint32_t offset = _offsets->get_data()[idx];
     uint32_t map_size = _offsets->get_data()[idx + 1] - offset;

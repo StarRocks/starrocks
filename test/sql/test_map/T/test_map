@@ -1,0 +1,22 @@
+-- name: testMapTopN
+CREATE TABLE map_top_n
+    (c1 int,
+    c2 map<varchar(8), int>)
+    PRIMARY KEY(c1)
+    DISTRIBUTED BY HASH(c1)
+    BUCKETS 1
+    PROPERTIES ("replication_num" = "1");
+
+insert into map_top_n values
+(1, map{"key1":1}),
+(2, map{"key1":5, "key2":6}),
+(3, map{"key1":2, "key2":3, "key4":4}),
+(4, map{"key1":12, "key2":13, "key3":14, "key4":15}),
+(5, map{"key1":7, "key2":8, "key3":9, "key4":10, "key5":11});
+
+select * from map_top_n order by c2["key1"];
+select * from map_top_n order by c2["key1"] limit 1,10;
+select * from map_top_n order by c2["key1"] limit 2,10;
+select * from map_top_n order by c2["key1"] limit 3,10;
+select * from map_top_n order by c2["key1"] limit 4,10;
+select * from map_top_n order by c2["key1"] limit 5,10;
