@@ -47,24 +47,24 @@ import java.util.UUID;
  * Authenticating process (It's a pseudocode code):
  * Credentials credentials = null;
  * if (useAWSSDKDefaultBehavior) {
- * return new DefaultAWSCredentialsProviderChain();
+ *   return new DefaultAWSCredentialsProviderChain();
  * } else if (useInstanceProfile) {
- * credentials = GetInstanceProfileCredentials();
- * if (useIamRoleArn) {
- * credentials = GetAssumeRole(credentials, iamRoleArn, externalId);
- * }
- * return credentials;
+ *   credentials = GetInstanceProfileCredentials();
+ *   if (useIamRoleArn) {
+ *     credentials = GetAssumeRole(credentials, iamRoleArn, externalId);
+ *   }
+ *   return credentials;
  * } else if (exist(accessKey) && exist(secretKey)) {
- * // sessionToken is optional, if you use sessionToken, GetAKSKCredentials() will return a temporary credential
- * credentials = GetAKSKCredentials(accessKey, secretKey, [sessionToken]);
- * if (useIamRoleArn) {
- * credentials = GetAssumeRole(credentials, iamRoleArn, externalId);
- * }
- * return credentials;
+ *   // sessionToken is optional, if you use sessionToken, GetAKSKCredentials() will return a temporary credential
+ *   credentials = GetAKSKCredentials(accessKey, secretKey, [sessionToken]);
+ *   if (useIamRoleArn) {
+ *     credentials = GetAssumeRole(credentials, iamRoleArn, externalId);
+ *   }
+ *   return credentials;
  * } else {
- * // Unreachable!!!!
- * // We don't allowed to create anonymous credentials, we will check it in validate() method.
- * // If user want to use anonymous credentials, they just don't set cloud credential directly.
+ *   // Unreachable!!!!
+ *   // We don't allowed to create anonymous credentials, we will check it in validate() method.
+ *   // If user want to use anonymous credentials, they just don't set cloud credential directly.
  * }
  */
 public class AWSCloudCredential implements CloudCredential {
