@@ -86,10 +86,9 @@ public class IcebergConnector implements Connector {
                 Map<String, String> newProperties = new HashMap<>();
                 properties.forEach((key, value) -> {
                     String newKey = key.toLowerCase();
-                    String newValue = value.toLowerCase();
                     if (newKey.startsWith(ICEBERG_REST_CATALOG_PREFIX)) {
                         newKey = newKey.substring(ICEBERG_REST_CATALOG_PREFIX.length());
-                        newProperties.put(newKey, newValue);
+                        newProperties.put(newKey, value);
                     }
                 });
                 properties.putAll(newProperties);
