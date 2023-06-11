@@ -367,7 +367,7 @@ public class IcebergScanNode extends ScanNode {
         if (tabularTempCloudConfiguration.getCloudType() == CloudType.AWS) {
             // If we build CloudConfiguration succeed, means we can use tabular signed temp credentials
             TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
-            cloudConfiguration.toThrift(tCloudConfiguration);
+            tabularTempCloudConfiguration.toThrift(tCloudConfiguration);
             msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
         } else if (cloudConfiguration != null) {
             TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
