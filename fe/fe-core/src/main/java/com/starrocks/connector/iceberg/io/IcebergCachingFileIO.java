@@ -184,6 +184,11 @@ public class IcebergCachingFileIO implements FileIO, Configurable {
         fileContentCache.invalidate(path);
     }
 
+    @Override
+    public Map<String, String> properties() {
+        return wrappedIO.properties();
+    }
+
     private static class CacheEntry {
         private final long length;
         private final List<ByteBuffer> buffers;
