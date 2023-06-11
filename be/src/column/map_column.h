@@ -100,7 +100,7 @@ public:
 
     Status update_rows(const Column& src, const uint32_t* indexes) override;
 
-    void remove_first_n_values(size_t count) override {}
+    void remove_first_n_values(size_t count) override;
 
     uint32_t max_one_element_serialize_size() const override;
 
