@@ -361,9 +361,9 @@ public class IcebergScanNode extends ScanNode {
         msg.hdfs_scan_node.setTable_name(srIcebergTable.getRemoteTableName());
 
         // Try to get tabular signed temporary credential
-        Map<String, String> copiedFileIOProperties = new HashMap<>(srIcebergTable.getNativeTable().io().properties());
+        Map<String, String> tabularFileIOProperties = new HashMap<>(srIcebergTable.getNativeTable().io().properties());
         CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
-                buildCloudConfigurationForTabular(copiedFileIOProperties);
+                buildCloudConfigurationForTabular(tabularFileIOProperties);
         if (tabularTempCloudConfiguration.getCloudType() == CloudType.AWS) {
             // If we build CloudConfiguration succeed, means we can use tabular signed temp credentials
             TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();

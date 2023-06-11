@@ -129,7 +129,7 @@ private:
 
 S3ClientFactory::S3ClientFactory() : _rand((int)::time(nullptr)) {}
 
-// Get a AWSCredentialsProvider based on CloudCredential
+// Get an AWSCredentialsProvider based on CloudCredential
 std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_credentials_provider(
         const AWSCloudCredential& aws_cloud_credential) {
     std::shared_ptr<Aws::Auth::AWSCredentialsProvider> credential_provider = nullptr;
