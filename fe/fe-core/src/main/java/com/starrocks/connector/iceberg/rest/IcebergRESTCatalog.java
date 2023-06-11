@@ -63,10 +63,9 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
         properties.forEach((key, value) -> {
             String newKey = key.toLowerCase();
-            String newValue = value.toLowerCase();
             if (newKey.startsWith(ICEBERG_REST_CATALOG_PREFIX)) {
                 newKey = newKey.substring(ICEBERG_REST_CATALOG_PREFIX.length());
-                copiedProperties.put(newKey, newValue);
+                copiedProperties.put(newKey, value);
             }
         });
 
