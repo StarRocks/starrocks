@@ -142,11 +142,15 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.consistency.ConsistencyChecker;
+<<<<<<< HEAD
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.external.hive.events.MetastoreEventsProcessor;
 import com.starrocks.external.iceberg.IcebergRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
+=======
+import com.starrocks.credential.CloudCredentialUtil;
+>>>>>>> ef1fc6a40 ([Refactor] Synchronize OLAP external table metadata when loading data (#24739))
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -309,8 +313,11 @@ public class GlobalStateMgr {
     private Daemon replayer;
     private Daemon timePrinter;
     private EsRepository esRepository;  // it is a daemon, so add it here
+<<<<<<< HEAD
     private StarRocksRepository starRocksRepository;
     private HiveRepository hiveRepository;
+=======
+>>>>>>> ef1fc6a40 ([Refactor] Synchronize OLAP external table metadata when loading data (#24739))
     private MetastoreEventsProcessor metastoreEventsProcessor;
     private IcebergRepository icebergRepository;
 
@@ -537,10 +544,15 @@ public class GlobalStateMgr {
         this.resourceGroupMgr = new ResourceGroupMgr(this);
 
         this.esRepository = new EsRepository();
+<<<<<<< HEAD
         this.starRocksRepository = new StarRocksRepository();
         this.hiveRepository = new HiveRepository();
         this.icebergRepository = new IcebergRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor(hiveRepository);
+=======
+        this.metastoreEventsProcessor = new MetastoreEventsProcessor();
+        this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
+>>>>>>> ef1fc6a40 ([Refactor] Synchronize OLAP external table metadata when loading data (#24739))
 
         this.metaContext = new MetaContext();
         this.metaContext.setThreadLocalInfo();
@@ -1081,7 +1093,6 @@ public class GlobalStateMgr {
         labelCleaner.start();
         // ES state store
         esRepository.start();
-        starRocksRepository.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             // load hive table to event processor and start to process hms events.
@@ -1148,6 +1159,7 @@ public class GlobalStateMgr {
             esRepository.loadTableFromCatalog();
             starRocksRepository.loadTableFromCatalog();
 
+<<<<<<< HEAD
             checksum = load.loadLoadJob(dis, checksum);
             checksum = loadAlterJob(dis, checksum);
             checksum = recycleBin.loadRecycleBin(dis, checksum);
@@ -1181,6 +1193,115 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadShardManager(dis, checksum);
             remoteChecksum = dis.readLong();
+=======
+                    Iterator<Map.Entry<SRMetaBlockID, SRMetaBlockLoader>> iterator = loadImages.entrySet().iterator();
+                    Map.Entry<SRMetaBlockID, SRMetaBlockLoader> entry = iterator.next();
+                    while (true) {
+                        SRMetaBlockID srMetaBlockID = entry.getKey();
+                        SRMetaBlockReader reader = new SRMetaBlockReader(dis, srMetaBlockID);
+                        if (reader.getHeader().getId() != srMetaBlockID) {
+                            /*
+                              The expected read module does not match the module stored in the image,
+                              and the json chunk is skipped directly. This usually occurs in several situations.
+                              1. When the obsolete image code is deleted.
+                              2. When the new version rolls back to the old version,
+                                 the old version ignores the functions of the new version
+                             */
+                            LOG.warn(String.format("Ignore this invalid meta block, sr meta block id mismatch" +
+                                    "(expect %s actual %s)", srMetaBlockID.name(), reader.getHeader().getId().name()));
+                            reader.close();
+                            continue;
+                        }
+
+                        try {
+                            SRMetaBlockLoader imageLoader = entry.getValue();
+                            imageLoader.apply(reader);
+                            LOG.info("Success load StarRocks meta block " + srMetaBlockID.name() + " from image");
+                        } catch (SRMetaBlockEOFException srMetaBlockEOFException) {
+                            /*
+                              The number of json expected to be read is more than the number of json actually stored
+                              in the image, which usually occurs when the module adds new functions.
+                             */
+                            LOG.warn("Got EOF exception, ignore, ", srMetaBlockEOFException);
+                        } catch (SRMetaBlockException srMetaBlockException) {
+                            LOG.error("Load meta block failed ", srMetaBlockException);
+                            throw new IOException("Load meta block failed ", srMetaBlockException);
+                        } finally {
+                            reader.close();
+                        }
+                        if (iterator.hasNext()) {
+                            entry = iterator.next();
+                        } else {
+                            break;
+                        }
+                    }
+                } catch (SRMetaBlockException e) {
+                    LOG.error("load meta block failed ", e);
+                    throw new IOException("load meta block failed ", e);
+                }
+            } else {
+                checksum = loadHeaderV1(dis, checksum);
+                checksum = nodeMgr.loadLeaderInfo(dis, checksum);
+                checksum = nodeMgr.loadFrontends(dis, checksum);
+                checksum = nodeMgr.loadBackends(dis, checksum);
+                checksum = localMetastore.loadDb(dis, checksum);
+                // ATTN: this should be done after load Db, and before loadAlterJob
+                localMetastore.recreateTabletInvertIndex();
+                // rebuild es state state
+                esRepository.loadTableFromCatalog();
+
+                checksum = load.loadLoadJob(dis, checksum);
+                checksum = loadAlterJob(dis, checksum);
+                checksum = recycleBin.loadRecycleBin(dis, checksum);
+                checksum = VariableMgr.loadGlobalVariable(dis, checksum);
+                checksum = localMetastore.loadCluster(dis, checksum);
+                checksum = nodeMgr.loadBrokers(dis, checksum);
+                checksum = loadResources(dis, checksum);
+                checksum = exportMgr.loadExportJob(dis, checksum);
+                checksum = backupHandler.loadBackupHandler(dis, checksum, this);
+                checksum = auth.loadAuth(dis, checksum);
+                // global transaction must be replayed before load jobs v2
+                checksum = globalTransactionMgr.loadTransactionState(dis, checksum);
+                checksum = colocateTableIndex.loadColocateTableIndex(dis, checksum);
+                checksum = routineLoadMgr.loadRoutineLoadJobs(dis, checksum);
+                checksum = loadMgr.loadLoadJobsV2(dis, checksum);
+                checksum = smallFileMgr.loadSmallFiles(dis, checksum);
+                checksum = pluginMgr.loadPlugins(dis, checksum);
+                checksum = loadDeleteHandler(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = analyzeMgr.loadAnalyze(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = resourceGroupMgr.loadResourceGroups(dis, checksum);
+                checksum = auth.readAsGson(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = taskManager.loadTasks(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = catalogMgr.loadCatalogs(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = loadInsertOverwriteJobs(dis, checksum);
+                checksum = nodeMgr.loadComputeNodes(dis, checksum);
+                remoteChecksum = dis.readLong();
+                // ShardManager DEPRECATED, keep it for backward compatible
+                checksum = loadShardManager(dis, checksum);
+                remoteChecksum = dis.readLong();
+
+                checksum = loadCompactionManager(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = loadStreamLoadManager(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = MaterializedViewMgr.getInstance().reload(dis, checksum);
+                remoteChecksum = dis.readLong();
+                globalFunctionMgr.loadGlobalFunctions(dis, checksum);
+                loadRBACPrivilege(dis);
+                checksum = warehouseMgr.loadWarehouses(dis, checksum);
+                remoteChecksum = dis.readLong();
+                checksum = localMetastore.loadAutoIncrementId(dis, checksum);
+                remoteChecksum = dis.readLong();
+                // ** NOTICE **: always add new code at the end
+
+                Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
+            }
+>>>>>>> ef1fc6a40 ([Refactor] Synchronize OLAP external table metadata when loading data (#24739))
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -2581,6 +2702,7 @@ public class GlobalStateMgr {
         return this.esRepository;
     }
 
+<<<<<<< HEAD
     public StarRocksRepository getStarRocksRepository() {
         return this.starRocksRepository;
     }
@@ -2593,6 +2715,8 @@ public class GlobalStateMgr {
         return this.icebergRepository;
     }
 
+=======
+>>>>>>> ef1fc6a40 ([Refactor] Synchronize OLAP external table metadata when loading data (#24739))
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {
         return this.metastoreEventsProcessor;
     }

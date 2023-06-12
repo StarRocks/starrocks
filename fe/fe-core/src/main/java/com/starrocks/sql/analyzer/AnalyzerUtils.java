@@ -324,6 +324,122 @@ public class AnalyzerUtils {
         return subQueryRelations;
     }
 
+<<<<<<< HEAD
+=======
+    public static Map<TableName, Table> collectAllTableAndView(StatementBase statementBase) {
+        Map<TableName, Table> tables = Maps.newHashMap();
+        new AnalyzerUtils.TableAndViewCollector(tables).visit(statementBase);
+        return tables;
+    }
+
+    public static Map<TableName, Table> collectAllConnectorTableAndView(StatementBase statementBase) {
+        Map<TableName, Table> tables = Maps.newHashMap();
+        new AnalyzerUtils.ConnectorTableAndViewCollector(tables).visit(statementBase);
+        return tables;
+    }
+
+    private static class TableAndViewCollector extends TableCollector {
+        public TableAndViewCollector(Map<TableName, Table> dbs) {
+            super(dbs);
+        }
+
+        public Void visitView(ViewRelation node, Void context) {
+            Table table = node.getView();
+            tables.put(node.getResolveTableName(), table);
+            return null;
+        }
+    }
+
+    private static class ConnectorTableAndViewCollector extends TableAndViewCollector {
+        public ConnectorTableAndViewCollector(Map<TableName, Table> dbs) {
+            super(dbs);
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            Table table = node.getTable();
+            if (table == null) {
+                tables.put(node.getName(), null);
+                return null;
+            }
+            // For external tables, their db/table names are case-insensitive, need to get real names of them.
+            if (table.isHiveTable() || table.isHudiTable()) {
+                HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
+                TableName tableName = new TableName(hiveMetaStoreTable.getCatalogName(), hiveMetaStoreTable.getDbName(),
+                        hiveMetaStoreTable.getTableName());
+                tables.put(tableName, table);
+            } else if (table.isIcebergTable()) {
+                IcebergTable icebergTable = (IcebergTable) table;
+                TableName tableName = new TableName(icebergTable.getCatalogName(), icebergTable.getRemoteDbName(),
+                        icebergTable.getRemoteTableName());
+                tables.put(tableName, table);
+            } else {
+                tables.put(node.getName(), table);
+            }
+            return null;
+        }
+    }
+
+    private static class NonOlapTableCollector extends TableCollector {
+        public NonOlapTableCollector(Map<TableName, Table> tables) {
+            super(tables);
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            if (!tables.isEmpty()) {
+                return null;
+            }
+            // if olap table has MV, we remove it
+            if (!node.getTable().isOlapTable() ||
+                    !node.getTable().getRelatedMaterializedViews().isEmpty()) {
+                tables.put(node.getName(), node.getTable());
+            }
+            return null;
+        }
+    }
+
+    private static class OlapTableCollector extends TableCollector {
+        Set<OlapTable> olapTables;
+
+        public OlapTableCollector(Set<OlapTable> tables) {
+            this.olapTables = tables;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            if (node.getTable().isOlapTable()) {
+                OlapTable table = (OlapTable) node.getTable();
+                olapTables.add(table);
+                // Only copy the necessary olap table meta to avoid the lock when plan query
+                OlapTable copied = new OlapTable();
+                table.copyOnlyForQuery(copied);
+                node.setTable(copied);
+            }
+            return null;
+        }
+    }
+
+    private static class ExternalTableCollector extends TableCollector {
+        List<Table> tables;
+        Predicate<Table> predicate;
+
+        public ExternalTableCollector(List<Table> tables, Predicate<Table> filter) {
+            this.tables = tables;
+            this.predicate = filter;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            Table table = node.getTable();
+            if (predicate.test(table)) {
+                tables.add(table);
+            }
+            return null;
+        }
+    }
+
+>>>>>>> ef1fc6a40 ([Refactor] Synchronize OLAP external table metadata when loading data (#24739))
     private static class TableCollectorWithAlias extends TableCollector {
         public TableCollectorWithAlias(Map<TableName, Table> dbs) {
             super(dbs);
