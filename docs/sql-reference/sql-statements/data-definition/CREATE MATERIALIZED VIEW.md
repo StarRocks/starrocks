@@ -213,7 +213,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
 
 The query statement to create the asynchronous materialized view.
 
-### Query Materialized View
+### Query a synchronous materialized view
 
 An asynchronous materialized view is a physic table. You can operate it as any regular table **except that you cannot directly load data into an asynchronous materialized view**.
 
