@@ -1,6 +1,6 @@
 # SHOW TABLET
 
-This statement is used to display tablet related information.
+Displays tablet related information.
 
 > **NOTE**
 >
