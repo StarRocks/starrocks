@@ -442,7 +442,7 @@ void MapColumn::fnv_hash_at(uint32_t* hash, uint32_t idx) const {
         _keys->fnv_hash_at(&pair_hash, ele_offset);
         _values->fnv_hash_at(&pair_hash, ele_offset);
 
-        // for get same hash on un-order map, we need too satisfies the commutative law
+        // for get same hash on un-order map, we need to satisfies the commutative law
         *hash += pair_hash;
     }
 }
@@ -461,7 +461,7 @@ void MapColumn::crc32_hash_at(uint32_t* hash, uint32_t idx) const {
         _keys->crc32_hash_at(&pair_hash, ele_offset);
         _values->crc32_hash_at(&pair_hash, ele_offset);
 
-        // for get same hash on un-order map, we need too satisfies the commutative law
+        // for get same hash on un-order map, we need to satisfies the commutative law
         *hash += pair_hash;
     }
 }

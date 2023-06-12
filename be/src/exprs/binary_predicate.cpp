@@ -196,12 +196,12 @@ DEFINE_UNARY_FN_WITH_IMPL(isNullImpl, v) {
     return v;
 }
 
-class CommonEqualsSafePredicate final : public Predicate {
+class CommonNullSafeEqualsPredicate final : public Predicate {
 public:
-    explicit CommonEqualsSafePredicate(const TExprNode& node) : Predicate(node) {}
-    ~CommonEqualsSafePredicate() override = default;
+    explicit CommonNullSafeEqualsPredicate(const TExprNode& node) : Predicate(node) {}
+    ~CommonNullSafeEqualsPredicate() override = default;
 
-    Expr* clone(ObjectPool* pool) const override { return pool->add(new CommonEqualsSafePredicate(*this)); }
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CommonNullSafeEqualsPredicate(*this)); }
 
     // if v1 null and v2 null = true
     // if v1 null and v2 not null = false
@@ -338,7 +338,7 @@ Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
         if (node.opcode == TExprOpcode::EQ) {
             return new CommonEqualsPredicate(node);
         } else if (node.opcode == TExprOpcode::EQ_FOR_NULL) {
-            return new CommonEqualsSafePredicate(node);
+            return new CommonNullSafeEqualsPredicate(node);
         } else {
             return new ArrayPredicate(node);
         }
@@ -346,7 +346,7 @@ Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
         if (node.opcode == TExprOpcode::EQ) {
             return new CommonEqualsPredicate(node);
         } else if (node.opcode == TExprOpcode::EQ_FOR_NULL) {
-            return new CommonEqualsSafePredicate(node);
+            return new CommonNullSafeEqualsPredicate(node);
         } else {
             return nullptr;
         }
