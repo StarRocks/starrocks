@@ -60,6 +60,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
