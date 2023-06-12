@@ -272,6 +272,14 @@ public:
 
     const auto& level_to_partitions() { return _level_to_partitions; }
 
+<<<<<<< HEAD
+=======
+    template <class ChunkProvider>
+    Status spill_partition(SerdeContext& context, SpilledPartition* partition, ChunkProvider&& provider);
+
+    int64_t mem_consumption() const { return _mem_tracker->consumption(); }
+
+>>>>>>> 03073d9e9 ([Enhancement] add more memory usage profiles for spill (#24353))
 private:
     Status _init_with_partition_nums(RuntimeState* state, int num_partitions);
 
