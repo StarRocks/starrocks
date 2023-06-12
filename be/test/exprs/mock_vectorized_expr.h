@@ -206,7 +206,7 @@ public:
 
 class MockColumnExpr : public MockCostExpr {
 public:
-    MockColumnExpr(const TExprNode& t, ColumnPtr column): MockCostExpr(t), _column(column) {}
+    MockColumnExpr(const TExprNode& t, ColumnPtr column) : MockCostExpr(t), _column(column) {}
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         start();

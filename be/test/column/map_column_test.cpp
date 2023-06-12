@@ -1387,7 +1387,6 @@ TEST(MapColumnTest, test_hash) {
     ASSERT_EQ("{1:11,2:21,3:31}", column->debug_item(0));
     ASSERT_EQ("{2:21,1:11,3:31}", column1->debug_item(0));
 
-
     uint32_t hash = 0;
     uint32_t hash1 = 0;
     column->fnv_hash_at(&hash, 0);
