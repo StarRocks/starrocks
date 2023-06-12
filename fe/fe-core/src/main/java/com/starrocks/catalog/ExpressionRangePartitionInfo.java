@@ -161,7 +161,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
 
     @Override
     public boolean isAutomaticPartition() {
-        return true;
+        return type == PartitionType.EXPR_RANGE;
     }
 }
 

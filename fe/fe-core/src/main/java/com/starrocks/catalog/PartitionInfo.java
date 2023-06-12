@@ -297,6 +297,6 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
     }
 
     public boolean isAutomaticPartition() {
-        return type == PartitionType.EXPR_RANGE;
+        return false;
     }
 }
