@@ -221,10 +221,19 @@ public class ColocateTableIndex implements Writable {
                     // generate a new one
                     groupId = new GroupId(dbId, GlobalStateMgr.getCurrentState().getNextId());
                 }
-                HashDistributionInfo distributionInfo = (HashDistributionInfo) tbl.getDefaultDistributionInfo();
-                ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId,
-                        distributionInfo.getDistributionColumns(), distributionInfo.getBucketNum(),
-                        tbl.getDefaultReplicationNum());
+
+                ColocateGroupSchema groupSchema;
+                if (tbl.getDefaultDistributionInfo() instanceof HashDistributionInfo) {
+                    HashDistributionInfo distributionInfo = (HashDistributionInfo) tbl.getDefaultDistributionInfo();
+                    groupSchema = new ColocateGroupSchema(groupId,
+                            distributionInfo.getDistributionColumns(), distributionInfo.getBucketNum(),
+                            tbl.getDefaultReplicationNum());
+                } else {
+                    RandomDistributionInfo distributionInfo = (RandomDistributionInfo) tbl.getDefaultDistributionInfo();
+                    groupSchema = new ColocateGroupSchema(groupId,
+                            Lists.newArrayList(), distributionInfo.getBucketNum(),
+                            tbl.getDefaultReplicationNum());
+                }
                 groupName2Id.put(fullGroupName, groupId);
                 group2Schema.put(groupId, groupSchema);
             }

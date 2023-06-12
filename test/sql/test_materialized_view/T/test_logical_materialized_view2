@@ -12,6 +12,7 @@ PARTITION BY range(`dt`)()
 DISTRIBUTED BY HASH(`k1`) BUCKETS 3 
 PROPERTIES(
     "replication_num" = "1",
+    "colocate_with" = "target1",
     "dynamic_partition.enable" = "true",
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-5",
@@ -34,6 +35,7 @@ PARTITION BY range(`dt`)()
 DISTRIBUTED BY HASH(`k1`) BUCKETS 3 
 PROPERTIES(
     "replication_num" = "1",
+    "colocate_with" = "target1",
     "dynamic_partition.enable" = "true",
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-5",
@@ -56,6 +58,7 @@ PARTITION BY range(`dt`)()
 DISTRIBUTED BY HASH(`k1`) BUCKETS 3 
 PROPERTIES(
     "replication_num" = "1",
+    "colocate_with" = "target1",
     "dynamic_partition.enable" = "true",
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-5",
@@ -79,6 +82,7 @@ PARTITION BY range(`dt`)()
 DISTRIBUTED BY RANDOM BUCKETS 3 
 PROPERTIES(
     "replication_num" = "1",
+    "colocate_with" = "target1",
     "dynamic_partition.enable" = "true",
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-5",

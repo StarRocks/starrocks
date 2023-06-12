@@ -254,13 +254,13 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                         break;
                     default:
                         mvColumnName = Strings.isNullOrEmpty(alias) ? MVUtils.getMVColumnName(selectListItemExpr.toSql(),
-                                baseColumnNames) : alias;
+                                baseColumnNames) : MVUtils.getMVColumnName(alias);
                         expr = selectListItemExpr;
                         break;
                 }
             } else {
                 mvColumnName = Strings.isNullOrEmpty(alias) ? MVUtils.getMVColumnName(selectListItemExpr.toSql(),
-                        baseColumnNames) : alias;
+                        baseColumnNames) : MVUtils.getMVColumnName(alias);
                 expr = selectListItemExpr;
             }
             result.put(mvColumnName, expr);
@@ -411,7 +411,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     columnName = baseColumnNames.get(0);
                 } else {
                     columnName = Strings.isNullOrEmpty(alias) ? MVUtils.getMVColumnName(selectListItemExpr.toSql(),
-                            baseColumnNames) : alias;
+                            baseColumnNames) : MVUtils.getMVColumnName(alias);
                 }
                 mvColumnItem = new MVColumnItem(columnName, type, selectListItemExpr, baseColumnNames);
                 if (meetAggregate) {
@@ -429,10 +429,10 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 joiner.add(selectListItemExpr.toSql());
             }
 
-            if (!Strings.isNullOrEmpty(selectListItem.getAlias()) && fullSchemaColNames.contains(selectListItem.getAlias())) {
-                Expr existedDefinedExpr = table.getColumn(selectListItem.getAlias()).getDefineExpr();
-                if (existedDefinedExpr.equals(mvColumnItem.getDefineExpr())) {
-                    throw new SemanticException(String.format("The alias column %s has already existed in the table's full " +
+            if (fullSchemaColNames.contains(mvColumnItem.getName())) {
+                Expr existedDefinedExpr = table.getColumn(mvColumnItem.getName()).getDefineExpr();
+                if (existedDefinedExpr != null && !existedDefinedExpr.equals(mvColumnItem.getDefineExpr())) {
+                    throw new SemanticException(String.format("The mv column %s has already existed in the table's full " +
                             "schema, please set another alias name", selectListItem.getAlias()));
                 }
             }
@@ -457,7 +457,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         AggregateType mvAggregateType;
         Type funcArgType = functionChild0.getType();
         String mvColumnName = Strings.isNullOrEmpty(aliasName) ? MVUtils.getMVColumnName(functionName, baseColumnNames)
-                : aliasName;
+                : MVUtils.getMVColumnName(aliasName);
         Expr defineExpr = functionChild0;
         Type type;
         switch (functionName.toLowerCase()) {

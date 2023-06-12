@@ -109,6 +109,13 @@ public class ColocateGroupSchema implements Writable {
                             groupId.toString(), info.getDistributionColumns().get(i).getName(), targetColType);
                 }
             }
+        } else if (distributionInfo instanceof RandomDistributionInfo) {
+            RandomDistributionInfo info = (RandomDistributionInfo) distributionInfo;
+            // buckets num
+            if (info.getBucketNum() != bucketsNum) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COLOCATE_TABLE_MUST_HAS_SAME_BUCKET_NUM, bucketsNum,
+                        groupId.toString());
+            }
         }
     }
 

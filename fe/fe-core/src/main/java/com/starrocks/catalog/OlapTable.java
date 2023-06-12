@@ -1269,42 +1269,11 @@ public class OlapTable extends Table {
 
     // this will be called when rollupJobV2 is finished
     public void addTableToColocateGroupIfSet(Long dbId, String rollupIndexName) {
-        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
-        if (!colocateTableIndex.isColocateTable(this.id)
-                && colocateMaterializedViewNames.contains(rollupIndexName)) {
-            String dbName = GlobalStateMgr.getCurrentState().getDb(dbId).getFullName();
-            String colocateGroupName;
-            if (!Strings.isNullOrEmpty(this.colocateGroup)) {
-                colocateGroupName = this.colocateGroup;
-            } else {
-                colocateGroupName = dbName + ":" + getName();
-            }
-            try {
-                colocateTableIndex.addTableToGroup(dbId, this, colocateGroupName, null, false /* isReplay */);
-            } catch (DdlException e) {
-                // should not happen, just log an error here
-                LOG.error(e.getMessage());
-                return;
-            }
-            setInColocateMvGroup(true);
-            if (!colocateGroupName.equalsIgnoreCase(this.colocateGroup)) {
-                setColocateGroup(colocateGroupName);
-            }
-
-            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(this.id);
-            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
-            ColocatePersistInfo info =
-                    ColocatePersistInfo.createForAddTable(groupId, this.id, backendsPerBucketSeq);
-            GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(info);
+        if (colocateMaterializedViewNames.contains(rollupIndexName)) {
+            return;
         }
-    }
-
-    public void addTableToColocateGroup(Database db, String rollupIndexName, OlapTable targetTable) throws DdlException {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
-        Long dbId = db.getId();
-        if ((!colocateTableIndex.isColocateTable(this.id) ||
-                !colocateTableIndex.isColocateTable(targetTable.getId())) &&
-                colocateMaterializedViewNames.contains(rollupIndexName)) {
+        if (!colocateTableIndex.isColocateTable(this.id)) {
             String dbName = GlobalStateMgr.getCurrentState().getDb(dbId).getFullName();
             String colocateGroupName;
             if (!Strings.isNullOrEmpty(this.colocateGroup)) {
@@ -1314,18 +1283,17 @@ public class OlapTable extends Table {
             }
             try {
                 colocateTableIndex.addTableToGroup(dbId, this, colocateGroupName, null, false /* isReplay */);
-                if (targetTable != null) {
-                    colocateTableIndex.addTableToGroup(dbId, targetTable, colocateGroupName, null, false /* isReplay */);
-                }
             } catch (DdlException e) {
                 // should not happen, just log an error here
                 LOG.error(e.getMessage());
                 return;
             }
             setInColocateMvGroup(true);
+            addColocateMaterializedView(rollupIndexName);
             if (!colocateGroupName.equalsIgnoreCase(this.colocateGroup)) {
                 setColocateGroup(colocateGroupName);
             }
+
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(this.id);
             List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
             ColocatePersistInfo info =

@@ -1,5 +1,7 @@
 -- name: test_logical_materialized_view1
 drop table if exists test1;
+-- result:
+-- !result
 CREATE TABLE `test1` (
   `k1` tinyint(4) NULL DEFAULT "0",
    `dt` datetime Not NULL,	
@@ -12,6 +14,7 @@ PARTITION BY range(`dt`)()
 DISTRIBUTED BY HASH(`k1`) BUCKETS 3 
 PROPERTIES(
     "replication_num" = "1",
+    "colocate_with" = "target1",
     "dynamic_partition.enable" = "true",
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-5",
@@ -20,8 +23,11 @@ PROPERTIES(
     "dynamic_partition.buckets" = "3",
     "dynamic_partition.history_partition_num" = "1"
 );
-
+-- result:
+-- !result
 drop table if exists test2;
+-- result:
+-- !result
 CREATE TABLE `test2` (
   `k1` tinyint(4) NULL DEFAULT "0",
    `dt` datetime Not NULL,	
@@ -34,6 +40,7 @@ PARTITION BY range(`dt`)()
 DISTRIBUTED BY HASH(`k1`) BUCKETS 3 
 PROPERTIES(
     "replication_num" = "1",
+    "colocate_with" = "target1",
     "dynamic_partition.enable" = "true",
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-5",
@@ -42,8 +49,11 @@ PROPERTIES(
     "dynamic_partition.buckets" = "3",
     "dynamic_partition.history_partition_num" = "1"
 );
-
+-- result:
+-- !result
 drop table if exists test3;
+-- result:
+-- !result
 CREATE TABLE `test3` (
   `k1` tinyint(4) NULL DEFAULT "0",
    `dt` datetime Not NULL,	
@@ -56,6 +66,7 @@ PARTITION BY range(`dt`)()
 DISTRIBUTED BY HASH(`k1`) BUCKETS 3 
 PROPERTIES(
     "replication_num" = "1",
+    "colocate_with" = "target1",
     "dynamic_partition.enable" = "true",
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-5",
@@ -64,8 +75,11 @@ PROPERTIES(
     "dynamic_partition.buckets" = "3",
     "dynamic_partition.history_partition_num" = "1"
 );
-
+-- result:
+-- !result
 drop table if exists target1;
+-- result:
+-- !result
 CREATE TABLE `target1` (
   `k1` tinyint(4) NULL DEFAULT "0",
   `k11` tinyint(4) NULL DEFAULT "0",
@@ -79,6 +93,7 @@ PARTITION BY range(`dt`)()
 DISTRIBUTED BY RANDOM BUCKETS 3 
 PROPERTIES(
     "replication_num" = "1",
+    "colocate_with" = "target1",
     "dynamic_partition.enable" = "true",
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-5",
@@ -87,7 +102,8 @@ PROPERTIES(
     "dynamic_partition.buckets" = "3",
     "dynamic_partition.history_partition_num" = "1"
 );
-
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW test_mv1
 to target1
 as
@@ -104,12 +120,28 @@ as
 select k1, dt, sum(k3) as k4 from test3 group by k1, dt; 
 
 insert into test1 values(1, '2023-06-12 00:00:00', 'a', 1, 'a');
+-- result:
+E: (1064, "Associated table's partition should be kept the same with the base table, partition p20230613 is not found in target table target1")
+-- !result
 insert into test2 values(1, '2023-06-12 00:00:00', 'a', 1, 'a');
+-- result:
+-- !result
 insert into test3 values(1, '2023-06-12 00:00:00', 'a', 1, 'a');
-
+-- result:
+-- !result
 select * from target1 order by k1, dt;
-
+-- result:
+1	None	None	2023-06-12 00:00:00	2	None
+-- !result
 drop materialized view test_mv3;
+-- result:
+-- !result
 drop materialized view test_mv2;
+-- result:
+-- !result
 drop materialized view test_mv1;
+-- result:
+-- !result
 drop table target1;
+-- result:
+-- !result
