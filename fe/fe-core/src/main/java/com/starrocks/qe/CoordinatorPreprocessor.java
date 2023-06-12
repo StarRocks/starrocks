@@ -432,8 +432,18 @@ public class CoordinatorPreprocessor {
     }
 
     private ImmutableMap<Long, ComputeNode> buildComputeNodeInfo() {
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            Map<Long, ComputeNode> computeNodes = new HashMap<>();
+            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+                computeNodes.put(nodeId, GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId));
+            }
+            return ImmutableMap.copyOf(computeNodes);
+        }
+
         ImmutableMap<Long, ComputeNode> idToComputeNode
                 = ImmutableMap.copyOf(GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode());
+
         int useComputeNodeNumber = connectContext.getSessionVariable().getUseComputeNodes();
         if (useComputeNodeNumber < 0
                 || useComputeNodeNumber >= idToComputeNode.size()) {
@@ -523,38 +533,6 @@ public class CoordinatorPreprocessor {
         return result;
     }
 
-    private Map<Long, ComputeNode> getNodeMapInDefaultWarehouse() {
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-        Map<Long, ComputeNode> idToNode = new HashMap<>();
-        for (long id : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-            idToNode.put(id, GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(id));
-        }
-        return idToNode;
-    }
-
-    private TNetworkAddress getExecHostPort(Reference<Long> nodeIdRef) {
-        // TODO: need to refactor after be split into cn + dn
-        // get node from default warehouse
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            Map<Long, ComputeNode> idToNode = getNodeMapInDefaultWarehouse();
-            return SimpleScheduler.getComputeNodeHost(ImmutableMap.copyOf(idToNode), nodeIdRef);
-        }
-        return SimpleScheduler.getBackendHost(this.idToBackend, nodeIdRef);
-    }
-
-    private TNetworkAddress getExecHostPortV2(long nodeId, List<TScanRangeLocation> locations,
-                                              Reference<Long> nodeIdRef) {
-        // TODO: need to refactor after be split into cn + dn
-        // get node from default warehouse
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            Map<Long, ComputeNode> idToNode = getNodeMapInDefaultWarehouse();
-            return SimpleScheduler.getHost(nodeId, locations, idToBackend,
-                    ImmutableMap.copyOf(idToNode), nodeIdRef);
-        }
-        return SimpleScheduler.getHost(nodeId, locations, idToBackend, idToComputeNode, nodeIdRef);
-
-    }
-
     // For each fragment in fragments, computes hosts on which to run the instances
     // and stores result in fragmentExecParams.hosts.
     private void computeFragmentHosts() throws Exception {
@@ -582,10 +560,12 @@ public class CoordinatorPreprocessor {
 
             if (fragment.getDataPartition() == DataPartition.UNPARTITIONED) {
                 Reference<Long> backendIdRef = new Reference<>();
-                TNetworkAddress execHostport = usedComputeNode ?
-                        SimpleScheduler.getComputeNodeHost(this.idToComputeNode, backendIdRef) :
-                        getExecHostPort(backendIdRef);
-
+                TNetworkAddress execHostport;
+                if (usedComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                    execHostport = SimpleScheduler.getComputeNodeHost(this.idToComputeNode, backendIdRef);
+                } else {
+                    execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
+                }
                 if (execHostport == null) {
                     String msg = FeConstants.getNodeNotFoundError(usedComputeNode);
                     LOG.warn("DataPartition UNPARTITIONED. " + msg);
@@ -636,7 +616,7 @@ public class CoordinatorPreprocessor {
                 // of hostSet, that it to say, each backend has exactly one fragment.
                 Set<TNetworkAddress> hostSet = Sets.newHashSet();
 
-                if (usedComputeNode) {
+                if (usedComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                     for (Map.Entry<Long, ComputeNode> entry : idToComputeNode.entrySet()) {
                         ComputeNode computeNode = entry.getValue();
                         if (!computeNode.isAlive() || SimpleScheduler.isInBlacklist(computeNode.getId())) {
@@ -805,10 +785,12 @@ public class CoordinatorPreprocessor {
 
             if (params.instanceExecParams.isEmpty()) {
                 Reference<Long> backendIdRef = new Reference<>();
-                TNetworkAddress execHostport = usedComputeNode ?
-                        SimpleScheduler.getComputeNodeHost(this.idToComputeNode, backendIdRef) :
-                        getExecHostPort(backendIdRef);
-
+                TNetworkAddress execHostport;
+                if (usedComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                    execHostport = SimpleScheduler.getComputeNodeHost(this.idToComputeNode, backendIdRef);
+                } else {
+                    execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
+                }
                 if (execHostport == null) {
                     throw new UserException(
                             FeConstants.getNodeNotFoundError(usedComputeNode) + backendInfosString(usedComputeNode));
@@ -2008,8 +1990,9 @@ public class CoordinatorPreprocessor {
                 }
 
                 Reference<Long> backendIdRef = new Reference<>();
-                TNetworkAddress execHostPort = getExecHostPortV2(minLocation.backend_id,
-                        scanRangeLocations.getLocations(), backendIdRef);
+                TNetworkAddress execHostPort = SimpleScheduler.getHost(minLocation.backend_id,
+                        scanRangeLocations.getLocations(),
+                        idToBackend, idToComputeNode, backendIdRef);
 
                 if (execHostPort == null) {
                     throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR
@@ -2192,7 +2175,8 @@ public class CoordinatorPreprocessor {
 
             buckendIdToBucketCountMap.put(buckendId, buckendIdToBucketCountMap.get(buckendId) + 1);
             Reference<Long> backendIdRef = new Reference<>();
-            TNetworkAddress execHostPort = getExecHostPortV2(buckendId, seqLocation.locations, backendIdRef);
+            TNetworkAddress execHostPort = SimpleScheduler.getHost(buckendId, seqLocation.locations,
+                    idToBackend, idToComputeNode, backendIdRef);
             if (execHostPort == null) {
                 throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR
                         + backendInfosString(false));
