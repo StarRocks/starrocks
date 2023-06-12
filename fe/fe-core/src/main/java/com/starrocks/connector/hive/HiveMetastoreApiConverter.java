@@ -26,7 +26,6 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.UserException;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorTableId;
@@ -34,6 +33,7 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -132,8 +132,8 @@ public class HiveMetastoreApiConverter {
         HiveView hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
                 table.getTableName(), toFullSchemasForHiveTable(table), table.getViewExpandedText());
         try {
-            hiveView.init();
-        } catch (UserException e) {
+            hiveView.getQueryStatementWithSRParser();
+        } catch (StarRocksPlannerException e) {
             throw new StarRocksConnectorException("failed to parse hive view text", e);
         }
         return hiveView;
