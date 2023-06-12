@@ -87,6 +87,14 @@ public class RangePartitionInfo extends PartitionInfo {
         this.isMultiColumnPartition = partitionColumns.size() > 1;
     }
 
+    public RangePartitionInfo(RangePartitionInfo other) {
+        super(other.type);
+        this.partitionColumns = Lists.newArrayList(other.partitionColumns);
+        this.idToRange = Maps.newHashMap(other.idToRange);
+        this.idToTempRange = Maps.newHashMap(other.idToTempRange);
+        this.isMultiColumnPartition = partitionColumns.size() > 1;
+    }
+
     @Override
     public List<Column> getPartitionColumns() {
         return partitionColumns;

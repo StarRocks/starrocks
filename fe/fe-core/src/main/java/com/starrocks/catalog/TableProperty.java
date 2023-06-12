@@ -22,6 +22,7 @@
 package com.starrocks.catalog;
 
 import com.clearspring.analytics.util.Lists;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
@@ -132,6 +133,18 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private List<ForeignKeyConstraint> foreignKeyConstraints;
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
+    }
+
+    public TableProperty copy() {
+        TableProperty newTableProperty = new TableProperty(Maps.newHashMap(this.properties));
+        try {
+            newTableProperty.gsonPostProcess();
+        } catch (IOException e) {
+            Preconditions.checkState(false, "gsonPostProcess shouldn't fail");
+        }
+        newTableProperty.hasDelete = this.hasDelete;
+        newTableProperty.hasForbitGlobalDict = this.hasDelete;
+        return newTableProperty;
     }
 
     public static boolean isSamePrefixProperties(Map<String, String> properties, String prefix) {
