@@ -20,7 +20,6 @@
 #include "common/status.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/stl_util.h"
-#include "service/backend_options.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
@@ -39,25 +38,17 @@
 namespace starrocks {
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema)
-        : ChunkIterator(std::move(schema)),
-          _tablet(std::move(tablet)),
-          _version(version),
-          _delete_predicates_version(version) {}
+        : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version) {}
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
                            const std::vector<RowsetSharedPtr>& captured_rowsets)
-        : ChunkIterator(std::move(schema)),
-          _tablet(std::move(tablet)),
-          _version(version),
-          _delete_predicates_version(version),
-          _rowsets(captured_rowsets) {}
+        : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version), _rowsets(captured_rowsets) {}
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
                            RowSourceMaskBuffer* mask_buffer)
         : ChunkIterator(std::move(schema)),
           _tablet(std::move(tablet)),
           _version(version),
-          _delete_predicates_version(version),
           _is_vertical_merge(true),
           _is_key(is_key),
           _mask_buffer(mask_buffer) {

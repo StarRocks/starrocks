@@ -725,7 +725,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
 
     // open tablet readers out of lock for open is heavy because of io
     for (auto& tablet_reader : readers) {
-        tablet_reader->set_delete_predicates_version(delete_predicates_version);
         RETURN_IF_ERROR(tablet_reader->open(read_params));
     }
 
