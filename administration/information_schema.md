@@ -60,7 +60,7 @@ StarRocks 优化了 `information_schema` 中以下表提供的元数据信息：
 | ROW_FORMAT      | 该字段暂不可用。                                             |
 | TABLE_ROWS      | 表的行数。                                                   |
 | AVG_ROW_LENGTH  | 表的平均行长度（大小），等于 `DATA_LENGTH` / `TABLE_ROWS`。 单位：Byte。 |
-| DATA_LENGTH     | 数据长度（大小）。 单位：Byte。                              |
+| DATA_LENGTH     | 表的数据文件长度（大小）。单位：Byte。                         |
 | MAX_DATA_LENGTH | 该字段暂不可用。                                             |
 | INDEX_LENGTH    | 该字段暂不可用。                                             |
 | DATA_FREE       | 该字段暂不可用。                                             |
