@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "exec/tablet_sink_colocate_sender.h"
+#include "exec/tablet_sink/tablet_sink_colocate_sender.h"
 
 #include "agent/master_info.h"
 #include "agent/utils.h"

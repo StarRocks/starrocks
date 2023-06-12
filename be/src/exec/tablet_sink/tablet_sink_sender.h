@@ -48,7 +48,7 @@
 #include "common/tracer.h"
 #include "exec/data_sink.h"
 #include "exec/tablet_info.h"
-#include "exec/tablet_sink_index_channel.h"
+#include "exec/tablet_sink/tablet_sink_index_channel.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
