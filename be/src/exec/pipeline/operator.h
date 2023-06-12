@@ -228,6 +228,8 @@ public:
     virtual bool spillable() const { return false; }
     // Operator can free memory/buffer early
     virtual bool releaseable() const { return false; }
+    virtual void enter_release_memory_mode() {}
+    virtual bool release_memory_mode_done() const { return true; }
     spill::OperatorMemoryResourceManager& mem_resource_manager() { return _mem_resource_manager; }
 
     // the memory that can be freed by the current operator
