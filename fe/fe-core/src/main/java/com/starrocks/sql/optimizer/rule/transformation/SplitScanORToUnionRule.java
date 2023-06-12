@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -39,6 +40,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.rewrite.scalar.FilterSelectivityEvaluator.NON_SELECTIVITY;
+
 // For sql like:
 //      select * from tbl where col1 > 100 and (col2 = 1 or col3 =2 or col4 = 4), the (col2 = 1 or col3 =2 or col4 = 4)
 // predicate can actually filter lots of rows, but our index doesn't support this predicate. We can transform it to:
@@ -50,7 +53,8 @@ import java.util.stream.Collectors;
 // Every scanNode has an equivalent predicate can use index to filter lots of rows.
 public class SplitScanORToUnionRule extends TransformationRule {
     private static final Logger LOG = LogManager.getLogger(SplitScanORToUnionRule.class);
-    private static final double SELECTIVITY_THRESHOLD = 0.035;
+
+    private static final double HIGH_SELECTIVITY = 1E-6;
 
     private SplitScanORToUnionRule() {
         super(RuleType.TF_SPLIT_SCAN_OR, Pattern.create(OperatorType.LOGICAL_OLAP_SCAN));
@@ -99,7 +103,7 @@ public class SplitScanORToUnionRule extends TransformationRule {
         List<ColumnFilter> columnFilters = selectivityEvaluator.evaluate();
 
         // already has a predicate can use index and late materialized to filter a large part of rows
-        if (columnFilters.get(0).getSelectRatio() < SELECTIVITY_THRESHOLD) {
+        if (columnFilters.get(0).getSelectRatio() < HIGH_SELECTIVITY) {
             return Lists.newArrayList();
         }
 
@@ -108,7 +112,8 @@ public class SplitScanORToUnionRule extends TransformationRule {
         List<ColumnFilter> remainingFilters = columnFilters.stream().filter(e -> !e.isUnknownSelectRatio())
                 .collect(Collectors.toList());
 
-        Pair<List<ColumnFilter>, List<ColumnFilter>> pair = chooseRewriteColumnFilter(unknownSelectivityFilters, statistics);
+        Pair<List<ColumnFilter>, List<ColumnFilter>> pair = chooseRewriteColumnFilter(unknownSelectivityFilters,
+                statistics, columnFilters.get(0).getSelectRatio());
         if (pair.first == null) {
             return Lists.newArrayList();
         }
@@ -126,7 +131,8 @@ public class SplitScanORToUnionRule extends TransformationRule {
     }
 
     private Pair<List<ColumnFilter>, List<ColumnFilter>> chooseRewriteColumnFilter(List<ColumnFilter> columnFilters,
-                                                                                   Statistics statistics) {
+                                                                                   Statistics statistics,
+                                                                                   double existSelectRatio) {
         List<List<ColumnFilter>> decomposeFilters = Lists.newArrayList();
         for (ColumnFilter columnFilter : columnFilters) {
             ScalarOperator scalarOperator = columnFilter.getFilter();
@@ -137,28 +143,32 @@ public class SplitScanORToUnionRule extends TransformationRule {
         }
 
         int idx = -1;
-        double minSelectRatio = SELECTIVITY_THRESHOLD;
+        double min  = NON_SELECTIVITY;
+
+        int childrenOfUnion = ConnectContext.get().getSessionVariable().getScanOrToUnionLimit();
 
         // choose the columnFilter with minSelectRatio to rewrite
         for (int i = 0; i < decomposeFilters.size(); i++) {
             List<ColumnFilter> filters = decomposeFilters.get(i);
-            if (filters.size() > ConnectContext.get().getSessionVariable().getScanOrToUnionLimit()) {
+            if (filters.size() > childrenOfUnion) {
                 continue;
             }
             double maxSelectRatio = filters.get(filters.size() - 1).getSelectRatio();
-            if (maxSelectRatio < minSelectRatio) {
-                minSelectRatio = maxSelectRatio;
+            if (maxSelectRatio < min) {
+                min = maxSelectRatio;
                 idx = i;
             }
         }
 
-        if (idx == -1) {
-            return Pair.create(null, columnFilters);
-        } else {
+        if (idx != -1) {
             List<ColumnFilter> selectedFilters = decomposeFilters.get(idx);
-            columnFilters.remove(idx);
-            return Pair.create(selectedFilters, columnFilters);
+            double maxSelectRatio = selectedFilters.get(selectedFilters.size() - 1).getSelectRatio();
+            if (canBenefitFromSplit(existSelectRatio, maxSelectRatio)) {
+                columnFilters.remove(idx);
+                return Pair.create(selectedFilters, columnFilters);
+            }
         }
+        return Pair.create(null, columnFilters);
     }
 
     private List<ScalarOperator> rebuildScanPredicate(List<ColumnFilter> decomposeFilters,
@@ -199,5 +209,13 @@ public class SplitScanORToUnionRule extends TransformationRule {
             inputs.add(OptExpression.create(scan));
         }
         return inputs;
+    }
+
+    private boolean canBenefitFromSplit(double existSelectRatio, double splitMaxSelectRatio) {
+        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        int childrenNumOfUnion = sessionVariable.getScanOrToUnionLimit();
+        existSelectRatio = Math.min(1, existSelectRatio);
+        existSelectRatio = Math.min(existSelectRatio, sessionVariable.getSelectRatioThreshold());
+        return splitMaxSelectRatio < existSelectRatio / childrenNumOfUnion;
     }
 }
