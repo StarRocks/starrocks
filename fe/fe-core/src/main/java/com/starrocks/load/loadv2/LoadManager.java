@@ -64,6 +64,7 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.TransactionStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -384,6 +385,25 @@ public class LoadManager implements Writable {
     }
 
     public void removeOldLoadJob() {
+        // 1. record failed insert job
+        for (Map.Entry<Long, LoadJob> entry : idToLoadJob.entrySet()) {
+            LoadJob job = entry.getValue();
+            if (job.getJobType() != EtlJobType.INSERT) {
+                continue;
+            }
+            TransactionStatus st = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelState(job.getDbId(), job.getLabel());
+            if (st == TransactionStatus.UNKNOWN) {
+                try {
+                    recordFinishedOrCacnelledLoadJob(
+                            job.getId(), EtlJobType.INSERT, "Cancelled since transaction status unknown", "");
+                    LOG.info("abort job: {} since transaction status unknown", job.getLabel());
+                } catch (UserException e) {
+                    LOG.warn("failed to abort job: {}", job.getLabel(), e);
+                }
+            }
+        }
+
+        // 2. clean expired load job
         long currentTimeMs = System.currentTimeMillis();
 
         writeLock();
