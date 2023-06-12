@@ -126,7 +126,7 @@ public class Table extends MetaObject implements Writable {
 
     // not serialized field
     // record all materialized views based on this Table
-    private Set<MvId> relatedMaterializedViews;
+    protected Set<MvId> relatedMaterializedViews;
 
     // unique constraints for mv rewrite
     // a table may have multi unique constraints

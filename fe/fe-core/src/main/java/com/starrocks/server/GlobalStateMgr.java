@@ -124,7 +124,6 @@ import com.starrocks.connector.iceberg.IcebergRepository;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.external.elasticsearch.EsRepository;
-import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -338,7 +337,6 @@ public class GlobalStateMgr {
     private Daemon replayer;
     private Daemon timePrinter;
     private EsRepository esRepository;  // it is a daemon, so add it here
-    private StarRocksRepository starRocksRepository;
     private IcebergRepository icebergRepository;
     private MetastoreEventsProcessor metastoreEventsProcessor;
     private ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
@@ -592,7 +590,6 @@ public class GlobalStateMgr {
         this.resourceGroupMgr = new ResourceGroupMgr(this);
 
         this.esRepository = new EsRepository();
-        this.starRocksRepository = new StarRocksRepository();
         this.icebergRepository = new IcebergRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
         this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
@@ -1217,7 +1214,6 @@ public class GlobalStateMgr {
         labelCleaner.start();
         // ES state store
         esRepository.start();
-        starRocksRepository.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             metastoreEventsProcessor.start();
@@ -1291,7 +1287,6 @@ public class GlobalStateMgr {
             localMetastore.recreateTabletInvertIndex();
             // rebuild es state state
             esRepository.loadTableFromCatalog();
-            starRocksRepository.loadTableFromCatalog();
 
             checksum = load.loadLoadJob(dis, checksum);
             checksum = loadAlterJob(dis, checksum);
@@ -2821,14 +2816,9 @@ public class GlobalStateMgr {
         return this.esRepository;
     }
 
-    public StarRocksRepository getStarRocksRepository() {
-        return this.starRocksRepository;
-    }
-
     public IcebergRepository getIcebergRepository() {
         return this.icebergRepository;
     }
-
 
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {
         return this.metastoreEventsProcessor;
