@@ -861,8 +861,15 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
                 return true;
             }
+
             if (txnState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
                     partition.getVisibleVersion() + 1 != txnVersion) {
+                LOG.info("Previous transaction has not finished. txn_id={} partition_version={}, txn_version={}",
+                        txnId, partition.getVisibleVersion(), txnVersion);
+                String errMsg = String.format("wait for publishing partition %d version %d. self version: %d. table %d",
+                                partitionId, partition.getVisibleVersion() + 1,
+                                partitionCommitInfo.getVersion(), tableId);
+                txnState.setErrorMsg(errMsg);
                 return false;
             }
             baseVersion = partition.getVisibleVersion();
