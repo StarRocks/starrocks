@@ -10,11 +10,15 @@ import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.external.starrocks.TableMetaSyncer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -38,6 +42,10 @@ public class InsertAnalyzer {
         MetaUtils.normalizationTableName(session, insertStmt.getTableName());
         Database database = MetaUtils.getStarRocks(session, insertStmt.getTableName());
         Table table = MetaUtils.getStarRocksTable(session, insertStmt.getTableName());
+
+        if (table instanceof ExternalOlapTable) {
+            table = getOLAPExternalTableMeta(database, (ExternalOlapTable) table);
+        }
 
         if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
             throw unsupportedException("Only support insert into olap table or mysql table");
@@ -136,5 +144,26 @@ public class InsertAnalyzer {
         insertStmt.setTargetPartitionIds(targetPartitionIds);
         insertStmt.setTargetColumns(targetColumns);
         session.getDumpInfo().addTable(database.getFullName().split(":")[1], table);
+    }
+
+    private static ExternalOlapTable getOLAPExternalTableMeta(Database database, ExternalOlapTable externalOlapTable) {
+        // copy the table, and release database lock when synchronize table meta
+        ExternalOlapTable copiedTable = new ExternalOlapTable();
+        externalOlapTable.copyOnlyForQuery(copiedTable);
+        int lockTimes = 0;
+        while (database.isReadLockHeldByCurrentThread()) {
+            database.readUnlock();
+            lockTimes++;
+        }
+        try {
+            new TableMetaSyncer().syncTable(copiedTable);
+        }  catch (MetaNotFoundException e) {
+            throw new SemanticException(e.getMessage());
+        } finally {
+            while (lockTimes-- > 0) {
+                database.readLock();
+            }
+        }
+        return copiedTable;
     }
 }
