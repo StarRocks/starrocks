@@ -208,8 +208,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                                 const TabletMetaSharedPtr& new_tablet_meta, MemPool* mem_pool) {
     if (new_chunk->num_columns() != _schema_mapping.size()) {
         LOG(WARNING) << "new chunk does not match with schema mapping rules. "
-                     << "base_tablet_id=" << base_tablet_meta->tablet_schema()->table_id()
-                     << ", new_tablet_id=" << new_tablet_meta->tablet_schema()->table_id()
+                     << "base_tablet_id=" << base_tablet_meta->tablet_id()
+                     << ", new_tablet_id=" << new_tablet_meta->tablet_id()
                      << ", chunk_schema_size=" << new_chunk->num_columns()
                      << ", mapping_schema_size=" << _schema_mapping.size();
         return false;
@@ -217,8 +217,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
     if (_has_mv_expr_context) {
         if (base_chunk->num_columns() != _slot_id_to_index_map.size()) {
             LOG(WARNING) << "base chunk does not match with _slot_id_to_index_map mapping rules. "
-                         << "base_tablet_id=" << base_tablet_meta->tablet_schema()->table_id()
-                         << ", new_tablet_id=" << new_tablet_meta->tablet_schema()->table_id()
+                         << "base_tablet_id=" << base_tablet_meta->tablet_id()
+                         << ", new_tablet_id=" << new_tablet_meta->tablet_id()
                          << ", base_chunk_size=" << base_chunk->num_columns()
                          << ", slot_id_to_index_map's size=" << _slot_id_to_index_map.size();
             return false;
@@ -234,7 +234,9 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
         if (ref_column >= 0) {
             if (_schema_mapping[i].mv_expr_ctx != nullptr) {
                 auto new_col_status = (_schema_mapping[i].mv_expr_ctx)->evaluate(base_chunk.get());
-                RETURN_IF_ERROR(new_col_status.status());
+                if (!new_col_status.ok()) {
+                    return false;
+                }
                 auto new_col = new_col_status.value();
                 // TODO: no need to unpack const column later.
                 new_col = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
@@ -286,8 +288,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                     auto converter = get_type_converter(ref_type, new_type);
                     if (converter == nullptr) {
                         LOG(WARNING) << "failed to get type converter, from_type=" << ref_type << ", to_type"
-                                     << new_type << ", base_tablet_id=" << base_tablet_meta->tablet_schema()->table_id()
-                                     << ", new_tablet_id=" << new_tablet_meta->tablet_schema()->table_id();
+                                     << new_type << ", base_tablet_id=" << base_tablet_meta->tablet_id()
+                                     << ", new_tablet_id=" << new_tablet_meta->tablet_id();
                         return false;
                     }
 
@@ -300,8 +302,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                     if (!st.ok()) {
                         LOG(WARNING) << "failed to convert " << logical_type_to_string(ref_type) << " to "
                                      << logical_type_to_string(new_type)
-                                     << ", base_tablet_id=" << base_tablet_meta->tablet_schema()->table_id()
-                                     << ", new_tablet_id=" << new_tablet_meta->tablet_schema()->table_id();
+                                     << ", base_tablet_id=" << base_tablet_meta->tablet_id()
+                                     << ", new_tablet_id=" << new_tablet_meta->tablet_id();
                         return false;
                     }
                 } else {
@@ -326,8 +328,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                     default:
                         LOG(WARNING) << "the column type which was altered from was unsupported."
                                      << " from_type=" << ref_type << ", to_type=" << new_type
-                                     << ", base_tablet_id=" << base_tablet_meta->tablet_schema()->table_id()
-                                     << ", new_tablet_id=" << new_tablet_meta->tablet_schema()->table_id();
+                                     << ", base_tablet_id=" << base_tablet_meta->tablet_id()
+                                     << ", new_tablet_id=" << new_tablet_meta->tablet_id();
                         ;
                         return false;
                     }
@@ -336,8 +338,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                                   << "column=" << new_tablet_meta->tablet_schema().column(i).name()
                                   << ", origin_type=" << logical_type_to_string(ref_type)
                                   << ", alter_type=" << logical_type_to_string(new_type)
-                                  << ", base_tablet_id=" << base_tablet_meta->tablet_schema()->table_id()
-                                  << ", new_tablet_id=" << new_tablet_meta->tablet_schema()->table_id();
+                                  << ", base_tablet_id=" << base_tablet_meta->tablet_id()
+                                  << ", new_tablet_id=" << new_tablet_meta->tablet_id();
                         ;
                     }
                 }
@@ -356,7 +358,7 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                                    const Schema& new_schema, MemPool* mem_pool) {
     if (new_chunk->num_columns() != _schema_mapping.size()) {
         LOG(WARNING) << "new chunk does not match with schema mapping rules. "
-                     << "base_tablet_id=" << base_tablet_meta->tablet_schema()->table_id()
+                     << "chunk_schema_size=" << new_chunk->num_columns()
                      << ", mapping_schema_size=" << _schema_mapping.size();
         return false;
     }
@@ -378,7 +380,9 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
         if (ref_column >= 0) {
             if (_schema_mapping[i].mv_expr_ctx != nullptr) {
                 auto new_col_status = (_schema_mapping[i].mv_expr_ctx)->evaluate(base_chunk.get());
-                RETURN_IF_ERROR(new_col_status.status());
+                if (!new_col_status.ok()) {
+                    return false;
+                }
                 auto new_col = new_col_status.value();
                 new_col = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
                 new_chunk->update_column_by_index(new_col, i);
