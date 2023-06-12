@@ -344,7 +344,7 @@ TEST_F(LakePrimaryKeyPublishTest, test_write_fail_retry) {
 TEST_F(LakePrimaryKeyPublishTest, test_publish_multi_times) {
     auto saved_max_versions = config::lake_gc_metadata_max_versions;
     // Prevent the old tablet metadata files been removed
-     config::lake_gc_metadata_max_versions = 10;
+    config::lake_gc_metadata_max_versions = 10;
 
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
     auto txns = std::vector<int64_t>();
