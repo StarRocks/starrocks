@@ -40,6 +40,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -54,6 +55,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 public class SimpleScheduler {
@@ -98,6 +100,19 @@ public class SimpleScheduler {
                             && !blacklistBackends.containsKey(location.backend_id)) {
                         backendIdRef.setRef(location.backend_id);
                         return new TNetworkAddress(candidateBackend.getHost(), candidateBackend.getBePort());
+                    }
+                }
+
+                // In shared data mode, we can select any alive node to replace the original dead node for query
+                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                    List<Backend> candidateNodes = backends.values().stream()
+                            .filter(x -> x.getId() != backendId && x.isAlive() &&
+                                    !blacklistBackends.containsKey(x.getId())).collect(Collectors.toList());
+                    if (!candidateNodes.isEmpty()) {
+                        // use modulo operation to ensure that the same node is selected for the dead node
+                        Backend candidateNode = candidateNodes.get((int) (backendId % candidateNodes.size()));
+                        backendIdRef.setRef(candidateNode.getId());
+                        return new TNetworkAddress(candidateNode.getHost(), candidateNode.getBePort());
                     }
                 }
             }
