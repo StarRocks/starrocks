@@ -30,6 +30,7 @@
 namespace starrocks::spill {
 using FlushCallBack = std::function<Status(const ChunkPtr&)>;
 class SpillInputStream;
+class Spiller;
 
 //  This component is the intermediate buffer for our spill data, which may be ordered or unordered,
 // depending on the requirements of the upper layer
@@ -45,8 +46,8 @@ class SpillInputStream;
 
 class SpillableMemTable {
 public:
-    SpillableMemTable(RuntimeState* state, size_t max_buffer_size, MemTracker* parent)
-            : _runtime_state(state), _max_buffer_size(max_buffer_size) {
+    SpillableMemTable(RuntimeState* state, size_t max_buffer_size, MemTracker* parent, Spiller* spiller)
+            : _runtime_state(state), _max_buffer_size(max_buffer_size), _spiller(spiller) {
         _tracker = std::make_unique<MemTracker>(-1, "spill-mem-table", parent);
     }
     virtual ~SpillableMemTable() {
@@ -75,6 +76,7 @@ protected:
     RuntimeState* _runtime_state;
     const size_t _max_buffer_size;
     std::unique_ptr<MemTracker> _tracker;
+    Spiller* _spiller = nullptr;
 };
 
 using MemTablePtr = std::shared_ptr<SpillableMemTable>;

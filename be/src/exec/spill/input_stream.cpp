@@ -20,6 +20,7 @@
 
 #include "exec/spill/block_manager.h"
 #include "exec/spill/serde.h"
+#include "exec/spill/spiller.h"
 #include "runtime/sorted_chunks_merger.h"
 #include "util/blocking_queue.hpp"
 #include "util/defer_op.h"
@@ -97,7 +98,8 @@ StatusOr<ChunkUniquePtr> UnionAllSpilledInputStream::get_next(SerdeContext& cont
 // The raw chunk input stream. all chunks are in memory.
 class RawChunkInputStream final : public SpillInputStream {
 public:
-    RawChunkInputStream(std::vector<ChunkPtr> chunks) : _chunks(std::move(chunks)) {}
+    RawChunkInputStream(std::vector<ChunkPtr> chunks, Spiller* spiller)
+            : _chunks(std::move(chunks)), _spiller(spiller) {}
     StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) override;
 
     bool is_ready() override { return true; };
@@ -113,6 +115,7 @@ public:
 private:
     size_t read_idx{};
     std::vector<ChunkPtr> _chunks;
+    Spiller* _spiller = nullptr;
 };
 
 StatusOr<ChunkUniquePtr> RawChunkInputStream::get_next(SerdeContext& context) {
@@ -135,13 +138,14 @@ InputStreamPtr SpillInputStream::union_all(std::vector<InputStreamPtr>& _streams
     return std::make_shared<UnionAllSpilledInputStream>(_streams);
 }
 
-InputStreamPtr SpillInputStream::as_stream(std::vector<ChunkPtr> chunks) {
-    return std::make_shared<RawChunkInputStream>(chunks);
+InputStreamPtr SpillInputStream::as_stream(std::vector<ChunkPtr> chunks, Spiller* spiller) {
+    return std::make_shared<RawChunkInputStream>(chunks, spiller);
 }
 
 class BufferedInputStream : public SpillInputStream {
 public:
-    BufferedInputStream(int capacity, InputStreamPtr stream) : _capacity(capacity), _input_stream(std::move(stream)) {}
+    BufferedInputStream(int capacity, InputStreamPtr stream, Spiller* spiller)
+            : _capacity(capacity), _input_stream(std::move(stream)), _spiller(spiller) {}
     ~BufferedInputStream() override = default;
 
     bool is_buffer_full() { return _chunk_buffer.get_size() >= _capacity; }
@@ -176,6 +180,7 @@ private:
     InputStreamPtr _input_stream;
     UnboundedBlockingQueue<ChunkUniquePtr> _chunk_buffer;
     std::atomic_bool _is_prefetching = false;
+    Spiller* _spiller = nullptr;
 };
 
 StatusOr<ChunkUniquePtr> BufferedInputStream::read_from_buffer() {
@@ -185,6 +190,7 @@ StatusOr<ChunkUniquePtr> BufferedInputStream::read_from_buffer() {
     }
     ChunkUniquePtr res;
     CHECK(_chunk_buffer.try_get(&res));
+    COUNTER_ADD(_spiller->metrics().input_stream_peak_memory_usage, -res->memory_usage());
     return res;
 }
 
@@ -209,6 +215,7 @@ Status BufferedInputStream::prefetch(SerdeContext& ctx) {
 
     auto res = _input_stream->get_next(ctx);
     if (res.ok()) {
+        COUNTER_ADD(_spiller->metrics().input_stream_peak_memory_usage, res.value()->memory_usage());
         _chunk_buffer.put(std::move(res.value()));
         return Status::OK();
     } else if (res.status().is_end_of_file()) {
@@ -276,7 +283,7 @@ public:
 
     ~OrderedInputStream() override = default;
 
-    Status init(SerdePtr serde, const SortExecExprs* sort_exprs, const SortDescs* descs);
+    Status init(SerdePtr serde, const SortExecExprs* sort_exprs, const SortDescs* descs, Spiller* spiller);
 
     StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) override;
     bool is_ready() override {
@@ -297,14 +304,15 @@ private:
     Status _status;
 };
 
-Status OrderedInputStream::init(SerdePtr serde, const SortExecExprs* sort_exprs, const SortDescs* descs) {
+Status OrderedInputStream::init(SerdePtr serde, const SortExecExprs* sort_exprs, const SortDescs* descs,
+                                Spiller* spiller) {
     std::vector<starrocks::ChunkProvider> chunk_providers;
     DCHECK(!_input_blocks.empty());
 
     for (auto& block : _input_blocks) {
         std::vector<BlockPtr> blocks{block};
-        auto stream = std::make_shared<BufferedInputStream>(chunk_buffer_max_size,
-                                                            std::make_shared<UnorderedInputStream>(blocks, serde));
+        auto stream = std::make_shared<BufferedInputStream>(
+                chunk_buffer_max_size, std::make_shared<UnorderedInputStream>(blocks, serde), spiller);
         _input_streams.emplace_back(std::move(stream));
         auto input_stream = _input_streams.back();
         auto chunk_provider = [input_stream, this](ChunkUniquePtr* output, bool* eos) {
@@ -363,15 +371,15 @@ Status OrderedInputStream::prefetch(SerdeContext& ctx) {
     return Status::OK();
 }
 
-StatusOr<InputStreamPtr> BlockGroup::as_unordered_stream(const SerdePtr& serde) {
+StatusOr<InputStreamPtr> BlockGroup::as_unordered_stream(const SerdePtr& serde, Spiller* spiller) {
     auto stream = std::make_shared<UnorderedInputStream>(_blocks, serde);
-    return std::make_shared<BufferedInputStream>(chunk_buffer_max_size, std::move(stream));
+    return std::make_shared<BufferedInputStream>(chunk_buffer_max_size, std::move(stream), spiller);
 }
 
-StatusOr<InputStreamPtr> BlockGroup::as_ordered_stream(RuntimeState* state, const SerdePtr& serde,
+StatusOr<InputStreamPtr> BlockGroup::as_ordered_stream(RuntimeState* state, const SerdePtr& serde, Spiller* spiller,
                                                        const SortExecExprs* sort_exprs, const SortDescs* sort_descs) {
     auto stream = std::make_shared<OrderedInputStream>(_blocks, state);
-    RETURN_IF_ERROR(stream->init(serde, sort_exprs, sort_descs));
+    RETURN_IF_ERROR(stream->init(serde, sort_exprs, sort_descs, spiller));
     return stream;
 }
 
