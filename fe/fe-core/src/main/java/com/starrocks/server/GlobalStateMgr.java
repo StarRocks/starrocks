@@ -298,8 +298,8 @@ public class GlobalStateMgr {
     private Daemon timePrinter;
     private Daemon listener;
     private EsRepository esRepository;  // it is a daemon, so add it here
-    private StarRocksRepository starRocksRepository;
     private HiveRepository hiveRepository;
+    private IcebergRepository icebergRepository;
     private MetastoreEventsProcessor metastoreEventsProcessor;
     private IcebergRepository icebergRepository;
 
@@ -510,7 +510,6 @@ public class GlobalStateMgr {
         this.workGroupMgr = new WorkGroupMgr(this);
 
         this.esRepository = new EsRepository();
-        this.starRocksRepository = new StarRocksRepository();
         this.hiveRepository = new HiveRepository();
         this.icebergRepository = new IcebergRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor(hiveRepository);
@@ -1044,7 +1043,6 @@ public class GlobalStateMgr {
         labelCleaner.start();
         // ES state store
         esRepository.start();
-        starRocksRepository.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             // load hive table to event processor and start to process hms events.
@@ -1122,7 +1120,6 @@ public class GlobalStateMgr {
             localMetastore.recreateTabletInvertIndex();
             // rebuild es state state
             esRepository.loadTableFromCatalog();
-            starRocksRepository.loadTableFromCatalog();
 
             checksum = load.loadLoadJob(dis, checksum);
             checksum = loadAlterJob(dis, checksum);
@@ -2476,12 +2473,12 @@ public class GlobalStateMgr {
         return this.esRepository;
     }
 
-    public StarRocksRepository getStarRocksRepository() {
-        return this.starRocksRepository;
-    }
-
     public HiveRepository getHiveRepository() {
         return this.hiveRepository;
+    }
+
+    public IcebergRepository getIcebergRepository() {
+        return this.icebergRepository;
     }
 
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {

@@ -1101,7 +1101,12 @@ public class StmtExecutor {
 
         MetaUtils.normalizationTableName(context, stmt.getTableName());
         Database database = MetaUtils.getStarRocks(context, stmt.getTableName());
-        Table targetTable = MetaUtils.getStarRocksTable(context, stmt.getTableName());
+        Table targetTable;
+        if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
+            targetTable = ((InsertStmt) stmt).getTargetTable();
+        } else {
+            targetTable = MetaUtils.getStarRocksTable(context, stmt.getTableName());
+        }
 
         String label = DebugUtil.printId(context.getExecutionId());
         if (stmt instanceof InsertStmt) {
