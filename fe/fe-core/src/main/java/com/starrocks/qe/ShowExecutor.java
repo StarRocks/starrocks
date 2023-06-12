@@ -1896,7 +1896,7 @@ public class ShowExecutor {
         // Comment
         String comment = catalog.getComment();
         if (comment != null) {
-            createCatalogSql.append("comment \"").append(catalog.getComment()).append("\"\n");
+            createCatalogSql.append("comment \"").append(catalog.getDisplayComment()).append("\"\n");
         }
 
         Map<String, String> clonedConfig = new HashMap<>(catalog.getConfig());
