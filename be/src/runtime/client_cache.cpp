@@ -147,13 +147,21 @@ Status ClientCacheHelper::create_client(const TNetworkAddress& hostport, const c
 void ClientCacheHelper::release_client(void** client_key) {
     DCHECK(*client_key != nullptr) << "Trying to release NULL client";
     std::lock_guard<std::mutex> lock(_lock);
-    auto client_map_entry = _client_map.find(*client_key);
-    DCHECK(client_map_entry != _client_map.end());
-    ThriftClientImpl* info = client_map_entry->second;
-    auto j = _client_cache.find(make_network_address(info->ipaddress(), info->port()));
-    DCHECK(j != _client_cache.end());
 
-    if (_max_cache_size_per_host >= 0 && j->second.size() >= _max_cache_size_per_host) {
+    auto client_map_entry = _client_map.find(*client_key);
+    if (client_map_entry == _client_map.end()) {
+        *client_key = nullptr;
+        return;
+    }
+
+    ThriftClientImpl* info = client_map_entry->second;
+    auto iter = _client_cache.find(make_network_address(info->ipaddress(), info->port()));
+    if (iter == _client_cache.end()) {
+        *client_key = nullptr;
+        return;
+    }
+
+    if (_max_cache_size_per_host >= 0 && iter->second.size() >= _max_cache_size_per_host) {
         // cache of this host is full, close this client connection and remove if from _client_map
         info->close();
         _client_map.erase(*client_key);
@@ -163,7 +171,7 @@ void ClientCacheHelper::release_client(void** client_key) {
             _opened_clients->increment(-1);
         }
     } else {
-        j->second.push_back(*client_key);
+        iter->second.push_back(*client_key);
     }
 
     if (_metrics_enabled) {
@@ -206,20 +214,6 @@ std::string ClientCacheHelper::debug_string() {
 
     out << "])";
     return out.str();
-}
-
-void ClientCacheHelper::test_shutdown() {
-    std::vector<TNetworkAddress> hostports;
-    {
-        std::lock_guard<std::mutex> lock(_lock);
-        for (const ClientCacheMap::value_type& i : _client_cache) {
-            hostports.push_back(i.first);
-        }
-    }
-
-    for (auto& hostport : hostports) {
-        close_connections(hostport);
-    }
 }
 
 void ClientCacheHelper::init_metrics(MetricRegistry* metrics, const std::string& key_prefix) {
