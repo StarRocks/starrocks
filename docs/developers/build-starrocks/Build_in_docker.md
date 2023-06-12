@@ -9,8 +9,8 @@ The dev environment image was named as `dev-env`, and was a CentOS7 based image,
 | main             | starrocks/dev-env-ubuntu:latest     |
 | branch-3.0       | starrocks/dev-env-ubuntu:3.0-latest |
 | branch-2.5       | starrocks/dev-env-ubuntu:2.5-latest |
-| branch-2.4       | starrocks/dev-env:branch-2.4        |
-| branch-2.3       | starrocks/dev-env:branch-2.3        |
+| branch-2.4       | starrocks/dev-env-centos7:2.4-latest|
+| branch-2.3       | starrocks/dev-env-centos7:2.3-latest|
 
 ## Download the image
 
