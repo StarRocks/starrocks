@@ -126,8 +126,13 @@ public class ColocateTableIndex implements Writable {
     private Map<GroupId, List<List<Long>>> group2BackendsPerBucketSeq = Maps.newHashMap();
     // the colocate group is unstable
     private Set<GroupId> unstableGroups = Sets.newHashSet();
+<<<<<<< HEAD
+=======
+    // lake group, in memory
+    private final Set<GroupId> lakeGroups = Sets.newHashSet();
+>>>>>>> 98063ba44 ([BugFix] Fix colocate table across different db not working (#24996))
 
-    private transient ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final transient ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public ColocateTableIndex() {
 
@@ -154,7 +159,12 @@ public class ColocateTableIndex implements Writable {
     public GroupId addTableToGroup(long dbId, OlapTable tbl, String groupName, GroupId assignedGroupId) {
         writeLock();
         try {
+<<<<<<< HEAD
             GroupId groupId = null;
+=======
+            boolean groupAlreadyExist = true;
+            GroupId groupId;
+>>>>>>> 98063ba44 ([BugFix] Fix colocate table across different db not working (#24996))
             String fullGroupName = dbId + "_" + groupName;
 
             if (groupName2Id.containsKey(fullGroupName)) {
@@ -559,7 +569,7 @@ public class ColocateTableIndex implements Writable {
                 info.add(String.valueOf(groupSchema.getBucketsNum()));
                 info.add(String.valueOf(groupSchema.getReplicationNum()));
                 List<String> cols = groupSchema.getDistributionColTypes().stream().map(
-                        e -> e.toSql()).collect(Collectors.toList());
+                        Type::toSql).collect(Collectors.toList());
                 info.add(Joiner.on(", ").join(cols));
                 info.add(String.valueOf(!unstableGroups.contains(groupId)));
                 infos.add(info);
@@ -775,7 +785,9 @@ public class ColocateTableIndex implements Writable {
     private List<GroupId> getOtherGroupsWithSameOrigNameUnlocked(String origName, long dbId) {
         List<GroupId> groupIds = new ArrayList<>();
         for (Map.Entry<String, GroupId> entry : groupName2Id.entrySet()) {
-            if (entry.getKey().split("_")[1].equals(origName) &&
+            // Get existed group original name
+            String existedGroupOrigName = entry.getKey().split("_", 2)[1];
+            if (existedGroupOrigName.equals(origName) &&
                     entry.getValue().dbId != dbId) {
                 groupIds.add(entry.getValue());
             }
