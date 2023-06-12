@@ -14,13 +14,10 @@
 
 ## 注意事项
 
-- 当前版本中，INSERT 语句导入方式仅支持在 MySQL 客户端通过 `Ctrl` + `C` 按键强制取消。
-
-- 当前版本中，StarRocks 在执行 INSERT 语句时，如果有数据不符合目标表格式的数据（例如字符串超长等情况），INSERT 操作默认执行失败。您可以通过设置会话变量 `enable_insert_strict` 为 `false` 以确保 INSERT 操作过滤不符合目标表格式的数据，并继续执行。
-
+- 您只能在 MySQL 客户端通过 `Ctrl` + `C` 按键强制取消同步 INSERT 导入任务。
+- 当前版本中，StarRocks 在执行 INSERT 语句时，如果有数据不符合目标表格式（例如字符串超长等情况），INSERT 操作默认执行失败。您可以通过设置会话变量 `enable_insert_strict` 为 `false` 以确保 INSERT 操作过滤不符合目标表格式的数据，并继续执行。
 - 频繁使用 INSERT 语句导入小批量数据会产生过多的数据版本，从而影响查询性能，因此不建议您频繁使用 INSERT 语句导入数据或将其作为生产环境的日常例行导入作业。如果您的业务场景需要流式导入或者小批量多次导入数据，建议使用 Apache Kafka® 作为数据源并通过 [Routine Load](../loading/RoutineLoad.md) 方式进行导入作业。
-
-- 执行 INSERT OVERWRITE 语句后，系统将为目标分区创建相应的临时分区，并将数据写入临时分区，最后使用临时分区原子替换目标分区来实现覆盖写入。其所有过程均在在 Leader FE 节点执行。因此，如果 Leader FE 节点在覆盖写入过程中发生宕机，将会导致该次 INSERT OVERWRITE 导入失败，其过程中所创建的临时分区也会被删除。
+- 执行 INSERT OVERWRITE 语句后，系统将为目标分区创建相应的临时分区，并将数据写入临时分区，最后使用临时分区[原子替换](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md#使用临时分区替换原分区)目标分区来实现覆盖写入。其所有过程均在 Leader FE 节点执行。因此，如果 Leader FE 节点在覆盖写入过程中发生宕机，将会导致该次 INSERT OVERWRITE 导入失败，其过程中所创建的临时分区也会被删除。
 
 ## 准备工作
 
@@ -186,7 +183,7 @@ SELECT event_time, channel FROM source_wiki_edit;
 | table_name  | 导入数据的目标表。可以为 `db_name.table_name` 形式。         |
 | partitions  | 导入的目标分区。此参数必须是目标表中存在的分区，多个分区名称用逗号（`,`）分隔。如果指定该参数，数据只会被导入相应分区内。如果未指定，则默认将数据导入至目标表的所有分区。 |
 | label       | 导入作业的标识，数据库内唯一。如果未指定，StarRocks 会自动为作业生成一个 Label。建议您指定 Label。否则，如果当前导入作业因网络错误无法返回结果，您将无法得知该导入操作是否成功。如果指定了 Label，可以通过 SQL 命令 `SHOW LOAD WHERE label="label"` 查看作业结果。 |
-| column_name | 导入的目标列，必须是目标表中存在的列。该参数的对应关系与列名无关，但与其顺序一一对应。如果不指定目标列，默认为目标表中的所有列。如果源表中的某个列在目标列不存在，则写入默认值。如果当前列没有默认值，导入作业会失败。如果查询语句的结果列类型与目标列的类型不一致，会进行隐式转化，如果不能进行转化，那么 INSERT INTO 语句会报语法解析错误。 |
+| column_name | 导入的目标列，必须是目标表中存在的列。该参数与导入数据的列的名称可以不同，但顺序需一一对应。如果不指定目标列，默认为目标表中的所有列。如果源表中的某个列在目标列不存在，则写入默认值。如果当前列没有默认值，导入作业会失败。如果查询语句的结果列类型与目标列的类型不一致，会进行隐式转化，如果不能进行转化，那么 INSERT INTO 语句会报语法解析错误。 |
 | query       | 查询语句，查询的结果会导入至目标表中。查询语句支持任意 StarRocks 支持的 SQL 查询语法。 |
 
 ## 通过 INSERT OVERWRITE VALUES 语句覆盖写入数据
@@ -284,13 +281,13 @@ WITH LABEL insert_load_wikipedia_ow_3
 SELECT event_time, channel FROM source_wiki_edit;
 ```
 
-## **查看导入作业状态**
+## 查看导入作业状态
 
-### 通过结果返回查看
+### 通过返回结果查看
 
 INSERT 导入作业会根据执行结果的不同，返回以下两种作业状态：
 
-- ***\*执行成功\****
+- **执行成功**
 
 如果导入执行成功，StarRocks 的返回如下：
 
@@ -306,7 +303,7 @@ Query OK, 2 rows affected, 2 warnings (0.05 sec)
 | status        | 表示导入数据是否可见。VISIBLE 表示可见，COMMITTED 表示已提交但暂不可见。 |
 | txnId         | 该 INSERT 导入对应的导入事务 ID。                            |
 
-- ***\*执行失败\****
+- **执行失败**
 
 如果所有数据都无法被导入，则导入执行失败，StarRocks 将返回相应错误以及 `tracking_url`。您可以通过 `tracking_url` 查看错误相关的日志信息并排查问题。
 
@@ -316,7 +313,7 @@ ERROR 1064 (HY000): Insert has filtered data in strict mode, tracking_url=http:/
 
 ### 通过 SHOW LOAD 语句查看
 
-您可以通过 SHOW LOAD 语句查看 INSERT 导入作业状态。
+您可以通过 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句查看 INSERT 导入作业状态。
 
 以下示例通过 SHOW LOAD 语句查看 Label 为 `insert_load_wikipedia` 的导入作业状态。
 
@@ -328,21 +325,27 @@ SHOW LOAD WHERE label="insert_load_wikipedia"\G
 
 ```Plain
 *************************** 1. row ***************************
-         JobId: 13525
+         JobId: 10278
          Label: insert_load_wikipedia
          State: FINISHED
       Progress: ETL:100%; LOAD:100%
           Type: INSERT
+      Priority: NORMAL
+      ScanRows: 0
+  FilteredRows: 0
+UnselectedRows: 0
+      SinkRows: 2
        EtlInfo: NULL
-      TaskInfo: cluster:N/A; timeout(s):3600; max_filter_ratio:0.0
+      TaskInfo: resource:N/A; timeout(s):300; max_filter_ratio:0.0
       ErrorMsg: NULL
-    CreateTime: 2022-08-02 11:41:26
-  EtlStartTime: 2022-08-02 11:41:26
- EtlFinishTime: 2022-08-02 11:41:26
- LoadStartTime: 2022-08-02 11:41:26
-LoadFinishTime: 2022-08-02 11:41:26
-           URL: 
-    JobDetails: {"Unfinished backends":{},"ScannedRows":0,"TaskNumber":0,"All backends":{},"FileNumber":0,"FileSize":0}
+    CreateTime: 2023-06-12 18:31:07
+  EtlStartTime: 2023-06-12 18:31:07
+ EtlFinishTime: 2023-06-12 18:31:07
+ LoadStartTime: 2023-06-12 18:31:07
+LoadFinishTime: 2023-06-12 18:31:08
+   TrackingSQL: 
+    JobDetails: {"All backends":{"3d96e21a-090c-11ee-9083-00163e0e2cf9":[10142]},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":175,"InternalTableLoadRows":2,"ScanBytes":0,"ScanRows":0,"TaskNumber":1,"Unfinished backends":{"3d96e21a-090c-11ee-9083-00163e0e2cf9":[]}}
+1 row in set (0.00 sec)
 ```
 
 ### 通过 curl 命令查看
@@ -350,8 +353,8 @@ LoadFinishTime: 2022-08-02 11:41:26
 您可以通过 curl 命令查看 INSERT 导入作业状态。
 
 ```Plain
-curl --location-trusted -u {user}:{passwd} \
-  http://{hostname}:{port}/api/{database}/_load_info?label={labelname}
+curl --location-trusted -u <username>:<password> \
+  http://<fe_address>:<fe_http_port>/api/<db_name>/_load_info?label=<label_name>
 ```
 
 以下示例通过 curl 命令查看 Label 为 `insert_load_wikipedia` 的导入作业状态。
@@ -369,19 +372,18 @@ curl --location-trusted -u <username>:<password> \
 
 ```Plain
 {
-  "jobInfo": {
-    "dbName": "default_cluster:load_test",
-    "tblNames": [
-      "source_wiki_edit"
-    ],
-    "label": "insert_load_wikipedia",
-    "clusterName": "default_cluster",
-    "state": "FINISHED",
-    "failMsg": "",
-    "trackingUrl": ""
-  },
-  "status": "OK",
-  "msg": "Success"
+   "jobInfo":{
+      "dbName":"load_test",
+      "tblNames":[
+         "source_wiki_edit"
+      ],
+      "label":"insert_load_wikipedia",
+      "state":"FINISHED",
+      "failMsg":"",
+      "trackingUrl":""
+   },
+   "status":"OK",
+   "msg":"Success"
 }
 ```
 
@@ -399,5 +401,5 @@ curl --location-trusted -u <username>:<password> \
 
 | Session 变量         | 说明                                                         |
 | -------------------- | ------------------------------------------------------------ |
-| enable_insert_strict | INSERT 导入是否容忍错误数据行。设置为 `true` 时，如果有一条数据错误，则返回导入失败。设置为 `false` 时，如果至少有一条数据被正确导入，则返回导入成功，并会返回一个 Label。该参数默认为 `true`。您可以通过 `SET enable_insert_strict = {true | false};` 命令来设定该参数。 |
+| enable_insert_strict | INSERT 导入是否容忍错误数据行。设置为 `true` 时，如果有一条数据错误，则返回导入失败。设置为 `false` 时，如果至少有一条数据被正确导入，则返回导入成功，并会返回一个 Label。该参数默认为 `true`。您可以通过 `SET enable_insert_strict = {true or false};` 命令来设定该参数。 |
 | query_timeout        | SQL 命令的超时时间，单位为秒。INSERT 语句作为 SQL 命令，同样受到该 Session 变量的限制。您可以通过 `SET query_timeout = xxx;` 命令来设定该参数。 |
