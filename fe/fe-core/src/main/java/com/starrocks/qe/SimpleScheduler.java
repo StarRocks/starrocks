@@ -124,11 +124,11 @@ public class SimpleScheduler {
                     allNodes.addAll(backends.values());
                     allNodes.addAll(computeNodes.values());
                     List<ComputeNode> candidateNodes = allNodes.stream()
-                            .filter(x -> x.getId() != backendId && x.isAlive() &&
+                            .filter(x -> x.getId() != nodeId && x.isAlive() &&
                                     !blacklistBackends.containsKey(x.getId())).collect(Collectors.toList());
                     if (!candidateNodes.isEmpty()) {
                         // use modulo operation to ensure that the same node is selected for the dead node
-                        ComputeNode candidateNode = candidateNodes.get((int) (backendId % candidateNodes.size()));
+                        ComputeNode candidateNode = candidateNodes.get((int) (nodeId % candidateNodes.size()));
                         backendIdRef.setRef(candidateNode.getId());
                         return new TNetworkAddress(candidateNode.getHost(), candidateNode.getBePort());
                     }
