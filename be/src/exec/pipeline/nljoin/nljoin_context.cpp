@@ -82,7 +82,7 @@ StatusOr<ChunkPtr> SpillableNLJoinChunkStream::get_next(RuntimeState* state, spi
 Status SpillableNLJoinChunkStream::reset(RuntimeState* state, spill::Spiller* dummy_spiller) {
     std::vector<spill::InputStreamPtr> spilled_input_streams;
 
-    auto stream = spill::SpillInputStream::as_stream(_build_chunks);
+    auto stream = spill::SpillInputStream::as_stream(_build_chunks, dummy_spiller);
     spilled_input_streams.emplace_back(std::move(stream));
 
     //

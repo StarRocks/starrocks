@@ -709,7 +709,7 @@ public:
 
     void remove_duplicate_index(Filter* filter);
 
-    int64_t mem_usage();
+    int64_t mem_usage() const;
 
 private:
     JoinHashMapType _choose_join_hash_map();

@@ -42,6 +42,8 @@ Status SpillableHashJoinBuildOperator::prepare(RuntimeState* state) {
     if (state->spill_mode() == TSpillMode::FORCE) {
         set_spill_strategy(spill::SpillStrategy::SPILL_ALL);
     }
+    _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
+            "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     return Status::OK();
 }
 

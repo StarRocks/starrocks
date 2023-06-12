@@ -48,6 +48,8 @@ private:
 struct SpillableHashJoinProbeMetrics {
     RuntimeProfile::Counter* hash_partitions = nullptr;
     RuntimeProfile::Counter* probe_shuffle_timer = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* prober_peak_memory_usage = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* build_partition_peak_memory_usage = nullptr;
 };
 
 class SpillableHashJoinProbeOperator final : public HashJoinProbeOperator {

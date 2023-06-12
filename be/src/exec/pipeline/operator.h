@@ -236,7 +236,12 @@ public:
 
     // the memory that can be freed by the current operator
     size_t revocable_mem_bytes() { return _revocable_mem_bytes; }
-    void set_revocable_mem_bytes(size_t bytes) { _revocable_mem_bytes = bytes; }
+    void set_revocable_mem_bytes(size_t bytes) {
+        _revocable_mem_bytes = bytes;
+        if (_peak_revocable_mem_bytes) {
+            COUNTER_SET(_peak_revocable_mem_bytes, _revocable_mem_bytes);
+        }
+    }
     int32_t get_driver_sequence() const { return _driver_sequence; }
     OperatorFactory* get_factory() const { return _factory; }
 
@@ -295,6 +300,10 @@ protected:
     RuntimeProfile::Counter* _conjuncts_timer = nullptr;
     RuntimeProfile::Counter* _conjuncts_input_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_output_counter = nullptr;
+
+    // only used in spillable operator to record peak revocable memory bytes,
+    // each operator should initialize it before use
+    RuntimeProfile::HighWaterMarkCounter* _peak_revocable_mem_bytes = nullptr;
 
     // Some extra cpu cost of this operator that not accounted by pipeline driver,
     // such as OlapScanOperator( use separated IO thread to execute the IO task)
