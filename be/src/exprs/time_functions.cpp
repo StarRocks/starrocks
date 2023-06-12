@@ -33,6 +33,9 @@ static int day_to_first[8] = {0 /*never use*/, 6, 0, 1, 2, 3, 4, 5};
 // avoid format function OOM, the value just based on experience
 const static int DEFAULT_DATE_FORMAT_LIMIT = 100;
 
+static bool fast_format(const std::vector<DateValue>& viewer_date, const std::string& format,
+                        ColumnBuilder<TYPE_VARCHAR>& builder);
+
 #define DEFINE_TIME_UNARY_FN(NAME, TYPE, RESULT_TYPE)                                                         \
     StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::Columns& columns) {    \
         return VectorizedStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0)); \
@@ -1287,9 +1290,30 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_const(std::string& f
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
-
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+
+    // fast path
+    if (fast_format({}, format_content, result)) {
+        std::vector<DateValue> dates(size);
+        for (size_t row = 0; row < size; row++) {
+            int64_t timestamp = data_column.value(row);
+            DateValue value;
+            if (UNLIKELY(timestamp < 0 || timestamp > MAX_UNIX_TIMESTAMP)) {
+                value = DateValue::INVALID_DATE_VALUE;
+                continue;
+            }
+            if (!value.from_unixtime(timestamp, context->state()->timezone_obj())) {
+                value = DateValue::INVALID_DATE_VALUE;
+            }
+            dates[row] = value;
+        }
+
+        fast_format(dates, format_content, result);
+        return result.build(ColumnHelper::is_all_const(columns));
+    }
+
+    // slow path
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row) || format_content.empty()) {
             result.append_null();
@@ -1855,6 +1879,40 @@ void common_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TYPE_VA
         bool b = standard_format_one_row(ts, buf, viewer_format->value(i).to_string());
         builder->append(Slice(std::string(buf)), !b);
     }
+}
+
+static bool fast_format(const std::vector<DateValue>& viewer_date, const std::string& format,
+                        ColumnBuilder<TYPE_VARCHAR>& builder) {
+    if (format.empty()) {
+        builder.append_nulls(viewer_date.size());
+        return true;
+    }
+
+    std::function<std::string(const DateValue& date)> worker;
+    if (format == "%Y%m%d" || format == "yyyyMMdd") {
+        worker = format_for_yyyyMMdd;
+    } else if (format == "%Y-%m-%d" || format == "yyyy-MM-dd") {
+        worker = format_for_yyyy_MM_dd_Impl;
+    } else if (format == "%Y-%m-%d %H:%i:%s" || format == "yyyy-MM-dd HH:mm:ss") {
+        worker = format_for_yyyyMMddHHmmssImpl;
+    } else if (format == "%Y-%m") {
+        worker = format_for_yyyy_MMImpl;
+    } else if (format == "%Y%m") {
+        worker = format_for_yyyyMMImpl;
+    } else if (format == "%Y") {
+        worker = format_for_yyyyImpl;
+    } else {
+        return false;
+    }
+    for (auto& date : viewer_date) {
+        if (date.is_valid()) {
+            builder.append(std::move(worker(date)));
+        } else {
+            builder.append_null();
+        }
+    }
+
+    return true;
 }
 
 // datetime_format

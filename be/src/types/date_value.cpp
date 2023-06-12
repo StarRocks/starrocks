@@ -30,6 +30,26 @@ static int month_to_quarter_end[13] = {0, 3, 3, 3, 6, 6, 6, 9, 9, 9, 12, 12, 12}
 
 const DateValue DateValue::MAX_DATE_VALUE{date::MAX_DATE};
 const DateValue DateValue::MIN_DATE_VALUE{date::MIN_DATE};
+const DateValue DateValue::INVALID_DATE_VALUE{date::INVALID_DATE};
+
+bool DateValue::from_unixtime(int64_t timestamp, const cctz::time_zone& ctz) {
+    static const cctz::time_point<cctz::sys_seconds> epoch =
+            std::chrono::time_point_cast<cctz::sys_seconds>(std::chrono::system_clock::from_time_t(0));
+
+    cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(timestamp);
+    const auto tp = cctz::convert(t, ctz);
+    from_date(tp.year(), tp.month(), tp.day());
+    return true;
+}
+
+bool DateValue::from_unixtime(int64_t timestamp, const std::string& timezone) {
+    cctz::time_zone ctz;
+    if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
+        return false;
+    }
+
+    return from_unixtime(timestamp, ctz);
+}
 
 void DateValue::from_date(int year, int month, int day) {
     _julian = date::from_date(year, month, day);
