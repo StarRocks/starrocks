@@ -153,7 +153,7 @@ GROUP BY order_id;
 > - Asynchronous materialized views support a dynamic partitioning strategy in a longer span. For example, if the base table is partitioned at an interval of one day, you can set the materialized view to be partitioned at an interval of one month.
 > - The query statement that is used to create an asynchronous materialized view must include the partition keys and bucket keys of the materialized views.
 > - The query statement used to create a materialized view does not support random functions, including rand(), random(), uuid(), and sleep().
-> - [CREATE MATERIALIZED VIEW - Supported data types](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md#supported-data-types)
+> - Asynchronous materialized views support a variety of data types. For more information, see [CREATE MATERIALIZED VIEW - Supported data types](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md#supported-data-types).
 
 - **About refresh mechanisms of asynchronous materialized views**
 
