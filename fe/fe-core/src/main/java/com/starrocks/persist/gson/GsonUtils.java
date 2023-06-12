@@ -105,6 +105,7 @@ import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.persist.SinglePartitionPersistInfo;
 import com.starrocks.privilege.CatalogPEntryObject;
 import com.starrocks.privilege.DbPEntryObject;
+import com.starrocks.privilege.ForwardCompatiblePEntryObject;
 import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
 import com.starrocks.privilege.MaterializedViewPEntryObject;
@@ -254,7 +255,8 @@ public class GsonUtils {
                     .registerSubtype(FunctionPEntryObject.class, FunctionPEntryObject.class.getSimpleName())
                     .registerSubtype(CatalogPEntryObject.class, CatalogPEntryObject.class.getSimpleName())
                     .registerSubtype(ResourceGroupPEntryObject.class,
-                            ResourceGroupPEntryObject.class.getSimpleName());
+                            ResourceGroupPEntryObject.class.getSimpleName())
+                    .registerSubtype(ForwardCompatiblePEntryObject.class, "StorageVolumePEntryObject");
 
     private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
             .of(Warehouse.class, "clazz")
