@@ -56,10 +56,12 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class CreateTableTest {
     private static ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -72,6 +74,7 @@ public class CreateTableTest {
         Config.enable_auto_tablet_distribution = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
@@ -1409,5 +1412,57 @@ public class CreateTableTest {
                         "partition by range(k1)\n" +
                         "(partition p1 values less than(\"10\"))\n" +
                         "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+    }
+
+    @Test
+    public void testCreateCrossDatabaseColocateTable() throws Exception {
+        starRocksAssert.withDatabase("dwd");
+        String sql1 = "CREATE TABLE dwd.dwd_site_scan_dtl_test (\n" +
+                "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                "sub_ship_id bigint(20) NOT NULL COMMENT \" \"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(ship_id, sub_ship_id) COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(ship_id) BUCKETS 48\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"colocate_with\" = \"ship_id_public\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");";
+        starRocksAssert.withTable(sql1);
+
+        starRocksAssert.withDatabase("ods");
+        String sql2 = "CREATE TABLE ods.reg_bill_info_test (\n" +
+                "unit_tm datetime NOT NULL COMMENT \" \",\n" +
+                "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                "ins_db_tm datetime NULL COMMENT \" \"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(unit_tm, ship_id)\n" +
+                "DISTRIBUTED BY HASH(ship_id) BUCKETS 48\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"colocate_with\" = \"ship_id_public\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");";
+        starRocksAssert.withTable(sql2);
+
+        List<List<String>> result = GlobalStateMgr.getCurrentState().getColocateTableIndex().getInfos();
+        System.out.println(result);
+        List<String> groupIds = new ArrayList<>();
+        for (List<String> e : result) {
+            if (e.get(1).contains("ship_id_public")) {
+                groupIds.add(e.get(0));
+            }
+        }
+        Assert.assertEquals(2, groupIds.size());
+        System.out.println(groupIds);
+        // colocate groups in different db should have same `GroupId.grpId`
+        Assert.assertEquals(groupIds.get(0).split("\\.")[1], groupIds.get(1).split("\\.")[1]);
     }
 }
