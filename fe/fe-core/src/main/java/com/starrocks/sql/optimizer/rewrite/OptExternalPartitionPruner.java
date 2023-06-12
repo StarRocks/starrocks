@@ -187,7 +187,6 @@ public class OptExternalPartitionPruner {
                 partitionColumnRefOperators.add(partitionColumnRefOperator);
             }
 
-
             context.getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(),
                     hmsTable.getTableName()).setPartitionNames(new ArrayList<>());
 

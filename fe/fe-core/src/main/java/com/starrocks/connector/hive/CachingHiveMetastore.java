@@ -30,6 +30,7 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
@@ -206,25 +207,6 @@ public class CachingHiveMetastore implements IHiveMetastore {
         return metastore.getAllTableNames(dbName);
     }
 
-    private List<String> getFilteredPartitionKeys(List<String> partitionNames, List<Optional<String>> partitionValues) {
-        List<String> filteredPartitionName = Lists.newArrayList();
-        for (String partitionName : partitionNames) {
-            List<String> values = toPartitionValues(partitionName);
-            int index = 0;
-            for (; index < values.size(); ++index) {
-                if (partitionValues.get(index).isPresent()) {
-                    if (!values.get(index).equals(partitionValues.get(index).get())) {
-                        break;
-                    }
-                }
-            }
-            if (index == values.size()) {
-                filteredPartitionName.add(partitionName);
-            }
-        }
-        return filteredPartitionName;
-    }
-
     @Override
     public List<String> getPartitionKeysByValue(String dbName, String tableName, List<Optional<String>> partitionValues) {
         HiveTableName hiveTableName = HiveTableName.of(dbName, tableName);
@@ -245,7 +227,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
                 // no need to filter partition names by values
                 return allPartitionNames;
             }
-            return getFilteredPartitionKeys(allPartitionNames, partitionValues);
+            return PartitionUtil.getFilteredPartitionKeys(allPartitionNames, partitionValues);
         }
         return get(partitionKeysCache, hivePartitionValue);
     }
