@@ -68,6 +68,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
             "PeakChunkBufferSize", TUnit::UNIT,
             RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_ALL),
             RuntimeProfile::ROOT_COUNTER);
+
     _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
     _buffer_unplug_counter = ADD_COUNTER(_unique_metrics, "BufferUnplugCount", TUnit::UNIT);
     _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitTaskCount", TUnit::UNIT);
