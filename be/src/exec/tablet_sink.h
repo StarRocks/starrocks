@@ -48,8 +48,8 @@
 #include "common/tracer.h"
 #include "exec/data_sink.h"
 #include "exec/tablet_info.h"
-#include "exec/tablet_sink_index_channel.h"
-#include "exec/tablet_sink_sender.h"
+#include "exec/tablet_sink/tablet_sink_index_channel.h"
+#include "exec/tablet_sink/tablet_sink_sender.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -234,6 +234,7 @@ private:
     std::vector<uint32_t> _tablet_indexes;
     // Store the output expr comput result column
     std::unique_ptr<Chunk> _output_chunk;
+    bool _open_done{false};
 
     std::unique_ptr<TabletSinkSender> _tablet_sink_sender;
 

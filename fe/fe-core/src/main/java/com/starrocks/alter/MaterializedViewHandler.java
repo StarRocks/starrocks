@@ -38,11 +38,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -89,6 +89,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.MVColumnItem;
+import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import org.apache.logging.log4j.LogManager;
@@ -234,12 +235,6 @@ public class MaterializedViewHandler extends AlterHandler {
 
             olapTable.setState(OlapTableState.ROLLUP);
 
-            boolean isColocateMv = PropertyAnalyzer.analyzeBooleanProp(addMVClause.getProperties(),
-                    PropertyAnalyzer.PROPERTIES_COLOCATE_MV, false);
-            if (isColocateMv) {
-                olapTable.addColocateMaterializedView(rollupJobV2.getRollupIndexName());
-            }
-
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(rollupJobV2);
             LOG.info("finished to create materialized view job: {}", rollupJobV2.getJobId());
         }
@@ -259,6 +254,15 @@ public class MaterializedViewHandler extends AlterHandler {
             throw new DdlException("Do not support create rollup on " + targetTable.getType().name() +
                     " table[" + target.getTbl() + "], please use new syntax to create materialized view");
         }
+        // one table should not have mv which mv's target table is the same table.
+        for (MaterializedIndexMeta indexMeta : baseTable.getIndexIdToMeta().values()) {
+            if (indexMeta.getTargetTableId() == targetTable.getId()) {
+                throw new DdlException(String.format("Target table %s has already set in the mv %s, one target table can only " +
+                        "be set once for" + " the base table.",
+                        targetTable.getName(), baseTable.getIndexNameById(indexMeta.getIndexId())));
+            }
+        }
+
         OlapTable targetOlapTable = (OlapTable) targetTable;
         // target table should not have the associated materialized views.
         if (targetOlapTable.hasMaterializedView()) {
@@ -266,24 +270,57 @@ public class MaterializedViewHandler extends AlterHandler {
                     "the associated materialized views." + targetOlapTable);
         }
         // logical materialized view's column should be in the target table.
-        Set<String> mvColumnNames = Sets.newHashSet();
-        for (Column mvCol : mvColumns) {
-            mvColumnNames.add(mvCol.getName());
+        Set<String> mvColumnNames = mvColumns.stream().map(Column::getName).collect(Collectors.toSet());
+        Set<String> targetColumnNames = targetOlapTable.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
+
+        if (mvColumns.size() < targetOlapTable.getBaseSchema().size()) {
+            int j = 0;
+            List<Column> newMVColumns = Lists.newArrayList();
+            // We still need to keep the targets column order.
+            // eg:
+            // Target Table: c1, c2, c3, c4
+            // Logical MV  : c1, c3, c4
+            //  so c2 can be appended by default.
+            List<Column> targetBaseColumns = Lists.newArrayList(targetTable.getBaseSchema());
+            for (int i = 0; i < targetBaseColumns.size(); i++) {
+                Column targetCol = targetBaseColumns.get(i);
+                if (j < mvColumns.size() && targetCol.getName().equalsIgnoreCase(
+                        MVUtils.parseMVColumnName(mvColumns.get(j).getName()))) {
+                    newMVColumns.add(mvColumns.get(j));
+                    j++;
+                } else {
+                    if (!targetCol.isAllowNull()) {
+                        throw new DdlException(String.format("Target table %s's column %s is lost by default, it should be " +
+                                "nullable by default.", targetOlapTable.getName(), targetCol.getName()));
+                    }
+                    Column copiedTargetColumn = new Column(targetCol);
+                    // to distinguish with base table's column name, add `mv_` prefix
+                    copiedTargetColumn.setName(MVUtils.getMVColumnName(targetCol.getName()));
+                    copiedTargetColumn.setDefaultValue(null);
+                    newMVColumns.add(copiedTargetColumn);
+                }
+            }
+            mvColumns = newMVColumns;
         }
-        if (mvColumns.size() != targetOlapTable.getBaseSchema().size()) {
+        if (mvColumns.size() > targetOlapTable.getBaseSchema().size()) {
             throw new DdlException("Logical materialized view columns' size "
-                    + mvColumns.size() + " should be equal to the target table columns' size:"
+                    + mvColumns.size() + " should be less than the target table columns' size:"
                     + targetOlapTable.getBaseSchema().size());
         }
         // Ensure targetOlapTable's column is equal to mvColumns.
         for (int i = 0; i < targetOlapTable.getBaseSchema().size(); i++) {
             Column targetCol = targetTable.getBaseSchema().get(i);
             Column mvCol = mvColumns.get(i);
+            String parseMVColumnName = MVUtils.parseMVColumnName(mvCol.getName());
+            if (!targetColumnNames.contains(parseMVColumnName)) {
+                throw new DdlException(String.format("Logical materialized view column name %s is not found " +
+                                "in target table %s", parseMVColumnName, targetTable.getName()));
+            }
             if (!mvCol.getType().equals(targetCol.getType())) {
                 if (!Type.canCastTo(mvCol.getType(), targetCol.getType())) {
                     throw new DdlException("Logical materialized view column type "
-                            + mvColumns.get(i) + " is not equal to " + targetOlapTable.getBaseSchema().get(i)
-                            + " and can not cast " + mvColumns.get(i) + " to " + targetOlapTable.getBaseSchema().get(i));
+                            + mvCol + " is not equal to " + targetCol
+                            + " and can not cast mv column to target column");
                 }
                 Expr newDefinedExpr = new CastExpr(targetCol.getType(), mvCol.getDefineExpr());
                 mvCol.setDefineExpr(newDefinedExpr);
@@ -385,6 +422,14 @@ public class MaterializedViewHandler extends AlterHandler {
             mvIndexMeta.setTargetTableId(targetTableId);
             mvIndexMeta.setTargetTableIndexId(targetOlapTable.getBaseIndexId());
             mvIndexMeta.setMetaIndexType(MaterializedIndexMeta.MetaIndexType.LOGICAL);
+
+            // colocate base table and target table.
+            ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
+            if (colocateTableIndex.isSameGroup(baseTable.getId(), targetTableId)) {
+                baseTable.setInColocateMvGroup(true);
+                baseTable.addColocateMaterializedView(stmt.getMVName());
+            }
+
             baseTable.rebuildFullSchema();
             CreateMaterializedIndexMetaInfo info =
                     new CreateMaterializedIndexMetaInfo(db.getFullName(), baseTable.getName(),
@@ -509,8 +554,8 @@ public class MaterializedViewHandler extends AlterHandler {
         short mvShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(mvColumns, properties);
         // get timeout
         long timeoutMs = PropertyAnalyzer.analyzeTimeout(properties, Config.alter_table_timeout_second) * 1000;
-        boolean isPopulate = PropertyAnalyzer.analyzeBooleanProp(properties,
-                PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_POPULATE, true);
+        boolean isColocateMVIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
+                PropertyAnalyzer.PROPERTIES_COLOCATE_MV, false);
 
         // create rollup job
         long dbId = db.getId();
@@ -522,7 +567,7 @@ public class MaterializedViewHandler extends AlterHandler {
         RollupJobV2 mvJob = new RollupJobV2(jobId, dbId, tableId, olapTable.getName(), timeoutMs,
                 baseIndexId, mvIndexId, baseIndexName, mvName,
                 mvColumns, baseSchemaHash, mvSchemaHash,
-                mvKeysType, mvShortKeyColumnCount, origStmt, isPopulate);
+                mvKeysType, mvShortKeyColumnCount, origStmt, isColocateMVIndex);
 
         /*
          * create all rollup indexes. and set state.

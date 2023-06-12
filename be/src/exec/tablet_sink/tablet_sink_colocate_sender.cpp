@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "exec/tablet_sink_colocate_sender.h"
+#include "exec/tablet_sink/tablet_sink_colocate_sender.h"
 
 #include "agent/master_info.h"
 #include "agent/utils.h"
@@ -66,35 +66,81 @@
 
 namespace starrocks::stream_load {
 
-Status TabletSinkColocateSender::send_chunk(std::shared_ptr<OlapTableSchemaParam> schema,
+Status TabletSinkColocateSender::send_chunk(const OlapTableSchemaParam* schema,
                                             const std::vector<OlapTablePartition*>& partitions,
                                             const std::vector<uint32_t>& tablet_indexes,
                                             const std::vector<uint16_t>& validate_select_idx,
                                             std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id,
                                             Chunk* chunk) {
+    if (UNLIKELY(!_colocate_mv_index)) {
+        return TabletSinkSender::send_chunk(schema, partitions, tablet_indexes, validate_select_idx,
+                                            index_id_partition_id, chunk);
+    }
+
     Status err_st = Status::OK();
     size_t num_rows = chunk->num_rows();
     size_t selection_size = validate_select_idx.size();
     if (selection_size == 0) {
         return Status::OK();
     }
+
     if (num_rows > selection_size) {
         size_t index_size = partitions[validate_select_idx[0]]->indexes.size();
         _index_tablet_ids.resize(index_size);
         for (size_t i = 0; i < index_size; ++i) {
             _index_tablet_ids[i].resize(num_rows);
+            auto* index = schema->indexes()[i];
             for (size_t j = 0; j < selection_size; ++j) {
                 uint16_t selection = validate_select_idx[j];
+                index_id_partition_id[index->index_id].emplace(partitions[selection]->id);
                 _index_tablet_ids[i][selection] = partitions[selection]->indexes[i].tablets[tablet_indexes[selection]];
             }
         }
+        return _send_chunks(schema, chunk, _index_tablet_ids, validate_select_idx);
     } else { // Improve for all rows are selected
         size_t index_size = partitions[0]->indexes.size();
         _index_tablet_ids.resize(index_size);
         for (size_t i = 0; i < index_size; ++i) {
+            auto* index = schema->indexes()[i];
             _index_tablet_ids[i].resize(num_rows);
             for (size_t j = 0; j < num_rows; ++j) {
+                index_id_partition_id[index->index_id].emplace(partitions[j]->id);
                 _index_tablet_ids[i][j] = partitions[j]->indexes[i].tablets[tablet_indexes[j]];
+            }
+        }
+        return _send_chunks(schema, chunk, _index_tablet_ids, validate_select_idx);
+    }
+}
+
+Status TabletSinkColocateSender::_send_chunks(const OlapTableSchemaParam* schema, Chunk* chunk,
+                                              const std::vector<std::vector<int64_t>>& index_tablet_ids,
+                                              const std::vector<uint16_t>& selection_idx) {
+    Status err_st = Status::OK();
+    auto* index = schema->indexes()[0];
+    auto& tablet_id_selections = index_tablet_ids[0];
+    for (auto& it : _node_channels) {
+        _node_select_idx.clear();
+        _node_select_idx.reserve(selection_idx.size());
+
+        auto* node = it.second;
+        // use 1th index to generate selective vel.
+        auto& node_tablet_ids = node->tablet_ids_of_index(index->index_id);
+        for (unsigned short selection : selection_idx) {
+            auto choose_tablet_id = tablet_id_selections[selection];
+            if (node_tablet_ids.find(choose_tablet_id) != node_tablet_ids.end()) {
+                _node_select_idx.emplace_back(selection);
+            }
+        }
+        auto st = node->add_chunks(chunk, index_tablet_ids, _node_select_idx, 0, _node_select_idx.size());
+
+        if (!st.ok()) {
+            LOG(WARNING) << node->name() << ", tablet add chunk failed, " << node->print_load_info()
+                         << ", node=" << node->node_info()->host << ":" << node->node_info()->brpc_port
+                         << ", errmsg=" << st.get_error_msg();
+            err_st = st;
+            // we only send to primary replica, if it fail whole load fail
+            if (_enable_replicated_storage) {
+                return err_st;
             }
         }
     }
@@ -102,6 +148,9 @@ Status TabletSinkColocateSender::send_chunk(std::shared_ptr<OlapTableSchemaParam
 }
 
 Status TabletSinkColocateSender::try_open(RuntimeState* state) {
+    if (UNLIKELY(!_colocate_mv_index)) {
+        return TabletSinkSender::try_open(state);
+    }
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
     RETURN_IF_ERROR(_vectorized_partition->open(state));
@@ -110,7 +159,7 @@ Status TabletSinkColocateSender::try_open(RuntimeState* state) {
 }
 
 bool TabletSinkColocateSender::is_open_done() {
-    if (!_colocate_mv_index) {
+    if (UNLIKELY(!_colocate_mv_index)) {
         return TabletSinkSender::is_open_done();
     }
     if (!_open_done) {
@@ -123,7 +172,7 @@ bool TabletSinkColocateSender::is_open_done() {
 }
 
 bool TabletSinkColocateSender::is_full() {
-    if (!_colocate_mv_index) {
+    if (UNLIKELY(!_colocate_mv_index)) {
         return TabletSinkSender::is_full();
     }
     bool full = false;
@@ -144,6 +193,7 @@ Status TabletSinkColocateSender::open_wait() {
         }
         // disable colocate mv index load if other BE not supported
         if (!ch->enable_colocate_mv_index()) {
+            LOG(WARNING) << "node channel cannot support colocate, set it to false";
             _colocate_mv_index = false;
         }
     });
@@ -157,7 +207,7 @@ Status TabletSinkColocateSender::open_wait() {
 }
 
 Status TabletSinkColocateSender::try_close(RuntimeState* state) {
-    if (!_colocate_mv_index) {
+    if (UNLIKELY(!_colocate_mv_index)) {
         return TabletSinkSender::try_close(state);
     }
     Status err_st = Status::OK();
@@ -185,7 +235,7 @@ Status TabletSinkColocateSender::try_close(RuntimeState* state) {
 }
 
 bool TabletSinkColocateSender::is_close_done() {
-    if (!_colocate_mv_index) {
+    if (UNLIKELY(!_colocate_mv_index)) {
         return TabletSinkSender::is_close_done();
     }
     if (!_close_done) {
@@ -203,7 +253,7 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
                                             RuntimeProfile::Counter* send_rpc_timer,
                                             RuntimeProfile::Counter* server_rpc_timer,
                                             RuntimeProfile::Counter* server_wait_flush_timer) {
-    if (!_colocate_mv_index) {
+    if (UNLIKELY(!_colocate_mv_index)) {
         return TabletSinkColocateSender::close_wait(state, close_status, close_timer, serialize_chunk_timer,
                                                     send_rpc_timer, server_rpc_timer, server_wait_flush_timer);
     }

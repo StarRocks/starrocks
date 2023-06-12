@@ -78,4 +78,11 @@ public class MVUtils {
     public static String getMVColumnName(String alias) {
         return new StringBuilder().append(MATERIALIZED_VIEW_NAME_PREFIX).append(alias).toString();
     }
+
+    public static String parseMVColumnName(String mvName) {
+        if (mvName.startsWith(MATERIALIZED_VIEW_NAME_PREFIX)) {
+            return mvName.substring(MATERIALIZED_VIEW_NAME_PREFIX.length());
+        }
+        return mvName;
+    }
 }

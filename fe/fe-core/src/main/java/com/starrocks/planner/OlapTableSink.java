@@ -191,6 +191,7 @@ public class OlapTableSink extends DataSink {
         tDataSink = new TDataSink(TDataSinkType.DATA_SPLIT_SINK);
         tDataSink.setType(TDataSinkType.OLAP_TABLE_SINK);
         tDataSink.setOlap_table_sink(tSink);
+        tSink.setEnable_replicated_storage(enableReplicatedStorage);
 
         for (Long partitionId : partitionIds) {
             Partition part = dstTable.getPartition(partitionId);
@@ -261,6 +262,9 @@ public class OlapTableSink extends DataSink {
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
         tSink.setSchema(createSchema(tSink.getDb_id(), dstTable));
 
+        if (dstTable.isEnableColocateMVIndex()) {
+            tSink.setEnable_colocate_mv_index(true);
+        }
         if (dstTable.hasAssociatedTables()) {
             // prepare associate tables
             Database db = GlobalStateMgr.getCurrentState().getDb(tSink.getDb_id());
@@ -373,7 +377,7 @@ public class OlapTableSink extends DataSink {
                         if (targetPartition == null) {
                             throw new AnalysisException(
                                     String.format("Associated table's partition should be kept the same with the base " +
-                                                    "table, partition {} is not found in target table {}", partition.getName(),
+                                                    "table, partition %s is not found in target table %s", partition.getName(),
                                             targetTable.getName()));
                         }
                     } else {
@@ -381,21 +385,21 @@ public class OlapTableSink extends DataSink {
                         if (targetPartition == null) {
                             throw new AnalysisException(
                                     String.format("Associated table's partition should be kept the same with the base " +
-                                            "table, partition is not found in target table {}", targetTable.getName()));
+                                            "table, partition is not found in target table %s", targetTable.getName()));
                         }
                     }
                     Preconditions.checkNotNull(targetPartition);
                     MaterializedIndex targetIndex = targetPartition.getBaseIndex();
                     if (targetIndex.getId() != targetIndexId) {
                         throw new AnalysisException(
-                                String.format("Only support associated table's({}) base partition id {}, but now " +
-                                        "the partition id is {}", targetTable.getName(), targetIndex.getId(), targetIndexId));
+                                String.format("Only support associated table's(%s) base partition id %s, but now " +
+                                        "the partition id is %s", targetTable.getName(), targetIndex.getId(), targetIndexId));
                     }
                     long targetPartitionId = targetPartition.getId();
                     if (targetIndex.getTablets().size() != basePartitionTabletSize) {
                         throw new AnalysisException(
-                                String.format("Associated table's({}) partition {}'s tablets' size {} should be " +
-                                                "equal base table partition's size {}", targetTable.getName(), targetPartitionId,
+                                String.format("Associated table's(%s) partition %s's tablets' size %s should be " +
+                                                "equal base table partition's size %s", targetTable.getName(), targetPartitionId,
                                         targetIndex.getTablets().size(), basePartitionTabletSize));
                     }
                     meta = new AssociateTableMeta(indexMeta, targetTable, targetPartition);

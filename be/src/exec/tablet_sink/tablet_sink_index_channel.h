@@ -109,8 +109,12 @@ public:
     // called before open, used to add tablet loacted in this backend
     void add_tablet(const int64_t index_id, const PTabletWithPartition& tablet) {
         _index_tablets_map[index_id].emplace_back(tablet);
+        _index_tablet_ids_map[index_id].emplace(tablet.tablet_id());
     }
 
+    const std::unordered_set<int64_t>& tablet_ids_of_index(int64_t index_id) const {
+        return _index_tablet_ids_map.at(index_id);
+    }
     Status init(RuntimeState* state);
 
     // async open interface: try_open() -> [is_open_done()] -> open_wait()
@@ -198,6 +202,7 @@ private:
     std::vector<RefCountClosure<PTabletWriterOpenResult>*> _open_closures;
 
     std::map<int64_t, std::vector<PTabletWithPartition>> _index_tablets_map;
+    std::unordered_map<int64_t, std::unordered_set<int64_t>> _index_tablet_ids_map;
 
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
     std::vector<TTabletFailInfo> _tablet_fail_infos;

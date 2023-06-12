@@ -858,6 +858,22 @@ class StarrocksSQLApiLib(object):
         time.sleep(10)
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
+    def wait_materialized_view_finish(self):
+        """
+        wait materialized view job finish and return status
+        """
+        status = ""
+        show_sql = "SHOW ALTER MATERIALIZED VIEW"
+        while True:
+            res = self.execute_sql(show_sql, True)
+            # print(res)
+            status = res["result"][-1][8]
+            if status == "FINISHED" or status == "CANCELLED" or status == "":
+                break
+            time.sleep(0.5)
+        time.sleep(10)
+        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
     def check_es_table_metadata_ready(self, table_name):
         check_sql = "SELECT * FROM %s limit 1" % table_name
         count = 0

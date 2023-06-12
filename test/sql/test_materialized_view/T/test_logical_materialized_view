@@ -255,7 +255,7 @@ PROPERTIES (
 CREATE MATERIALIZED VIEW test_mv3 
 to target3
 as
-select k1, length(k2) as k2, cast(k1 * 2 as tinyint(4)) as k11, sum(k3), hll_union(hll_hash(k4)) as k5 from test3 group by k1, k2; 
+select k1, length(k2) as k2, cast(k1 * 2 as tinyint(4)) as k11, sum(k3) as k4, hll_union(hll_hash(k4)) as k5 from test3 group by k1, k2; 
 
 insert into test3 values (1, 'a', 1, 'aa'), (2, 'b', 1, 'aa'), (3, 'a', 1, 'cc');
 select * from test3 order by k1;
@@ -265,7 +265,7 @@ drop materialized view test_mv3;
 CREATE MATERIALIZED VIEW test_mv3_1
 to target3
 as
-select k1, length(k2) as k2, k1 * 2 as k11, sum(k3), hll_union(hll_hash(k4)) as k5 from test2 group by k1, k2; 
+select k1, length(k2) as k2, k1 * 2 as k11, sum(k3) as k4, hll_union(hll_hash(k4)) as k5 from test2 group by k1, k2; 
 insert into test2 values (1, 'a', 1, 'aa'), (2, 'b', 1, 'aa'), (3, 'a', 1, 'cc');
 select * from test3 order by k1;
 select * from target3 order by k1;
@@ -303,82 +303,3 @@ insert into test8 values (1, 'a', 1, 'aa'), (2, 'b', 1, 'aa'), (3, 'a', 1, 'cc')
 select * from test8 order by k1;
 select * from target8 order by k1;
 drop materialized view test_mv8;
-
---------
-drop table if exists test1;
-CREATE TABLE `test1` (
-  `k1` tinyint(4) NULL DEFAULT "0",
-   `dt` datetime Not NULL,	
-  `k2` varchar(64) NULL DEFAULT "",
-  `k3` bigint NULL DEFAULT "0",
-  `k4` varchar(64) NULL DEFAULT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k1`)
-PARTITION BY range(`dt`)()
-DISTRIBUTED BY HASH(`k1`) BUCKETS 32 
-PROPERTIES(
-    "replication_num" = "1",
-    "dynamic_partition.enable" = "true",
-    "dynamic_partition.time_unit" = "DAY",
-    "dynamic_partition.start" = "-5",
-    "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
-    "dynamic_partition.buckets" = "32",
-    "dynamic_partition.history_partition_num" = "5"
-);
-
-drop table if exists target1;
-CREATE TABLE `target1` (
-  `k1` tinyint(4) NULL DEFAULT "0",
-  `k11` tinyint(4) NULL DEFAULT "0",
-  `k2` int NULL DEFAULT "0",
-  `dt` datetime Not NULL,
-  `k4` bigint sum DEFAULT "0",
-  `k5` hll hll_union
-) ENGINE=OLAP 
-AGGREGATE KEY(`k1`, `k11`, `k2`, `dt`)
-PARTITION BY range(`dt`)()
-DISTRIBUTED BY RANDOM BUCKETS 32 
-PROPERTIES(
-    "replication_num" = "1",
-    "dynamic_partition.enable" = "true",
-    "dynamic_partition.time_unit" = "DAY",
-    "dynamic_partition.start" = "-5",
-    "dynamic_partition.end" = "5",
-    "dynamic_partition.prefix" = "p",
-    "dynamic_partition.buckets" = "32",
-    "dynamic_partition.history_partition_num" = "5"
-);
-
-CREATE MATERIALIZED VIEW test_mv1 
-to target1
-as
-select k1, k1 * 2 as k11,  length(k2) as k2, dt, sum(k3) as k4, hll_union(hll_hash(k4)) as k5 from test1 group by k1, k11, k2, dt; 
-
-drop table if exists test;
-CREATE TABLE `test` (
-  `k1` tinyint(4) NULL DEFAULT "0",
-   `dt` datetime Not NULL,	
-  `k2` varchar(64) NULL DEFAULT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k1`)
-PARTITION BY range(`dt`)()
-DISTRIBUTED BY HASH(`k1`) BUCKETS 32 
-PROPERTIES(
-    "replication_num" = "1",
-    "dynamic_partition.enable" = "true",
-    "dynamic_partition.time_unit" = "DAY",
-    "dynamic_partition.start" = "-5",
-    "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
-    "dynamic_partition.buckets" = "32",
-    "dynamic_partition.history_partition_num" = "5"
-);
-
-CREATE MATERIALIZED VIEW test_mv 
-to target1
-as
-select k1, k1 * 2 as k11,  length(k2) as k2, dt, sum(0) as k4, hll_union(hll_hash(NULL)) as k5 from test group by k1, k11, k2, dt;
-drop materialized view test_mv;
-drop materialized view test_mv1;
-

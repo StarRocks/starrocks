@@ -34,6 +34,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableIndexes;
@@ -497,11 +498,20 @@ public class OlapTableFactory implements AbstractTableFactory {
                                 DataProperty.getInferredDefaultDataProperty());
                         DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(table, properties);
                         if (table.dynamicPartitionExists() && table.getColocateGroup() != null) {
-                            HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
-                            if (info.getBucketNum() !=
-                                    table.getTableProperty().getDynamicPartitionProperty().getBuckets()) {
-                                throw new DdlException("dynamic_partition.buckets should equal the distribution buckets"
-                                        + " if creating a colocate table");
+                            if (distributionInfo instanceof HashDistributionInfo) {
+                                HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
+                                if (info.getBucketNum() !=
+                                        table.getTableProperty().getDynamicPartitionProperty().getBuckets()) {
+                                    throw new DdlException("dynamic_partition.buckets should equal the distribution buckets"
+                                            + " if creating a colocate table");
+                                }
+                            } else {
+                                RandomDistributionInfo info = (RandomDistributionInfo) distributionInfo;
+                                if (info.getBucketNum() !=
+                                        table.getTableProperty().getDynamicPartitionProperty().getBuckets()) {
+                                    throw new DdlException("dynamic_partition.buckets should equal the distribution buckets"
+                                            + " if creating a colocate table");
+                                }
                             }
                         }
                         if (hasMedium) {

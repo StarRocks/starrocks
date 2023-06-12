@@ -48,7 +48,7 @@
 #include "common/tracer.h"
 #include "exec/data_sink.h"
 #include "exec/tablet_info.h"
-#include "exec/tablet_sink_index_channel.h"
+#include "exec/tablet_sink/tablet_sink_index_channel.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -90,8 +90,7 @@ public:
     ~TabletSinkSender() = default;
 
 public:
-    virtual Status send_chunk(std::shared_ptr<OlapTableSchemaParam> schema,
-                              const std::vector<OlapTablePartition*>& partitions,
+    virtual Status send_chunk(const OlapTableSchemaParam* schema, const std::vector<OlapTablePartition*>& partitions,
                               const std::vector<uint32_t>& tablet_indexes,
                               const std::vector<uint16_t>& validate_select_idx,
                               std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id, Chunk* chunk);
@@ -158,7 +157,6 @@ protected:
     // one chunk selection for BE node
     std::vector<uint32_t> _node_select_idx;
     std::vector<int64_t> _tablet_ids;
-    std::vector<std::vector<int64_t>> _index_tablet_ids;
     std::set<int64_t> _failed_channels;
 };
 

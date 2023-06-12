@@ -48,8 +48,8 @@
 #include "common/tracer.h"
 #include "exec/data_sink.h"
 #include "exec/tablet_info.h"
-#include "exec/tablet_sink_index_channel.h"
-#include "exec/tablet_sink_sender.h"
+#include "exec/tablet_sink/tablet_sink_colocate_sender.h"
+#include "exec/tablet_sink/tablet_sink_index_channel.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -70,41 +70,23 @@ class ExprContext;
 class TExpr;
 
 namespace stream_load {
-// TabletSinkColocateSender will control one index/table's send chunks.
-class TabletSinkColocateSender : public TabletSinkSender {
+// TabletSinkSender will control one index/table's send chunks.
+class TabletSinkColocateMultiSender final : public TabletSinkColocateSender {
 public:
-    TabletSinkColocateSender(PUniqueId load_id, int64_t txn_id, OlapTableLocationParam* location,
-                             OlapTablePartitionParam* vectorized_partition, std::vector<IndexChannel*> channels,
-                             std::unordered_map<int64_t, NodeChannel*> node_channels,
-                             std::vector<ExprContext*> output_expr_ctxs, bool enable_replicated_storage,
-                             TWriteQuorumType::type write_quorum_type, int num_repicas)
-            : TabletSinkSender(load_id, txn_id, location, vectorized_partition, std::move(channels),
-                               std::move(node_channels), std::move(output_expr_ctxs), enable_replicated_storage,
-                               write_quorum_type, num_repicas) {}
-    ~TabletSinkColocateSender() = default;
+    TabletSinkColocateMultiSender(PUniqueId load_id, int64_t txn_id, OlapTableLocationParam* location,
+                                  OlapTablePartitionParam* vectorized_partition, std::vector<IndexChannel*> channels,
+                                  std::unordered_map<int64_t, NodeChannel*> node_channels,
+                                  std::vector<ExprContext*> output_expr_ctxs, bool enable_replicated_storage,
+                                  TWriteQuorumType::type write_quorum_type, int num_repicas)
+            : TabletSinkColocateSender(load_id, txn_id, location, vectorized_partition, std::move(channels),
+                                       std::move(node_channels), std::move(output_expr_ctxs), enable_replicated_storage,
+                                       write_quorum_type, num_repicas) {}
+    ~TabletSinkColocateMultiSender() = default;
 
 public:
-    Status send_chunk(std::shared_ptr<OlapTableSchemaParam> schema, const std::vector<OlapTablePartition*>& partitions,
+    Status send_chunk(const OlapTableSchemaParam* schema, const std::vector<OlapTablePartition*>& partitions,
                       const std::vector<uint32_t>& tablet_indexes, const std::vector<uint16_t>& validate_select_idx,
-                      std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id, Chunk* chunkk) override;
-
-    Status try_open(RuntimeState* state) override;
-    Status open_wait() override;
-    // async close interface: try_close() -> [is_close_done()] -> close_wait()
-    // if is_close_done() return true, close_wait() will not block
-    // otherwise close_wait() will block
-    Status try_close(RuntimeState* state) override;
-    Status close_wait(RuntimeState* state, Status close_status, RuntimeProfile::Counter* close_timer,
-                      RuntimeProfile::Counter* serialize_chunk_timer, RuntimeProfile::Counter* send_rpc_timer,
-                      RuntimeProfile::Counter* server_rpc_timer,
-                      RuntimeProfile::Counter* server_wait_flush_timer) override;
-
-    bool is_open_done() override;
-    bool is_full() override;
-    bool is_close_done() override;
-
-private:
-    bool _colocate_mv_index{false};
+                      std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id, Chunk* chunk) override;
 };
 
 } // namespace stream_load
