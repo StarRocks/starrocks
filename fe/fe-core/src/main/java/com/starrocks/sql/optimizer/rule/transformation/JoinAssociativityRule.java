@@ -77,9 +77,6 @@ public class JoinAssociativityRule extends JoinAssociateBaseRule {
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
-        if (JoinReorderHelper.existTableFunc(input)) {
-            return false;
-        }
         LogicalJoinOperator topJoin = (LogicalJoinOperator) input.getOp();
         LogicalJoinOperator bottomJoin = (LogicalJoinOperator) input.inputAt(0).getOp();
         if (StringUtils.isNotEmpty(topJoin.getJoinHint()) || StringUtils.isNotEmpty(bottomJoin.getJoinHint())) {

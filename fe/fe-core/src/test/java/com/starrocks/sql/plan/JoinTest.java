@@ -2750,4 +2750,27 @@ public class JoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 19: v4 = 1");
     }
+
+    @Test
+    public void testTableFunctionReorder() throws Exception {
+
+        String sql = "select * from (SELECT * FROM tarray, unnest(v3, v3)) t1 LEFT JOIN " +
+                "(SELECT * FROM tarray, unnest(v3, v3)) t2 ON t1.v1=t2.v1 join t3 on t1.v1 = t3.v10";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "9:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 6: v1\n" +
+                "  |  \n" +
+                "  |----8:EXCHANGE\n" +
+                "  |    \n" +
+                "  5:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 11: v10\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:EXCHANGE");
+    }
 }
