@@ -101,7 +101,9 @@ Status FlushToken::submit(std::unique_ptr<MemTable> memtable, bool eos,
     SCOPED_THREAD_LOCAL_MEM_SETTER(nullptr, false);
     auto task = std::make_shared<MemtableFlushTask>(this, std::move(memtable), eos, std::move(cb));
     _stats.queueing_memtable_num++;
-    return _flush_token->submit(std::move(task));
+    task->run();
+    return {};
+    // return _flush_token->submit(std::move(task));
 }
 
 void FlushToken::shutdown() {
