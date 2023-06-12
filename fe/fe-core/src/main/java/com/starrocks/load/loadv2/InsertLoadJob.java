@@ -139,7 +139,7 @@ public class InsertLoadJob extends LoadJob {
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
-        return new AuthorizationInfo(database.getFullName(), getTableNames());
+        return new AuthorizationInfo(database.getFullName(), getTableNames(false));
     }
 
     @Override
@@ -181,14 +181,18 @@ public class InsertLoadJob extends LoadJob {
     }
 
     @Override
-    public Set<String> getTableNames() throws MetaNotFoundException {
+    public Set<String> getTableNames(boolean noThrow) throws MetaNotFoundException {
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
         Table table = database.getTable(tableId);
         if (table == null) {
-            throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
+            if (noThrow) {
+                return Sets.newHashSet();
+            } else {
+                throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
+            }
         }
         return Sets.newHashSet(table.getName());
     }

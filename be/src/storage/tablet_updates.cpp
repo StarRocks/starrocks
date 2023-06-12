@@ -940,7 +940,16 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
                     _set_error(msg);
                     return;
                 }
-                _do_update(rowset_id, i, conditional_column, upserts, index, tablet_id, &new_deletes);
+                st = _do_update(rowset_id, i, conditional_column, upserts, index, tablet_id, &new_deletes);
+                if (!st.ok()) {
+                    manager->update_state_cache().remove(state_entry);
+                    std::string msg =
+                            strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                                st.to_string(), debug_string());
+                    LOG(ERROR) << msg;
+                    _set_error(msg);
+                    return;
+                }
                 manager->index_cache().update_object_size(index_entry, index.memory_usage());
                 if (delete_pks != nullptr) {
                     index.erase(*delete_pks, &new_deletes);
@@ -990,7 +999,17 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
                         _set_error(msg);
                         return;
                     }
-                    _do_update(rowset_id, loaded_upsert, conditional_column, upserts, index, tablet_id, &new_deletes);
+                    st = _do_update(rowset_id, loaded_upsert, conditional_column, upserts, index, tablet_id,
+                                    &new_deletes);
+                    if (!st.ok()) {
+                        manager->update_state_cache().remove(state_entry);
+                        std::string msg = strings::Substitute(
+                                "_apply_rowset_commit error: apply rowset update state failed: $0 $1", st.to_string(),
+                                debug_string());
+                        LOG(ERROR) << msg;
+                        _set_error(msg);
+                        return;
+                    }
                     manager->index_cache().update_object_size(index_entry, index.memory_usage());
                     if (delete_pks != nullptr) {
                         index.erase(*delete_pks, &new_deletes);
@@ -1254,7 +1273,7 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
         read_column_ids.push_back(condition_column);
 
         std::vector<uint64_t> old_rowids(upserts[upsert_idx]->size());
-        index.get(*upserts[upsert_idx], &old_rowids);
+        RETURN_IF_ERROR(index.get(*upserts[upsert_idx], &old_rowids));
         bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int id) { return -1 == id; });
         if (!non_old_value) {
             std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
@@ -1265,7 +1284,8 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
             auto old_unordered_column =
                     ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             old_columns[0] = old_unordered_column->clone_empty();
-            get_column_values(read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns, nullptr);
+            RETURN_IF_ERROR(
+                    get_column_values(read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns, nullptr));
             auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
@@ -1278,7 +1298,7 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
             std::vector<std::unique_ptr<Column>> new_columns(1);
             auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             new_columns[0] = new_column->clone_empty();
-            get_column_values(read_column_ids, false, new_rowids_by_rssid, &new_columns, nullptr);
+            RETURN_IF_ERROR(get_column_values(read_column_ids, false, new_rowids_by_rssid, &new_columns, nullptr));
 
             int idx_begin = 0;
             int upsert_idx_step = 0;
@@ -1289,8 +1309,8 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
                 } else {
                     int r = old_column->compare_at(j, j, *new_columns[0].get(), -1);
                     if (r > 0) {
-                        index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
-                                     idx_begin + upsert_idx_step, new_deletes);
+                        RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
+                                                     idx_begin + upsert_idx_step, new_deletes));
 
                         idx_begin = j + 1;
                         upsert_idx_step = 0;
@@ -1304,14 +1324,14 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
             }
 
             if (idx_begin < old_column->size()) {
-                index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin, idx_begin + upsert_idx_step,
-                             new_deletes);
+                RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
+                                             idx_begin + upsert_idx_step, new_deletes));
             }
         } else {
-            index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
+            RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes));
         }
     } else {
-        index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
+        RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes));
     }
 
     return Status::OK();
@@ -1845,7 +1865,7 @@ int64_t TabletUpdates::get_compaction_score() {
         }
         rowsets = _edit_version_infos[_apply_version_idx]->rowsets;
     }
-    int64_t total_score = -_compaction_cost_seek;
+    int64_t total_score = -config::update_compaction_size_threshold;
     bool has_error = false;
     {
         std::lock_guard lg(_rowset_stats_lock);
@@ -1892,7 +1912,6 @@ static string int_list_to_string(const vector<uint32_t>& l) {
     return ret;
 }
 
-static const size_t compaction_result_bytes_threashold = 1000000000;
 static const size_t compaction_result_rows_threashold = 10000000;
 
 Status TabletUpdates::compaction(MemTracker* mem_tracker) {
@@ -1922,7 +1941,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     size_t total_bytes = 0;
     size_t total_rows_after_compaction = 0;
     size_t total_bytes_after_compaction = 0;
-    int64_t total_score = -_compaction_cost_seek;
+    int64_t total_score = -config::update_compaction_size_threshold;
     vector<CompactionEntry> candidates;
     {
         std::lock_guard lg(_rowset_stats_lock);
@@ -1960,7 +1979,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         size_t new_rows = total_rows_after_compaction + e.num_rows - e.num_dels;
         size_t new_bytes = total_bytes_after_compaction + e.bytes * (e.num_rows - e.num_dels) / e.num_rows;
         if (info->inputs.size() > 0 && (new_rows > compaction_result_rows_threashold * 3 / 2 ||
-                                        new_bytes > compaction_result_bytes_threashold * 3 / 2)) {
+                                        new_bytes > config::update_compaction_size_threshold * 3 / 2)) {
             break;
         }
         info->inputs.push_back(e.rowsetid);
@@ -1969,7 +1988,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         total_bytes += e.bytes;
         total_rows_after_compaction = new_rows;
         total_bytes_after_compaction = new_bytes;
-        if (total_bytes_after_compaction > compaction_result_bytes_threashold ||
+        if (total_bytes_after_compaction > config::update_compaction_size_threshold ||
             total_rows_after_compaction > compaction_result_rows_threashold ||
             info->inputs.size() >= config::max_update_compaction_num_singleton_deltas) {
             break;
@@ -2237,8 +2256,8 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
 }
 
 void TabletUpdates::_calc_compaction_score(RowsetStats* stats) {
-    if (stats->num_rows < 10) {
-        stats->compaction_score = _compaction_cost_seek;
+    if (stats->num_rows == 0) {
+        stats->compaction_score = config::update_compaction_size_threshold;
         return;
     }
     // TODO(cbl): estimate read/write cost, currently just use fixed value
@@ -2246,7 +2265,8 @@ void TabletUpdates::_calc_compaction_score(RowsetStats* stats) {
     const int64_t cost_record_read = 4;
     // use double to prevent overflow
     auto delete_bytes = (int64_t)(stats->byte_size * (double)stats->num_dels / stats->num_rows);
-    stats->compaction_score = _compaction_cost_seek + (cost_record_read + cost_record_write) * delete_bytes -
+    stats->compaction_score = config::update_compaction_size_threshold +
+                              (cost_record_read + cost_record_write) * delete_bytes -
                               cost_record_write * stats->byte_size;
 }
 

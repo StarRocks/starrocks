@@ -139,6 +139,8 @@ public:
     std::unique_ptr<FlushToken> create_flush_token(
             ThreadPool::ExecutionMode execution_mode = ThreadPool::ExecutionMode::SERIAL);
 
+    ThreadPool* get_thread_pool() { return _flush_pool.get(); }
+
 private:
     std::unique_ptr<ThreadPool> _flush_pool;
 };

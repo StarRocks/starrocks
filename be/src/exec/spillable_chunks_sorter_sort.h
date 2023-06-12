@@ -31,7 +31,7 @@ public:
     void setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker) override;
 
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
-    Status done(RuntimeState* state) override;
+    Status do_done(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
     void cancel() override;
