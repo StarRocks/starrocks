@@ -26,6 +26,108 @@
 
 namespace starrocks::pipeline {
 
+<<<<<<< HEAD
+=======
+void NJJoinBuildInputChannel::add_chunk(ChunkPtr build_chunk) {
+    if (build_chunk == nullptr || build_chunk->is_empty()) {
+        return;
+    }
+    _num_rows += build_chunk->num_rows();
+    _accumulator.push(std::move(build_chunk));
+}
+
+Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk,
+                                                          spill::IOTaskExecutor& executor) {
+    if (build_chunk == nullptr || build_chunk->is_empty()) {
+        return Status::OK();
+    }
+
+    _num_rows += build_chunk->num_rows();
+    _accumulator.push(std::move(build_chunk));
+    if (auto chunk = _accumulator.pull()) {
+        RETURN_IF_ERROR(_spiller->spill(state, chunk, executor, RESOURCE_TLS_MEMTRACER_GUARD(state)));
+    }
+
+    return Status::OK();
+}
+
+void NJJoinBuildInputChannel::finalize() {
+    _accumulator.finalize();
+    while (ChunkPtr output = _accumulator.pull()) {
+        _input_chunks.emplace_back(std::move(output));
+    }
+}
+
+Status SpillableNLJoinChunkStream::prefetch(RuntimeState* state, spill::IOTaskExecutor& executor) {
+    return _reader->trigger_restore(state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
+}
+
+bool SpillableNLJoinChunkStream::has_output() {
+    return _reader && _reader->has_output_data();
+}
+
+StatusOr<ChunkPtr> SpillableNLJoinChunkStream::get_next(RuntimeState* state, spill::IOTaskExecutor& executor) {
+    return _reader->restore(state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
+}
+
+Status SpillableNLJoinChunkStream::reset(RuntimeState* state, spill::Spiller* dummy_spiller) {
+    std::vector<spill::InputStreamPtr> spilled_input_streams;
+
+    auto stream = spill::SpillInputStream::as_stream(_build_chunks, dummy_spiller);
+    spilled_input_streams.emplace_back(std::move(stream));
+
+    //
+    for (auto& spiller : _spillers) {
+        spill::InputStreamPtr input_stream;
+        RETURN_IF_ERROR(spiller->writer()->acquire_stream(&input_stream));
+        spilled_input_streams.emplace_back(std::move(input_stream));
+    }
+
+    stream = spill::SpillInputStream::union_all(spilled_input_streams);
+    _reader = std::make_shared<spill::SpillerReader>(dummy_spiller);
+    RETURN_IF_ERROR(_reader->set_stream(std::move(stream)));
+
+    return Status::OK();
+}
+
+Status NLJoinBuildChunkStreamBuilder::init(RuntimeState* state,
+                                           std::vector<std::unique_ptr<NJJoinBuildInputChannel>>& channels) {
+    for (auto& channel : channels) {
+        if (channel->has_spilled()) {
+            _spillers.emplace_back(channel->spiller());
+        }
+    }
+
+    // normalize all incomplete chunks
+    ChunkAccumulator accumulator(state->chunk_size());
+    for (auto& sink : channels) {
+        if (auto chunk = sink->incomplete_chunk()) {
+            RETURN_IF_ERROR(accumulator.push(std::move(chunk)));
+        }
+    }
+    accumulator.finalize();
+
+    // collect all complete chunks
+    for (auto& sink : channels) {
+        sink->for_each_complete_chunk([&](auto&& chunk) { _build_chunks.emplace_back(std::move(chunk)); });
+    }
+
+    while (ChunkPtr output = accumulator.pull()) {
+        _build_chunks.emplace_back(std::move(output));
+    }
+
+    return Status::OK();
+}
+
+std::vector<ChunkPtr> NLJoinBuildChunkStreamBuilder::build() {
+    return _build_chunks;
+}
+
+std::unique_ptr<SpillableNLJoinChunkStream> NLJoinBuildChunkStreamBuilder::build_stream() {
+    return std::make_unique<SpillableNLJoinChunkStream>(_build_chunks, _spillers);
+}
+
+>>>>>>> 03073d9e9 ([Enhancement] add more memory usage profiles for spill (#24353))
 void NLJoinContext::close(RuntimeState* state) {
     _build_chunks.clear();
 }

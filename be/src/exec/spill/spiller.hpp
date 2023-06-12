@@ -30,8 +30,13 @@
 namespace starrocks::spill {
 template <class TaskExecutor, class MemGuard>
 Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard) {
+<<<<<<< HEAD
     SCOPED_TIMER(_metrics.spill_timer);
     RETURN_IF_ERROR(_spilled_task_status);
+=======
+    SCOPED_TIMER(_metrics.append_data_timer);
+    RETURN_IF_ERROR(task_status());
+>>>>>>> 03073d9e9 ([Enhancement] add more memory usage profiles for spill (#24353))
     DCHECK(!chunk->is_empty());
     DCHECK(!is_full());
 
@@ -55,8 +60,13 @@ Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&&
 template <class Processer, class TaskExecutor, class MemGuard>
 Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, SpillHashColumn* hash_column,
                                   Processer&& processer, TaskExecutor&& executor, MemGuard&& guard) {
+<<<<<<< HEAD
     SCOPED_TIMER(_metrics.spill_timer);
     RETURN_IF_ERROR(_spilled_task_status);
+=======
+    SCOPED_TIMER(_metrics.append_data_timer);
+    RETURN_IF_ERROR(task_status());
+>>>>>>> 03073d9e9 ([Enhancement] add more memory usage profiles for spill (#24353))
     DCHECK(!chunk->is_empty());
     COUNTER_UPDATE(_metrics.spill_rows, chunk->num_rows());
     DCHECK_GT(_opts.init_partition_nums, 0);
@@ -68,8 +78,12 @@ Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, Sp
 
     std::vector<uint32_t> indexs;
     auto writer = _writer->as<PartitionedSpillerWriter*>();
-    writer->shuffle(indexs, hash_column);
-    writer->process_partition_data(chunk, indexs, std::forward<Processer>(processer));
+    {
+        SCOPED_TIMER(_metrics.shuffle_timer);
+        writer->shuffle(indexs, hash_column);
+        writer->process_partition_data(chunk, indexs, std::forward<Processer>(processer));
+    }
+    _metrics.partition_writer_peak_memory_usage->set(writer->mem_consumption());
     RETURN_IF_ERROR(writer->flush_if_full(state, executor, guard));
     return Status::OK();
 }
@@ -90,7 +104,6 @@ StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, TaskExecutor&& executor
 
     ASSIGN_OR_RETURN(auto chunk, _reader->restore(state, executor, guard));
     chunk->check_or_die();
-    COUNTER_UPDATE(_metrics.restore_rows, chunk->num_rows());
     _restore_read_rows += chunk->num_rows();
 
     RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));
@@ -165,10 +178,15 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
 
 template <class TaskExecutor, class MemGuard>
 StatusOr<ChunkPtr> SpillerReader::restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-    SCOPED_TIMER(_spiller->metrics().restore_timer);
+    SCOPED_TIMER(_spiller->metrics().restore_from_buffer_timer);
     ASSIGN_OR_RETURN(auto chunk, _stream->get_next(_spill_read_ctx));
     RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));
     _read_rows += chunk->num_rows();
+<<<<<<< HEAD
+=======
+    COUNTER_UPDATE(_spiller->metrics().restore_rows, chunk->num_rows());
+    TRACE_SPILL_LOG << "restore rows: " << chunk->num_rows() << ", total restored: " << _read_rows << ", " << this;
+>>>>>>> 03073d9e9 ([Enhancement] add more memory usage profiles for spill (#24353))
     return chunk;
 }
 
