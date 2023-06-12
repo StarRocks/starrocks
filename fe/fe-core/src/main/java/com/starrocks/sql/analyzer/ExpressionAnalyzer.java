@@ -1223,7 +1223,7 @@ public class ExpressionAnalyzer {
                     }
                     for (int i = 0; i < node.getChildren().size(); ++i) {
                         if (!node.getChild(i).getType().isArrayType() && !node.getChild(i).getType().isNull()) {
-                            throw new SemanticException(i + "th input of " + fnName +
+                            throw new SemanticException((i + 1) + "-th input of " + fnName +
                                     " should be an array", node.getPos());
                         }
                     }
