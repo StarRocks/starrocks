@@ -34,11 +34,15 @@
 
 #pragma once
 
+#include <bthread/execution_queue.h>
+#include <glog/logging.h>
+
 #include <atomic>
 #include <memory>
 #include <vector>
 
 #include "common/status.h"
+#include "storage/memtable.h"
 #include "storage/olap_define.h"
 #include "util/spinlock.h"
 #include "util/threadpool.h"
@@ -113,6 +117,68 @@ private:
     Status _status;
 
     FlushStatistic _stats;
+};
+
+class FlushQueue {
+public:
+    using SegmentCallback = std::function<void(std::unique_ptr<SegmentPB>, bool)>;
+
+    FlushQueue();
+
+    Status submit(std::unique_ptr<MemTable> memtable, bool eos = false, SegmentCallback cb = nullptr) {
+        FlushTask task(std::move(memtable));
+        task.callback = std::move(cb);
+        bthread::execution_queue_execute(_queue_id, std::move(task));
+        return _status;
+    }
+
+    Status wait() {
+        bthread::execution_queue_join(_queue_id);
+        return _status;
+    }
+    void cancel(const Status& st) {
+        FlushTask task(nullptr);
+        task.abort = true;
+        bthread::execution_queue_execute(_queue_id, task);
+    }
+    void close() {
+        int r = bthread::execution_queue_stop(_queue_id);
+        LOG_IF(WARNING, r != 0) << "Fail to stop execution queue: " << r;
+        r = bthread::execution_queue_join(_queue_id);
+        LOG_IF(WARNING, r != 0) << "Fail to join execution queue: " << r;
+    }
+    const FlushStatistic& get_stats() const { return _stats; }
+    void set_status(Status st) { _status = st; }
+    Status status() const { return _status; }
+
+    struct FlushTask {
+        FlushTask(std::shared_ptr<MemTable> i_memtable) : memtable(std::move(i_memtable)) {}
+        FlushTask() = delete;
+
+        std::shared_ptr<MemTable> memtable;
+        SegmentCallback callback;
+        bool abort = false;
+        bool eos = false;
+    };
+
+private:
+    Status _flush_memtable(MemTable* memtable, SegmentPB* segment) {
+        if (!status().ok()) return status();
+
+        MonotonicStopWatch timer;
+        timer.start();
+        set_status(memtable->flush(segment));
+        _stats.flush_time_ns += timer.elapsed_time();
+        _stats.flush_count++;
+        _stats.flush_size_bytes += memtable->memory_usage();
+        return status();
+    }
+
+    static int _execute(void* meta, bthread::TaskIterator<FlushTask>& iter);
+
+    bthread::ExecutionQueueId<FlushTask> _queue_id;
+    FlushStatistic _stats;
+    Status _status;
 };
 
 // MemTableFlushExecutor is responsible for flushing memtables to disk.

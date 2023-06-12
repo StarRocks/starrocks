@@ -36,6 +36,7 @@
 
 #include <memory>
 
+#include "exec/workgroup/scan_executor.h"
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
 #include "storage/memtable.h"
@@ -101,9 +102,7 @@ Status FlushToken::submit(std::unique_ptr<MemTable> memtable, bool eos,
     SCOPED_THREAD_LOCAL_MEM_SETTER(nullptr, false);
     auto task = std::make_shared<MemtableFlushTask>(this, std::move(memtable), eos, std::move(cb));
     _stats.queueing_memtable_num++;
-    task->run();
-    return {};
-    // return _flush_token->submit(std::move(task));
+    return _flush_token->submit(std::move(task));
 }
 
 void FlushToken::shutdown() {
@@ -134,6 +133,39 @@ void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment) {
     _stats.flush_time_ns += timer.elapsed_time();
     _stats.flush_count++;
     _stats.flush_size_bytes += memtable->memory_usage();
+}
+
+FlushQueue::FlushQueue() {
+    bthread::ExecutionQueueOptions opts;
+    opts.executor = ExecEnv::GetInstance()->scan_executor_with_workgroup();
+    bthread::execution_queue_start(&_queue_id, &opts, _execute, nullptr);
+}
+
+int FlushQueue::_execute(void* meta, bthread::TaskIterator<FlushTask>& iter) {
+    if (iter.is_queue_stopped()) {
+        return 0;
+    }
+    auto* queue = static_cast<FlushQueue*>(meta);
+    for (; iter; ++iter) {
+        if (iter->abort) {
+            break;
+        }
+        std::unique_ptr<SegmentPB> segment = nullptr;
+        if (iter->memtable) {
+            SCOPED_THREAD_LOCAL_MEM_SETTER(iter->memtable->mem_tracker(), false);
+            segment = std::make_unique<SegmentPB>();
+            if (!queue->_flush_memtable(iter->memtable.get(), segment.get()).ok()) {
+                return 0;
+            }
+            if (!segment->has_path() && !segment->has_delete_path() && !segment->has_update_path()) {
+                segment.reset();
+            }
+        }
+        if (iter->callback) {
+            iter->callback(std::move(segment), iter->eos);
+        }
+    }
+    return 0;
 }
 
 Status MemTableFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {
