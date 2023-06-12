@@ -288,11 +288,11 @@ public class AnalyzeExprTest {
                 "union all select v1 as a, v3 as b from t0)A;");
         analyzeSuccess("select array_agg(v1 order by v1),array_sortby(array_agg(v1),array_agg(v2)) from t0;");
         analyzeSuccess("select array_agg(case when c1='a' then [1,3] else [1,2] end order by c3) as arr1 " +
-        "from (select 'a' as c1, 1 as c2, 2 as c3)t");
+                "from (select 'a' as c1, 1 as c2, 2 as c3)t");
         analyzeSuccess("select array_agg(case when c1='a' then map(1,3) else map(1,2) end order by c3) as arr1 " +
-        "from (select 'a' as c1, 1 as c2, 2 as c3)t");
+                "from (select 'a' as c1, 1 as c2, 2 as c3)t");
         analyzeSuccess("select array_agg(case when c1='a' then struct(1,3) else struct(1,2) end order by c3) as arr1" +
-        " from (select 'a' as c1, 1 as c2, 2 as c3)t");
+                " from (select 'a' as c1, 1 as c2, 2 as c3)t");
 
 
         analyzeFail("select array_agg(null order by);");
@@ -300,9 +300,9 @@ public class AnalyzeExprTest {
         analyzeFail("select array_agg(1,1);");
         analyzeFail("select array_agg(1 order by 1 nulls first desc)");
         analyzeFail("select array_agg(case when c1='a' then struct(1,3) else map(1,2) end order by c3) as arr1 from " +
-        " (select 'a' as c1, 1 as c2, 2 as c3)t");
+                " (select 'a' as c1, 1 as c2, 2 as c3)t");
         analyzeFail("select array_agg(case when c1='a' then [1,3] else map(1,2) end order by c3) as arr1" +
-        " from (select 'a' as c1, 1 as c2, 2 as c3)t");
+                " from (select 'a' as c1, 1 as c2, 2 as c3)t");
     }
 
     @Test
