@@ -1100,8 +1100,28 @@ public class StmtExecutor {
         }
 
         MetaUtils.normalizationTableName(context, stmt.getTableName());
+<<<<<<< HEAD
         Database database = MetaUtils.getStarRocks(context, stmt.getTableName());
         Table targetTable = MetaUtils.getStarRocksTable(context, stmt.getTableName());
+=======
+        String catalogName = stmt.getTableName().getCatalog();
+        String dbName = stmt.getTableName().getDb();
+        String tableName = stmt.getTableName().getTbl();
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Table targetTable;
+        if (stmt instanceof InsertStmt && ((InsertStmt) stmt).getTargetTable() != null) {
+            targetTable = ((InsertStmt) stmt).getTargetTable();
+        } else {
+            targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        }
+
+        if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite() &&
+                !((InsertStmt) parsedStmt).hasOverwriteJob() &&
+                !(targetTable instanceof IcebergTable)) {
+            handleInsertOverwrite((InsertStmt) parsedStmt);
+            return;
+        }
+>>>>>>> ef1fc6a40 ([Refactor] Synchronize OLAP external table metadata when loading data (#24739))
 
         String label = DebugUtil.printId(context.getExecutionId());
         if (stmt instanceof InsertStmt) {

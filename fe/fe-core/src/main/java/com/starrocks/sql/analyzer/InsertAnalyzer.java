@@ -10,11 +10,25 @@ import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.catalog.MysqlTable;
+=======
+import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.MaterializedView;
+>>>>>>> ef1fc6a40 ([Refactor] Synchronize OLAP external table metadata when loading data (#24739))
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.external.starrocks.TableMetaSyncer;
+>>>>>>> ef1fc6a40 ([Refactor] Synchronize OLAP external table metadata when loading data (#24739))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -39,8 +53,53 @@ public class InsertAnalyzer {
         Database database = MetaUtils.getStarRocks(session, insertStmt.getTableName());
         Table table = MetaUtils.getStarRocksTable(session, insertStmt.getTableName());
 
+<<<<<<< HEAD
         if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
             throw unsupportedException("Only support insert into olap table or mysql table");
+=======
+        try {
+            MetaUtils.checkCatalogExistAndReport(catalogName);
+        } catch (AnalysisException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+        }
+
+        Database database = MetaUtils.getDatabase(catalogName, dbName);
+        Table table = MetaUtils.getTable(catalogName, dbName, tableName);
+
+        if (table instanceof ExternalOlapTable) {
+            table = getOLAPExternalTableMeta(database, (ExternalOlapTable) table);
+        }
+
+        if (table instanceof MaterializedView && !insertStmt.isSystem()) {
+            throw new SemanticException(
+                    "The data of '%s' cannot be inserted because '%s' is a materialized view," +
+                            "and the data of materialized view must be consistent with the base table.",
+                    insertStmt.getTableName().getTbl(), insertStmt.getTableName().getTbl());
+        }
+
+        if (insertStmt.isOverwrite()) {
+            if (!(table instanceof OlapTable) && !table.isIcebergTable()) {
+                throw unsupportedException("Only support insert overwrite olap table and iceberg table");
+            }
+            if (table instanceof OlapTable && ((OlapTable) table).getState() != NORMAL) {
+                String msg =
+                        String.format("table state is %s, please wait to insert overwrite util table state is normal",
+                                ((OlapTable) table).getState());
+                throw unsupportedException(msg);
+            }
+        }
+
+        if (!table.supportInsert()) {
+            if (table.isIcebergTable()) {
+                throw unsupportedException("Only support insert into iceberg table with parquet file format");
+            }
+            throw unsupportedException("Only support insert into olap table or mysql table or iceberg table");
+        }
+
+        if (table instanceof IcebergTable && CatalogMgr.isInternalCatalog(catalogName)) {
+            throw unsupportedException("Doesn't support iceberg table sink in the internal catalog. " +
+                    "You need to use iceberg catalog.");
+>>>>>>> ef1fc6a40 ([Refactor] Synchronize OLAP external table metadata when loading data (#24739))
         }
 
         List<Long> targetPartitionIds = Lists.newArrayList();
@@ -136,5 +195,24 @@ public class InsertAnalyzer {
         insertStmt.setTargetPartitionIds(targetPartitionIds);
         insertStmt.setTargetColumns(targetColumns);
         session.getDumpInfo().addTable(database.getFullName().split(":")[1], table);
+    }
+
+    private static ExternalOlapTable getOLAPExternalTableMeta(Database database, ExternalOlapTable externalOlapTable) {
+        // copy the table, and release database lock when synchronize table meta
+        ExternalOlapTable copiedTable = new ExternalOlapTable();
+        externalOlapTable.copyOnlyForQuery(copiedTable);
+        int lockTimes = 0;
+        while (database.isReadLockHeldByCurrentThread()) {
+            database.readUnlock();
+            lockTimes++;
+        }
+        try {
+            new TableMetaSyncer().syncTable(copiedTable);
+        } finally {
+            while (lockTimes-- > 0) {
+                database.readLock();
+            }
+        }
+        return copiedTable;
     }
 }
