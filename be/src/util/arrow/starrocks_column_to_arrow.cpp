@@ -139,8 +139,10 @@ DEF_PRED_GUARD(ConvBinaryGuard, is_conv_binary, PrimitiveType, PT, ArrowTypeId, 
 #define IS_CONV_BINARY_CTOR(PT, AT) DEF_PRED_CASE_CTOR(is_conv_binary, PT, AT)
 #define IS_CONV_BINARY_R(AT, ...) DEF_BINARY_RELATION_ENTRY_SEP_SEMICOLON_R(IS_CONV_BINARY_CTOR, AT, ##__VA_ARGS__)
 
-IS_CONV_BINARY_R(ArrowTypeId::STRING, TYPE_VARCHAR, TYPE_CHAR, TYPE_HLL, TYPE_DATE, TYPE_DATETIME, TYPE_LARGEINT)
+IS_CONV_BINARY_R(ArrowTypeId::STRING, TYPE_VARCHAR, TYPE_HLL, TYPE_CHAR, TYPE_DATE, TYPE_DATETIME, TYPE_LARGEINT)
 IS_CONV_BINARY_R(ArrowTypeId::STRING, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
+//TODO(by satanson): one day, we must support TYPE_STRUCT/TYPE_MAP/TYPE_ARRAY
+IS_CONV_BINARY_R(ArrowTypeId::STRING, TYPE_JSON)
 
 template <PrimitiveType PT, ArrowTypeId AT, bool is_nullable>
 struct ColumnToArrowConverter<PT, AT, is_nullable, ConvBinaryGuard<PT, AT>> {
@@ -163,6 +165,8 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvBinaryGuard<PT, AT>> {
             return LargeIntValue::to_string(datum);
         } else if constexpr (pt_is_decimal<PT>) {
             return DecimalV3Cast::to_string<StarRocksCppType>(datum, precision, scale);
+        } else if constexpr (pt_is_json<PT>) {
+            return datum->to_string_uncheck();
         } else {
             static_assert(is_conv_binary<PT, AT>, "Illegal PrimitiveType");
             return "";
@@ -255,6 +259,7 @@ static const std::unordered_map<int32_t, StarRocksToArrowConvertFunc> global_sta
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::DECIMAL, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRING, TYPE_VARCHAR, TYPE_CHAR, TYPE_HLL),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRING, TYPE_LARGEINT, TYPE_DATE, TYPE_DATETIME),
+        STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::STRING, TYPE_JSON),
 };
 static inline StarRocksToArrowConvertFunc resolve_convert_func(PrimitiveType pt, ArrowTypeId at, bool is_nullable) {
     const auto func_id = starrocks_to_arrow_convert_idx(pt, at, is_nullable);
