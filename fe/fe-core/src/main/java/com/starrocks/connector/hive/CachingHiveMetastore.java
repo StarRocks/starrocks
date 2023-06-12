@@ -56,7 +56,6 @@ import static com.google.common.base.Throwables.throwIfUnchecked;
 import static com.google.common.cache.CacheLoader.asyncReloading;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService;
-import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class CachingHiveMetastore implements IHiveMetastore {
