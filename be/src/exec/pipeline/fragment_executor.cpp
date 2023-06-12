@@ -944,6 +944,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         DCHECK(target_table.__isset.path);
         DCHECK(target_table.__isset.file_format);
         DCHECK(target_table.__isset.columns);
+        DCHECK(target_table.__isset.write_single_file);
         DCHECK(target_table.columns.size() == output_exprs.size());
 
         std::vector<std::string> column_names;
@@ -968,14 +969,17 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                 Expr::create_expr_trees(runtime_state->obj_pool(), output_exprs, &output_expr_ctxs, runtime_state));
 
         auto op = std::make_shared<TableFunctionTableSinkOperatorFactory>(
-                context->next_operator_id(), thrift_sink.table_function_table_sink.target_table.path,
-                thrift_sink.table_function_table_sink.target_table.file_format,
-                thrift_sink.table_function_table_sink.target_table.compression_type, output_expr_ctxs,
-                partition_expr_ctxs, column_names, partition_column_names,
-                thrift_sink.table_function_table_sink.cloud_configuration, fragment_ctx);
+                context->next_operator_id(), target_table.path, target_table.file_format, target_table.compression_type,
+                output_expr_ctxs, partition_expr_ctxs, column_names, partition_column_names,
+                target_table.write_single_file, thrift_sink.table_function_table_sink.cloud_configuration,
+                fragment_ctx);
 
         size_t source_dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         size_t sink_dop = request.pipeline_sink_dop();
+
+        if (target_table.write_single_file) {
+            sink_dop = 1;
+        }
 
         if (partition_expr_ctxs.empty()) {
             if (sink_dop != source_dop) {

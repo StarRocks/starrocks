@@ -24,6 +24,7 @@ public class TableFunctionTableSink extends DataSink {
                 prefix + "  PATH: " + table.getPath() + "\n" +
                 prefix + "  FORMAT: " + table.getFormat() + "\n" +
                 prefix + "  PARTITION BY: " + table.getPartitionColumnNames() + "\n" +
+                prefix + "  SINGLE: " + table.isWriteSingleFile() + "\n" +
                 prefix + "  " + DataPartition.RANDOM.getExplainString(explainLevel);
     }
 
@@ -58,4 +59,6 @@ public class TableFunctionTableSink extends DataSink {
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }
+
+    public boolean isWriteSingleFile() { return table.isWriteSingleFile(); }
 }

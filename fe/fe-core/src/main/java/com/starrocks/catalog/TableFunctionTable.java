@@ -68,6 +68,7 @@ public class TableFunctionTable extends Table {
     private String format;
     private Map<String, String> properties;
     private List<Integer> partitionColumnIDs;
+    private boolean writeSingleFile;
 
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
@@ -84,12 +85,14 @@ public class TableFunctionTable extends Table {
 
     // Ctor for unload data via table function
     public TableFunctionTable(String path, String format, List<Column> columns,
-                              @Nullable List<Integer> partitionColumnIDs) {
+                              @Nullable List<Integer> partitionColumnIDs, boolean writeSingleFile) {
         super(TableType.TABLE_FUNCTION);
         verify(!Strings.isNullOrEmpty(path));
+        verify(!(partitionColumnIDs != null && writeSingleFile));
         this.path = path;
         this.format = format;
         this.partitionColumnIDs = partitionColumnIDs;
+        this.writeSingleFile = writeSingleFile;
         super.setNewFullSchema(columns);
     }
 
@@ -123,6 +126,7 @@ public class TableFunctionTable extends Table {
         tTableFunctionTable.setPath(path);
         tTableFunctionTable.setColumns(tColumns);
         tTableFunctionTable.setFile_format(format);
+        tTableFunctionTable.setWrite_single_file(writeSingleFile);
         tTableFunctionTable.setCompression_type(TCompressionType.NO_COMPRESSION);
         if (partitionColumnIDs != null) {
             tTableFunctionTable.setPartition_column_ids(partitionColumnIDs);
@@ -273,5 +277,9 @@ public class TableFunctionTable extends Table {
             return new ArrayList<>();
         }
         return partitionColumnIDs.stream().map(id -> fullSchema.get(id).getName()).collect(Collectors.toList());
+    }
+
+    public boolean isWriteSingleFile() {
+        return writeSingleFile;
     }
 }

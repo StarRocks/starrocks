@@ -151,6 +151,9 @@ TableInfo TableFunctionTableSinkOperator::_make_table_info(const string& partiti
     tableInfo.schema = _parquet_file_schema;
     tableInfo.compress_type = _compression_type;
     tableInfo.cloud_conf = _cloud_conf;
+    if (_write_single_file) {
+        tableInfo.max_file_size = -1;
+    }
     return tableInfo;
 }
 
@@ -158,7 +161,7 @@ TableFunctionTableSinkOperatorFactory::TableFunctionTableSinkOperatorFactory(
         const int32_t id, const string& path, const string& file_format, const TCompressionType::type& compression_type,
         const std::vector<ExprContext*>& output_exprs, const std::vector<ExprContext*>& partition_exprs,
         const std::vector<std::string>& column_names, const std::vector<std::string>& partition_column_names,
-        const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx)
+        bool write_single_file, const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx)
         : OperatorFactory(id, "table_function_table_sink",
                           Operator::s_pseudo_plan_node_id_for_table_function_table_sink),
           _path(path),
@@ -168,6 +171,7 @@ TableFunctionTableSinkOperatorFactory::TableFunctionTableSinkOperatorFactory(
           _partition_exprs(partition_exprs),
           _column_names(column_names),
           _partition_column_names(partition_column_names),
+          _write_single_file(write_single_file),
           _cloud_conf(cloud_conf),
           _fragment_ctx(fragment_ctx) {}
 
@@ -197,7 +201,8 @@ Status TableFunctionTableSinkOperatorFactory::prepare(RuntimeState* state) {
 OperatorPtr TableFunctionTableSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     return std::make_shared<TableFunctionTableSinkOperator>(
             this, _id, _plan_node_id, driver_sequence, _path, _file_format, _compression_type, _output_exprs,
-            _partition_exprs, _partition_column_names, _cloud_conf, _fragment_ctx, _parquet_file_schema);
+            _partition_exprs, _partition_column_names, _write_single_file, _cloud_conf, _fragment_ctx,
+            _parquet_file_schema);
 }
 
 void TableFunctionTableSinkOperatorFactory::close(RuntimeState* state) {

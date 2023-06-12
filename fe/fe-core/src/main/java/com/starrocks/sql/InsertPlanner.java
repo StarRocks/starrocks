@@ -567,8 +567,15 @@ public class InsertPlanner {
             return new PhysicalPropertySet(distributionProperty);
         }
 
-        if (insertStmt.getTargetTable() instanceof IcebergTable) {
-            IcebergTable icebergTable = (IcebergTable) insertStmt.getTargetTable();
+        Table targetTable = insertStmt.getTargetTable();
+
+        if (targetTable instanceof TableFunctionTable && ((TableFunctionTable) targetTable).isWriteSingleFile()) {
+            DistributionProperty distributionProperty = new DistributionProperty(new GatherDistributionSpec());
+            return new PhysicalPropertySet(distributionProperty);
+        }
+
+        if (targetTable instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) targetTable;
             SortOrder sortOrder = icebergTable.getNativeTable().sortOrder();
 
             if (sortOrder.isUnsorted()) {
@@ -590,11 +597,11 @@ public class InsertPlanner {
             }
         }
 
-        if (!(insertStmt.getTargetTable() instanceof OlapTable)) {
+        if (!(targetTable instanceof OlapTable)) {
             return new PhysicalPropertySet();
         }
 
-        OlapTable table = (OlapTable) insertStmt.getTargetTable();
+        OlapTable table = (OlapTable) targetTable;
 
         if (KeysType.DUP_KEYS.equals(table.getKeysType())) {
             return new PhysicalPropertySet();

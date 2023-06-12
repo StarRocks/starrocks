@@ -34,7 +34,7 @@ public:
                                    const TCompressionType::type& compression_type,
                                    const std::vector<ExprContext*>& output_exprs,
                                    const std::vector<ExprContext*>& partition_exprs,
-                                   const std::vector<std::string>& partition_column_names,
+                                   const std::vector<std::string>& partition_column_names, bool write_single_file,
                                    const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx,
                                    std::shared_ptr<::parquet::schema::GroupNode> parquet_file_schema)
             : Operator(factory, id, "table_function_table_sink", plan_node_id, driver_sequence),
@@ -44,6 +44,7 @@ public:
               _output_exprs(output_exprs),
               _partition_exprs(partition_exprs),
               _partition_column_names(partition_column_names),
+              _write_single_file(write_single_file),
               _cloud_conf(cloud_conf),
               _fragment_ctx(fragment_ctx),
               _parquet_file_schema(std::move(parquet_file_schema)) {}
@@ -80,6 +81,7 @@ private:
     const std::vector<ExprContext*> _output_exprs;
     const std::vector<ExprContext*> _partition_exprs;
     const std::vector<std::string> _partition_column_names;
+    const bool _write_single_file;
     const TCloudConfiguration _cloud_conf;
     const FragmentContext* _fragment_ctx;
 
@@ -96,7 +98,8 @@ public:
                                           const std::vector<ExprContext*>& partition_exprs,
                                           const std::vector<std::string>& column_names,
                                           const std::vector<std::string>& partition_column_names,
-                                          const TCloudConfiguration& cloud_conf, const FragmentContext* fragment_ctx);
+                                          bool write_single_file, const TCloudConfiguration& cloud_conf,
+                                          const FragmentContext* fragment_ctx);
 
     ~TableFunctionTableSinkOperatorFactory() override = default;
 
@@ -114,6 +117,7 @@ private:
     const std::vector<ExprContext*> _partition_exprs;
     const std::vector<std::string> _column_names;
     const std::vector<std::string> _partition_column_names;
+    const bool _write_single_file;
     const TCloudConfiguration _cloud_conf;
     const FragmentContext* _fragment_ctx;
 
