@@ -2387,6 +2387,8 @@ public class Coordinator {
                 instanceProfile.removeInfoString("Address");
             });
             fragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
+            Counter backendNum = fragmentProfile.addCounter("BackendNum", TUnit.UNIT, null);
+            backendNum.setValue(backendAddresses.size());
 
             // Setup number of instance
             Counter counter = fragmentProfile.addCounter("InstanceNum", TUnit.UNIT);
@@ -2411,20 +2413,6 @@ public class Coordinator {
         // Remove redundant MIN/MAX metrics if MIN and MAX are identical
         for (RuntimeProfile fragmentProfile : fragmentProfiles) {
             RuntimeProfile.removeRedundantMinMaxMetrics(fragmentProfile);
-        }
-
-        // Set backend number
-        for (int i = 0; i < fragments.size(); i++) {
-            PlanFragment fragment = fragments.get(i);
-            RuntimeProfile profile = fragmentProfiles.get(i);
-
-            Set<TNetworkAddress> networkAddresses =
-                    fragmentExecParamsMap.get(fragment.getFragmentId()).instanceExecParams.stream()
-                            .map(param -> param.host)
-                            .collect(Collectors.toSet());
-
-            Counter backendNum = profile.addCounter("BackendNum", TUnit.UNIT);
-            backendNum.setValue(networkAddresses.size());
         }
 
         // Calculate ExecutionTotalTime, which comprising all operator's sync time and async time
