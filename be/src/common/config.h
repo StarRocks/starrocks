@@ -115,6 +115,7 @@ CONF_mInt32(transaction_publish_version_worker_count, "0");
 // The count of thread to apply rowset in primary key table
 // 0 means apply worker count is equal to cpu core count
 CONF_mInt32(transaction_apply_worker_count, "0");
+CONF_mInt32(get_pindex_worker_count, "0");
 
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
@@ -985,4 +986,10 @@ CONF_Int32(default_mv_resource_group_cpu_limit, "1");
 
 // Max size of key columns size of primary key table, default value is 128 bytes
 CONF_mInt32(primary_key_limit_size, "128");
+
+// If your sort key cardinality is very high,
+// You could enable this config to speed up the point lookup query,
+// otherwise, StarRocks will use zone map for one column filter
+CONF_mBool(enable_short_key_for_one_column_filter, "false");
+
 } // namespace starrocks::config
