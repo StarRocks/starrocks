@@ -440,9 +440,20 @@ public class AnalyzerUtils {
         }
 
         @Override
+<<<<<<< HEAD
         public Void visitInPredicate(InPredicate node, Void context) {
             if (CollectionUtils.isNotEmpty(node.getChildren())) {
                 node.getChildren().forEach(this::visit);
+=======
+        public Void visitTable(TableRelation node, Void context) {
+            if (node.getTable().isOlapTable()) {
+                OlapTable table = (OlapTable) node.getTable();
+                olapTables.add(table);
+                // Only copy the necessary olap table meta to avoid the lock when plan query
+                OlapTable copied = new OlapTable();
+                table.copyOnlyForQuery(copied);
+                node.setTable(copied);
+>>>>>>> ef1fc6a40 ([Refactor] Synchronize OLAP external table metadata when loading data (#24739))
             }
             return null;
         }
