@@ -548,6 +548,9 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     sc_params.base_tablet = base_tablet;
     sc_params.new_tablet = new_tablet;
     sc_params.chunk_changer = std::make_unique<ChunkChanger>(sc_params.new_tablet->tablet_schema());
+    if (request.__isset.query_options && request.__isset.query_options) {
+        sc_params.chunk_changer->init_runtime_state(request.query_options, request.query_globals);
+    }
 
     // materialized column index in new schema
     std::unordered_set<int> materialized_column_idxs;
@@ -555,6 +558,19 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         for (auto it : request.materialized_column_req.mc_exprs) {
             materialized_column_idxs.insert(it.first);
         }
+    }
+
+    // primary key do not support materialized view, initialize materialized_params_map here,
+    // just for later column_mapping of _parse_request.
+    SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map);
+    Status status = SchemaChangeUtils::parse_request(base_tablet->tablet_schema(), new_tablet->tablet_schema(),
+                                                     sc_params.chunk_changer.get(), sc_params.materialized_params_map,
+                                                     !base_tablet->delete_predicates().empty(), &sc_params.sc_sorting,
+                                                     &sc_params.sc_directly, &materialized_column_idxs);
+
+    if (!status.ok()) {
+        LOG(WARNING) << _alter_msg_header << "failed to parse the request. res=" << status.get_error_msg();
+        return status;
     }
 
     if (request.materialized_column_req.mc_exprs.size() != 0) {
@@ -577,18 +593,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
 
             sc_params.chunk_changer->get_mc_exprs()->insert({it.first, ctx});
         }
-    }
-
-    // primary key do not support materialized view, initialize materialized_params_map here,
-    // just for later column_mapping of _parse_request.
-    SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map);
-    Status status = SchemaChangeUtils::parse_request(base_tablet->tablet_schema(), new_tablet->tablet_schema(),
-                                                     sc_params.chunk_changer.get(), sc_params.materialized_params_map,
-                                                     !base_tablet->delete_predicates().empty(), &sc_params.sc_sorting,
-                                                     &sc_params.sc_directly, &materialized_column_idxs);
-    if (!status.ok()) {
-        LOG(WARNING) << _alter_msg_header << "failed to parse the request. res=" << status.get_error_msg();
-        return status;
     }
 
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
