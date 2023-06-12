@@ -71,7 +71,7 @@ class TExpr;
 
 namespace stream_load {
 // TabletSinkSender will control one index/table's send chunks.
-class TabletSinkMultiSender : public TabletSinkSender {
+class TabletSinkMultiSender final : public TabletSinkSender {
 public:
     TabletSinkMultiSender(PUniqueId load_id, int64_t txn_id, OlapTableLocationParam* location,
                           OlapTablePartitionParam* vectorized_partition, std::vector<IndexChannel*> channels,

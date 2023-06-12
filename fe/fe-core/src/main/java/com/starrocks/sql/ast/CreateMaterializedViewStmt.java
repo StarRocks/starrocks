@@ -49,6 +49,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
@@ -253,13 +254,13 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                         break;
                     default:
                         mvColumnName = Strings.isNullOrEmpty(alias) ? MVUtils.getMVColumnName(selectListItemExpr.toSql(),
-                                baseColumnNames) : MVUtils.getMVColumnName(alias);
+                                baseColumnNames) : alias;
                         expr = selectListItemExpr;
                         break;
                 }
             } else {
                 mvColumnName = Strings.isNullOrEmpty(alias) ? MVUtils.getMVColumnName(selectListItemExpr.toSql(),
-                        baseColumnNames) : MVUtils.getMVColumnName(alias);
+                        baseColumnNames) : alias;
                 expr = selectListItemExpr;
             }
             result.put(mvColumnName, expr);
@@ -314,7 +315,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         if (!(selectRelation.getRelation() instanceof TableRelation)) {
             throw new SemanticException("Materialized view query statement only support direct query from table.");
         }
-        int beginIndexOfAggregation = genColumnAndSetIntoStmt(selectRelation);
+        int beginIndexOfAggregation = genColumnAndSetIntoStmt(table, selectRelation);
         if (selectRelation.isDistinct() || selectRelation.hasAggregation()) {
             this.setMvKeysType(KeysType.AGG_KEYS);
         }
@@ -347,7 +348,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     }
 
     /// FIXME Need check alias is not same as column names in base schema?
-    private int genColumnAndSetIntoStmt(SelectRelation selectRelation) {
+    private int genColumnAndSetIntoStmt(Table table, SelectRelation selectRelation) {
         List<MVColumnItem> mvColumnItemList = Lists.newArrayList();
 
         boolean meetAggregate = false;
@@ -356,6 +357,8 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         StringJoiner joiner = new StringJoiner(", ", "[", "]");
 
         List<SelectListItem> selectListItems = selectRelation.getSelectList().getItems();
+        List<Column> fullSchema = table.getFullSchema();
+        Set<String> fullSchemaColNames = table.getFullSchema().stream().map(Column::getName).collect(Collectors.toSet());
         for (int i = 0; i < selectListItems.size(); ++i) {
             SelectListItem selectListItem = selectListItems.get(i);
             if (selectListItem.isStar()) {
@@ -364,6 +367,13 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
             String alias = selectListItem.getAlias();
             Expr selectListItemExpr = selectListItem.getExpr();
+            if (!Strings.isNullOrEmpty(selectListItem.getAlias())) {
+                // check alias name is not in the `FullSchema`
+                if (fullSchemaColNames.contains(selectListItem.getAlias())) {
+                    throw new SemanticException(String.format("The alias column {} has already existed in the table's full " +
+                            "schema, please set another name", selectListItem.getAlias()));
+                }
+            }
 
             if (selectListItemExpr instanceof FunctionCallExpr
                     && ((FunctionCallExpr) selectListItemExpr).isAggregateFunction()) {
@@ -406,7 +416,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     columnName = baseColumnNames.get(0);
                 } else {
                     columnName = Strings.isNullOrEmpty(alias) ? MVUtils.getMVColumnName(selectListItemExpr.toSql(),
-                            baseColumnNames) : MVUtils.getMVColumnName(alias);
+                            baseColumnNames) : alias;
                 }
                 MVColumnItem mvColumnItem = new MVColumnItem(columnName, type, selectListItemExpr, baseColumnNames);
                 if (meetAggregate) {
@@ -444,7 +454,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         AggregateType mvAggregateType;
         Type funcArgType = functionChild0.getType();
         String mvColumnName = Strings.isNullOrEmpty(aliasName) ? MVUtils.getMVColumnName(functionName, baseColumnNames)
-                : MVUtils.getMVColumnName(aliasName);
+                : aliasName;
         Expr defineExpr = functionChild0;
         Type type;
         switch (functionName.toLowerCase()) {

@@ -101,7 +101,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
-import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME_PREFIX;
 
 public class InsertPlanner {
     // Only for unit test
@@ -458,9 +457,9 @@ public class InsertPlanner {
                 continue;
             }
 
-            // Target column which starts with "mv" should not be treated as materialized view column when this column exists in base schema,
-            // this could be created by user.
-            if (targetColumn.isNameWithPrefix(MATERIALIZED_VIEW_NAME_PREFIX)) {
+            // Target column which starts with "mv" should not be treated as materialized view column
+            // when this column exists in base schema, this could be created by user.
+            if (targetColumn.getDefineExpr() != null && !baseSchema.contains(targetColumn)) {
                 ExpressionAnalyzer.analyzeExpression(targetColumn.getDefineExpr(), new AnalyzeState(),
                         new Scope(RelationId.anonymous(),
                                 new RelationFields(insertStatement.getTargetTable().getBaseSchema().stream()
@@ -475,11 +474,9 @@ public class InsertPlanner {
 
                 for (SlotRef slot : slots) {
                     String originName = slot.getColumnName();
-
                     Optional<Column> optOriginColumn = fullSchema.stream()
                             .filter(c -> c.nameEquals(originName, false)).findFirst();
                     Preconditions.checkState(optOriginColumn.isPresent());
-
                     Column originColumn = optOriginColumn.get();
                     ColumnRefOperator originColRefOp = outputColumns.get(fullSchema.indexOf(originColumn));
 

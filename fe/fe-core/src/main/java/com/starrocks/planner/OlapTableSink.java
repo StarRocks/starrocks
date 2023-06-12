@@ -191,6 +191,7 @@ public class OlapTableSink extends DataSink {
         tDataSink = new TDataSink(TDataSinkType.DATA_SPLIT_SINK);
         tDataSink.setType(TDataSinkType.OLAP_TABLE_SINK);
         tDataSink.setOlap_table_sink(tSink);
+        tSink.setEnable_replicated_storage(enableReplicatedStorage);
 
         for (Long partitionId : partitionIds) {
             Partition part = dstTable.getPartition(partitionId);
@@ -261,6 +262,9 @@ public class OlapTableSink extends DataSink {
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
         tSink.setSchema(createSchema(tSink.getDb_id(), dstTable));
 
+        if (dstTable.isEnableColocateMVIndex()) {
+            tSink.setEnable_colocate_mv_index(true);
+        }
         if (dstTable.hasAssociatedTables()) {
             // prepare associate tables
             Database db = GlobalStateMgr.getCurrentState().getDb(tSink.getDb_id());
