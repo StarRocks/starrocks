@@ -677,7 +677,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE MATERIALIZED VIEW `").append(this.getName()).append("`");
         if (!Strings.isNullOrEmpty(this.getComment())) {
-            sb.append("\nCOMMENT \"").append(this.getComment()).append("\"");
+            sb.append("\nCOMMENT \"").append(this.getDisplayComment()).append("\"");
         }
 
         // partition
