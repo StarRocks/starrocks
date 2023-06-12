@@ -30,6 +30,7 @@ namespace starrocks::spill {
 // InputStream reads multiple Blocks and returns the deserialized Chunks.
 class SpillInputStream;
 using InputStreamPtr = std::shared_ptr<SpillInputStream>;
+class Spiller;
 
 class SpillInputStream {
 public:
@@ -49,7 +50,7 @@ public:
 
     static InputStreamPtr union_all(const InputStreamPtr& left, const InputStreamPtr& right);
     static InputStreamPtr union_all(std::vector<InputStreamPtr>& _streams);
-    static InputStreamPtr as_stream(std::vector<ChunkPtr> chunks);
+    static InputStreamPtr as_stream(std::vector<ChunkPtr> chunks, Spiller* spiller);
 
 private:
     std::atomic_bool _eof = false;
@@ -62,9 +63,9 @@ public:
 
     void append(BlockPtr block) { _blocks.emplace_back(std::move(block)); }
 
-    StatusOr<InputStreamPtr> as_unordered_stream(const SerdePtr& serde);
+    StatusOr<InputStreamPtr> as_unordered_stream(const SerdePtr& serde, Spiller* spiller);
 
-    StatusOr<InputStreamPtr> as_ordered_stream(RuntimeState* state, const SerdePtr& serde,
+    StatusOr<InputStreamPtr> as_ordered_stream(RuntimeState* state, const SerdePtr& serde, Spiller* spiller,
                                                const SortExecExprs* sort_exprs, const SortDescs* sort_descs);
 
 private:

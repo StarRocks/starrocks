@@ -464,6 +464,7 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(Chunk** chunk, const int3
 
     _total_chunks--;
     _recvr->_num_buffered_bytes -= item.chunk_bytes;
+    COUNTER_ADD(_recvr->_peak_buffer_mem_bytes, -item.chunk_bytes);
     return Status::OK();
 }
 
@@ -498,6 +499,7 @@ bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(Chunk** chunk) {
     }
     _total_chunks--;
     _recvr->_num_buffered_bytes -= item.chunk_bytes;
+    COUNTER_ADD(_recvr->_peak_buffer_mem_bytes, -item.chunk_bytes);
     return true;
 }
 
@@ -551,6 +553,7 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
                 }
                 --_total_chunks;
                 _recvr->_num_buffered_bytes -= item.chunk_bytes;
+                COUNTER_ADD(_recvr->_peak_buffer_mem_bytes, -item.chunk_bytes);
             }
         }
     }
@@ -721,6 +724,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
                 _chunk_queue_states[0].blocked_closure_num += closure != nullptr;
                 _total_chunks++;
                 _recvr->_num_buffered_bytes += chunk_bytes;
+                COUNTER_ADD(_recvr->_peak_buffer_mem_bytes, chunk_bytes);
             }
 
             chunk_queues.erase(it);
@@ -773,6 +777,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             _chunk_queue_states[index].blocked_closure_num += closure != nullptr;
             _total_chunks++;
             _recvr->_num_buffered_bytes += chunk_bytes;
+            COUNTER_ADD(_recvr->_peak_buffer_mem_bytes, chunk_bytes);
         }
     }
 
@@ -795,6 +800,7 @@ void DataStreamRecvr::PipelineSenderQueue::short_circuit(const int32_t driver_se
                 }
                 --_total_chunks;
                 _recvr->_num_buffered_bytes -= item.chunk_bytes;
+                COUNTER_ADD(_recvr->_peak_buffer_mem_bytes, item.chunk_bytes);
             }
         }
     }
