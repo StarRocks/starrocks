@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <bthread/execution_queue.h>
+
 #include "util/limit_setter.h"
 #include "util/threadpool.h"
 #include "work_group.h"
@@ -25,15 +27,17 @@ class WorkGroupManager;
 struct ScanTask;
 class ScanTaskQueue;
 
-class ScanExecutor {
+class ScanExecutor : public bthread::Executor {
 public:
     explicit ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue);
-    virtual ~ScanExecutor();
+    ~ScanExecutor() override;
 
     void initialize(int32_t num_threads);
     void change_num_threads(int32_t num_threads);
 
     bool submit(ScanTask task);
+
+    int submit(void* (*fn)(void*), void* args) override;
 
 private:
     void worker_thread();

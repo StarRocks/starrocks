@@ -15,6 +15,7 @@
 #include "exec/workgroup/scan_executor.h"
 
 #include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/work_group.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::workgroup {
@@ -78,6 +79,15 @@ void ScanExecutor::worker_thread() {
 
 bool ScanExecutor::submit(ScanTask task) {
     return _task_queue->try_offer(std::move(task));
+}
+
+int ScanExecutor::submit(void* (*fn)(void*), void* args) {
+    // TODO: specify the workgroup through parameter
+    auto wg = WorkGroupManager::instance()->get_default_mv_workgroup();
+    ScanTask::WorkFunction wf = [=]() { fn(args); };
+    ScanTask task(wg.get(), std::move(wf));
+    _task_queue->try_offer(std::move(task));
+    return 0;
 }
 
 } // namespace starrocks::workgroup
