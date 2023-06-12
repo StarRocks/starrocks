@@ -232,6 +232,15 @@ public class StorageVolumeTest {
     }
 
     @Test
+    public void testHDFSEmptyCredential() {
+        Map<String, String> storageParams = new HashMap<>();
+        StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
+                storageParams, true, "");
+        CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
+        Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
+    }
+
+    @Test
     public void testHDFSInvalidCredential() {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put("hadoop.security.authentication", "kerberos");

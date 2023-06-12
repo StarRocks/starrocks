@@ -16,6 +16,8 @@ package com.starrocks.credential.hdfs;
 
 import autovalue.shaded.com.google.common.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.HDFSFileStoreInfo;
 import com.starrocks.credential.CloudCredential;
 import com.starrocks.thrift.TCloudProperty;
 import org.apache.hadoop.conf.Configuration;
@@ -65,6 +67,10 @@ public class HDFSCloudCredential implements CloudCredential {
 
     @Override
     public boolean validate() {
+        if (authentication.isEmpty()) {
+            return true;
+        }
+
         if (authentication.equals("simple")) {
             return true;
         }
@@ -99,6 +105,10 @@ public class HDFSCloudCredential implements CloudCredential {
     @Override
     public FileStoreInfo toFileStoreInfo() {
         // TODO: support hdfs credential
-        return null;
+        FileStoreInfo.Builder fileStore = FileStoreInfo.newBuilder();
+        fileStore.setFsType(FileStoreType.HDFS);
+        HDFSFileStoreInfo.Builder hdfsFileStoreInfo = HDFSFileStoreInfo.newBuilder();
+        fileStore.setHdfsFsInfo(hdfsFileStoreInfo.build());
+        return fileStore.build();
     }
 }
