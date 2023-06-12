@@ -3213,13 +3213,11 @@ TEST_F(TimeFunctionsTest, DateSliceCeilTest) {
 }
 
 TEST_F(TimeFunctionsTest, MakeDateTest) {
-
     auto year_value = Int32Column::create();
     auto day_of_year_value = Int32Column::create();
 
     year_value->append(0);
     day_of_year_value->append(1);
-
 
     year_value->append(2023);
     day_of_year_value->append(0);

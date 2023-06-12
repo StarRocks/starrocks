@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Splitter;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.Predicate;
@@ -49,7 +50,7 @@ public class ResourceGroupAnalyzer {
         ResourceGroupClassifier classifier = new ResourceGroupClassifier();
         for (Predicate pred : predicates) {
             if (pred instanceof BinaryPredicate &&
-                    ((BinaryPredicate) pred).getOp().equals(BinaryPredicate.Operator.EQ)) {
+                    ((BinaryPredicate) pred).getOp().equals(BinaryType.EQ)) {
                 BinaryPredicate eqPred = (BinaryPredicate) pred;
                 Expr lhs = eqPred.getChild(0);
                 Expr rhs = eqPred.getChild(1);

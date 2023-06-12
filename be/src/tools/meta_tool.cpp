@@ -597,6 +597,7 @@ private:
     };
 
     Status _init();
+    void _convert_column_meta(const ColumnMetaPB& src_col, ColumnPB* dest_col);
     std::shared_ptr<Schema> _init_query_schema(const std::shared_ptr<TabletSchema>& tablet_schema);
     std::shared_ptr<TabletSchema> _init_search_schema_from_footer(const SegmentFooterPB& footer);
     void _analyze_short_key_columns(size_t key_column_count, std::vector<ColItem>* cols);
@@ -618,15 +619,25 @@ std::shared_ptr<Schema> SegmentDump::_init_query_schema(const std::shared_ptr<Ta
     return std::make_shared<Schema>(tablet_schema->schema());
 }
 
+void SegmentDump::_convert_column_meta(const ColumnMetaPB& src_col, ColumnPB* dest_col) {
+    dest_col->set_unique_id(src_col.unique_id());
+    dest_col->set_type(type_to_string(LogicalType(src_col.type())));
+    dest_col->set_is_nullable(src_col.is_nullable());
+    dest_col->set_length(src_col.length());
+
+    const auto& src_child_cols = src_col.children_columns();
+    for (const auto& src_child_col : src_child_cols) {
+        auto* dest_child_col = dest_col->add_children_columns();
+        _convert_column_meta(src_child_col, dest_child_col);
+    }
+}
+
 std::shared_ptr<TabletSchema> SegmentDump::_init_search_schema_from_footer(const SegmentFooterPB& footer) {
     TabletSchemaPB tablet_schema_pb;
     for (int i = 0; i < footer.columns_size(); i++) {
         const auto& src_col = footer.columns(i);
         ColumnPB* dest_col = tablet_schema_pb.add_column();
-        dest_col->set_unique_id(src_col.unique_id());
-        dest_col->set_type(type_to_string(LogicalType(src_col.type())));
-        dest_col->set_is_nullable(src_col.is_nullable());
-        dest_col->set_length(src_col.length());
+        _convert_column_meta(src_col, dest_col);
     }
 
     return std::make_shared<TabletSchema>(tablet_schema_pb);
@@ -825,6 +836,7 @@ Status SegmentDump::dump_segment_data() {
             std::cout << "ROW: (" << row << "): " << chunk->debug_row(i) << std::endl;
             row++;
         }
+        chunk->reset();
     } while (true);
 
     return Status::OK();

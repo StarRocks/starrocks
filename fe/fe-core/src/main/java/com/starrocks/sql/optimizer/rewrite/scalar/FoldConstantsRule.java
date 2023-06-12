@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -156,7 +157,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate,
                                                ScalarOperatorRewriteContext context) {
-        if (!BinaryPredicateOperator.BinaryType.EQ_FOR_NULL.equals(predicate.getBinaryType())
+        if (!BinaryType.EQ_FOR_NULL.equals(predicate.getBinaryType())
                 && hasNull(predicate.getChildren())) {
             return ConstantOperator.createNull(Type.BOOLEAN);
         }

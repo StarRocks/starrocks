@@ -71,6 +71,7 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.backup.SnapshotInfo;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AnyArrayType;
 import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.ArrayType;
@@ -81,6 +82,7 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HiveTable;
@@ -103,10 +105,12 @@ import com.starrocks.catalog.PseudoType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Resource;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.lake.LakeMaterializedView;
@@ -144,6 +148,7 @@ import com.starrocks.privilege.MaterializedViewPEntryObject;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.ResourceGroupPEntryObject;
 import com.starrocks.privilege.ResourcePEntryObject;
+import com.starrocks.privilege.StorageVolumePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.privilege.ViewPEntryObject;
@@ -294,7 +299,8 @@ public class GsonUtils {
                     .registerSubtype(GlobalFunctionPEntryObject.class, "GlobalFunctionPEntryObject")
                     .registerSubtype(FunctionPEntryObject.class, "FunctionPEntryObject")
                     .registerSubtype(CatalogPEntryObject.class, "CatalogPEntryObject")
-                    .registerSubtype(ResourceGroupPEntryObject.class, "ResourceGroupPEntryObject");
+                    .registerSubtype(ResourceGroupPEntryObject.class, "ResourceGroupPEntryObject")
+                    .registerSubtype(StorageVolumePEntryObject.class, "StorageVolumePEntryObject");
 
     private static final RuntimeTypeAdapterFactory<SecurityIntegration> SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(SecurityIntegration.class, "clazz")
@@ -335,6 +341,12 @@ public class GsonUtils {
                     .registerSubtype(LakeBackupJob.class, "LakeBackupJob")
                     .registerSubtype(RestoreJob.class, "RestoreJob")
                     .registerSubtype(LakeRestoreJob.class, "LakeRestoreJob");
+
+    public static final RuntimeTypeAdapterFactory<Function> FUNCTION_TYPE_RUNTIME_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(Function.class, "clazz")
+                    .registerSubtype(ScalarFunction.class, "ScalarFunction")
+                    .registerSubtype(AggregateFunction.class, "AggregateFunction")
+                    .registerSubtype(TableFunction.class, "TableFunction");
 
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
@@ -391,6 +403,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(ROUTINE_LOAD_PROGRESS_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ROUTINE_LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(ABSTRACT_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(FUNCTION_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)

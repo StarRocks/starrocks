@@ -346,6 +346,9 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                 num_rows += rowset.num_rows();
                 data_size += rowset.data_size();
             }
+            for (const auto& [_, file] : (*tablet_metadata)->delvec_meta().version_to_file()) {
+                data_size += file.size();
+            }
 
             std::lock_guard l(response_mtx);
             auto tablet_stat = response->add_tablet_stats();

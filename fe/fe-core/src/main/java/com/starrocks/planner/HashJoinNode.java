@@ -35,6 +35,7 @@
 package com.starrocks.planner;
 
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.SlotId;
@@ -147,7 +148,7 @@ public class HashJoinNode extends JoinNode {
             return;
         }
         for (BinaryPredicate eq : eqJoinConjuncts) {
-            if (!eq.getOp().equals(BinaryPredicate.Operator.EQ)) {
+            if (!eq.getOp().equals(BinaryType.EQ)) {
                 continue;
             }
             SlotId lhsSlotId = ((SlotRef) eq.getChild(0)).getSlotId();

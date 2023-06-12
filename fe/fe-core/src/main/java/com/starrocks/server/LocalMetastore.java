@@ -101,6 +101,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
@@ -128,7 +129,6 @@ import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
@@ -211,6 +211,7 @@ import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -260,7 +261,6 @@ public class LocalMetastore implements ConnectorMetadata {
     private Cluster defaultCluster;
 
     private final GlobalStateMgr stateMgr;
-    private EditLog editLog;
     private final CatalogRecycleBin recycleBin;
     private ColocateTableIndex colocateTableIndex;
 
@@ -281,14 +281,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
     long getNextId() {
         return stateMgr.getNextId();
-    }
-
-    public void setEditLog(EditLog editLog) {
-        this.editLog = editLog;
-    }
-
-    public EditLog getEditLog() {
-        return editLog;
     }
 
     GlobalStateMgr getStateMgr() {
@@ -389,14 +381,14 @@ public class LocalMetastore implements ConnectorMetadata {
                 id = getNextId();
                 Database db = new Database(id, dbName);
                 unprotectCreateDb(db);
-
-                /* TODO (log compatibility):
-                    For the compatibility reasons of the development version,
-                    temporarily use OP_CREATE_DB, we will use the new log of the new version in a single PR
-                 */
-                //CreateDbInfo createDbInfo = new CreateDbInfo(id, dbName);
-                //editLog.logCreateDb(createDbInfo);
-                editLog.logCreateDb(db);
+                if (RunMode.allowCreateLakeTable()) {
+                    String volume = StorageVolumeMgr.DEFAULT;
+                    if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
+                        volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
+                    }
+                    setDbStorageVolumeInfo(db, volume);
+                }
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateDb(db);
             }
         } finally {
             unlock();
@@ -491,7 +483,7 @@ public class LocalMetastore implements ConnectorMetadata {
             taskManager.dropTasks(dropTaskIdList, false);
 
             DropDbInfo info = new DropDbInfo(db.getFullName(), isForceDrop);
-            editLog.logDropDb(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logDropDb(info);
 
             LOG.info("finish drop database[{}], id: {}, is force : {}", dbName, db.getId(), isForceDrop);
         } finally {
@@ -589,7 +581,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // log
             RecoverInfo recoverInfo = new RecoverInfo(db.getId(), -1L, -1L);
-            editLog.logRecoverDb(recoverInfo);
+            GlobalStateMgr.getCurrentState().getEditLog().logRecoverDb(recoverInfo);
         } finally {
             unlock();
         }
@@ -682,7 +674,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         long quota = stmt.getQuota();
         DatabaseInfo dbInfo = new DatabaseInfo(db.getFullName(), "", quota, quotaType);
-        editLog.logAlterDb(dbInfo);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterDb(dbInfo);
     }
 
     public void replayAlterDatabaseQuota(String dbName, long quota, AlterDatabaseQuotaStmt.QuotaType quotaType) {
@@ -734,7 +726,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             DatabaseInfo dbInfo =
                     new DatabaseInfo(fullDbName, newFullDbName, -1L, AlterDatabaseQuotaStmt.QuotaType.NONE);
-            editLog.logDatabaseRename(dbInfo);
+            GlobalStateMgr.getCurrentState().getEditLog().logDatabaseRename(dbInfo);
         } finally {
             unlock();
         }
@@ -1162,7 +1154,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         ((SingleRangePartitionDesc) partitionDescs.get(0)).getStorageCacheInfo());
                 partitionInfoV2List.add(info);
                 AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoV2List);
-                editLog.logAddPartitions(infos);
+                GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
             } else {
                 PartitionPersistInfo info = new PartitionPersistInfo(db.getId(), olapTable.getId(), partition,
                         ((RangePartitionInfo) partitionInfo).getRange(partitionId),
@@ -1170,7 +1162,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         partitionInfo.getReplicationNum(partitionId),
                         partitionInfo.getIsInMemory(partitionId),
                         isTempPartition);
-                editLog.logAddPartition(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logAddPartition(info);
             }
 
             LOG.info("succeed in creating partition[{}], name: {}, temp: {}", partitionId,
@@ -1204,10 +1196,10 @@ public class LocalMetastore implements ConnectorMetadata {
 
             if (olapTable.isCloudNativeTableOrMaterializedView()) {
                 AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoV2List);
-                editLog.logAddPartitions(infos);
+                GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
             } else {
                 AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
-                editLog.logAddPartitions(infos);
+                GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
             }
 
             for (Partition partition : partitionList) {
@@ -1239,7 +1231,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 isTempPartition,
                 ((ListPartitionInfo) partitionInfo).getIdToValues().get(partitionId),
                 ((ListPartitionInfo) partitionInfo).getIdToMultiValues().get(partitionId));
-        editLog.logAddPartition(info);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddPartition(info);
 
         LOG.info("succeed in creating list partition[{}], name: {}, temp: {}", partitionId,
                 partition.getName(), isTempPartition);
@@ -1308,7 +1300,7 @@ public class LocalMetastore implements ConnectorMetadata {
             distributionInfo = getDistributionInfo(olapTable, addPartitionClause).copy();
             if (distributionInfo.getBucketNum() == 0) {
                 int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 5,
-                                    Config.enable_auto_tablet_distribution);
+                        Config.enable_auto_tablet_distribution);
                 distributionInfo.setBucketNum(numBucket);
             }
 
@@ -1496,7 +1488,7 @@ public class LocalMetastore implements ConnectorMetadata {
         boolean isTempPartition = clause.isTempPartition();
 
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-            throw new DdlException("Table[" + olapTable.getName() + "]'s state is not NORMAL");
+            throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
         }
 
         if (!olapTable.checkPartitionNameExist(partitionName, isTempPartition)) {
@@ -1556,7 +1548,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // log
         DropPartitionInfo info = new DropPartitionInfo(db.getId(), olapTable.getId(), partitionName, isTempPartition,
                 clause.isForceDrop());
-        editLog.logDropPartition(info);
+        GlobalStateMgr.getCurrentState().getEditLog().logDropPartition(info);
 
         LOG.info("succeed in droping partition[{}], is temp : {}, is force : {}", partitionName, isTempPartition,
                 clause.isForceDrop());
@@ -1920,15 +1912,16 @@ public class LocalMetastore implements ConnectorMetadata {
 
                 String userErrorMsg = String.format(
                         "Table creation timed out.\n You can increase the timeout by increasing the " +
-                        "config \"tablet_create_timeout_second\" and try again.\n" +
-                        "To increase the config \"tablet_create_timeout_second\" (currently %d), run the following command:\n" +
-                        "```\nadmin set frontend config(\"tablet_create_timeout_second\"=\"%d\")\n```\n" +
-                        "or add the following configuration to the fe.conf file and restart the process:\n" +
-                        "```\ntablet_create_timeout_second=%d\n```",
+                                "config \"tablet_create_timeout_second\" and try again.\n" +
+                                "To increase the config \"tablet_create_timeout_second\" (currently %d), " +
+                                "run the following command:\n" +
+                                "```\nadmin set frontend config(\"tablet_create_timeout_second\"=\"%d\")\n```\n" +
+                                "or add the following configuration to the fe.conf file and restart the process:\n" +
+                                "```\ntablet_create_timeout_second=%d\n```",
                         Config.tablet_create_timeout_second,
                         Config.tablet_create_timeout_second * 2,
                         Config.tablet_create_timeout_second * 2
-                        );
+                );
                 countDownLatch.countDownToZero(new Status(TStatusCode.TIMEOUT, "timed out"));
                 throw new DdlException(userErrorMsg);
             }
@@ -1984,6 +1977,20 @@ public class LocalMetastore implements ConnectorMetadata {
         // get service shard storage info from StarMgr
         FilePathInfo pathInfo = stateMgr.getStarOSAgent().allocateFilePath(table.getId());
         table.setStorageInfo(pathInfo, storageCacheInfo);
+    }
+
+    void setLakeStorageInfo(OlapTable table, String storageVolumeId, Map<String, String> properties) throws DdlException {
+        StorageCacheInfo storageCacheInfo = null;
+        try {
+            storageCacheInfo = PropertyAnalyzer.analyzeStorageCacheInfo(properties);
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+
+        // get service shard storage info from StarMgr
+        FilePathInfo pathInfo = stateMgr.getStarOSAgent().allocateFilePath(storageVolumeId, table.getId());
+        table.setStorageInfo(pathInfo, storageCacheInfo);
+        table.setStorageVolumeId(storageVolumeId);
     }
 
     void registerTable(Database db, Table table, CreateTableStmt stmt) throws DdlException {
@@ -2194,7 +2201,7 @@ public class LocalMetastore implements ConnectorMetadata {
             colocateTableIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
             ColocatePersistInfo info =
                     ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
-            editLog.logColocateBackendsPerBucketSeq(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logColocateBackendsPerBucketSeq(info);
         }
     }
 
@@ -2387,7 +2394,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public Pair<Table, MaterializedIndex> getMaterializedViewIndex(String dbName, String indexName) {
+    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String indexName) {
         Database database = getDb(dbName);
         if (database == null) {
             return null;
@@ -2615,7 +2622,7 @@ public class LocalMetastore implements ConnectorMetadata {
                                             hdd,
                                             (short) -1,
                                             partitionInfo.getIsInMemory(partition.getId()));
-                            editLog.logModifyPartition(info);
+                            GlobalStateMgr.getCurrentState().getEditLog().logModifyPartition(info);
                         }
                     } // end for partitions
                 } // end for tables
@@ -3223,7 +3230,7 @@ public class LocalMetastore implements ConnectorMetadata {
         disableMaterializedViewForRenameTable(db, olapTable);
 
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
-        editLog.logTableRename(tableInfo);
+        GlobalStateMgr.getCurrentState().getEditLog().logTableRename(tableInfo);
         LOG.info("rename table[{}] to {}, tableId: {}", oldTableName, newTableName, olapTable.getId());
     }
 
@@ -3231,7 +3238,7 @@ public class LocalMetastore implements ConnectorMetadata {
     public void alterTableComment(Database db, Table table, AlterTableCommentClause clause) {
         ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(db.getId(), table.getId());
         log.setComment(clause.getNewComment());
-        editLog.logAlterTableProperties(log);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(log);
 
         table.setComment(clause.getNewComment());
     }
@@ -3303,7 +3310,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // log
         TableInfo tableInfo = TableInfo.createForPartitionRename(db.getId(), olapTable.getId(), partition.getId(),
                 newPartitionName);
-        editLog.logPartitionRename(tableInfo);
+        GlobalStateMgr.getCurrentState().getEditLog().logPartitionRename(tableInfo);
         LOG.info("rename partition[{}] to {}", partitionName, newPartitionName);
     }
 
@@ -3356,7 +3363,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // log
         TableInfo tableInfo = TableInfo.createForRollupRename(db.getId(), table.getId(), indexId, newRollupName);
-        editLog.logRollupRename(tableInfo);
+        GlobalStateMgr.getCurrentState().getEditLog().logRollupRename(tableInfo);
         LOG.info("rename rollup[{}] to {}", rollupName, newRollupName);
     }
 
@@ -3406,7 +3413,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 table.getName(), DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), logProperties);
-        editLog.logDynamicPartition(info);
+        GlobalStateMgr.getCurrentState().getEditLog().logDynamicPartition(info);
     }
 
 
@@ -3431,7 +3438,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), logProperties);
-        editLog.logAlterTableProperties(info);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
     }
 
     /**
@@ -3479,7 +3486,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // log
         ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), table.getId(), partition.getId(),
                 newDataProperty, replicationNum, isInMemory);
-        editLog.logModifyPartition(info);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyPartition(info);
         LOG.info("modify partition[{}-{}-{}] replication num to {}", db.getOriginName(), table.getName(),
                 partition.getName(), replicationNum);
     }
@@ -3531,7 +3538,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // log
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
-        editLog.logModifyReplicationNum(info);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyReplicationNum(info);
         LOG.info("modify table[{}] replication num to {}", table.getName(),
                 properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
     }
@@ -3549,7 +3556,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
-        editLog.logModifyEnablePersistentIndex(info);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyEnablePersistentIndex(info);
 
     }
 
@@ -3559,7 +3566,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 db.getId(),
                 table.getId(),
                 binlogConfig.toProperties());
-        editLog.logModifyBinlogConfig(log);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyBinlogConfig(log);
 
         if (!binlogConfig.getBinlogEnable()) {
             table.clearBinlogAvailableVersion();
@@ -3587,7 +3594,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
-        editLog.logModifyInMemory(info);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyInMemory(info);
     }
 
     // The caller need to hold the db write lock
@@ -3609,7 +3616,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), olapTable.getId(), properties);
-        editLog.logModifyConstraint(info);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyConstraint(info);
     }
 
     // The caller need to hold the db write lock
@@ -3626,7 +3633,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
-        editLog.logModifyWriteQuorum(info);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyWriteQuorum(info);
     }
 
     // The caller need to hold the db write lock
@@ -3643,7 +3650,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
-        editLog.logModifyReplicatedStorage(info);
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyReplicatedStorage(info);
     }
 
     public void modifyTableMeta(Database db, OlapTable table, Map<String, String> properties,
@@ -3684,7 +3691,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
                 ModifyTablePropertyOperationLog info =
                         new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
-                editLog.logSetHasForbitGlobalDict(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logSetHasForbitGlobalDict(info);
             }
         } finally {
             db.readUnlock();
@@ -3953,7 +3960,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // no matter default_cluster is created or not,
         // mark isDefaultClusterCreated as true
         stateMgr.setIsDefaultClusterCreated(true);
-        editLog.logCreateCluster(cluster);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateCluster(cluster);
     }
 
     //TODO [meta-format-change] deprecated
@@ -4019,7 +4026,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-                throw new DdlException("Table' state is not NORMAL: " + olapTable.getState());
+                throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
             }
 
             if (!truncateEntireTable) {
@@ -4087,7 +4094,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
 
             if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-                throw new DdlException("Table' state is not NORMAL: " + olapTable.getState());
+                throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
             }
 
             // check partitions
@@ -4132,7 +4139,7 @@ public class LocalMetastore implements ConnectorMetadata {
             // write edit log
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,
                     truncateEntireTable);
-            editLog.logTruncateTable(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logTruncateTable(info);
 
             // refresh mv
             Set<MvId> relatedMvs = olapTable.getRelatedMaterializedViews();
@@ -4298,7 +4305,7 @@ public class LocalMetastore implements ConnectorMetadata {
         db.writeLock();
         try {
             TableInfo tableInfo = TableInfo.createForModifyDistribution(db.getId(), tbl.getId());
-            editLog.logModifyDistributionType(tableInfo);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyDistributionType(tableInfo);
             LOG.info("finished to modify distribution type of table: " + tbl.getName());
         } finally {
             db.writeUnlock();
@@ -4356,7 +4363,7 @@ public class LocalMetastore implements ConnectorMetadata {
             // write log
             ReplacePartitionOperationLog info = new ReplacePartitionOperationLog(db.getId(), olapTable.getId(),
                     partitionNames, tempPartitionNames, isStrictRange, useTempPartitionName);
-            editLog.logReplaceTempPartition(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info);
             LOG.info("finished to replace partitions {} with temp partitions {} from table: {}",
                     clause.getPartitionNames(), clause.getTempPartitionNames(), tableName);
         } finally {
@@ -4429,9 +4436,12 @@ public class LocalMetastore implements ConnectorMetadata {
             if (status == Replica.ReplicaStatus.BAD || status == Replica.ReplicaStatus.OK) {
                 if (replica.setBadForce(status == Replica.ReplicaStatus.BAD)) {
                     if (!isReplay) {
+                        // Put this tablet into urgent table so that it can be repaired ASAP.
+                        stateMgr.getTabletChecker().setTabletForUrgentRepair(dbId, meta.getTableId(),
+                                meta.getPartitionId());
                         SetReplicaStatusOperationLog log =
                                 new SetReplicaStatusOperationLog(backendId, tabletId, status);
-                        editLog.logSetReplicaStatus(log);
+                        GlobalStateMgr.getCurrentState().getEditLog().logSetReplicaStatus(log);
                     }
                     LOG.info("set replica {} of tablet {} on backend {} as {}. is replay: {}",
                             replica.getId(), tabletId, backendId, status, isReplay);
@@ -4658,6 +4668,24 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+    private void setDbStorageVolumeInfo(Database db, String volume) throws DdlException {
+        StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        StorageVolume sv = null;
+        try {
+            if (volume.equals(StorageVolumeMgr.DEFAULT)) {
+                sv = svm.getDefaultStorageVolume();
+            } else {
+                sv = svm.getStorageVolumeByName(volume);
+            }
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+        if (sv == null) {
+            throw new DdlException("Unknown storage volume \"" + volume + "\"");
+        }
+        db.setStorageVolumeId(sv.getId());
+    }
+
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         // Don't write system db meta
         Map<Long, Database> idToDbNormal = idToDb.entrySet().stream().filter(entry -> entry.getKey() > NEXT_ID_INIT_VALUE)
@@ -4731,9 +4759,12 @@ public class LocalMetastore implements ConnectorMetadata {
 
         recreateTabletInvertIndex();
         GlobalStateMgr.getCurrentState().getEsRepository().loadTableFromCatalog();
-        GlobalStateMgr.getCurrentState().getStarRocksRepository().loadTableFromCatalog();
 
-        defaultCluster = new Cluster(SystemInfoService.DEFAULT_CLUSTER, 0);
+        /*
+         * defaultCluster has no meaning, it is only for compatibility with
+         * old versions of the code (defaultCluster is required for 3.0 fallback)
+         */
+        defaultCluster = new Cluster(SystemInfoService.DEFAULT_CLUSTER, NEXT_ID_INIT_VALUE);
     }
 }
 

@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.operator.operator;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -54,7 +55,7 @@ public class OperatorEqualsTest {
         Assert.assertNotEquals(logicalA, logicalB);
 
         PhysicalUnionOperator physicalA = new PhysicalUnionOperator(null, null, true,
-                10, new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                10, new BinaryPredicateOperator(BinaryType.EQ,
                         Lists.newArrayList(
                                 ConstantOperator.createBoolean(true),
                                 ConstantOperator.createBoolean(false)

@@ -176,6 +176,39 @@ public class AnalyzeExprTest {
     }
 
     @Test
+    public void testLambdaFunctionArrayMatch() {
+        analyzeSuccess("select all_match((x,y) -> x < y, null, [4,5,6])");
+        analyzeSuccess("select all_match((x,y) -> x < y, [], [])");
+        analyzeSuccess("select all_match((x,y) -> x < y, null, [])");
+        analyzeSuccess("select all_match((x,y) -> x < y, null, null)");
+        analyzeSuccess("select any_match((x,y) -> x < y, null, [4,5,6])");
+        analyzeSuccess("select any_match((x,y) -> x < y, [], [])");
+        analyzeSuccess("select any_match((x,y) -> x < y, null, [])");
+        analyzeSuccess("select any_match((x,y) -> x < y, null, null)");
+        analyzeSuccess("select all_match([0],x->1)");
+        analyzeSuccess("select any_match([0],x->1)");
+        analyzeSuccess("select any_match([],x->1)");
+        analyzeSuccess("select any_match(null)");
+        analyzeSuccess("select any_match([])");
+        analyzeSuccess("select all_match([])");
+
+        analyzeFail("select all_match((x,y) -> x < y, []);");
+        analyzeFail("select all_match((x,y) -> x < y, [],{});");
+        analyzeFail("select all_match([],null)");
+        analyzeFail("select all_match({})");
+        analyzeFail("select all_match()");
+        analyzeFail("select all_match(null,[])");
+        analyzeFail("select all_match(null,null)");
+        analyzeFail("select any_match((x,y) -> x < y, []);");
+        analyzeFail("select any_match((x,y) -> x < y, [],{});");
+        analyzeFail("select any_match([],null)");
+        analyzeFail("select any_match({})");
+        analyzeFail("select any_match()");
+        analyzeFail("select any_match(null,[])");
+        analyzeFail("select any_match(null,null)");
+        analyzeFail("select all_match([[]])");
+    }
+    @Test
     public void testLambdaFunctionMapApply() {
         analyzeSuccess("select map_apply((k,v)->(k+1,length(v)), col_map) from " +
                 "(select map_from_arrays([1,3,null,2,null],['ab','cdd',null,null,'']) as col_map " +
@@ -299,21 +332,21 @@ public class AnalyzeExprTest {
         analyzeSuccess("select map()");
         analyzeSuccess("select map(NULL,NULL)");
         analyzeSuccess("select map(1,NULL)");
-        analyzeSuccess("select {}");
-        analyzeSuccess("select {NULL:NULL}");
-        analyzeSuccess("select map<int,map<varchar,int>>{2:{3:3}}");
-        analyzeSuccess("select map<int,map<int,int>>{2:{'3':3}}");
-        analyzeSuccess("select map<int,map<int,int>>{{3:3}:2}"); // runtime error will report when cast
-        analyzeSuccess("select map<int,map<int,int>>{'2s':{3:3}}");
+        analyzeSuccess("select map{}");
+        analyzeSuccess("select map{NULL:NULL}");
+        analyzeSuccess("select map<int,map<varchar,int>>{2:map{3:3}}");
+        analyzeSuccess("select map<int,map<int,int>>{2:map{'3':3}}");
+        analyzeSuccess("select map<int,map<int,int>>{map{3:3}:2}"); // runtime error will report when cast
+        analyzeSuccess("select map<int,map<int,int>>{'2s':map{3:3}}");
 
         analyzeFail("select map(null)");
         analyzeFail("select map(1:4)");
         analyzeFail("select map(1,3,4)");
         analyzeFail("select {)");
-        analyzeFail("select {NULL}");
-        analyzeFail("select {1,3}");
-        analyzeFail("select {1:3:3}");
-        analyzeFail("select {1:3,}");
+        analyzeFail("select map{NULL}");
+        analyzeFail("select map{1,3}");
+        analyzeFail("select map{1:3:3}");
+        analyzeFail("select map{1:3,}");
         analyzeFail("select map<hll,int>{1:3}");
         analyzeFail("select map<map<int,int>,int>{{1:3}:11}");
     }
@@ -321,20 +354,28 @@ public class AnalyzeExprTest {
 
     @Test
     public void testAnalyzeMapFunc() {
-        analyzeSuccess("select cardinality({1:3,3:5,2:45})");
-        analyzeSuccess("select cardinality({})");
-        analyzeSuccess("select element_at({1:2,3:3,4:3},3)");
-        analyzeSuccess("select element_at({1:2,3:3,4:3},312)");
-        analyzeSuccess("select element_at({1:2,3:3,4:3},null)");
+        analyzeSuccess("select cardinality(map{1:3,3:5,2:45})");
+        analyzeSuccess("select cardinality(map{})");
+        analyzeSuccess("select element_at(map{1:2,3:3,4:3},3)");
+        analyzeSuccess("select element_at(map{1:2,3:3,4:3},312)");
+        analyzeSuccess("select element_at(map{1:2,3:3,4:3},null)");
         analyzeSuccess("select map_concat(NULL)");
         analyzeSuccess("select map_concat(NULL,NULL)");
-        analyzeSuccess("select map_concat(NULL,{})");
+        analyzeSuccess("select map_concat(NULL,map{})");
 
         analyzeFail("select cardinality();");
-        analyzeFail("select cardinality({},{})");
+        analyzeFail("select cardinality(map{},map{})");
         analyzeFail("select cardinality(1)");
-        analyzeFail("select element_at({1:2,3:3,4:3})");
+        analyzeFail("select element_at(map{1:2,3:3,4:3})");
         analyzeFail("select map_concat()");
     }
 
+    @Test
+    public void testAnalyzeStructFunc() {
+        analyzeFail("select row('a', 1, 'b', 2)[0]");
+        analyzeFail("select row('a', 1, 'b', 2)[5]");
+        analyzeFail("select row('a', 1, 'b', 2)[-5]");
+        analyzeSuccess("select row('a', 1, 'b', 2)[1]");
+        analyzeSuccess("select row('a', 1, 'b', 2)[-1]");
+    }
 }

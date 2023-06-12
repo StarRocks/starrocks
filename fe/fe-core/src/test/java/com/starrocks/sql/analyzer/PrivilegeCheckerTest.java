@@ -1896,6 +1896,26 @@ public class PrivilegeCheckerTest {
         String showLoadSql = "SHOW LOAD FROM db1";
         statement = UtFrameUtils.parseStmtWithNewParser(showLoadSql, starRocksAssert.getCtx());
         PrivilegeChecker.check(statement, ctx);
+
+        // Test cancel load and table doesn't exist
+        createSql = "LOAD LABEL db1.job_name2" +
+                "(DATA INFILE('hdfs://test:8080/user/starrocks/data/input/example1.csv') " +
+                "INTO TABLE tbl_not_exist) " +
+                "WITH RESOURCE 'my_spark'" +
+                "('username' = 'test_name','password' = 'pwd') " +
+                "PROPERTIES ('timeout' = '3600');";
+        ctxToRoot();
+        String createTblStmtStr = "create table db1.tbl_not_exist(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
+                "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
+        starRocksAssert.withLoad(createSql);
+        starRocksAssert.dropTable("db1.tbl_not_exist");
+        ctxToTestUser();
+        grantRevokeSqlAsRoot("grant USAGE on resource 'my_spark' to test;");
+        statement = UtFrameUtils.parseStmtWithNewParser(
+                "CANCEL LOAD FROM db1 WHERE LABEL = 'job_name2'", starRocksAssert.getCtx());
+        PrivilegeChecker.check(statement, ctx);
+        grantRevokeSqlAsRoot("revoke USAGE on resource 'my_spark' from test;");
     }
 
     @Test
@@ -2834,5 +2854,91 @@ public class PrivilegeCheckerTest {
         starRocksAssert.dropMaterializedView("db1.mv5");
         starRocksAssert.dropView("db1.view5");
         ctxToTestUser();
+    }
+
+    @Test
+    public void testStorageVolumeStatement() throws Exception {
+        String createSql = "create storage volume sv type = s3 " +
+                "locations = ('s3://starrocks-cloud-data-zhangjiakou/luzijie/') comment 'comment' properties " +
+                "(\"aws.s3.endpoint\"=\"endpoint\", \"aws.s3.region\"=\"us-test-2\", " +
+                "\"aws.s3.use_aws_sdk_default_behavior\" = \"false\", \"aws.s3.access_key\"=\"accesskey\", " +
+                "\"aws.s3.secret_key\"=\"secretkey\");";
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSql, ctx), ctx);
+        ctxToTestUser();
+
+        // test no authorization on show resource groups
+        ShowResultSet res = new ShowExecutor(ctx,
+                (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show storage volumes", ctx)).execute();
+        Assert.assertEquals(0, res.getResultRows().size());
+
+        // test drop storage volume
+        verifyGrantRevoke(
+                "drop storage volume sv",
+                "grant DROP on storage volume sv to test",
+                "revoke DROP on storage volume sv from test",
+                "Access denied; you need (at least one of) the DROP STORAGE VOLUME privilege(s) for this operation");
+
+        String sql = "" +
+                "ALTER STORAGE VOLUME sv \n" +
+                "SET \n" +
+                "   (\"aws.s3.region\"=\"us-west-1\", \"aws.s3.endpoint\"=\"endpoint1\", \"enabled\"=\"true\")";
+        // test drop resource group
+        verifyGrantRevoke(
+                sql,
+                "grant ALTER on storage volume sv to test",
+                "revoke ALTER on storage volume sv from test",
+                "Access denied; you need (at least one of) the ALTER STORAGE VOLUME privilege(s) for this operation");
+
+        // test create storage volume
+        String createSv1Sql = "create storage volume sv1 type = s3 " +
+                "locations = ('s3://starrocks-cloud-data-zhangjiakou/luzijie/') comment 'comment' properties " +
+                "(\"aws.s3.endpoint\"=\"endpoint\", \"aws.s3.region\"=\"us-test-2\", " +
+                "\"aws.s3.use_aws_sdk_default_behavior\" = \"false\", \"aws.s3.access_key\"=\"accesskey\", " +
+                "\"aws.s3.secret_key\"=\"secretkey\");";
+        verifyGrantRevoke(
+                createSv1Sql,
+                "grant create storage volume on system to test",
+                "revoke create storage volume on system from test",
+                "Access denied; you need (at least one of) the CREATE STORAGE VOLUME privilege(s) for this operation");
+
+        // test usage of storage volume
+        String grantCreateDb = "grant create database on catalog default_catalog to test";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantCreateDb, ctx), ctx);
+        ctxToTestUser();
+        String createDbSql = "create database testdb properties (\"storage_volume\"=\"sv\")";
+        verifyGrantRevoke(
+                createDbSql,
+                "grant USAGE on storage volume sv to test",
+                "revoke USAGE ON storage volume sv from test",
+                "Access denied; you need (at least one of) the USAGE ON STORAGE VOLUME privilege(s) for this operation");
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createDbSql, ctx), ctx);
+        String grantCreateTable = "grant create table on database testdb to test";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantCreateTable, ctx), ctx);
+        ctxToTestUser();
+        String createTableSql = "create table testdb.t2(c0 INT) duplicate key(c0) distributed " +
+                "by hash(c0) buckets 1 properties(\"storage_volume\" = \"sv\");";
+        verifyGrantRevoke(
+                createTableSql,
+                "grant USAGE on storage volume sv to test",
+                "revoke USAGE ON storage volume sv from test",
+                "Access denied; you need (at least one of) the USAGE ON STORAGE VOLUME privilege(s) for this operation");
+
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "revoke create database on catalog default_catalog from test", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "revoke create table on database testdb from test", ctx), ctx);
+
+        ctxToTestUser();
+        // test grant/revoke on all storage volumes
+        verifyGrantRevoke(
+                sql,
+                "grant ALTER on all storage volumes to test",
+                "revoke ALTER on all storage volumes from test",
+                "Access denied; you need (at least one of) the ALTER STORAGE VOLUME privilege(s) for this operation");
     }
 }

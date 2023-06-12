@@ -314,6 +314,8 @@ public:
 
     std::string debug_item(size_t idx) const override;
 
+    std::string raw_item_value(size_t idx) const override;
+
     std::string debug_string() const override {
         std::stringstream ss;
         size_t size = this->size();

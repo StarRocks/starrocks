@@ -31,6 +31,7 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.external.starrocks.TableMetaSyncer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
@@ -62,6 +63,10 @@ public class InsertAnalyzer {
                 .forEach(table -> table.useMetadataCache(false));
 
         Table table = getOrMakeTargetTable(insertStmt, session);
+
+        if (table instanceof ExternalOlapTable) {
+            table = getOLAPExternalTableMeta(database, (ExternalOlapTable) table);
+        }
 
         if (table instanceof MaterializedView && !insertStmt.isSystem()) {
             throw new SemanticException(
@@ -350,5 +355,24 @@ public class InsertAnalyzer {
         List<Integer> partitionColumnIDs = partitionColumnNames.stream().map(columnNames::indexOf).collect(
                 Collectors.toList());
         return new TableFunctionTable(path, format, columns, partitionColumnIDs, false);
+    }
+
+    private static ExternalOlapTable getOLAPExternalTableMeta(Database database, ExternalOlapTable externalOlapTable) {
+        // copy the table, and release database lock when synchronize table meta
+        ExternalOlapTable copiedTable = new ExternalOlapTable();
+        externalOlapTable.copyOnlyForQuery(copiedTable);
+        int lockTimes = 0;
+        while (database.isReadLockHeldByCurrentThread()) {
+            database.readUnlock();
+            lockTimes++;
+        }
+        try {
+            new TableMetaSyncer().syncTable(copiedTable);
+        } finally {
+            while (lockTimes-- > 0) {
+                database.readLock();
+            }
+        }
+        return copiedTable;
     }
 }

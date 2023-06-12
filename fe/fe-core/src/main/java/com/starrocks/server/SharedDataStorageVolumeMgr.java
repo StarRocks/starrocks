@@ -21,6 +21,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.credential.CloudConfigurationConstants;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
 
 import java.util.ArrayList;
@@ -34,7 +35,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     public static final String BUILTIN_STORAGE_VOLUME = "builtin_storage_volume";
 
     @Override
-    public StorageVolume getStorageVolumeByName(String svKey) throws AnalysisException {
+    public StorageVolume getStorageVolumeByName(String svKey) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             try {
                 FileStoreInfo fileStoreInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getFileStoreByName(svKey);
@@ -43,15 +44,24 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 }
                 return StorageVolume.fromFileStoreInfo(fileStoreInfo);
             } catch (DdlException e) {
-                throw new AnalysisException(e.getMessage());
+                throw new SemanticException(e.getMessage());
             }
         }
     }
 
     @Override
-    public StorageVolume getStorageVolume(String storageVolumeId) throws AnalysisException {
-        // TODO: should be supported by staros. We use id for persistence, storage volume needs to be got by id.
-        return null;
+    public StorageVolume getStorageVolume(String storageVolumeId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            try {
+                FileStoreInfo fileStoreInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getFileStore(storageVolumeId);
+                if (fileStoreInfo == null) {
+                    return null;
+                }
+                return StorageVolume.fromFileStoreInfo(fileStoreInfo);
+            } catch (DdlException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
     }
 
     @Override

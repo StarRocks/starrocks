@@ -17,12 +17,19 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.catalog.StructType;
+import com.starrocks.catalog.Type;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
 import java.util.ArrayList;
@@ -82,21 +89,21 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
                                                 ScalarOperatorRewriteContext context) {
         if (predicate.isNotBetween()) {
             ScalarOperator lower =
-                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LT, predicate.getChild(0),
+                    new BinaryPredicateOperator(BinaryType.LT, predicate.getChild(0),
                             predicate.getChild(1));
 
             ScalarOperator upper =
-                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT, predicate.getChild(0),
+                    new BinaryPredicateOperator(BinaryType.GT, predicate.getChild(0),
                             predicate.getChild(2));
 
             return new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, lower, upper);
         } else {
             ScalarOperator lower =
-                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, predicate.getChild(0),
+                    new BinaryPredicateOperator(BinaryType.GE, predicate.getChild(0),
                             predicate.getChild(1));
 
             ScalarOperator upper =
-                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, predicate.getChild(0),
+                    new BinaryPredicateOperator(BinaryType.LE, predicate.getChild(0),
                             predicate.getChild(2));
 
             return new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, lower, upper);
@@ -167,8 +174,8 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
         List<ScalarOperator> constants = predicate.getChildren().stream().skip(1).filter(ScalarOperator::isConstant)
                 .collect(Collectors.toList());
         if (constants.size() == 1) {
-            BinaryPredicateOperator.BinaryType op =
-                    isIn ? BinaryPredicateOperator.BinaryType.EQ : BinaryPredicateOperator.BinaryType.NE;
+            BinaryType op =
+                    isIn ? BinaryType.EQ : BinaryType.NE;
             result.add(new BinaryPredicateOperator(op, lhs, constants.get(0)));
         } else if (!constants.isEmpty()) {
             constants.add(0, lhs);
@@ -178,13 +185,44 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
         predicate.getChildren().stream().skip(1).filter(ScalarOperator::isVariable).forEach(child -> {
             BinaryPredicateOperator newOp;
             if (isIn) {
-                newOp = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, lhs, child);
+                newOp = new BinaryPredicateOperator(BinaryType.EQ, lhs, child);
             } else {
-                newOp = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.NE, lhs, child);
+                newOp = new BinaryPredicateOperator(BinaryType.NE, lhs, child);
             }
             result.add(newOp);
         });
 
         return isIn ? Utils.compoundOr(result) : Utils.compoundAnd(result);
+    }
+
+    // rewrite collection element to subfiled
+    @Override
+    public ScalarOperator visitCollectionElement(CollectionElementOperator collectionElement,
+                                                 ScalarOperatorRewriteContext context) {
+        if (collectionElement.getChild(0).getType().isStructType()) {
+            Preconditions.checkState(collectionElement.getChild(1).isConstantRef());
+            Preconditions.checkState(collectionElement.getChild(1).getType().isIntegerType());
+
+            ConstantOperator op = collectionElement.getChild(1).cast();
+            int index = 0;
+            try {
+                index = op.castTo(Type.INT).getInt();
+            } catch (Exception e) {
+                throw new SemanticException("Invalid index for struct element: " + collectionElement);
+            }
+
+            if (index > 0) {
+                index = index - 1;
+            } else if (index < 0) {
+                index += ((StructType) collectionElement.getChild(0).getType()).getFields().size();
+            } else {
+                throw new SemanticException("Invalid index for struct element: " + collectionElement);
+            }
+
+            return SubfieldOperator.build(collectionElement.getChild(0),
+                    collectionElement.getChild(0).getType(),
+                    Lists.newArrayList(index));
+        }
+        return collectionElement;
     }
 }

@@ -60,6 +60,8 @@ public:
 
     bool has_restore_task() const { return _running_restore_tasks > 0; }
 
+    size_t read_rows() const { return _read_rows; }
+
 protected:
     Spiller* _spiller;
     std::atomic_uint64_t _running_restore_tasks{};
@@ -270,11 +272,11 @@ public:
 
     const auto& level_to_partitions() { return _level_to_partitions; }
 
+    template <class ChunkProvider>
+    Status spill_partition(SerdeContext& context, SpilledPartition* partition, ChunkProvider&& provider);
+
 private:
     Status _init_with_partition_nums(RuntimeState* state, int num_partitions);
-
-    template <class ChunkProvider>
-    Status _spill_partition(SerdeContext& context, SpilledPartition* partition, ChunkProvider&& provider);
 
     // split partition by hash
     // hash-based partitioning can have significant degradation in the case of heavily skewed data.

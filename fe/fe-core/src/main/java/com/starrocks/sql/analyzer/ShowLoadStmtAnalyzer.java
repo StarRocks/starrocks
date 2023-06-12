@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LikePredicate;
@@ -133,7 +134,7 @@ public class ShowLoadStmtAnalyzer {
             {
                 if (expr instanceof BinaryPredicate) {
                     BinaryPredicate binaryPredicate = (BinaryPredicate) expr;
-                    if (binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
+                    if (binaryPredicate.getOp() != BinaryType.EQ) {
                         valid = false;
                         break CHECK;
                     }

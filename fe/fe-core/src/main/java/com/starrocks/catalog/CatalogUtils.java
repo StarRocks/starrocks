@@ -22,10 +22,12 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -61,7 +63,7 @@ public class CatalogUtils {
     // check table state
     public static void checkTableState(OlapTable olapTable, String tableName) throws DdlException {
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-            throw new DdlException("Table[" + tableName + "]'s state is not NORMAL");
+            throw InvalidOlapTableStateException.of(olapTable.getState(), tableName);
         }
     }
 
@@ -350,6 +352,24 @@ public class CatalogUtils {
             bucketNum = 1;
         }
         return bucketNum;
+    }
+
+    public static String addEscapeCharacter(String comment) {
+        if (StringUtils.isEmpty(comment)) {
+            return comment;
+        }
+        StringBuilder output = new StringBuilder();
+        for (int i = 0; i < comment.length(); i++) {
+            char c = comment.charAt(i);
+
+            if (c == '\\' || c == '"') {
+                output.append('\\');
+                output.append(c);
+            } else {
+                output.append(c);
+            }
+        }
+        return output.toString();
     }
 
 }

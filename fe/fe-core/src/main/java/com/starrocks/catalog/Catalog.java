@@ -21,6 +21,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.persist.gson.GsonUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -67,8 +68,12 @@ public class Catalog implements Writable {
         return comment;
     }
 
+    public String getDisplayComment() {
+        return CatalogUtils.addEscapeCharacter(comment);
+    }
+
     public void getProcNodeData(BaseProcResult result) {
-        result.addRow(Lists.newArrayList(this.getName(), config.get(CATALOG_TYPE), this.getComment()));
+        result.addRow(Lists.newArrayList(this.getName(), StringUtils.capitalize(config.get(CATALOG_TYPE)), this.getComment()));
     }
 
     public static Catalog read(DataInput in) throws IOException {

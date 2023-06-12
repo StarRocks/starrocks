@@ -18,8 +18,8 @@
 package com.starrocks.transaction;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -35,13 +35,7 @@ public class TransactionIdGenerator implements GsonPostProcessable {
     @SerializedName("bi")
     private long batchEndId = 0;
 
-    private EditLog editLog;
-
     public TransactionIdGenerator() {
-    }
-
-    public void setEditLog(EditLog editLog) {
-        this.editLog = editLog;
     }
 
     // performance is more quickly
@@ -51,7 +45,7 @@ public class TransactionIdGenerator implements GsonPostProcessable {
             return nextId;
         } else {
             batchEndId = batchEndId + BATCH_ID_INTERVAL;
-            editLog.logSaveTransactionId(batchEndId);
+            GlobalStateMgr.getCurrentState().getEditLog().logSaveTransactionId(batchEndId);
             ++nextId;
             return nextId;
         }

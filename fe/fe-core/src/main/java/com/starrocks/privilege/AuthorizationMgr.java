@@ -164,7 +164,8 @@ public class AuthorizationMgr {
                     ObjectType.RESOURCE,
                     ObjectType.RESOURCE_GROUP,
                     ObjectType.FUNCTION,
-                    ObjectType.GLOBAL_FUNCTION)) {
+                    ObjectType.GLOBAL_FUNCTION,
+                    ObjectType.STORAGE_VOLUME)) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t, provider.getAvailablePrivType(t));
             }
             rolePrivilegeCollection.disableMutable(); // not mutable
@@ -257,6 +258,7 @@ public class AuthorizationMgr {
             case RESOURCE:
             case CATALOG:
             case RESOURCE_GROUP:
+            case STORAGE_VOLUME:
                 objects.add(provider.generateObject(objectType,
                         Lists.newArrayList("*"), globalStateMgr));
                 collection.grant(objectType, actionList, objects, false);

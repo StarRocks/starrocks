@@ -1090,8 +1090,10 @@ public class RestoreJob extends AbstractJob {
     protected void prepareDownloadTasks(List<SnapshotInfo> beSnapshotInfos, Database db, long beId, List<FsBroker> brokerAddrs,
                                         THdfsProperties hdfsProperties) {
         int totalNum = beSnapshotInfos.size();
-        // each backend allot at most 3 tasks
-        int batchNum = Math.min(totalNum, 3);
+        int batchNum = totalNum;
+        if (Config.max_download_task_per_be > 0) {
+            batchNum = Math.min(totalNum, Config.max_download_task_per_be);
+        }
         // each task contains several upload subtasks
         int taskNumPerBatch = Math.max(totalNum / batchNum, 1);
         LOG.debug("backend {} has {} batch, total {} tasks, {}",

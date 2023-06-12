@@ -187,7 +187,7 @@ public abstract class BulkLoadJob extends LoadJob {
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
-        return new AuthorizationInfo(database.getFullName(), getTableNames());
+        return new AuthorizationInfo(database.getFullName(), getTableNames(false));
     }
 
     @Override
@@ -212,18 +212,24 @@ public abstract class BulkLoadJob extends LoadJob {
     }
 
     @Override
-    public Set<String> getTableNames() throws MetaNotFoundException {
+    public Set<String> getTableNames(boolean noThrow) throws MetaNotFoundException {
         Set<String> result = Sets.newHashSet();
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
-            throw new MetaNotFoundException("Database " + dbId + "has been deleted");
+            if (noThrow) {
+                return result;
+            } else {
+                throw new MetaNotFoundException("Database " + dbId + "has been deleted");
+            }
         }
         // The database will not be locked in here.
         // The getTable is a thread-safe method called without read lock of database
         for (long tableId : fileGroupAggInfo.getAllTableIds()) {
             Table table = database.getTable(tableId);
             if (table == null) {
-                throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
+                if (!noThrow) {
+                    throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
+                }
             } else {
                 result.add(table.getName());
             }

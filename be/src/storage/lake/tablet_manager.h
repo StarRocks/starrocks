@@ -172,7 +172,7 @@ private:
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
 
     /// Cache operations
-    bool fill_metacache(std::string_view key, CacheValue* ptr, int size);
+    void fill_metacache(std::string_view key, CacheValue* ptr, int size);
     void erase_metacache(std::string_view key);
 
     TabletMetadataPtr lookup_tablet_metadata(std::string_view key);

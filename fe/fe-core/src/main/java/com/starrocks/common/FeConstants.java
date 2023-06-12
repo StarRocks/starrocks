@@ -80,6 +80,16 @@ public class FeConstants {
     // the raw data of one tablet equals to 10GB approximately
     public static final long AUTO_DISTRIBUTION_UNIT = 3221225472L;
 
+    public static final String DOCUMENT_SHOW_ALTER =
+            "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER";
+    public static final String DOCUMENT_SHOW_ALTER_MATERIALIZED_VIEW =
+            "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation" +
+                    "/SHOW%20ALTER%20MATERIALIZED%20VIEW";
+    public static final String DOCUMENT_SHOW_BACKUP =
+            "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP";
+    public static final String DOCUMENT_SHOW_RESTORE =
+            "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20RESTORE";
+
     public static String getNodeNotFoundError(boolean chooseComputeNode) {
         return chooseComputeNode ? COMPUTE_NODE_NOT_FOUND_ERROR : BACKEND_NODE_NOT_FOUND_ERROR;
     }

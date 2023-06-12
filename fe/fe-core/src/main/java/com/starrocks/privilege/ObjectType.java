@@ -30,7 +30,8 @@ public enum ObjectType {
     MATERIALIZED_VIEW(8),
     FUNCTION(9),
     RESOURCE_GROUP(10),
-    GLOBAL_FUNCTION(11);
+    GLOBAL_FUNCTION(11),
+    STORAGE_VOLUME(12);
 
     @SerializedName("id")
     private final int id;
@@ -53,5 +54,6 @@ public enum ObjectType {
             .put("MATERIALIZED VIEWS", ObjectType.MATERIALIZED_VIEW)
             .put("FUNCTIONS", ObjectType.FUNCTION)
             .put("RESOURCE GROUPS", ObjectType.RESOURCE_GROUP)
-            .put("GLOBAL FUNCTIONS", ObjectType.GLOBAL_FUNCTION).build();
+            .put("GLOBAL FUNCTIONS", ObjectType.GLOBAL_FUNCTION)
+            .put("STORAGE VOLUMES", ObjectType.STORAGE_VOLUME).build();
 }

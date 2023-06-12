@@ -39,10 +39,10 @@ bool SpillableAggregateBlockingSinkOperator::is_finished() const {
 }
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
+    auto defer_set_finishing = DeferOp([this]() { _aggregator->spill_channel()->set_finishing(); });
     if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
         _is_finished = true;
         RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
-        _aggregator->spill_channel()->set_finishing();
         return Status::OK();
     }
 
@@ -54,21 +54,17 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
     auto io_executor = _aggregator->spill_channel()->io_executor();
 
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
-        return _aggregator->spiller()->flush(
-                state, *io_executor,
-                spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
+        return _aggregator->spiller()->flush(state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
     };
 
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
-        _aggregator->spill_channel()->set_finishing();
         return _aggregator->spiller()->set_flush_all_call_back(
                 [this, state]() {
                     _is_finished = true;
                     RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
-                state, *io_executor,
-                spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this()));
+                state, *io_executor, RESOURCE_TLS_MEMTRACER_GUARD(state));
     };
 
     if (_aggregator->spill_channel()->is_working()) {

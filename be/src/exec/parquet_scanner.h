@@ -45,7 +45,8 @@ public:
     Status open() override;
 
     StatusOr<ChunkPtr> get_next() override;
-    Status get_schema(std::vector<SlotDescriptor>* schema);
+
+    Status get_schema(std::vector<SlotDescriptor>* schema) override;
 
     void close() override;
 

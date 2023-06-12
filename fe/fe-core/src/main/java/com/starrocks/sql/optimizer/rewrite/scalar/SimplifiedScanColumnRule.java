@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -28,7 +29,7 @@ public class SimplifiedScanColumnRule extends BottomUpScalarOperatorRewriteRule 
     public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate,
                                                ScalarOperatorRewriteContext context) {
         if (predicate.getChild(0).isVariable() && predicate.getChild(0).equals(predicate.getChild(1))) {
-            if (predicate.getBinaryType().equals(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL)) {
+            if (predicate.getBinaryType().equals(BinaryType.EQ_FOR_NULL)) {
                 return ConstantOperator.createBoolean(true);
             } else if (!predicate.getChild(0).isNullable()) {
                 // The nullable is not accurate if child node will produce null. like:

@@ -44,7 +44,6 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -632,10 +631,6 @@ public class GlobalTransactionMgr implements Writable {
             LOG.warn("Get transaction {} in db {} failed. msg: {}", transactionId, dbId, e.getMessage());
             return null;
         }
-    }
-
-    public void setEditLog(EditLog editLog) {
-        this.idGenerator.setEditLog(editLog);
     }
 
     // for replay idToTransactionState
