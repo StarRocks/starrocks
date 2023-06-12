@@ -540,7 +540,7 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op
         if (mem_resource_mgr.is_releasing()) {
             if (op->release_memory_mode_done()) {
                 mem_resource_mgr.set_release_done();
-                LOG(INFO) << "operator release memory done, op: " << op->get_name() << ", " << op.get()
+                TRACE_SPILL_LOG << "operator release memory done, op: " << op->get_name() << ", " << op.get()
                                 << ", res releasing opeartors: "
                                 << mem_resource_mgr.query_spill_manager()->releasing_operators();
             }
@@ -557,7 +557,7 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op
             // if the currently used memory is very close to the threshold that triggers spill,
             // try to release buffer first
             if (op->releaseable()) {
-                LOG(INFO) << "release operator due to mem pressure, consumption: " << query_consumption
+                TRACE_SPILL_LOG << "release operator due to mem pressure, consumption: " << query_consumption
                                 << ", release buffer threshold: "
                                 << static_cast<int64_t>(spill_mem_threshold * release_buffer_mem_threshold)
                                 << ", spill mem threshold: " << static_cast<int64_t>(spill_mem_threshold);
