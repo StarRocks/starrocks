@@ -32,7 +32,7 @@ The Stream Load transaction interface provides the `/api/transaction/load` opera
 
 ### Transaction deduplication
 
-The Stream Load transaction interface carries over the labeling mechanism of StarRocks. Binding labels to transactions helps achieve at-most-once guarantees for transactions.
+The Stream Load transaction interface carries over the labeling mechanism of StarRocks. You can bind a unique label to each transaction to achieve at-most-once guarantees for transactions.
 
 ### Transaction timeout management
 
@@ -68,10 +68,10 @@ The Stream Load transaction interface has the following limits:
 
 ## Precautions
 
-- If any of the four transactions `/api/transaction/begin`, `/api/transaction/load`, `/api/transaction/prepare`, and `/api/transaction/commit` for a load job fails, none of the subsequent transactions can succeed.
-- When calling the `/api/transaction/begin` operation to start a load job, you have the option to specify a label. If you do not specify a label, StarRocks will generate a label for the load job. Note that the subsequent `/api/transaction/load`, `/api/transaction/prepare`, and `/api/transaction/commit` transactions must use the same label as the `/api/transaction/begin` transaction.
-- The labels of failed load jobs cannot be reused. If you use a failed load job's label to retry its transactions, the transactions will fail again.
-- The default column separator and row delimiter in StarRocks are `\t` and `\n`. If your data file does not use the default column separator or row delimiter, you must use `"column_separator: <column_separator>"` or `"row_delimiter: <row_delimiter>"` to specify the column separator or row delimiter that is actually used in your data file when calling the `/api/transaction/load` operation.
+- If the `/api/transaction/begin`, `/api/transaction/load`, or `/api/transaction/prepare` operation that you have called returns errors, the transaction fails and is automatically rolled back.
+- When calling the `/api/transaction/begin` operation to start a new transaction, you have the option to specify a label. If you do not specify a label, StarRocks will generate a label for the transaction. Note that the subsequent `/api/transaction/load`, `/api/transaction/prepare`, and `/api/transaction/commit` operations must use the same label as the `/api/transaction/begin` operation.
+- Using the same label to repeatedly call the `/api/transaction/begin` operation will cause the transaction to fail and be rolled back.
+- The default column separator and row delimiter that StarRocks supports for CSV-formatted data are `\t` and `\n`. If your data file does not use the default column separator or row delimiter, you must use `"column_separator: <column_separator>"` or `"row_delimiter: <row_delimiter>"` to specify the column separator or row delimiter that is actually used in your data file when calling the `/api/transaction/load` operation.
 
 ## Basic operations
 
@@ -122,7 +122,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 > **NOTE**
 >
-> For this example, `streamload_txn_example1_table1` is specified as the label of the load job.
+> For this example, `streamload_txn_example1_table1` is specified as the label of the transaction.
 
 #### Return result
 
