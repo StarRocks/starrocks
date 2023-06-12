@@ -2656,7 +2656,7 @@ public class Coordinator {
                 instanceProfile.removeInfoString("Address");
             });
             fragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
-            Counter backendNum = fragmentProfile.addCounter("BackendNum", TUnit.UNIT, null);
+            Counter backendNum = fragmentProfile.addCounter("BackendNum", TUnit.UNIT);
             backendNum.setValue(backendAddresses.size());
 
             // Setup number of instance
