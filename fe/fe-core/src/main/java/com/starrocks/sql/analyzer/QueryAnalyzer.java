@@ -830,7 +830,34 @@ public class QueryAnalyzer {
             Database database = metadataMgr.getDb(catalogName, dbName);
             MetaUtils.checkDbNullAndReport(database, dbName);
 
+<<<<<<< HEAD
             Table table = metadataMgr.getTable(catalogName, dbName, tbName);
+=======
+            Table table = null;
+            if (tableRelation.isSyncMVQuery()) {
+                Pair<Table, MaterializedIndexMeta> materializedIndex =
+                        metadataMgr.getMaterializedViewIndex(catalogName, dbName, tbName);
+                if (materializedIndex != null) {
+                    Table mvTable = materializedIndex.first;
+                    Preconditions.checkState(mvTable != null);
+                    Preconditions.checkState(mvTable instanceof OlapTable);
+                    try {
+                        // Add read lock to avoid concurrent problems.
+                        database.readLock();
+                        OlapTable mvOlapTable = new OlapTable();
+                        ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
+                        // Copy the necessary olap table meta to avoid changing original meta;
+                        mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
+                        table = mvOlapTable;
+                    } finally {
+                        database.readUnlock();
+                    }
+                }
+            } else {
+                table = metadataMgr.getTable(catalogName, dbName, tbName);
+            }
+
+>>>>>>> ef1fc6a40 ([Refactor] Synchronize OLAP external table metadata when loading data (#24739))
             if (table == null) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName + "." + tbName);
             }
