@@ -32,7 +32,7 @@ The Stream Load transaction interface provides the `/api/transaction/load` opera
 
 ### Transaction deduplication
 
-The Stream Load transaction interface carries over the labeling mechanism of StarRocks. Each load job has a unique label within the destination StarRocks database, and all transactions of a load job use the same label, thereby achieving at-most-once guarantees for transactions.
+The Stream Load transaction interface carries over the labeling mechanism of StarRocks. Binding labels to transactions helps achieve at-most-once guarantees for transactions.
 
 ### Transaction timeout management
 
