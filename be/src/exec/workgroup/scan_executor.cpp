@@ -90,4 +90,8 @@ int ScanExecutor::submit(void* (*fn)(void*), void* args) {
     return 0;
 }
 
+std::unique_ptr<ThreadPoolToken> ScanExecutor::create_token(ThreadPool::ExecutionMode mode) {
+    return _thread_pool->new_token(mode);
+}
+
 } // namespace starrocks::workgroup
