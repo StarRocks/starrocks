@@ -1284,6 +1284,7 @@ public class OlapTable extends Table {
             } catch (DdlException e) {
                 // should not happen, just log an error here
                 LOG.error(e.getMessage());
+                return;
             }
             setInColocateMvGroup(true);
             if (!colocateGroupName.equalsIgnoreCase(this.colocateGroup)) {
@@ -1301,14 +1302,15 @@ public class OlapTable extends Table {
     public void addTableToColocateGroup(Database db, String rollupIndexName, OlapTable targetTable) throws DdlException {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
         Long dbId = db.getId();
-        if (!colocateTableIndex.isColocateTable(this.id)
-                && colocateMaterializedViewNames.contains(rollupIndexName)) {
+        if ((!colocateTableIndex.isColocateTable(this.id) ||
+                !colocateTableIndex.isColocateTable(targetTable.getId())) &&
+                colocateMaterializedViewNames.contains(rollupIndexName)) {
             String dbName = GlobalStateMgr.getCurrentState().getDb(dbId).getFullName();
             String colocateGroupName;
             if (!Strings.isNullOrEmpty(this.colocateGroup)) {
                 colocateGroupName = this.colocateGroup;
             } else {
-                colocateGroupName = dbName + ":mv:" + getName();
+                colocateGroupName = dbName + ":" + getName();
             }
             try {
                 colocateTableIndex.addTableToGroup(dbId, this, colocateGroupName, null, false /* isReplay */);
@@ -1318,13 +1320,12 @@ public class OlapTable extends Table {
             } catch (DdlException e) {
                 // should not happen, just log an error here
                 LOG.error(e.getMessage());
-                throw e;
+                return;
             }
             setInColocateMvGroup(true);
             if (!colocateGroupName.equalsIgnoreCase(this.colocateGroup)) {
                 setColocateGroup(colocateGroupName);
             }
-
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(this.id);
             List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
             ColocatePersistInfo info =

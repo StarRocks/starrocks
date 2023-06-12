@@ -278,11 +278,12 @@ public class MaterializedViewHandler extends AlterHandler {
             //  so c2 can be appended by default.
             for (int i = 0; i < targetOlapTable.getBaseSchema().size(); i++) {
                 Column targetCol = targetTable.getBaseSchema().get(i);
-                if (!targetCol.getName().equalsIgnoreCase(targetOlapTable.getBaseSchema().get(j).getName())) {
+                if (!targetCol.getName().equalsIgnoreCase(mvColumns.get(j).getName())) {
                     if (!targetCol.isAllowNull()) {
-                        throw new DdlException(String.format("Target table {}'s column {} is lost by default, it should be " +
+                        throw new DdlException(String.format("Target table %s's column %s is lost by default, it should be " +
                                 "nullable by default.", targetOlapTable.getName(), targetCol.getName()));
                     }
+                    targetCol.setDefaultValue(null);
                     newMVColumns.add(targetCol);
                 } else {
                     newMVColumns.add(mvColumns.get(j));
@@ -301,8 +302,8 @@ public class MaterializedViewHandler extends AlterHandler {
             Column targetCol = targetTable.getBaseSchema().get(i);
             Column mvCol = mvColumns.get(i);
             if (!targetColumnNames.contains(mvCol.getName())) {
-                throw new DdlException(String.format("Logical materialized view column name {} is not found " +
-                                "in target table {}", mvCol.getName(), targetTable.getName()));
+                throw new DdlException(String.format("Logical materialized view column name %s is not found " +
+                                "in target table %s", mvCol.getName(), targetTable.getName()));
             }
 
             if (!mvCol.getType().equals(targetCol.getType())) {

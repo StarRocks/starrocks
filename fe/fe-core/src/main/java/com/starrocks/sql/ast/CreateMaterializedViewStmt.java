@@ -367,14 +367,8 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
             String alias = selectListItem.getAlias();
             Expr selectListItemExpr = selectListItem.getExpr();
-            if (!Strings.isNullOrEmpty(selectListItem.getAlias())) {
-                // check alias name is not in the `FullSchema`
-                if (fullSchemaColNames.contains(selectListItem.getAlias())) {
-                    throw new SemanticException(String.format("The alias column {} has already existed in the table's full " +
-                            "schema, please set another name", selectListItem.getAlias()));
-                }
-            }
 
+            MVColumnItem mvColumnItem;
             if (selectListItemExpr instanceof FunctionCallExpr
                     && ((FunctionCallExpr) selectListItemExpr).isAggregateFunction()) {
                 // Aggregate Function must match pattern.
@@ -391,10 +385,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 meetAggregate = true;
 
                 /// Normal function
-                MVColumnItem mvColumnItem = buildMVColumnItem(alias, functionCallExpr);
+                mvColumnItem = buildMVColumnItem(alias, functionCallExpr);
                 if (!mvColumnNameSet.add(mvColumnItem.getName())) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, mvColumnItem.getName());
                 }
+
                 mvColumnItemList.add(mvColumnItem);
             } else {
                 List<SlotRef> slots = new ArrayList<>();
@@ -418,7 +413,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                     columnName = Strings.isNullOrEmpty(alias) ? MVUtils.getMVColumnName(selectListItemExpr.toSql(),
                             baseColumnNames) : alias;
                 }
-                MVColumnItem mvColumnItem = new MVColumnItem(columnName, type, selectListItemExpr, baseColumnNames);
+                mvColumnItem = new MVColumnItem(columnName, type, selectListItemExpr, baseColumnNames);
                 if (meetAggregate) {
                     throw new SemanticException("Any single column should be before agg column. " +
                             "Column %s at wrong location", columnName);
@@ -432,6 +427,14 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 // mvColumnItem.setAggregationType(AggregateType.NONE, true);
                 mvColumnItemList.add(mvColumnItem);
                 joiner.add(selectListItemExpr.toSql());
+            }
+
+            if (!Strings.isNullOrEmpty(selectListItem.getAlias()) && fullSchemaColNames.contains(selectListItem.getAlias())) {
+                Expr existedDefinedExpr = table.getColumn(selectListItem.getAlias()).getDefineExpr();
+                if (existedDefinedExpr.equals(mvColumnItem.getDefineExpr())) {
+                    throw new SemanticException(String.format("The alias column %s has already existed in the table's full " +
+                            "schema, please set another alias name", selectListItem.getAlias()));
+                }
             }
         }
         if (beginIndexOfAggregation == 0) {
