@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Objects;
 
@@ -29,15 +30,18 @@ public class TableScanDesc {
     // join type of LogicalJoinOperator above scan operator
     private final JoinOperator parentJoinType;
     private final boolean isLeft;
+    // for build join graph
+    private final ScalarOperator onPredicate;
 
     public TableScanDesc(Table table, int index,
                          LogicalScanOperator scanOperator, JoinOperator parentJoinType,
-                         boolean isLeft) {
+                         boolean isLeft, ScalarOperator onPredicate) {
         this.table = table;
         this.index = index;
         this.scanOperator = scanOperator;
         this.parentJoinType = parentJoinType;
         this.isLeft = isLeft;
+        this.onPredicate = onPredicate;
     }
 
     public Table getTable() {
@@ -58,6 +62,14 @@ public class TableScanDesc {
 
     public LogicalScanOperator getScanOperator() {
         return scanOperator;
+    }
+
+    public ScalarOperator getOnPredicate() {
+        return onPredicate;
+    }
+
+    public boolean isLeft() {
+        return isLeft;
     }
 
     public boolean isMatch(TableScanDesc other) {

@@ -57,7 +57,7 @@ public class ColumnRewriter {
         return predicate.accept(visitor, null);
     }
 
-    public ColumnRefOperator rewriteViewToQuery(final ColumnRefOperator colRef) {
+    public ColumnRefOperator rewriteColumnViewToQuery(final ColumnRefOperator colRef) {
         if (colRef == null) {
             return null;
         }
@@ -72,6 +72,23 @@ public class ColumnRewriter {
             return null;
         }
         return (ColumnRefOperator) target;
+    }
+
+    public ScalarOperator rewriteViewToQuery(final ScalarOperator scalarOperator) {
+        if (scalarOperator == null) {
+            return null;
+        }
+        ColumnRewriteVisitor visitor =
+                new ColumnWriterBuilder()
+                        .withRewriteContext(rewriteContext)
+                        .withEnableRelationRewrite(true)
+                        .withViewToQuery(true)
+                        .build();
+        ScalarOperator target = scalarOperator.accept(visitor, null);
+        if (target == null || target == scalarOperator) {
+            return null;
+        }
+        return target;
     }
 
     public ScalarOperator rewriteViewToQueryWithQueryEc(ScalarOperator predicate) {
@@ -128,6 +145,10 @@ public class ColumnRewriter {
         } else {
             return rewriteViewToQueryWithQueryEc(predicate);
         }
+    }
+
+    public ScalarOperator rewriteToTarget(ScalarOperator predicate) {
+        return rewriteViewToQuery(predicate);
     }
 
     public Pair<ScalarOperator, ScalarOperator> rewriteSrcTargetWithEc(ScalarOperator src,
