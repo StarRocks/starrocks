@@ -181,6 +181,9 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
 
     _buffer_unplug_counter = ADD_COUNTER(_profile, "BufferUnplugCount", TUnit::UNIT);
 
+    _peak_buffer_mem_bytes = _profile->AddHighWaterMarkCounter("PeakBufferMemoryBytes", TUnit::BYTES,
+                                                               RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+
     _pass_through_context.init();
     if (runtime_state->query_options().__isset.transmission_encode_level) {
         _encode_level = runtime_state->query_options().transmission_encode_level;
