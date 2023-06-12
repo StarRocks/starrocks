@@ -997,7 +997,7 @@ public class ShowExecutor {
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
         }
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && !Strings.isNullOrEmpty(db.getStorageVolumeId())) {
+        if (!Strings.isNullOrEmpty(db.getStorageVolumeId())) {
             StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolume(db.getStorageVolumeId());
             createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(sv.getName()).append("\")");
         }

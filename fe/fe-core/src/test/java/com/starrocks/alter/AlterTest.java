@@ -1151,7 +1151,7 @@ public class AlterTest {
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
             @Mock
-            public StorageVolume getStorageVolumeByName(String fsKey) throws AnalysisException {
+            public StorageVolume getStorageVolumeByName(String svKey) throws AnalysisException {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
         };
