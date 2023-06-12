@@ -21,6 +21,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
@@ -63,10 +65,6 @@ public class InsertAnalyzer {
                 .forEach(table -> table.useMetadataCache(false));
 
         Table table = getOrMakeTargetTable(insertStmt, session);
-
-        if (table instanceof ExternalOlapTable) {
-            table = getOLAPExternalTableMeta(database, (ExternalOlapTable) table);
-        }
 
         if (table instanceof MaterializedView && !insertStmt.isSystem()) {
             throw new SemanticException(
@@ -284,7 +282,13 @@ public class InsertAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
         }
 
-        return MetaUtils.getTable(catalogName, dbName, tableName);
+        Table table = MetaUtils.getTable(catalogName, dbName, tableName);
+
+        if (table instanceof ExternalOlapTable) {
+            Database database = MetaUtils.getDatabase(catalogName, dbName);
+            table = getOLAPExternalTableMeta(database, (ExternalOlapTable) table);
+        }
+        return table;
     }
 
     private static Table makeTableFunctionTable(InsertStmt insertStmt) {
