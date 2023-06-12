@@ -22,7 +22,14 @@ public class DistributionCol {
 
     // used to record the null value in this col is distributed like normal value.
     // true means is same with normal value.
-    // false means null value may be randomly distributed
+    // false means null value may be randomly distributed.
+    // Given the following example：
+    //      select tblA.c1, tblB.c2,tblC.c3 from tblA
+    //          left join tblB on tblA.c1 = tblB.c1
+    //          left join tblC on tblB.c1 = tblC.c1
+    // The data distribution after the first join can be described as tblA.c1(nullStrict = true), but if we don't
+    // care about the null value distribution of tblB.c1, we can also use tblB.c1(nullStrict = false) to describe
+    // the data distribution.
     private final boolean nullStrict;
 
 

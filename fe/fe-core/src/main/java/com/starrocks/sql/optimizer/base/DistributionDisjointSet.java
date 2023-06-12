@@ -33,7 +33,7 @@ import java.util.function.Function;
 // The operation of checking if the output of the child satisfies the join condition is like a "find" operation.
 // After the join, the operation of establishing equivalence between the corresponding columns of the left and right
 // child is like a "union" operation.
-// Naturally, using a disjoint-set data structure (also known as a union-find data structure) to abstract this
+// Naturally, using a disjoint-set data structure (also known as a union-find data structure) to describe this procedure
 // is a suitable approach.
 public class DistributionDisjointSet {
 
