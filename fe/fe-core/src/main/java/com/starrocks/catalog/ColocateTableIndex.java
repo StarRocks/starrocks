@@ -221,20 +221,20 @@ public class ColocateTableIndex implements Writable {
             throws DdlException {
         writeLock();
         try {
-            boolean groupAlreadyExist = false;
+            boolean groupAlreadyExist = true;
             GroupId groupId = null;
             String fullGroupName = dbId + "_" + groupName;
 
             if (groupName2Id.containsKey(fullGroupName)) {
                 groupId = groupName2Id.get(fullGroupName);
-                groupAlreadyExist = true;
             } else {
                 if (assignedGroupId != null) {
-                    // use the given group id, eg, in replay process
+                    // use the given group id, eg, in replay process or cross db colocation
                     groupId = assignedGroupId;
                 } else {
                     // generate a new one
                     groupId = new GroupId(dbId, GlobalStateMgr.getCurrentState().getNextId());
+                    groupAlreadyExist = false;
                 }
                 HashDistributionInfo distributionInfo = (HashDistributionInfo) tbl.getDefaultDistributionInfo();
                 ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId,
@@ -242,12 +242,6 @@ public class ColocateTableIndex implements Writable {
                         tbl.getDefaultReplicationNum());
                 groupName2Id.put(fullGroupName, groupId);
                 group2Schema.put(groupId, groupSchema);
-            }
-
-            if (groupAlreadyExist) {
-                if (tbl.isCloudNativeTable() != lakeGroups.contains(groupId)) {
-                    throw new DdlException("Table type mismatch with colocate group type.");
-                }
             }
 
             if (tbl.isCloudNativeTable()) {
