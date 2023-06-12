@@ -221,6 +221,10 @@ public class InsertOverwriteJobRunner {
         if (insertStmt.getTargetPartitionNames() == null) {
             return;
         }
+        OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
+        if (!olapTable.getPartitionInfo().isAutomaticPartition()) {
+            return;
+        }
         List<Expr> partitionColValues = insertStmt.getTargetPartitionNames().getPartitionColValues();
         List<List<String>> partitionValues = Lists.newArrayList();
         for (Expr expr : partitionColValues) {
@@ -230,10 +234,10 @@ public class InsertOverwriteJobRunner {
                 throw new SemanticException("Only support literal value for partition column.");
             }
         }
-        OlapTable table = (OlapTable) insertStmt.getTargetTable();
         try {
-            addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(table, partitionValues);
+            addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues);
         } catch (AnalysisException ex) {
+            LOG.warn(ex);
             throw new RuntimeException(ex);
         }
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
@@ -242,12 +246,12 @@ public class InsertOverwriteJobRunner {
         List<Long> sourcePartitionIds = job.getSourcePartitionIds();
         for (AddPartitionClause addPartitionClause : addPartitionClauseMap.values()) {
             try {
-                state.addPartitions(db, table.getName(), addPartitionClause);
-                Partition partition = table.getPartition(addPartitionClause.getPartitionDesc().getPartitionName());
+                state.addPartitions(db, olapTable.getName(), addPartitionClause);
+                Partition partition = olapTable.getPartition(addPartitionClause.getPartitionDesc().getPartitionName());
                 sourcePartitionIds.add(partition.getId());
-            } catch (Exception e) {
-                LOG.warn(e);
-                throw new RuntimeException(e);
+            } catch (Exception ex) {
+                LOG.warn(ex);
+                throw new RuntimeException(ex);
             }
         }
     }
