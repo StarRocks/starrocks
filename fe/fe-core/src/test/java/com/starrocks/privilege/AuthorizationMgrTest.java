@@ -929,8 +929,12 @@ public class AuthorizationMgrTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role1, role2 to test_role_user;", ctx), ctx);
 
-        Assert.assertEquals("[role1, role2]", manager.getRoleNamesByUser(
-                UserIdentity.createAnalyzedUserIdentWithIp("test_role_user", "%")).toString());
+        List<String> expected = Arrays.asList("role1", "role2");
+        expected.sort(null);
+        List<String> result = manager.getRoleNamesByUser(
+                UserIdentity.createAnalyzedUserIdentWithIp("test_role_user", "%"));
+        result.sort(null);
+        Assert.assertEquals(expected, result);
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke role1, role2 from test_role_user;", ctx), ctx);
