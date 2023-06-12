@@ -138,22 +138,20 @@ public class MockJournal implements Journal {
 
         @Override
         public List<InetSocketAddress> getNoneLeaderNodes() {
-            return null;
+            return Lists.newArrayList();
         }
 
         @Override
         public void transferToMaster() {
-
         }
 
         @Override
         public void transferToNonMaster() {
-
         }
 
         @Override
         public boolean isLeader() {
-            return false;
+            return true;
         }
 
         @Override
