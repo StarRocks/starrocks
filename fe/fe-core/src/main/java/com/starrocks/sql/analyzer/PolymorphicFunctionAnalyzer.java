@@ -99,7 +99,7 @@ public class PolymorphicFunctionAnalyzer {
 
         int size = Math.max(argsTypes.length, inputArgTypes.length);
         for (int i = 0; i < size; ++i) {
-            Type declType = size >= argsTypes.length ? argsTypes[argsTypes.length - 1] : argsTypes[i];
+            Type declType = i >= argsTypes.length ? argsTypes[argsTypes.length - 1] : argsTypes[i];
             Type inputType = inputArgTypes[i];
 
             // If declaration type is not a pseudo type, use it.
@@ -118,6 +118,8 @@ public class PolymorphicFunctionAnalyzer {
             } else {
                 resolvedTypes[i] = inputType;
             }
+
+            resolvedTypes[i] = AnalyzerUtils.replaceNullType2Boolean(resolvedTypes[i]);
         }
         return resolvedTypes;
     }
@@ -291,7 +293,6 @@ public class PolymorphicFunctionAnalyzer {
         Type[] declTypes = fn.getArgs();
         Function resolvedFunction;
 
-        paramTypes = Arrays.stream(paramTypes).map(AnalyzerUtils::replaceNullType2Boolean).toArray(Type[]::new);
         long numPseudoArgs = Arrays.stream(declTypes).filter(Type::isPseudoType).count();
         // resolve single pseudo type parameter, example: int array_length(ANY_ARRAY)
         if (!retType.isPseudoType() && numPseudoArgs == 1) {
