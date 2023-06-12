@@ -91,6 +91,16 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         GlobalStateMgr.getCurrentState().getStarOSAgent().removeFileStoreByName(sv.getName());
     }
 
+    @Override
+    public StorageVolume getDefaultStorageVolume() throws AnalysisException {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            if (defaultStorageVolumeId.isEmpty()) {
+                return getStorageVolumeByName(BUILTIN_STORAGE_VOLUME);
+            }
+            return getStorageVolume(getDefaultStorageVolumeId());
+        }
+    }
+
     public void createOrUpdateBuiltinStorageVolume() throws DdlException, AnalysisException, AlreadyExistsException {
         if (Config.cloud_native_storage_type.isEmpty()) {
             return;
