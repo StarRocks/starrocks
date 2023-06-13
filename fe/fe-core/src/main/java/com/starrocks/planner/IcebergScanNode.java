@@ -93,7 +93,6 @@ public class IcebergScanNode extends ScanNode {
 
     private Set<String> equalityDeleteColumns = new HashSet<>();
 
-    private final HashMultimap<String, Long> hostToBeId = HashMultimap.create();
     private long totalBytes = 0;
 
     private boolean isFinalized = false;
@@ -122,21 +121,6 @@ public class IcebergScanNode extends ScanNode {
     @Override
     public void init(Analyzer analyzer) throws UserException {
         super.init(analyzer);
-        getAliveBackends();
-    }
-
-    private void getAliveBackends() throws UserException {
-        ImmutableCollection<ComputeNode> computeNodes =
-                ImmutableList.copyOf(GlobalStateMgr.getCurrentSystemInfo().getComputeNodes());
-
-        for (ComputeNode computeNode : computeNodes) {
-            if (computeNode.isAlive()) {
-                hostToBeId.put(computeNode.getHost(), computeNode.getId());
-            }
-        }
-        if (hostToBeId.isEmpty()) {
-            throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
-        }
     }
 
     public void preProcessIcebergPredicate(ScalarOperator predicate) {
