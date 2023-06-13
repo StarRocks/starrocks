@@ -3638,7 +3638,7 @@ public class LocalMetastore implements ConnectorMetadata {
             materializedView.addPartition(partition);
         }
 
-        MVManager.getInstance().prepareMaintenanceWork(stmt, materializedView);
+        MaterializedViewMgr.getInstance().prepareMaintenanceWork(stmt, materializedView);
 
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
@@ -4577,7 +4577,6 @@ public class LocalMetastore implements ConnectorMetadata {
                     cluster.addDb(StarRocksDb.DATABASE_NAME, starRocksDb.getId());
                 }
                 defaultCluster = cluster;
-            }
         }
         LOG.info("finished replay cluster from image");
         return checksum;
