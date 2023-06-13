@@ -54,7 +54,7 @@ import static com.starrocks.sql.optimizer.rewrite.scalar.FilterSelectivityEvalua
 public class SplitScanORToUnionRule extends TransformationRule {
     private static final Logger LOG = LogManager.getLogger(SplitScanORToUnionRule.class);
 
-    private static final double HIGH_SELECTIVITY = 1E-6;
+    private static final double HIGH_SELECTIVITY = 1E-4;
 
     private SplitScanORToUnionRule() {
         super(RuleType.TF_SPLIT_SCAN_OR, Pattern.create(OperatorType.LOGICAL_OLAP_SCAN));
