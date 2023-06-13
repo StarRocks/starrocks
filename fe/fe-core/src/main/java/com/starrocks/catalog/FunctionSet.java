@@ -294,6 +294,11 @@ public class FunctionSet {
     public static final String ARRAY_APPEND = "array_append";
     public static final String ARRAY_AVG = "array_avg";
     public static final String ARRAY_CONTAINS = "array_contains";
+    public static final String ARRAY_CONTAINS_ALL = "array_contains_all";
+    public static final String ARRAY_CUM_SUM = "array_cum_sum";
+
+
+
     public static final String ARRAY_JOIN = "array_join";
     public static final String ARRAY_DISTINCT = "array_distinct";
     public static final String ARRAY_LENGTH = "array_length";
@@ -309,6 +314,8 @@ public class FunctionSet {
     public static final String ALL_MATCH = "all_match";
 
     public static final String ARRAY_GENERATE = "array_generate";
+
+    public static final String ARRAY_TO_BITMAP = "array_to_bitmap";
 
     // Bit functions:
     public static final String BITAND = "bitand";
