@@ -139,6 +139,7 @@ StatusOr<ChunkPtr> LocalExchangeSourceOperator::pull_chunk(RuntimeState* state) 
 const size_t min_local_memory_limit = 1LL * 1024 * 1024;
 
 void LocalExchangeSourceOperator::enter_release_memory_mode() {
+    // limit the memory limit to a very small value so that the upstream will not write new data until all the data has been pushed to the downstream operators
     _local_memory_limit = min_local_memory_limit;
     _memory_manager->update_max_memory_usage(min_local_memory_limit);
 }
