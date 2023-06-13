@@ -53,7 +53,7 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
         `v3` string NULL COMMENT ""
     )
     duplicate key(v1)
-    DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+    DISTRIBUTED BY HASH(`v1`)
     PROPERTIES (
         "replication_num" = "3",
         "storage_format" = "DEFAULT"
@@ -124,7 +124,7 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
         `v2` ARRAY<int> NULL COMMENT ""
     ) 
     duplicate key(v1)
-    DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+    DISTRIBUTED BY HASH(`v1`)
     PROPERTIES (
         "replication_num" = "3",
         "storage_format" = "DEFAULT"
@@ -177,7 +177,7 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
     `v2` Bitmap BITMAP_UNION COMMENT ""
     )
     Aggregate key(v1)
-    DISTRIBUTED BY HASH(`v1`) BUCKETS 1;
+    DISTRIBUTED BY HASH(`v1`);
 
     insert into lateral_test3 values (1, bitmap_from_string('1, 2')), (2, to_bitmap(3));
     ~~~

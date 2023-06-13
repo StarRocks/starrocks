@@ -56,7 +56,7 @@ PARTITION BY RANGE(k1)
     PARTITION p1 values less than('2020-02-01'),
     PARTITION p2 values less than('2020-03-01')
 )
-DISTRIBUTED BY HASH(k2) BUCKETS 3
+DISTRIBUTED BY HASH(k2)
 PROPERTIES( "replication_num"  = "1");
 ```
 

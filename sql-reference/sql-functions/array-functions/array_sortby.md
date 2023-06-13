@@ -68,7 +68,7 @@ CREATE TABLE `test_array` (
 ) ENGINE=OLAP
 DUPLICATE KEY(`c1`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`c1`) BUCKETS 2
+DISTRIBUTED BY HASH(`c1`)
 PROPERTIES (
 "replication_num" = "3",
 "storage_format" = "DEFAULT",

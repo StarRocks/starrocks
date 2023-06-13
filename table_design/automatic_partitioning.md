@@ -118,7 +118,7 @@ DUPLICATE KEY(event_day, site_id, city_code, user_name)
 PARTITION BY date_trunc('month', event_day)(
     START ("2022-06-01") END ("2022-12-01") EVERY (INTERVAL 1 month)
 )
-DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32
+DISTRIBUTED BY HASH(event_day, site_id)
 PROPERTIES(
     "partition_live_number" = "3",
     "replication_num" = "1"
@@ -137,7 +137,7 @@ CREATE TABLE site_access(
 )
 DUPLICATE KEY(event_day, site_id, city_code, user_name)
 PARTITION BY time_slice(event_day, INTERVAL 7 day)
-DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32
+DISTRIBUTED BY HASH(event_day, site_id)
 PROPERTIES("replication_num" = "1");
 ```
 

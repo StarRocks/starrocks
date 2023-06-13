@@ -18,7 +18,7 @@ BITMAP 与 HLL (HyperLogLog) 类似，常用来加速 count distinct 的去重�
     ) ENGINE=OLAP
     AGGREGATE KEY(dt, page)
     COMMENT "OLAP"
-    DISTRIBUTED BY HASH(dt) BUCKETS 2;
+    DISTRIBUTED BY HASH(dt);
     ```
 
 2. 主键模型建表时指定字段类型为 BITMAP。
@@ -31,7 +31,7 @@ BITMAP 与 HLL (HyperLogLog) 类似，常用来加速 count distinct 的去重�
     ) ENGINE=OLAP
     PRIMARY KEY(`tagname`, `tagvalue`)
     COMMENT "OLAP"
-    DISTRIBUTED BY HASH(`tagname`) BUCKETS 1;
+    DISTRIBUTED BY HASH(`tagname`);
     ```
 
 向 BITMAP 列中插入数据需要先使用 to_bitmap() 函数进行转换。

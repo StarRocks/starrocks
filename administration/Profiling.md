@@ -23,7 +23,7 @@ StarRocks 支持四种数据模型：主键模型 (PRIMARY KEY)，聚合模型 (
         pv BIGINT   SUM DEFAULT '0'
     )
     AGGREGATE KEY(siteid, city, username)
-    DISTRIBUTED BY HASH(siteid) BUCKETS 10;
+    DISTRIBUTED BY HASH(siteid);
     ```
 
 * **UNIQUE KEY 模型**
@@ -39,7 +39,7 @@ StarRocks 支持四种数据模型：主键模型 (PRIMARY KEY)，聚合模型 (
         amount      BIGINT DEFAULT '0'
     )
     UNIQUE KEY(orderid)
-    DISTRIBUTED BY HASH(orderid) BUCKETS 10;
+    DISTRIBUTED BY HASH(orderid);
     ```
 
 * **DUPLICATE KEY 模型**
@@ -59,7 +59,7 @@ StarRocks 支持四种数据模型：主键模型 (PRIMARY KEY)，聚合模型 (
         url         VARCHAR(1024)
     )
     DUPLICATE KEY(visitorid, sessionid)
-    DISTRIBUTED BY HASH(sessionid, visitorid) BUCKETS 10;
+    DISTRIBUTED BY HASH(sessionid, visitorid);
     ```
 
 * **PRIMARY KEY 模型**
@@ -80,7 +80,7 @@ StarRocks 支持四种数据模型：主键模型 (PRIMARY KEY)，聚合模型 (
         state tinyint NOT NULL
     )
     PRIMARY KEY (dt, order_id)
-    DISTRIBUTED BY HASH(order_id) BUCKETS 4;
+    DISTRIBUTED BY HASH(order_id);
     ```
 
 ### 使用 Colocate Table
@@ -100,7 +100,7 @@ CREATE TABLE colocate_table
     url         VARCHAR(1024)
 )
 DUPLICATE KEY(visitorid, sessionid)
-DISTRIBUTED BY HASH(sessionid, visitorid) BUCKETS 10
+DISTRIBUTED BY HASH(sessionid, visitorid)
 PROPERTIES(
     "colocate_with" = "group1"
 );

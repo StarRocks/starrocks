@@ -63,7 +63,7 @@ PARTITION BY RANGE(event_time)
     PARTITION p18 VALUES LESS THAN ('2015-09-12 18:00:00'),
     PARTITION p24 VALUES LESS THAN ('2015-09-13 00:00:00')
 )
-DISTRIBUTED BY HASH(user) BUCKETS 3;
+DISTRIBUTED BY HASH(user);
 
 CREATE TABLE source_wiki_edit
 (
@@ -97,8 +97,12 @@ PARTITION BY RANGE(event_time)
     PARTITION p18 VALUES LESS THAN ('2015-09-12 18:00:00'),
     PARTITION p24 VALUES LESS THAN ('2015-09-13 00:00:00')
 )
-DISTRIBUTED BY HASH(user) BUCKETS 3;
+DISTRIBUTED BY HASH(user);
 ```
+
+> **注意**
+>
+> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
 
 ## 通过 INSERT INTO VALUES 语句导入数据
 

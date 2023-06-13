@@ -28,14 +28,14 @@
 ALTER TABLE <table_name> 
 ADD TEMPORARY PARTITION <temporary_partition_name> VALUES [("value1"), {MAXVALUE|("value2")})]
 [(partition_desc)]
-[DISTRIBUTED BY HASH(<bucket_key>) BUCKETS <bucket_number>];
+[DISTRIBUTED BY HASH(<bucket_key>)];
 ```
 
 ```SQL
 ALTER TABLE <table_name> 
 ADD TEMPORARY PARTITION <temporary_partition_name> VALUES LESS THAN {MAXVALUE|(<"value">)}
 [(partition_desc)]
-[DISTRIBUTED BY HASH(<bucket_key>) BUCKETS <bucket_number>];
+[DISTRIBUTED BY HASH(<bucket_key>)];
 ```
 
 **批量创建临时分区**
@@ -44,7 +44,7 @@ ADD TEMPORARY PARTITION <temporary_partition_name> VALUES LESS THAN {MAXVALUE|(<
 ALTER TABLE <table_name>
 ADD TEMPORARY PARTITIONS START ("value1") END ("value2") EVERY {(INTERVAL <num> <time_unit>)|<num>}
 [(partition_desc)]
-[DISTRIBUTED BY HASH(<bucket_key>) BUCKETS <bucket_number>];
+[DISTRIBUTED BY HASH(<bucket_key>)];
 ```
 
 ### **参数说明**
@@ -73,7 +73,7 @@ ADD TEMPORARY PARTITION tp2 VALUES LESS THAN ("2020-03-01");
 ALTER TABLE site_access
 ADD TEMPORARY PARTITION tp3 VALUES LESS THAN ("2020-04-01")
  ("replication_num" = "1")
-DISTRIBUTED BY HASH (site_id) BUCKETS 5;
+DISTRIBUTED BY HASH (site_id);
 ```
 
 在 `site_access` 表中批量创建临时分区，使用 `START (...) END (...) EVERY (...)` 语法指定批量创建的临时分区范围为 [2020-04-01, 2021-01-01)，分区粒度是一个月。

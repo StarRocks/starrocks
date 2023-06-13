@@ -14,7 +14,7 @@ CREATE TABLE `pv_bitmap` (
 ) ENGINE=OLAP
 AGGREGATE KEY(`dt`, `page`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`dt`) BUCKETS 2;
+DISTRIBUTED BY HASH(`dt`);
 ```
 
 >当数据量很大时，最好为高频率的 bitmap_union 查询建立对应的 rollup 表，如:

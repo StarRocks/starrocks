@@ -59,7 +59,7 @@ select bitmap_to_base64(bitmap_empty());
         `visit_users` BITMAP BITMAP_UNION NOT NULL COMMENT '访问用户id'
         ) ENGINE=OLAP
         AGGREGATE KEY(`page_id`, `visit_date`)
-        DISTRIBUTED BY HASH(`page_id`) BUCKETS 1
+        DISTRIBUTED BY HASH(`page_id`)
         PROPERTIES (
         "replication_num" = "3",
         "storage_format" = "DEFAULT"

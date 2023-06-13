@@ -42,7 +42,7 @@ SUM(expr)
         income        DOUBLE         COMMENT "8 bytes",
         sales       DECIMAL(12,4)  COMMENT ""
         )
-        DISTRIBUTED BY HASH(region_num) BUCKETS 8;
+        DISTRIBUTED BY HASH(region_num);
     ```
 
 2. 向表中插入数据。

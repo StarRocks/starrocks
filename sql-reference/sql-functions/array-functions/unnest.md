@@ -43,7 +43,7 @@ CREATE TABLE student_score
     `scores` ARRAY<int> NULL COMMENT ""
 )
 DUPLICATE KEY (id)
-DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+DISTRIBUTED BY HASH(`id`);
 
 -- 向表插入数据。
 INSERT INTO student_score VALUES
@@ -98,7 +98,7 @@ scores ARRAY<int> NULL COMMENT ""
 ) ENGINE=OLAP
 DUPLICATE KEY(id)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(id) BUCKETS 1
+DISTRIBUTED BY HASH(id)
 PROPERTIES (
 "replication_num" = "3");
 

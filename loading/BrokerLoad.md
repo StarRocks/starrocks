@@ -88,8 +88,12 @@ Broker Load 支持从如下外部存储系统导入数据：
       )
           ENGINE=OLAP
           PRIMARY KEY(`id`)
-          DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+          DISTRIBUTED BY HASH(`id`);
       ```
+
+    > **注意**
+    >
+    > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
 
    b. 创建一张名为 `table2` 的主键模型表。表包含 `id` 和 `city` 两列，分别代表城市 ID 和城市名称，主键为 `id` 列，如下所示：
 
@@ -101,7 +105,7 @@ Broker Load 支持从如下外部存储系统导入数据：
       )
           ENGINE=OLAP
           PRIMARY KEY(`id`)
-          DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+          DISTRIBUTED BY HASH(`id`);
    ```
 
 2. 在本地文件系统中创建 CSV 格式的数据文件。

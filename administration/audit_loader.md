@@ -44,13 +44,12 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
 DUPLICATE KEY (`queryId`, `timestamp`, `clientIp`)
 COMMENT "审计日志表"
 PARTITION BY RANGE (`timestamp`) ()
-DISTRIBUTED BY HASH (`queryId`) BUCKETS 3 
+DISTRIBUTED BY HASH (`queryId`)
 PROPERTIES (
   "dynamic_partition.time_unit" = "DAY",
   "dynamic_partition.start" = "-30",
   "dynamic_partition.end" = "3",
   "dynamic_partition.prefix" = "p",
-  "dynamic_partition.buckets" = "3",
   "dynamic_partition.enable" = "true",
   "replication_num" = "3"
 );
@@ -86,13 +85,12 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
 DUPLICATE KEY (`queryId`, `timestamp`, `clientIp`)
 COMMENT "审计日志表"
 PARTITION BY RANGE (`timestamp`) ()
-DISTRIBUTED BY HASH (`queryId`) BUCKETS 3 
+DISTRIBUTED BY HASH (`queryId`)
 PROPERTIES (
   "dynamic_partition.time_unit" = "DAY",
   "dynamic_partition.start" = "-30",
   "dynamic_partition.end" = "3",
   "dynamic_partition.prefix" = "p",
-  "dynamic_partition.buckets" = "3",
   "dynamic_partition.enable" = "true",
   "replication_num" = "3"
 );
@@ -124,13 +122,12 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
 ) engine=OLAP
 duplicate key(query_id, time, client_ip)
 partition by range(time) ()
-distributed by hash(query_id) buckets 3
+distributed by hash(query_id)
 properties(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
     "dynamic_partition.end" = "3",
     "dynamic_partition.prefix" = "p",
-    "dynamic_partition.buckets" = "3",
     "dynamic_partition.enable" = "true",
     "replication_num" = "3"
 );
@@ -160,13 +157,12 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
 ) engine=OLAP
 DUPLICATE KEY(query_id, time, client_ip)
 PARTITION BY RANGE(time) ()
-DISTRIBUTED BY HASH(query_id) BUCKETS 3
+DISTRIBUTED BY HASH(query_id)
 PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
     "dynamic_partition.end" = "3",
     "dynamic_partition.prefix" = "p",
-    "dynamic_partition.buckets" = "3",
     "dynamic_partition.enable" = "true",
     "replication_num" = "3"
 );
@@ -195,13 +191,12 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
 ) engine=OLAP
 DUPLICATE KEY(query_id, time, client_ip)
 PARTITION BY RANGE(time) ()
-DISTRIBUTED BY HASH(query_id) BUCKETS 3
+DISTRIBUTED BY HASH(query_id)
 PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
     "dynamic_partition.end" = "3",
     "dynamic_partition.prefix" = "p",
-    "dynamic_partition.buckets" = "3",
     "dynamic_partition.enable" = "true",
     "replication_num" = "3"
 );

@@ -36,7 +36,7 @@ retention(array)
     )
     ENGINE=olap
     DUPLICATE KEY(id)
-    DISTRIBUTED BY HASH(id) BUCKETS 8;
+    DISTRIBUTED BY HASH(id);
 
     INSERT INTO test VALUES 
     (1,'pv','2022-01-01 08:00:05'),

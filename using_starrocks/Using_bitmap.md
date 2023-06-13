@@ -33,7 +33,7 @@ Roaring Bitmap 实现，细节可以参考：[具体论文和实现](https://git
     `visit_users` BITMAP BITMAP_UNION NOT NULL COMMENT '访问用户id'
   ) ENGINE=OLAP
   AGGREGATE KEY(`page_id`, `visit_date`)
-  DISTRIBUTED BY HASH(`page_id`) BUCKETS 1
+  DISTRIBUTED BY HASH(`page_id`)
   PROPERTIES (
     "replication_num" = "3",
     "storage_format" = "DEFAULT"

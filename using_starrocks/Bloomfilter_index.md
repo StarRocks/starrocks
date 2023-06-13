@@ -32,7 +32,7 @@ CREATE TABLE table1
 )
 ENGINE = olap
 PRIMARY KEY(k1, k2)
-DISTRIBUTED BY HASH (k1, k2) BUCKETS 10
+DISTRIBUTED BY HASH (k1, k2)
 PROPERTIES("bloom_filter_columns" = "k1,k2");
 ```
 

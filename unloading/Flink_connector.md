@@ -166,7 +166,7 @@ Flink 连接器支持两种数据读取方式：Flink SQL 和 Flink DataStream�
    ENGINE=OLAP
    PRIMARY KEY(`id`)
    COMMENT "OLAP"
-   DISTRIBUTED BY HASH(`id`) BUCKETS 1
+   DISTRIBUTED BY HASH(`id`)
    PROPERTIES
    (
        "replication_num" = "3"

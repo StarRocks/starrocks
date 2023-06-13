@@ -37,7 +37,7 @@ max_by(x,y)
         subject_id INT,
         subject STRING,
         exam_result INT
-    ) DISTRIBUTED BY HASH(`subject_id`) BUCKETS 1;
+    ) DISTRIBUTED BY HASH(`subject_id`);
     ```
 
 2. 向表插入数据并查询表中数据。

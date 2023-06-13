@@ -421,7 +421,7 @@ DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
 * **建表时，必须指定分桶键**。
 * 作为分桶键的列，该列的值不支持更新。
 * 分桶键指定后不支持修改。
-* 自 2.5.0 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
+* 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
 
 ### **ORDER BY**
 
@@ -621,9 +621,13 @@ CREATE TABLE example_db.table_hash
 ENGINE = olap
 AGGREGATE KEY(k1, k2)
 COMMENT "my first starrocks table"
-DISTRIBUTED BY HASH(k1) BUCKETS 10
+DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type" = "column");
 ```
+
+> **注意**
+>
+> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
 
 ### 创建表并设置存储介质和数据降冷时间
 
@@ -639,7 +643,7 @@ CREATE TABLE example_db.table_hash
 )
 ENGINE = olap
 UNIQUE KEY(k1, k2)
-DISTRIBUTED BY HASH (k1, k2) BUCKETS 10
+DISTRIBUTED BY HASH (k1, k2)
 PROPERTIES(
     "storage_type" = "column",
     "storage_medium" = "SSD",
@@ -659,7 +663,7 @@ CREATE TABLE example_db.table_hash
 )
 ENGINE = olap
 PRIMARY KEY(k1, k2)
-DISTRIBUTED BY HASH (k1, k2) BUCKETS 10
+DISTRIBUTED BY HASH (k1, k2)
 PROPERTIES(
     "storage_type" = "column",
     "storage_medium" = "SSD",
@@ -690,7 +694,7 @@ PARTITION BY RANGE (k1)
     PARTITION p2 VALUES LESS THAN ("2014-06-01"),
     PARTITION p3 VALUES LESS THAN ("2014-12-01")
 )
-DISTRIBUTED BY HASH(k2) BUCKETS 10
+DISTRIBUTED BY HASH(k2)
 PROPERTIES(
     "storage_medium" = "SSD",
     "storage_cooldown_time" = "2025-06-04 00:00:00"
@@ -726,7 +730,7 @@ PARTITION BY RANGE (k1, k2, k3)
     PARTITION p1 VALUES [("2014-01-01", "10", "200"), ("2014-01-01", "20", "300")),
     PARTITION p2 VALUES [("2014-06-01", "100", "200"), ("2014-07-01", "100", "300"))
 )
-DISTRIBUTED BY HASH(k2) BUCKETS 10
+DISTRIBUTED BY HASH(k2)
 PROPERTIES(
     "storage_medium" = "SSD"
 );
@@ -767,7 +771,7 @@ CREATE TABLE example_db.example_table
 )
 ENGINE = olap
 AGGREGATE KEY(k1, k2)
-DISTRIBUTED BY HASH(k1) BUCKETS 10
+DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type" = "column");
 ```
 
@@ -785,7 +789,7 @@ CREATE TABLE example_db.example_table
 )
 ENGINE = olap
 AGGREGATE KEY(k1, k2)
-DISTRIBUTED BY HASH(k1) BUCKETS 10
+DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type" = "column");
 ```
 
@@ -799,7 +803,7 @@ CREATE TABLE `t1` (
     `value` varchar(8) COMMENT ""
 ) ENGINE = OLAP
 DUPLICATE KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 10
+DISTRIBUTED BY HASH(`id`)
 PROPERTIES (
     "colocate_with" = "t1"
 );
@@ -809,7 +813,7 @@ CREATE TABLE `t2` (
     `value` varchar(8) COMMENT ""
 ) ENGINE = OLAP
 DUPLICATE KEY(`id`)
-DISTRIBUTED BY HASH(`id`) BUCKETS 10
+DISTRIBUTED BY HASH(`id`)
 PROPERTIES (
     "colocate_with" = "t1"
 );
@@ -829,7 +833,7 @@ CREATE TABLE example_db.table_hash
 ENGINE = olap
 AGGREGATE KEY(k1, k2)
 COMMENT "my first starrocks table"
-DISTRIBUTED BY HASH(k1) BUCKETS 10
+DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type" = "column");
 ```
 
@@ -863,14 +867,13 @@ PARTITION BY RANGE (k1)
     PARTITION p2 VALUES LESS THAN ("2014-06-01"),
     PARTITION p3 VALUES LESS THAN ("2014-12-01")
 )
-DISTRIBUTED BY HASH(k2) BUCKETS 10
+DISTRIBUTED BY HASH(k2)
 PROPERTIES(
     "storage_medium" = "SSD",
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-3",
     "dynamic_partition.end" = "3",
     "dynamic_partition.prefix" = "p",
-    "dynamic_partition.buckets" = "10"
 );
 ```
 
@@ -911,7 +914,7 @@ create table users (
     property3 tinyint NOT NULL
 ) 
 PRIMARY KEY (`user_id`)
-DISTRIBUTED BY HASH(`user_id`) BUCKETS 4
+DISTRIBUTED BY HASH(`user_id`)
 ORDER BY(`address`,`last_active`)
 PROPERTIES(
     "replication_num" = "3",

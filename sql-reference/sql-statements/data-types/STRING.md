@@ -15,7 +15,7 @@ CREATE TABLE stringDemo (
 ) ENGINE=OLAP 
 DUPLICATE KEY(pk)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(pk) BUCKETS 4;
+DISTRIBUTED BY HASH(pk);
 ```
 
 表建成功后通过执行 `desc <table_name>;` 查看表信息，可以看到 STRING 类型为 `VARCHAR(65533)`。

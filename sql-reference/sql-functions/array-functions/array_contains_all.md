@@ -45,7 +45,7 @@ BOOLEAN array_contains_all(arr1, arr2)
         c2 ARRAY<INT>
     ) ENGINE=OLAP
     DUPLICATE KEY(c0)
-    DISTRIBUTED BY HASH(c0) BUCKETS 8;
+    DISTRIBUTED BY HASH(c0);
 
     INSERT INTO t1 VALUES
         (1,[1,2,3],[1,2]),

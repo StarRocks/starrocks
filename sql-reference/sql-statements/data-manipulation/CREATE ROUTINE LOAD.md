@@ -269,7 +269,7 @@ CREATE TABLE example_db.example_tbl1 (
     `gender` varchar(26) NULL COMMENT "性别", 
     `price` double NULL COMMENT "支付金额") 
 DUPLICATE KEY (order_id,pay_dt) 
-DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`order_id`);
 ```
 
 #### 从 Topic 指定分区和起始位点开始消费
@@ -337,7 +337,7 @@ CREATE TABLE example_db.example_tbl2 (
     `price` double NULL COMMENT "支付金额"
 ) 
 DUPLICATE KEY (order_id,pay_dt) 
-DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`order_id`);
 ```
 
 **导入作业**
@@ -499,7 +499,7 @@ CREATE TABLE example_db.example_tbl3 (
     `pay_time` bigint(20) NULL COMMENT "支付时间", 
     `price` double SUM NULL COMMENT "支付金额") 
 AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`) 
-DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`commodity_id`);
 ```
 
 **导入作业**
@@ -551,7 +551,7 @@ CREATE TABLE example_db.example_tbl4 (
     `pay_dt` date NULL COMMENT "支付日期", 
     `price`double SUM NULL COMMENT "支付金额") 
 AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`,`pay_dt`) 
-DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`commodity_id`);
 ```
 
 **导入作业**
@@ -602,7 +602,7 @@ CREATE TABLE example_db.example_tbl3 (
     `pay_time` bigint(20) NULL COMMENT "支付时间", 
     `price`double SUM NULL COMMENT "支付金额") 
 AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`) 
-DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`commodity_id`);
 ```
 
 **导入作业**
@@ -672,7 +672,7 @@ CREATE TABLE sensor.sensor_log1 (
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
-DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`id`);
 ```
 
 **导入作业**
@@ -750,7 +750,7 @@ CREATE TABLE sensor.sensor_log2 (
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
-DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`id`);
 ```
 
 **导入作业**
@@ -830,7 +830,7 @@ CREATE TABLE sensor.sensor_log3 (
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
-DISTRIBUTED BY HASH(`id`) BUCKETS 5; 
+DISTRIBUTED BY HASH(`id`);
 ```
 
 **导入作业**
