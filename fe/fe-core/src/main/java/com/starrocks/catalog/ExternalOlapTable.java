@@ -348,7 +348,6 @@ public class ExternalOlapTable extends OlapTable {
             throws DdlException, IOException {
         // no meta changed since last time, do nothing
         if (lastExternalMeta != null && meta.compareTo(lastExternalMeta) == 0) {
-            LOG.info("no meta changed since last time, do nothing");
             return;
         }
 
@@ -366,6 +365,7 @@ public class ExternalOlapTable extends OlapTable {
         db.writeLock();
         long start = System.currentTimeMillis();
 
+<<<<<<< HEAD
         try {
             lastExternalMeta = meta;
 
@@ -373,6 +373,12 @@ public class ExternalOlapTable extends OlapTable {
             baseIndexId = meta.getBase_index_id();
             colocateGroup = meta.getColocate_group();
             bfFpp = meta.getBloomfilter_fpp();
+=======
+        state = OlapTableState.valueOf(meta.getState());
+        baseIndexId = meta.getBase_index_id();
+        colocateGroup = meta.getColocate_group();
+        bfFpp = meta.getBloomfilter_fpp();
+>>>>>>> 3d1b121b7 ([BugFix] fix external table commit timeout treated as failure (#24856))
 
             keysType = KeysType.valueOf(meta.getKey_type());
             tableProperty = new TableProperty(meta.getProperties());
@@ -588,5 +594,16 @@ public class ExternalOlapTable extends OlapTable {
         } finally {
             db.writeUnlock();
         }
+<<<<<<< HEAD
+=======
+
+        lastExternalMeta = meta;
+        LOG.info("TableMetaSyncer finish meta update. partition build cost: {}ms, " +
+                        "index meta build cost: {}ms, schema rebuild cost: {}ms, " +
+                        "tablet meta build cost: {}ms, total cost: {}ms",
+                endOfPartitionBuild - start, endOfIndexMetaBuild - endOfPartitionBuild,
+                endOfSchemaRebuild - endOfIndexMetaBuild, endOfTabletMetaBuild - endOfSchemaRebuild,
+                System.currentTimeMillis() - start);
+>>>>>>> 3d1b121b7 ([BugFix] fix external table commit timeout treated as failure (#24856))
     }
 }
