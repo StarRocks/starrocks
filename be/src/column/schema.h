@@ -60,15 +60,6 @@ public:
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
     void append_sort_key_idx(ColumnId idx) { _sort_key_idxes.emplace_back(idx); }
 
-    std::vector<ColumnId> get_sort_key_idxes() {
-        if (!_sort_key_idxes.empty()) {
-            return _sort_key_idxes;
-        }
-        std::vector<ColumnId> sort_key_idxes(num_key_fields());
-        std::iota(sort_key_idxes.begin(), sort_key_idxes.end(), 0);
-        return sort_key_idxes;
-    }
-
     void reserve(size_t size) { _fields.reserve(size); }
 
     void append(const FieldPtr& field);
@@ -99,6 +90,12 @@ public:
 
 private:
     void _build_index_map(const Fields& fields);
+    void _init_sort_key_idxes() {
+        if (_sort_key_idxes.empty()) {
+            _sort_key_idxes.resize(num_key_fields());
+            std::iota(_sort_key_idxes.begin(), _sort_key_idxes.end(), 0);
+        }
+    }
 
     Fields _fields;
     size_t _num_keys = 0;
