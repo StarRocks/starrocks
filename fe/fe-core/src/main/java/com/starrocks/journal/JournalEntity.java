@@ -1023,15 +1023,12 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             case OperationType.OP_CREATE_STORAGE_VOLUME:
+            case OperationType.OP_DROP_STORAGE_VOLUME:
                 data = StorageVolume.read(in);
                 isRead = true;
                 break;
             case OperationType.OP_UPDATE_STORAGE_VOLUME:
                 data = StorageVolume.read(in);
-                isRead = true;
-                break;
-            case OperationType.OP_DROP_STORAGE_VOLUME:
-                data = StringLog.read(in);
                 isRead = true;
                 break;
             default: {

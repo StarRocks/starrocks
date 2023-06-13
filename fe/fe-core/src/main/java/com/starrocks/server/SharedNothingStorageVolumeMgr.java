@@ -87,10 +87,12 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     @Override
     public void load(SRMetaBlockReader reader)
             throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
-        SharedNothingStorageVolumeMgr data = reader.readJson(SharedNothingStorageVolumeMgr.class);
+        SharedNothingStorageVolumeMgr data = (SharedNothingStorageVolumeMgr) reader.readJson(StorageVolumeMgr.class);
         this.storageVolumeToDbs = data.storageVolumeToDbs;
         this.storageVolumeToTables = data.storageVolumeToTables;
         this.defaultStorageVolumeId = data.defaultStorageVolumeId;
+        this.dbToStorageVolume = data.dbToStorageVolume;
+        this.tableToStorageVolume = data.tableToStorageVolume;
         this.idToSV = data.idToSV;
     }
 

@@ -53,27 +53,27 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     // Without id, the scenario like "create storage volume 'a', drop storage volume 'a', create storage volume 'a'"
     // can not be handled. They will be treated as the same storage volume.
-    @SerializedName("id")
+    @SerializedName("i")
     private String id;
 
-    @SerializedName("name")
+    @SerializedName("n")
     private String name;
 
-    @SerializedName("svt")
+    @SerializedName("s")
     private StorageVolumeType svt;
 
-    @SerializedName("locations")
+    @SerializedName("l")
     private List<String> locations;
 
     private CloudConfiguration cloudConfiguration;
 
-    @SerializedName("params")
+    @SerializedName("p")
     private Map<String, String> params;
 
-    @SerializedName("comment")
+    @SerializedName("c")
     private String comment;
 
-    @SerializedName("enabled")
+    @SerializedName("e")
     private boolean enabled;
 
     public StorageVolume(String id, String name, String svt, List<String> locations,

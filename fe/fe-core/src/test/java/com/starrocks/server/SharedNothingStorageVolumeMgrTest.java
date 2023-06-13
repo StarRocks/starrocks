@@ -126,18 +126,6 @@ public class SharedNothingStorageVolumeMgrTest {
         // bind/unbind db and table to storage volume
         svm.bindDbToStorageVolume(sv.getId(), 1L);
         svm.bindTableToStorageVolume(sv.getId(), 1L);
-        try {
-            svm.unbindDbToStorageVolume("-1", 1L);
-            Assert.fail();
-        } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("Storage volume does not exist"));
-        }
-        try {
-            svm.unbindTableToStorageVolume("-1", 1L);
-            Assert.fail();
-        } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("Storage volume does not exist"));
-        }
 
         // remove
         try {
@@ -166,8 +154,8 @@ public class SharedNothingStorageVolumeMgrTest {
             Assert.assertTrue(e.getMessage().contains("Storage volume 'test' is referenced by dbs or tables, " +
                     "dbs: [1], tables: [1]"));
         }
-        svm.unbindDbToStorageVolume(sv.getId(), 1L);
-        svm.unbindTableToStorageVolume(sv.getId(), 1L);
+        svm.unbindDbToStorageVolume(1L);
+        svm.unbindTableToStorageVolume(1L);
         svm.removeStorageVolume(svKey);
         Assert.assertFalse(svm.exists(svKey));
     }

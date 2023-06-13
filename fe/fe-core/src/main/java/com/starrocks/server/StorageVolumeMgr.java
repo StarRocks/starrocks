@@ -63,6 +63,12 @@ public abstract class StorageVolumeMgr {
     @SerializedName("storageVolumeToTables")
     protected Map<String, Set<Long>> storageVolumeToTables = new HashMap<>();
 
+    @SerializedName("dbToStorageVolumes")
+    protected Map<Long, String> dbToStorageVolume = new HashMap<>();
+
+    @SerializedName("tableToStorageVolumes")
+    protected Map<Long, String> tableToStorageVolume = new HashMap<>();
+
     public String createStorageVolume(CreateStorageVolumeStmt stmt)
             throws AlreadyExistsException, AnalysisException, DdlException {
         Map<String, String> params = new HashMap<>();
@@ -181,12 +187,16 @@ public abstract class StorageVolumeMgr {
             Set<Long> dbs = storageVolumeToDbs.getOrDefault(svId, new HashSet<>());
             dbs.add(dbId);
             storageVolumeToDbs.put(svId, dbs);
+            dbToStorageVolume.put(dbId, svId);
         }
     }
 
-    public void unbindDbToStorageVolume(String svId, long dbId) {
+    public void unbindDbToStorageVolume(long dbId) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(storageVolumeToDbs.containsKey(svId), "Storage volume does not exist");
+            if (!dbToStorageVolume.containsKey(dbId)) {
+                return;
+            }
+            String svId = dbToStorageVolume.remove(dbId);
             Set<Long> dbs = storageVolumeToDbs.get(svId);
             dbs.remove(dbId);
             if (dbs.isEmpty()) {
@@ -200,17 +210,27 @@ public abstract class StorageVolumeMgr {
             Set<Long> tables = storageVolumeToTables.getOrDefault(svId, new HashSet<>());
             tables.add(tableId);
             storageVolumeToTables.put(svId, tables);
+            tableToStorageVolume.put(tableId, svId);
         }
     }
 
-    public void unbindTableToStorageVolume(String svId, long tableId) {
+    public void unbindTableToStorageVolume(long tableId) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(storageVolumeToTables.containsKey(svId), "Storage volume does not exist");
+            if (!tableToStorageVolume.containsKey(tableId)) {
+                return;
+            }
+            String svId = tableToStorageVolume.remove(tableId);
             Set<Long> tables = storageVolumeToTables.get(svId);
             tables.remove(tableId);
             if (tables.isEmpty()) {
                 storageVolumeToTables.remove(svId);
             }
+        }
+    }
+
+    public String getStorageVolumeIdOfDb(long dbId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return dbToStorageVolume.get(dbId);
         }
     }
 
@@ -238,8 +258,15 @@ public abstract class StorageVolumeMgr {
         writer.close();
     }
 
-    public abstract void load(SRMetaBlockReader reader)
-            throws IOException, SRMetaBlockException, SRMetaBlockEOFException;
+    public void load(SRMetaBlockReader reader)
+            throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
+        StorageVolumeMgr data = reader.readJson(StorageVolumeMgr.class);
+        this.storageVolumeToDbs = data.storageVolumeToDbs;
+        this.storageVolumeToTables = data.storageVolumeToTables;
+        this.defaultStorageVolumeId = data.defaultStorageVolumeId;
+        this.dbToStorageVolume = data.dbToStorageVolume;
+        this.tableToStorageVolume = data.tableToStorageVolume;
+    }
 
     public abstract StorageVolume getStorageVolumeByName(String svKey) throws AnalysisException;
 

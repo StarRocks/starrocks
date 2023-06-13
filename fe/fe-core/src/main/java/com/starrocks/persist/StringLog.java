@@ -24,7 +24,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class StringLog implements Writable {
-    @SerializedName(value = "id")
+    @SerializedName(value = "v")
     private String value;
 
     public StringLog(String value) {

@@ -223,7 +223,7 @@ public class EditLog {
                     CreateTableInfo info = (CreateTableInfo) journal.getData();
                     LOG.info("Begin to unprotect create table. db = "
                             + info.getDbName() + " table = " + info.getTable().getId());
-                    globalStateMgr.replayCreateTable(info.getDbName(), info.getTable());
+                    globalStateMgr.replayCreateTable(info);
                     break;
                 }
                 case OperationType.OP_DROP_TABLE:
@@ -1184,10 +1184,10 @@ public class EditLog {
         logEdit(OperationType.OP_DELETE_AUTO_INCREMENT_ID, info);
     }
 
-    public void logCreateDb(Database db) {
+    public void logCreateDb(Database db, String storageVolumeId) {
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             CreateDbInfo createDbInfo = new CreateDbInfo(db.getId(), db.getFullName());
-            createDbInfo.setStorageVolumeId(db.getStorageVolumeId());
+            createDbInfo.setStorageVolumeId(storageVolumeId);
             logJsonObject(OperationType.OP_CREATE_DB_V2, createDbInfo);
         } else {
             logEdit(OperationType.OP_CREATE_DB, db);

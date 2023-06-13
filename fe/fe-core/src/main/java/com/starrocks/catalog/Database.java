@@ -110,8 +110,6 @@ public class Database extends MetaObject implements Writable {
     private volatile long dataQuotaBytes;
     @SerializedName(value = "r")
     private volatile long replicaQuotaSize;
-    @SerializedName(value = "storageVolumeId")
-    private String storageVolumeId = "";
 
     private final Map<String, Table> nameToTable;
     private final Map<Long, Table> idToTable;
@@ -350,14 +348,6 @@ public class Database extends MetaObject implements Writable {
         return this;
     }
 
-    public String getStorageVolumeId() {
-        return storageVolumeId;
-    }
-
-    public void setStorageVolumeId(String storageVolumeId) {
-        this.storageVolumeId = storageVolumeId;
-    }
-
     public void setNameWithLock(String newName) {
         writeLock();
         try {
@@ -495,6 +485,31 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
+    // return false if table already exists
+    public boolean createTableWithLock(Table table, String storageVolumeId, boolean isReplay) {
+        writeLock();
+        try {
+            String tableName = table.getName();
+            if (nameToTable.containsKey(tableName)) {
+                return false;
+            } else {
+                idToTable.put(table.getId(), table);
+                nameToTable.put(table.getName(), table);
+
+                table.onCreate();
+                if (!isReplay) {
+                    // Write edit log
+                    CreateTableInfo info = new CreateTableInfo(fullQualifiedName, table);
+                    info.setStorageVolumeId(storageVolumeId);
+                    GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
+                }
+            }
+            return true;
+        } finally {
+            writeUnlock();
+        }
+    }
+
     public boolean createTable(Table table) {
         boolean result = true;
         String tableName = table.getName();
@@ -588,12 +603,8 @@ public class Database extends MetaObject implements Writable {
         if (table != null) {
             this.nameToTable.remove(tableName);
             this.idToTable.remove(table.getId());
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && table.isNativeTable()) {
-                String storageVolumeId = ((OlapTable) table).getStorageVolumeId();
-                if (!storageVolumeId.isEmpty()) {
-                    GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
-                            .unbindTableToStorageVolume(storageVolumeId, table.getId());
-                }
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && table.isCloudNativeTable()) {
+                GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(table.getId());
             }
         }
     }

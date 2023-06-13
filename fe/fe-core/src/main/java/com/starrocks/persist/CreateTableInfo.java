@@ -54,6 +54,8 @@ public class CreateTableInfo implements Writable {
     private String dbName;
     @SerializedName(value = "t")
     private Table table;
+    @SerializedName(value = "volumeId")
+    private String storageVolumeId;
 
     public CreateTableInfo() {
         // for persist
@@ -70,6 +72,14 @@ public class CreateTableInfo implements Writable {
 
     public Table getTable() {
         return table;
+    }
+
+    public void setStorageVolumeId(String storageVolumeId) {
+        this.storageVolumeId = storageVolumeId;
+    }
+
+    public String getStorageVolumeId() {
+        return storageVolumeId;
     }
 
     public void write(DataOutput out) throws IOException {
