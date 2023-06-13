@@ -59,6 +59,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
@@ -209,6 +210,29 @@ public class PartitionUtil {
                     "table type %s", table.getType());
         }
         return partitionNames;
+    }
+
+    // use partitionValues to filter partitionNames
+    // eg. partitionNames: [p1=1/p2=2, p1=1/p2=3, p1=2/p2=2, p1=2/p2=3]
+    //     partitionValues: [empty, 2]
+    // return [p1=1/p2=2, p1=2/p2=2]
+    public static List<String> getFilteredPartitionKeys(List<String> partitionNames, List<Optional<String>> partitionValues) {
+        List<String> filteredPartitionName = Lists.newArrayList();
+        for (String partitionName : partitionNames) {
+            List<String> values = toPartitionValues(partitionName);
+            int index = 0;
+            for (; index < values.size(); ++index) {
+                if (partitionValues.get(index).isPresent()) {
+                    if (!values.get(index).equals(partitionValues.get(index).get())) {
+                        break;
+                    }
+                }
+            }
+            if (index == values.size()) {
+                filteredPartitionName.add(partitionName);
+            }
+        }
+        return filteredPartitionName;
     }
 
     public static List<Column> getPartitionColumns(Table table) {

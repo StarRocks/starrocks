@@ -55,6 +55,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 public interface ConnectorMetadata {
     /**
@@ -83,6 +84,18 @@ public interface ConnectorMetadata {
      * @return a list of partition names
      */
     default List<String> listPartitionNames(String databaseName, String tableName) {
+        return Lists.newArrayList();
+    }
+
+    /**
+     * Return partial partition names of the table using partitionValues to filter.
+     * @param databaseName the name of the database
+     * @param tableName the name of the table
+     * @param partitionValues the partition value to filter
+     * @return a list of partition names
+     */
+    default List<String> listPartitionNamesByValue(String databaseName, String tableName,
+                                                   List<Optional<String>> partitionValues) {
         return Lists.newArrayList();
     }
 

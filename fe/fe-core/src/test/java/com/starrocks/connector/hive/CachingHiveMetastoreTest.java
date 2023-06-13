@@ -109,7 +109,8 @@ public class CachingHiveMetastoreTest {
     public void testGetPartitionKeys() {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
-        Assert.assertEquals(Lists.newArrayList("col1"), cachingHiveMetastore.getPartitionKeys("db1", "tbl1"));
+        Assert.assertEquals(Lists.newArrayList("col1"), cachingHiveMetastore.getPartitionKeysByValue("db1", "tbl1",
+                HivePartitionValue.ALL_PARTITION_VALUES));
     }
 
     @Test

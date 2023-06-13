@@ -191,6 +191,13 @@ public class HiveMetaClient {
         }
     }
 
+    public List<String> getPartitionKeysByValue(String dbName, String tableName, List<String> partitionValues) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.listPartitionNamesByValue")) {
+            return callRPC("listPartitionNames", String.format("Failed to get partitionKeys on [%s.%s]", dbName, tableName),
+                    dbName, tableName, partitionValues, (short) -1);
+        }
+    }
+
     public Database getDb(String dbName) {
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getDatabase")) {
             return callRPC("getDatabase", String.format("Failed to get database %s", dbName), dbName);
