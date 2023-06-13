@@ -1,5 +1,25 @@
 # StarRocks version 3.0
 
+## 3.0.2
+
+发布日期： 2023 年 6 月 13 日
+
+### 功能优化
+
+- Union 查询在被物化视图改写后，谓词也可以下推。 [#23312](https://github.com/StarRocks/starrocks/pull/23312)
+- 优化表的[自动分桶策略](../table_design/Data_distribution.md#确定分桶数量)。 [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- 解除 NetworkTime 对系统时钟的依赖，以解决系统时钟误差导致 Exchange 网络耗时估算异常的问题。 [#24858](https://github.com/StarRocks/starrocks/pull/24858)
+
+### 问题修复
+
+修复了如下问题：
+
+- 主键模型表在数据导入过程中同时进行 Schema Change，会导致 Schema Change 卡住。 [#23456](https://github.com/StarRocks/starrocks/pull/23456)
+- `pipeline_profile_level = 0` 时查询出错。 [#23873](https://github.com/StarRocks/starrocks/pull/23873)
+- `cloud_native_storage_type` 配置为 S3 时建表报错。
+- LDAP 账号没有密码也能登录。 [#24862](https://github.com/StarRocks/starrocks/pull/24862)
+- CANCEL LOAD 在表不存在时会失败。 [#24922](https://github.com/StarRocks/starrocks/pull/24922)
+
 ## 3.0.1
 
 发布日期： 2023 年 6 月 1 日
