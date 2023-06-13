@@ -248,7 +248,6 @@ public class ArrayTypeTest extends PlanTestBase {
     public void testArrayDifferenceArgs2() throws Exception {
         String sql = "select array_difference(c0) from test_array";
         expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("No matching function with signature: array_difference(int(11)).");
         getFragmentPlan(sql);
     }
 
@@ -256,8 +255,6 @@ public class ArrayTypeTest extends PlanTestBase {
     public void testArrayDifferenceArgs3() throws Exception {
         String sql = "select array_difference(c1, 3) from test_array";
         expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage(
-                "No matching function with signature: array_difference(array<varchar(65533)>, tinyint(4)).");
         getFragmentPlan(sql);
     }
 

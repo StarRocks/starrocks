@@ -389,4 +389,56 @@ public class AnalyzeExprTest {
         analyzeSuccess("select row('a', 1, 'b', 2)[1]");
         analyzeSuccess("select row('a', 1, 'b', 2)[-1]");
     }
+
+    @Test
+    public void testAnalyzeArrayFunc() {
+        analyzeFail("select array_append('aaa','a')");
+        analyzeFail("select array_avg('aaa')");
+        analyzeFail("select array_concat('aaa','a')");
+        analyzeFail("select array_contains('abc','a')");
+        analyzeFail("select array_contains_all('abc','[]')");
+        analyzeFail("select array_cum_sum('arr')");
+        analyzeFail("select array_difference('aaa')");
+        analyzeFail("select ARRAY_DISTINCT('aa')");
+        analyzeFail("select array_filter('a','b')");
+        analyzeFail("select array_intersect('b','bb')");
+        analyzeFail("select ARRAY_JOIN('abc','-')");
+        analyzeFail("select array_length('abc')");
+        analyzeFail("select array_map('abc', x->upper(x))");
+        analyzeFail("select array_max('abc')");
+        analyzeFail("select array_min('bcd')");
+        analyzeFail("select arrays_overlap('abc','ab')");
+        analyzeFail("select array_position('abc','a')");
+        analyzeFail("select array_remove('abc','a')");
+        analyzeFail("select array_slice('abc', 1,2)");
+        analyzeFail("select ARRAY_SORT('abc')");
+        analyzeFail("select array_sortby('abc','b')");
+        analyzeFail("select array_sum('abc')");
+        analyzeFail("select array_to_bitmap('abc')");
+
+        analyzeFail("select array_append('[1,2]','a')");
+        analyzeFail("select array_avg('[1,2]')");
+        analyzeFail("select array_concat('[1,2]','a')");
+        analyzeFail("select array_contains('[1,2]','a')");
+        analyzeFail("select array_contains_all('[1,2]','[1]')");
+        analyzeFail("select array_cum_sum('[1,2]')");
+        analyzeFail("select array_difference('[1,2]')");
+        analyzeFail("select ARRAY_DISTINCT('[1,2]')");
+        analyzeFail("select array_filter('[1,2]','[1,2]')");
+        analyzeFail("select array_intersect('[1,2]','[1]')");
+        analyzeFail("select ARRAY_JOIN('[1,2]','-')");
+        analyzeFail("select array_length('[1,2]')");
+        analyzeFail("select array_map('[1,2]', x->upper(x))");
+        analyzeFail("select array_max('[1,2]')");
+        analyzeFail("select array_min('[1,2]')");
+        analyzeFail("select arrays_overlap('[1,2]','[1,2,4]')");
+        analyzeFail("select array_position('[1,2]','1')");
+        analyzeFail("select array_remove('[1,2]','1')");
+        analyzeFail("select array_slice('[1,3,2]', 1,2)");
+        analyzeFail("select ARRAY_SORT('[1,2]')");
+        analyzeFail("select array_sortby('[a,b]','[1,2]')");
+        analyzeFail("select array_sum('[1,2]')");
+        analyzeFail("select array_to_bitmap('[1,2]')");
+    }
+
 }
