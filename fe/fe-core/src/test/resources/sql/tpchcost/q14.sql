@@ -63,7 +63,6 @@ rollup: part
 tabletRatio=10/10
 cardinality=20000000
 avgRowSize=33.0
-numNodes=0
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -87,6 +86,5 @@ rollup: lineitem
 tabletRatio=20/20
 cardinality=6653465
 avgRowSize=28.0
-numNodes=0
 [end]
 

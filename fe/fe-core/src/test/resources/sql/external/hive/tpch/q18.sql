@@ -198,7 +198,6 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 34: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0
-numNodes=0
 cardinality: 600037902
 column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
@@ -261,7 +260,6 @@ TABLE: customer
 NON-PARTITION PREDICATES: 1: c_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
-numNodes=0
 cardinality: 15000000
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
@@ -278,7 +276,6 @@ TABLE: orders
 NON-PARTITION PREDICATES: 10: o_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=28.0
-numNodes=0
 cardinality: 150000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (10: o_custkey)
@@ -299,7 +296,6 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 18: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0
-numNodes=0
 cardinality: 600037902
 probe runtime filters:
 - filter_id = 2, probe_expr = (18: l_orderkey)

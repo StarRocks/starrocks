@@ -185,7 +185,6 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 21: s_comment LIKE '%Customer%Complaints%'
 partitions=1/1
 avgRowSize=105.0
-numNodes=0
 cardinality: 250000
 column statistics:
 * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 250000.0] ESTIMATE
@@ -203,7 +202,6 @@ NON-PARTITION PREDICATES: 9: p_brand != 'Brand#43', NOT (10: p_type LIKE 'PROMO 
 MIN/MAX PREDICATES: 24: p_size >= 1, 25: p_size <= 43
 partitions=1/1
 avgRowSize=47.0
-numNodes=0
 cardinality: 2304000
 column statistics:
 * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2304000.0] ESTIMATE
@@ -222,7 +220,6 @@ TABLE: partsupp
 NON-PARTITION PREDICATES: 1: ps_partkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0
-numNodes=0
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (1: ps_partkey)

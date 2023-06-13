@@ -45,7 +45,6 @@ tabletRatio=3/3
 tabletList=10006,10008,10010
 cardinality=1
 avgRowSize=2.0
-numNodes=0
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -80,7 +79,6 @@ tabletRatio=3/3
 tabletList=10033,10035,10037
 cardinality=1
 avgRowSize=1.0
-numNodes=0
 [end]
 
 [sql]
@@ -161,7 +159,6 @@ tabletRatio=3/3
 tabletList=10033,10035,10037
 cardinality=1
 avgRowSize=2.0
-numNodes=0
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -181,7 +178,6 @@ tabletRatio=3/3
 tabletList=10006,10008,10010
 cardinality=1
 avgRowSize=3.0
-numNodes=0
 [end]
 
 [sql]
@@ -280,7 +276,6 @@ tabletRatio=3/3
 tabletList=10033,10035,10037
 cardinality=1
 avgRowSize=5.0
-numNodes=0
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -306,7 +301,6 @@ tabletRatio=3/3
 tabletList=10006,10008,10010
 cardinality=1
 avgRowSize=4.0
-numNodes=0
 [end]
 
 [sql]

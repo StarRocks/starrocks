@@ -138,7 +138,6 @@ NON-PARTITION PREDICATES: 11: l_shipdate <= '1998-12-01'
 MIN/MAX PREDICATES: 27: l_shipdate <= '1998-12-01'
 partitions=1/1
 avgRowSize=70.0
-numNodes=0
 cardinality: 600037902
 column statistics:
 * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE

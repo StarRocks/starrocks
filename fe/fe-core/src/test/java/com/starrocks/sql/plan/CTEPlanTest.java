@@ -207,7 +207,6 @@ public class CTEPlanTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("MultiCastDataSinks"));
         Assert.assertTrue(plan.contains("cardinality=1\n" +
                 "     avgRowSize=24.0\n" +
-                "     numNodes=0\n" +
                 "     limit: 3"));
     }
 
@@ -228,7 +227,6 @@ public class CTEPlanTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=24.0\n" +
-                "     numNodes=0\n" +
                 "     limit: 3");
     }
 

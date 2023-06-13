@@ -149,7 +149,6 @@ public class OrderByTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=3.0\n" +
-                "     numNodes=0\n" +
                 "     limit: 10");
 
         sql = "select * from (select max(v5) from t1) tmp order by null limit 10;";
