@@ -9,6 +9,7 @@ import com.starrocks.connector.hive.HiveConnectorFactory;
 import com.starrocks.connector.hudi.HudiConnectorFactory;
 import com.starrocks.connector.iceberg.IcebergConnectorFactory;
 import com.starrocks.connector.jdbc.JDBCConnectorFactory;
+import com.starrocks.connector.paimon.PaimonConnectorFactory;
 import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,6 +40,7 @@ public class ConnectorMgr {
         addConnectorFactory(new HudiConnectorFactory());
         addConnectorFactory(new JDBCConnectorFactory());
         addConnectorFactory(new DeltaLakeConnectorFactory());
+        addConnectorFactory(new PaimonConnectorFactory());
     }
 
     public void addConnectorFactory(ConnectorFactory connectorFactory) {

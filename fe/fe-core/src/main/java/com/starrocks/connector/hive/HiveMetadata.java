@@ -21,6 +21,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
@@ -95,7 +96,8 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys) {
+    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
+                                                   ScalarOperator predicate, List<String> fieldNames) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
 
@@ -135,7 +137,8 @@ public class HiveMetadata implements ConnectorMetadata {
     public Statistics getTableStatistics(OptimizerContext session,
                                          Table table,
                                          List<ColumnRefOperator> columns,
-                                         List<PartitionKey> partitionKeys) {
+                                         List<PartitionKey> partitionKeys,
+                                         ScalarOperator predicate) {
         Statistics statistics = null;
         try {
             if (session.getSessionVariable().enableHiveColumnStats()) {

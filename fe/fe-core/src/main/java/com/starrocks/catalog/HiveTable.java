@@ -256,7 +256,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         List<RemoteFileInfo> hivePartitions;
         try {
             hivePartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getRemoteFileInfos(getCatalogName(), this, partitionKeys);
+                    .getRemoteFileInfos(getCatalogName(), this, partitionKeys, null, null);
         } catch (StarRocksConnectorException e) {
             LOG.warn("table {} gets partition info failed.", name, e);
             return null;

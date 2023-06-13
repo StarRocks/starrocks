@@ -456,7 +456,7 @@ public class OffHeapColumnVector {
             case STRING:
             case DATE:
             case DECIMAL:
-                appendString(o.getString());
+                appendString(o.getString(typeValue));
                 break;
             case DATETIME:
             case DATETIME_MICROS:
@@ -485,7 +485,6 @@ public class OffHeapColumnVector {
             default:
                 throw new RuntimeException("Unknown type value: " + typeValue);
         }
-        return;
     }
 
     OffHeapColumnVector getMapKeyColumnVector() {

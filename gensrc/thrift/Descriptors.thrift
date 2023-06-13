@@ -369,9 +369,17 @@ struct THudiTable {
 
     // hudi table serde_lib
     10: optional string serde_lib
+}
 
-    // hudi table type: copy on write or merge on read
-    11: optional bool is_mor_table
+struct TPaimonTable {
+    // paimon table catalog type
+    1: optional string catalog_type
+
+    // paimon table metastore URI
+    2: optional string metastore_uri
+
+    // paimon table warehouse path
+    3: optional string warehouse_path
 }
 
 struct TDeltaLakeTable {
@@ -435,6 +443,9 @@ struct TTableDescriptor {
 
   // File Table
   34: optional TFileTable fileTable
+
+  // Paimon Table schema
+  35: optional TPaimonTable paimonTable
 }
 
 struct TDescriptorTable {

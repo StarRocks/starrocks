@@ -23,6 +23,7 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
@@ -150,7 +151,8 @@ public class ReplayMetadataMgr extends MetadataMgr {
                                          String catalogName,
                                          Table table,
                                          List<ColumnRefOperator> columns,
-                                         List<PartitionKey> partitionKeys) {
+                                         List<PartitionKey> partitionKeys,
+                                         ScalarOperator predicate) {
         Statistics.Builder resStatistics = Statistics.builder();
         Map<ColumnRefOperator, ColumnStatistic> res = new HashMap<>();
         String dbName = ((HiveMetaStoreTable) table).getDbName();
@@ -170,7 +172,8 @@ public class ReplayMetadataMgr extends MetadataMgr {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
+    public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys,
+                                                   ScalarOperator predicate, List<String> fieldNames) {
         return Lists.newArrayList(MOCKED_FILES);
     }
 

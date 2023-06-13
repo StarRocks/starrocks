@@ -60,6 +60,7 @@ import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.MysqlScanNode;
 import com.starrocks.planner.NestLoopJoinNode;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
@@ -118,6 +119,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
@@ -942,6 +944,49 @@ public class PlanFragmentBuilder {
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), deltaLakeScanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        public PlanFragment visitPhysicalPaimonScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalPaimonScanOperator node = (PhysicalPaimonScanOperator) optExpression.getOp();
+
+            Table referenceTable = node.getTable();
+            context.getDescTbl().addReferencedTable(referenceTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(referenceTable);
+
+            // set slot
+            prepareContextSlots(node, context, tupleDescriptor);
+
+            PaimonScanNode paimonScanNode =
+                    new PaimonScanNode(context.getNextNodeId(), tupleDescriptor, "PaimonScanNode");
+            paimonScanNode.computeStatistics(optExpression.getStatistics());
+            try {
+                // set predicate
+                ScalarOperatorToExpr.FormatterContext formatterContext =
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+                for (ScalarOperator predicate : predicates) {
+                    paimonScanNode.getConjuncts()
+                            .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                }
+                paimonScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate());
+                HDFSScanNodePredicates scanNodePredicates = paimonScanNode.getScanNodePredicates();
+                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+                prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+            } catch (Exception e) {
+                LOG.warn("Paimon scan node get scan range locations failed : " + e);
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            }
+
+            paimonScanNode.setLimit(node.getLimit());
+
+            tupleDescriptor.computeMemLayout();
+            context.getScanNodes().add(paimonScanNode);
+
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), paimonScanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
         }

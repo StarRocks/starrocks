@@ -79,7 +79,7 @@ public class HudiRemoteFileIO implements RemoteFileIO {
                 long fileLength = baseFile.map(BaseFile::getFileLen).orElse(-1L);
                 List<String> logs = fileSlice.getLogFiles().map(HoodieLogFile::getFileName).collect(Collectors.toList());
                 fileDescs.add(new RemoteFileDesc(fileName, "", fileLength,
-                        ImmutableList.of(), ImmutableList.copyOf(logs)));
+                        ImmutableList.of(), ImmutableList.copyOf(logs), null));
             }
         } catch (Exception e) {
             LOG.error("Failed to get hudi remote file's metadata on path: {}", partitionPath, e);

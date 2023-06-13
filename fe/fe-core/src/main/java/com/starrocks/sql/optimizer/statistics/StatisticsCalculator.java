@@ -15,6 +15,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -60,6 +61,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -93,6 +95,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
@@ -313,6 +316,29 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return visitOperator(node, context);
     }
 
+    @Override
+    public Void visitLogicalPaimonScan(LogicalPaimonScanOperator node, ExpressionContext context) {
+        return computePaimonScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalPaimonScan(PhysicalPaimonScanOperator node, ExpressionContext context) {
+        return computePaimonScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    private Void computePaimonScanNode(Operator node, ExpressionContext context, Table table,
+                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+        if (context.getStatistics() == null) {
+            String catalogName = ((PaimonTable) table).getCatalogName();
+            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, catalogName, table, Lists.newArrayList(columnRefOperatorColumnMap.keySet()),
+                    null, node.getPredicate());
+            context.setStatistics(stats);
+        }
+
+        return visitOperator(node, context);
+    }
+
     public Void visitLogicalHudiScan(LogicalHudiScanOperator node, ExpressionContext context) {
         return computeHMSTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
@@ -348,7 +374,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             String catalogName = ((HiveMetaStoreTable) table).getCatalogName();
             Statistics statistics = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, Lists.newArrayList(colRefToColumnMetaMap.keySet()),
-                    partitionKeys);
+                    partitionKeys, null);
             context.setStatistics(statistics);
 
             if (node.isLogical()) {

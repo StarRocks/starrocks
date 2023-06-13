@@ -15,6 +15,7 @@
         <module>jni-connector</module>
         <module>hudi-reader</module>
         <module>udf-examples</module>
+        <module>paimon-reader</module>
     </modules>
     <name>starrocks-java-extensions</name>
 

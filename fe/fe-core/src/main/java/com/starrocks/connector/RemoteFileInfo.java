@@ -9,12 +9,15 @@ import java.util.List;
 public class RemoteFileInfo {
     private RemoteFileInputFormat format;
     private List<RemoteFileDesc> files;
-    private final String fullPath;
+    private String fullPath;
 
     public RemoteFileInfo(RemoteFileInputFormat format, List<RemoteFileDesc> files, String fullPath) {
         this.format = format;
         this.files = files;
         this.fullPath = fullPath;
+    }
+
+    public RemoteFileInfo() {
     }
 
     public RemoteFileInputFormat getFormat() {

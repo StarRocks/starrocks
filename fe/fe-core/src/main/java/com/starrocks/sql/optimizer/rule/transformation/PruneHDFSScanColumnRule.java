@@ -39,6 +39,8 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
             new PruneHDFSScanColumnRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
     public static final PruneHDFSScanColumnRule FILE_SCAN =
             new PruneHDFSScanColumnRule(OperatorType.LOGICAL_FILE_SCAN);
+    public static final PruneHDFSScanColumnRule PAIMON_SCAN =
+            new PruneHDFSScanColumnRule(OperatorType.LOGICAL_PAIMON_SCAN);
 
     public PruneHDFSScanColumnRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PRUNE_OLAP_SCAN_COLUMNS, Pattern.create(logicalOperatorType));

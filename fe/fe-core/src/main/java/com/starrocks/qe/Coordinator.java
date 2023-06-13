@@ -64,6 +64,7 @@ import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.MultiCastDataSink;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
@@ -2430,7 +2431,7 @@ public class Coordinator {
                 selector.computeScanRangeAssignment();
             } else if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
-                    scanNode instanceof FileTableScanNode) {
+                    scanNode instanceof FileTableScanNode || scanNode instanceof PaimonScanNode) {
                 HDFSBackendSelector selector =
                         new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
                                 getSelectorComputeNodes(hasComputeNode),

@@ -217,7 +217,6 @@ public:
     HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~HudiTableDescriptor() override = default;
     bool has_partition() const override { return true; }
-    const bool& is_mor_table() const;
     const std::string& get_base_path() const;
     const std::string& get_instant_time() const;
     const std::string& get_hive_column_names() const;
@@ -226,12 +225,30 @@ public:
     const std::string& get_serde_lib() const;
 
 private:
-    bool _is_mor_table;
     std::string _hudi_instant_time;
     std::string _hive_column_names;
     std::string _hive_column_types;
     std::string _input_format;
     std::string _serde_lib;
+};
+
+class PaimonTableDescriptor : public HiveTableDescriptor {
+public:
+    PaimonTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~PaimonTableDescriptor() override = default;
+    bool has_partition() const override { return false; }
+    const std::string& get_catalog_type() const;
+    const std::string& get_metastore_uri() const;
+    const std::string& get_warehouse_path() const;
+    const std::string& get_database_name() const;
+    const std::string& get_table_name() const;
+
+private:
+    std::string _catalog_type;
+    std::string _metastore_uri;
+    std::string _warehouse_path;
+    std::string _database_name;
+    std::string _table_name;
 };
 
 // ===========================================

@@ -39,6 +39,7 @@ under the License.
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.5</jacoco.version>
         <iceberg.version>1.0.0</iceberg.version>
+        <paimon.version>0.4.0-incubating</paimon.version>
         <python>python</python>
     </properties>
 
@@ -622,6 +623,12 @@ under the License.
             <groupId>org.apache.hudi</groupId>
             <artifactId>hudi-hadoop-mr</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-bundle</artifactId>
+            <version>${paimon.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starclient</artifactId>

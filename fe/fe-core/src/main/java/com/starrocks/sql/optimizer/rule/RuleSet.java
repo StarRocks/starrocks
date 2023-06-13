@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRul
 import com.starrocks.sql.optimizer.rule.implementation.MysqlScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.NestLoopJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.PaimonScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ProjectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.RepeatImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.SchemaScanImplementationRule;
@@ -138,6 +139,7 @@ public class RuleSet {
             new IcebergScanImplementationRule(),
             new HudiScanImplementationRule(),
             new DeltaLakeScanImplementationRule(),
+            new PaimonScanImplementationRule(),
             new SchemaScanImplementationRule(),
             new MysqlScanImplementationRule(),
             new EsScanImplementationRule(),
@@ -186,6 +188,7 @@ public class RuleSet {
                 MergeLimitDirectRule.HUDI_SCAN,
                 MergeLimitDirectRule.DELTALAKE_SCAN,
                 MergeLimitDirectRule.FILE_SCAN,
+                MergeLimitDirectRule.PAIMON_SCAN,
                 MergeLimitDirectRule.SCHEMA_SCAN,
                 MergeLimitDirectRule.MYSQL_SCAN,
                 MergeLimitDirectRule.ES_SCAN,
@@ -206,7 +209,8 @@ public class RuleSet {
                 ExternalScanPartitionPruneRule.ICEBERG_SCAN,
                 ExternalScanPartitionPruneRule.DELTALAKE_SCAN,
                 ExternalScanPartitionPruneRule.FILE_SCAN,
-                ExternalScanPartitionPruneRule.ES_SCAN
+                ExternalScanPartitionPruneRule.ES_SCAN,
+                ExternalScanPartitionPruneRule.PAIMON_SCAN
         ));
 
         REWRITE_RULES.put(RuleSetType.PRUNE_COLUMNS, ImmutableList.of(
@@ -219,6 +223,7 @@ public class RuleSet {
                 PruneHDFSScanColumnRule.DELTALAKE_SCAN,
                 PruneHDFSScanColumnRule.FILE_SCAN,
                 PruneHDFSScanColumnRule.HUDI_SCAN,
+                PruneHDFSScanColumnRule.PAIMON_SCAN,
                 PruneScanColumnRule.JDBC_SCAN,
                 new PruneProjectColumnsRule(),
                 new PruneFilterColumnsRule(),
@@ -244,6 +249,7 @@ public class RuleSet {
                 PushDownPredicateScanRule.HUDI_SCAN,
                 PushDownPredicateScanRule.DELTALAKE_SCAN,
                 PushDownPredicateScanRule.FILE_SCAN,
+                PushDownPredicateScanRule.PAIMON_SCAN,
                 PushDownPredicateScanRule.SCHEMA_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
                 PushDownPredicateScanRule.META_SCAN,

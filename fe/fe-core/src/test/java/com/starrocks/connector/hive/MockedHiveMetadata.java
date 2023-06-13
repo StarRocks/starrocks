@@ -25,6 +25,7 @@ import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
@@ -96,7 +97,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     public Statistics getTableStatistics(OptimizerContext session,
                                          com.starrocks.catalog.Table table,
                                          List<ColumnRefOperator> columns,
-                                         List<PartitionKey> partitionKeys) {
+                                         List<PartitionKey> partitionKeys,
+                                         ScalarOperator predicate) {
         HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
         String hiveDb = hmsTable.getDbName();
         String tblName = hmsTable.getTableName();
@@ -117,7 +119,8 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(com.starrocks.catalog.Table table, List<PartitionKey> partitionKeys) {
+    public List<RemoteFileInfo> getRemoteFileInfos(com.starrocks.catalog.Table table, List<PartitionKey> partitionKeys,
+                                                   ScalarOperator predicate, List<String> fieldNames) {
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         int size = partitionKeys.size();
         readLock();

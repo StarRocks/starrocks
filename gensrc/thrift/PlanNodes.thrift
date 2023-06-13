@@ -299,6 +299,15 @@ struct THdfsScanRange {
     10: optional bool use_hudi_jni_reader;
 
     11: optional list<TIcebergDeleteFile> delete_files;
+
+    // whether to use JNI scanner to read data of paimon table
+    12: optional bool use_paimon_jni_reader
+
+    // paimon split info
+    13: optional string paimon_split_info
+
+    // paimon predicate info
+    14: optional string paimon_predicate_info
 }
 
 // Specification of an individual data range which is held in its entirety

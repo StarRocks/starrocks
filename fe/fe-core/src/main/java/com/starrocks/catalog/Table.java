@@ -79,7 +79,8 @@ public class Table extends MetaObject implements Writable {
         MATERIALIZED_VIEW,
         LAKE,
         DELTALAKE,
-        FILE
+        FILE,
+        PAIMON;
     }
 
     @SerializedName(value = "id")
@@ -227,6 +228,10 @@ public class Table extends MetaObject implements Writable {
         return type == TableType.DELTALAKE;
     }
 
+    public boolean isPaimonTable() {
+        return type == TableType.PAIMON;
+    }
+
     // for create table
     public boolean isOlapOrLakeTable() {
         return isOlapTable() || isLakeTable();
@@ -267,6 +272,11 @@ public class Table extends MetaObject implements Writable {
 
     public long getCreateTime() {
         return createTime;
+    }
+
+    public String getTableLocation() {
+        String msg = "The getTableLocation() method needs to be implemented.";
+        throw new NotImplementedException(msg);
     }
 
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {

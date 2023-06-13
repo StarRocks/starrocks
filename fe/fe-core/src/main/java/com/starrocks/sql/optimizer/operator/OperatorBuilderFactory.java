@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
@@ -51,6 +52,8 @@ public class OperatorBuilderFactory {
             return new LogicalHudiScanOperator.Builder();
         } else if (operator instanceof LogicalDeltaLakeScanOperator) {
             return new LogicalDeltaLakeScanOperator.Builder();
+        } else if (operator instanceof LogicalPaimonScanOperator) {
+            return new LogicalPaimonScanOperator.Builder();
         } else if (operator instanceof LogicalEsScanOperator) {
             return new LogicalEsScanOperator.Builder();
         } else if (operator instanceof LogicalMysqlScanOperator) {

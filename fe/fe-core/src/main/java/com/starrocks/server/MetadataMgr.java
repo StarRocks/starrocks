@@ -21,6 +21,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -143,18 +144,20 @@ public class MetadataMgr {
                                          String catalogName,
                                          Table table,
                                          List<ColumnRefOperator> columns,
-                                         List<PartitionKey> partitionKeys) {
+                                         List<PartitionKey> partitionKeys,
+                                         ScalarOperator predicate) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         return connectorMetadata.map(metadata ->
-                metadata.getTableStatistics(session, table, columns, partitionKeys)).orElse(null);
+                metadata.getTableStatistics(session, table, columns, partitionKeys, predicate)).orElse(null);
     }
 
-    public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
+    public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys,
+                                                   ScalarOperator predicate, List<String> fieldNames) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
-                connectorMetadata.get().getRemoteFileInfos(table, partitionKeys).forEach(files::add);
+                connectorMetadata.get().getRemoteFileInfos(table, partitionKeys, predicate, fieldNames).forEach(files::add);
             } catch (Exception e) {
                 LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", catalogName, table, e);
                 throw e;

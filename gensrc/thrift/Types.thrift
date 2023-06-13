@@ -361,6 +361,7 @@ enum TTableType {
     ICEBERG_TABLE,
     HUDI_TABLE,
     JDBC_TABLE,
+    PAIMON_TABLE,
     VIEW = 20,
     MATERIALIZED_VIEW,
     FILE_TABLE,

@@ -29,6 +29,7 @@ import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.List;
@@ -80,7 +81,8 @@ public interface ConnectorMetadata {
      * @param partitionKeys selected columns
      * @return the remote file information of the query to scan.
      */
-    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys) {
+    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
+                                                    ScalarOperator predicate, List<String> fieldNames) {
         return Lists.newArrayList();
     }
 
@@ -99,7 +101,8 @@ public interface ConnectorMetadata {
     default Statistics getTableStatistics(OptimizerContext session,
                                           Table table,
                                           List<ColumnRefOperator> columns,
-                                          List<PartitionKey> partitionKeys) {
+                                          List<PartitionKey> partitionKeys,
+                                          ScalarOperator predicate) {
         return Statistics.builder().build();
     }
 

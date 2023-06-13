@@ -159,7 +159,7 @@ public class RemoteScanRangeLocations {
         }
         String catalogName = hiveMetaStoreTable.getCatalogName();
         List<RemoteFileInfo> partitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getRemoteFileInfos(catalogName, table, partitionKeys);
+                .getRemoteFileInfos(catalogName, table, partitionKeys, null, null);
 
         if (table instanceof HiveTable) {
             Preconditions.checkState(partitions.size() == partitionKeys.size());

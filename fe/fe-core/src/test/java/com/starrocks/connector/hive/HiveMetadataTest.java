@@ -151,7 +151,7 @@ public class HiveMetadataTest {
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
 
         List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFileInfos(
-                hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+                hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, null);
         Assert.assertEquals(2, remoteFileInfos.size());
 
         RemoteFileInfo fileInfo = remoteFileInfos.get(0);
@@ -199,7 +199,7 @@ public class HiveMetadataTest {
 
         Statistics statistics = hiveMetadata.getTableStatistics(
                 optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null);
         Assert.assertEquals(1, statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
         Assert.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
@@ -217,14 +217,14 @@ public class HiveMetadataTest {
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
         Statistics statistics = hiveMetadata.getTableStatistics(
                 optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null);
         Assert.assertEquals(1,  statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(2, statistics.getColumnStatistics().size());
 
         cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1", "col1=2"));
         statistics = hiveMetadata.getTableStatistics(
                 optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null);
         Assert.assertEquals(100, statistics.getOutputRowCount(), 0.001);
         Map<ColumnRefOperator, ColumnStatistic> columnStatistics = statistics.getColumnStatistics();
         ColumnStatistic partitionColumnStats = columnStatistics.get(partColumnRefOperator);
