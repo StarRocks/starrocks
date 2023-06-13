@@ -1457,8 +1457,8 @@ public class GlobalStateMgr {
                     Map.Entry<SRMetaBlockID, SRMetaBlockLoader> entry = iterator.next();
                     while (true) {
                         SRMetaBlockID srMetaBlockID = entry.getKey();
-                        SRMetaBlockReader reader = new SRMetaBlockReader(dis, srMetaBlockID);
-                        if (reader.getHeader().getId() != srMetaBlockID) {
+                        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+                        if (!reader.getHeader().getSrMetaBlockID().equals(srMetaBlockID)) {
                             /*
                               The expected read module does not match the module stored in the image,
                               and the json chunk is skipped directly. This usually occurs in several situations.
@@ -1467,7 +1467,7 @@ public class GlobalStateMgr {
                                  the old version ignores the functions of the new version
                              */
                             LOG.warn(String.format("Ignore this invalid meta block, sr meta block id mismatch" +
-                                    "(expect %s actual %s)", srMetaBlockID.name(), reader.getHeader().getId().name()));
+                                    "(expect %s actual %s)", srMetaBlockID, reader.getHeader().getSrMetaBlockID()));
                             reader.close();
                             continue;
                         }
@@ -1475,7 +1475,7 @@ public class GlobalStateMgr {
                         try {
                             SRMetaBlockLoader imageLoader = entry.getValue();
                             imageLoader.apply(reader);
-                            LOG.info("Success load StarRocks meta block " + srMetaBlockID.name() + " from image");
+                            LOG.info("Success load StarRocks meta block " + srMetaBlockID + " from image");
                         } catch (SRMetaBlockEOFException srMetaBlockEOFException) {
                             /*
                               The number of json expected to be read is more than the number of json actually stored
