@@ -317,6 +317,7 @@ public class StarRocksAssert {
                 createMaterializedViewStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             }
             GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
+            checkAlterJob();
         } else {
             Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
             CreateMaterializedViewStatement createMaterializedViewStatement =
@@ -326,7 +327,6 @@ public class StarRocksAssert {
             }
             GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
         }
-        checkAlterJob();
         return this;
     }
 

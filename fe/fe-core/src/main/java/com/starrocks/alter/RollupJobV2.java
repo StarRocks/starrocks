@@ -39,6 +39,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -470,6 +471,9 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                         outputExprs, new ConnectContext());
                         Expr definedExpr = column.getDefineExpr().clone();
                         definedExpr = definedExpr.accept(visitor, null);
+                        if (!definedExpr.getType().equals(column.getType())) {
+                            definedExpr = new CastExpr(column.getType(), definedExpr);
+                        }
                         definedExpr = Expr.analyzeAndCastFold(definedExpr);
                         defineExprs.put(column.getName(), definedExpr);
                     }
