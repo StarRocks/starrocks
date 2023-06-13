@@ -504,7 +504,7 @@ BE static parameters are as follows.
 | enable_event_based_compaction_framework | 0 | N/A | |
 | enable_load_colocate_mv | 0 | N/A | |
 | enable_metric_calculator | 0 | N/A | |
-| enable_new_load_on_memory_limit_exceeded | 0 | N/A | |
+| enable_new_load_on_memory_limit_exceeded | 1 | N/A | |
 | enable_orc_late_materialization | 1 | N/A | |
 | enable_schema_change_v2 | 1 | N/A | |
 | enable_segment_overflow_read_chunk | 1 | N/A | |
