@@ -310,6 +310,7 @@ public class PrivilegeActions {
             case DELTALAKE:
             case FILE:
             case SCHEMA:
+            case PAIMON:
                 return checkAnyActionOnTable(currentUser, roleIds, dbName, tbl.getName());
             case MATERIALIZED_VIEW:
             case CLOUD_NATIVE_MATERIALIZED_VIEW:

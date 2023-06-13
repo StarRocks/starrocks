@@ -71,6 +71,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -105,6 +106,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
@@ -332,6 +334,29 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }
         // cause we don't know the real schema in file，just use the default Row Count now
+        builder.setOutputRowCount(1);
+        context.setStatistics(builder.build());
+
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitLogicalPaimonScan(LogicalPaimonScanOperator node, ExpressionContext context) {
+        return computePaimonScanNode(node, context, node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalPaimonScan(PhysicalPaimonScanOperator node, ExpressionContext context) {
+        return computePaimonScanNode(node, context, node.getColRefToColumnMetaMap());
+    }
+
+    private Void computePaimonScanNode(Operator node, ExpressionContext context,
+                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+        // Use default statistics for now.
+        Statistics.Builder builder = Statistics.builder();
+        for (ColumnRefOperator columnRefOperator : columnRefOperatorColumnMap.keySet()) {
+            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
+        }
         builder.setOutputRowCount(1);
         context.setStatistics(builder.build());
 

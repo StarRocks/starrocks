@@ -284,7 +284,6 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         tHudiTable.setHive_column_types(hudiProperties.get(HUDI_TABLE_COLUMN_TYPES));
         tHudiTable.setInput_format(hudiProperties.get(HUDI_TABLE_INPUT_FOAMT));
         tHudiTable.setSerde_lib(hudiProperties.get(HUDI_TABLE_SERDE_LIB));
-        tHudiTable.setIs_mor_table(getTableType() == HoodieTableType.MERGE_ON_READ);
 
         TTableDescriptor tTableDescriptor =
                 new TTableDescriptor(id, TTableType.HUDI_TABLE, fullSchema.size(), 0, hiveTableName, hiveDbName);

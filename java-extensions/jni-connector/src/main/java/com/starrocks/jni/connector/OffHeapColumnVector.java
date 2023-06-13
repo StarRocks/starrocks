@@ -485,7 +485,6 @@ public class OffHeapColumnVector {
             default:
                 throw new RuntimeException("Unknown type value: " + typeValue);
         }
-        return;
     }
 
     OffHeapColumnVector getMapKeyColumnVector() {
