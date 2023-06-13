@@ -298,10 +298,7 @@ public class OlapScanNode extends ScanNode {
             if (hasLimit()) {
                 cardinality = Math.min(cardinality, limit);
             }
-            numNodes = scanBackendIds.size();
         }
-        // even current node scan has no data,at least on backend will be assigned when the fragment actually execute
-        numNodes = numNodes <= 0 ? 1 : numNodes;
         // when node scan has no data, cardinality should be 0 instead of a invalid value after computeStats()
         cardinality = cardinality == -1 ? 0 : cardinality;
     }
@@ -698,7 +695,6 @@ public class OlapScanNode extends ScanNode {
             output.append("\n");
             output.append(prefix).append(String.format("cardinality=%s\n", cardinality));
             output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
-            output.append(prefix).append(String.format("numNodes=%s\n", numNodes));
         } else {
             output.append(prefix).append(String.format(
                             "partitionsRatio=%s/%s",
