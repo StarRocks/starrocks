@@ -77,6 +77,14 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
+<<<<<<< HEAD
+=======
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.iceberg.NullOrder;
+import org.apache.iceberg.SortDirection;
+import org.apache.iceberg.SortField;
+import org.apache.iceberg.SortOrder;
+>>>>>>> bbf6973a0 ([Enhancement] Support insert overwrite specify partition for automatic partition table (#25005))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -187,16 +195,30 @@ public class InsertPlanner {
             olapTuple.computeMemLayout();
 
             DataSink dataSink;
+<<<<<<< HEAD
             if (insertStmt.getTargetTable() instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
 
+=======
+            if (targetTable instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) targetTable;
+>>>>>>> bbf6973a0 ([Enhancement] Support insert overwrite specify partition for automatic partition table (#25005))
                 boolean enableAutomaticPartition;
-                if (!insertStmt.isOverwrite() && insertStmt.isSpecifyPartition()) {
+                List<Long> targetPartitionIds = insertStmt.getTargetPartitionIds();
+                if (insertStmt.isSpecifyPartitionNames()) {
+                    Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
+                    enableAutomaticPartition = false;
+                } else if (insertStmt.isStaticKeyPartitionInsert()) {
                     enableAutomaticPartition = false;
                 } else {
+                    Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
                     enableAutomaticPartition = olapTable.supportedAutomaticPartition();
                 }
+<<<<<<< HEAD
                 dataSink = new OlapTableSink(olapTable, olapTuple, insertStmt.getTargetPartitionIds(),
+=======
+                dataSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
+>>>>>>> bbf6973a0 ([Enhancement] Support insert overwrite specify partition for automatic partition table (#25005))
                         canUsePipeline, olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
                         false, enableAutomaticPartition);

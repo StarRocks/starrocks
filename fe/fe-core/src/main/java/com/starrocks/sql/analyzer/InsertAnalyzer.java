@@ -79,7 +79,7 @@ public class InsertAnalyzer {
             OlapTable olapTable = (OlapTable) table;
             PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
 
-            if (targetPartitionNames != null) {
+            if (insertStmt.isSpecifyPartitionNames()) {
                 if (targetPartitionNames.getPartitionNames().isEmpty()) {
                     throw new SemanticException("No partition specified in partition lists");
                 }
@@ -96,6 +96,8 @@ public class InsertAnalyzer {
                     }
                     targetPartitionIds.add(partition.getId());
                 }
+            } else if (insertStmt.isStaticKeyPartitionInsert()) {
+                checkStaticKeyPartitionInsert(insertStmt, table, targetPartitionNames);
             } else {
                 for (Partition partition : olapTable.getPartitions()) {
                     targetPartitionIds.add(partition.getId());
@@ -108,6 +110,23 @@ public class InsertAnalyzer {
             }
         }
 
+<<<<<<< HEAD
+=======
+        if (table instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            List<String> tablePartitionColumnNames = icebergTable.getPartitionColumnNames();
+            if (insertStmt.getTargetColumnNames() != null) {
+                for (String partitionColName : tablePartitionColumnNames) {
+                    if (!insertStmt.getTargetColumnNames().contains(partitionColName)) {
+                        throw new SemanticException("Must include partition column %s", partitionColName);
+                    }
+                }
+            } else if (insertStmt.isStaticKeyPartitionInsert()) {
+                checkStaticKeyPartitionInsert(insertStmt, icebergTable, targetPartitionNames);
+            }
+        }
+
+>>>>>>> bbf6973a0 ([Enhancement] Support insert overwrite specify partition for automatic partition table (#25005))
         // Build target columns
         List<Column> targetColumns;
         Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -165,4 +184,75 @@ public class InsertAnalyzer {
         insertStmt.setTargetColumns(targetColumns);
         session.getDumpInfo().addTable(database.getFullName(), table);
     }
+<<<<<<< HEAD
+=======
+
+    private static void checkStaticKeyPartitionInsert(InsertStmt insertStmt, Table table, PartitionNames targetPartitionNames) {
+        List<String> partitionColNames = targetPartitionNames.getPartitionColNames();
+        List<Expr> partitionColValues = targetPartitionNames.getPartitionColValues();
+        List<String> tablePartitionColumnNames = table.getPartitionColumnNames();
+
+        Preconditions.checkState(partitionColNames.size() == partitionColValues.size(),
+                "Partition column names size must be equal to the partition column values size. %d vs %d",
+                partitionColNames.size(), partitionColValues.size());
+
+        if (tablePartitionColumnNames.size() > partitionColNames.size()) {
+            throw new SemanticException("Must include all %d partition columns in the partition clause",
+                    tablePartitionColumnNames.size());
+        }
+
+        if (tablePartitionColumnNames.size() < partitionColNames.size()) {
+            throw new SemanticException("Only %d partition columns can be included in the partition clause",
+                    tablePartitionColumnNames.size());
+        }
+        Map<String, Long> frequencies = partitionColNames.stream()
+                .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+        Optional<Map.Entry<String, Long>> duplicateKey = frequencies.entrySet().stream()
+                .filter(entry -> entry.getValue() > 1).findFirst();
+        if (duplicateKey.isPresent()) {
+            throw new SemanticException("Found duplicate partition column name %s", duplicateKey.get().getKey());
+        }
+
+        for (int i = 0; i < partitionColNames.size(); i++) {
+            String actualName = partitionColNames.get(i);
+            if (!tablePartitionColumnNames.contains(actualName)) {
+                throw new SemanticException("Can't find partition column %s", actualName);
+            }
+
+            Expr partitionValue = partitionColValues.get(i);
+
+            if (!partitionValue.isLiteral()) {
+                throw new SemanticException("partition value should be literal expression");
+            }
+
+            LiteralExpr literalExpr = (LiteralExpr) partitionValue;
+            Column column = table.getColumn(actualName);
+            try {
+                Expr expr = LiteralExpr.create(literalExpr.getStringValue(), column.getType());
+                insertStmt.getTargetPartitionNames().getPartitionColValues().set(i, expr);
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+    }
+  
+    private static ExternalOlapTable getOLAPExternalTableMeta(Database database, ExternalOlapTable externalOlapTable) {
+        // copy the table, and release database lock when synchronize table meta
+        ExternalOlapTable copiedTable = new ExternalOlapTable();
+        externalOlapTable.copyOnlyForQuery(copiedTable);
+        int lockTimes = 0;
+        while (database.isReadLockHeldByCurrentThread()) {
+            database.readUnlock();
+            lockTimes++;
+        }
+        try {
+            new TableMetaSyncer().syncTable(copiedTable);
+        } finally {
+            while (lockTimes-- > 0) {
+                database.readLock();
+            }
+        }
+        return copiedTable;
+    }
+>>>>>>> bbf6973a0 ([Enhancement] Support insert overwrite specify partition for automatic partition table (#25005))
 }
