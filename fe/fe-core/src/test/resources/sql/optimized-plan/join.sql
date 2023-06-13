@@ -67,7 +67,6 @@ tabletRatio=3/3
 tabletList=10015,10017,10019
 cardinality=1
 avgRowSize=3.0
-numNodes=0
 
 PLAN FRAGMENT 3
 OUTPUT EXPRS:
@@ -87,7 +86,6 @@ tabletRatio=3/3
 tabletList=10006,10008,10010
 cardinality=9000
 avgRowSize=1.0
-numNodes=0
 [end]
 
 [sql]

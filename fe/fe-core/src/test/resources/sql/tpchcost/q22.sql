@@ -118,7 +118,6 @@ rollup: customer
 tabletRatio=10/10
 cardinality=7500000
 avgRowSize=31.0
-numNodes=0
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -161,7 +160,6 @@ rollup: customer
 tabletRatio=10/10
 cardinality=6818187
 avgRowSize=23.0
-numNodes=0
 
 PLAN FRAGMENT 6
 OUTPUT EXPRS:
@@ -179,6 +177,5 @@ rollup: orders
 tabletRatio=10/10
 cardinality=150000000
 avgRowSize=8.0
-numNodes=0
 [end]
 

@@ -493,8 +493,7 @@ public class SubqueryTest extends PlanTestBase {
                     "     tabletRatio=0/0\n" +
                     "     tabletList=\n" +
                     "     cardinality=1\n" +
-                    "     avgRowSize=2.0\n" +
-                    "     numNodes=0");
+                    "     avgRowSize=2.0\n");
         }
         {
             connectContext.getSessionVariable().setNewPlanerAggStage(2);
@@ -1522,7 +1521,6 @@ public class SubqueryTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=3.0\n" +
-                "     numNodes=0\n" +
                 "     limit: 1");
 
         sql = "((select * from t0) limit 2) order by v1 limit 1";
@@ -1558,7 +1556,6 @@ public class SubqueryTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=3.0\n" +
-                "     numNodes=0\n" +
                 "     limit: 2");
     }
 

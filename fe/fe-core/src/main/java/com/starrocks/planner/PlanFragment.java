@@ -347,14 +347,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
     }
 
-    /**
-     * Return the number of nodes on which the plan fragment will execute.
-     * invalid: -1
-     */
-    public int getNumNodes() {
-        return dataPartition == DataPartition.UNPARTITIONED ? 1 : planRoot.getNumNodes();
-    }
-
     public int getParallelExecNum() {
         return parallelExecNum;
     }

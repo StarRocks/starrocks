@@ -49,7 +49,7 @@ import static com.starrocks.thrift.TExplainLevel.VERBOSE;
  * 2. Min-max pruning: creates an additional list of conjuncts that are used to
  * prune a row group if any fail the row group's min-max parquet::Statistics.
  * 3. Get scan range locations.
- * 4. Compute stats, like cardinality, avgRowSize and numNodes.
+ * 4. Compute stats, like cardinality, avgRowSize.
  * <p>
  * TODO: Dictionary pruning
  */
@@ -143,9 +143,6 @@ public class HdfsScanNode extends ScanNode {
         }
 
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
-        output.append("\n");
-
-        output.append(prefix).append(String.format("numNodes=%s", numNodes));
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {

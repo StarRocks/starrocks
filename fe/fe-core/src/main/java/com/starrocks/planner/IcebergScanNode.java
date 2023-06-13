@@ -324,9 +324,6 @@ public class IcebergScanNode extends ScanNode {
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
 
-        output.append(prefix).append(String.format("numNodes=%s", numNodes));
-        output.append("\n");
-
         if (detailLevel == TExplainLevel.VERBOSE) {
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
@@ -362,11 +359,7 @@ public class IcebergScanNode extends ScanNode {
             if (hasLimit()) {
                 cardinality = Math.min(cardinality, limit);
             }
-
-            numNodes = Math.min(hostToBeId.size(), result.size());
         }
-        // even current node scan has no data, at least one backend will be assigned when the fragment actually execute
-        numNodes = numNodes <= 0 ? 1 : numNodes;
         // when node scan has no data, cardinality should be 0 instead of a invalid value after computeStats()
         cardinality = cardinality == -1 ? 0 : cardinality;
     }
