@@ -106,7 +106,7 @@ This topic uses CSV-formatted data as an example.
 
 #### Syntax
 
-```PowerShell
+```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "db:<database_name>" -H "table:<table_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/begin
@@ -114,7 +114,7 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 
 #### Example
 
-```PowerShell
+```Bash
 curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
     -H "db:test_db" -H "table:table1" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/begin
@@ -128,7 +128,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If the transaction is successfully started, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "Status": "OK",
       "Message": "",
@@ -140,7 +140,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If the transaction is bound to a duplicate label, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "Status": "LABEL_ALREADY_EXISTS",
       "ExistingJobStatus": "RUNNING",
@@ -150,7 +150,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If errors other than duplicate label occur, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "Status": "FAILED",
       "Message": ""
@@ -161,7 +161,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 #### Syntax
 
-```PowerShell
+```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "db:<database_name>" -H "table:<table_name>" \
     -T <file_path>
@@ -174,7 +174,7 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 
 #### Example
 
-```PowerShell
+```Bash
 curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
     -H "db:test_db" -H "table:table1" \
     -T /home/disk1/example1.csv
@@ -190,7 +190,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If the data write is successful, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Seq": 0,
@@ -210,7 +210,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If the transaction is considered unknown, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Label": "streamload_txn_example1_table1",
@@ -221,7 +221,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If the transaction is considered in an invalid state, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Label": "streamload_txn_example1_table1",
@@ -232,7 +232,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If errors other than unknown transaction and invalid status occur, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Label": "streamload_txn_example1_table1",
@@ -245,7 +245,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 #### Syntax
 
-```PowerShell
+```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "db:<database_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
@@ -253,7 +253,7 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 
 #### Example
 
-```PowerShell
+```Bash
 curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
     -H "db:test_db"
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
@@ -263,7 +263,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If the pre-commit is successful, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Label": "streamload_txn_example1_table1",
@@ -284,7 +284,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If the transaction is considered not existent, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Label": "streamload_txn_example1_table1",
@@ -295,7 +295,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If the pre-commit times out, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Label": "streamload_txn_example1_table1",
@@ -306,7 +306,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If errors other than non-existent transaction and pre-commit timeout occur, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Label": "streamload_txn_example1_table1",
@@ -319,7 +319,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 #### Syntax
 
-```PowerShell
+```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "db:<database_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/commit
@@ -327,7 +327,7 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 
 #### Example
 
-```PowerShell
+```Bash
 curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
     -H "db:test_db>"
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/commit
@@ -337,7 +337,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If the commit is successful, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Label": "streamload_txn_example1_table1",
@@ -358,7 +358,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If the transaction has already been committed, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Label": "streamload_txn_example1_table1",
@@ -369,7 +369,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If the transaction is considered not existent, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Label": "streamload_txn_example1_table1",
@@ -380,7 +380,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If the commit times out, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Label": "streamload_txn_example1_table1",
@@ -391,7 +391,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If the data publish times out, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Label": "streamload_txn_example1_table1",
@@ -403,7 +403,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If errors other than non-existent transaction and timeout occur, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Label": "streamload_txn_example1_table1",
@@ -416,7 +416,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 #### Syntax
 
-```PowerShell
+```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "db:<database_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/rollback
@@ -424,7 +424,7 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 
 #### Example
 
-```PowerShell
+```Bash
 curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
     -H "db:test_db"
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/rollback
@@ -434,7 +434,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If the rollback is successful, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Label": "streamload_txn_example1_table1",
@@ -445,7 +445,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If the transaction is considered not existent, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Label": "streamload_txn_example1_table1",
@@ -456,7 +456,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 - If errors other than not existent transaction occur, the following result is returned:
 
-  ```PowerShell
+  ```Bash
   {
       "TxnId": 1,
       "Label": "streamload_txn_example1_table1",

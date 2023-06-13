@@ -67,7 +67,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 ##### Data examples
 
-1. In your StarRocks database `test_db`, create a table named `table1` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+1. In your StarRocks database `test_db`, create a Primary Key table named `table1`. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table1`
