@@ -442,7 +442,7 @@ public class ShowExecutorTest {
 
         new MockUp<SystemInfoService>() {
             @Mock
-            public List<Long> getBackendIds(boolean alive) {
+            public List<Long> getAvailableBackendIds() {
                 return Arrays.asList(10001L, 10002L, 10003L);
             }
         };

@@ -410,17 +410,18 @@ public class PropertyAnalyzer {
         if (replicationNum <= 0) {
             throw new AnalysisException("Replication num should larger than 0");
         }
-        int numComputeNodes = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
+
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            numComputeNodes +=  GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
-            if (RunMode.defaultReplicationNum() > numComputeNodes) {
-                throw new AnalysisException("Number of available CN nodes is " + numComputeNodes
+            backendIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodeIds());
+            if (RunMode.defaultReplicationNum() > backendIds.size()) {
+                throw new AnalysisException("Number of available CN nodes is " + backendIds.size()
                         + ", less than " + RunMode.defaultReplicationNum());
             }
         } else {
-            if (replicationNum > numComputeNodes) {
+            if (replicationNum > backendIds.size()) {
                 throw new AnalysisException("Replication num should be less than the number of available BE nodes. "
-                        + "Replication num is " + replicationNum + " available BE nodes is " + numComputeNodes +
+                        + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size() +
                         ", You can change this default by setting the replication_num table properties.");
             }
         }

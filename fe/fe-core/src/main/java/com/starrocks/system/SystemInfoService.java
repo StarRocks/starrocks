@@ -636,6 +636,32 @@ public class SystemInfoService {
         return backendIds;
     }
 
+    public List<Long> getAvailableBackendIds() {
+        List<Long> backendIds = Lists.newArrayList(idToBackendRef.keySet());
+
+        Iterator<Long> iter = backendIds.iterator();
+        while (iter.hasNext()) {
+            Backend backend = this.getBackend(iter.next());
+            if (backend == null || !backend.isAvailable()) {
+                iter.remove();
+            }
+        }
+        return backendIds;
+    }
+
+    public List<Long> getAvailableComputeNodeIds() {
+        List<Long> computeNodeIds = Lists.newArrayList(idToComputeNodeRef.keySet());
+
+        Iterator<Long> iter = computeNodeIds.iterator();
+        while (iter.hasNext()) {
+            ComputeNode cn = this.getComputeNode(iter.next());
+            if (cn == null || !cn.isAvailable()) {
+                iter.remove();
+            }
+        }
+        return computeNodeIds;
+    }
+
     public List<Backend> getBackends() {
         return Lists.newArrayList(idToBackendRef.values());
     }

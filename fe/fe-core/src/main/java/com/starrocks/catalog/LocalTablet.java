@@ -593,12 +593,12 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             return createRedundantSchedCtx(TabletStatus.FORCE_REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
                     needFurtherRepairReplica);
         } else {
-            int numAliveNodes = systemInfoService.getAliveBackendNumber();
+            List<Long> availableBEs = systemInfoService.getAvailableBackendIds();
             // We create `REPLICA_MISSING` type task only when there exists enough available BEs which
             // we can choose to clone data to, if not we should check if we can create `VERSION_INCOMPLETE` task,
             // so that repair of replica with incomplete version won't be blocked and hence version publish process
             // of load task won't be blocked either.
-            if (numAliveNodes > alive) {
+            if (availableBEs.size() > alive) {
                 if (alive < (replicationNum / 2) + 1) {
                     return Pair.create(TabletStatus.REPLICA_MISSING, TabletSchedCtx.Priority.HIGH);
                 } else if (alive < replicationNum) {

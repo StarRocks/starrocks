@@ -410,7 +410,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
         // for backends that haven't assigned any bucket of any colocate group, we should
         // also initialize its `AllGroupsReplicaDistInfoPerBe`, in order to migrate some buckets to them
         // in the following balancing process
-        List<Long> availableBackends = systemInfoService.getBackendIds(true);
+        List<Long> availableBackends = systemInfoService.getAvailableBackendIds();
         availableBackends.forEach(backendId ->
                 distInfoPerBackendMap.putIfAbsent(backendId,
                         AllGroupsReplicaDistInfoPerBe.createNewDistInfoObj(backendId)));
