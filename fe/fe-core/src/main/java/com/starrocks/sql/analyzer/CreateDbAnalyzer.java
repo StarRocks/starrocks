@@ -47,9 +47,9 @@ public class CreateDbAnalyzer {
         Map<String, String> properties = statement.getProperties();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
             String volume = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING && !volume.equals(StorageVolumeMgr.LOCAL)) {
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING && !StorageVolumeMgr.LOCAL.equalsIgnoreCase(volume)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "Storage volume can only be local in shared nothing mode");
+                        "Storage volume can only be 'local' in shared nothing mode");
             }
         }
     }
