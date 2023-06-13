@@ -23,16 +23,16 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class SetDefaultStorageVolumeLog implements Writable {
+public class StringLog implements Writable {
     @SerializedName(value = "id")
-    private String id;
+    private String value;
 
-    public SetDefaultStorageVolumeLog(String id) {
-        this.id = id;
+    public StringLog(String value) {
+        this.value = value;
     }
 
-    public String getId() {
-        return id;
+    public String getValue() {
+        return value;
     }
 
     @Override
@@ -40,8 +40,8 @@ public class SetDefaultStorageVolumeLog implements Writable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
-    public static SetDefaultStorageVolumeLog read(DataInput in) throws IOException {
+    public static StringLog read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, SetDefaultStorageVolumeLog.class);
+        return GsonUtils.GSON.fromJson(json, StringLog.class);
     }
 }

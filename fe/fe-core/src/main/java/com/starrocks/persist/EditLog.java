@@ -1049,8 +1049,8 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME: {
-                    SetDefaultStorageVolumeLog info = (SetDefaultStorageVolumeLog) journal.getData();
-                    globalStateMgr.getStorageVolumeMgr().replaySetDefaultStorageVolume(info);
+                    StringLog log = (StringLog) journal.getData();
+                    globalStateMgr.getStorageVolumeMgr().replaySetDefaultStorageVolume(log);
                     break;
                 }
                 case OperationType.OP_CREATE_STORAGE_VOLUME: {
@@ -1064,8 +1064,8 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_DROP_STORAGE_VOLUME: {
-                    DropStorageVolumeLog info = (DropStorageVolumeLog) journal.getData();
-                    globalStateMgr.getStorageVolumeMgr().replayDropStorageVolume(info);
+                    StringLog log = (StringLog) journal.getData();
+                    globalStateMgr.getStorageVolumeMgr().replayDropStorageVolume(log);
                     break;
                 }
 
@@ -2037,8 +2037,8 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_TASK, changedTask);
     }
 
-    public void logSetDefaultStorageVolume(SetDefaultStorageVolumeLog info) {
-        logEdit(OperationType.OP_SET_DEFAULT_STORAGE_VOLUME, info);
+    public void logSetDefaultStorageVolume(StringLog log) {
+        logEdit(OperationType.OP_SET_DEFAULT_STORAGE_VOLUME, log);
     }
 
     public void logCreateStorageVolume(StorageVolume storageVolume) {
@@ -2049,7 +2049,7 @@ public class EditLog {
         logEdit(OperationType.OP_UPDATE_STORAGE_VOLUME, storageVolume);
     }
 
-    public void logDropStorageVolume(DropStorageVolumeLog info) {
-        logEdit(OperationType.OP_DROP_STORAGE_VOLUME, info);
+    public void logDropStorageVolume(StringLog log) {
+        logEdit(OperationType.OP_DROP_STORAGE_VOLUME, log);
     }
 }
