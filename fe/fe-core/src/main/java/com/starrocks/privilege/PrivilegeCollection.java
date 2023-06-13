@@ -16,12 +16,14 @@
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -29,11 +31,28 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-public class PrivilegeCollection {
+public class PrivilegeCollection implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(PrivilegeCollection.class);
 
     @SerializedName("m2")
     protected Map<ObjectType, List<PrivilegeEntry>> typeToPrivilegeEntryList = new HashMap<>();
+
+    /**
+     * Remove invalid {@link ForwardCompatiblePEntryObject} after deserialization.
+     * @throws IOException
+     */
+    @Override
+    public void gsonPostProcess() throws IOException {
+        Iterator<Map.Entry<ObjectType, List<PrivilegeEntry>>> mapIter = typeToPrivilegeEntryList.entrySet().iterator();
+        while (mapIter.hasNext()) {
+            Map.Entry<ObjectType, List<PrivilegeEntry>> entry = mapIter.next();
+            List<PrivilegeEntry> pEntryList = entry.getValue();
+            pEntryList.removeIf(privilegeEntry -> privilegeEntry.getObject() instanceof ForwardCompatiblePEntryObject);
+            if (pEntryList.isEmpty()) {
+                mapIter.remove();
+            }
+        }
+    }
 
     public static class PrivilegeEntry implements Comparable<PrivilegeEntry> {
         @SerializedName(value = "a")
