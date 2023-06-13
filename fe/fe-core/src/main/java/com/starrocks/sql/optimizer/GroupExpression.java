@@ -64,6 +64,8 @@ public class GroupExpression {
 
     private boolean isUnused = false;
 
+    private double costLowerBound = -10000;
+
     public GroupExpression(Operator op, List<Group> inputs) {
         this.op = op;
         this.inputs = inputs;
@@ -123,6 +125,14 @@ public class GroupExpression {
 
     public void setUnused(boolean isUnused) {
         this.isUnused = isUnused;
+    }
+
+    public double getCostLowerBound() {
+        return costLowerBound;
+    }
+
+    public void setCostLowerBound(double costLowerBound) {
+        this.costLowerBound = Math.max(this.costLowerBound, costLowerBound);
     }
 
     public boolean hasRuleExplored(Rule rule) {

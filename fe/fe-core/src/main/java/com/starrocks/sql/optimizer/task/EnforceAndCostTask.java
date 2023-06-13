@@ -123,6 +123,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
             return;
         }
 
+        if (checkCostLowerBound(context.getUpperBoundCost())) {
+            return;
+        }
+
         // Init costs and get required properties for children
         initRequiredProperties();
 
@@ -146,6 +150,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 if (childBestExpr == null && prevChildIndex >= curChildIndex) {
                     // If there can not find best child expr or push child's OptimizeGroupTask, The child has been
                     // pruned because of UpperBound cost prune, and parent task can break here and return
+                    groupExpression.setCostLowerBound(context.getUpperBoundCost());
                     break;
                 }
 
@@ -174,6 +179,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
                 curTotalCost += childBestExpr.getCost(childRequiredProperty);
                 if (curTotalCost > context.getUpperBoundCost()) {
+                    groupExpression.setCostLowerBound(context.getUpperBoundCost());
                     break;
                 }
             }
@@ -191,6 +197,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 curTotalCost = childOutputPropertyGuarantor.enforceLegalChildOutputProperty();
 
                 if (curTotalCost > context.getUpperBoundCost()) {
+                    groupExpression.setCostLowerBound(context.getUpperBoundCost());
                     break;
                 }
 
@@ -205,6 +212,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                         context.getRequiredProperty(), childrenOutputProperties);
                 PhysicalPropertySet outputProperty = outputPropertyDeriver.getOutputProperty();
                 recordCostsAndEnforce(outputProperty, childrenRequiredProperties);
+                groupExpression.setCostLowerBound(context.getUpperBoundCost());
             }
             // Reset child idx and total cost
             prevChildIndex = -1;
@@ -522,5 +530,13 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
             enforcer.setOutputPropertySatisfyRequiredProperty(newOutputProperty, newOutputProperty);
         }
         groupExpression.getGroup().setBestExpression(enforcer, curTotalCost, newOutputProperty);
+    }
+
+    private boolean checkCostLowerBound(double costUpperBound) {
+        if (groupExpression.getCostLowerBound() < 0) {
+            return false;
+        }
+
+        return groupExpression.getCostLowerBound() > costUpperBound;
     }
 }
