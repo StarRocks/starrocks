@@ -203,7 +203,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
 
     @Override
     public boolean isAutomaticPartition() {
-        return true;
+        return type == PartitionType.EXPR_RANGE;
     }
 
 }
