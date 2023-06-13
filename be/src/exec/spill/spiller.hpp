@@ -28,6 +28,7 @@
 #include "exec/spill/spiller.h"
 #include "storage/chunk_helper.h"
 #include "util/defer_op.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks::spill {
 template <class TaskExecutor, class MemGuard>
@@ -75,7 +76,7 @@ Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, Sp
         writer->shuffle(indexs, hash_column);
         writer->process_partition_data(chunk, indexs, std::forward<Processer>(processer));
     }
-    _metrics.partition_writer_peak_memory_usage->set(writer->mem_consumption());
+    COUNTER_SET(_metrics.partition_writer_peak_memory_usage, 0);
     RETURN_IF_ERROR(writer->flush_if_full(state, executor, guard));
     return Status::OK();
 }
@@ -248,7 +249,7 @@ Status PartitionedSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chun
 
 template <class TaskExecutor, class MemGuard>
 Status PartitionedSpillerWriter::flush_if_full(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-    if (_mem_tracker->consumption() > options().spill_file_size) {
+    if (_mem_tracker->consumption() > options().spill_mem_table_bytes_size) {
         return flush(state, executor, guard);
     }
     return Status::OK();
@@ -281,7 +282,7 @@ Status PartitionedSpillerWriter::spill_partition(SerdeContext& ctx, SpilledParti
 
     RETURN_IF_ERROR(provider(consumer));
 
-    if (partition->spill_writer->block()->size() > options().spill_file_size) {
+    if (partition->spill_writer->block()->size() > options().spill_mem_table_bytes_size) {
         RETURN_IF_ERROR(block->flush());
         RETURN_IF_ERROR(_spiller->block_manager()->release_block(block));
         block.reset();
@@ -427,7 +428,7 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, TaskExecutor&& execu
             const auto& mem_table = partition->spill_writer->mem_table();
             // partition not in memory
             if (!partition->in_mem && partition->level < max_partition_level &&
-                mem_table->mem_usage() + partition->bytes > options().max_memory_size_each_partition) {
+                mem_table->mem_usage() + partition->bytes > options().spill_mem_table_bytes_size) {
                 RETURN_IF_ERROR(mem_table->done());
                 partition->in_mem = false;
                 partition->mem_size = 0;
