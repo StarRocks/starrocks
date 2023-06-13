@@ -39,10 +39,8 @@ ChunkChanger::~ChunkChanger() {
 }
 
 void ChunkChanger::init_runtime_state(TQueryOptions query_options, TQueryGlobals query_globals) {
-    if (_state == nullptr) {
-        _state = _obj_pool.add(
-                new RuntimeState(TUniqueId(), TUniqueId(), query_options, query_globals, ExecEnv::GetInstance()));
-    }
+    _state = _obj_pool.add(
+            new RuntimeState(TUniqueId(), TUniqueId(), query_options, query_globals, ExecEnv::GetInstance()));
 }
 
 ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
@@ -569,7 +567,9 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
             if (mvParam.mv_expr != nullptr) {
                 chunk_changer->set_has_mv_expr_context(true);
                 RuntimeState* runtime_state = chunk_changer->get_runtime_state();
-                DCHECK(runtime_state);
+                if (runtime_state == nullptr) {
+                    return Status::InternalError("change materialized view but query_options/query_globals is not set");
+                }
                 RETURN_IF_ERROR(Expr::create_expr_tree(chunk_changer->get_object_pool(), *(mvParam.mv_expr),
                                                        &(column_mapping->mv_expr_ctx), runtime_state));
                 RETURN_IF_ERROR(column_mapping->mv_expr_ctx->prepare(runtime_state));

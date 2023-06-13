@@ -178,7 +178,8 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         }
         req.setMaterialized_column_req(materializedColumnReq);
 
-        if (defineExprs != null || materializedColumnReq != null) {
+        // TODO: merge `materializedColumnReq`'s query options into this later.
+        if (defineExprs != null && defineExprs.size() > 0) {
             // we need this thing, otherwise some expr evalution will fail in BE
             TQueryGlobals queryGlobals = new TQueryGlobals();
             SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");

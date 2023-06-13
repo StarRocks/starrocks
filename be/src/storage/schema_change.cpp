@@ -548,7 +548,12 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     sc_params.base_tablet = base_tablet;
     sc_params.new_tablet = new_tablet;
     sc_params.chunk_changer = std::make_unique<ChunkChanger>(sc_params.new_tablet->tablet_schema());
-    if (request.__isset.query_options && request.__isset.query_options) {
+
+    if (request.__isset.materialized_view_params && request.materialized_view_params.size() > 0) {
+        if (!request.__isset.query_options || !request.__isset.query_globals) {
+            return Status::InternalError(_alter_msg_header +
+                                         "change materialized view but query_options/query_globals is not set");
+        }
         sc_params.chunk_changer->init_runtime_state(request.query_options, request.query_globals);
     }
 
