@@ -39,7 +39,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.meta.MetaContext;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
@@ -342,7 +341,7 @@ public class LoadManagerTest {
         loadManager.saveLoadJobsV2JsonFormat(image.getDataOutputStream());
 
         LoadMgr loadManager2 = new LoadMgr(new LoadJobScheduler());
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream(), SRMetaBlockID.LOAD_MGR);
+        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
         loadManager2.loadLoadJobsV2JsonFormat(reader);
         reader.close();
 

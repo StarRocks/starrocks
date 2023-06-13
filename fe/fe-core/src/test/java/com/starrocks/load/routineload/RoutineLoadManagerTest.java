@@ -52,7 +52,6 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.RoutineLoadOperation;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
@@ -874,7 +873,7 @@ public class RoutineLoadManagerTest {
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
         leaderLoadManager.saveRoutineLoadJobsV2(pseudoImage.getDataOutputStream());
         RoutineLoadMgr restartedRoutineLoadManager = new RoutineLoadMgr();
-        SRMetaBlockReader reader = new SRMetaBlockReader(pseudoImage.getDataInputStream(), SRMetaBlockID.ROUTINE_LOAD_MGR);
+        SRMetaBlockReader reader = new SRMetaBlockReader(pseudoImage.getDataInputStream());
         restartedRoutineLoadManager.loadRoutineLoadJobsV2(reader);
         reader.close();
 
