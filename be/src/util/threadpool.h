@@ -389,7 +389,7 @@ public:
     // Marks the token as unusable for future submissions. Any queued tasks not
     // yet running are destroyed. If tasks are in flight, Shutdown() will wait
     // on their completion before returning.
-    void shutdown();
+    void shutdown(bool check = true);
 
     // Waits until all the tasks submitted via this token are completed.
     void wait(bool check = true);

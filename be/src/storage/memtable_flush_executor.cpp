@@ -107,7 +107,7 @@ Status FlushToken::submit(std::unique_ptr<MemTable> memtable, bool eos,
 }
 
 void FlushToken::shutdown() {
-    _flush_token->shutdown();
+    _flush_token->shutdown(false);
 }
 
 void FlushToken::cancel(const Status& st) {
