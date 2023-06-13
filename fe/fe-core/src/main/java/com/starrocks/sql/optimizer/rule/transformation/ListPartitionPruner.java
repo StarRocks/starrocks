@@ -19,9 +19,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -38,6 +42,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -206,6 +211,49 @@ public class ListPartitionPruner implements PartitionPruner {
         return false;
     }
 
+    private int compareLiteral(LiteralExpr left, LiteralExpr right) {
+        if (right instanceof StringLiteral && left instanceof DateLiteral) {
+            try {
+                right = (LiteralExpr) right.uncheckedCastTo(Type.DATE);
+            } catch (Exception e) {
+                LOG.error(e);
+                throw new StarRocksConnectorException(e.getMessage());
+            }
+        }
+
+        return left.compareLiteral(right);
+    }
+
+    private boolean containsKey(TreeMap<LiteralExpr, Set<Long>> partitionValueMap, LiteralExpr predicate) {
+        if (partitionValueMap.isEmpty()) {
+            return false;
+        }
+        LiteralExpr firstKey = partitionValueMap.firstKey();
+        LiteralExpr literalExpr = maybeTransformExpr(firstKey, predicate);
+        return partitionValueMap.containsKey(literalExpr);
+    }
+
+    private Set<Long> get(TreeMap<LiteralExpr, Set<Long>> partitionValueMap, LiteralExpr predicate) {
+        if (partitionValueMap.isEmpty()) {
+            return new HashSet<>();
+        }
+        LiteralExpr firstKey = partitionValueMap.firstKey();
+        LiteralExpr literalExpr = maybeTransformExpr(firstKey, predicate);
+        return partitionValueMap.get(literalExpr);
+    }
+
+    private LiteralExpr maybeTransformExpr(LiteralExpr value, LiteralExpr predicate) {
+        if (value instanceof StringLiteral && predicate instanceof DateLiteral) {
+            try {
+                predicate = (LiteralExpr) predicate.uncheckedCastTo(Type.STRING);
+            } catch (Exception e) {
+                LOG.error(e);
+                throw new StarRocksConnectorException(e.getMessage());
+            }
+        }
+        return predicate;
+    }
+
     private Set<Long> evalBinaryPredicate(BinaryPredicateOperator binaryPredicate) {
         Preconditions.checkNotNull(binaryPredicate);
         ScalarOperator left = binaryPredicate.getChild(0);
@@ -236,8 +284,8 @@ public class ListPartitionPruner implements PartitionPruner {
         switch (type) {
             case EQ:
                 // SlotRef = Literal
-                if (partitionValueMap.containsKey(literal)) {
-                    matches.addAll(partitionValueMap.get(literal));
+                if (containsKey(partitionValueMap, literal)) {
+                    matches.addAll(get(partitionValueMap, literal));
                 }
                 return matches;
             case EQ_FOR_NULL:
@@ -247,8 +295,8 @@ public class ListPartitionPruner implements PartitionPruner {
                     matches.addAll(nullPartitions);
                 } else {
                     // same as EQ
-                    if (partitionValueMap.containsKey(literal)) {
-                        matches.addAll(partitionValueMap.get(literal));
+                    if (containsKey(partitionValueMap, literal)) {
+                        matches.addAll(get(partitionValueMap, literal));
                     }
                 }
                 return matches;
@@ -258,8 +306,8 @@ public class ListPartitionPruner implements PartitionPruner {
                 // remove null partitions
                 matches.removeAll(nullPartitions);
                 // remove partition matches literal
-                if (partitionValueMap.containsKey(literal)) {
-                    matches.removeAll(partitionValueMap.get(literal));
+                if (containsKey(partitionValueMap, literal)) {
+                    matches.removeAll(get(partitionValueMap, literal));
                 }
                 return matches;
             case LE:
@@ -276,13 +324,13 @@ public class ListPartitionPruner implements PartitionPruner {
 
                 if (type == BinaryType.LE || type == BinaryType.LT) {
                     // SlotRef <[=] Literal
-                    if (literal.compareLiteral(firstKey) < 0) {
+                    if (compareLiteral(literal, firstKey) < 0) {
                         return Sets.newHashSet();
                     }
                     if (type == BinaryType.LE) {
                         upperInclusive = true;
                     }
-                    if (literal.compareLiteral(lastKey) <= 0) {
+                    if (compareLiteral(literal, lastKey) <= 0) {
                         upperBoundKey = literal;
                     } else {
                         upperBoundKey = lastKey;
@@ -292,13 +340,13 @@ public class ListPartitionPruner implements PartitionPruner {
                     lowerInclusive = true;
                 } else {
                     // SlotRef >[=] Literal
-                    if (literal.compareLiteral(lastKey) > 0) {
+                    if (compareLiteral(literal, lastKey) > 0) {
                         return Sets.newHashSet();
                     }
                     if (type == BinaryType.GE) {
                         lowerInclusive = true;
                     }
-                    if (literal.compareLiteral(firstKey) >= 0) {
+                    if (compareLiteral(literal, firstKey) >= 0) {
                         lowerBoundKey = literal;
                     } else {
                         lowerBoundKey = firstKey;
@@ -306,6 +354,20 @@ public class ListPartitionPruner implements PartitionPruner {
                     }
                     upperBoundKey = lastKey;
                     upperInclusive = true;
+                }
+
+                try {
+                    if (firstKey instanceof StringLiteral && upperBoundKey instanceof DateLiteral) {
+                        upperBoundKey = (LiteralExpr) upperBoundKey.uncheckedCastTo(Type.STRING);
+                    }
+
+                    if (firstKey instanceof StringLiteral && lowerBoundKey instanceof DateLiteral) {
+                        lowerBoundKey = (LiteralExpr) lowerBoundKey.uncheckedCastTo(Type.STRING);
+                    }
+
+                } catch (Exception e) {
+                    LOG.error(e);
+                    throw new StarRocksConnectorException(e.getMessage());
                 }
 
                 rangeValueMap = partitionValueMap.subMap(lowerBoundKey, lowerInclusive, upperBoundKey, upperInclusive);
