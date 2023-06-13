@@ -742,8 +742,19 @@ public abstract class Type implements Cloneable {
         if (isArrayType()) {
             return ((ArrayType) this).getItemType().canJoinOn();
         }
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType();
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().canJoinOn() && ((MapType) this).getValueType().canJoinOn();
+        }
+        if (isStructType()) {
+            for (StructField sf : ((StructType) this).getFields()) {
+                if (!sf.getType().canJoinOn()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        return !isOnlyMetricType() && !isFunctionType() && !isBinaryType();
     }
 
     public boolean canGroupBy() {

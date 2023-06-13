@@ -261,8 +261,7 @@ std::string TypeDescriptor::debug_string() const {
 }
 
 bool TypeDescriptor::support_join() const {
-    return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_MAP && type != TYPE_STRUCT;
+    return type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL;
 }
 
 bool TypeDescriptor::support_orderby() const {
