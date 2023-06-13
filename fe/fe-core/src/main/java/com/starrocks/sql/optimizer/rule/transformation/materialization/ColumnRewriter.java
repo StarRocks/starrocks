@@ -147,10 +147,6 @@ public class ColumnRewriter {
         }
     }
 
-    public ScalarOperator rewriteToTarget(ScalarOperator predicate) {
-        return rewriteViewToQuery(predicate);
-    }
-
     public Pair<ScalarOperator, ScalarOperator> rewriteSrcTargetWithEc(ScalarOperator src,
                                                                        ScalarOperator target,
                                                                        boolean isQueryToMV) {

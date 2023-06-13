@@ -1402,7 +1402,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testJoinMaterialization11() {
-        testRewriteFail("select empid from emps\n"
+        testRewriteOK("select empid from emps\n"
                         + "join depts using (deptno)",
                 "select empid from emps\n"
                         + "where deptno in (select deptno from depts)");

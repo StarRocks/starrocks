@@ -30,18 +30,15 @@ public class TableScanDesc {
     // join type of LogicalJoinOperator above scan operator
     private final JoinOperator parentJoinType;
     private final boolean isLeft;
-    // for build join graph
-    private final ScalarOperator onPredicate;
 
     public TableScanDesc(Table table, int index,
                          LogicalScanOperator scanOperator, JoinOperator parentJoinType,
-                         boolean isLeft, ScalarOperator onPredicate) {
+                         boolean isLeft) {
         this.table = table;
         this.index = index;
         this.scanOperator = scanOperator;
         this.parentJoinType = parentJoinType;
         this.isLeft = isLeft;
-        this.onPredicate = onPredicate;
     }
 
     public Table getTable() {
@@ -62,14 +59,6 @@ public class TableScanDesc {
 
     public LogicalScanOperator getScanOperator() {
         return scanOperator;
-    }
-
-    public ScalarOperator getOnPredicate() {
-        return onPredicate;
-    }
-
-    public boolean isLeft() {
-        return isLeft;
     }
 
     public boolean isMatch(TableScanDesc other) {

@@ -168,7 +168,7 @@ public class MvUtils {
                 LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
                 Table table = scanOperator.getTable();
                 Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
-                TableScanDesc tableScanDesc = new TableScanDesc(table, id, scanOperator, null, false, null);
+                TableScanDesc tableScanDesc = new TableScanDesc(table, id, scanOperator, null, false);
                 context.getTableScanDescs().add(tableScanDesc);
                 scanContext.getTableIdMap().put(table, ++id);
                 return null;
@@ -184,7 +184,7 @@ public class MvUtils {
                         Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
                         LogicalJoinOperator joinOperator = optExpression.getOp().cast();
                         TableScanDesc tableScanDesc = new TableScanDesc(
-                                table, id, scanOperator, joinOperator.getJoinType(), i == 0, joinOperator.getOnPredicate());
+                                table, id, scanOperator, joinOperator.getJoinType(), i == 0);
                         context.getTableScanDescs().add(tableScanDesc);
                         scanContext.getTableIdMap().put(table, ++id);
                     } else {
@@ -410,8 +410,6 @@ public class MvUtils {
             // Collect all join on predicates which join type are not inner/cross join.
             if (joinOperatorType == JoinOperator.INNER_JOIN
                     || joinOperatorType == JoinOperator.CROSS_JOIN) {
-                // Now join's on-predicates may be pushed down below join, so use original on-predicates
-                // instead of new on-predicates.
                 List<ScalarOperator> conjuncts = Utils.extractConjuncts(joinOperator.getOnPredicate());
                 collectValidPredicates(conjuncts, predicates);
             } else if (joinOperator.getOnPredicate() != null) {
