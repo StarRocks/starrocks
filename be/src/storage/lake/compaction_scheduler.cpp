@@ -216,8 +216,8 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
 
     // Task failure due to memory limitations allows for retries. more threads allow for more retries.
     if (status.is_mem_limit_exceeded() && context->runs.load(std::memory_order_relaxed) < _task_queue_count + 1) {
-        VLOG(3) << "Memory limit exceeded, will retry later. tablet_id=" << tablet_id << " version=" << version
-                << " txn_id=" << txn_id << " cost=" << cost << "s";
+        LOG(WARNING) << "Memory limit exceeded, will retry later. tablet_id=" << tablet_id << " version=" << version
+                     << " txn_id=" << txn_id << " cost=" << cost << "s";
         context->progress.update(0);
         auto idx = choose_task_queue_by_txn_id(context->txn_id);
         // re-schedule the compaction task
