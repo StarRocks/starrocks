@@ -20,6 +20,8 @@ import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 
+import static com.starrocks.sql.optimizer.base.DistributionSpec.DistributionType.SHUFFLE;
+
 public class DistributionProperty implements PhysicalProperty {
     private final DistributionSpec spec;
     private final boolean isCTERequired;
@@ -50,7 +52,7 @@ public class DistributionProperty implements PhysicalProperty {
     }
 
     public boolean isShuffle() {
-        return spec.type == DistributionSpec.DistributionType.SHUFFLE;
+        return spec.type == SHUFFLE;
     }
 
     public boolean isGather() {
@@ -63,6 +65,10 @@ public class DistributionProperty implements PhysicalProperty {
 
     public boolean isCTERequired() {
         return isCTERequired;
+    }
+
+    public DistributionProperty copyWithSpec(DistributionSpec distributionSpec) {
+        return new DistributionProperty(distributionSpec, isCTERequired);
     }
 
     @Override
@@ -79,6 +85,17 @@ public class DistributionProperty implements PhysicalProperty {
 
     public GroupExpression appendEnforcers(Group child) {
         return new GroupExpression(new PhysicalDistributionOperator(spec), Lists.newArrayList(child));
+    }
+
+    public DistributionProperty getNullStrictProperty() {
+        if (spec.getType() == SHUFFLE) {
+            HashDistributionSpec hashDistributionSpec = ((HashDistributionSpec) spec);
+            if (!hashDistributionSpec.isAllNullStrict()) {
+                return new DistributionProperty(hashDistributionSpec.getNullStrictSpec(
+                        hashDistributionSpec.getPropertyInfo()), isCTERequired);
+            }
+        }
+        return this;
     }
 
     @Override
