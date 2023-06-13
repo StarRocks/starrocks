@@ -105,7 +105,7 @@ public enum ScalarOperatorEvaluator {
      */
     public ScalarOperator evaluation(CallOperator root) {
         if (ConnectContext.get() != null
-                && !ConnectContext.get().getSessionVariable().isEnableFunctionFoldConstants()) {
+                && ConnectContext.get().getSessionVariable().isDisableFunctionFoldConstants()) {
             return root;
         }
 

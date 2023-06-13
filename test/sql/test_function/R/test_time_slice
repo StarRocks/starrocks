@@ -1,5 +1,5 @@
 -- name: test_time_slice
-set enable_function_fold_constants=off;
+set disable_function_fold_constants=off;
 -- result:
 -- !result
 select time_slice('9999-12-31 23:59:59',interval 5 year, ceil);
@@ -150,7 +150,7 @@ select date_slice('2023-12-31 03:12:04',interval -3.2 week);
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 58. Detail message: date_slice requires second parameter must be a constant interval.')
 -- !result
-set enable_function_fold_constants=on;
+set disable_function_fold_constants=on;
 -- result:
 -- !result
 select time_slice('9999-12-31 23:59:59',interval 5 year, ceil);

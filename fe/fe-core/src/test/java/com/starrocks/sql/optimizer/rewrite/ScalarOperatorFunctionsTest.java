@@ -729,26 +729,20 @@ public class ScalarOperatorFunctionsTest {
         );
 
         for (Param testCase : cases) {
-            if (testCase.expect != null) {
+            try {
                 ConstantOperator result = ScalarOperatorFunctions.timeSlice(
                         ConstantOperator.createDatetime(testCase.dateTime),
                         ConstantOperator.createInt(testCase.interval),
                         ConstantOperator.createVarchar(testCase.unit),
                         ConstantOperator.createVarchar(testCase.boundary)
                 );
-                assertEquals(testCase.expect, result.getDatetime());
-            } else {
-                try {
-                    ScalarOperatorFunctions.timeSlice(
-                            ConstantOperator.createDatetime(testCase.dateTime),
-                            ConstantOperator.createInt(testCase.interval),
-                            ConstantOperator.createVarchar(testCase.unit),
-                            ConstantOperator.createVarchar(testCase.boundary)
-                    );
+                if (testCase.expect != null) {
+                    assertEquals(testCase.expect, result.getDatetime());
+                } else {
                     Assert.fail();
-                } catch (Exception e) {
-                    assertTrue(e.getMessage().contains(testCase.e));
                 }
+            } catch (AnalysisException e) {
+                assertTrue(e.getMessage().contains(testCase.e));
             }
         }
     }

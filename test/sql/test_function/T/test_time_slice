@@ -1,6 +1,6 @@
 -- name: test_time_slice
 
-set enable_function_fold_constants=off;
+set disable_function_fold_constants=off;
 select time_slice('9999-12-31 23:59:59',interval 5 year, ceil);
 select time_slice('9999-12-31 23:59:59',interval 5 month, ceil);
 select time_slice('9999-12-31 23:59:59',interval 5 day, ceil);
@@ -38,7 +38,7 @@ select date_slice('2023-12-31 03:12:04',interval 3.2 day);
 select date_slice('2023-12-31 03:12:04',interval 3.2 quarter);
 select date_slice('2023-12-31 03:12:04',interval 3.2 week);
 select date_slice('2023-12-31 03:12:04',interval -3.2 week);
-set enable_function_fold_constants=on;
+set disable_function_fold_constants=on;
 select time_slice('9999-12-31 23:59:59',interval 5 year, ceil);
 select time_slice('9999-12-31 23:59:59',interval 5 month, ceil);
 select time_slice('9999-12-31 23:59:59',interval 5 day, ceil);
