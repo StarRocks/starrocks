@@ -31,28 +31,7 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
   [ ... ]
   ```
 
-  该语法会创建一个 Task，表示一个 CTAS 语句执行任务的存储模板。查看 Task 信息的语法如下。
-
-  ```SQL
-  SELECT * FROM INFORMATION_SCHEMA.tasks;
-  ```
-
-  执行 Task 后会对应生成一个 TaskRun，表示一个 CTAS 语句执行任务。TaskRun 有以下 4 种状态：
-
-  - `PEDING`：任务等待执行。
-  - `RUNNING`：任务正在执行。
-  - `FAILED`：任务执行失败。
-  - `SUCCESS`：任务执行成功。
-
-  查看 TaskRun 状态的语法如下。
-
-  ```SQL
-  SELECT * FROM INFORMATION_SCHEMA.task_runs;
-  ```
-
 ## 参数说明
-
-### 语句参数
 
 | **参数**          | **必填** | **描述**                                                     |
 | ----------------- | -------- | ------------------------------------------------------------ |
@@ -62,18 +41,6 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 | distribution_desc | 否       | 新表的分桶方式。如不指定该参数，则默认新表的分桶列为使用 CBO 优化器采集的统计信息中基数最高的列，且分桶数量默认为 10。如果 CBO 优化器没有采集基数信息，则默认新表的第一列为分桶列。更多有关分桶的设置，参见 CREATE TABLE。 |
 | Properties        | 否       | 新表的属性。                                                 |
 | AS SELECT query   | 是       | 查询结果。该参数支持如下值： 列。比如 `... AS SELECT a, b, c FROM table_a;`，其中 `a`、`b` 和 `c` 为原表的列名。如果您没有为新表指定列名，那么新表的列名也为 `a`、`b` 和 `c`。 表达式。比如 `... AS SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a;`，其中 `a+1`、`b+2` 和 `c*c` 为原表的列名，`x`、`y` 和 `z` 为新表的列名。 说明： 新表的列数需要与 `AS SELECT query` 中指定的列数保持一致。 建议您为新表的列设置具有业务意义的列名，便于后续识别使用。 |
-
-### FE 参数
-
-如需异步查询原表并根据查询结果创建新表，您需要配置如下 FE 参数。
-
-| **参数**                   | **默认值** | **说明**                                                     |
-| -------------------------- | ---------- | ------------------------------------------------------------ |
-| task_ttl_second            | 259200     | Task 的有效期，单位秒。超过有效期的 Task 会被自动删除        |
-| task_check_interval_second | 14400      | 删除过期 Task 的间隔时间，单位秒。                           |
-| task_runs_ttl_second       | 259200     | TaskRun 的有效期，单位秒。超过有效期的 TaskRun 会被自动删除。此外，成功和失败状态的 TaskRun 也会被自动删除。 |
-| task_runs_concurrency      | 20         | 最多可同时运行的 TaskRun 的数量。                            |
-| task_runs_queue_length     | 500        | 最多可同时等待运行的 TaskRun 的数量。如同时等待运行的 TaskRun 的数量超过该参数的默认值，您将无法继续执行 Task。 |
 
 ## 注意事项
 
