@@ -110,6 +110,9 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     if (table_sink.__isset.enable_replicated_storage) {
         _enable_replicated_storage = table_sink.enable_replicated_storage;
     }
+    if (table_sink.__isset.enable_resource_group) {
+        _enable_resource_group = table_sink.enable_resource_group;
+    }
     if (table_sink.__isset.db_name) {
         state->set_db(table_sink.db_name);
     }
@@ -175,7 +178,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _profile->add_info_string("IndexNum", fmt::format("{}", _schema->indexes().size()));
     _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
     _profile->add_info_string("AutomaticPartition", fmt::format("{}", _enable_automatic_partition));
-    _ts_profile->alloc_auto_increment_timer = ADD_TIMER(_profile, "AllocAutoIncrementTime");
+    _profile->add_info_string("EnableResourceGroup", fmt::format("{}", _enable_resource_group));
 
     SCOPED_TIMER(_profile->total_time_counter());
 
