@@ -3539,7 +3539,7 @@ public class GlobalStateMgr {
         }
 
         try {
-            loadMgr.cleanResidualJob();
+            loadManager.cleanResidualJob();
         } catch (Throwable t) {
             LOG.warn("load manager clean residual job failed", t);
         }
