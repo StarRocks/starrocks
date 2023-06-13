@@ -6,7 +6,7 @@ Displays tablet related information.
 
 > **NOTE**
 >
-> For versions earlier than v3.0, this operation requires the SELECT_PRIV privilege. For v3.0 and later, this operation requires TABLE-level SELECT privilege.
+> This operation requires the SELECT_PRIV privilege.
 
 ## Syntax
 
