@@ -68,7 +68,7 @@ CREATE TABLE stock_ticker (
 )
 DUPLICATE KEY(stock_symbol)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(closing_date) BUCKETS 3;
+DISTRIBUTED BY HASH(closing_date);
 
 INSERT INTO stock_ticker VALUES 
     ("JDR", 12.86, "2014-10-02 00:00:00"), 
@@ -291,7 +291,7 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 
 ~~~SQL
 CREATE TABLE test_tbl (col_1 INT, col_2 INT)
-DISTRIBUTED BY HASH(col_1) BUCKETS 3;
+DISTRIBUTED BY HASH(col_1);
 
 INSERT INTO test_tbl VALUES 
     (1, NULL),
@@ -429,7 +429,7 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 
 ~~~SQL
 CREATE TABLE test_tbl (col_1 INT, col_2 INT)
-DISTRIBUTED BY HASH(col_1) BUCKETS 3;
+DISTRIBUTED BY HASH(col_1);
 
 INSERT INTO test_tbl VALUES 
     (1, NULL),
@@ -792,7 +792,7 @@ CREATE TABLE sales_record (
    city_id INT,
    item STRING,
    sales INT
-) DISTRIBUTED BY HASH(`city_id`) BUCKETS 1;
+) DISTRIBUTED BY HASH(`city_id`);
 
 -- 向表插入数据。
 insert into sales_record values

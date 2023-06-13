@@ -43,7 +43,7 @@ set enable_sort_aggregate=true;
     ENGINE=OLAP 
     DUPLICATE KEY(`id_int`)
     COMMENT "OLAP"
-    DISTRIBUTED BY HASH(`id_int`) BUCKETS 10 
+    DISTRIBUTED BY HASH(`id_int`)
     PROPERTIES (
     "replication_num" = "3"
     ); 

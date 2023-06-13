@@ -263,7 +263,7 @@ PARTITION p4 VALUES [('1995-01-01'), ('1996-01-01')),
 PARTITION p5 VALUES [('1996-01-01'), ('1997-01-01')),
 PARTITION p6 VALUES [('1997-01-01'), ('1998-01-01')),
 PARTITION p7 VALUES [('1998-01-01'), ('1999-01-01')))
-DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48 
+DISTRIBUTED BY HASH(`lo_orderkey`)
 PROPERTIES
 (
     "replication_num" = "1",
@@ -327,7 +327,7 @@ PARTITION BY RANGE(ts)
 (
   START ("2022-01-01 00:00:00") END ("2022-02-01 00:00:00") EVERY (INTERVAL 1 day) 
 )
-DISTRIBUTED BY HASH(`ts`, `k0`, `k1`) BUCKETS 1
+DISTRIBUTED BY HASH(`ts`, `k0`, `k1`)
 PROPERTIES
 (
     "replication_num" = "1", 
@@ -563,7 +563,7 @@ Query Cache 支持多版本 Cache 机制。
    (
        START ("2022-01-01 00:00:00") END ("2022-02-01 00:00:00") EVERY (INTERVAL 1 DAY)
    )
-   DISTRIBUTED BY HASH(`ts`, `k0`, `k1`) BUCKETS 64 
+   DISTRIBUTED BY HASH(`ts`, `k0`, `k1`)
    PROPERTIES
    (
        "replication_num" = "1",

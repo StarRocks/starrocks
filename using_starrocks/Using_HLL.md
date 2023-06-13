@@ -20,7 +20,7 @@ CREATE TABLE test(
         id INT,
         uv HLL HLL_UNION
 )
-DISTRIBUTED BY HASH(ID) BUCKETS 32;
+DISTRIBUTED BY HASH(ID);
 ~~~
 
 > 注意
@@ -86,7 +86,7 @@ ALTER TABLE test ADD ROLLUP test_rollup(dt, uv);
 create table test_uv1(
 id int,
 uv_set hll hll_union)
-distributed by hash(id) buckets 32;
+distributed by hash(id);
 
 insert into test_uv1 select id, uv from test;
 ~~~
@@ -97,7 +97,7 @@ insert into test_uv1 select id, uv from test;
 create table test_uv2(
 id int,
 uv_set hll hll_union)
-distributed by hash(id) buckets 32;
+distributed by hash(id);
 
 insert into test_uv2 select id, hll_hash(id) from test;
 ~~~

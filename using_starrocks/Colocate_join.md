@@ -23,7 +23,6 @@ Colocate Join 支持等值 Join。
 ~~~SQL
 CREATE TABLE tbl (k1 int, v1 int sum)
 DISTRIBUTED BY HASH(k1)
-BUCKETS 8
 PROPERTIES(
     "colocate_with" = "group1"
 );
@@ -178,7 +177,7 @@ PARTITION BY RANGE(`k1`)
     PARTITION p1 VALUES LESS THAN ('2019-05-31'),
     PARTITION p2 VALUES LESS THAN ('2019-06-30')
 )
-DISTRIBUTED BY HASH(`k2`) BUCKETS 8
+DISTRIBUTED BY HASH(`k2`)
 PROPERTIES (
     "colocate_with" = "group1"
 );
@@ -193,7 +192,7 @@ CREATE TABLE `tbl2` (
     `v1` double SUM NOT NULL COMMENT ""
 ) ENGINE=OLAP
 AGGREGATE KEY(`k1`, `k2`)
-DISTRIBUTED BY HASH(`k2`) BUCKETS 8
+DISTRIBUTED BY HASH(`k2`)
 PROPERTIES (
     "colocate_with" = "group1"
 );

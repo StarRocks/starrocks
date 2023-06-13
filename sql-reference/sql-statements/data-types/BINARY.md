@@ -31,7 +31,7 @@ CREATE TABLE `test_binary` (
 ) ENGINE=OLAP
 DUPLICATE KEY(`id`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`id`) BUCKETS 1
+DISTRIBUTED BY HASH(`id`)
 PROPERTIES (
     "replication_num" = "3",
     "storage_format" = "DEFAULT"

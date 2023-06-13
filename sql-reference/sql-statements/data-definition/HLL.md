@@ -32,7 +32,7 @@ create table test(
     set1 hll hll_union,
     set2 hll hll_union
 )
-distributed by hash(id) buckets 32;
+distributed by hash(id);
 ```
 
 ### 通过 [Stream load](../data-manipulation/STREAM%20LOAD.md) 导入数据
@@ -66,7 +66,7 @@ create table test_uv(
     id int,
     uv_set hll hll_union
 )
-distributed by hash(id) buckets 32;
+distributed by hash(id);
 
 insert into test_uv select dt, id, set1 from test;
 
@@ -77,7 +77,7 @@ create table test_uv(
     id int,
     id_set hll hll_union
 )
-distributed by hash(id) buckets 32;
+distributed by hash(id);
 
 insert into test_uv select dt, id, hll_hash(id) from test;
 ```

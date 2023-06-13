@@ -21,14 +21,13 @@ PARTITION p20200322 VALUES LESS THAN ("2020-03-23"),
 PARTITION p20200323 VALUES LESS THAN ("2020-03-24"),
 PARTITION p20200324 VALUES LESS THAN ("2020-03-25")
 )
-DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32
+DISTRIBUTED BY HASH(event_day, site_id)
 PROPERTIES(
     "dynamic_partition.enable" = "true",
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-3",
     "dynamic_partition.end" = "3",
     "dynamic_partition.prefix" = "p",
-    "dynamic_partition.buckets" = "32",
     "dynamic_partition.history_partition_num" = "0"
 );
 ```

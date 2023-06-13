@@ -34,7 +34,7 @@ Bitmap 索引能够提高指定列的查询效率。如果一个查询条件命�
     )
     ENGINE = olap
     AGGREGATE KEY(k1, k2)
-    DISTRIBUTED BY HASH(k1) BUCKETS 10
+    DISTRIBUTED BY HASH(k1)
     PROPERTIES ("storage_type" = "column");
     ```
 

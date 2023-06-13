@@ -147,7 +147,7 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
    ENGINE=OLAP
    PRIMARY KEY(`id`)
    COMMENT "OLAP"
-   DISTRIBUTED BY HASH(`id`) BUCKETS 1
+   DISTRIBUTED BY HASH(`id`)
    PROPERTIES (
        "replication_num" = "3"
    );
@@ -400,7 +400,7 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
        PARTITION p202202 VALUES [('2022-02-01 00:00:00'), ('2022-03-01 00:00:00')),
        PARTITION p202203 VALUES [('2022-03-01 00:00:00'), ('2022-04-01 00:00:00'))
    )
-   DISTRIBUTED BY HASH(`k`) BUCKETS 3
+   DISTRIBUTED BY HASH(`k`)
    PROPERTIES (
        "replication_num" = "3"
    );

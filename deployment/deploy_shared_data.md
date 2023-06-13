@@ -310,13 +310,17 @@ CREATE TABLE IF NOT EXISTS detail_demo (
     ispass        BOOLEAN        COMMENT "true/false"
 )
 DUPLICATE KEY(recruit_date, region_num)
-DISTRIBUTED BY HASH(recruit_date, region_num) BUCKETS 96
+DISTRIBUTED BY HASH(recruit_date, region_num)
 PROPERTIES (
     "enable_storage_cache" = "true",
     "storage_cache_ttl" = "2592000",
     "enable_async_write_back" = "false"
 );
 ```
+
+> 注意
+>
+> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
 
 除了常规表 PROPERTIES 之外，您还需要在创建表时指定以下 PROPERTIES：
 

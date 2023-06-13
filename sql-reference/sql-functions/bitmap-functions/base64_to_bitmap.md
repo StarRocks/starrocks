@@ -37,7 +37,7 @@ BITMAP base64_to_bitmap(VARCHAR bitmap)
     ) ENGINE=OLAP
     PRIMARY KEY(`tagname`, `tagvalue`)
     COMMENT "OLAP"
-    DISTRIBUTED BY HASH(`tagname`) BUCKETS 1
+    DISTRIBUTED BY HASH(`tagname`)
     PROPERTIES (
     "replication_num" = "3",
     "storage_format" = "DEFAULT"

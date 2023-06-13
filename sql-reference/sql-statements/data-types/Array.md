@@ -43,7 +43,7 @@ create table t0(
   c1 ARRAY<INT>
 )
 duplicate key(c0)
-distributed by hash(c0) buckets 3;
+distributed by hash(c0);
 
 -- 建表并指定 `c1` 为两层的嵌套数组，元素类型为 VARCHAR。
 create table t1(
@@ -51,7 +51,7 @@ create table t1(
   c1 ARRAY<ARRAY<VARCHAR(10)>>
 )
 duplicate key(c0)
-distributed by hash(c0) buckets 3;
+distributed by hash(c0);
 
 -- 建表并定义 NOT NULL 数组的列。
 create table t2(
@@ -59,7 +59,7 @@ create table t2(
   c1 ARRAY<INT> NOT NULL
 )
 duplicate key(c0)
-distributed by hash(c0) buckets 3;
+distributed by hash(c0);
 ~~~
 
 ## 使用 SELECT 语句构造数组
@@ -190,7 +190,7 @@ create table t0(
   c1 ARRAY<INT>
 )
 duplicate key(c0)
-distributed by hash(c0) buckets 3;
+distributed by hash(c0);
 INSERT INTO t0 VALUES(1, [1,2,3]);
 ~~~
 

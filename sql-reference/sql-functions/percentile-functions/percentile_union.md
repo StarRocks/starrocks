@@ -51,7 +51,7 @@ CREATE TABLE sales_records(
 ) ENGINE=OLAP
 AGGREGATE KEY(`record_id`, `seller_id`, `store_id`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`record_id`) BUCKETS 3
+DISTRIBUTED BY HASH(`record_id`)
 PROPERTIES (
 "replication_num" = "3",
 "storage_format" = "DEFAULT"

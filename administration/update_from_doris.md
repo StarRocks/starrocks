@@ -125,7 +125,7 @@
     ADD TEMPORARY PARTITION p09
     VALUES [('2020-09-01'), ('2020-10-01')]
     ("replication_num" = "3")
-    DISTRIBUTED BY HASH(`dt`, `c`, `city`, `trade_hour`) BUCKETS 16;
+    DISTRIBUTED BY HASH(`dt`, `c`, `city`, `trade_hour`);
 
     INSERT INTO dwd_user_tradetype_d TEMPORARY partition(p09)
     select * from dwd_user_tradetype_d partition(p202009);
