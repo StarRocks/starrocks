@@ -2365,4 +2365,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_download_task_per_be = 0;
+
+    /**
+     * timeout for external table commit
+     */
+    @ConfField(mutable = true)
+    public static int external_table_commit_timeout_ms = 10000; // 10s
 }
