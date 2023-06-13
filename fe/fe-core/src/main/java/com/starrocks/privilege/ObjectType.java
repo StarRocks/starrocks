@@ -19,30 +19,30 @@ import com.google.gson.annotations.SerializedName;
 
 import java.util.Map;
 
-public enum ObjectType {
-    TABLE(1),
-    DATABASE(2),
-    SYSTEM(3),
-    USER(4),
-    RESOURCE(5),
-    VIEW(6),
-    CATALOG(7),
-    MATERIALIZED_VIEW(8),
-    FUNCTION(9),
-    RESOURCE_GROUP(10),
-    GLOBAL_FUNCTION(11),
-    STORAGE_VOLUME(12);
-
+public class ObjectType {
     @SerializedName("id")
     private final int id;
 
-    ObjectType(int id) {
+    private ObjectType(int id) {
         this.id = id;
     }
 
     public int getId() {
         return id;
     }
+
+    public static final ObjectType TABLE = new ObjectType(1);
+    public static final ObjectType DATABASE = new ObjectType(2);
+    public static final ObjectType SYSTEM = new ObjectType(3);
+    public static final ObjectType USER = new ObjectType(4);
+    public static final ObjectType RESOURCE = new ObjectType(5);
+    public static final ObjectType VIEW = new ObjectType(6);
+    public static final ObjectType CATALOG = new ObjectType(7);
+    public static final ObjectType MATERIALIZED_VIEW = new ObjectType(8);
+    public static final ObjectType FUNCTION = new ObjectType(9);
+    public static final ObjectType RESOURCE_GROUP = new ObjectType(10);
+    public static final ObjectType GLOBAL_FUNCTION = new ObjectType(11);
+    public static final ObjectType STORAGE_VOLUME = new ObjectType(12);
 
     public static final Map<String, ObjectType> OBJECT_TO_PLURAL = new ImmutableMap.Builder<String, ObjectType>()
             .put("TABLES", ObjectType.TABLE)

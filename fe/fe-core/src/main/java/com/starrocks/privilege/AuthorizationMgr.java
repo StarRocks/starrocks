@@ -82,6 +82,7 @@ public class AuthorizationMgr {
     private GlobalStateMgr globalStateMgr;
 
     protected Map<UserIdentity, UserPrivilegeCollection> userToPrivilegeCollection;
+    protected Map<Long, RolePrivilegeCollection> roleIdToPrivilegeCollection;
 
     private static final int MAX_NUM_CACHED_MERGED_PRIVILEGE_COLLECTION = 1000;
     private static final int CACHED_MERGED_PRIVILEGE_COLLECTION_EXPIRE_MIN = 60;
@@ -102,7 +103,7 @@ public class AuthorizationMgr {
     // set by load() to distinguish brand-new environment with upgraded environment
     private boolean isLoaded = false;
 
-    protected Map<Long, RolePrivilegeCollection> roleIdToPrivilegeCollection;
+
     private final ReentrantReadWriteLock roleLock;
 
     // only used in deserialization
@@ -236,35 +237,35 @@ public class AuthorizationMgr {
             throws PrivilegeException {
         List<PEntryObject> objects = new ArrayList<>();
         switch (objectType) {
-            case TABLE:
+            case ObjectType.TABLE:
                 objects.add(provider.generateObject(objectType,
                         Lists.newArrayList("*", "*", "*"), globalStateMgr));
                 collection.grant(objectType, actionList, objects, false);
                 break;
-            case VIEW:
-            case MATERIALIZED_VIEW:
+            case ObjectType.VIEW:
+            case ObjectType.MATERIALIZED_VIEW:
 
-            case DATABASE:
+            case ObjectType.DATABASE:
                 objects.add(provider.generateObject(objectType,
                         Lists.newArrayList("*", "*"), globalStateMgr));
                 collection.grant(objectType, actionList, objects, false);
                 break;
 
-            case USER:
+            case ObjectType.USER:
                 objects.add(provider.generateUserObject(objectType, null, globalStateMgr));
                 collection.grant(objectType, actionList, objects, false);
                 break;
 
-            case RESOURCE:
-            case CATALOG:
-            case RESOURCE_GROUP:
-            case STORAGE_VOLUME:
+            case ObjectType.RESOURCE:
+            case ObjectType.CATALOG:
+            case ObjectType.RESOURCE_GROUP:
+            case ObjectType.STORAGE_VOLUME:
                 objects.add(provider.generateObject(objectType,
                         Lists.newArrayList("*"), globalStateMgr));
                 collection.grant(objectType, actionList, objects, false);
                 break;
 
-            case FUNCTION:
+            case ObjectType.FUNCTION:
                 objects.add(provider.generateFunctionObject(objectType,
                         PrivilegeBuiltinConstants.ALL_DATABASE_ID,
                         PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID,
@@ -272,7 +273,7 @@ public class AuthorizationMgr {
                 collection.grant(objectType, actionList, objects, false);
                 break;
 
-            case GLOBAL_FUNCTION:
+            case ObjectType.GLOBAL_FUNCTION:
                 objects.add(provider.generateFunctionObject(objectType,
                         PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID,
                         PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID,
@@ -280,7 +281,7 @@ public class AuthorizationMgr {
                 collection.grant(objectType, actionList, objects, false);
                 break;
 
-            case SYSTEM:
+            case ObjectType.SYSTEM:
                 collection.grant(objectType, actionList, Arrays.asList(new PEntryObject[] {null}), false);
                 break;
 
@@ -1024,7 +1025,7 @@ public class AuthorizationMgr {
         }
     }
 
-    public Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> getTypeToPrivilegeEntryListByRole(String roleName) {
+    public Map<ObjectType, List<PrivilegeEntry>> getTypeToPrivilegeEntryListByRole(String roleName) {
         roleReadLock();
         try {
             Long roleId = getRoleIdByNameAllowNull(roleName);
@@ -1076,7 +1077,7 @@ public class AuthorizationMgr {
         }
     }
 
-    public Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> getTypeToPrivilegeEntryListByUser(
+    public Map<ObjectType, List<PrivilegeEntry>> getTypeToPrivilegeEntryListByUser(
             UserIdentity userIdentity) {
         userReadLock();
         try {
@@ -1089,7 +1090,7 @@ public class AuthorizationMgr {
         }
     }
 
-    public Map<ObjectType, List<PrivilegeCollection.PrivilegeEntry>> getMergedTypeToPrivilegeEntryListByUser(
+    public Map<ObjectType, List<PrivilegeEntry>> getMergedTypeToPrivilegeEntryListByUser(
             UserIdentity userIdentity) {
         userReadLock();
         try {
