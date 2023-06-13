@@ -35,10 +35,10 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     public static final String BUILTIN_STORAGE_VOLUME = "builtin_storage_volume";
 
     @Override
-    public StorageVolume getStorageVolumeByName(String svKey) {
+    public StorageVolume getStorageVolumeByName(String svName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             try {
-                FileStoreInfo fileStoreInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getFileStoreByName(svKey);
+                FileStoreInfo fileStoreInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getFileStoreByName(svName);
                 if (fileStoreInfo == null) {
                     return null;
                 }
