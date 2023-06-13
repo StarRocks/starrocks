@@ -1051,7 +1051,7 @@ public class AlterTest {
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
             @Mock
-            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+            public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
         };
@@ -1151,7 +1151,7 @@ public class AlterTest {
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
             @Mock
-            public StorageVolume getStorageVolume(String fsKey) throws AnalysisException {
+            public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
         };
@@ -2107,7 +2107,7 @@ public class AlterTest {
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
             @Mock
-            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+            public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
         };

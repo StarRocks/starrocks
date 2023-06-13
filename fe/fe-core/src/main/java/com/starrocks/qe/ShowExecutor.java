@@ -205,6 +205,7 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.warehouse.Warehouse;
@@ -995,6 +996,10 @@ public class ShowExecutor {
         createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
+        }
+        if (!Strings.isNullOrEmpty(db.getStorageVolumeId())) {
+            StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolume(db.getStorageVolumeId());
+            createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(sv.getName()).append("\")");
         }
         rows.add(Lists.newArrayList(showStmt.getDb(), createSqlBuilder.toString()));
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);

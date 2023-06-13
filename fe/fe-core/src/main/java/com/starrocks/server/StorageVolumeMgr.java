@@ -210,7 +210,7 @@ public abstract class StorageVolumeMgr {
         }
     }
 
-    public abstract StorageVolume getStorageVolumeByName(String svKey) throws AnalysisException;
+    public abstract StorageVolume getStorageVolumeByName(String svName) throws AnalysisException;
 
     public abstract StorageVolume getStorageVolume(String storageVolumeId);
 
