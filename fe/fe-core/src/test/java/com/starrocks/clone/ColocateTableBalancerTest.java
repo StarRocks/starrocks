@@ -446,7 +446,7 @@ public class ColocateTableBalancerTest {
                 result = null;
                 minTimes = 0;
 
-                infoService.getAvailableBackendIds();
+                infoService.getBackendIds(true);
                 result = Lists.newArrayList(1L, 2L, 3L, 4L, 5L);
                 minTimes = 0;
 
@@ -513,7 +513,7 @@ public class ColocateTableBalancerTest {
         // replicas of group 1 and group 2 only distribute on backends 1, 2, 3, and each backend of these backends
         // has one replica of the two groups, so from every group's view, it's already balanced, but from overview,
         // backend 4 and 5 has zero replica distributed, here we test overall balance process works
-        List<Long> availableBackends = infoService.getAvailableBackendIds();
+        List<Long> availableBackends = infoService.getBackendIds(true);
         System.out.println(availableBackends);
         Deencapsulation.invoke(balancer, "relocateAndBalanceAllGroups");
         List<List<Long>> list1 = colocateTableIndex.getBackendsPerBucketSeq(groupId1);
