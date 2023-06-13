@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/tablet_sink/tablet_sink_sender.h"
+#include "exec/tablet_sink_sender.h"
 
 #include "agent/master_info.h"
 #include "agent/utils.h"
@@ -25,7 +25,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/tablet_sink.h"
-#include "exec/tablet_sink/tablet_sink_colocate_sender.h"
+#include "exec/tablet_sink_colocate_sender.h"
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
