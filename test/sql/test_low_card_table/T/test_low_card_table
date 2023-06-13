@@ -1,0 +1,129 @@
+-- name: test_low_card_table
+CREATE TABLE `low_card_duplicate` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(500) NULL COMMENT "",
+  `c2` varchar(500) NOT NULL COMMENT "",
+  `c3` varchar(500) NULL COMMENT "",
+  `c4` varchar(500) NULL COMMENT "",
+  `c5` float NULL COMMENT "",
+  `c6` decimal128(38, 20) NULL COMMENT "",
+  INDEX index1_c0 (`c0`) USING BITMAP
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`, `c2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c2`, `c1`, `c0`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"bloom_filter_columns" = "c3, c4",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO low_card_duplicate (c0,c1,c2,c3,c4,c5,c6) VALUES
+	 (4028729, 'LXXX','M','shanghai','guangzhou',0.23245338,NULL),
+	 (4073406,'Osn','9YH','shanghai','beijing',0.031403933,NULL),
+	 (4113897,'','','shenzhen','shanghai',0.6216648,0.00509866038339453242),
+	 (4181781,'q39PENQ','r3QX1CB','beijing','hangzhou',0.50147545,NULL),
+	 (4185340,'n','diSfETB9w','shenzhen','shenzhen',0.38909242,0.00658175938211383748),
+	 (4192229,'tM3Qyfb','4TmE','shenzhen','beijing',NULL,0.00323685924317066320),
+	 (4237900,'LG2Y','sTR5sk1xS','beijing','shenzhen',1662326656,NULL),
+	 (null,'','c','beijing','guangzhou',0.52521884,0.00786437436465490524),
+	 (4281924,'B','6MQreuvrO','hangzhou','shenzhen',0.7812862,NULL),
+	 (4323689,'FLvkggwY','Su0mn','guangzhou','guangzhou',0.64466083,0.00310239927208628716),
+	 (4347917,'s88','','hangzhou','shenzhen',NULL,0.00128934378039352937),
+	 (4460826,'','m','hangzhou','shanghai',0.05397261,0.00749302791592826171),
+	 (4483389,'k2K','za','guangzhou','shenzhen',NULL,NULL),
+	 (39926,'bzJ4b','PGaR','shenzhen','beijing',0.7865386,NULL),
+	 (98605,'JAKI','Gm','hangzhou','shenzhen',-276141728,NULL),
+	 (121401,'W','Hhx','beijing','guangzhou',-1751479680,0.00411756405771526068),
+	 (142366,'bsE','H','hangzhou','shenzhen',NULL,0.00729408135086021218),
+	 (146633,'','','beijing','hangzhou',NULL,0.00434870393504969643),
+	 (240259,'N','3','shanghai','beijing',NULL,0.00926437309509938093),
+	 (283365,'','Pq4cV','shenzhen','hangzhou',0.44846734,0.00256190603527842786),
+	 (311714,'k','JfKNS6P','beijing','shenzhen',0.37677768,0.00818314413713589445),
+	 (321858,'3tI3','mZdXhq4WK','guangzhou','hangzhou',0.436497,0.00578794819660077497),
+	 (349669,'xxTs','KAf7','hangzhou','shanghai',0.94586104,0.00414582004597949438),
+	 (355923,'HZACTU','a','shenzhen','hangzhou',0.87821335,0.00671540005415932854),
+	 (363875,'','','shanghai','shenzhen',NULL,0.00604800585288353531),
+	 (397726,'L','f5nk2GR','guangzhou','guangzhou',0.8369341,0.00814616636756114009),
+	 (435379,'4jVE','9S748dXAD','guangzhou','shenzhen',0.65679884,0.00437136092039590662),
+	 (440655,'Kfea','EiilprDZ','shanghai','hangzhou',1121841536,0.00596289672077305643),
+	 (478129,'Xe','4rU','hangzhou','beijing',0.75556105,0.00528770752131694854),
+	 (483302,'1Rg','27bsqKE','shenzhen','beijing',0.84883356,NULL),
+	 (489046,'','','shenzhen','hangzhou',0.43289334,NULL),
+	 (2516549,'','','beijing','shenzhen',0.14729339,NULL),
+	 (2525413,'3ATb6fx','Lj','hangzhou','shenzhen',0.7737989,NULL),
+	 (2578858,'vI7jmgbw','t','hangzhou','shenzhen',-480735904,0.00023000260885998125),
+	 (2591294,'','','shenzhen','beijing',0.6668068,0.00054721899094682358),
+	 (2640932,null,'','beijing','shenzhen',NULL,0.00277427125543235886),
+	 (2648540,'','j6pfT2zK','hangzhou','beijing',0.0014816633,NULL),
+	 (2719877,'','RIs21pST','hangzhou','hangzhou',0.1515159,0.00345833220693746393),
+	 (2801219,'WU','z','shanghai','hangzhou',-1912016896,NULL),
+	 (2838958,'YfJri','THSp','hangzhou','beijing',0.6379289,0.00032909128446904401),
+	 (2888800,'','Hy','shanghai','beijing',0.4856327,0.00238101116732487170),
+	 (2924349,'','G','beijing','shanghai',0.5568987,0.00707716516765740910),
+	 (2936894,'w','vRLFJG','hangzhou','shanghai',0.9911975,0.00347808965119326695),
+	 (2942873,'IA','1','hangzhou','shanghai',NULL,0.00033297027408477875),
+	 (2950377,'','kwG','guangzhou','shenzhen',0.5930743,0.00327545643674688857),
+	 (2982678,'','w5wfxX5Fa','hangzhou','hangzhou',NULL,0.00016811152305200261),
+	 (2992145,'fl3GqO','7','guangzhou','shenzhen',0.87455606,NULL),
+	 (8016596,'a','x','beijing','beijing',0.59346026,0.00865099742347659634),
+	 (8039105,'bljCetxHp','jZs4','shenzhen','shenzhen',NULL,0.00049378896194342381),
+	 (8056923,'','8jQPJbEx','shanghai','beijing',NULL,0.00043050156236295456),
+	 (4790604,'rT7O7AtV','0Ciy1CaK','beijing','guangzhou',NULL,0.00771539250054795415),
+     (4823074,'hym6','','hangzhou','beijing',0.5755866,NULL),
+     (4829176,'','4pNHHHwHI','shenzhen','hangzhou',0.98076975,NULL),
+     (4868824,'yp400NU7','2lSNv','beijing','shanghai',0.17012751,0.00461525220091435024),
+     (4870400,'','','guangzhou','shenzhen',0.272922,0.00156899479000799491),
+     (4886927,'KIG','ah3v','shanghai','guangzhou',0.3145367,NULL),
+     (4888208,'5','8J','hangzhou','guangzhou',0.54044044,NULL),
+     (4946998,'9','Dr9mgP1Mr','beijing','beijing',-334771424,0.00760901099496228183),
+     (4954295,'','J','shanghai','guangzhou',0.26534575,0.00534481260801268287),
+     (4965213,'','wvF','shanghai','hangzhou',0.90404516,0.00107759190173502947),
+	 (4992699,'','2JX7','shenzhen','shanghai',495449792,0.00966124875693373363),
+	 (9519890,'','Tf','shenzhen','beijing',0.12186763,0.00675437090528215000),
+	 (9556978,'xy','','guangzhou','beijing',0.6189628,NULL),
+	 (9567710,'YXBNQKsy','ABRki','shenzhen','shenzhen',NULL,NULL),
+	 (9586721,'','5vyI','guangzhou','shanghai',0.09029194,0.00530568458098211348),
+	 (9611057,'C','M','shanghai','beijing',0.76435333,NULL),
+	 (9678950,'91','','hangzhou','beijing',0.9052692,0.00986150542527189621),
+	 (9703674,'v','','shanghai','beijing',NULL,0.00509169042839614472),
+	 (9766626,'f','','guangzhou','hangzhou',-334771424,0.00637944570532484311),
+	 (9832666,'Rt','isxbaW','shenzhen','shanghai',0.6379289,0.00132316278360541950),
+	 (9834869,'JFCzWcLZv','Ly','guangzhou','shenzhen',0.3132416,NULL),
+	 (9863927,'AdkOK5i','','shenzhen','beijing',-1912016896,NULL),
+	 (9869296,'H8CnOyH','M','shanghai','guangzhou',553599680,0.00666144341816466661),
+	 (9888334,'k','jy','shenzhen','shanghai',0.26394308,0.00727639777242782199),
+	 (9894091,'YBzFH','yP','shenzhen','shenzhen',0.08084528,0.00756869606537491550),
+	 (9896154,'','','hangzhou','shenzhen',0.47693557,0.00175303445490039722),
+	 (9944117,'IV','','beijing','shenzhen',0.18976498,0.00650395310526915466),
+	 (9975345,'2','yVkD','guangzhou','shenzhen',0.2773479,0.00363617544153826426),
+	 (9984300,'AjO','nfdM','shenzhen','beijing',0.06842731,0.00706409630241519048),
+	 (9997790,'n','3RnN','beijing','hangzhou',0.074448854,0.00444001051569349003);
+
+analyze table low_card_duplicate;
+set SCAN_OR_TO_UNION_THRESHOLD = 50;
+
+select count(*) from low_card_duplicate where c0 <=> 1 or c1 is null;
+
+select count(*) from low_card_duplicate where c0 is null or c1 in ('JFCzWcLZv', 'JFCzWcLZv');
+
+select count(*) from low_card_duplicate where c0 = 8056923 or c2 = 'M';
+
+select count(*) from low_card_duplicate where c0 = 1 or c2 = 'M' or c1 = 'vI7jmgbw';
+
+select count(*) from low_card_duplicate where c0 > 1 and (c2 = 'Hy' or c1 = 'vRLFJG');
+
+select count(*) from low_card_duplicate where c3 = 'shenzhen' and (c0 = 2838958 or c2 = 'M');
+
+select count(*) from low_card_duplicate where (c1 = 'vRLFJG' or c0 = abs(2924349)) and (c0 = 2838958 or c2 = 'M');
+
+select count(*) from low_card_duplicate where c3 = 'shenzhen' or c0 = 1;
+
+select count(*) from low_card_duplicate where (c0 = 1 and c1 = 'YBzFH') or (c2 = 'M' or c1 = upper('IV'));
+
+select count(*) from low_card_duplicate where c0 = 1 or c2 = 'M' or c1 = 'vI7jmgbw' or c3 = 'shenzhen';
+
+select count(*) from low_card_duplicate t1 join low_card_duplicate t2 where (t1.c0 <=> 1 or t1.c1 is null) and (t2.c0 > 1 and (t2.c2 = 'Hy' or t2.c1 = 'vRLFJG'));
