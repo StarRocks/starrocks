@@ -2559,7 +2559,16 @@ public class GlobalStateMgr {
                 sb.append(olapTable.getTableProperty().getDynamicPartitionProperty().toString());
             }
 
-            // enable storage cache && cache ttl & storage volume
+            String partitionDuration =
+                    olapTable.getTableProperty().getProperties().get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION);
+            if (partitionDuration != null) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)
+                        .append("\" = \"")
+                        .append(partitionDuration).append("\"");
+            }
+
+            // enable storage cache && cache ttl
             if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
 

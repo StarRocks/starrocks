@@ -70,6 +70,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -110,6 +111,16 @@ public class OlapScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(OlapScanNode.class);
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
+    private final List<String> selectedPartitionNames = Lists.newArrayList();
+    private final List<Long> selectedPartitionVersions = Lists.newArrayList();
+    private final HashSet<Long> scanBackendIds = new HashSet<>();
+    // The column names applied dict optimization
+    // used for explain
+    private final List<String> appliedDictStringColumns = new ArrayList<>();
+    private final List<String> unUsedOutputStringColumns = new ArrayList<>();
+    // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
+    public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
+    public List<Expr> prunedPartitionPredicates = Lists.newArrayList();
     /*
      * When the field value is ON, the storage engine can return the data directly without pre-aggregation.
      * When the field value is OFF, the storage engine needs to aggregate the data before returning to scan node.
@@ -135,28 +146,18 @@ public class OlapScanNode extends ScanNode {
     private long selectedIndexId = -1;
     private int selectedPartitionNum = 0;
     private List<Long> selectedPartitionIds = Lists.newArrayList();
-    private final List<String> selectedPartitionNames = Lists.newArrayList();
-    private final List<Long> selectedPartitionVersions = Lists.newArrayList();
     private long actualRows = 0;
-
     // List of tablets will be scanned by current olap_scan_node
     private ArrayList<Long> scanTabletIds = Lists.newArrayList();
     private boolean isFinalized = false;
-
     private boolean isSortedByKeyPerTablet = false;
-
-    private final HashSet<Long> scanBackendIds = new HashSet<>();
-
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
-    // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
-    public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
-
     private List<Expr> bucketExprs = Lists.newArrayList();
     private List<ColumnRefOperator> bucketColumns = Lists.newArrayList();
-    public List<Expr> prunedPartitionPredicates = Lists.newArrayList();
-
     // record the selected partition with the selected tablets belong to it
     private Map<Long, List<Long>> partitionToScanTabletMap;
+    // The dict id int column ids to dict string column ids
+    private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
 
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
@@ -188,6 +189,10 @@ public class OlapScanNode extends ScanNode {
         return selectedPartitionIds;
     }
 
+    public void setSelectedPartitionIds(List<Long> selectedPartitionIds) {
+        this.selectedPartitionIds = selectedPartitionIds;
+    }
+
     public List<String> getSelectedPartitionNames() {
         return selectedPartitionNames;
     }
@@ -195,9 +200,6 @@ public class OlapScanNode extends ScanNode {
     public List<Long> getSelectedPartitionVersions() {
         return selectedPartitionVersions;
     }
-
-    // The dict id int column ids to dict string column ids
-    private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
 
     public List<Expr> getPrunedPartitionPredicates() {
         return prunedPartitionPredicates;
@@ -228,10 +230,6 @@ public class OlapScanNode extends ScanNode {
         this.bucketExprs = bucketExprs;
     }
 
-    // The column names applied dict optimization
-    // used for explain
-    private final List<String> appliedDictStringColumns = new ArrayList<>();
-
     public void updateAppliedDictStringColumns(Set<Integer> appliedColumnIds) {
         for (SlotDescriptor slot : desc.getSlots()) {
             if (appliedColumnIds.contains(slot.getId().asInt())) {
@@ -239,8 +237,6 @@ public class OlapScanNode extends ScanNode {
             }
         }
     }
-
-    private final List<String> unUsedOutputStringColumns = new ArrayList<>();
 
     public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds,
                                              Set<String> aggOrPrimaryKeyTableValueColumnNames) {
@@ -339,7 +335,7 @@ public class OlapScanNode extends ScanNode {
         }
     }
 
-    // update TScanRangeLocations based on the latest olapTable tablet distributions, 
+    // update TScanRangeLocations based on the latest olapTable tablet distributions,
     // this function will make sure the version of each TScanRangeLocations doesn't change.
     public List<TScanRangeLocations> updateScanRangeLocations(List<TScanRangeLocations> locations)
             throws UserException {
@@ -432,8 +428,10 @@ public class OlapScanNode extends ScanNode {
         String schemaHashStr = String.valueOf(schemaHash);
         long visibleVersion = partition.getVisibleVersion();
         String visibleVersionStr = String.valueOf(visibleVersion);
+        boolean fillDataCache = olapTable.isCloudNativeTable() && ((LakeTable) olapTable).isEnableFillDataCache(partition);
         selectedPartitionNames.add(partition.getName());
         selectedPartitionVersions.add(visibleVersion);
+
         for (Tablet tablet : tablets) {
             long tabletId = tablet.getId();
             LOG.debug("{} tabletId={}", (logNum++), tabletId);
@@ -499,6 +497,7 @@ public class OlapScanNode extends ScanNode {
                 scanRangeLocation.setBackend_id(replica.getBackendId());
                 scanRangeLocations.addToLocations(scanRangeLocation);
                 internalRange.addToHosts(new TNetworkAddress(ip, port));
+                internalRange.setFill_data_cache(fillDataCache);
                 tabletIsNull = false;
 
                 // for CBO
@@ -871,10 +870,6 @@ public class OlapScanNode extends ScanNode {
 
         // FixMe(kks): For DUPLICATE table, isPreAggregation could always true
         this.isPreAggregation = true;
-    }
-
-    public void setSelectedPartitionIds(List<Long> selectedPartitionIds) {
-        this.selectedPartitionIds = selectedPartitionIds;
     }
 
     public void setTabletId2BucketSeq(Map<Long, Integer> tabletId2BucketSeq) {

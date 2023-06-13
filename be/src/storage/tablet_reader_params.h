@@ -57,6 +57,10 @@ struct TabletReaderParams {
     //     if config::disable_storage_page_cache is false, we use page cache
     bool use_page_cache = false;
 
+    // Allow this query to cache remote data on local disk or not.
+    // Only work for cloud native tablet(LakeTablet) now.
+    bool fill_data_cache = true;
+
     RangeStartOperation range = RangeStartOperation::GT;
     RangeEndOperation end_range = RangeEndOperation::LT;
     std::vector<OlapTuple> start_key;

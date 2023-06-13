@@ -134,6 +134,7 @@ Status ConvertedSchemaChange::init() {
     _read_params.skip_aggregation = false;
     _read_params.chunk_size = config::vector_chunk_size;
     _read_params.use_page_cache = false;
+    _read_params.fill_data_cache = false;
 
     ASSIGN_OR_RETURN(auto base_tablet_schema, _base_tablet->get_schema());
     _base_schema = ChunkHelper::convert_schema(*base_tablet_schema, _chunk_changer->get_selected_column_indexes());

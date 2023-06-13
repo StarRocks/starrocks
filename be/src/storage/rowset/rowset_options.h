@@ -67,6 +67,7 @@ public:
     RuntimeState* runtime_state = nullptr;
     RuntimeProfile* profile = nullptr;
     bool use_page_cache = false;
+    bool fill_data_cache = true;
 
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;

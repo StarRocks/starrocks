@@ -46,6 +46,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.OperationType;
@@ -57,6 +58,7 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -157,6 +159,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // foreign key constraint for mv rewrite
     private List<ForeignKeyConstraint> foreignKeyConstraints;
+
+    private PeriodDuration dataCachePartitionDuration;
 
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
@@ -387,6 +391,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildDataCachePartitionDuration() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+            dataCachePartitionDuration = TimeUtils.parseHumanReadablePeriodOrDuration(
+                    properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION));
+        }
+        return this;
+    }
+
     public void modifyTableProperties(Map<String, String> modifyProperties) {
         properties.putAll(modifyProperties);
     }
@@ -527,6 +539,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return binlogAvailabeVersions;
     }
 
+    public PeriodDuration getDataCachePartitionDuration() {
+        return dataCachePartitionDuration;
+    }
+
     public void clearBinlogAvailableVersion() {
         binlogAvailabeVersions.clear();
         for (Iterator<Map.Entry<String, String>> it = properties.entrySet().iterator(); it.hasNext();) {
@@ -565,5 +581,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildBinlogConfig();
         buildBinlogAvailableVersion();
         buildConstraint();
+        buildDataCachePartitionDuration();
     }
 }
