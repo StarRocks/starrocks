@@ -45,6 +45,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_aggregator.h"
 #include "storage/convert_helper.h"
 #include "storage/memtable.h"
@@ -548,6 +549,14 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     sc_params.new_tablet = new_tablet;
     sc_params.chunk_changer = std::make_unique<ChunkChanger>(sc_params.new_tablet->tablet_schema());
 
+    if (request.__isset.materialized_view_params && request.materialized_view_params.size() > 0) {
+        if (!request.__isset.query_options || !request.__isset.query_globals) {
+            return Status::InternalError(_alter_msg_header +
+                                         "change materialized view but query_options/query_globals is not set");
+        }
+        sc_params.chunk_changer->init_runtime_state(request.query_options, request.query_globals);
+    }
+
     // materialized column index in new schema
     std::unordered_set<int> materialized_column_idxs;
     if (request.materialized_column_req.mc_exprs.size() != 0) {
@@ -563,6 +572,11 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
                                                      sc_params.chunk_changer.get(), sc_params.materialized_params_map,
                                                      !base_tablet->delete_predicates().empty(), &sc_params.sc_sorting,
                                                      &sc_params.sc_directly, &materialized_column_idxs);
+
+    if (!status.ok()) {
+        LOG(WARNING) << _alter_msg_header << "failed to parse the request. res=" << status.get_error_msg();
+        return status;
+    }
 
     if (request.materialized_column_req.mc_exprs.size() != 0) {
         // Currently, a schema change task for materialized column is just
@@ -584,11 +598,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
 
             sc_params.chunk_changer->get_mc_exprs()->insert({it.first, ctx});
         }
-    }
-
-    if (!status.ok()) {
-        LOG(WARNING) << _alter_msg_header << "failed to parse the request. res=" << status.get_error_msg();
-        return status;
     }
 
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
