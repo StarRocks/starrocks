@@ -1,5 +1,25 @@
 # StarRocks version 3.0
 
+## 3.0.2
+
+Release date: June 13, 2023
+
+### Improvements
+
+- Predicates in a UNION query can be pushed down after the query is rewritten by an asynchronous materialized view. [#23312](https://github.com/StarRocks/starrocks/pull/23312)
+- Optimized the [auto tablet distribution policy](../table_design/Data_distribution.md#determine-the-number-of-tablets) for tables. [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- Removed the dependency of NetworkTime on system clocks, which fixes incorrect NetworkTime caused by inconsistent system clocks across servers. [#24858](https://github.com/StarRocks/starrocks/pull/24858)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Schema change for Primary Key tables is hung if data loading occurs simultaneously with schema change. [#23456](https://github.com/StarRocks/starrocks/pull/23456)
+- Queries encounter an error when the session variable `pipeline_profile_level` is set to `0`. [#23873](https://github.com/StarRocks/starrocks/pull/23873)
+- CREATE TABLE encounters an error when `cloud_native_storage_type` is set to `S3`.
+- LDAP authentication succeeds even when no password is used. [#24862](https://github.com/StarRocks/starrocks/pull/24862)
+- CANCEL LOAD fails if the table involved in the load job does not exist. [#24922](https://github.com/StarRocks/starrocks/pull/24922)
+
 ## 3.0.1
 
 Release date: June 1, 2023
