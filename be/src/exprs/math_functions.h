@@ -164,6 +164,8 @@ public:
      */
     DEFINE_VECTORIZED_FN(tanh);
 
+    DEFINE_VECTORIZED_FN(cosine_similarity);
+
     /**
     * @param columns: [DoubleColumn]
     * @return BigIntColumn

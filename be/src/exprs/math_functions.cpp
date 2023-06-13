@@ -20,6 +20,7 @@
 
 #include <cmath>
 
+#include "column/array_column.h"
 #include "column/column_helper.h"
 #include "exprs/expr.h"
 #include "util/time.h"
@@ -744,6 +745,82 @@ StatusOr<ColumnPtr> MathFunctions::rand_seed(FunctionContext* context, const Col
     }
 
     return rand(context, columns);
+}
+
+StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 2);
+
+    const Column* base = columns[0].get();
+    const Column* target = columns[1].get();
+    size_t target_size = target->size();
+    if (base->size() != target_size) {
+        return Status::InvalidArgument("cosine_similarity requires equal length arrays");
+    }
+    if (base->has_null() || target->has_null()) {
+        return Status::InvalidArgument("cosine_similarity does not support null values");
+    }
+    if (base->is_nullable()) {
+        base = down_cast<const NullableColumn*>(base)->data_column().get();
+    }
+    if (target->is_nullable()) {
+        target = down_cast<const NullableColumn*>(target)->data_column().get();
+    }
+
+    // check dimension equality.
+    const Column* base_flat = down_cast<const ArrayColumn*>(base)->elements_column().get();
+    const uint32_t* base_offset = down_cast<const ArrayColumn*>(base)->offsets().get_data().data();
+    size_t base_flat_size = base_flat->size();
+
+    const Column* target_flat = down_cast<const ArrayColumn*>(target)->elements_column().get();
+    size_t target_flat_size = target_flat->size();
+    const uint32_t* target_offset = down_cast<const ArrayColumn*>(target)->offsets().get_data().data();
+
+    if (base_flat->has_null() || target_flat->has_null()) {
+        return Status::InvalidArgument("cosine_similarity does not support null values");
+    }
+    if (base_flat->is_nullable()) {
+        base_flat = down_cast<const NullableColumn*>(base_flat)->data_column().get();
+    }
+    if (target_flat->is_nullable()) {
+        target_flat = down_cast<const NullableColumn*>(target_flat)->data_column().get();
+    }
+
+    const float* base_data_head = down_cast<const FloatColumn*>(base_flat)->get_data().data();
+    const float* target_data_head = down_cast<const FloatColumn*>(target_flat)->get_data().data();
+
+    // prepare result with nullable value.
+    ColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE_FLOAT}, false, false, target_size);
+    FloatColumn* data_result = down_cast<FloatColumn*>(result.get());
+    float* result_data = data_result->get_data().data();
+
+    for (size_t i = 0; i < target_size; i++) {
+        size_t t_dim_size = target_offset[i + 1] - target_offset[i];
+        size_t b_dim_size = base_offset[i + 1] - base_offset[i];
+        if (t_dim_size != b_dim_size) {
+            return Status::InvalidArgument("cosine_similarity requires equal length arrays in each row");
+        }
+    }
+
+    const float* target_data = target_data_head;
+    const float* base_data = base_data_head;
+    for (size_t i = 0; i < target_size; i++) {
+        float sum = 0;
+        float base_sum = 0;
+        float target_sum = 0;
+        size_t dim_size = target_offset[i + 1] - target_offset[i];
+        float result_value = 0;
+        if (dim_size != 0) {
+            for (size_t j = 0; j < dim_size; j++) {
+                sum += base_data[j] * target_data[j];
+                base_sum += base_data[j] * base_data[j];
+                target_sum += target_data[j] * target_data[j];
+            }
+            result_value = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
+        }
+        result_data[i] = result_value;
+        target_data += dim_size;
+    }
+    return result;
 }
 
 } // namespace starrocks
