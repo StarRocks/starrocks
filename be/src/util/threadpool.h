@@ -392,7 +392,7 @@ public:
     void shutdown();
 
     // Waits until all the tasks submitted via this token are completed.
-    void wait();
+    void wait(bool check = true);
 
     // Waits for all submissions using this token are complete, or until 'delta'
     // time elapses.

@@ -164,9 +164,11 @@ void ThreadPoolToken::shutdown() {
     l.unlock();
 }
 
-void ThreadPoolToken::wait() {
+void ThreadPoolToken::wait(bool check) {
     std::unique_lock l(_pool->_lock);
-    _pool->check_not_pool_thread_unlocked();
+    if (check) {
+        _pool->check_not_pool_thread_unlocked();
+    }
     _not_running_cond.wait(l, [&]() { return !is_active(); });
 }
 

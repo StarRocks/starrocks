@@ -119,7 +119,7 @@ void FlushToken::cancel(const Status& st) {
 }
 
 Status FlushToken::wait() {
-    _flush_token->wait();
+    _flush_token->wait(false);
     std::lock_guard l(_status_lock);
     return _status;
 }
