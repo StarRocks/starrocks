@@ -1,6 +1,6 @@
 # Data distribution
 
-When you create a table, you must specify the data distribution method by configuring the artitioning and bucketing strategy in a table. An appropriate data distribution method helps evenly distribute data across the nodes of your StarRocks cluster, reduces table scans, makes full use of the concurrency of the cluster, thereby improving query performance.
+When you create a table, you must specify the data distribution method by configuring the partitioning and bucketing strategy in a table. An appropriate data distribution method helps evenly distribute data across the nodes of your StarRocks cluster, reduces table scans, makes full use of the concurrency of the cluster, thereby improving query performance.
 
 > NOTICE
 >
