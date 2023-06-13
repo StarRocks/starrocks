@@ -71,6 +71,7 @@ public:
     RuntimeProfile* profile = nullptr;
 
     bool use_page_cache = false;
+    bool fill_data_cache = true;
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;

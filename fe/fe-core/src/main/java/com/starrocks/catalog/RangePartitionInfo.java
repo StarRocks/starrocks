@@ -556,5 +556,9 @@ public class RangePartitionInfo extends PartitionInfo {
         sb.append(")");
         return sb.toString();
     }
+
+    public boolean isPartitionedBy(PrimitiveType type) {
+        return partitionColumns.size() == 1 && partitionColumns.get(0).getType().getPrimitiveType() == type;
+    }
 }
 

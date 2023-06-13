@@ -126,6 +126,9 @@ struct TInternalScanRange {
   9: optional string table_name 
   10: optional i64 partition_id
   11: optional i64 row_count
+  // Allow this query to cache remote data on local disks or not.
+  // Only the cloud native tablet will respect this field.
+  12: optional bool fill_data_cache = true;
 }
 
 enum TFileFormatType {

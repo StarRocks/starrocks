@@ -71,6 +71,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.util.Arrays;
 import java.util.List;
@@ -159,6 +160,7 @@ public class PropertyAnalyzer {
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";
+    public static final String PROPERTIES_DATACACHE_PARTITION_DURATION = "datacache.partition_duration";
 
     public static final String PROPERTIES_MV_REWRITE_STALENESS_SECOND = "mv_rewrite_staleness_second";
 
@@ -909,7 +911,7 @@ public class PropertyAnalyzer {
                 }
 
                 analyzeForeignKeyUniqueConstraint(parentTable, parentColumns, analyzedTable);
-                
+
                 List<Pair<String, String>> columnRefPairs = Streams.zip(childColumns.stream(),
                         parentColumns.stream(), Pair::create).collect(Collectors.toList());
                 for (Pair<String, String> pair : columnRefPairs) {
@@ -965,5 +967,14 @@ public class PropertyAnalyzer {
         }
 
         return new StorageCacheInfo(enableStorageCache, storageCacheTtlS, enableAsyncWriteBack);
+    }
+
+    public static PeriodDuration analyzeDataCachePartitionDuration(Map<String, String> properties) throws AnalysisException {
+        String text = properties.get(PROPERTIES_DATACACHE_PARTITION_DURATION);
+        if (text == null) {
+            return null;
+        }
+        properties.remove(PROPERTIES_DATACACHE_PARTITION_DURATION);
+        return TimeUtils.parseHumanReadablePeriodOrDuration(text);
     }
 }

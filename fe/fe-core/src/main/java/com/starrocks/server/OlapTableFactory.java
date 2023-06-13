@@ -67,6 +67,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -336,6 +337,17 @@ public class OlapTableFactory implements AbstractTableFactory {
             throw new DdlException(e.getMessage());
         }
 
+        if (table.isCloudNativeTable() && properties != null) {
+            try {
+                PeriodDuration duration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+                if (duration != null) {
+                    table.setDataCachePartitionDuration(duration);
+                }
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+        }
+
         if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
             // if this is an unpartitioned table, we should analyze data property and replication num here.
             // if this is a partitioned table, there properties are already analyzed in RangePartitionDesc analyze phase.
@@ -443,7 +455,7 @@ public class OlapTableFactory implements AbstractTableFactory {
         Preconditions.checkNotNull(version);
 
         // storage_format is not necessary, remove storage_format if exist.
-        if (properties != null && properties.containsKey("storage_format")) {
+        if (properties != null) {
             properties.remove("storage_format");
         }
 
