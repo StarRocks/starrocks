@@ -86,6 +86,12 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public List<String> listPartitionNamesByValue(String databaseName, String tableName,
+                                                  List<Optional<String>> partitionValues) {
+        return hmsOps.getPartitionKeysByValue(databaseName, tableName, partitionValues);
+    }
+
+    @Override
     public Database getDb(String dbName) {
         Database database;
         try {
