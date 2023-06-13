@@ -130,6 +130,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     // The rollup job will wait all transactions before this txn id finished, then send the rollup tasks.
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
+    @SerializedName(value = "viewDefineSql")
+    private String viewDefineSql;
 
     // save all create rollup tasks
     private AgentBatchTask rollupBatchTask = new AgentBatchTask();
@@ -137,7 +139,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     public RollupJobV2(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
                        long baseIndexId, long rollupIndexId, String baseIndexName, String rollupIndexName,
                        List<Column> rollupSchema, int baseSchemaHash, int rollupSchemaHash, KeysType rollupKeysType,
-                       short rollupShortKeyColumnCount, OriginStatement origStmt) {
+                       short rollupShortKeyColumnCount, OriginStatement origStmt, String viewDefineSql) {
         super(jobId, JobType.ROLLUP, dbId, tableId, tableName, timeoutMs);
 
         this.baseIndexId = baseIndexId;
@@ -152,6 +154,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.rollupShortKeyColumnCount = rollupShortKeyColumnCount;
 
         this.origStmt = origStmt;
+        this.viewDefineSql = viewDefineSql;
     }
 
     private RollupJobV2() {
@@ -318,6 +321,10 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         tbl.setIndexMeta(rollupIndexId, rollupIndexName, rollupSchema, 0 /* initial schema version */,
                 rollupSchemaHash, rollupShortKeyColumnCount, TStorageType.COLUMN, rollupKeysType, origStmt);
+        MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(rollupIndexId);
+        Preconditions.checkNotNull(indexMeta);
+        indexMeta.setDbId(dbId);
+        indexMeta.setViewDefineSql(viewDefineSql);
         tbl.rebuildFullSchema();
     }
 

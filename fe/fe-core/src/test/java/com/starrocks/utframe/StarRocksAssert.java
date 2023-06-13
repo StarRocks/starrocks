@@ -40,6 +40,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -91,6 +92,7 @@ import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.BackendCoreStat;
 import org.apache.commons.lang.StringUtils;
@@ -293,6 +295,18 @@ public class StarRocksAssert {
     // Add materialized view to the schema
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
         return withMaterializedView(sql, false);
+    }
+
+    public void assertMVWithoutComplexExpression(String dbName, String tableName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Table table = db.getTable(tableName);
+        if (!(table instanceof OlapTable)) {
+            return;
+        }
+        OlapTable olapTable = (OlapTable) table;
+        for (MaterializedIndexMeta indexMeta : olapTable.getIndexIdToMeta().values()) {
+            Assert.assertFalse(MVUtils.containComplexExpresses(indexMeta));
+        }
     }
 
     public StarRocksAssert withMaterializedView(String sql, boolean isOnlySingleReplica) throws Exception {

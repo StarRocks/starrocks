@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
@@ -50,6 +51,11 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         if (input.getOp() instanceof LogicalOlapScanOperator) {
             LogicalOlapScanOperator scan = input.getOp().cast();
             if (scan.hasTableHints()) {
+                return false;
+            }
+            // Avoid rewrite the query repeat, add a shortcut.
+            Table table = scan.getTable();
+            if ((table instanceof MaterializedView) && ((MaterializedView) (table)).getRefreshScheme().isSync()) {
                 return false;
             }
         }
