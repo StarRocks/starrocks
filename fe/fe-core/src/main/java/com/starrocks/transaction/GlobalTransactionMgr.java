@@ -204,10 +204,12 @@ public class GlobalTransactionMgr implements Writable {
         request.setDb_id(dbId);
         request.setTxn_id(transactionId);
         request.setCommit_infos(tabletCommitInfos);
+        request.setCommit_timeout_ms(Config.external_table_commit_timeout_ms);
         TCommitRemoteTxnResponse response;
         try {
             response = FrontendServiceProxy.call(addr,
-                    Config.thrift_rpc_timeout_ms,
+                    // commit txn might take a while, so add transaction timeout
+                    Config.thrift_rpc_timeout_ms + Config.external_table_commit_timeout_ms,
                     Config.thrift_rpc_retry_times,
                     client -> client.commitRemoteTxn(request));
         } catch (Exception e) {
@@ -223,7 +225,11 @@ public class GlobalTransactionMgr implements Writable {
             }
             LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn_id: {}, error: {}", addr, transactionId,
                     errStr);
-            throw new TransactionCommitFailedException(errStr);
+            if (response.status.getStatus_code() == TStatusCode.TIMEOUT) {
+                return false;
+            } else {
+                throw new TransactionCommitFailedException(errStr);
+            }
         } else {
             LOG.info("commit remote, txn_id: {}", transactionId);
             return true;
