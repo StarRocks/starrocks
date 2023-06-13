@@ -1830,7 +1830,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         if (context.explainDesc() != null) {
-            queryStatement.setIsExplain(true, getExplainType(context.explainDesc()));
+            queryStatement.setIsExplain(true, getExplainType(context.explainDesc(), false));
         }
 
         return new InsertStmt(targetTableName, partitionNames,
@@ -1861,7 +1861,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         UpdateStmt ret = new UpdateStmt(targetTableName, assignments, fromRelations, where, ctes, createPos(context));
         if (context.explainDesc() != null) {
-            ret.setIsExplain(true, getExplainType(context.explainDesc()));
+            ret.setIsExplain(true, getExplainType(context.explainDesc(), false));
         }
         return ret;
     }
@@ -1883,7 +1883,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         DeleteStmt ret =
                 new DeleteStmt(targetTableName, partitionNames, usingRelations, where, ctes, createPos(context));
         if (context.explainDesc() != null) {
-            ret.setIsExplain(true, getExplainType(context.explainDesc()));
+            ret.setIsExplain(true, getExplainType(context.explainDesc(), false));
         }
         return ret;
     }
@@ -3777,7 +3777,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         if (context.explainDesc() != null) {
-            queryStatement.setIsExplain(true, getExplainType(context.explainDesc()));
+            queryStatement.setIsExplain(true, getExplainType(context.explainDesc(), true));
         }
 
         if (context.optimizerTrace() != null) {
@@ -6026,7 +6026,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     // ------------------------------------------- COMMON AST --------------------------------------------------------------
 
-    private static StatementBase.ExplainLevel getExplainType(StarRocksParser.ExplainDescContext context) {
+    private static StatementBase.ExplainLevel getExplainType(StarRocksParser.ExplainDescContext context, boolean isQueryStmt) {
         StatementBase.ExplainLevel explainLevel = StatementBase.ExplainLevel.NORMAL;
         if (context.LOGICAL() != null) {
             explainLevel = StatementBase.ExplainLevel.LOGICAL;
@@ -6034,6 +6034,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             explainLevel = StatementBase.ExplainLevel.VERBOSE;
         } else if (context.COSTS() != null) {
             explainLevel = StatementBase.ExplainLevel.COST;
+        } else if (context.ANALYZE() != null && isQueryStmt) {
+            explainLevel = StatementBase.ExplainLevel.ANALYZE;
         }
         return explainLevel;
     }

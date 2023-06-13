@@ -858,6 +858,9 @@ public class StmtExecutor {
         if (queryStmt instanceof QueryStatement) {
             isOutfileQuery = ((QueryStatement) queryStmt).hasOutFileClause();
         }
+        if (parsedStmt.isExplainAnalyze()) {
+            isOutfileQuery = true;
+        }
         boolean isSendFields = false;
         while (true) {
             batch = coord.getNext();
