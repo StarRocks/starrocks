@@ -89,6 +89,7 @@ UpdateManager::~UpdateManager() {
 }
 
 Status UpdateManager::init() {
+    int max_thread_cnt = CpuInfo::num_cores();
     RETURN_IF_ERROR(ThreadPoolBuilder("update_apply").build(&_apply_thread_pool));
     int max_get_thread_cnt =
             config::get_pindex_worker_count > max_thread_cnt ? config::get_pindex_worker_count : max_thread_cnt * 2;
