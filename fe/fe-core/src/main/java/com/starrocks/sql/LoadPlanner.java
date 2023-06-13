@@ -423,9 +423,12 @@ public class LoadPlanner {
                 enableAutomaticPartition = olapTable.supportedAutomaticPartition();
             }
             Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
-            dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds, canUsePipeLine,
-                    olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
-                    checkNullExprInAutoIncrement(), enableAutomaticPartition);
+            OlapTableSink tableSink =
+                    new OlapTableSink(olapTable, tupleDesc, partitionIds, canUsePipeLine, olapTable.writeQuorum(),
+                            forceReplicatedStorage || ((OlapTable) destTable).enableReplicatedStorage(),
+                            checkNullExprInAutoIncrement(), enableAutomaticPartition);
+            dataSink = tableSink;
+            tableSink.setEnableResourceGroup(ConnectContext.get().getSessionVariable().isEnableInsertResourceGroup());
             if (this.missAutoIncrementColumn == Boolean.TRUE) {
                 ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
             }

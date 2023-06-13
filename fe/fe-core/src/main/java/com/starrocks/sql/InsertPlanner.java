@@ -247,10 +247,11 @@ public class InsertPlanner {
                     }
 
                 }
-                dataSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
-                        canUsePipeline, olapTable.writeQuorum(),
-                        forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
+                OlapTableSink tableSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds, canUsePipeline,
+                        olapTable.writeQuorum(), forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
                         nullExprInAutoIncrement, enableAutomaticPartition);
+                dataSink = tableSink;
+                tableSink.setEnableResourceGroup(session.getSessionVariable().isEnableInsertResourceGroup());
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) targetTable);
             } else if (targetTable instanceof IcebergTable) {
