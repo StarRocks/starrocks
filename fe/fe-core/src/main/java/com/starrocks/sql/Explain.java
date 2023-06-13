@@ -372,7 +372,7 @@ public class Explain {
                 HashDistributionDesc desc =
                         ((HashDistributionSpec) exchange.getDistributionSpec()).getHashDistributionDesc();
                 sb.append("- EXCHANGE(SHUFFLE) ");
-                sb.append(desc.getColumns());
+                sb.append(desc.getExplainInfo());
             } else {
                 sb.append("- EXCHANGE(").append(exchange.getDistributionSpec()).append(")");
             }

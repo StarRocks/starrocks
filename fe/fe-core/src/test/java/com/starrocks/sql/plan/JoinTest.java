@@ -2442,7 +2442,8 @@ public class JoinTest extends PlanTestBase {
             String sql = "select * from ( select * from t0 right join[bucket] t1 on t0.v1 = t1.v4 ) s1 " +
                     "join[bucket] t2 on s1.v4 = t2.v7";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  |  join op: INNER JOIN (PARTITIONED)\n" +
+            assertContains(plan, "6:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 4: v4 = 7: v7");
         }

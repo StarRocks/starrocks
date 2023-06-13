@@ -386,7 +386,7 @@ public class LogicalPlanPrinter {
                 HashDistributionDesc desc =
                         ((HashDistributionSpec) exchange.getDistributionSpec()).getHashDistributionDesc();
                 String s = desc.getSourceType() == HashDistributionDesc.SourceType.LOCAL ? "LOCAL" : "SHUFFLE";
-                return new OperatorStr("EXCHANGE " + s + desc.getColumns(), step, Collections.singletonList(child));
+                return new OperatorStr("EXCHANGE " + s + desc.getExplainInfo(), step, Collections.singletonList(child));
             }
 
             return new OperatorStr("EXCHANGE " + exchange.getDistributionSpec(), step,

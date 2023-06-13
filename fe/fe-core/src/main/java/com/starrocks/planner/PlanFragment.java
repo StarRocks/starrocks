@@ -439,7 +439,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
         }
 
-        str.append(outputBuilder.toString());
+        str.append(outputBuilder);
         str.append("\n");
         str.append("  PARTITION: ").append(dataPartition.getExplainString(explainLevel)).append("\n");
         if (sink != null) {

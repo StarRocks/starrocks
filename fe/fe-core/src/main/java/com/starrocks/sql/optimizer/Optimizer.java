@@ -628,7 +628,10 @@ public class Optimizer {
     private OptExpression extractBestPlan(PhysicalPropertySet requiredProperty,
                                           Group rootGroup) {
         GroupExpression groupExpression = rootGroup.getBestExpression(requiredProperty);
-        Preconditions.checkNotNull(groupExpression, "no executable plan for this sql");
+        if (groupExpression == null) {
+            String msg = "no executable plan for this sql. group: %s. required property: %s";
+            throw new IllegalArgumentException(String.format(msg, rootGroup, requiredProperty));
+        }
         List<PhysicalPropertySet> inputProperties = groupExpression.getInputProperties(requiredProperty);
 
         List<OptExpression> childPlans = Lists.newArrayList();
