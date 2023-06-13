@@ -46,6 +46,11 @@ UNIQUE KEY(create_time, order_id)
 DISTRIBUTED BY HASH(order_id) BUCKETS 8;
 ```
 
+> **NOTICE**
+>
+> - When you create a table, you must specify the bucketing column by using the `DISTRIBUTED BY HASH` clause. For detailed information, see [bucketing](../Data_distribution.md#design-partitioning-and-bucketing-rules).
+> - Since v2.5.7, StarRocks can set the number of buckets (BUCKETS) automatically when a table is created or a partition is added. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../Data_distribution.md#determine-the-number-of-buckets).
+
 ## Usage notes
 
 - Take note of the following points about the primary key of a table:

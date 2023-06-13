@@ -88,11 +88,16 @@ create table users (
     property3 tinyint NOT NULL,
     ....
 ) PRIMARY KEY (user_id)
-DISTRIBUTED BY HASH(user_id) BUCKETS 4
+DISTRIBUTED BY HASH(user_id)
 ORDER BY(`address`,`last_active`)
 PROPERTIES("replication_num" = "3",
 "enable_persistent_index" = "true");
 ```
+
+> **NOTICE**
+>
+> - When you create a table, you must specify the bucketing column by using the `DISTRIBUTED BY HASH` clause. For detailed information, see [bucketing](../Data_distribution.md#design-partitioning-and-bucketing-rules).
+> - Since v2.5.7, StarRocks can set the number of buckets (BUCKETS) automatically when a table is created or a partition is added. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../Data_distribution.md#determine-the-number-of-buckets).
 
 ## Usage notes
 
