@@ -88,6 +88,7 @@ Status TabletSinkColocateSender::send_chunk(const OlapTableSchemaParam* schema,
             }
         }
     }
+    return Status::OK();
 }
 
 Status TabletSinkColocateSender::try_open(RuntimeState* state) {
