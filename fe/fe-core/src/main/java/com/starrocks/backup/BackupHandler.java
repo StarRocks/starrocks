@@ -58,7 +58,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AbstractBackupStmt;

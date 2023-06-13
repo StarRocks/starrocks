@@ -40,8 +40,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.meta.MetaContext;
-import com.starrocks.persist.metablock.SRMetaBlockID;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -318,42 +316,5 @@ public class LoadManagerTest {
         // recover config
         Config.label_keep_max_second = origLabelKeepMaxSecond;
         Config.label_keep_max_num = origLabelKeepMaxNum;
-    }
-
-    @Test
-    public void testLoadJsonImage(@Mocked GlobalStateMgr globalStateMgr,
-                                  @Injectable Database db) throws Exception {
-        new Expectations() {
-            {
-                globalStateMgr.getDb(anyLong);
-                result = db;
-            }
-        };
-
-        LoadMgr loadManager = new LoadMgr(new LoadJobScheduler());
-        LoadJob loadJob1 = new InsertLoadJob("job0", 0L, 1L, System.currentTimeMillis(), "", "");
-        loadJob1.id = 1L;
-        loadManager.replayCreateLoadJob(loadJob1);
-
-        LoadJob loadJob2 = new BrokerLoadJob(1L, "job1", null, null, null);
-        loadJob2.id = 2L;
-        loadManager.replayCreateLoadJob(loadJob2);
-
-        LoadJob loadJob3 = new SparkLoadJob(2L, "job3", null, null);
-        loadJob3.id = 3L;
-        loadManager.replayCreateLoadJob(loadJob3);
-
-        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-
-        loadManager.saveLoadJobsV2JsonFormat(image.getDataOutputStream());
-
-        LoadMgr loadManager2 = new LoadMgr(new LoadJobScheduler());
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream(), SRMetaBlockID.LOAD_MGR);
-        loadManager2.loadLoadJobsV2JsonFormat(reader);
-        reader.close();
-
-        Map<Long, LoadJob> idToLoadJob = Deencapsulation.getField(loadManager2, "idToLoadJob");
-
-        Assert.assertEquals(3, idToLoadJob.size());
     }
 }

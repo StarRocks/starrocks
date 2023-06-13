@@ -33,9 +33,7 @@ import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -551,42 +549,6 @@ public class AnalyzeMgr implements Writable {
         return checksum;
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-
-        List<NativeAnalyzeStatus> analyzeStatuses = getAnalyzeStatusMap().values().stream().
-                filter(AnalyzeStatus::isNative).
-                map(status -> (NativeAnalyzeStatus) status).distinct().collect(Collectors.toList());
-
-        int numJson = 1 + analyzeJobMap.size()
-                + 1 + analyzeStatuses.size()
-                + 1 + basicStatsMetaMap.size()
-                + 1 + histogramStatsMetaMap.size();
-
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.ANALYZE_MGR, numJson);
-
-        writer.writeJson(analyzeJobMap.size());
-        for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {
-            writer.writeJson(analyzeJob);
-        }
-
-        writer.writeJson(analyzeStatuses.size());
-        for (AnalyzeStatus analyzeStatus : analyzeStatuses) {
-            writer.writeJson(analyzeStatus);
-        }
-
-        writer.writeJson(basicStatsMetaMap.size());
-        for (BasicStatsMeta basicStatsMeta : basicStatsMetaMap.values()) {
-            writer.writeJson(basicStatsMeta);
-        }
-
-        writer.writeJson(histogramStatsMetaMap.size());
-        for (HistogramStatsMeta histogramStatsMeta : histogramStatsMetaMap.values()) {
-            writer.writeJson(histogramStatsMeta);
-        }
-
-        writer.close();
-    }
-
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         int analyzeJobSize = reader.readInt();
         for (int i = 0; i < analyzeJobSize; ++i) {
@@ -596,7 +558,7 @@ public class AnalyzeMgr implements Writable {
 
         int analyzeStatusSize = reader.readInt();
         for (int i = 0; i < analyzeStatusSize; ++i) {
-            NativeAnalyzeStatus analyzeStatus = reader.readJson(NativeAnalyzeStatus.class);
+            AnalyzeStatus analyzeStatus = reader.readJson(AnalyzeStatus.class);
             replayAddAnalyzeStatus(analyzeStatus);
         }
 

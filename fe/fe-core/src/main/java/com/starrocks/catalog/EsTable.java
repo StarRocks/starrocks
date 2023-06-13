@@ -44,10 +44,6 @@ import com.starrocks.external.elasticsearch.EsMajorVersion;
 import com.starrocks.external.elasticsearch.EsMetaStateTracker;
 import com.starrocks.external.elasticsearch.EsRestClient;
 import com.starrocks.external.elasticsearch.EsTablePartitions;
-import com.starrocks.connector.elasticsearch.EsMajorVersion;
-import com.starrocks.connector.elasticsearch.EsMetaStateTracker;
-import com.starrocks.connector.elasticsearch.EsRestClient;
-import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TEsTable;
@@ -503,16 +499,17 @@ public class EsTable extends Table implements GsonPostProcessable {
                 maxDocValueFields = DEFAULT_MAX_DOCVALUE_FIELDS;
             }
         }
-        if (tableContext.containsKey(KEY_WAN_ONLY)) {
-            wanOnly = Boolean.parseBoolean(tableContext.get(KEY_WAN_ONLY));
+        if (tableContext.containsKey(WAN_ONLY)) {
+            wanOnly = Boolean.parseBoolean(tableContext.get(WAN_ONLY));
         } else {
             wanOnly = false;
         }
-        if (tableContext.containsKey(KEY_ES_NET_SSL)) {
-            sslEnabled = Boolean.parseBoolean(tableContext.get(KEY_ES_NET_SSL));
+        if (tableContext.containsKey(ES_NET_SSL)) {
+            sslEnabled = Boolean.parseBoolean(tableContext.get(ES_NET_SSL));
         } else {
             sslEnabled = false;
         }
+
     }
 
     public String getHosts() {

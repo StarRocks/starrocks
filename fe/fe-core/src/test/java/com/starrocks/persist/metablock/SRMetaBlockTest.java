@@ -317,9 +317,8 @@ public class SRMetaBlockTest {
         dos.close();
 
         DataInputStream dis = openInput("blockid");
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, SRMetaBlockID.COMPACTION_MGR);
-        Assert.assertTrue(true);
-        Assert.assertEquals(reader.getHeader().getId(), SRMetaBlockID.CATALOG_MGR);
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
+        Assert.assertEquals(reader.getHeader().getSrMetaBlockID(), SRMetaBlockID.CATALOG_MGR);
     }
 
     @Test

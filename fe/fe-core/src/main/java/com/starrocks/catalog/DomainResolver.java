@@ -38,8 +38,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.mysql.privilege.Auth;
 import org.apache.logging.log4j.LogManager;

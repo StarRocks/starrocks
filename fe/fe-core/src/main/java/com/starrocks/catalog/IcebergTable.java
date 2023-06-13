@@ -59,6 +59,7 @@ public class IcebergTable extends Table {
     private static final String JSON_KEY_RESOURCE_NAME = "resource";
     private static final String JSON_KEY_ICEBERG_PROPERTIES = "icebergProperties";
 
+    private org.apache.iceberg.Table nativeTable; // actual iceberg table
     private String catalogName;
     @SerializedName(value = "dn")
     private String remoteDbName;

@@ -57,7 +57,6 @@ import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -196,14 +195,14 @@ public class RoutineLoadMgr implements Writable {
         // check load auth, in new RBAC framework, create routine load will be checked in PrivilegeCheckerV2
         if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                                                                         createRoutineLoadStmt.getDBName(),
-                                                                         createRoutineLoadStmt.getTableName(),
-                                                                         PrivPredicate.LOAD)) {
+                    createRoutineLoadStmt.getDBName(),
+                    createRoutineLoadStmt.getTableName(),
+                    PrivPredicate.LOAD)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
-                                                    ConnectContext.get().getQualifiedUser(),
-                                                    ConnectContext.get().getRemoteIP(),
-                                                    createRoutineLoadStmt.getDBName(),
-                                                    createRoutineLoadStmt.getTableName());
+                        ConnectContext.get().getQualifiedUser(),
+                        ConnectContext.get().getRemoteIP(),
+                        createRoutineLoadStmt.getDBName(),
+                        createRoutineLoadStmt.getTableName());
             }
         }
         RoutineLoadJob routineLoadJob = null;

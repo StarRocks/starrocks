@@ -37,7 +37,7 @@ import com.starrocks.load.ExportJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
-import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
@@ -263,7 +263,7 @@ public class PrivilegeCheckerV2 {
         RoutineLoadJob job = null;
         String tableName = null;
         try {
-            job = context.getGlobalStateMgr().getRoutineLoadManager().getJob(dbName, labelName);
+            job = context.getGlobalStateMgr().getRoutineLoadMgr().getJob(dbName, labelName);
         } catch (MetaNotFoundException e) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ROUTINELODE_JOB_NOT_FOUND, labelName);
         }
@@ -428,7 +428,7 @@ public class PrivilegeCheckerV2 {
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_DB_NOT_FOUND, dbName);
         }
-        List<LoadJob> loadJobs = globalStateMgr.getLoadManager().
+        List<LoadJob> loadJobs = globalStateMgr.getLoadMgr().
                 getLoadJobsByDb(db.getId(), label, false);
         List<String> forbiddenInsertTableList = new ArrayList<>();
         List<String> forbiddenUseResourceList = new ArrayList<>();
@@ -1023,7 +1023,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitExecuteAsStatement(ExecuteAsStmt statement, ConnectContext context) {
-            AuthorizationManager authorizationManager = context.getGlobalStateMgr().getAuthorizationManager();
+            AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
             if (!authorizationManager.canExecuteAs(context, statement.getToUser())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "IMPERSONATE");
             }
@@ -1110,7 +1110,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext context) {
-            AuthorizationManager authorizationManager = context.getGlobalStateMgr().getAuthorizationManager();
+            AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
             if (!authorizationManager.allowGrant(context, stmt.getObjectType(), stmt.getPrivilegeTypes(), stmt.getObjectList())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
@@ -1124,7 +1124,7 @@ public class PrivilegeCheckerV2 {
                     && !PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             } else if (statement.getRole() != null) {
-                AuthorizationManager authorizationManager = context.getGlobalStateMgr().getAuthorizationManager();
+                AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
                 try {
                     List<String> roleNames = authorizationManager.getRoleNamesByUser(context.getCurrentUserIdentity());
                     if (!roleNames.contains(statement.getRole())

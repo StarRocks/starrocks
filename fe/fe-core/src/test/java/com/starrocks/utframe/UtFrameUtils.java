@@ -744,7 +744,7 @@ public class UtFrameUtils {
         private DataOutputBuffer buffer;
         private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
-        protected static void setUpImageVersion() {
+        public static void setUpImageVersion() {
             MetaContext metaContext = new MetaContext();
             metaContext.setMetaVersion(FeMetaVersion.VERSION_CURRENT);
             metaContext.setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_CURRENT);

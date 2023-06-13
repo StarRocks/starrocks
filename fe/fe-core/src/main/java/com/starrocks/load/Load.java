@@ -56,7 +56,6 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.Status;
 import com.starrocks.catalog.Column;
@@ -108,13 +107,14 @@ public class Load {
      * 2. should not be bitmap/hll/percentile/json/varchar column
      * 3. should not be primary key
      * 4. table should be primary key model
+     *
      * @param mergeCondition
      * @param table
      * @return
      * @throws UserException
      */
     public static void checkMergeCondition(String mergeCondition, OlapTable table,
-            boolean missAutoIncrementColumn) throws DdlException {
+                                           boolean missAutoIncrementColumn) throws DdlException {
         if (mergeCondition == null || mergeCondition.isEmpty()) {
             return;
         }
@@ -565,7 +565,7 @@ public class Load {
     }
 
     public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
-             List<Boolean> missAutoIncrementColumn) throws UserException {
+                                                      List<Boolean> missAutoIncrementColumn) throws UserException {
         Set<String> specified = columnExprs.stream().map(desc -> desc.getColumnName()).collect(Collectors.toSet());
         List<Column> ret = new ArrayList<>();
         for (Column col : tbl.getBaseSchema()) {

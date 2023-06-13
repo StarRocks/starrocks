@@ -66,8 +66,6 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.load.streamload.StreamLoadInfo;
-import com.starrocks.load.streamload.StreamLoadMgr;
-import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -1100,14 +1098,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
         routineLoadTaskInfo.setTxnStatus(txnStatus);
 
-        if (TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr) == 
-                                            TransactionState.TxnStatusChangeReason.FILTERED_ROWS) {
+        if (TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr) ==
+                TransactionState.TxnStatusChangeReason.FILTERED_ROWS) {
             updateState(JobState.PAUSED,
-                        new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR, txnStatusChangeReasonStr),
-                        false /* not replay */);
+                    new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR, txnStatusChangeReasonStr),
+                    false /* not replay */);
             LOG.warn(
                     "routine load task [job name {}, task id {}] aborted because of {}, change state to PAUSED",
-                     name, routineLoadTaskInfo.getId().toString(), txnStatusChangeReasonStr);
+                    name, routineLoadTaskInfo.getId().toString(), txnStatusChangeReasonStr);
             return;
         }
 

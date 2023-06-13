@@ -241,7 +241,7 @@ public class TransactionLoadAction extends RestBaseAction {
         if (op.equalsIgnoreCase(LOAD) && channelIdStr != null) {
             int channelId = Integer.parseInt(channelIdStr);
             TransactionResult resp = new TransactionResult();
-            TNetworkAddress redirectAddr = GlobalStateMgr.getCurrentState().getStreamLoadManager().executeLoadTask(
+            TNetworkAddress redirectAddr = GlobalStateMgr.getCurrentState().getStreamLoadMgr().executeLoadTask(
                     label, channelId, request.getRequest().headers(), resp);
             if (!resp.stateOK() || resp.containMsg()) {
                 sendResult(request, response, resp);

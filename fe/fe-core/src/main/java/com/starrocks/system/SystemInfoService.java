@@ -63,13 +63,11 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DropComputeNodeLog;
-import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
@@ -98,7 +96,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class SystemInfoService implements GsonPostProcessable {
+public class SystemInfoService {
     private static final Logger LOG = LogManager.getLogger(SystemInfoService.class);
     public static final String DEFAULT_CLUSTER = "default_cluster";
 
@@ -843,18 +841,6 @@ public class SystemInfoService implements GsonPostProcessable {
         String s = GsonUtils.GSON.toJson(data);
         Text.writeString(dos, s);
         return checksum;
-    }
-
-    @Override
-    public void gsonPostProcess() throws IOException {
-        // Add compute node to DEFAULT_WAREHOUSE
-        final Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-        if (warehouse != null) {
-            for (ComputeNode computeNode : idToComputeNodeRef.values()) {
-                warehouse.getAnyAvailableCluster().addNode(computeNode.getId());
-            }
-        }
     }
 
     private static class SerializeData {

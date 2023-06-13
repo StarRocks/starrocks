@@ -29,8 +29,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyPartitionInfo;
-import com.starrocks.persist.metablock.SRMetaBlockID;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;

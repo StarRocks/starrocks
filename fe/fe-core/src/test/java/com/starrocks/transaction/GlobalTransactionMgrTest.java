@@ -59,8 +59,6 @@ import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadTaskInfo;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.metablock.SRMetaBlockID;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TLoadSourceType;
@@ -119,7 +117,6 @@ public class GlobalTransactionMgrTest {
 
         masterTransMgr = masterGlobalStateMgr.getGlobalTransactionMgr();
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
-        slaveTransMgr.setEditLog(slaveGlobalStateMgr.getEditLog());
     }
 
     @Test
@@ -744,7 +741,7 @@ public class GlobalTransactionMgrTest {
         transTablets.add(tabletCommitInfo2);
         transTablets.add(tabletCommitInfo3);
         masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets,
-                        Lists.newArrayList(), null);
+                Lists.newArrayList(), null);
         TransactionState transactionState = fakeEditLog.getTransaction(transactionId);
         assertEquals(TransactionStatus.PREPARED, transactionState.getTransactionStatus());
 

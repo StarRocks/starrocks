@@ -41,7 +41,6 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
-import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -69,8 +68,6 @@ import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
-import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -86,7 +83,6 @@ import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
-import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTaskStmt;
 import com.starrocks.sql.ast.DropUserStmt;
@@ -106,7 +102,6 @@ import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
-import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
@@ -127,7 +122,6 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 public class DDLStmtExecutor {
 
@@ -168,12 +162,10 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateDbStatement(CreateDbStmt stmt, ConnectContext context) {
             String fullDbName = stmt.getFullDbName();
-            String catalogName = stmt.getCatalogName();
-            Map<String, String> properties = stmt.getProperties();
             boolean isSetIfNotExists = stmt.isSetIfNotExists();
             ErrorReport.wrapWithRuntimeException(() -> {
                 try {
-                    context.getGlobalStateMgr().getMetadataMgr().createDb(catalogName, fullDbName, properties);
+                    context.getGlobalStateMgr().getMetadata().createDb(fullDbName);
                 } catch (AlreadyExistsException e) {
                     if (isSetIfNotExists) {
                         LOG.info("create database[{}] which already exists", fullDbName);
@@ -188,11 +180,10 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropDbStatement(DropDbStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                String catalogName = stmt.getCatalogName();
                 String dbName = stmt.getDbName();
                 boolean isForceDrop = stmt.isForceDrop();
                 try {
-                    context.getGlobalStateMgr().getMetadataMgr().dropDb(catalogName, dbName, isForceDrop);
+                    context.getGlobalStateMgr().getMetadata().dropDb(dbName, isForceDrop);
                 } catch (MetaNotFoundException e) {
                     if (stmt.isSetIfExists()) {
                         LOG.info("drop database[{}] which does not exist", dbName);
@@ -241,7 +232,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateTableStatement(CreateTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getMetadataMgr().createTable(stmt);
+                context.getGlobalStateMgr().createTable(stmt);
             });
             return null;
         }
@@ -257,7 +248,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropTableStatement(DropTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getMetadataMgr().dropTable(stmt);
+                context.getGlobalStateMgr().dropTable(stmt);
             });
             return null;
         }
@@ -495,17 +486,6 @@ public class DDLStmtExecutor {
                         stmt.getPropertyPairList());
 
             });
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement stmt,
-                                                                     ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuthenticationMgr().createSecurityIntegration(
-                        stmt.getName(), stmt.getPropertyMap());
-            });
-
             return null;
         }
 
@@ -873,39 +853,6 @@ public class DDLStmtExecutor {
                         "the related task will be deleted automatically.");
             }
             taskManager.dropTasks(Collections.singletonList(task.getId()), false);
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitCreateStorageVolumeStatement(CreateStorageVolumeStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() ->
-                    context.getGlobalStateMgr().getStorageVolumeMgr().createStorageVolume(stmt)
-            );
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitAlterStorageVolumeStatement(AlterStorageVolumeStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() ->
-                    context.getGlobalStateMgr().getStorageVolumeMgr().updateStorageVolume(stmt)
-            );
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitDropStorageVolumeStatement(DropStorageVolumeStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() ->
-                    context.getGlobalStateMgr().getStorageVolumeMgr().removeStorageVolume(stmt)
-            );
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt stmt,
-                                                                   ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() ->
-                    context.getGlobalStateMgr().getStorageVolumeMgr().setDefaultStorageVolume(stmt)
-            );
             return null;
         }
     }

@@ -53,7 +53,6 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;

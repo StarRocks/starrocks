@@ -1115,12 +1115,7 @@ public class EditLog {
     }
 
     public void logCreateDb(Database db) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            CreateDbInfo createDbInfo = new CreateDbInfo(db.getId(), db.getFullName());
-            logJsonObject(OperationType.OP_CREATE_DB_V2, createDbInfo);
-        } else {
-            logEdit(OperationType.OP_CREATE_DB, db);
-        }
+        logEdit(OperationType.OP_CREATE_DB, db);
     }
 
     public void logDropDb(DropDbInfo dropDbInfo) {

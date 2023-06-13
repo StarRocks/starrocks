@@ -18,7 +18,6 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.starrocks.GrantsTo;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;

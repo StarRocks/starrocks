@@ -29,8 +29,6 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.GlobalStateMgr;
@@ -671,7 +669,6 @@ public class AuthenticationMgr {
         // mark data is loaded
         this.isLoaded = true;
         this.userNameToProperty = ret.userNameToProperty;
-        this.nameToSecurityIntegrationMap = ret.nameToSecurityIntegrationMap;
         this.userToAuthenticationInfo = ret.userToAuthenticationInfo;
     }
 }

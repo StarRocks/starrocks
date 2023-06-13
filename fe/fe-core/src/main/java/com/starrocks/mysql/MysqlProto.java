@@ -35,9 +35,8 @@
 package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
-import com.starrocks.authentication.AuthenticationMgr;
 import com.google.common.collect.Lists;
-import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -76,7 +75,7 @@ public class MysqlProto {
 
         // In new RBAC privilege framework
         if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-            getAuthenticationMgr authenticationManager = context.getGlobalStateMgr().getAuthenticationMgr();
+            AuthenticationMgr authenticationManager = context.getGlobalStateMgr().getAuthenticationMgr();
             UserIdentity currentUser = null;
             if (Config.enable_auth_check) {
                 currentUser = authenticationManager.checkPassword(user, remoteIp, scramble, randomString);

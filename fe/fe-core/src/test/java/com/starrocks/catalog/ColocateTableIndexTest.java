@@ -17,8 +17,6 @@ package com.starrocks.catalog;
 
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.persist.metablock.SRMetaBlockID;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -44,13 +42,13 @@ public class ColocateTableIndexTest {
 
     /**
      * [
-     *   [10002.10006, 10002_group1, 10004, 10016, 4, 1, int(11), true],
-     *   [10026.10030, 10026_group2, 10028, 4, 1, int(11), true]
-     *  ]
+     * [10002.10006, 10002_group1, 10004, 10016, 4, 1, int(11), true],
+     * [10026.10030, 10026_group2, 10028, 4, 1, int(11), true]
+     * ]
      * ->
      * {
-     *   'group1': [10002.10006, 10002_group1, 10004, 10016, 4, 1, int(11), true],
-     *   'group2': [10026.10030, 10026_group2, 10028, 4, 1, int(11), true]
+     * 'group1': [10002.10006, 10002_group1, 10004, 10016, 4, 1, int(11), true],
+     * 'group2': [10026.10030, 10026_group2, 10028, 4, 1, int(11), true]
      * }
      */
     private Map<String, List<String>> groupByName(List<List<String>> lists) {

@@ -87,8 +87,6 @@ import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.streamload.StreamLoadInfo;
-import com.starrocks.load.streamload.StreamLoadMgr;
-import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -1081,7 +1079,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         if (globalStateMgr.isUsingNewPrivilege()) {
             UserIdentity currentUser =
-                    globalStateMgr.getAuthenticationManager().checkPlainPassword(user, clientIp, passwd);
+                    globalStateMgr.getAuthenticationMgr().checkPlainPassword(user, clientIp, passwd);
             if (currentUser == null) {
                 throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
             }

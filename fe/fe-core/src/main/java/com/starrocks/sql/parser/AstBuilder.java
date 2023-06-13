@@ -1198,9 +1198,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
         }
         QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
-        AlterClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
+        AlterClause alterClause = new AlterViewClause(colWithComments, queryStatement);
 
-        return new AlterViewStmt(targetTableName, alterClause, createPos(context));
+        return new AlterViewStmt(targetTableName, alterClause);
     }
 
     @Override

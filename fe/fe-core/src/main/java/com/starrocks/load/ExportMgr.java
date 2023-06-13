@@ -54,7 +54,6 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.qe.ConnectContext;
@@ -155,6 +154,7 @@ public class ExportMgr {
         }
         return matchedJob;
     }
+
     public void cancelExportJob(CancelExportStmt stmt) throws UserException {
         ExportJob matchedJob = getExportJob(stmt.getDbName(), stmt.getQueryId());
         UUID queryId = stmt.getQueryId();
@@ -165,8 +165,8 @@ public class ExportMgr {
             // check auth
             TableName tableName = matchedJob.getTableName();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                                                                         tableName.getDb(), tableName.getTbl(),
-                                                                         PrivPredicate.SELECT)) {
+                    tableName.getDb(), tableName.getTbl(),
+                    PrivPredicate.SELECT)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, Privilege.SELECT_PRIV);
             }
         }
