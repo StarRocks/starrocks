@@ -39,7 +39,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
@@ -380,7 +379,7 @@ public class AlterJobV2Test {
         UtFrameUtils.PseudoImage alterImage = new UtFrameUtils.PseudoImage();
         GlobalStateMgr.getCurrentState().getAlterJobMgr().save(alterImage.getDataOutputStream());
 
-        SRMetaBlockReader reader = new SRMetaBlockReader(alterImage.getDataInputStream(), SRMetaBlockID.ALTER_MGR);
+        SRMetaBlockReader reader = new SRMetaBlockReader(alterImage.getDataInputStream());
         GlobalStateMgr.getCurrentState().getAlterJobMgr().load(reader);
         reader.close();
 
