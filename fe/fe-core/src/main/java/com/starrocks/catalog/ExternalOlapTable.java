@@ -298,7 +298,6 @@ public class ExternalOlapTable extends OlapTable {
             throws DdlException, IOException {
         // no meta changed since last time, do nothing
         if (lastExternalMeta != null && meta.compareTo(lastExternalMeta) == 0) {
-            LOG.info("no meta changed since last time, do nothing");
             return;
         }
 
@@ -313,8 +312,6 @@ public class ExternalOlapTable extends OlapTable {
         db.writeLock();
 
         try {
-            lastExternalMeta = meta;
-
             state = OlapTableState.valueOf(meta.getState());
             baseIndexId = meta.getBase_index_id();
             colocateGroup = meta.getColocate_group();
@@ -519,6 +516,7 @@ public class ExternalOlapTable extends OlapTable {
                     backend.setBackendState(BackendState.values()[backendMeta.getState()]);
                 }
             }
+            lastExternalMeta = meta;
         } finally {
             db.writeUnlock();
         }
