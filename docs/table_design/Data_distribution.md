@@ -129,7 +129,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 In this example, `site_access` uses `site_id` as the bucketing column because this column is always used as a filter in queries. When the bucketing column is used as a filter in queries, StarRocks only scans the relevant tablets, which greatly improves query performance.
 
-Suppose each partition of table `site_access` has 10 buckets. In the following query, 9 out of 10 buckets are pruned, so the system only needs to scan 1/10 of the data in the `site_access` table:
+Suppose each partition of table `site_access` has 10 buckets. In the following query, 9 out of 10 buckets are pruned, so StarRocks only needs to scan 1/10 of the data in the `site_access` table:
 
 ```SQL
 select sum(pv)
