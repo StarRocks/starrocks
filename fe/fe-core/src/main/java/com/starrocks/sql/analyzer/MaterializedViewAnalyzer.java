@@ -356,7 +356,7 @@ public class MaterializedViewAnalyzer {
 
             List<Column> mvColumns = Lists.newArrayList();
             for (int i = 0; i < relationFields.size(); ++i) {
-                Type type = AnalyzerUtils.transformTypeForMv(relationFields.get(i).getType());
+                Type type = AnalyzerUtils.transformTableColumnType(relationFields.get(i).getType(), false);
                 Column column = new Column(columnNames.get(i), type, relationFields.get(i).isNullable());
                 // set default aggregate type, look comments in class Column
                 column.setAggregationType(AggregateType.NONE, false);
