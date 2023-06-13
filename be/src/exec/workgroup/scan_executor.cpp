@@ -89,4 +89,15 @@ int ScanExecutor::submit(void* (*fn)(void*), void* args) {
     return _task_queue->try_offer(std::move(task)) ? 0 : 1;
 }
 
+Status ScanExecutor::submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri) {
+    auto wg = WorkGroupManager::instance()->get_default_mv_workgroup();
+    ScanTask task(wg.get(), [=]() { r->run(); });
+    return _task_queue->try_offer(std::move(task)) ? Status::OK() : Status::ResourceBusy("enqueue failed");
+}
+
+std::unique_ptr<ThreadPoolToken> ScanExecutor::new_token(ThreadPool::ExecutionMode mode) {
+    // TODO: should not bypass the task queue
+    return _thread_pool->new_token(mode);
+}
+
 } // namespace starrocks::workgroup

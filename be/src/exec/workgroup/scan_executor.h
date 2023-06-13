@@ -37,6 +37,9 @@ public:
 
     bool submit(ScanTask task);
     int submit(void* (*fn)(void*), void* args) override;
+    Status submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
+
+    std::unique_ptr<ThreadPoolToken> new_token(ThreadPool::ExecutionMode mode);
 
 private:
     void worker_thread();

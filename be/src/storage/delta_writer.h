@@ -147,7 +147,7 @@ public:
 
     Status get_err_status() const;
 
-    const FlushStatistic& get_flush_stats() const { return _flush_queue->get_stats(); }
+    const FlushStatistic& get_flush_stats() const { return _flush_token->get_stats(); }
 
 private:
     DeltaWriter(DeltaWriterOptions opt, MemTracker* parent, StorageEngine* storage_engine);
@@ -184,8 +184,8 @@ private:
     std::unique_ptr<MemTableSink> _mem_table_sink;
     const TabletSchema* _tablet_schema;
 
-    // std::unique_ptr<FlushToken> _flush_token;
-    std::unique_ptr<FlushQueue> _flush_queue;
+    std::unique_ptr<FlushToken> _flush_token;
+    // std::unique_ptr<FlushQueue> _flush_queue;
     std::unique_ptr<ReplicateToken> _replicate_token;
     bool _with_rollback_log;
     // initial value is max value

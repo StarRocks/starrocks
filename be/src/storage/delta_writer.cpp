@@ -32,6 +32,7 @@
 #include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
+#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -54,14 +55,14 @@ DeltaWriter::DeltaWriter(DeltaWriterOptions opt, MemTracker* mem_tracker, Storag
           _mem_table(nullptr),
           _mem_table_sink(nullptr),
           _tablet_schema(nullptr),
-          _flush_queue(nullptr),
+          _flush_token(nullptr),
           _replicate_token(nullptr),
           _with_rollback_log(true) {}
 
 DeltaWriter::~DeltaWriter() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-    if (_flush_queue != nullptr) {
-        _flush_queue->close();
+    if (_flush_token != nullptr) {
+        _flush_token->shutdown();
     }
     if (_replicate_token != nullptr) {
         _replicate_token->shutdown();
@@ -269,11 +270,13 @@ Status DeltaWriter::_init() {
     }
     _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_rowset_writer.get());
     _tablet_schema = writer_context.tablet_schema;
-    _flush_queue = std::make_unique<FlushQueue>();
+    ThreadPool::ExecutionMode mode = ThreadPool::ExecutionMode::SERIAL;
     if (_opt.enable_resource_group) {
-        _flush_queue->init(ExecEnv::GetInstance()->scan_executor());
+        // _flush_queue->init(ExecEnv::GetInstance()->scan_executor());
+        _flush_token = std::make_unique<FlushToken>(ExecEnv::GetInstance()->scan_executor()->new_token(mode));
     } else {
-        _flush_queue->init(_storage_engine->memtable_flush_executor()->get_executor());
+        _flush_token = _storage_engine->memtable_flush_executor()->create_flush_token();
+        // _flush_queue->init(_storage_engine->memtable_flush_executor()->get_executor());
     }
     if (_replica_state == Primary && _opt.replicas.size() > 1) {
         _replicate_token = _storage_engine->segment_replicate_executor()->create_replicate_token(&_opt);
@@ -424,7 +427,7 @@ Status DeltaWriter::_flush_memtable_async(bool eos) {
         if (_replicate_token != nullptr) {
             // Although there maybe no data, but we still need send eos to seconary replica
             auto replicate_token = _replicate_token.get();
-            return _flush_queue->submit(std::move(_mem_table), eos,
+            return _flush_token->submit(std::move(_mem_table), eos,
                                         [replicate_token](std::unique_ptr<SegmentPB> seg, bool eos) {
                                             auto st = replicate_token->submit(std::move(seg), eos);
                                             if (!st.ok()) {
@@ -434,12 +437,12 @@ Status DeltaWriter::_flush_memtable_async(bool eos) {
                                         });
         } else {
             if (_mem_table != nullptr) {
-                return _flush_queue->submit(std::move(_mem_table), eos, nullptr);
+                return _flush_token->submit(std::move(_mem_table), eos, nullptr);
             }
         }
     } else if (_replica_state == Peer) {
         if (_mem_table != nullptr) {
-            return _flush_queue->submit(std::move(_mem_table), eos, nullptr);
+            return _flush_token->submit(std::move(_mem_table), eos, nullptr);
         }
     }
     return Status::OK();
@@ -447,7 +450,7 @@ Status DeltaWriter::_flush_memtable_async(bool eos) {
 
 Status DeltaWriter::_flush_memtable() {
     RETURN_IF_ERROR(_flush_memtable_async());
-    return _flush_queue->wait();
+    return _flush_token->wait();
 }
 
 void DeltaWriter::_reset_mem_table() {
@@ -496,7 +499,7 @@ Status DeltaWriter::commit() {
         break;
     }
 
-    if (auto st = _flush_queue->wait(); UNLIKELY(!st.ok())) {
+    if (auto st = _flush_token->wait(); UNLIKELY(!st.ok())) {
         LOG(WARNING) << st;
         _set_state(kAborted, st);
         return st;
@@ -547,14 +550,14 @@ Status DeltaWriter::commit() {
                                                      _opt.tablet_id, _state_name(state)));
         }
     }
-    VLOG(1) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_queue->get_stats();
+    VLOG(1) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
     return Status::OK();
 }
 
 void DeltaWriter::cancel(const Status& st) {
     _set_state(kAborted, st);
-    if (_flush_queue != nullptr) {
-        _flush_queue->cancel(st);
+    if (_flush_token != nullptr) {
+        _flush_token->cancel(st);
     }
     if (_replicate_token != nullptr) {
         _replicate_token->cancel(st);
@@ -564,10 +567,10 @@ void DeltaWriter::cancel(const Status& st) {
 void DeltaWriter::abort(bool with_log) {
     _set_state(kAborted, Status::Cancelled("aborted by others"));
     _with_rollback_log = with_log;
-    if (_flush_queue != nullptr) {
+    if (_flush_token != nullptr) {
         // Wait until all background tasks finished/cancelled.
         // https://github.com/StarRocks/starrocks/issues/8906
-        _flush_queue->close();
+        _flush_token->shutdown();
     }
     if (_replicate_token != nullptr) {
         _replicate_token->shutdown();

@@ -140,6 +140,7 @@ Status FlushQueue::init(bthread::Executor* executor) {
     bthread::ExecutionQueueOptions opts;
     opts.executor = executor;
     int r = bthread::execution_queue_start(&_queue_id, &opts, _execute, this);
+    LOG_IF(WARNING, r != 0) << "start execution queue failed: " << r;
     RETURN_IF(r != 0, Status::ResourceBusy("start execution queue failed"));
     return {};
 }
@@ -152,14 +153,17 @@ Status FlushQueue::submit(std::unique_ptr<MemTable> memtable, bool eos, SegmentC
     FlushTask task(std::move(memtable));
     task.callback = std::move(cb);
     int r = bthread::execution_queue_execute(_queue_id, std::move(task));
+    LOG_IF(WARNING, r != 0) << "submit execution queue failed: " << r;
     RETURN_IF(r != 0, Status::ResourceBusy("execute_queue_execute failed"));
     _stats.queueing_memtable_num++;
     return {};
 }
 
 Status FlushQueue::wait() {
-    int r = bthread::execution_queue_join(_queue_id);
-    RETURN_IF(r != 0, Status::ResourceBusy("join execution queue error"));
+    // TODO: implement wait
+    // int r = bthread::execution_queue_join(_queue_id);
+    // LOG_IF(WARNING, r != 0) << "join execution queue failed: " << r;
+    // RETURN_IF(r != 0, Status::ResourceBusy("join execution queue error"));
     return {};
 }
 
