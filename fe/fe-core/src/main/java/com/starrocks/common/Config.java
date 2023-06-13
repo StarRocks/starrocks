@@ -574,7 +574,7 @@ public class Config extends ConfigBase {
     public static int http_max_initial_line_length = 4096;
 
     @ConfField
-    public static int http_max_header_size = 8192;
+    public static int http_max_header_size = 32768;
 
     @ConfField
     public static int http_max_chunk_size = 8192;
@@ -873,7 +873,7 @@ public class Config extends ConfigBase {
      * txn manager will reject coming txns
      */
     @ConfField(mutable = true)
-    public static int max_running_txn_num_per_db = 100;
+    public static int max_running_txn_num_per_db = 1000;
 
     /**
      * The load task executor pool size. This pool size limits the max running load tasks.
