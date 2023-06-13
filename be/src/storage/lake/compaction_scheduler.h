@@ -227,7 +227,7 @@ inline void CompactionScheduler::Limiter::no_memory_limit_exceeded() {
         --_reserved;
         ++_free;
         _success = 0;
-        VLOG(3) << "Increased maximum concurrency to " << (_total - _reserved);
+        LOG(INFO) << "Increased maximum compaction concurrency to " << (_total - _reserved);
     }
 }
 
@@ -236,7 +236,7 @@ inline void CompactionScheduler::Limiter::memory_limit_exceeded() {
     _success = 0;
     if (_reserved + 1 < _total) { // Cannot reduce the concurrency to zero.
         _reserved++;
-        VLOG(3) << "Decreased maximum concurrency to " << (_total - _reserved);
+        LOG(INFO) << "Decreased maximum compaction concurrency to " << (_total - _reserved);
     } else {
         _free++;
     }

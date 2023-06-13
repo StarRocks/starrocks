@@ -175,7 +175,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
 
         progress->update((100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
                          column_group_size);
-        VLOG_EVERY_N(3, 1000) << "Compaction progress: " << progress->value();
+        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet->id() << ", compaction progress: " << progress->value();
     }
     RETURN_IF_ERROR(writer->flush_columns());
 
