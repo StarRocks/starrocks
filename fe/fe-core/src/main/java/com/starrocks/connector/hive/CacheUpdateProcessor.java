@@ -167,7 +167,8 @@ public class CacheUpdateProcessor {
             String path = metastore.getPartition(dbName, tblName, Lists.newArrayList()).getFullPath();
             existPaths = Lists.newArrayList(path.endsWith("/") ? path : path + "/");
         } else {
-            List<String> partitionNames = metastore.getPartitionKeys(dbName, tblName);
+            List<String> partitionNames = metastore.getPartitionKeysByValue(dbName, tblName,
+                    HivePartitionValue.ALL_PARTITION_VALUES);
             existPaths = metastore.getPartitionsByNames(dbName, tblName, partitionNames)
                     .values().stream()
                     .map(Partition::getFullPath)
