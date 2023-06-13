@@ -124,7 +124,7 @@ PARTITION BY RANGE(event_day)
     PARTITION p2 VALUES LESS THAN ("2020-02-29"),
     PARTITION p3 VALUES LESS THAN ("2020-03-31")
 )
-DISTRIBUTED BY HASH(site_id) BUCKETS 10;
+DISTRIBUTED BY HASH(site_id);
 ```
 
 In this example, `site_access` uses `site_id` as the bucketing column because this column is always used as a filter in queries. When the bucketing column is used as a filter in queries, StarRocks only scans the relevant tablets, which greatly improves query performance.
@@ -148,7 +148,7 @@ CREATE TABLE site_access
     pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(site_id, city_code, user_name)
-DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 10;
+DISTRIBUTED BY HASH(site_id,city_code);
 ```
 
 ### Determine the number of buckets
@@ -287,7 +287,7 @@ If you need to create partitions in advance, you can use other partition creatio
       PARTITION BY RANGE (datekey) (
           START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 DAY)
       )
-      DISTRIBUTED BY HASH(site_id) BUCKETS 10
+      DISTRIBUTED BY HASH(site_id)
       PROPERTIES ("replication_num" = "3" );
       ```
 
@@ -319,7 +319,7 @@ If you need to create partitions in advance, you can use other partition creatio
           START ("2021-01-01") END ("2021-05-01") EVERY (INTERVAL 1 MONTH),
           START ("2021-05-01") END ("2021-05-04") EVERY (INTERVAL 1 DAY)
       )
-      DISTRIBUTED BY HASH(site_id) BUCKETS 10
+      DISTRIBUTED BY HASH(site_id)
       PROPERTIES(
           "replication_num" = "3"
       );
@@ -358,7 +358,7 @@ If you need to create partitions in advance, you can use other partition creatio
       DUPLICATE KEY(datekey, site_id, city_code, user_name)
       PARTITION BY RANGE (datekey) (START ("1") END ("5") EVERY (1)
       )
-      DISTRIBUTED BY HASH(site_id) BUCKETS 10
+      DISTRIBUTED BY HASH(site_id)
       PROPERTIES ("replication_num" = "3");
       ```
 
@@ -394,7 +394,7 @@ The following statement adds a new partition `p4` to table `site_access` to stor
 ```SQL
 ALTER TABLE site_access
 ADD PARTITION p4 VALUES LESS THAN ("2020-04-30")
-DISTRIBUTED BY HASH(site_id) BUCKETS 20;
+DISTRIBUTED BY HASH(site_id);
 ```
 
 ### Delete a partition
