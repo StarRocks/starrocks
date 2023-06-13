@@ -169,8 +169,8 @@ public class InsertStmt extends DmlStmt {
         return targetPartitionNames;
     }
 
-    public boolean isSpecifyPartition() {
-        return targetPartitionNames != null;
+    public boolean isSpecifyPartitionNames() {
+        return targetPartitionNames != null && !targetPartitionNames.isStaticKeyPartitionInsert();
     }
 
     public List<String> getTargetColumnNames() {
