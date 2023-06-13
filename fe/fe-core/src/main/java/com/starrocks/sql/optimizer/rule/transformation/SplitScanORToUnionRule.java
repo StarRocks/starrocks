@@ -57,6 +57,7 @@ public class SplitScanORToUnionRule extends TransformationRule {
     private static final double HIGH_SELECTIVITY = 1E-4;
 
     private SplitScanORToUnionRule() {
+        // TODO support the external table
         super(RuleType.TF_SPLIT_SCAN_OR, Pattern.create(OperatorType.LOGICAL_OLAP_SCAN));
     }
 
