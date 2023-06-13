@@ -339,7 +339,7 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getMaterializedViews().forEach(Table::onCreate);
+            db.getTables().forEach(Table::onCreate);
             db.getHiveTables().forEach(Table::onCreate);
         }
         LOG.info("finished replay databases from image");
@@ -4727,7 +4727,7 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getMaterializedViews().forEach(Table::onCreate);
+            db.getTables().forEach(Table::onCreate);
             db.getHiveTables().forEach(Table::onCreate);
         }
 
