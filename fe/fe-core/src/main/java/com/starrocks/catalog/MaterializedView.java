@@ -425,7 +425,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this(indexMeta.getIndexId(), db.getId(), mvName, indexMeta.getSchema(), indexMeta.getKeysType(),
                 partitionInfo, distributionInfo, refreshScheme);
         Preconditions.checkState(baseTable.getIndexIdByName(mvName) != null);
-        this.copyOnlyForQuery(baseTable);
+        // copy olap table into mv.
+        baseTable.copyOnlyForQuery(this);
         this.partitionInfo = partitionInfo;
         this.defaultDistributionInfo = distributionInfo;
         this.baseIndexId = indexMeta.getIndexId();
