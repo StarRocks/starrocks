@@ -1498,9 +1498,15 @@ public class StmtExecutor {
                         coord.getCommitInfos())) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
+                } else {
+                    txnStatus = TransactionStatus.COMMITTED;
                 }
+<<<<<<< HEAD
                 // TODO: wait remote txn finished
             } else if (targetTable instanceof SchemaTable) {
+=======
+            } else if (targetTable instanceof SystemTable) {
+>>>>>>> 3d1b121b7 ([BugFix] fix external table commit timeout treated as failure (#24856))
                 // schema table does not need txn
                 txnStatus = TransactionStatus.VISIBLE;
             } else {
