@@ -261,8 +261,8 @@ void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::I
         if (column.t_iceberg_schema_field == nullptr) {
             _collect_field_io_range(*schema_node, column.col_type_in_chunk, ranges, &end);
         } else {
-            _collect_field_io_range_schema_change(*schema_node, column.col_type_in_chunk, column.t_iceberg_schema_field,
-                                                  ranges, &end);
+            _collect_field_io_range(*schema_node, column.col_type_in_chunk, column.t_iceberg_schema_field, ranges,
+                                    &end);
         }
     }
     *end_offset = end;
@@ -314,14 +314,14 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
     }
 }
 
-void GroupReader::_collect_field_io_range_schema_change(const ParquetField& field, const TypeDescriptor& col_type,
-                                                        const TIcebergSchemaField* iceberg_schema_field,
-                                                        std::vector<io::SharedBufferedInputStream::IORange>* ranges,
-                                                        int64_t* end_offset) {
+void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
+                                          const TIcebergSchemaField* iceberg_schema_field,
+                                          std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+                                          int64_t* end_offset) {
     // Logically same with _collect_filed_io_range, just support schema change.
     if (field.type.type == LogicalType::TYPE_ARRAY) {
-        _collect_field_io_range_schema_change(field.children[0], col_type.children[0],
-                                              &iceberg_schema_field->children[0], ranges, end_offset);
+        _collect_field_io_range(field.children[0], col_type.children[0], &iceberg_schema_field->children[0], ranges,
+                                end_offset);
     } else if (field.type.type == LogicalType::TYPE_STRUCT) {
         std::vector<int32> subfield_pos(col_type.children.size());
         std::vector<const TIcebergSchemaField*> iceberg_schema_subfield(col_type.children.size());
@@ -332,8 +332,8 @@ void GroupReader::_collect_field_io_range_schema_change(const ParquetField& fiel
             if (subfield_pos[i] == -1) {
                 continue;
             }
-            _collect_field_io_range_schema_change(field.children[subfield_pos[i]], col_type.children[i],
-                                                  iceberg_schema_subfield[i], ranges, end_offset);
+            _collect_field_io_range(field.children[subfield_pos[i]], col_type.children[i], iceberg_schema_subfield[i],
+                                    ranges, end_offset);
         }
     } else if (field.type.type == LogicalType::TYPE_MAP) {
         // ParquetFiled Map -> Map<Struct<key,value>>
@@ -341,8 +341,8 @@ void GroupReader::_collect_field_io_range_schema_change(const ParquetField& fiel
         auto index = 0;
         for (auto& child : field.children[0].children) {
             if ((!col_type.children[index].is_unknown_type())) {
-                _collect_field_io_range_schema_change(child, col_type.children[index],
-                                                      &iceberg_schema_field->children[index], ranges, end_offset);
+                _collect_field_io_range(child, col_type.children[index], &iceberg_schema_field->children[index], ranges,
+                                        end_offset);
             }
             ++index;
         }
