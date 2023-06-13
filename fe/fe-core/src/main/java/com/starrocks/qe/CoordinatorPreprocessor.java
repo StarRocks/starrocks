@@ -414,7 +414,7 @@ public class CoordinatorPreprocessor {
         boolean preferComputeNode = connectContext.getSessionVariable().isPreferComputeNode();
         if (idToComputeNode != null && idToComputeNode.size() > 0) {
             hasComputeNode = true;
-            if (preferComputeNode) {
+            if (preferComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 usedComputeNode = true;
             }
         }
@@ -561,7 +561,7 @@ public class CoordinatorPreprocessor {
             if (fragment.getDataPartition() == DataPartition.UNPARTITIONED) {
                 Reference<Long> backendIdRef = new Reference<>();
                 TNetworkAddress execHostport;
-                if (usedComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                if (usedComputeNode) {
                     execHostport = SimpleScheduler.getComputeNodeHost(this.idToComputeNode, backendIdRef);
                 } else {
                     execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
@@ -616,7 +616,7 @@ public class CoordinatorPreprocessor {
                 // of hostSet, that it to say, each backend has exactly one fragment.
                 Set<TNetworkAddress> hostSet = Sets.newHashSet();
 
-                if (usedComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                if (usedComputeNode) {
                     for (Map.Entry<Long, ComputeNode> entry : idToComputeNode.entrySet()) {
                         ComputeNode computeNode = entry.getValue();
                         if (!computeNode.isAlive() || SimpleScheduler.isInBlacklist(computeNode.getId())) {
@@ -786,7 +786,7 @@ public class CoordinatorPreprocessor {
             if (params.instanceExecParams.isEmpty()) {
                 Reference<Long> backendIdRef = new Reference<>();
                 TNetworkAddress execHostport;
-                if (usedComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                if (usedComputeNode) {
                     execHostport = SimpleScheduler.getComputeNodeHost(this.idToComputeNode, backendIdRef);
                 } else {
                     execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
