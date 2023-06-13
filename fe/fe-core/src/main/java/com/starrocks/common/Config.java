@@ -2086,6 +2086,8 @@ public class Config extends ConfigBase {
     public static String azure_blob_client_certificate_path = "";
     @ConfField
     public static String azure_blob_authority_host = "";
+    @ConfField(mutable = true)
+    public static int starmgr_grpc_timeout_seconds = 5;
 
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
