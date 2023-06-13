@@ -1756,4 +1756,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean recursive_dir_search_enabled = false;
+
+    /**
+     * timeout for external table commit
+     */
+    @ConfField(mutable = true)
+    public static int external_table_commit_timeout_ms = 10000; // 10s
 }
