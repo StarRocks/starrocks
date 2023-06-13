@@ -262,7 +262,7 @@ public class ColocateTableTest {
 
         new MockUp<SystemInfoService>() {
             @Mock
-            public List<Long> getAvailableBackendIds() {
+            public List<Long> getBackendIds(boolean alive) {
                 return Arrays.asList(10001L, 10002L, 10003L);       
             }
         };
