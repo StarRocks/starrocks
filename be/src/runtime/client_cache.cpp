@@ -50,7 +50,7 @@ Status ClientCacheHelper::get_client(const TNetworkAddress& hostport, const clie
                                      void** client_key, int timeout_ms) {
     std::lock_guard<std::mutex> lock(_lock);
     //VLOG_RPC << "get_client(" << hostport << ")";
-    ClientCacheMap::iterator cache_entry = _client_cache.find(hostport);
+    auto cache_entry = _client_cache.find(hostport);
 
     if (cache_entry == _client_cache.end()) {
         cache_entry = _client_cache.insert(std::make_pair(hostport, std::list<void*>())).first;
@@ -79,7 +79,7 @@ Status ClientCacheHelper::get_client(const TNetworkAddress& hostport, const clie
 
 Status ClientCacheHelper::reopen_client(const client_factory& factory_method, void** client_key, int timeout_ms) {
     std::lock_guard<std::mutex> lock(_lock);
-    ClientMap::iterator i = _client_map.find(*client_key);
+    auto i = _client_map.find(*client_key);
     DCHECK(i != _client_map.end());
     ThriftClientImpl* info = i->second;
     const std::string ipaddress = info->ipaddress();
@@ -134,13 +134,21 @@ Status ClientCacheHelper::create_client(const TNetworkAddress& hostport, const c
 void ClientCacheHelper::release_client(void** client_key) {
     DCHECK(*client_key != nullptr) << "Trying to release NULL client";
     std::lock_guard<std::mutex> lock(_lock);
-    ClientMap::iterator client_map_entry = _client_map.find(*client_key);
-    DCHECK(client_map_entry != _client_map.end());
-    ThriftClientImpl* info = client_map_entry->second;
-    ClientCacheMap::iterator j = _client_cache.find(make_network_address(info->ipaddress(), info->port()));
-    DCHECK(j != _client_cache.end());
 
-    if (_max_cache_size_per_host >= 0 && j->second.size() >= _max_cache_size_per_host) {
+    auto client_map_entry = _client_map.find(*client_key);
+    if (client_map_entry == _client_map.end()) {
+        *client_key = nullptr;
+        return;
+    }
+
+    ThriftClientImpl* info = client_map_entry->second;
+    auto iter = _client_cache.find(make_network_address(info->ipaddress(), info->port()));
+    if (iter == _client_cache.end()) {
+        *client_key = nullptr;
+        return;
+    }
+
+    if (_max_cache_size_per_host >= 0 && iter->second.size() >= _max_cache_size_per_host) {
         // cache of this host is full, close this client connection and remove if from _client_map
         info->close();
         _client_map.erase(*client_key);
@@ -150,7 +158,7 @@ void ClientCacheHelper::release_client(void** client_key) {
             _opened_clients->increment(-1);
         }
     } else {
-        j->second.push_back(*client_key);
+        iter->second.push_back(*client_key);
     }
 
     if (_metrics_enabled) {
@@ -162,14 +170,14 @@ void ClientCacheHelper::release_client(void** client_key) {
 
 void ClientCacheHelper::close_connections(const TNetworkAddress& hostport) {
     std::lock_guard<std::mutex> lock(_lock);
-    ClientCacheMap::iterator cache_entry = _client_cache.find(hostport);
+    auto cache_entry = _client_cache.find(hostport);
     if (cache_entry == _client_cache.end()) {
         return;
     }
 
     auto& client_keys = cache_entry->second;
     for (void* client_key : client_keys) {
-        ClientMap::iterator client_map_entry = _client_map.find(client_key);
+        auto client_map_entry = _client_map.find(client_key);
         DCHECK(client_map_entry != _client_map.end());
         ThriftClientImpl* info = client_map_entry->second;
         info->close();
@@ -183,7 +191,7 @@ std::string ClientCacheHelper::debug_string() {
     std::stringstream out;
     out << "ClientCacheHelper(#hosts=" << _client_cache.size() << " [";
 
-    for (ClientCacheMap::iterator i = _client_cache.begin(); i != _client_cache.end(); ++i) {
+    for (auto i = _client_cache.begin(); i != _client_cache.end(); ++i) {
         if (i != _client_cache.begin()) {
             out << " ";
         }
@@ -193,20 +201,6 @@ std::string ClientCacheHelper::debug_string() {
 
     out << "])";
     return out.str();
-}
-
-void ClientCacheHelper::test_shutdown() {
-    std::vector<TNetworkAddress> hostports;
-    {
-        std::lock_guard<std::mutex> lock(_lock);
-        for (const ClientCacheMap::value_type& i : _client_cache) {
-            hostports.push_back(i.first);
-        }
-    }
-
-    for (auto& hostport : hostports) {
-        close_connections(hostport);
-    }
 }
 
 void ClientCacheHelper::init_metrics(MetricRegistry* metrics, const std::string& key_prefix) {
