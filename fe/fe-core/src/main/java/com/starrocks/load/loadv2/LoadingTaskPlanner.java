@@ -34,6 +34,7 @@
 
 package com.starrocks.load.loadv2;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
@@ -244,6 +245,7 @@ public class LoadingTaskPlanner {
         } else {
             enableAutomaticPartition = table.supportedAutomaticPartition();
         }
+        Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
         OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
                 table.writeQuorum(), forceReplicatedStorage ? true : table.enableReplicatedStorage(),
                 checkNullExprInAutoIncrement(), enableAutomaticPartition);

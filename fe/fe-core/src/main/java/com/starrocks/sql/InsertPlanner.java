@@ -86,6 +86,7 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
@@ -210,14 +211,18 @@ public class InsertPlanner {
             DataSink dataSink;
             if (targetTable instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) targetTable;
-
                 boolean enableAutomaticPartition;
-                if (!insertStmt.isOverwrite() && insertStmt.isSpecifyPartition()) {
+                List<Long> targetPartitionIds = insertStmt.getTargetPartitionIds();
+                if (insertStmt.isSpecifyPartitionNames()) {
+                    Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
+                    enableAutomaticPartition = false;
+                } else if (insertStmt.isStaticKeyPartitionInsert()) {
                     enableAutomaticPartition = false;
                 } else {
+                    Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
                     enableAutomaticPartition = olapTable.supportedAutomaticPartition();
                 }
-                dataSink = new OlapTableSink(olapTable, tupleDesc, insertStmt.getTargetPartitionIds(),
+                dataSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
                         canUsePipeline, olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
                         false, enableAutomaticPartition);

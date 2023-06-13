@@ -1,0 +1,78 @@
+-- name: test_insert_overwrite
+CREATE TABLE site_access (
+event_day date NOT NULL COMMENT "",
+site_id int(11) NULL DEFAULT "10" COMMENT "",
+city_code varchar(100) NULL COMMENT "",
+user_name varchar(32) NULL DEFAULT "" COMMENT "",
+pv bigint(20) NULL DEFAULT "0" COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(event_day, site_id, city_code, user_name)
+COMMENT "OLAP"
+PARTITION BY date_trunc('day', event_day)
+DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT overwrite site_access PARTITION(event_day='2023-07-01') select '2023-07-01' as event_day, 10 as site_id, 'SomeCity' as city_code, 'UserName' as user_name, 0 as pv from dual;
+-- result:
+-- !result
+select * from site_access;
+-- result:
+2023-07-01	10	SomeCity	UserName	0
+-- !result
+INSERT overwrite site_access PARTITION(event_day='2023-07-01') select '2023-07-01' as event_day, 10 as site_id, 'SomeCity1' as city_code, 'UserName' as user_name, 0 as pv from dual;
+-- result:
+-- !result
+select * from site_access;
+-- result:
+2023-07-01	10	SomeCity1	UserName	0
+-- !result
+INSERT overwrite site_access PARTITION(event_day='2023-07-01') select '2023-07-02' as event_day, 10 as site_id, 'SomeCity' as city_code, 'UserName' as user_name, 0 as pv from dual;
+-- result:
+[REGEX]Insert has filtered data in strict mode
+-- !result
+INSERT overwrite site_access PARTITION(event_day='2023-07-02') select '2023-07-01' as event_day, 10 as site_id, 'SomeCity' as city_code, 'UserName' as user_name, 0 as pv from dual;
+-- result:
+[REGEX]Insert has filtered data in strict mode
+-- !result
+INSERT overwrite site_access select '2023-07-02' as event_day, 10 as site_id, 'SomeCity' as city_code, 'UserName' as user_name, 0 as pv from dual;
+-- result:
+-- !result
+select * from site_access;
+-- result:
+2023-07-02	10	SomeCity	UserName	0
+-- !result
+drop table site_access;
+-- result:
+-- !result
+CREATE TABLE site_access(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+AGGREGATE KEY(event_day, site_id, city_code, user_name)
+PARTITION BY RANGE(event_day)
+(
+    PARTITION p1 VALUES LESS THAN ("2020-01-31"),
+    PARTITION p2 VALUES LESS THAN ("2020-02-29"),
+    PARTITION p3 VALUES LESS THAN ("2020-03-31")
+)
+DISTRIBUTED BY HASH(site_id) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+-- result:
+-- !result
+INSERT overwrite site_access PARTITION(event_day='2023-07-01') select '2023-07-01' as event_day, 10 as site_id, 'SomeCity' as city_code, 'UserName' as user_name, 0 as pv from dual;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: No partition specified in partition lists.')
+-- !result

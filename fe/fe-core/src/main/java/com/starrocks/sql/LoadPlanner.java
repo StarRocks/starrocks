@@ -14,6 +14,7 @@
 
 package com.starrocks.sql;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
@@ -421,6 +422,7 @@ public class LoadPlanner {
             } else {
                 enableAutomaticPartition = olapTable.supportedAutomaticPartition();
             }
+            Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
             dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds, canUsePipeLine,
                     olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
                     checkNullExprInAutoIncrement(), enableAutomaticPartition);
