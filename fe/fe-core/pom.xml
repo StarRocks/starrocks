@@ -625,7 +625,7 @@ under the License.
         <dependency>
             <groupId>org.antlr</groupId>
             <artifactId>antlr4</artifactId>
-            <version>4.9.2</version>
+            <version>4.13.0</version>
             <exclusions>
                 <exclusion>
                     <groupId>commons-lang</groupId>
@@ -782,7 +782,7 @@ under the License.
         <dependency>
             <groupId>io.trino</groupId>
             <artifactId>trino-parser</artifactId>
-            <version>385</version>
+            <version>419</version>
         </dependency>
     </dependencies>
 
@@ -861,7 +861,7 @@ under the License.
             <plugin>
                 <groupId>org.antlr</groupId>
                 <artifactId>antlr4-maven-plugin</artifactId>
-                <version>4.9.2</version>
+                <version>4.13.0</version>
                 <executions>
                     <execution>
                         <id>antlr</id>

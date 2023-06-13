@@ -84,14 +84,13 @@ import io.trino.sql.tree.AliasedRelation;
 import io.trino.sql.tree.AllColumns;
 import io.trino.sql.tree.ArithmeticBinaryExpression;
 import io.trino.sql.tree.ArithmeticUnaryExpression;
-import io.trino.sql.tree.ArrayConstructor;
+import io.trino.sql.tree.Array;
 import io.trino.sql.tree.AstVisitor;
 import io.trino.sql.tree.BetweenPredicate;
 import io.trino.sql.tree.BooleanLiteral;
 import io.trino.sql.tree.Cast;
 import io.trino.sql.tree.CoalesceExpression;
 import io.trino.sql.tree.ComparisonExpression;
-import io.trino.sql.tree.Cube;
 import io.trino.sql.tree.CurrentTime;
 import io.trino.sql.tree.DataType;
 import io.trino.sql.tree.DateTimeDataType;
@@ -123,6 +122,8 @@ import io.trino.sql.tree.Join;
 import io.trino.sql.tree.JoinCriteria;
 import io.trino.sql.tree.JoinOn;
 import io.trino.sql.tree.JoinUsing;
+import io.trino.sql.tree.JsonArray;
+import io.trino.sql.tree.JsonArrayElement;
 import io.trino.sql.tree.LikePredicate;
 import io.trino.sql.tree.Limit;
 import io.trino.sql.tree.LogicalExpression;
@@ -133,7 +134,6 @@ import io.trino.sql.tree.NullIfExpression;
 import io.trino.sql.tree.NumericParameter;
 import io.trino.sql.tree.Query;
 import io.trino.sql.tree.QuerySpecification;
-import io.trino.sql.tree.Rollup;
 import io.trino.sql.tree.Row;
 import io.trino.sql.tree.SearchedCaseExpression;
 import io.trino.sql.tree.SetOperation;
@@ -368,26 +368,22 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
-    protected ParseNode visitRollup(Rollup node, ParseTreeContext context) {
-        return new GroupByClause((ArrayList<Expr>) visit(node.getExpressions(), context, Expr.class),
-                GroupByClause.GroupingType.ROLLUP);
-    }
-
-    @Override
-    protected ParseNode visitCube(Cube node, ParseTreeContext context) {
-        return new GroupByClause((ArrayList<Expr>) visit(node.getExpressions(), context, Expr.class),
-                GroupByClause.GroupingType.CUBE);
-    }
-
-    @Override
     protected ParseNode visitGroupingSets(GroupingSets node, ParseTreeContext context) {
-        List<ArrayList<Expr>> groupingSets = new ArrayList<>();
-        for (List<Expression> groupingSet : node.getSets()) {
-            List<Expr> exprList = visit(groupingSet, context, Expr.class);
-            groupingSets.add(new ArrayList<>(exprList));
-        }
+        if (node.getType() == GroupingSets.Type.ROLLUP) {
+            return new GroupByClause((ArrayList<Expr>) visit(node.getExpressions(), context, Expr.class),
+                    GroupByClause.GroupingType.ROLLUP);
+        } else if (node.getType() == GroupingSets.Type.CUBE) {
+            return new GroupByClause((ArrayList<Expr>) visit(node.getExpressions(), context, Expr.class),
+                    GroupByClause.GroupingType.CUBE);
+        } else {
+            List<ArrayList<Expr>> groupingSets = new ArrayList<>();
+            for (List<Expression> groupingSet : node.getSets()) {
+                List<Expr> exprList = visit(groupingSet, context, Expr.class);
+                groupingSets.add(new ArrayList<>(exprList));
+            }
 
-        return new GroupByClause(groupingSets, GroupByClause.GroupingType.GROUPING_SETS);
+            return new GroupByClause(groupingSets, GroupByClause.GroupingType.GROUPING_SETS);
+        }
     }
 
     @Override
@@ -519,7 +515,6 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         if (node.getAlias().isPresent()) {
             alias = node.getAlias().get().getValue();
         }
-
         Expr expression = (Expr) visit(node.getExpression(), context);
         return new SelectListItem(expression, alias);
     }
@@ -541,7 +536,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
-    protected ParseNode visitArrayConstructor(ArrayConstructor node, ParseTreeContext context) {
+    protected ParseNode visitArray(Array node, ParseTreeContext context) {
         List<Expr> exprs;
         if (node.getValues() != null) {
             exprs = visit(node.getValues(), context, Expr.class);
@@ -794,6 +789,17 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         } catch (AnalysisException e) {
             throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(node.getValue()));
         }
+    }
+
+    @Override
+    protected ParseNode visitJsonArrayElement(JsonArrayElement jsonArrayElement, ParseTreeContext context) {
+        return visit(jsonArrayElement.getValue(), context);
+    }
+
+    @Override
+    protected ParseNode visitJsonArray(JsonArray jsonArray, ParseTreeContext context) {
+        List<Expr> children = visit(jsonArray.getElements(), context, Expr.class);
+        return new FunctionCallExpr("json_array", children);
     }
 
     @Override
