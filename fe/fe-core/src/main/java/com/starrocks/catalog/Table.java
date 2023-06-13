@@ -115,7 +115,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         @SerializedName("TABLE_FUNCTION")
         TABLE_FUNCTION,
         @SerializedName("HIVE_VIEW")
-        HIVE_VIEW;
+        HIVE_VIEW,
+        @SerializedName("PAIMON")
+        PAIMON;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -324,6 +326,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.DELTALAKE;
     }
 
+    public boolean isPaimonTable() {
+        return type == TableType.PAIMON;
+    }
+
     // for create table
     public boolean isOlapOrCloudNativeTable() {
         return isOlapTable() || isCloudNativeTable();
@@ -371,6 +377,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public long getCreateTime() {
         return createTime;
+    }
+
+    public String getTableLocation() {
+        String msg = "The getTableLocation() method needs to be implemented.";
+        throw new NotImplementedException(msg);
     }
 
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
