@@ -236,6 +236,32 @@ public class MetadataMgr {
         return ImmutableList.copyOf(partitionNames.build());
     }
 
+    /**
+     * List partition names by partition values, The partition values are in the same order as the partition columns,
+     * it used for get partial partition names from hms/glue
+     * <p>
+     * For example:
+     * SQL ： select dt,hh,mm from tbl where hh = '12' and mm = '30';
+     * the partition columns are [dt,hh,mm]
+     * the partition values should be [empty,'12','30']
+     *
+     */
+    public List<String> listPartitionNamesByValue(String catalogName, String dbName, String tableName,
+                                                  List<Optional<String>> partitionValues) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
+        if (connectorMetadata.isPresent()) {
+            try {
+                connectorMetadata.get().listPartitionNamesByValue(dbName, tableName, partitionValues).
+                        forEach(partitionNames::add);
+            } catch (Exception e) {
+                LOG.error("Failed to listPartitionNamesByValue on [{}.{}]", catalogName, dbName, e);
+                throw e;
+            }
+        }
+        return ImmutableList.copyOf(partitionNames.build());
+    }
+
     public Statistics getTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,

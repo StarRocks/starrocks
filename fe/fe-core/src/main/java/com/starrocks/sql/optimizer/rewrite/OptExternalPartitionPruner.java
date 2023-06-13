@@ -49,6 +49,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -56,8 +57,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.PartitionUtil.createPartitionKey;
 import static com.starrocks.connector.PartitionUtil.toPartitionValues;
@@ -123,6 +126,49 @@ public class OptExternalPartitionPruner {
         return logicalScanOperator;
     }
 
+    // get equivalence predicate which column ref is partition column
+    private static List<Optional<ScalarOperator>> getEffectivePartitionPredicate(LogicalScanOperator operator,
+                                                                                 List<Column> partitionColumns,
+                                                                                 ScalarOperator predicate) {
+        if (partitionColumns.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
+        List<ScalarOperator> equalPredicates = Utils.extractConjuncts(predicateSplit.getRangePredicates()).
+                stream().filter(rangePredicate -> ((BinaryPredicateOperator) rangePredicate).getBinaryType().isEqual()).
+                collect(Collectors.toList());
+        Map<ColumnRefOperator, ScalarOperator> equalPredicateMap = equalPredicates.stream().
+                collect(Collectors.toMap(rangePredicate -> rangePredicate.getChild(0).cast(),
+                        rangePredicate -> rangePredicate));
+
+        List<Optional<ScalarOperator>> effectivePartitionPredicate = Lists.newArrayList();
+        for (Column partitionColumn : partitionColumns) {
+            ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(partitionColumn);
+            // only support string type partition column
+            if (partitionColumn.getType().isStringType() && equalPredicateMap.containsKey(partitionColumnRefOperator)) {
+                effectivePartitionPredicate.add(Optional.of(equalPredicateMap.get(partitionColumnRefOperator)));
+            } else {
+                effectivePartitionPredicate.add(Optional.empty());
+            }
+        }
+        return effectivePartitionPredicate;
+    }
+
+    private static List<Optional<String>> getPartitionValue(List<Optional<ScalarOperator>> predicates) {
+        List<Optional<String>> partitionValues = Lists.newArrayList();
+        for (Optional<ScalarOperator> predicate : predicates) {
+            if (predicate.isPresent()) {
+                Preconditions.checkState(predicate.get() instanceof BinaryPredicateOperator);
+                ConstantOperator constantOperator = predicate.get().getChild(1).cast();
+                partitionValues.add(Optional.of(constantOperator.getVarchar()));
+            } else {
+                partitionValues.add(Optional.empty());
+            }
+        }
+        return partitionValues;
+    }
+
+
     private static void initPartitionInfo(LogicalScanOperator operator, OptimizerContext context,
                                           Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
                                           Map<ColumnRefOperator, Set<Long>> columnToNullPartitions)
@@ -142,13 +188,25 @@ public class OptExternalPartitionPruner {
                 partitionColumnRefOperators.add(partitionColumnRefOperator);
             }
 
-            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName());
             context.getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(),
                     hmsTable.getTableName()).setPartitionNames(new ArrayList<>());
 
             Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
             if (!hmsTable.isUnPartitioned()) {
+                // get partition names
+                List<String> partitionNames;
+                // check if the partition predicate could be used for filter partition names
+                List<Optional<ScalarOperator>> effectivePartitionPredicate =
+                        getEffectivePartitionPredicate(operator, partitionColumns, operator.getPredicate());
+                if (effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)) {
+                    List<Optional<String>> partitionValues = getPartitionValue(effectivePartitionPredicate);
+                    partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNamesByValue(
+                            hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName(), partitionValues);
+                } else {
+                    partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                            hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName());
+                }
+
                 long partitionId = 0;
                 for (String partName : partitionNames) {
                     List<String> values = toPartitionValues(partName);

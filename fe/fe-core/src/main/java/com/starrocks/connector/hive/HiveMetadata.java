@@ -84,6 +84,12 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public List<String> listPartitionNamesByValue(String dbName, String tblName,
+                                                  List<Optional<String>> partitionValues) {
+        return hmsOps.getPartitionKeysByValue(dbName, tblName, partitionValues);
+    }
+
+    @Override
     public Database getDb(String dbName) {
         Database database;
         try {

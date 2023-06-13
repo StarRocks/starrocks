@@ -23,6 +23,7 @@ import com.starrocks.connector.PartitionUtil;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
@@ -47,7 +48,11 @@ public class HiveMetastoreOperations {
     }
 
     public List<String> getPartitionKeys(String dbName, String tableName) {
-        return metastore.getPartitionKeys(dbName, tableName);
+        return metastore.getPartitionKeysByValue(dbName, tableName, HivePartitionValue.ALL_PARTITION_VALUES);
+    }
+
+    public List<String> getPartitionKeysByValue(String dbName, String tableName, List<Optional<String>> partitionValues) {
+        return metastore.getPartitionKeysByValue(dbName, tableName, partitionValues);
     }
 
     public Database getDb(String dbName) {

@@ -33,6 +33,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -86,8 +87,15 @@ public class HiveMetastore implements IHiveMetastore {
         }
     }
 
-    public List<String> getPartitionKeys(String dbName, String tableName) {
-        return client.getPartitionKeys(dbName, tableName);
+    @Override
+    public List<String> getPartitionKeysByValue(String dbName, String tableName, List<Optional<String>> partitionValues) {
+        if (partitionValues.isEmpty()) {
+            return client.getPartitionKeys(dbName, tableName);
+        } else {
+            List<String> partitionValuesStr = partitionValues.stream()
+                    .map(v -> v.orElse("")).collect(Collectors.toList());
+            return client.getPartitionKeysByValue(dbName, tableName, partitionValuesStr);
+        }
     }
 
     public Partition getPartition(String dbName, String tblName, List<String> partitionValues) {
