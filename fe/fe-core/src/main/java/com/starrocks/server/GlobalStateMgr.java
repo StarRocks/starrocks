@@ -3706,6 +3706,13 @@ public class GlobalStateMgr {
         } catch (Throwable t) {
             LOG.warn("load manager remove old load jobs failed", t);
         }
+
+        try {
+            loadManager.cleanResidualJob();
+        } catch (Throwable t) {
+            LOG.warn("load manager clean residual job failed", t);
+        }
+
         try {
             exportMgr.removeOldExportJobs();
         } catch (Throwable t) {
