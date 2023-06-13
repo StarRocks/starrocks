@@ -22,6 +22,7 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -53,6 +54,7 @@ public class ListPartitionPrunerTest {
     private List<ScalarOperator> conjuncts;
     private ColumnRefOperator dateColumn;
     private ColumnRefOperator intColumn;
+    private ColumnRefOperator stringColumn;
     private ListPartitionPruner pruner;
 
     @Before
@@ -159,6 +161,53 @@ public class ListPartitionPrunerTest {
         conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, intColumn,
                 ConstantOperator.createInt(2)));
         Assert.assertEquals(Lists.newArrayList(3L, 4L, 6L, 7L), pruner.prune());
+    }
+
+    @Test
+    public void testExternalTableBinaryPredicate() throws AnalysisException {
+        // string_col=2021-01-01   1
+        // string_col=2021-01-02   2
+        // string_col=2021-01-03   3
+        // string_col=2021-01-04   4
+
+        ColumnRefOperator stringColumn = new ColumnRefOperator(1, Type.STRING, "string_col", true);
+
+        // column -> partition values
+        Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap = Maps.newHashMap();
+        TreeMap<LiteralExpr, Set<Long>> stringPartitionValuesMap = Maps.newTreeMap();
+        columnToPartitionValuesMap.put(stringColumn, stringPartitionValuesMap);
+        stringPartitionValuesMap.put(new StringLiteral("2021-01-01"), Sets.newHashSet(1L));
+        stringPartitionValuesMap.put(new StringLiteral("2021-01-02"), Sets.newHashSet(2L));
+        stringPartitionValuesMap.put(new StringLiteral("2021-01-03"), Sets.newHashSet(3L));
+        stringPartitionValuesMap.put(new StringLiteral("2021-01-04"), Sets.newHashSet(4L));
+
+        Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = Maps.newHashMap();
+        columnToNullPartitions.put(stringColumn, Sets.newHashSet(9L));
+
+        List<ScalarOperator> conjuncts = Lists.newArrayList();
+        ListPartitionPruner pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, stringColumn, ConstantOperator.createVarchar("2021-01-02")));
+        Assert.assertEquals(Lists.newArrayList(2L), pruner.prune());
+
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GE, stringColumn, ConstantOperator.createVarchar("2021-01-02")));
+        Assert.assertEquals(Lists.newArrayList(2L, 3L, 4L), pruner.prune());
+
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.LT, new CastOperator(Type.DATE, stringColumn),
+                ConstantOperator.createDate(LocalDateTime.of(2021, 1, 3, 0, 0, 0))));
+        Assert.assertEquals(Lists.newArrayList(1L, 2L), pruner.prune());
+
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.GE, new CastOperator(Type.DATE, stringColumn),
+                ConstantOperator.createDate(LocalDateTime.of(2021, 1, 4, 0, 0, 0))));
+        Assert.assertEquals(Lists.newArrayList(4L), pruner.prune());
+
+        conjuncts.clear();
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, new CastOperator(Type.DATE, stringColumn),
+                ConstantOperator.createDate(LocalDateTime.of(2021, 1, 1, 0, 0, 0))));
+        Assert.assertEquals(Lists.newArrayList(1L), pruner.prune());
     }
 
     @Test
