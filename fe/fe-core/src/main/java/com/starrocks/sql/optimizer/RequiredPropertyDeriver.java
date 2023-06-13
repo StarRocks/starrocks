@@ -14,15 +14,16 @@
 
 package com.starrocks.sql.optimizer;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -42,12 +43,13 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -143,15 +145,13 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         }
 
         // 2 For shuffle join
-        List<Integer> leftOnPredicateColumns = joinHelper.getLeftOnColumns();
-        List<Integer> rightOnPredicateColumns = joinHelper.getRightOnColumns();
-        if (leftOnPredicateColumns.isEmpty() || rightOnPredicateColumns.isEmpty()) {
+        List<DistributionCol> leftCols = joinHelper.getLeftCols();
+        List<DistributionCol> rightCols = joinHelper.getRightCols();
+        if (leftCols.isEmpty() || rightCols.isEmpty()) {
             return null;
         }
 
-        Preconditions.checkState(leftOnPredicateColumns.size() == rightOnPredicateColumns.size());
-        requiredProperties.add(computeShuffleJoinRequiredProperties(requirementsFromParent, leftOnPredicateColumns,
-                rightOnPredicateColumns));
+        requiredProperties.add(computeShuffleJoinRequiredProperties(requirementsFromParent, leftCols, rightCols));
 
         return null;
     }
@@ -164,13 +164,15 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
         JoinHelper joinHelper = JoinHelper.of(node, leftChildColumns, rightChildColumns);
 
-        List<Integer> leftOnPredicateColumns = joinHelper.getLeftOnColumns();
-        List<Integer> rightOnPredicateColumns = joinHelper.getRightOnColumns();
+        List<DistributionCol> leftOnPredicateColumns = joinHelper.getLeftCols();
+        List<DistributionCol> rightOnPredicateColumns = joinHelper.getRightCols();
         List<Ordering> leftOrderings = leftOnPredicateColumns.stream()
-                .map(l -> new Ordering(columnRefFactory.getColumnRef(l), true, true)).collect(Collectors.toList());
+                .map(l -> new Ordering(columnRefFactory.getColumnRef(l.getColId()), true, true))
+                .collect(Collectors.toList());
 
         List<Ordering> rightOrderings = rightOnPredicateColumns.stream()
-                .map(l -> new Ordering(columnRefFactory.getColumnRef(l), true, true)).collect(Collectors.toList());
+                .map(l -> new Ordering(columnRefFactory.getColumnRef(l.getColId()), true, true))
+                .collect(Collectors.toList());
 
         SortProperty leftSortProperty = new SortProperty(new OrderSpec(leftOrderings));
         SortProperty rightSortProperty = new SortProperty(new OrderSpec(rightOrderings));
@@ -191,7 +193,6 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         }
 
         // 2 For shuffle join
-        Preconditions.checkState(leftOnPredicateColumns.size() == rightOnPredicateColumns.size());
         List<PhysicalPropertySet> physicalPropertySets =
                 computeShuffleJoinRequiredProperties(requirementsFromParent, leftOnPredicateColumns,
                         rightOnPredicateColumns);
@@ -230,8 +231,9 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         }
 
         if (!node.getType().isLocal()) {
-            List<Integer> columns = node.getPartitionByColumns().stream().map(ColumnRefOperator::getId).collect(
-                    Collectors.toList());
+            List<DistributionCol> columns = node.getPartitionByColumns().stream()
+                    .map(e -> new DistributionCol(e.getId(), true))
+                    .collect(Collectors.toList());
 
             // None grouping columns
             if (columns.isEmpty()) {
@@ -241,7 +243,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
             // shuffle aggregation
             requiredProperties.add(
-                    Lists.newArrayList(computeAggRequiredShuffleProperties(requirementsFromParent, columns)));
+                    Lists.newArrayList(computeAggRequiredShuffleProperties(columns)));
             return null;
         }
 
@@ -278,7 +280,10 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             if (context.getRootProperty().oneTabletProperty().supportOneTabletOpt) {
                 distributionProperty = DistributionProperty.EMPTY;
             } else {
-                distributionProperty = createShuffleAggProperty(partitionColumnRefSet);
+                List<DistributionCol> distributionCols = partitionColumnRefSet.stream()
+                        .map(e -> new DistributionCol(e, true)).collect(
+                        Collectors.toList());
+                distributionProperty = createShuffleAggProperty(distributionCols);
             }
         }
         requiredProperties.add(Lists.newArrayList(new PhysicalPropertySet(distributionProperty, sortProperty)));
@@ -339,5 +344,48 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
     public Void visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
         requiredProperties.add(Lists.newArrayList(requirementsFromParent));
         return null;
+    }
+
+
+    private List<PhysicalPropertySet> computeAggRequiredShuffleProperties(List<DistributionCol> groupByCols) {
+        Optional<HashDistributionDesc> requiredShuffleDescOptional =
+                getShuffleJoinHashDistributionDesc(requirementsFromParent);
+        if (!requiredShuffleDescOptional.isPresent()) {
+            // required property is not SHUFFLE_JOIN
+            return Lists.newArrayList(createShuffleAggPropertySet(groupByCols));
+        }
+
+        List<DistributionCol> parentsRequiredCols = requiredShuffleDescOptional.get().getDistributionCols();
+        List<DistributionCol> requiredCols;
+        if (shouldAdjustGroupByOrder(parentsRequiredCols, groupByCols)) {
+            // keep order with parent
+            groupByCols = parentsRequiredCols.stream().map(e -> new DistributionCol(e.getColId(), true))
+                    .collect(Collectors.toList());
+
+        }
+        if (canRelaxGroupByCols(parentsRequiredCols, groupByCols)) {
+            requiredCols = groupByCols.stream().map(col -> col.getNullRelaxCol()).collect(
+                    Collectors.toList());
+        } else {
+            requiredCols = groupByCols;
+        }
+        return Lists.newArrayList(createShuffleAggPropertySet(requiredCols));
+    }
+
+    private boolean canRelaxGroupByCols(List<DistributionCol> requiredCols, List<DistributionCol> groupByCols) {
+        for (DistributionCol col : groupByCols) {
+            for (DistributionCol requiredCol : requiredCols) {
+                if (requiredCol.getColId() == col.getColId() && !requiredCol.isAggStrict()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean shouldAdjustGroupByOrder(List<DistributionCol> requiredCols, List<DistributionCol> groupByCols) {
+        List<DistributionCol> nullStrictRequiredCols = requiredCols.stream().map(e -> e.getNullStrictCol())
+                .collect(Collectors.toList());
+        return CollectionUtils.isEqualCollection(nullStrictRequiredCols, groupByCols);
     }
 }

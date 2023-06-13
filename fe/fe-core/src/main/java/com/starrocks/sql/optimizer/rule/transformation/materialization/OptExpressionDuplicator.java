@@ -27,7 +27,8 @@ import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionCol;
+import com.starrocks.sql.optimizer.base.DistributionDisjointSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
@@ -273,47 +274,45 @@ public class OptExpressionDuplicator {
                 Map<ColumnRefOperator, ScalarOperator> columnMapping) {
 
             // HashDistributionDesc
-            List<Integer> newColumnIds = Lists.newArrayList();
-            for (Integer columnId : originSpec.getShuffleColumns()) {
-                ColumnRefOperator oldRefOperator = columnRefFactory.getColumnRef(columnId);
+            List<DistributionCol> newColumns = Lists.newArrayList();
+            for (DistributionCol column : originSpec.getShuffleColumns()) {
+                ColumnRefOperator oldRefOperator = columnRefFactory.getColumnRef(column.getColId());
                 ColumnRefOperator newRefOperator = columnMapping.get(oldRefOperator).cast();
                 Preconditions.checkNotNull(newRefOperator);
-                newColumnIds.add(newRefOperator.getId());
+                newColumns.add(new DistributionCol(newRefOperator.getId(), column.isNullStrict()));
             }
-            Preconditions.checkState(newColumnIds.size() == originSpec.getShuffleColumns().size());
+            Preconditions.checkState(newColumns.size() == originSpec.getShuffleColumns().size());
             HashDistributionDesc hashDistributionDesc =
-                    new HashDistributionDesc(newColumnIds, originSpec.getHashDistributionDesc().getSourceType());
+                    new HashDistributionDesc(newColumns, originSpec.getHashDistributionDesc().getSourceType());
 
             // PropertyInfo
             DistributionSpec.PropertyInfo propertyInfo = originSpec.getPropertyInfo();
-            ColumnRefSet newNullableColumns = rewriteColumnRefSet(propertyInfo.nullableColumns, columnRefFactory, columnMapping);
 
             DistributionSpec.PropertyInfo newPropertyInfo = new DistributionSpec.PropertyInfo();
             newPropertyInfo.tableId = propertyInfo.tableId;
             newPropertyInfo.partitionIds = propertyInfo.partitionIds;
-            newPropertyInfo.nullableColumns = newNullableColumns;
-            for (Map.Entry<Integer, ColumnRefSet> entry : propertyInfo.joinEquivalentColumns.entrySet()) {
-                ColumnRefOperator keyColumn = columnRefFactory.getColumnRef(entry.getKey());
-                ColumnRefOperator newRefOperator = columnMapping.get(keyColumn).cast();
-                Preconditions.checkNotNull(newRefOperator);
-                ColumnRefSet newColumnSet = rewriteColumnRefSet(entry.getValue(), columnRefFactory, columnMapping);
-                newPropertyInfo.joinEquivalentColumns.put(newRefOperator.getId(), newColumnSet);
-            }
+            newPropertyInfo.setNullStrictDisjointSet(updateDistributionDisJointSet(propertyInfo.getNullStrictDisjointSet()));
+            newPropertyInfo.setNullRelaxDisjointSet(updateDistributionDisJointSet(propertyInfo.getNullRelaxDisjointSet()));
+
             return new HashDistributionSpec(hashDistributionDesc, newPropertyInfo);
         }
 
-        private ColumnRefSet rewriteColumnRefSet(
-                ColumnRefSet oldRefSet,
-                ColumnRefFactory columnRefFactory,
-                Map<ColumnRefOperator, ScalarOperator> columnMapping) {
-            ColumnRefSet newColumnSet = new ColumnRefSet();
-            for (Integer columnId : oldRefSet.getColumnIds()) {
-                ColumnRefOperator oldRefOperator = columnRefFactory.getColumnRef(columnId);
-                ColumnRefOperator newRefOperator = columnMapping.get(oldRefOperator).cast();
-                Preconditions.checkNotNull(newRefOperator);
-                newColumnSet.union(newRefOperator.getId());
+        public DistributionDisjointSet updateDistributionDisJointSet(DistributionDisjointSet disjointSet) {
+            DistributionDisjointSet newDisjointSet = new DistributionDisjointSet();
+            Map<DistributionCol, DistributionCol> parentMap = Maps.newHashMap();
+            for (Map.Entry<DistributionCol, DistributionCol> entry : disjointSet.getParentMap().entrySet()) {
+                DistributionCol oldKey = entry.getKey();
+                DistributionCol oldValue = entry.getValue();
+
+                ColumnRefOperator keyColumn = columnRefFactory.getColumnRef(oldKey.getColId());
+                ColumnRefOperator newKeyCol = columnMapping.get(keyColumn).cast();
+
+                ColumnRefOperator valueColumn = columnRefFactory.getColumnRef(oldValue.getColId());
+                ColumnRefOperator newValueCol = columnMapping.get(valueColumn).cast();
+                parentMap.put(oldKey.updateColId(newKeyCol.getId()), oldValue.updateColId(newValueCol.getId()));
             }
-            return newColumnSet;
+            newDisjointSet.updateParentMap(parentMap);
+            return newDisjointSet;
         }
 
         private void processCommon(Operator.Builder opBuilder) {
