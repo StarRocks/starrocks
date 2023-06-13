@@ -270,7 +270,7 @@ Status DeltaWriter::_init() {
     _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_rowset_writer.get());
     _tablet_schema = writer_context.tablet_schema;
     _flush_queue = std::make_unique<FlushQueue>();
-    if (config::enable_resource_group_memtable) {
+    if (_opt.enable_resource_group) {
         _flush_queue->init(ExecEnv::GetInstance()->scan_executor());
     } else {
         _flush_queue->init(_storage_engine->memtable_flush_executor()->get_executor());

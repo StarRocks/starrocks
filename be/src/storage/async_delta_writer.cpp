@@ -19,6 +19,7 @@
 #include "common/config.h"
 #include "exec/workgroup/scan_executor.h"
 #include "runtime/current_thread.h"
+#include "storage/delta_writer.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/storage_engine.h"
 
@@ -82,16 +83,16 @@ StatusOr<std::unique_ptr<AsyncDeltaWriter>> AsyncDeltaWriter::open(const DeltaWr
         return res.status();
     }
     auto w = std::make_unique<AsyncDeltaWriter>(private_type(0), std::move(res).value());
-    RETURN_IF_ERROR(w->_init());
+    RETURN_IF_ERROR(w->_init(opt));
     return std::move(w);
 }
 
-Status AsyncDeltaWriter::_init() {
+Status AsyncDeltaWriter::_init(const DeltaWriterOptions& opt) {
     if (UNLIKELY(StorageEngine::instance() == nullptr)) {
         return Status::InternalError("StorageEngine::instance() is NULL");
     }
     bthread::ExecutionQueueOptions opts;
-    if (config::enable_resource_group_memtable) {
+    if (opt.enable_resource_group) {
         opts.executor = ExecEnv::GetInstance()->scan_executor();
     } else {
         opts.executor = StorageEngine::instance()->async_delta_writer_executor();
