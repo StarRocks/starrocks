@@ -428,6 +428,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
 
+    public static final String SCAN_OR_TO_UNION_LIMIT = "scan_or_to_union_limit";
+
+    public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
+
+    public static final String SELECT_RATIO_THRESHOLD = "SELECT_RATIO_THRESHOLD";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1124,6 +1130,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PLAN_VALIDATION, flag = VariableMgr.INVISIBLE)
     private boolean enablePlanValidation = true;
+
+    @VarAttr(name = SCAN_OR_TO_UNION_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int scanOrToUnionLimit = 4;
+
+    @VarAttr(name = SCAN_OR_TO_UNION_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private long scanOrToUnionThreshold = 50000000;
+
+    @VarAttr(name = SELECT_RATIO_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double selectRatioThreshold = 0.15;
 
     private int exprChildrenLimit = -1;
 
@@ -2144,6 +2159,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboPruneSubfield(boolean cboPruneSubfield) {
         this.cboPruneSubfield = cboPruneSubfield;
+    }
+
+    public int getScanOrToUnionLimit() {
+        return scanOrToUnionLimit;
+    }
+
+    public void setScanOrToUnionLimit(int scanOrToUnionLimit) {
+        this.scanOrToUnionLimit = scanOrToUnionLimit;
+    }
+
+    public long getScanOrToUnionThreshold() {
+        return scanOrToUnionThreshold;
+    }
+
+    public void setScanOrToUnionThreshold(long scanOrToUnionThreshold) {
+        this.scanOrToUnionThreshold = scanOrToUnionThreshold;
+    }
+
+    public double getSelectRatioThreshold() {
+        return selectRatioThreshold;
+    }
+
+    public void setSelectRatioThreshold(double selectRatioThreshold) {
+        this.selectRatioThreshold = selectRatioThreshold;
     }
 
     // Serialize to thrift object
