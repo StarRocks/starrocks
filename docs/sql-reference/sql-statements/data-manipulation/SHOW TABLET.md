@@ -1,5 +1,7 @@
 # SHOW TABLET
 
+## Description
+
 Displays tablet related information.
 
 > **NOTE**
@@ -15,12 +17,12 @@ SHOW TABLET
 FROM [<db_name>.]<table_name>
 [PARTITION(<partition_name>, ...]
 [
-WHERE [<version = <version_number>] 
+WHERE [version = <version_number>] 
     [[AND] backendid = <backend_id>] 
     [[AND] STATE = "NORMAL"|"ALTER"|"CLONE"|"DECOMMISSION"]
 ]
 [ORDER BY <field_name> [ASC | DESC]]
-[LIMIT [<offset>,]<limit>];
+[LIMIT [<offset>,]<limit>]
 ```
 
 | **Parameter**       | **Required** | **Description**                                                     |
@@ -40,7 +42,7 @@ WHERE [<version = <version_number>]
 After obtaining all tablet IDs using `SHOW TABLET FROM <table_name>`, you can query the information of a single tablet.
 
 ```sql
-SHOW TABLET <tablet_id>;
+SHOW TABLET <tablet_id>
 ```
 
 | **Parameter**  | **Required** | **Description**       |
