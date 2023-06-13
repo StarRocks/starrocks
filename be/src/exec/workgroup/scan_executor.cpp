@@ -86,12 +86,7 @@ int ScanExecutor::submit(void* (*fn)(void*), void* args) {
     auto wg = WorkGroupManager::instance()->get_default_mv_workgroup();
     ScanTask::WorkFunction wf = [=]() { fn(args); };
     ScanTask task(wg.get(), std::move(wf));
-    _task_queue->try_offer(std::move(task));
-    return 0;
-}
-
-std::unique_ptr<ThreadPoolToken> ScanExecutor::create_token(ThreadPool::ExecutionMode mode) {
-    return _thread_pool->new_token(mode);
+    return _task_queue->try_offer(std::move(task)) ? 0 : 1;
 }
 
 } // namespace starrocks::workgroup

@@ -16,6 +16,8 @@
 
 #include <utility>
 
+#include "common/config.h"
+#include "exec/workgroup/scan_executor.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "storage/compaction_manager.h"
@@ -267,8 +269,12 @@ Status DeltaWriter::_init() {
     }
     _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_rowset_writer.get());
     _tablet_schema = writer_context.tablet_schema;
-    // _flush_token = _storage_engine->memtable_flush_executor()->create_flush_token();
     _flush_queue = std::make_unique<FlushQueue>();
+    if (config::enable_resource_group_memtable) {
+        _flush_queue->init(ExecEnv::GetInstance()->scan_executor());
+    } else {
+        _flush_queue->init(_storage_engine->memtable_flush_executor()->get_executor());
+    }
     if (_replica_state == Primary && _opt.replicas.size() > 1) {
         _replicate_token = _storage_engine->segment_replicate_executor()->create_replicate_token(&_opt);
     }

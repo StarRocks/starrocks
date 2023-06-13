@@ -44,6 +44,7 @@
 #include "common/status.h"
 #include "storage/memtable.h"
 #include "storage/olap_define.h"
+#include "util/bthreads/executor.h"
 #include "util/spinlock.h"
 #include "util/threadpool.h"
 
@@ -119,40 +120,34 @@ private:
     FlushStatistic _stats;
 };
 
+// bthread::ExecutionQueue based executor
 class FlushQueue {
 public:
     using SegmentCallback = std::function<void(std::unique_ptr<SegmentPB>, bool)>;
 
-    FlushQueue();
+    Status init(bthread::Executor* executor);
 
-    Status submit(std::unique_ptr<MemTable> memtable, bool eos = false, SegmentCallback cb = nullptr) {
-        FlushTask task(std::move(memtable));
-        task.callback = std::move(cb);
-        bthread::execution_queue_execute(_queue_id, std::move(task));
-        return _status;
-    }
+    Status submit(std::unique_ptr<MemTable> memtable, bool eos = false, SegmentCallback cb = nullptr);
 
-    Status wait() {
-        bthread::execution_queue_join(_queue_id);
-        return _status;
-    }
-    void cancel(const Status& st) {
-        FlushTask task(nullptr);
-        task.abort = true;
-        bthread::execution_queue_execute(_queue_id, task);
-    }
-    void close() {
-        int r = bthread::execution_queue_stop(_queue_id);
-        LOG_IF(WARNING, r != 0) << "Fail to stop execution queue: " << r;
-        r = bthread::execution_queue_join(_queue_id);
-        LOG_IF(WARNING, r != 0) << "Fail to join execution queue: " << r;
-    }
+    Status wait();
+
+    void cancel(const Status& st);
+
+    void close();
+
     const FlushStatistic& get_stats() const { return _stats; }
-    void set_status(Status st) { _status = st; }
-    Status status() const { return _status; }
+
+    void set_status(Status st) {
+        std::lock_guard<SpinLock> guard(_status_lock);
+        _status = st;
+    }
+    Status status() const {
+        std::lock_guard<SpinLock> guard(_status_lock);
+        return _status;
+    }
 
     struct FlushTask {
-        FlushTask(std::shared_ptr<MemTable> i_memtable) : memtable(std::move(i_memtable)) {}
+        FlushTask(std::unique_ptr<MemTable> i_memtable) : memtable(std::move(i_memtable)) {}
         FlushTask() = delete;
 
         std::shared_ptr<MemTable> memtable;
@@ -162,22 +157,13 @@ public:
     };
 
 private:
-    Status _flush_memtable(MemTable* memtable, SegmentPB* segment) {
-        if (!status().ok()) return status();
-
-        MonotonicStopWatch timer;
-        timer.start();
-        set_status(memtable->flush(segment));
-        _stats.flush_time_ns += timer.elapsed_time();
-        _stats.flush_count++;
-        _stats.flush_size_bytes += memtable->memory_usage();
-        return status();
-    }
+    Status _flush_memtable(MemTable* memtable, SegmentPB* segment);
 
     static int _execute(void* meta, bthread::TaskIterator<FlushTask>& iter);
 
     bthread::ExecutionQueueId<FlushTask> _queue_id;
     FlushStatistic _stats;
+    mutable SpinLock _status_lock;
     Status _status;
 };
 
@@ -207,9 +193,11 @@ public:
             ThreadPool::ExecutionMode execution_mode = ThreadPool::ExecutionMode::SERIAL);
 
     ThreadPool* get_thread_pool() { return _flush_pool.get(); }
+    bthread::Executor* get_executor() { return _executor.get(); }
 
 private:
     std::unique_ptr<ThreadPool> _flush_pool;
+    std::unique_ptr<bthreads::ThreadPoolExecutor> _executor;
 };
 
 } // namespace starrocks

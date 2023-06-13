@@ -38,8 +38,6 @@ public:
     bool submit(ScanTask task);
     int submit(void* (*fn)(void*), void* args) override;
 
-    std::unique_ptr<ThreadPoolToken> create_token(ThreadPool::ExecutionMode mode);
-
 private:
     void worker_thread();
 

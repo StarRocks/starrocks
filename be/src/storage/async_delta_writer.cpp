@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include "common/config.h"
 #include "exec/workgroup/scan_executor.h"
 #include "runtime/current_thread.h"
 #include "storage/segment_flush_executor.h"
@@ -90,8 +91,11 @@ Status AsyncDeltaWriter::_init() {
         return Status::InternalError("StorageEngine::instance() is NULL");
     }
     bthread::ExecutionQueueOptions opts;
-    // opts.executor = StorageEngine::instance()->async_delta_writer_executor();
-    opts.executor = ExecEnv::GetInstance()->scan_executor_with_workgroup();
+    if (config::enable_resource_group_memtable) {
+        opts.executor = ExecEnv::GetInstance()->scan_executor();
+    } else {
+        opts.executor = StorageEngine::instance()->async_delta_writer_executor();
+    }
     if (UNLIKELY(opts.executor == nullptr)) {
         return Status::InternalError("AsyncDeltaWriterExecutor init failed");
     }

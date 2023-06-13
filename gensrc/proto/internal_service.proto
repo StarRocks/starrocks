@@ -178,6 +178,7 @@ message PTabletWriterOpenRequest {
     optional int32 sender_id = 30;
     optional PartialUpdateMode partial_update_mode = 31;
     optional int64 table_id = 32;
+    optional bool enable_resource_group = 33;
 };
 
 message PTabletWriterOpenResult {
