@@ -434,6 +434,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SELECT_RATIO_THRESHOLD = "SELECT_RATIO_THRESHOLD";
 
+    public static final String ENABLE_FUNCTION_FOLD_CONSTANTS = "enable_function_fold_constants";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1139,6 +1141,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SELECT_RATIO_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double selectRatioThreshold = 0.15;
+
+    @VarAttr(name = ENABLE_FUNCTION_FOLD_CONSTANTS, flag = VariableMgr.INVISIBLE)
+    private boolean enableFunctionFoldConstants = true;
 
     private int exprChildrenLimit = -1;
 
@@ -2183,6 +2188,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSelectRatioThreshold(double selectRatioThreshold) {
         this.selectRatioThreshold = selectRatioThreshold;
+    }
+
+    public boolean isEnableFunctionFoldConstants() {
+        return enableFunctionFoldConstants;
+    }
+
+    public void setEnableFunctionFoldConstants(boolean enableFunctionFoldConstants) {
+        this.enableFunctionFoldConstants = enableFunctionFoldConstants;
     }
 
     // Serialize to thrift object
