@@ -40,7 +40,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateFileStmt;
@@ -180,7 +179,7 @@ public class SmallFileMgrTest {
         smallFileMgr.saveSmallFilesV2(image.getDataOutputStream());
 
         SmallFileMgr followerMgr = new SmallFileMgr();
-        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream(), SRMetaBlockID.SMALL_FILE_MGR);
+        SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
         followerMgr.loadSmallFilesV2(reader);
         reader.close();
 
