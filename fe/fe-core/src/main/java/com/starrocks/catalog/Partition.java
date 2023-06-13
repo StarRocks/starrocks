@@ -112,10 +112,13 @@ public class Partition extends MetaObject implements Writable {
     @SerializedName(value = "shardGroupId")
     private long shardGroupId;
 
+    // Tablet metadata files of this version cannot be deleted.
+    // Since the minimum version of tablet metadata is 1, 0 means there is
+    // currently no locked version
+    private long lockedVersion = 0;
+
     private Partition() {
     }
-
-
 
     public Partition(long id, String name,
                      MaterializedIndex baseIndex,
@@ -520,5 +523,13 @@ public class Partition extends MetaObject implements Writable {
             hasChanged = true;
         }
         return hasChanged;
+    }
+
+    public long getLockedVersion() {
+        return lockedVersion;
+    }
+
+    public void setLockedVersion(long lockedVersion) {
+        this.lockedVersion = lockedVersion;
     }
 }

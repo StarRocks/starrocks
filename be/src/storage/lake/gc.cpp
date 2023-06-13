@@ -511,18 +511,26 @@ Status datafile_gc(std::string_view root_location, TabletManager* tablet_mgr, in
     return Status::OK();
 }
 
-Status delete_garbage_files(TabletManager* tablet_mgr, int64_t tablet_id, int64_t version) {
-    auto metadata_path = tablet_mgr->tablet_metadata_location(tablet_id, version);
-    ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(metadata_path, false));
-    auto data_dir = join_path(tablet_mgr->tablet_root_location(tablet_id), kSegmentDirectoryName);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(data_dir));
-    for (const auto& rowset : metadata->compaction_inputs()) {
-        RETURN_IF_ERROR(delete_rowset_files(fs.get(), data_dir, rowset));
+Status remove_old_version_tablet_impl(TabletManager* tablet_mgr, int64_t tablet_id, int64_t version,
+                                      bool has_garbage_files) {
+    if (has_garbage_files) {
+        auto metadata_path = tablet_mgr->tablet_metadata_location(tablet_id, version);
+        ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(metadata_path, false));
+        auto data_dir = join_path(tablet_mgr->tablet_root_location(tablet_id), kSegmentDirectoryName);
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(data_dir));
+        for (const auto& rowset : metadata->compaction_inputs()) {
+            RETURN_IF_ERROR(delete_rowset_files(fs.get(), data_dir, rowset));
+        }
+        for (const auto& file : metadata->orphan_files()) {
+            RETURN_IF_ERROR(delete_file_with_log(fs.get(), join_path(data_dir, file.name())));
+        }
     }
-    for (const auto& file : metadata->orphan_files()) {
-        RETURN_IF_ERROR(delete_file_with_log(fs.get(), join_path(data_dir, file.name())));
-    }
-    return Status::OK();
+    return tablet_mgr->delete_tablet_metadata(tablet_id, version);
+}
+
+void remove_old_version_tablet(TabletManager* tablet_mgr, int64_t tablet_id, int64_t version, bool has_garbage_files) {
+    Status st = remove_old_version_tablet_impl(tablet_mgr, tablet_id, version, has_garbage_files);
+    LOG_IF(WARNING, !st.ok()) << "Fail to remove tablet " << tablet_id << " of version " << version << ": " << st;
 }
 
 } // namespace starrocks::lake

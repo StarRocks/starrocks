@@ -24,4 +24,8 @@ using TabletMetadata = TabletMetadataPB;
 using TabletMetadataPtr = std::shared_ptr<TabletMetadata>;
 using MutableTabletMetadataPtr = std::shared_ptr<TabletMetadata>;
 
+inline bool is_garbage_version(const TabletMetadata& metadata) {
+    return metadata.compaction_inputs_size() > 0 || metadata.orphan_files_size() > 0;
+}
+
 } // namespace starrocks::lake

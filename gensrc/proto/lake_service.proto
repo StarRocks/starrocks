@@ -29,6 +29,7 @@ message PublishVersionRequest {
     // it explicitly for more clarity and better forward compatibility.
     optional int64 base_version = 3;
     optional int64 new_version = 4;
+    optional int64 locked_version = 5;
 }
 
 message PublishVersionResponse {

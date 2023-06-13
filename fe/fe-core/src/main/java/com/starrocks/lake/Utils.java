@@ -90,13 +90,8 @@ public class Utils {
         return groupMap;
     }
 
-    public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion)
-            throws NoAliveBackendException, RpcException {
-        publishVersion(tablets, txnId, baseVersion, newVersion, null);
-    }
-
-    public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion, Map<Long,
-            Double> compactionScores)
+    public static Map<Long, Double> publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
+                                                   long lockedVersion)
             throws NoAliveBackendException, RpcException {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (Tablet tablet : tablets) {
@@ -123,6 +118,7 @@ public class Utils {
             request.newVersion = newVersion;
             request.tabletIds = entry.getValue();
             request.txnIds = txnIds;
+            request.lockedVersion = lockedVersion;
 
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
             Future<PublishVersionResponse> future = lakeService.publishVersion(request);
@@ -130,6 +126,7 @@ public class Utils {
             backendList.add(node);
         }
 
+        Map<Long, Double> compactionScores = new HashMap<>();
         for (int i = 0; i < responseList.size(); i++) {
             try {
                 PublishVersionResponse response = responseList.get(i).get();
@@ -137,13 +134,14 @@ public class Utils {
                     throw new RpcException(backendList.get(i).getHost(),
                             "Fail to publish version for tablets {}" + response.failedTablets);
                 }
-                if (compactionScores != null && response != null && response.compactionScores != null) {
+                if (response != null && response.compactionScores != null) {
                     compactionScores.putAll(response.compactionScores);
                 }
             } catch (Exception e) {
                 throw new RpcException(backendList.get(i).getHost(), e.getMessage());
             }
         }
+        return compactionScores;
     }
 
     public static void publishLogVersion(@NotNull List<Tablet> tablets, long txnId, long version)

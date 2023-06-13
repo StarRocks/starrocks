@@ -29,6 +29,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.Daemon;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.CompactRequest;
@@ -136,6 +137,10 @@ public class CompactionScheduler extends Daemon {
 
                 if (job.isCompleted()) {
                     try {
+                        // It's ok to call `setLockedVersion()` without holding database lock, because only compaction
+                        // and schema change operation will update the locked version now, and there are no concurrent
+                        // compaction or schema change operation on the same partition now.
+                        job.getPartition().setLockedVersion(0);
                         commitCompaction(partition, job);
                         assert job.transactionHasCommitted();
                     } catch (Exception e) {
@@ -144,6 +149,7 @@ public class CompactionScheduler extends Daemon {
                     }
                 } else if (job.isFailed()) {
                     errorMsg = Objects.requireNonNull(job.getFailMessage(), "getFailMessage() is null");
+                    job.getPartition().setLockedVersion(0);
                     job.abort(); // Abort any executing task, if present.
                 }
 
@@ -254,13 +260,13 @@ public class CompactionScheduler extends Daemon {
 
         long txnId;
         long currentVersion;
-        OlapTable table;
+        LakeTable table;
         Partition partition;
         Map<Long, List<Long>> beToTablets;
 
         try {
             // lake table or lake materialized view
-            table = (OlapTable) db.getTable(partitionIdentifier.getTableId());
+            table = (LakeTable) db.getTable(partitionIdentifier.getTableId());
             // Compact a table of SCHEMA_CHANGE state does not make much sense, because the compacted data
             // will not be used after the schema change job finished.
             if (table != null && table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
@@ -273,8 +279,6 @@ public class CompactionScheduler extends Daemon {
                 return null;
             }
 
-            currentVersion = partition.getVisibleVersion();
-
             beToTablets = collectPartitionTablets(partition);
             if (beToTablets.isEmpty()) {
                 compactionManager.enableCompactionAfter(partitionIdentifier, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
@@ -284,6 +288,13 @@ public class CompactionScheduler extends Daemon {
             // Note: call `beginTransaction()` in the scope of database reader lock to make sure no shadow index will
             // be added to this table(i.e., no schema change) before calling `beginTransaction()`.
             txnId = beginTransaction(partitionIdentifier);
+
+            currentVersion = partition.getVisibleVersion();
+
+            // Try to prevent the data and metadata files of this version from being deleted before the compaction job finished.
+            // Set the locked version at the end of the try {...} block so that we don't need to clear the locked version
+            // in the catch {...} block below
+            partition.setLockedVersion(currentVersion);
         } catch (BeginTransactionException | AnalysisException | LabelAlreadyUsedException | DuplicatedRequestException e) {
             LOG.error("Fail to create transaction for compaction job. {}", e.getMessage());
             return null;
@@ -295,8 +306,7 @@ public class CompactionScheduler extends Daemon {
         }
 
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
-        String partitionName = String.format("%s.%s.%s", db.getFullName(), table.getName(), partition.getName());
-        CompactionJob job = new CompactionJob(partitionName, txnId);
+        CompactionJob job = new CompactionJob(db, table, partition, txnId);
         try {
             List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId);
             for (CompactionTask task : tasks) {
@@ -306,6 +316,13 @@ public class CompactionScheduler extends Daemon {
             return job;
         } catch (Exception e) {
             LOG.error(e);
+
+            // Note: Reset the locked version of the partition before aborting the compaction transaction to
+            // ensure that we will not overwrite the locked version set by the concurrent schema change task,
+            // because the schema change task will not start executing before we abort/publish the transaction.
+            // For more details, see LakeTableSchemaChangeJob.
+            partition.setLockedVersion(0);
+
             nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_FAILURE;
             abortTransactionIgnoreError(db.getId(), txnId, e.getMessage());
             job.finish();

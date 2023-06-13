@@ -56,8 +56,8 @@
 namespace starrocks::lake {
 
 static void* gc_checker(void* arg);
-static StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns,
-                                int txns_size);
+static StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_version, int64_t txn_id,
+                                int64_t locked_version, int64_t max_previous_version);
 
 TabletManager::TabletManager(LocationProvider* location_provider, UpdateManager* update_mgr, int64_t cache_capacity)
         : _location_provider(location_provider),
@@ -349,8 +349,8 @@ TabletMetadataPtr TabletManager::get_latest_cached_tablet_metadata(int64_t table
     return lookup_tablet_latest_metadata(tablet_latest_metadata_cache_key(tablet_id));
 }
 
-StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version) {
-    return get_tablet_metadata(tablet_metadata_location(tablet_id, version));
+StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache) {
+    return get_tablet_metadata(tablet_metadata_location(tablet_id, version), fill_cache);
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& path, bool fill_cache) {
@@ -575,13 +575,19 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
 }
 
 StatusOr<double> TabletManager::publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
-                                                const int64_t* txns, int txns_size) {
+                                                int64_t txn, int64_t locked_version, int64_t max_previous_versions) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
-    return publish(&tablet, base_version, new_version, txns, txns_size);
+    return publish(&tablet, base_version, new_version, txn, locked_version, max_previous_versions);
 }
 
-StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns,
-                         int txns_size) {
+StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_version, int64_t txn_id,
+                         int64_t locked_version, int64_t max_previous_versions) {
+    VLOG(3) << "Processing publish version request. tablet_id=" << tablet->id() << " base_version=" << base_version
+            << " new_version=" << new_version << " txn_id=" << txn_id << " locked_version=" << locked_version
+            << " max_previous_versions=" << max_previous_versions;
+    if (UNLIKELY(max_previous_versions < 0)) {
+        return Status::InvalidArgument("max_previous_versions is negative");
+    }
     // Read base version metadata
     auto res = tablet->get_metadata(base_version);
     if (res.status().is_not_found()) {
@@ -610,7 +616,7 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
         new_metadata->mutable_orphan_files()->Clear();
     }
 
-    if (base_metadata->compaction_inputs_size() > 0 || base_metadata->orphan_files_size() > 0) {
+    if (is_garbage_version(*base_metadata)) {
         new_metadata->set_prev_garbage_version(base_metadata->version());
     }
 
@@ -629,43 +635,40 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
         }
     }
 
-    // Apply txn logs
+    // Apply txn log
     int64_t alter_version = -1;
-    for (int i = 0; i < txns_size; i++) {
-        auto txn_id = txns[i];
-        auto txn_log_st = tablet->get_txn_log(txn_id);
+    auto txn_log_st = tablet->get_txn_log(txn_id);
 
-        if (txn_log_st.status().is_not_found()) {
-            auto target_metadata_or = tablet->get_metadata(new_version);
-            if (target_metadata_or.ok()) {
-                // txn log does not exist but the new version metadata has been generated, maybe
-                // this is a duplicated publish version request.
-                return compaction_score(**target_metadata_or);
-            }
+    if (txn_log_st.status().is_not_found()) {
+        auto target_metadata_or = tablet->get_metadata(new_version);
+        if (target_metadata_or.ok()) {
+            // txn log does not exist but the new version metadata has been generated, maybe
+            // this is a duplicated publish version request.
+            return compaction_score(**target_metadata_or);
         }
+    }
 
-        if (!txn_log_st.ok()) {
-            LOG(WARNING) << "Fail to get " << tablet->txn_log_location(txn_id) << ": " << txn_log_st.status();
-            return txn_log_st.status();
-        }
+    if (!txn_log_st.ok()) {
+        LOG(WARNING) << "Fail to get " << tablet->txn_log_location(txn_id) << ": " << txn_log_st.status();
+        return txn_log_st.status();
+    }
 
-        auto& txn_log = txn_log_st.value();
-        if (txn_log->has_op_schema_change()) {
-            alter_version = txn_log->op_schema_change().alter_version();
-        }
+    auto& txn_log = txn_log_st.value();
+    if (txn_log->has_op_schema_change()) {
+        alter_version = txn_log->op_schema_change().alter_version();
+    }
 
-        auto st = log_applier->apply(*txn_log);
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to apply " << tablet->txn_log_location(txn_id) << ": " << st;
-            return st;
-        }
+    auto st = log_applier->apply(*txn_log);
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to apply " << tablet->txn_log_location(txn_id) << ": " << st;
+        return st;
     }
 
     // Apply vtxn logs for schema change
     // Should firstly apply schema change txn log, then apply txn version logs,
     // because the rowsets in txn log are older.
     if (alter_version != -1 && alter_version + 1 < new_version) {
-        DCHECK(base_version == 1 && txns_size == 1);
+        DCHECK(base_version == 1);
         for (int64_t v = alter_version + 1; v < new_version; ++v) {
             auto txn_vlog = tablet->get_txn_vlog(v);
             if (txn_vlog.status().is_not_found()) {
@@ -693,12 +696,10 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
     // Save new metadata
     RETURN_IF_ERROR(log_applier->finish());
 
-    // Delete txn logs
-    for (int i = 0; i < txns_size; i++) {
-        auto txn_id = txns[i];
-        auto st = tablet->delete_txn_log(txn_id);
-        LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_log_location(txn_id) << ": " << st;
-    }
+    // Delete txn log
+    st = tablet->delete_txn_log(txn_id);
+    LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_log_location(txn_id) << ": " << st;
+
     // Delete vtxn logs
     if (alter_version != -1 && alter_version + 1 < new_version) {
         for (int64_t v = alter_version + 1; v < new_version; ++v) {
@@ -707,20 +708,25 @@ StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_versi
         }
     }
 
-    if (config::lake_enable_aggressive_gc && DeltaWriter::io_threads() != nullptr) {
+    if (config::lake_enable_aggressive_gc) {
+        CHECK(DeltaWriter::io_threads() != nullptr);
+        auto priority = config::lake_aggressive_gc_high_priority ? ThreadPool::HIGH_PRIORITY : ThreadPool::LOW_PRIORITY;
         auto tablet_mgr = tablet->tablet_mgr();
         auto tablet_id = new_metadata->id();
-        auto old_version = new_version - config::lake_gc_metadata_max_versions;
-        auto priority = config::lake_aggressive_gc_high_priority ? ThreadPool::HIGH_PRIORITY : ThreadPool::LOW_PRIORITY;
+        auto old_version = new_version - max_previous_versions - 1;
         auto may_has_garbage_file = old_version <= new_metadata->prev_garbage_version();
-        (void)DeltaWriter::io_threads()->submit_func(
-                [=]() {
-                    if (may_has_garbage_file) {
-                        (void)delete_garbage_files(tablet_mgr, tablet_id, old_version);
-                    }
-                    (void)tablet_mgr->delete_tablet_metadata(tablet_id, old_version);
-                },
-                priority);
+        if (old_version > 0 && old_version != locked_version) {
+            (void)DeltaWriter::io_threads()->submit_func(
+                    [=]() { remove_old_version_tablet(tablet_mgr, tablet_id, old_version, may_has_garbage_file); },
+                    priority);
+        }
+        if (txn_log->has_op_compaction() && txn_log->op_compaction().input_version() < old_version) {
+            auto compacted_version = txn_log->op_compaction().input_version();
+            auto has_garbage_files = txn_log->op_compaction().input_version_contains_garbage_files();
+            (void)DeltaWriter::io_threads()->submit_func(
+                    [=]() { remove_old_version_tablet(tablet_mgr, tablet_id, compacted_version, has_garbage_files); },
+                    priority);
+        }
     }
 
     return compaction_score(*new_metadata);

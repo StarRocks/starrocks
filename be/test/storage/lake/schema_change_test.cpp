@@ -240,7 +240,7 @@ TEST_P(SchemaChangeAddColumnTest, test_add_column) {
         ASSERT_OK(delta_writer->write(chunk0, indexes, sizeof(indexes) / sizeof(indexes[0])));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, txn_id, 0, 10).status());
         version++;
         txn_id++;
     }
@@ -287,12 +287,13 @@ TEST_P(SchemaChangeAddColumnTest, test_add_column) {
     // publish schema change
     int concurrency = GetParam().concurrency;
     if (concurrency == 1) {
-        ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &alter_txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, alter_txn_id, 0, 10).status());
     } else {
         std::vector<std::thread> threads;
         for (int i = 0; i < concurrency; i++) {
-            threads.emplace_back(
-                    [&]() { (void)_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &alter_txn_id, 1); });
+            threads.emplace_back([&]() {
+                (void)_tablet_manager->publish_version(new_tablet_id, 1, version + 1, alter_txn_id, 0, 10);
+            });
         }
         for (auto& t : threads) {
             t.join();
@@ -483,7 +484,7 @@ TEST_P(SchemaChangeModifyColumnTypeTest, test_alter_column_type) {
         ASSERT_OK(delta_writer->write(chunk0, indexes, sizeof(indexes) / sizeof(indexes[0])));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, txn_id, 0, 10).status());
         version++;
         txn_id++;
     }
@@ -528,12 +529,13 @@ TEST_P(SchemaChangeModifyColumnTypeTest, test_alter_column_type) {
 
     int concurrency = GetParam().concurrency;
     if (concurrency == 1) {
-        ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &alter_txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, alter_txn_id, 0, 10).status());
     } else {
         std::vector<std::thread> threads;
         for (int i = 0; i < concurrency; i++) {
-            threads.emplace_back(
-                    [&]() { (void)_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &alter_txn_id, 1); });
+            threads.emplace_back([&]() {
+                (void)_tablet_manager->publish_version(new_tablet_id, 1, version + 1, alter_txn_id, 0, 10);
+            });
         }
         for (auto& t : threads) {
             t.join();
@@ -750,7 +752,7 @@ TEST_P(SchemaChangeModifyColumnOrderTest, test_alter_key_order) {
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, txn_id, 0, 10).status());
         version++;
         txn_id++;
     }
@@ -783,7 +785,7 @@ TEST_P(SchemaChangeModifyColumnOrderTest, test_alter_key_order) {
         txn_id++;
     }
 
-    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &alter_txn_id, 1).status());
+    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, alter_txn_id, 0, 10).status());
     version++;
     txn_id++;
 

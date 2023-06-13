@@ -240,7 +240,7 @@ TEST_F(PartialUpdateTest, test_write) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, _txn_id, 0, 10).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
@@ -258,7 +258,7 @@ TEST_F(PartialUpdateTest, test_write) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, _txn_id, 0, 10).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
@@ -286,7 +286,7 @@ TEST_F(PartialUpdateTest, test_write_multi_segment) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, _txn_id, 0, 10).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
@@ -307,7 +307,7 @@ TEST_F(PartialUpdateTest, test_write_multi_segment) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, _txn_id, 0, 10).status());
         version++;
     }
     config::write_buffer_size = old_size;
@@ -339,7 +339,7 @@ TEST_F(PartialUpdateTest, test_write_multi_segment_by_diff_val) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, _txn_id, 0, 10).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
@@ -360,7 +360,7 @@ TEST_F(PartialUpdateTest, test_write_multi_segment_by_diff_val) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, _txn_id, 0, 10).status());
         version++;
     }
     config::write_buffer_size = old_size;
@@ -391,7 +391,7 @@ TEST_F(PartialUpdateTest, test_resolve_conflict) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, _txn_id, 0, 10).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
@@ -413,7 +413,7 @@ TEST_F(PartialUpdateTest, test_resolve_conflict) {
     for (int i = _txn_id - 2; i <= _txn_id; i++) {
         // Publish version
         const int64_t ctxnid = i;
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &ctxnid, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, ctxnid, 0, 10).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
@@ -442,7 +442,7 @@ TEST_F(PartialUpdateTest, test_resolve_conflict_multi_segment) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, _txn_id, 0, 10).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
@@ -467,7 +467,7 @@ TEST_F(PartialUpdateTest, test_resolve_conflict_multi_segment) {
     for (int i = _txn_id - 2; i <= _txn_id; i++) {
         // Publish version
         const int64_t ctxnid = i;
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &ctxnid, 1).status());
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, ctxnid, 0, 10).status());
         version++;
     }
     config::write_buffer_size = old_size;

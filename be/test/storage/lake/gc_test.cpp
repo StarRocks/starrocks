@@ -552,7 +552,7 @@ TEST_F(GCTest, test_delete_compaction_inputs) {
         ASSERT_OK(tablet_mgr->put_txn_log(txnlog));
 
         // Publish
-        ASSIGN_OR_ABORT(auto score, tablet_mgr->publish_version(tablet_id, 2, 3, &txn_id, 1));
+        ASSIGN_OR_ABORT(auto score, tablet_mgr->publish_version(tablet_id, 2, 3, txn_id, 0, 10));
         (void)score;
 
         ASSIGN_OR_ABORT(auto metadata, tablet_mgr->get_tablet_metadata(tablet_id, 3));
@@ -576,7 +576,7 @@ TEST_F(GCTest, test_delete_compaction_inputs) {
         ASSERT_OK(tablet_mgr->put_txn_log(txnlog));
 
         // Publish
-        ASSIGN_OR_ABORT(auto score, tablet_mgr->publish_version(tablet_id, 3, 4, &txn_id, 1));
+        ASSIGN_OR_ABORT(auto score, tablet_mgr->publish_version(tablet_id, 3, 4, txn_id, 0, 10));
         (void)score;
 
         ASSIGN_OR_ABORT(auto metadata, tablet_mgr->get_tablet_metadata(tablet_id, 4));
@@ -598,7 +598,7 @@ TEST_F(GCTest, test_delete_compaction_inputs) {
         ASSERT_OK(tablet_mgr->put_txn_log(txnlog));
 
         // Publish
-        ASSIGN_OR_ABORT(auto score, tablet_mgr->publish_version(tablet_id, 4, 5, &txn_id, 1));
+        ASSIGN_OR_ABORT(auto score, tablet_mgr->publish_version(tablet_id, 4, 5, txn_id, 0, 10));
         (void)score;
 
         ASSIGN_OR_ABORT(auto metadata, tablet_mgr->get_tablet_metadata(tablet_id, 5));

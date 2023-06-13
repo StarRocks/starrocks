@@ -50,6 +50,7 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _total_num_rows, _total_data_size);
     ASSIGN_OR_RETURN(auto writer, _tablet->new_writer(kVertical, _txn_id, max_rows_per_segment));
     RETURN_IF_ERROR(writer->open());
+    ASSIGN_OR_RETURN(auto input_metadata, _tablet->get_metadata(_version));
     DeferOp defer([&]() { writer->close(); });
 
     std::vector<std::vector<uint32_t>> column_groups;
@@ -94,6 +95,8 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
+    op_compaction->set_input_version(_version);
+    op_compaction->set_input_version_contains_garbage_files(is_garbage_version(*input_metadata));
     RETURN_IF_ERROR(_tablet->put_txn_log(std::move(txn_log)));
     return Status::OK();
 }

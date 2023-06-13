@@ -89,6 +89,12 @@ message TxnLogPB {
     message OpCompaction {
         repeated uint32 input_rowsets = 1;
         optional RowsetMetadataPB output_rowset = 2;
+        // The version of the compaction input tablet metadata. Used to check whether
+        // the input tablet metadata need to be deleted when finished publish the copmaction
+        // transaction.
+        optional int64 input_version = 3;
+        // Whether the input tablet contains garbage files to be deleted
+        optional int64 input_version_contains_garbage_files = 4;
     }
 
     message OpSchemaChange {

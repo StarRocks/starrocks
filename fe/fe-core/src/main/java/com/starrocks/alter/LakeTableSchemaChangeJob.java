@@ -359,6 +359,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
                 // the schema change task will transform the data before visible version(included).
                 long visibleVersion = partition.getVisibleVersion();
+                // Prevent the metadata and data files of this version from being deleted.
+                // There is no need to synchronize the locked version with the follower nodes of FE.
+                partition.setLockedVersion(visibleVersion);
 
                 Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
@@ -420,6 +423,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 Preconditions.checkNotNull(partition, partitionId);
                 long commitVersion = partition.getNextVersion();
                 commitVersionMap.put(partitionId, commitVersion);
+                partition.setLockedVersion(0);
                 LOG.debug("commit version of partition {} is {}. jobId={}", partitionId, commitVersion, jobId);
             }
             this.jobState = JobState.FINISHED_REWRITING;
@@ -527,7 +531,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
-                    Utils.publishVersion(shadowIndex.getTablets(), watershedTxnId, 1, commitVersion);
+                    Utils.publishVersion(shadowIndex.getTablets(), watershedTxnId, 1, commitVersion, 0);
                 }
             }
             return true;
@@ -702,6 +706,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             Partition partition = table.getPartition(partitionId);
             Preconditions.checkNotNull(partition, partitionId);
+            partition.setLockedVersion(0);
             for (MaterializedIndex shadowIdx : partitionIndexMap.row(partitionId).values()) {
                 partition.deleteRollupIndex(shadowIdx.getId());
             }

@@ -65,7 +65,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -383,6 +382,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long tableId = tableCommitInfo.getTableId();
         long txnVersion = partitionCommitInfo.getVersion();
         long txnId = txnState.getTransactionId();
+        long lockedVersion = 0;
         String txnLabel = txnState.getLabel();
         List<Tablet> normalTablets = null;
         List<Tablet> shadowTablets = null;
@@ -404,6 +404,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (partition.getVisibleVersion() + 1 != txnVersion) {
                 return false;
             }
+            lockedVersion = partition.getLockedVersion();
             List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
             for (MaterializedIndex index : indexes) {
                 if (!index.visibleForTransaction(txnId)) {
@@ -427,8 +428,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 Utils.publishLogVersion(shadowTablets, txnId, txnVersion);
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
-                Map<Long, Double> compactionScores = new HashMap<>();
-                Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, compactionScores);
+                Map<Long, Double> compactionScores;
+                compactionScores = Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, lockedVersion);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);

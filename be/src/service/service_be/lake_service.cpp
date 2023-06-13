@@ -61,6 +61,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         cntl->SetFailed("missing txn_ids");
         return;
     }
+    if (request->txn_ids_size() > 1) {
+        cntl->SetFailed("does not support publish multiple transactions in a single request yet");
+        return;
+    }
     if (request->tablet_ids_size() == 0) {
         cntl->SetFailed("missing tablet_ids");
         return;
@@ -74,22 +78,24 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         auto task = [&, tablet_id]() {
             auto base_version = request->base_version();
             auto new_version = request->new_version();
-            auto txns = request->txn_ids().data();
-            auto txns_size = request->txn_ids().size();
+            auto txn_id = request->txn_ids(0);
+            auto locked_version = request->locked_version();
+            auto max_previous_versions = config::lake_gc_metadata_max_versions;
             auto tablet_manager = _env->lake_tablet_manager();
 
-            auto res = tablet_manager->publish_version(tablet_id, base_version, new_version, txns, txns_size);
+            auto res = tablet_manager->publish_version(tablet_id, base_version, new_version, txn_id, locked_version,
+                                                       max_previous_versions);
             if (res.ok()) {
                 std::lock_guard l(response_mtx);
                 response->mutable_compaction_scores()->insert({tablet_id, *res});
             } else {
                 LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                             << " txn_id=" << txns[0];
+                             << " txn_id=" << txn_id;
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
             }
             latch.count_down();
-            VLOG(5) << "Published version. tablet_id=" << tablet_id << " txn_id=" << txns[0];
+            VLOG(5) << "Published version. tablet_id=" << tablet_id << " txn_id=" << txn_id;
         };
 
         auto st = thread_pool->submit_func(task, ThreadPool::HIGH_PRIORITY);

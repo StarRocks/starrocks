@@ -14,6 +14,9 @@
 
 package com.starrocks.lake.compaction;
 
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Partition;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.VisibleStateWaiter;
 
@@ -23,7 +26,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class CompactionJob {
-    private final String partitionName;
+    private final Database db;
+    private final LakeTable table;
+    private final Partition partition;
     private final long txnId;
     private final long startTs;
     private volatile long commitTs;
@@ -31,8 +36,10 @@ public class CompactionJob {
     private VisibleStateWaiter visibleStateWaiter;
     private List<CompactionTask> tasks;
 
-    public CompactionJob(String partitionName, long txnId) {
-        this.partitionName = partitionName;
+    public CompactionJob(Database db, LakeTable table, Partition partition, long txnId) {
+        this.db = Objects.requireNonNull(db, "db is null");
+        this.table = Objects.requireNonNull(table, "table is null");
+        this.partition = Objects.requireNonNull(partition, "partitio is null");
         this.txnId = txnId;
         this.startTs = System.currentTimeMillis();
     }
@@ -103,10 +110,14 @@ public class CompactionJob {
     }
 
     public String getFullPartitionName() {
-        return partitionName;
+        return String.format("%s.%s.%s (%d)", db.getFullName(), table.getName(), partition.getName(), partition.getId());
+    }
+
+    Partition getPartition() {
+        return partition;
     }
 
     public String getDebugString() {
-        return String.format("TxnId=%d partition=%s", txnId, partitionName);
+        return String.format("TxnId=%d partition=%s", txnId, getFullPartitionName());
     }
 }

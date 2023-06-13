@@ -130,6 +130,21 @@ TEST_F(LakeServiceTest, test_publish_version_missing_txn_ids) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(LakeServiceTest, test_publish_version_multiple_txn_ids) {
+    brpc::Controller cntl;
+    lake::PublishVersionRequest request;
+    lake::PublishVersionResponse response;
+    request.set_base_version(1);
+    request.set_new_version(3);
+    request.add_txn_ids(1000);
+    request.add_txn_ids(1001);
+    request.add_tablet_ids(_tablet_id);
+    _lake_service.publish_version(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("does not support publish multiple transactions in a single request yet", cntl.ErrorText());
+}
+
+// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_missing_base_version) {
     brpc::Controller cntl;
     lake::PublishVersionRequest request;

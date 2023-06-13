@@ -66,8 +66,8 @@ public:
     Status delete_tablet(int64_t tablet_id);
 
     // Returns the compaction score of the newly created tablet metadata
-    StatusOr<double> publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version, const int64_t* txns,
-                                     int txns_size);
+    StatusOr<double> publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version, int64_t txn_id,
+                                     int64_t locked_version, int64_t max_previous_versions);
 
     void abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size);
 
@@ -77,7 +77,7 @@ public:
 
     Status put_tablet_metadata(TabletMetadataPtr metadata);
 
-    StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache = true);
 
     StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& path, bool fill_cache = true);
 

@@ -52,7 +52,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     reader_params.use_page_cache = false;
     reader_params.fill_data_cache = false;
     RETURN_IF_ERROR(reader.open(reader_params));
-
+    ASSIGN_OR_RETURN(auto input_metadata, _tablet->get_metadata(_version));
     ASSIGN_OR_RETURN(auto writer, _tablet->new_writer(kHorizontal, _txn_id))
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
@@ -101,6 +101,8 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
+    op_compaction->set_input_version(_version);
+    op_compaction->set_input_version_contains_garbage_files(is_garbage_version(*input_metadata));
     Status st = _tablet->put_txn_log(std::move(txn_log));
     return st;
 }

@@ -173,7 +173,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, txn_id, 0, 10).status());
         version++;
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
@@ -187,7 +187,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, txn_id, 0, 10).status());
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
 
@@ -213,22 +213,16 @@ TEST_F(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, txn_id, 0, 10).status());
     version++;
     ASSERT_EQ(0, read(version));
 }
 
 TEST_F(LakeDuplicateKeyCompactionTest, test_aggressive_gc) {
     ASSERT_TRUE(DeltaWriter::io_threads() != nullptr);
+    ASSERT_TRUE(config::experimental_lake_enable_fast_gc);
 
-    auto save_max_versions = config::lake_gc_metadata_max_versions;
-    auto save_enable_aggressive_gc = config::lake_enable_aggressive_gc;
-    auto save_enable_fast_gc = config::experimental_lake_enable_fast_gc;
-
-    config::lake_gc_metadata_max_versions = 2;
-    config::lake_enable_aggressive_gc = true;
-    config::experimental_lake_enable_fast_gc = true;
-
+    const auto kMaxPreviousVersions = 1;
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
@@ -246,7 +240,8 @@ TEST_F(LakeDuplicateKeyCompactionTest, test_aggressive_gc) {
         ASSERT_OK(delta_writer->flush());
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, txn_id, 0, kMaxPreviousVersions)
+                          .status());
         version++;
     }
     {
@@ -255,7 +250,10 @@ TEST_F(LakeDuplicateKeyCompactionTest, test_aggressive_gc) {
         CompactionTask::Progress progress;
         ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, progress.value());
-        ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(
+                _tablet_mgr
+                        ->publish_version(_tablet_metadata->id(), version, version + 1, txn_id, 0, kMaxPreviousVersions)
+                        .status());
         version++;
         ASSERT_EQ(kChunkSize * 3, read(version));
     }
@@ -263,7 +261,7 @@ TEST_F(LakeDuplicateKeyCompactionTest, test_aggressive_gc) {
     ASSIGN_OR_ABORT(auto compacted_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     ASSERT_GT(compacted_metadata->compaction_inputs_size(), 0);
 
-    for (int i = 0; i < config::lake_gc_metadata_max_versions; i++) {
+    for (int i = 0; i < kMaxPreviousVersions + 1; i++) {
         auto txn_id = next_id();
         auto delta_writer =
                 DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
@@ -272,15 +270,20 @@ TEST_F(LakeDuplicateKeyCompactionTest, test_aggressive_gc) {
         ASSERT_OK(delta_writer->flush());
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, txn_id, 0, kMaxPreviousVersions)
+                          .status());
         version++;
     }
 
     DeltaWriter::io_threads()->wait();
 
-    for (int v = 1; v <= version - config::lake_gc_metadata_max_versions; v++) {
+    for (int v = 1; v <= version; v++) {
         auto res = _tablet_mgr->get_tablet_metadata(tablet_id, v);
-        ASSERT_TRUE(res.status().is_not_found()) << res.status();
+        if (v < version - kMaxPreviousVersions) {
+            ASSERT_TRUE(res.status().is_not_found()) << v << ": " << res.status();
+        } else {
+            ASSERT_TRUE(res.ok()) << v << ": " << res.status();
+        }
     }
 
     for (const auto& rowset : compacted_metadata->compaction_inputs()) {
@@ -288,12 +291,140 @@ TEST_F(LakeDuplicateKeyCompactionTest, test_aggressive_gc) {
             EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(tablet_id, segment)));
         }
     }
+}
 
-    ASSERT_EQ(kChunkSize * 5, read(version));
+TEST_F(LakeDuplicateKeyCompactionTest, test_aggressive_gc_lock_version) {
+    ASSERT_TRUE(DeltaWriter::io_threads() != nullptr);
+    ASSERT_TRUE(config::experimental_lake_enable_fast_gc);
 
-    config::lake_gc_metadata_max_versions = save_max_versions;
-    config::lake_enable_aggressive_gc = save_enable_aggressive_gc;
-    config::experimental_lake_enable_fast_gc = save_enable_fast_gc;
+    const auto kMaxPreviousVersions = 2;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 2; i++) {
+        auto txn_id = next_id();
+        auto delta_writer =
+                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->flush());
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, txn_id, 0, kMaxPreviousVersions)
+                          .status());
+        version++;
+    }
+
+    auto locked_version = version;
+
+    for (int i = 0; i < kMaxPreviousVersions * 2; i++) {
+        auto txn_id = next_id();
+        auto delta_writer =
+                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->flush());
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        ASSERT_OK(
+                _tablet_mgr
+                        ->publish_version(tablet_id, version, version + 1, txn_id, locked_version, kMaxPreviousVersions)
+                        .status());
+        version++;
+    }
+
+    DeltaWriter::io_threads()->wait();
+
+    for (int v = 1; v <= version; v++) {
+        auto res = _tablet_mgr->get_tablet_metadata(tablet_id, v);
+        if (v < version - kMaxPreviousVersions && v != locked_version) {
+            ASSERT_TRUE(res.status().is_not_found()) << v << ": " << res.status();
+        } else {
+            ASSERT_TRUE(res.ok()) << v << ": " << res.status();
+        }
+    }
+}
+
+TEST_F(LakeDuplicateKeyCompactionTest, test_aggressive_gc_delete_compaction_input_version) {
+    ASSERT_TRUE(DeltaWriter::io_threads() != nullptr);
+    ASSERT_TRUE(config::experimental_lake_enable_fast_gc);
+
+    const auto kMaxPreviousVersions = 1;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 2; i++) {
+        auto txn_id = next_id();
+        auto delta_writer =
+                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->flush());
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, txn_id, 0, kMaxPreviousVersions)
+                          .status());
+        version++;
+    }
+    auto compaction_input_version = version;
+    auto compaction_txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, compaction_txn_id));
+        CompactionTask::Progress progress;
+        ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
+        EXPECT_EQ(100, progress.value());
+    }
+    for (int i = 0; i < kMaxPreviousVersions + 1; i++) {
+        auto txn_id = next_id();
+        auto delta_writer =
+                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->flush());
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        ASSERT_OK(_tablet_mgr
+                          ->publish_version(tablet_id, version, version + 1, txn_id, compaction_input_version,
+                                            kMaxPreviousVersions)
+                          .status());
+        version++;
+    }
+
+    DeltaWriter::io_threads()->wait();
+
+    for (int v = 1; v <= version; v++) {
+        auto res = _tablet_mgr->get_tablet_metadata(tablet_id, v);
+        if (v < version - kMaxPreviousVersions && v != compaction_input_version) {
+            ASSERT_TRUE(res.status().is_not_found()) << v << ": " << res.status();
+        } else {
+            ASSERT_TRUE(res.ok()) << v << ": " << res.status();
+        }
+    }
+
+    {
+        ASSERT_OK(_tablet_mgr
+                          ->publish_version(_tablet_metadata->id(), version, version + 1, compaction_txn_id, 0,
+                                            kMaxPreviousVersions)
+                          .status());
+        version++;
+    }
+
+    DeltaWriter::io_threads()->wait();
+
+    {
+        auto res = _tablet_mgr->get_tablet_metadata(tablet_id, compaction_input_version);
+        ASSERT_TRUE(res.status().is_not_found()) << res.status();
+    }
 }
 
 class LakeDuplicateKeyOverlapSegmentsCompactionTest : public LakeCompactionTest {
@@ -412,7 +543,7 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, txn_id, 0, 10).status());
         version++;
     }
     ASSERT_EQ(kChunkSize * 6, read(version));
@@ -435,7 +566,7 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
         CompactionTask::Progress progress;
         ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, progress.value());
-        ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, txn_id, 0, 10).status());
         version++;
         ASSERT_EQ(kChunkSize * 6, read(version));
     }
@@ -584,7 +715,7 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, txn_id, 0, 10).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, read(version));
@@ -598,7 +729,7 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, txn_id, 0, 10).status());
     version++;
     ASSERT_EQ(kChunkSize, read(version));
 
@@ -726,7 +857,7 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, txn_id, 0, 10).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, read(version));
@@ -764,7 +895,7 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
-    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, &txn_id, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), version, version + 1, txn_id, 0, 10).status());
     version++;
     ASSERT_EQ(kChunkSize - 4, read(version));
 
