@@ -76,6 +76,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.List;
 
+import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
+
 /**
  * Optimizer's entrance class
  */
@@ -220,10 +222,15 @@ public class Optimizer {
         if (Config.enable_experimental_mv
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
                 && !optimizerConfig.isRuleBased()) {
-            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessMvs")) {
-                MvRewritePreprocessor preprocessor =
+            MvRewritePreprocessor preprocessor =
                         new MvRewritePreprocessor(connectContext, columnRefFactory, context, logicOperatorTree);
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessMvs")) {
                 preprocessor.prepareMvCandidatesForPlan();
+            }
+            if (connectContext.getSessionVariable().isEnableSyncMaterializedViewRewrite()) {
+                try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessSyncMvs")) {
+                    preprocessor.prepareSyncMvCandidatesForPlan(connectContext);
+                }
             }
         }
     }
@@ -304,7 +311,7 @@ public class Optimizer {
             }
         }
 
-        if (sessionVariable.isEnableSyncMaterializedViewRewrite()) {
+        if (!optimizerConfig.isRuleDisable(TF_MATERIALIZED_VIEW) && sessionVariable.isEnableSyncMaterializedViewRewrite()) {
             // Add a config to decide whether to rewrite sync mv.
             tree = new MaterializedViewRule().transform(tree, context).get(0);
             deriveLogicalProperty(tree);

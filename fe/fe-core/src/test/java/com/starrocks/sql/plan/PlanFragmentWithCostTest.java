@@ -1346,19 +1346,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Thread.sleep(3000);
         String sql = "select LO_ORDERDATE, LO_ORDERKEY from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "PLAN FRAGMENT 1\n" +
-                " OUTPUT EXPRS:\n" +
-                "  PARTITION: RANDOM\n" +
-                "\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
-                "    UNPARTITIONED\n" +
-                "\n" +
-                "  1:Project\n" +
-                "  |  <slot 1> : 1: LO_ORDERDATE\n" +
-                "  |  <slot 2> : 2: LO_ORDERKEY\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
+        assertContains(plan, "0:OlapScanNode\n" +
                 "     TABLE: lineorder_flat_for_mv\n" +
                 "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
                 "     partitions=7/7\n" +

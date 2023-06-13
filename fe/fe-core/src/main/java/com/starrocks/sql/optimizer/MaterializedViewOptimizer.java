@@ -29,7 +29,7 @@ public class MaterializedViewOptimizer {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         String mvSql = mv.getViewDefineSql();
         Pair<OptExpression, LogicalPlan> plans =
-                MvUtils.getRuleOptimizedLogicalPlan(mvSql, columnRefFactory, connectContext);
+                MvUtils.getRuleOptimizedLogicalPlan(mv, mvSql, columnRefFactory, connectContext);
         if (plans == null) {
             return null;
         }

@@ -74,6 +74,10 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     private KeysType keysType;
     @SerializedName(value = "defineStmt")
     private OriginStatement defineStmt;
+    @SerializedName(value = "dbId")
+    private long dbId;
+    @SerializedName(value = "viewDefineSql")
+    private String viewDefineSql;
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
@@ -146,6 +150,22 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         } else {
             return defineStmt.originStmt;
         }
+    }
+
+    public long getDbId() {
+        return dbId;
+    }
+
+    public void setDbId(long dbId) {
+        this.dbId = dbId;
+    }
+
+    public String getViewDefineSql() {
+        return viewDefineSql;
+    }
+
+    public void setViewDefineSql(String viewDefineSql) {
+        this.viewDefineSql = viewDefineSql;
     }
 
     // The column names of the materialized view are all lowercase, but the column names may be uppercase
