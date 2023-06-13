@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <numeric>
 #include <string_view>
 #include <utility>
 
@@ -58,6 +59,15 @@ public:
 
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
     void append_sort_key_idx(ColumnId idx) { _sort_key_idxes.emplace_back(idx); }
+
+    std::vector<ColumnId> get_sort_key_idxes() {
+        if (!_sort_key_idxes.empty()) {
+            return _sort_key_idxes;
+        }
+        std::vector<ColumnId> sort_key_idxes(num_key_fields());
+        std::iota(sort_key_idxes.begin(), sort_key_idxes.end(), 0);
+        return sort_key_idxes;
+    }
 
     void reserve(size_t size) { _fields.reserve(size); }
 
