@@ -94,12 +94,6 @@ public class MultiCastPlanFragment extends PlanFragment {
     }
 
     @Override
-    public int getNumNodes() {
-        Preconditions.checkState(false);
-        return 0;
-    }
-
-    @Override
     public void setOutputPartition(DataPartition outputPartition) {
         Preconditions.checkState(false);
     }

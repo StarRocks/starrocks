@@ -81,7 +81,6 @@ rollup: partsupp
 tabletRatio=10/10
 cardinality=80000000
 avgRowSize=28.0
-numNodes=0
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
@@ -134,7 +133,6 @@ rollup: partsupp
 tabletRatio=10/10
 cardinality=80000000
 avgRowSize=20.0
-numNodes=0
 
 PLAN FRAGMENT 4
 OUTPUT EXPRS:
@@ -162,7 +160,6 @@ rollup: supplier
 tabletRatio=1/1
 cardinality=1000000
 avgRowSize=8.0
-numNodes=0
 
 PLAN FRAGMENT 5
 OUTPUT EXPRS:
@@ -184,7 +181,6 @@ rollup: nation
 tabletRatio=1/1
 cardinality=1
 avgRowSize=29.0
-numNodes=0
 
 PLAN FRAGMENT 6
 OUTPUT EXPRS:
@@ -212,7 +208,6 @@ rollup: supplier
 tabletRatio=1/1
 cardinality=1000000
 avgRowSize=8.0
-numNodes=0
 
 PLAN FRAGMENT 7
 OUTPUT EXPRS:
@@ -234,6 +229,5 @@ rollup: nation
 tabletRatio=1/1
 cardinality=1
 avgRowSize=29.0
-numNodes=0
 [end]
 
