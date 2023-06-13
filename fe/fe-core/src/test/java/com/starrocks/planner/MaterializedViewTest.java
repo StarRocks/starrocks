@@ -2852,18 +2852,18 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
 
         {
-            String mv = "select lo_orderkey, c_name, sum(lo_revenue) as total_revenue" +
+            String mv = "select lo_orderkey, c_custkey, sum(lo_revenue) as total_revenue" +
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey" +
-                    " group by lo_orderkey, c_name";
-            String query =  "select lo_orderkey, c_name, sum(lo_revenue) as total_revenue" +
+                    " group by lo_orderkey, c_custkey";
+            String query =  "select lo_orderkey, c_custkey, sum(lo_revenue) as total_revenue" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey" +
-                    " group by lo_orderkey, c_name";
+                    " group by lo_orderkey, c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("TABLE: mv0\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 28: c_name IS NOT NULL\n" +
+                    "     PREDICATES: 28: c_custkey IS NOT NULL\n" +
                     "     partitions=1/1");
         }
 
@@ -2989,32 +2989,32 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
 
         {
-            String mv = "select lo_orderkey, c_name, sum(lo_revenue) as total_revenue" +
+            String mv = "select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey" +
-                    " group by lo_orderkey, c_name";
+                    " group by lo_orderkey, lo_custkey";
             // left outer join will be converted to inner join because query has null-rejecting predicate: c_name = 'name'
             // c_name = 'name' is a null-rejecting predicate, so do not add the compensated predicate
-            String query =  "select lo_orderkey, c_name, sum(lo_revenue) as total_revenue" +
+            String query =  "select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue" +
                     " from lineorder inner join customer" +
-                    " on lo_custkey = c_custkey where c_name = 'name'" +
-                    " group by lo_orderkey, c_name";
+                    " on lo_custkey = c_custkey where lo_orderkey = 10" +
+                    " group by lo_orderkey, lo_custkey";
             testRewriteOK(mv, query);
         }
 
         {
-            String mv = "select lo_orderkey, c_name, sum(lo_revenue) as total_revenue" +
+            String mv = "select lo_custkey, c_name, sum(lo_revenue) as total_revenue" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey" +
-                    " group by lo_orderkey, c_name";
-            String query =  "select lo_orderkey, c_name, sum(lo_revenue) as total_revenue" +
+                    " group by lo_custkey, c_name";
+            String query =  "select lo_custkey, c_name, sum(lo_revenue) as total_revenue" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey" +
-                    " group by lo_orderkey, c_name";
+                    " group by lo_custkey, c_name";
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("TABLE: mv0\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 27: lo_orderkey IS NOT NULL\n" +
+                    "     PREDICATES: 27: lo_custkey IS NOT NULL\n" +
                     "     partitions=1/1");
         }
 
@@ -3034,23 +3034,23 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
 
         {
-            // the compensation predicate is c_custkey is not null, c_custkey should be in the output of mv
-            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            // the compensation predicate is lo_custkey is not null, lo_custkey should be in the output of mv
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey";
-            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name" +
                     " from lineorder inner join customer" +
                     " on lo_custkey = c_custkey";
             MVRewriteChecker checker = testRewriteOK(mv, query);
             // should contain c_custkey IS NOT NULL predicate
             checker.contains("TABLE: mv0\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 26: lo_orderkey IS NOT NULL\n" +
+                    "     PREDICATES: 30: lo_custkey IS NOT NULL\n" +
                     "     partitions=1/1");
         }
 
         {
-            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
+            String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_custkey, c_name" +
                     " from lineorder right outer join customer" +
                     " on lo_custkey = c_custkey and lo_shipmode = c_name";
             String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, lo_shipmode, c_name" +
@@ -3059,7 +3059,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("TABLE: mv0\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 26: lo_orderkey IS NOT NULL\n" +
+                    "     PREDICATES: 31: lo_custkey IS NOT NULL\n" +
                     "     partitions=1/1");
         }
 
@@ -3091,7 +3091,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("TABLE: mv0\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: 26: lo_orderkey IS NULL\n" +
+                    "     PREDICATES: 29: lo_custkey IS NULL\n" +
                     "     partitions=1/1");
         }
 
@@ -3195,8 +3195,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder_null left outer join customer" +
                     " on lo_custkey = c_custkey";
-            // lo_custkey is nullable, can not be rewritten
-            testRewriteFail(mv, query);
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 26: lo_orderkey IS NOT NULL\n" +
+                    "     partitions=1/1");
         }
 
         {
@@ -3254,8 +3257,11 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             String query =  "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name" +
                     " from lineorder_null inner join customer" +
                     " on lo_custkey = c_custkey";
-            // lo_custkey is nullable, can not be rewritten
-            testRewriteFail(mv, query);
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("TABLE: mv0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 30: c_custkey IS NOT NULL, 26: lo_orderkey IS NOT NULL\n" +
+                    "     partitions=1/1");
         }
     }
 }
