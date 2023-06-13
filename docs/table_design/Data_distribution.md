@@ -4,7 +4,7 @@ When you create a table, you must specify the data distribution method by config
 
 > NOTICE
 >
-> Since v2.5.7, StarRocks can set the number of buckets (BUCKETS) automatically when a table is created and a partition is added. You no longer need to manually set the number of buckets. However, if the performance does not meet your expectations after StarRocks sets the number of buckets automatically and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#determine-the-number-of-buckets).
+> Since v2.5.7, StarRocks can set the number of buckets (BUCKETS) automatically when a table is created or a partition is added. You no longer need to manually set the number of buckets. However, if the performance does not meet your expectations after StarRocks sets the number of buckets automatically and you are familiar with the bucketing mechanism, you can still [manually set the number of buckets](#determine-the-number-of-buckets).
 
 ## Basic concepts
 
@@ -16,7 +16,9 @@ Before you dive into the details of designing and managing data distribution, fa
 
 - Bucketing
 
-  Bucketing divides a partition into multiple more manageable parts called tablets, which is the smallest unit of storage that you can use and allocate. StarRocks uses a hash algorithm to bucket data. Data with the same hash value of the bucketing column is distributed to the same tablet. StarRocks creates multiple replicas (three by default) for each tablet to prevent data loss. These replicas are managed by a separate local storage engine. You must specify the bucketing column when you create a table.
+  Bucketing divides a partition into multiple more manageable parts called tablets, which is the smallest unit of storage that you can use and allocate. StarRocks uses a hash algorithm to bucket data. Data with the same hash value of the bucketing column is distributed to the same tablet. StarRocks creates multiple replicas (three by default) for each tablet to prevent data loss. These replicas are managed by a separate local storage engine.
+  
+  **You must specify the bucketing column when you create a table.** Since v2.5.7, StarRocks can set the number of buckets (BUCKETS) automatically when a table is created or a partition is added. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](#determine-the-number-of-buckets).
 
 ## Partitioning methods
 
@@ -31,9 +33,9 @@ Modern distributed database systems generally use four basic partitioning method
 
 To achieve more flexible data distribution, you can combine the preceding four partitioning methods based on your business requirements, such as hash-hash, range-hash, and hash-list. **StarRocks offers the following two partitioning methods:**
 
-- **Hash**: A hash-partitioned table has only one partition (the entire table is considered a partition). The partition is divided into tablets based on the bucketing column and the number of buckets that you specified.
+- **Hash**: A hash-partitioned table has only one partition (the entire table is considered a partition). The partition is divided into tablets based on the bucketing column and the number of buckets.
 
-  For example, the following statement creates a table `site_access`. The table is divided into 10 tablets based on the `site_id` column.
+  For example, the following statement creates a table `site_access`. The table is divided into tablets based on the `site_id` column.
 
   ```SQL
   CREATE TABLE site_access(
@@ -67,10 +69,6 @@ To achieve more flexible data distribution, you can combine the preceding four p
   )
   DISTRIBUTED BY HASH(site_id);
   ```
-
-> **NOTICE**
->
-> Since v2.5.7, StarRocks can set the number of buckets (BUCKETS) automatically when a table is created and a partition is added. You no longer need to manually set the number of buckets.For detailed information, see [determine the number of buckets](#determine-the-number-of-buckets).
 
 ## Design partitioning and bucketing rules
 
@@ -131,7 +129,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 In this example, `site_access` uses `site_id` as the bucketing column because this column is always used as a filter in queries. When the bucketing column is used as a filter in queries, StarRocks only scans the relevant tablets, which greatly improves query performance.
 
-Suppose you execute the following statement to query `site_access`. After you send the query, StarRocks only scans data in one tablet of `site_access`. The overall query speed is much faster than scanning 10 tablets.
+Suppose each partition of table `site_access` has 10 buckets. In the following query, 9 out of 10 buckets are pruned, so the system only needs to scan 1/10 of the data in the `site_access` table:
 
 ```SQL
 select sum(pv)
