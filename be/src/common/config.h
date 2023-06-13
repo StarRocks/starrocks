@@ -683,9 +683,6 @@ CONF_Int64(pipeline_sink_brpc_dop, "64");
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 CONF_mBool(pipeline_print_profile, "false");
 
-// Use resource group threads to do memtable write & flush
-CONF_mBool(enable_resource_group_memtable, "true");
-
 // The arguments of multilevel feedback pipeline_driver_queue. It prioritizes small queries over larger ones,
 // when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
 CONF_Int64(pipeline_driver_queue_level_time_slice_base_ns, "200000000");
