@@ -90,6 +90,7 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
+import org.apache.arrow.util.VisibleForTesting;
 import org.apache.commons.lang3.StringUtils;
 
 import java.time.LocalDateTime;
@@ -792,7 +793,7 @@ public class AnalyzerUtils {
             for (List<String> partitionValue : partitionValues) {
                 List<String> formattedPartitionValue = Lists.newArrayList();
                 for (String value : partitionValue) {
-                    String formatValue = value.replaceAll("[^a-zA-Z0-9]", "");
+                    String formatValue = getFormatPartitionValue(value);
                     formattedPartitionValue.add(formatValue);
                 }
                 String partitionName = partitionPrefix + Joiner.on("_").join(formattedPartitionValue);
@@ -812,6 +813,24 @@ public class AnalyzerUtils {
             throw new AnalysisException("automatic partition only support partition by value.");
         }
         return result;
+    }
+
+    @VisibleForTesting
+    public static String getFormatPartitionValue(String value) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
+                sb.append(ch);
+            } else if (ch == '-' || ch == ':' || ch == ' ') {
+                // remove;
+            } else {
+                int unicodeValue = value.codePointAt(i);
+                String unicodeString = Integer.toHexString(unicodeValue);
+                sb.append(unicodeString);
+            }
+        }
+        return sb.toString();
     }
 
     private static void getAddPartitionClauseForRangePartition(OlapTable olapTable, List<List<String>> partitionValues,
