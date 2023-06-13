@@ -141,7 +141,6 @@ public class OlapTableSink extends DataSink {
                          boolean nullExprInAutoIncrement, boolean enableAutomaticPartition) {
         this.dstTable = dstTable;
         this.tupleDescriptor = tupleDescriptor;
-        Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
         this.partitionIds = partitionIds;
         this.clusterId = dstTable.getClusterId();
         this.enablePipelineLoad = enablePipelineLoad;
