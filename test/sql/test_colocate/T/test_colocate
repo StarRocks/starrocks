@@ -1,0 +1,211 @@
+-- name: test_colocate
+CREATE TABLE `t1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
+PROPERTIES (
+"colocate_with" = "group1",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `t2` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
+PROPERTIES (
+"colocate_with" = "group1",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+
+CREATE TABLE `t3` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
+PROPERTIES (
+"colocate_with" = "group1",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+
+CREATE TABLE `t4` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
+PROPERTIES (
+"colocate_with" = "group1",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO t1 (c0, c1, c2, c3) VALUES
+  (1, 'a', 'Value1', 10),
+  (2, 'b', 'Value2', 20),
+  (null, 'c', 'Value3', 30),
+  (4, 'd', 'Value4', 40),
+  (5, null, 'Value5', 50),
+  (5, 'f', 'Value6', 60),
+  (8, 'h', 'Value7', 70),
+  (8, 'h', 'Value8', 80),
+  (null, null, 'Value9', 90),
+  (10, 'j', 'Value10', 100),
+  (null, 'k', 'Value11', 110),
+  (12, 'l', 'Value12', 120),
+  (12, 'l', 'Value13', 130),
+  (14, 'l', 'Value14', 140),
+  (15, 'o', 'Value15', 150);
+
+INSERT INTO t2 (c0, c1, c2, c3) VALUES
+  (null, null, 'Value1', 10),
+  (2, 'b', 'Value2', 20),
+  (null, 'c', 'Value3', 30),
+  (4, 'd', 'Value4', 40),
+  (5, null, 'Value5', 50),
+  (5, 'f', 'Value6', 60),
+  (5, 'h', 'Value7', 70),
+  (8, 'h', 'Value8', 80),
+  (8, null, 'Value9', 90),
+  (10, 'j', 'Value10', 100),
+  (null, 'k', 'Value11', 110),
+  (12, 'l', 'Value12', 120),
+  (12, 'l', 'Value13', 130),
+  (14, 'm', 'Value14', 140),
+  (null, 'o', 'Value15', 150);
+
+INSERT INTO t3 (c0, c1, c2, c3) VALUES
+  (1, 'a', 'Value1', 10),
+  (2, 'b', 'Value2', 20),
+  (3, 'c', 'Value3', 30),
+  (3, 'd', 'Value4', 40),
+  (5, null, 'Value5', 50),
+  (null, 'f', 'Value6', 60),
+  (5, 'h', 'Value7', 70),
+  (8, 'h', 'Value8', 80),
+  (8, null, 'Value9', 90),
+  (10, 'j', 'Value10', 100),
+  (null, 'k', 'Value11', 110),
+  (12, 'l', 'Value12', 120),
+  (12, 'l', 'Value13', 130),
+  (14, 'm', 'Value14', 140),
+  (null, 'o', 'Value15', 150);
+
+INSERT INTO t4 (c0, c1, c2, c3) VALUES
+  (1, null, 'Value1', 10),
+  (2, 'b', 'Value2', 20),
+  (null, 'c', 'Value3', 30),
+  (4, 'd', 'Value4', 40),
+  (5, null, 'Value5', 50),
+  (5, 'f', 'Value6', 60),
+  (5, 'h', 'Value7', 70),
+  (8, 'h', 'Value8', 80),
+  (8, null, 'Value9', 90),
+  (10, 'j', 'Value10', 100),
+  (null, 'k', 'Value11', 110),
+  (12, 'l', 'Value12', 120),
+  (12, null, 'Value13', 130),
+  (14, 'm', 'Value14', 140),
+  (null, 'o', 'Value15', 150);
+
+select t1.c0, t2.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0=t2.c0 and t1.c1=t2.c1 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1;
+select t1.c0, t2.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1=t2.c1 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1=t2.c1 left join t3 on t2.c0<=>t3.c0 and t2.c1=t3.c1;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0<=>t3.c0 and t2.c1=t3.c1;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 left join t3 on t2.c0 = t3.c0 and t1.c1 =t3.c1;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0 = t3.c0 and t1.c1 =t3.c1;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0 <=> t3.c0 and t1.c1 =t3.c1;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 right join t3 on t1.c0 = t3.c0 and t2.c1 = t3.c1 left join t4 on t2.c0 = t4.c0 and t2.c3 = t4.c1;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 right join t3 on t1.c0 = t3.c0 and t2.c1 = t3.c1 left join t4 on t2.c0 <=> t4.c0 and t2.c3 = t4.c1;
+
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 right join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 right join t3 on t2.c0 = t3.c0 and t1.c1 =t3.c1;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 right join t3 on t2.c0 = t3.c0 and t1.c1 =t3.c1;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 right join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0 <=> t3.c0 and t1.c1 =t3.c1;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 right join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 right join t3 on t1.c0 = t3.c0 and t2.c1 = t3.c1 left join t4 on t2.c0 = t4.c0 and t2.c3 = t4.c1;
+
+select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0=t2.c0 and t1.c1=t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2;
+select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1=t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2;
+select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2;
+select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0<=>t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2;
+select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 right join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 right join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1 and t2.c2=t3.c2;
+select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 right join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2;
+select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 right join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0<=>t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2;
+select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 right join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1 and t2.c2=t3.c2;
+
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1<=>t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1,t2.c2) t on t3.c0=t.c0 and t3.c1= t.c1;
+
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1<=>t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1 from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1,t2.c2) t on t3.c0=t.c0 and t3.c1= t.c1;
+
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) c2 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1 and t3.c2=t.c2;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1, t2.c2 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1,t2.c2) t on t3.c0=t.c0 and t3.c1= t.c1;
+
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) c2 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1 and t3.c2=t.c2;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1, t2.c2 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1,t2.c2) t on t3.c0=t.c0 and t3.c1= t.c1;
+
+select t4.c0, t4.c1, t.c01, t.c13 from t4 left join (select t1.c0 as c01, t2.c0 as c02, t1.c1 as c11, t2.c1 as c12, t3.c1 as c13 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2 group by t1.c0, t2.c0, t1.c1, t2.c1, t3.c1) t on t4.c0 = t.c02 and t4.c1 = t.c13;
+select t4.c0, t4.c1, t.c01, t.c13 from t4 left join (select t1.c0 as c01, t2.c0 as c02, t1.c1 as c11, t2.c1 as c12, t3.c1 as c13 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1 and t2.c2=t3.c2 group by t1.c0, t2.c0, t1.c1, t2.c1, t3.c1) t on t4.c0 = t.c02 and t4.c1 = t.c13;
+
+select t4.c0, t4.c1, t.c01, t.c13 from t4 right join (select t1.c0 as c01, t2.c0 as c02, t1.c1 as c11, t2.c1 as c12, t3.c1 as c13 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2 group by t1.c0, t2.c0, t1.c1, t2.c1, t3.c1) t on t4.c0 = t.c02 and t4.c1 = t.c13;
+select t4.c0, t4.c1, t.c01, t.c13 from t4 right join (select t1.c0 as c01, t2.c0 as c02, t1.c1 as c11, t2.c1 as c12, t3.c1 as c13 from t1 right join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1 and t2.c2=t3.c2 group by t1.c0, t2.c0, t1.c1, t2.c1, t3.c1) t on t4.c0 = t.c02 and t4.c1 = t.c13;
+
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 left join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 left join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 left join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1 join t4 on t3.c0 = t4.c0 and t.c1 = t4.c1;
+
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 right join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 left join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 right join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1 join t4 on t3.c0 = t4.c0 and t.c1 = t4.c1;
+
+

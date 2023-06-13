@@ -122,6 +122,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
@@ -2268,12 +2269,12 @@ public class PlanFragmentBuilder {
         }
 
         private List<ColumnRefOperator> getShuffleColumns(HashDistributionSpec spec) {
-            List<Integer> columnRefs = spec.getShuffleColumns();
-            Preconditions.checkState(!columnRefs.isEmpty());
+            List<DistributionCol> columns = spec.getShuffleColumns();
+            Preconditions.checkState(!columns.isEmpty());
 
             List<ColumnRefOperator> shuffleColumns = new ArrayList<>();
-            for (int columnId : columnRefs) {
-                shuffleColumns.add(columnRefFactory.getColumnRef(columnId));
+            for (DistributionCol column : columns) {
+                shuffleColumns.add(columnRefFactory.getColumnRef(column.getColId()));
             }
             return shuffleColumns;
         }

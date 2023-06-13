@@ -22,6 +22,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
@@ -30,6 +31,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
 
 import java.util.List;
+import java.util.stream.Collectors;
+
+import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
 
 public class JoinHelper {
     private final JoinOperator type;
@@ -41,8 +45,9 @@ public class JoinHelper {
 
     private List<BinaryPredicateOperator> equalsPredicate;
 
-    private List<Integer> leftOnColumns;
-    private List<Integer> rightOnColumns;
+    private List<DistributionCol> leftOnCols;
+
+    private List<DistributionCol> rightOnCols;
 
     public static JoinHelper of(Operator join, ColumnRefSet leftInput, ColumnRefSet rightInput) {
         JoinHelper helper = new JoinHelper(join, leftInput, rightInput);
@@ -79,10 +84,16 @@ public class JoinHelper {
 
     private void init() {
         equalsPredicate = getEqualsPredicate(leftChildColumns, rightChildColumns, Utils.extractConjuncts(onPredicate));
-        leftOnColumns = Lists.newArrayList();
-        rightOnColumns = Lists.newArrayList();
+        leftOnCols = Lists.newArrayList();
+        rightOnCols = Lists.newArrayList();
+
+        boolean leftTableAggStrict = type.isLeftOuterJoin() || type.isFullOuterJoin();
+        boolean rightTableAggStrict = type.isRightOuterJoin() || type.isFullOuterJoin();
 
         for (BinaryPredicateOperator binaryPredicate : equalsPredicate) {
+            boolean nullStrict = binaryPredicate.getBinaryType() == EQ_FOR_NULL;
+            leftTableAggStrict = leftTableAggStrict || nullStrict;
+            rightTableAggStrict = rightTableAggStrict || nullStrict;
             ColumnRefSet leftUsedColumns = binaryPredicate.getChild(0).getUsedColumns();
             ColumnRefSet rightUsedColumns = binaryPredicate.getChild(1).getUsedColumns();
             // Join on expression had pushed down to project node, so there must be one column
@@ -93,24 +104,31 @@ public class JoinHelper {
             }
 
             if (leftChildColumns.containsAll(leftUsedColumns) && rightChildColumns.containsAll(rightUsedColumns)) {
-                leftOnColumns.add(leftUsedColumns.getColumnIds()[0]);
-                rightOnColumns.add(rightUsedColumns.getColumnIds()[0]);
-            } else if (leftChildColumns.containsAll(rightUsedColumns) &&
-                    rightChildColumns.containsAll(leftUsedColumns)) {
-                leftOnColumns.add(rightUsedColumns.getColumnIds()[0]);
-                rightOnColumns.add(leftUsedColumns.getColumnIds()[0]);
+                leftOnCols.add(new DistributionCol(leftUsedColumns.getFirstId(), nullStrict, leftTableAggStrict));
+                rightOnCols.add(new DistributionCol(rightUsedColumns.getFirstId(), nullStrict, rightTableAggStrict));
+            } else if (leftChildColumns.containsAll(rightUsedColumns) && rightChildColumns.containsAll(leftUsedColumns)) {
+                leftOnCols.add(new DistributionCol(rightUsedColumns.getFirstId(), nullStrict, leftTableAggStrict));
+                rightOnCols.add(new DistributionCol(leftUsedColumns.getFirstId(), nullStrict, rightTableAggStrict));
             } else {
                 Preconditions.checkState(false, "shouldn't reach here");
             }
         }
     }
 
-    public List<Integer> getLeftOnColumns() {
-        return leftOnColumns;
+    public List<Integer> getLeftOnColumnIds() {
+        return leftOnCols.stream().map(DistributionCol::getColId).collect(Collectors.toList());
     }
 
-    public List<Integer> getRightOnColumns() {
-        return rightOnColumns;
+    public List<Integer> getRightOnColumnIds() {
+        return rightOnCols.stream().map(DistributionCol::getColId).collect(Collectors.toList());
+    }
+
+    public List<DistributionCol> getLeftCols() {
+        return leftOnCols;
+    }
+
+    public List<DistributionCol> getRightCols() {
+        return rightOnCols;
     }
 
     public boolean isCrossJoin() {
