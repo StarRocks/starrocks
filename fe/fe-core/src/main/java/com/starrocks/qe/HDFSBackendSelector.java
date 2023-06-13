@@ -34,6 +34,7 @@ import com.starrocks.planner.FileTableScanNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
@@ -110,6 +111,10 @@ public class HDFSBackendSelector implements BackendSelector {
                 FileTableScanNode node = (FileTableScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
                 basePath = node.getFileTable().getTableLocation();
+            } else if (scanNode instanceof PaimonScanNode) {
+                PaimonScanNode node = (PaimonScanNode) scanNode;
+                predicates = node.getScanNodePredicates();
+                basePath = node.getPaimonTable().getTableLocation();
             } else {
                 Preconditions.checkState(false);
             }
