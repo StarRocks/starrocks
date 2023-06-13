@@ -860,7 +860,13 @@ public class ExpressionAnalyzer {
                 fn.setIsNullable(false);
             } else if (fnName.equals(FunctionSet.ARRAY_AGG)) {
                 // move order by expr to node child, and extract is_asc and null_first information.
+<<<<<<< HEAD
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+=======
+                fn = Expr.getBuiltinFunction(fnName, new Type[] {argumentTypes[0]},
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                fn = fn.copy();
+>>>>>>> 229864988 ([BugFix] array_agg order by nest types (#25034))
                 List<OrderByElement> orderByElements = node.getParams().getOrderByElements();
                 List<Boolean> isAscOrder = new ArrayList<>();
                 List<Boolean> nullsFirst = new ArrayList<>();
