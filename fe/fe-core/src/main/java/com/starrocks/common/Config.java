@@ -1755,5 +1755,160 @@ public class Config extends ConfigBase {
     public static String metadata_journal_skip_bad_journal_ids = "";
 
     @ConfField(mutable = true)
+<<<<<<< HEAD
     public static boolean recursive_dir_search_enabled = false;
+=======
+    public static int profile_info_reserved_num = 500;
+
+    /**
+     * Number of stream load profile infos reserved by `ProfileManager` for recently executed stream load and routine load task.
+     * Default value: 500
+     */
+    @ConfField(mutable = true)
+    public static int load_profile_info_reserved_num = 500;
+
+    /**
+     * format of profile infos reserved by `ProfileManager` for recently executed query.
+     * Default value: "default"
+     */
+    @ConfField(mutable = true)
+    public static String profile_info_format = "default";
+
+    /**
+     * Max number of roles that can be granted to user including all direct roles and all parent roles
+     * Used in new RBAC framework after 3.0 released
+     **/
+    @ConfField(mutable = true)
+    public static int privilege_max_total_roles_per_user = 64;
+
+    /**
+     * Max role inheritance depth allowed. To avoid bad performance when merging privileges.
+     **/
+    @ConfField(mutable = true)
+    public static int privilege_max_role_depth = 16;
+
+    /**
+     * ignore invalid privilege & authentication when upgraded to new RBAC privilege framework in 3.0
+     */
+    @ConfField(mutable = true)
+    public static boolean ignore_invalid_privilege_authentications = false;
+
+    /**
+     * the keystore file path
+     */
+    @ConfField
+    public static String ssl_keystore_location = "";
+
+    /**
+     * the password of keystore file
+     */
+    @ConfField
+    public static String ssl_keystore_password = "";
+
+    /**
+     * the password of private key
+     */
+    @ConfField
+    public static String ssl_key_password = "";
+
+    /**
+     * the truststore file path
+     */
+    @ConfField
+    public static String ssl_truststore_location = "";
+
+    /**
+     * the password of truststore file
+     */
+    @ConfField
+    public static String ssl_truststore_password = "";
+
+    /**
+     * ignore check db status when show proc '/catalog/catalog_name'
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_check_db_state = true;
+
+    @ConfField
+    public static long binlog_ttl_second = 60 * 30; // 30min
+
+    @ConfField
+    public static long binlog_max_size = Long.MAX_VALUE; // no limit
+
+    /**
+     * Enable check if the cluster is under safe mode or not
+     **/
+    @ConfField(mutable = true)
+    public static boolean enable_safe_mode = false;
+
+    /**
+     * The safe mode checker thread work interval
+     */
+    @ConfField(mutable = true)
+    public static long safe_mode_checker_interval_sec = 5;
+
+    /**
+     * Enable auto create tablet when creating table and add partition
+     **/
+    @ConfField(mutable = true)
+    public static boolean enable_auto_tablet_distribution = false;
+
+    /**
+     * default size of minimum cache size of auto increment id allocation
+     **/
+    @ConfField(mutable = true)
+    public static int auto_increment_cache_size = 100000;
+
+    /**
+     * Enable the experimental temporary table feature
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_experimental_temporary_table = false;
+
+    @ConfField(mutable = true)
+    public static long max_per_node_grep_log_limit = 500000;
+
+    @ConfField
+    public static boolean enable_execute_script_on_frontend = true;
+
+    @ConfField(mutable = true)
+    public static short default_replication_num = 3;
+
+    /**
+     * The default scheduler interval for alter jobs.
+     */
+    @ConfField(mutable = true)
+    public static int alter_scheduler_interval_millisecond = 10000;
+
+    /**
+     * The default scheduler interval for routine loads.
+     */
+    @ConfField(mutable = true)
+    public static int routine_load_scheduler_interval_millisecond = 10000;
+
+    /**
+     * Only when the stream load time exceeds this value,
+     * the profile will be put into the profileManager
+     */
+    @ConfField(mutable = true)
+    public static long stream_load_profile_collect_second = 10; //10s
+
+    /**
+     * If set to <= 0, means that no limitation.
+     */
+    @ConfField(mutable = true)
+    public static int max_upload_task_per_be = 0;
+
+    /**
+     * If set to <= 0, means that no limitation.
+     */
+    @ConfField(mutable = true)
+    public static int max_download_task_per_be = 0;
+
+    /**
+     * timeout for external table commit
+     */
+    @ConfField(mutable = true)
+    public static int external_table_commit_timeout_ms = 10000; // 10s
+>>>>>>> 00d0dbdb6 ([BugFix] fix external table commit timeout treated as failure (#24856))
 }

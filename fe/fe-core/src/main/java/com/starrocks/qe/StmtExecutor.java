@@ -1437,8 +1437,28 @@ public class StmtExecutor {
                         coord.getCommitInfos())) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
+                } else {
+                    txnStatus = TransactionStatus.COMMITTED;
                 }
+<<<<<<< HEAD
                 // TODO: wait remote txn finished
+=======
+            } else if (targetTable instanceof SystemTable) {
+                // schema table does not need txn
+                txnStatus = TransactionStatus.VISIBLE;
+            } else if (targetTable instanceof IcebergTable) {
+                // TODO(stephen): support abort interface and delete data files when aborting.
+                List<TSinkCommitInfo> commitInfos = coord.getSinkCommitInfos();
+                if (stmt instanceof InsertStmt && ((InsertStmt) stmt).isOverwrite()) {
+                    for (TSinkCommitInfo commitInfo : commitInfos) {
+                        commitInfo.setIs_overwrite(true);
+                    }
+                }
+
+                context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos);
+                txnStatus = TransactionStatus.VISIBLE;
+                label = "FAKE_ICEBERG_SINK_LABEL";
+>>>>>>> 00d0dbdb6 ([BugFix] fix external table commit timeout treated as failure (#24856))
             } else {
                 if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                         database,
