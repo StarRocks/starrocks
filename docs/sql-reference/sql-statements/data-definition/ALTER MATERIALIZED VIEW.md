@@ -2,12 +2,42 @@
 
 ## Description
 
+<<<<<<< HEAD
 Alters the name or refresh strategy of an asynchronous materialized view.
+=======
+This SQL statement can：
+
+- Alter the name of an asynchronous materialized view.
+- Alter the refresh strategy of an asynchronous materialized view.
+- Alter the status of an asynchronous materialized view to active or inactive.
+- Alter the properties of an asynchronous materialized view.
+
+  You can use this SQL statement to alter the following properties:
+
+  - `partition_ttl_number`
+  - `partition_refresh_number`
+  - `resource_group`
+  - `auto_refresh_partitions_limit`
+  - `excluded_trigger_tables`
+  - `mv_rewrite_staleness_second`
+  - `unique_constraints`
+  - `foreign_key_constraints`
+  - `colocate_with`
+  - All session variable-related properties. For information on session variables, see [System variables](/docs/reference/System_variable.md)。
+>>>>>>> eb65e7547 ([Doc] Add DROP TASK and ALTER MV ACTIVE (#25077))
 
 ## Syntax
 
 ```SQL
+<<<<<<< HEAD
 ALTER MATERIALIZED VIEW [database.]mv_name {REFRESH ASYNC new_refresh_scheme_desc | RENAME [database.]new_mv_name}
+=======
+ALTER MATERIALIZED VIEW [db_name.]<mv_name> 
+    { RENAME [db_name.]<new_mv_name> 
+    | REFRESH <new_refresh_scheme_desc> 
+    | ACTIVE | INACTIVE 
+    | SET ( "<key>" = "<value>"[,...]) }
+>>>>>>> eb65e7547 ([Doc] Add DROP TASK and ALTER MV ACTIVE (#25077))
 ```
 
 Parameters in brackets [] is optional.
@@ -19,6 +49,13 @@ Parameters in brackets [] is optional.
 | mv_name                 | yes          | The name of the materialized view to alter.                  |
 | new_refresh_scheme_desc | no           | New async refresh strategy, see [SQL Reference - CREATE MATERIALIZED VIEW - Parameters](../data-definition/CREATE%20MATERIALIZED%20VIEW.md#parameters) for details. |
 | new_mv_name             | no           | New name for the materialized view.                          |
+<<<<<<< HEAD
+=======
+| ACTIVE                  | no           |Set the status of the materialized view to active. StarRocks automatically sets a materialized view to inactive if any of its base tables is changed, for example, dropped and re-created, to prevent the situation that original metadata mismatches the changed base table. Inactive materialized views cannot be used for query acceleration or query rewrite. You can use this SQL to activate the materialized view after changing the base tables. |
+| INACTIVE                | no           | Set the status of the materialized view to inactive. An inactive asynchronous materialized view cannot be refreshed. But you can still query it as a table. |
+| key                     | no           | The name of the property to alter, see [SQL Reference - CREATE MATERIALIZED VIEW - Parameters](../data-definition/CREATE%20MATERIALIZED%20VIEW.md#parameters) for details.<br />**NOTE**<br />If you want to alter a session variable-related property of the materialized view, you must add a `session.` prefix to the property, for example, `session.query_timeout`. You do not need to specify the prefix for non-session properties, for example, `mv_rewrite_staleness_second`. |
+| value                   | no           | The value of the property to alter.                         |
+>>>>>>> eb65e7547 ([Doc] Add DROP TASK and ALTER MV ACTIVE (#25077))
 
 ## Example
 
@@ -33,3 +70,21 @@ ALTER MATERIALIZED VIEW lo_mv1 RENAME lo_mv1_new_name;
 ```SQL
 ALTER MATERIALIZED VIEW lo_mv2 REFRESH ASYNC EVERY(INTERVAL 1 DAY);
 ```
+<<<<<<< HEAD
+=======
+
+Example 3: Alter the materialized view's properties.
+
+```SQL
+-- Change mv1's query_timeout to 40000 seconds.
+ALTER MATERIALIZED VIEW mv1 SET ("session.query_timeout" = "40000");
+-- Change mv1's mv_rewrite_staleness_second to 600 seconds.
+ALTER MATERIALIZED VIEW mv1 SET ("mv_rewrite_staleness_second" = "600");
+```
+
+Example 4: Alter the materialized view's status to active.
+
+```SQL
+ALTER MATERIALIZED VIEW order_mv ACTIVE;
+```
+>>>>>>> eb65e7547 ([Doc] Add DROP TASK and ALTER MV ACTIVE (#25077))
