@@ -2799,6 +2799,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCreateMvWithView() throws Exception {
         starRocksAssert.withView("create view view_1 as select tb1.k1, k2 s2 from tbl1 tb1;");
         starRocksAssert.withView("create view view_2 as select v1.k1, v1.s2 from view_1 v1;");
@@ -2857,6 +2858,23 @@ public class CreateMaterializedViewTest {
                     "as select v2.k1, v2.s2 from view_2 v2;";
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         }
+=======
+    public void testCreateMvWithTypes() throws Exception {
+        String sql = "create materialized view mv_test_types \n" +
+                "distributed by hash(k1) buckets 10\n" +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1'" +
+                ")\n" +
+                "as " +
+                "select tb1.k1, k2, " +
+                "array<int>[1,2,3] as type_array, " +
+                "map<int, int>{1:2} as type_map, " +
+                "parse_json('{\"a\": 1}') as type_json, " +
+                "row('c') as type_struct, " +
+                "array<json>[parse_json('{}')] as type_array_json " +
+                "from tbl1 tb1;";
+        starRocksAssert.withMaterializedView(sql);
+>>>>>>> f743310d0 ([Enhancement] support using struct/map in mv (#24904))
     }
 }
 

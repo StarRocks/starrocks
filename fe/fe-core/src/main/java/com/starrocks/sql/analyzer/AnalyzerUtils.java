@@ -100,6 +100,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class AnalyzerUtils {
 
@@ -432,6 +433,14 @@ public class AnalyzerUtils {
         new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
     }
 
+<<<<<<< HEAD
+=======
+    public static void collectSpecifyExternalTables(StatementBase statementBase, List<Table> tables,
+                                                    Predicate<Table> filter) {
+        new ExternalTableCollector(tables, filter).visit(statementBase);
+    }
+
+>>>>>>> f743310d0 ([Enhancement] support using struct/map in mv (#24904))
     public static Map<TableName, SubqueryRelation> collectAllSubQueryRelation(QueryStatement queryStatement) {
         Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
         new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
@@ -624,12 +633,16 @@ public class AnalyzerUtils {
         }
     }
 
+    public static Type transformTableColumnType(Type srcType) {
+        return transformTableColumnType(srcType, true);
+    }
+
     // For char and varchar types, use the inferred length if the length can be inferred,
     // otherwise (include null type) use the longest varchar value.
     // For double and float types, since they may be selected as key columns,
     // the key column must be an exact value, so we unified into a default decimal type.
-    public static Type transformType(Type srcType) {
-        Type newType;
+    public static Type transformTableColumnType(Type srcType, boolean convertDouble) {
+        Type newType = srcType;
         if (srcType.isScalarType()) {
             if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
                     PrimitiveType.CHAR == srcType.getPrimitiveType() ||
@@ -646,6 +659,7 @@ public class AnalyzerUtils {
                 newType = stringType;
             } else if (PrimitiveType.FLOAT == srcType.getPrimitiveType() ||
                     PrimitiveType.DOUBLE == srcType.getPrimitiveType()) {
+<<<<<<< HEAD
                 newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
             } else if (PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
                     PrimitiveType.DECIMAL64 == srcType.getPrimitiveType() ||
@@ -675,10 +689,11 @@ public class AnalyzerUtils {
                     if (scalarType.getLength() > 0 && scalarType.isAssignedStrLenInColDefinition()) {
                         len = scalarType.getLength();
                     }
+=======
+                if (convertDouble) {
+                    newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
+>>>>>>> f743310d0 ([Enhancement] support using struct/map in mv (#24904))
                 }
-                ScalarType stringType = ScalarType.createVarcharType(len);
-                stringType.setAssignedStrLenInColDefinition();
-                newType = stringType;
             } else if (PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
                     PrimitiveType.DECIMAL64 == srcType.getPrimitiveType() ||
                     PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
@@ -688,9 +703,20 @@ public class AnalyzerUtils {
                 newType = ScalarType.createType(srcType.getPrimitiveType());
             }
         } else if (srcType.isArrayType()) {
-            newType = new ArrayType(transformTypeForMv(((ArrayType) srcType).getItemType()));
+            newType = new ArrayType(transformTableColumnType(((ArrayType) srcType).getItemType(), convertDouble));
+        } else if (srcType.isMapType()) {
+            newType = new MapType(transformTableColumnType(((MapType) srcType).getKeyType(), convertDouble),
+                    transformTableColumnType(((MapType) srcType).getValueType(), convertDouble));
+        } else if (srcType.isStructType()) {
+            StructType structType = (StructType) srcType;
+            List<StructField> mappingFields = structType.getFields().stream()
+                    .map(x -> new StructField(x.getName(), transformTableColumnType(x.getType(), convertDouble),
+                            x.getComment()))
+                    .collect(Collectors.toList());
+            newType = new StructType(mappingFields, structType.isNamed());
         } else {
-            throw new SemanticException("Unsupported Mv transform type: %s", srcType);
+            // Default behavior is keep source type
+            return newType;
         }
         return newType;
     }
@@ -723,9 +749,8 @@ public class AnalyzerUtils {
         }
     }
 
-
-
-    public static PartitionMeasure checkAndGetPartitionMeasure(ExpressionRangePartitionInfo expressionRangePartitionInfo)
+    public static PartitionMeasure checkAndGetPartitionMeasure(
+            ExpressionRangePartitionInfo expressionRangePartitionInfo)
             throws AnalysisException {
         long interval = 1;
         String granularity;
@@ -786,7 +811,8 @@ public class AnalyzerUtils {
         } else if (partitionInfo instanceof ListPartitionInfo) {
             Short replicationNum = olapTable.getTableProperty().getReplicationNum();
             DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc();
-            Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
+            Map<String, String> partitionProperties =
+                    ImmutableMap.of("replication_num", String.valueOf(replicationNum));
             String partitionPrefix = "p";
 
             for (List<String> partitionValue : partitionValues) {
@@ -868,7 +894,8 @@ public class AnalyzerUtils {
                     default:
                         throw new AnalysisException("unsupported automatic partition granularity:" + granularity);
                 }
-                PartitionKeyDesc partitionKeyDesc = createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
+                PartitionKeyDesc partitionKeyDesc =
+                        createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
 
                 SingleRangePartitionDesc singleRangePartitionDesc =
                         new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
@@ -889,10 +916,12 @@ public class AnalyzerUtils {
         DateTimeFormatter outputDateFormat;
         if (partitionType.isDate()) {
             outputDateFormat = DateUtils.DATE_FORMATTER_UNIX;
-            isMaxValue = endTime.isAfter(TimeUtils.MAX_DATE.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
+            isMaxValue =
+                    endTime.isAfter(TimeUtils.MAX_DATE.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
         } else if (partitionType.isDatetime()) {
             outputDateFormat = DateUtils.DATE_TIME_FORMATTER_UNIX;
-            isMaxValue = endTime.isAfter(TimeUtils.MAX_DATETIME.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
+            isMaxValue = endTime.isAfter(
+                    TimeUtils.MAX_DATETIME.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
         } else {
             throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionType));
         }
