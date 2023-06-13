@@ -444,14 +444,6 @@ public class Utils {
         return false;
     }
 
-    public static boolean isOneLevelEqualBinaryPredicate(ScalarOperator predicate) {
-        if (predicate instanceof BinaryPredicateOperator) {
-            BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) predicate;
-            return binaryPredicate.getBinaryType().isEquivalence();
-        }
-        return false;
-    }
-
     /**
      * Try cast op to descType, return empty if failed
      */
