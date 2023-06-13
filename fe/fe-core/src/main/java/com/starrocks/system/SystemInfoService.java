@@ -36,8 +36,6 @@ package com.starrocks.system;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableCollection;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
@@ -788,35 +786,6 @@ public class SystemInfoService {
 
     public ImmutableMap<Long, ComputeNode> getIdComputeNode() {
         return ImmutableMap.copyOf(idToComputeNodeRef);
-    }
-
-    public ImmutableCollection<ComputeNode> getComputeNodes() {
-        List<Long> computeNodeIds = getComputeNodeIds(true);
-        if (computeNodeIds != null && computeNodeIds.size() > 0) {
-            return getComputeNodes(true);
-        } else {
-            return getBackends(true);
-        }
-    }
-
-    public ImmutableCollection<ComputeNode> getComputeNodes(boolean needAlive) {
-        ImmutableMap<Long, ComputeNode> idToComputeNode = ImmutableMap.copyOf(idToComputeNodeRef);
-        List<Long> computeNodeIds = getComputeNodeIds(needAlive);
-        List<ComputeNode> computeNodes = new ArrayList<>();
-        for (Long computeNodeId : computeNodeIds) {
-            computeNodes.add(idToComputeNode.get(computeNodeId));
-        }
-        return ImmutableList.copyOf(computeNodes);
-    }
-
-    public ImmutableCollection<ComputeNode> getBackends(boolean needAlive) {
-        ImmutableMap<Long, Backend> idToComputeNode = ImmutableMap.copyOf(idToBackendRef);
-        List<Long> backendIds = getBackendIds(needAlive);
-        List<ComputeNode> backends = new ArrayList<>();
-        for (Long backendId : backendIds) {
-            backends.add(idToComputeNode.get(backendId));
-        }
-        return ImmutableList.copyOf(backends);
     }
 
     public long getBackendReportVersion(long backendId) {
