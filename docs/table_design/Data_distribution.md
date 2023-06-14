@@ -197,7 +197,7 @@ Buckets reflect how data files are organized in StarRocks.
     Since v2.5.7, StarRocks supports automatically setting the number of buckets based on machine resources and data volume for a partition.
     To enable this feature,  make sure that the FE dynamic parameter `enable_auto_tablet_distribution` remains the default value `true`.
 
-    To disable this feature, run the `ADMIN SET FRONTEND CONFIG ('enable_auto_tablet_distribution' = 'false');` statement. And when a new partition is added without specifying the number of buckets, the new partition inherits the the number of buckets set during table creation. After a new partition is added successfully, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) to view the number of buckets automatically set by StarRocks for the new partition.
+    To disable this feature, run the `ADMIN SET FRONTEND CONFIG ('enable_auto_tablet_distribution' = 'false');` statement. And when a new partition is added without specifying the number of buckets, the new partition inherits the the number of buckets set when a table is created. After a new partition is added successfully, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) to view the number of buckets automatically set by StarRocks for the new partition.
 
   - Method 2: manually set the number of buckets
 
