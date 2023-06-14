@@ -103,6 +103,12 @@ under the License.
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>shade-trino-parser</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.trino</groupId>
+                    <artifactId>trino-parser</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/commons-cli/commons-cli -->
@@ -630,7 +636,7 @@ under the License.
         <dependency>
             <groupId>org.antlr</groupId>
             <artifactId>antlr4</artifactId>
-            <version>4.9.3</version>
+            <version>4.9.2</version>
             <exclusions>
                 <exclusion>
                     <groupId>commons-lang</groupId>
@@ -860,7 +866,7 @@ under the License.
             <plugin>
                 <groupId>org.antlr</groupId>
                 <artifactId>antlr4-maven-plugin</artifactId>
-                <version>4.9.3</version>
+                <version>4.9.2</version>
                 <executions>
                     <execution>
                         <id>antlr</id>
@@ -1012,6 +1018,7 @@ under the License.
                             <!-- exclude test only jars(junit&mysql-connector), GPL jar(mysql-connector) must be excluded in release package -->
                             <includeScope>runtime</includeScope>
                         </configuration>
+
                     </execution>
                 </executions>
             </plugin>
@@ -1113,6 +1120,7 @@ under the License.
                                         <goals>
                                             <goal>copy-dependencies</goal>
                                         </goals>
+
                                     </pluginExecutionFilter>
                                 </pluginExecution>
                                 <pluginExecution>
