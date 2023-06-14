@@ -1708,10 +1708,19 @@ columnAliases
 partitionNames
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifierOrString (',' identifierOrString)* ')'
     | TEMPORARY? (PARTITION | PARTITIONS) identifierOrString
+    | keyPartitions
+    ;
+
+keyPartitions
+    : PARTITION '(' keyPartition (',' keyPartition)* ')'                              #keyPartitionList
     ;
 
 tabletList
     : TABLET '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
+    ;
+
+keyPartition
+    : partitionColName=identifier '=' partitionColValue=literalExpression
     ;
 
 // ------------------------------------------- Expression --------------------------------------------------------------
