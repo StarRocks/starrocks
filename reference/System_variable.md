@@ -271,7 +271,23 @@ SELECT /*+ SET_VAR
 
   用于兼容 8.0.16 及以上版本的 MySQL JDBC。无实际作用。
 
-* query_cache_size
+* pipeline_dop
+
+  一个 Pipeline 实例的并行数量。可通过设置实例的并行数量调整查询并发度。默认值为 0，即系统自适应调整每个 pipeline 的并行度。您也可以设置为大于 0 的数值，通常为 BE 节点 CPU 物理核数的一半。
+
+* pipeline_profile_level
+
+  用于控制 profile 的等级。一个 profile 通常有 5 个层级：Fragment、FragmentInstance、Pipeline、PipelineDriver、Operator。不同等级下，profile 的详细程度有所区别：
+
+  * 0：在此等级下，StarRocks 会合并 profile，只显示几个核心指标。
+  * 1：默认值。在此等级下，StarRocks 会对 profile 进行简化处理，将同一个 pipeline 的指标做合并来缩减层级。
+  * 2：在此等级下，StarRocks 会保留 Profile 所有的层级，不做简化。该设置下 profile 的体积会非常大，特别是 SQL 较复杂时，因此不推荐该设置。
+
+* prefer_compute_node
+
+  将部分执行计划调度到 CN 节点执行。默认为 false。该变量从 2.4 版本开始支持。
+
+* query_cache_size (global)
 
   用于兼容 MySQL 客户端。无实际作用。
 
