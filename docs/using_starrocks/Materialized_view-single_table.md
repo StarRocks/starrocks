@@ -4,7 +4,7 @@ This topic describes how to create, use, and manage a **synchronous materialized
 
 For a synchronous materialized view, all changes in the base table are simultaneously updated to the corresponding synchronous materialized views. The refresh of a synchronous materialized view is triggered automatically. Synchronous materialized views are significantly inexpensive to maintain and update, making them suitable for transparent acceleration of real-time, single-table aggregate queries.
 
-Synchronous materialized views in StarRocks can be created only on a single base table from [the default catalog](../data_source/catalog/default_catalog.md). They are essentially a special index for query acceleration rather than a physic table like asynchronous materialized views.
+Synchronous materialized views in StarRocks can be created only on a single base table from [the default catalog](../data_source/catalog/default_catalog.md). They are essentially a special index for query acceleration rather than a physical table like asynchronous materialized views.
 
 From v2.4 onwards, StarRocks provides asynchronous materialized views, which supports creation on multiple tables and more aggregation operators. For the usage of **asynchronous materialized views**, see [Asynchronous materialized view](../using_starrocks/Materialized_view.md).
 
@@ -180,7 +180,7 @@ The `RollupIndexName` section indicates the name of the synchronous materialized
 
 ## Query a synchronous materialized view
 
-Because a synchronous materialized view is essentially an index of the base table rather than a physic table, you can only query a synchronous materialized view using the hint `[_SYNC_MV_]`:
+Because a synchronous materialized view is essentially an index of the base table rather than a physical table, you can only query a synchronous materialized view using the hint `[_SYNC_MV_]`:
 
 ```SQL
 -- Do not omit the brackets [] in the hint.
