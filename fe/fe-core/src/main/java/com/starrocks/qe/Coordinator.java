@@ -1622,7 +1622,7 @@ public class Coordinator {
                 // when enable_profile is true, it disable count down profileDoneSignal for collect all backend's profile
                 // but if backend has crashed, we need count down profileDoneSignal since it will not report by itself
                 if (connectContext.getSessionVariable().isEnableProfile() && profileDoneSignal != null
-                        && cancelledMessage.equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
+                        && cancelledMessage.contain("Backend not found")) {
                     profileDoneSignal.countDownToZero(new Status());
                     LOG.info("count down profileDoneSignal since backend has crashed, query id: {}", DebugUtil.printId(queryId));
                 }
