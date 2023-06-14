@@ -238,6 +238,8 @@ public class StorageVolumeTest {
                 storageParams, true, "");
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
+        HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
+        Assert.assertTrue(hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication().isEmpty());
     }
 
     @Test

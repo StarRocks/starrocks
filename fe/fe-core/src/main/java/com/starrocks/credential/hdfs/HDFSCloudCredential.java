@@ -104,7 +104,6 @@ public class HDFSCloudCredential implements CloudCredential {
 
     @Override
     public FileStoreInfo toFileStoreInfo() {
-        // TODO: support hdfs credential
         FileStoreInfo.Builder fileStore = FileStoreInfo.newBuilder();
         fileStore.setFsType(FileStoreType.HDFS);
         HDFSFileStoreInfo.Builder hdfsFileStoreInfo = HDFSFileStoreInfo.newBuilder();
