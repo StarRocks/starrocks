@@ -108,6 +108,7 @@ This topic uses CSV-formatted data as an example.
 
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
+    -H "Expect:100-continue" \
     -H "db:<database_name>" -H "table:<table_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/begin
 ```
@@ -116,6 +117,7 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 
 ```Bash
 curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
+    -H "Expect:100-continue" \
     -H "db:test_db" -H "table:table1" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/begin
 ```
@@ -163,6 +165,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
+    -H "Expect:100-continue" \
     -H "db:<database_name>" -H "table:<table_name>" \
     -T <file_path>
     -XPUT http://<fe_host>:<fe_http_port>/api/transaction/load
@@ -176,6 +179,7 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 
 ```Bash
 curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
+    -H "Expect:100-continue" \
     -H "db:test_db" -H "table:table1" \
     -T /home/disk1/example1.csv
     -H "column_separator: ,"
@@ -247,6 +251,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
+    -H "Expect:100-continue" \
     -H "db:<database_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
 ```
@@ -255,6 +260,7 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 
 ```Bash
 curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
+    -H "Expect:100-continue" \
     -H "db:test_db"
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
 ```
@@ -321,6 +327,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
+    -H "Expect:100-continue" \
     -H "db:<database_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/commit
 ```
@@ -329,6 +336,7 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 
 ```Bash
 curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
+    -H "Expect:100-continue" \
     -H "db:test_db>"
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/commit
 ```
@@ -418,6 +426,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
+    -H "Expect:100-continue" \
     -H "db:<database_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/rollback
 ```
@@ -426,6 +435,7 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 
 ```Bash
 curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
+    -H "Expect:100-continue" \
     -H "db:test_db"
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/rollback
 ```
