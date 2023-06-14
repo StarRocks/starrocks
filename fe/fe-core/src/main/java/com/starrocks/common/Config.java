@@ -261,6 +261,21 @@ public class Config extends ConfigBase {
     public static int label_keep_max_num = 1000;
 
     /**
+     * StreamLoadTasks hold by StreamLoadMgr will be cleaned
+     */
+    @ConfField(mutable = true)
+    public static int stream_load_task_keep_max_num = 1000;
+
+    /**
+     * StreamLoadTasks of finished or cancelled can be removed
+     * 1. after *stream_load_task_keep_max_second*
+     * or
+     * 2. tasks total num > *stream_load_task_keep_max_num*
+     */
+    @ConfField(mutable = true)
+    public static int stream_load_task_keep_max_second = 3 * 24 * 3600; // 3 days
+
+    /**
      * Load label cleaner will run every *label_clean_interval_second* to clean the outdated jobs.
      */
     @ConfField
