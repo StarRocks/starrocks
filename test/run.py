@@ -50,6 +50,7 @@ python run.py [-d dirname/file] [-r] [-l] [-c ${concurrency}] [-t ${time}] [-a $
               -a|--attr            Case attrs for filter, default all cases, e.x: system,admit
               --file_filter        Case file regex for filter, default .*
               --case_filter        Case name regex for filter, default .*
+              --config             Config path, default conf/sr.conf
         """
     )
 
@@ -65,10 +66,11 @@ if __name__ == "__main__":
     case_filter = ".*"
     collect = False
     part = False
+    config = "conf/sr.conf"
 
     args = "hld:rvc:t:x:y:pa:"
     detail_args = ["help", "list", "dir=", "record", "validate", "concurrency=", "timeout=", "file_filter=",
-                   "case_filter=", "part", "attr="]
+                   "case_filter=", "part", "attr=", "config="]
 
     case_dir = None
 
@@ -120,12 +122,16 @@ if __name__ == "__main__":
         if opt in ("-a", "--attr"):
             attr = arg
 
+        if opt == "--config":
+            config = arg
+
     # set environment
     os.environ["record_mode"] = "true" if record else "false"
     os.environ["sql_dir"] = str(dirname)
     os.environ["file_filter"] = file_filter
     os.environ["case_filter"] = case_filter
     os.environ["attr"] = attr
+    os.environ["config_path"] = config
 
     argv = [
         "nosetests",
