@@ -44,6 +44,7 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
@@ -1449,7 +1450,17 @@ public class Coordinator {
             LOG.warn("cancel execution of query, this is outside invoke");
             cancelInternal(cancelReason);
         } finally {
-            unlock();
+            try {
+                // when enable_profile is true, it disable count down profileDoneSignal for collect all backend's profile
+                // but if backend has crashed, we need count down profileDoneSignal since it will not report by itself
+                if (connectContext.getSessionVariable().isEnableProfile() && profileDoneSignal != null
+                        && cancelledMessage.equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
+                    profileDoneSignal.countDownToZero(new Status());
+                    LOG.info("count down profileDoneSignal since backend has crashed, query id: {}", DebugUtil.printId(queryId));
+                }
+            } finally {
+                unlock();
+            }
         }
     }
 
