@@ -85,7 +85,6 @@ public class SimpleScheduler {
         }
         LOG.debug("getHost nodeID={}, nodeSize={}", nodeId, computeNodes.size());
 
-        // TODO: need to refactor after be split into cn + dn
         ComputeNode node = computeNodes.get(nodeId);
 
         lock.lock();

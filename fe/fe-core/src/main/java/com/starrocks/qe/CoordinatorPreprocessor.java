@@ -197,13 +197,9 @@ public class CoordinatorPreprocessor {
 
         this.idToComputeNode = buildComputeNodeInfo();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            this.idToBackend = buildComputeNodeInfo();
+            this.idToBackend = this.idToComputeNode;
         } else {
-            Map<Long, ComputeNode> nodeMap = new HashMap<>();
-            for (long nodeId : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().keySet()) {
-                nodeMap.put(nodeId, GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId));
-            }
-            this.idToBackend = ImmutableMap.copyOf(nodeMap);
+            this.idToBackend = ImmutableMap.copyOf(GlobalStateMgr.getCurrentSystemInfo().getIdToBackend());
         }
 
         Map<PlanFragmentId, PlanFragment> fragmentMap =
@@ -416,13 +412,9 @@ public class CoordinatorPreprocessor {
 
         this.idToComputeNode = buildComputeNodeInfo();
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            this.idToBackend = buildComputeNodeInfo();
+            this.idToBackend = this.idToComputeNode;
         } else {
-            Map<Long, ComputeNode> nodeMap = new HashMap<>();
-            for (long nodeId : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().keySet()) {
-                nodeMap.put(nodeId, GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId));
-            }
-            this.idToBackend = ImmutableMap.copyOf(nodeMap);
+            this.idToBackend = ImmutableMap.copyOf(GlobalStateMgr.getCurrentSystemInfo().getIdToBackend());
         }
 
         //if it has compute node and contains hdfsScanNode,will use compute node,even though preferComputeNode is false
