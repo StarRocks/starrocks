@@ -135,7 +135,7 @@ Status VerticalGeneralTabletWriter::write_columns(const Chunk& data, const std::
         DCHECK_LE(num_rows_written, segment_num_rows);
 
         if (_current_writer_index == 0 && num_rows_written == 0) {
-            RETURN_IF_ERROR(_segment_writers[_current_writer_index]->init(column_indexes, is_key));
+            RETURN_IF_ERROR(_segment_writers[_current_writer_index]->init(column_indexes, is_key, is_key));
         }
 
         if (num_rows_written + chunk_num_rows <= segment_num_rows) {
@@ -149,7 +149,7 @@ Status VerticalGeneralTabletWriter::write_columns(const Chunk& data, const std::
                 if (segment_num_rows == num_rows_written) {
                     RETURN_IF_ERROR(flush_columns(&_segment_writers[_current_writer_index]));
                     ++_current_writer_index;
-                    RETURN_IF_ERROR(_segment_writers[_current_writer_index]->init(column_indexes, is_key));
+                    RETURN_IF_ERROR(_segment_writers[_current_writer_index]->init(column_indexes, is_key, is_key));
                     num_rows_written = _segment_writers[_current_writer_index]->num_rows_written();
                     segment_num_rows = _segment_writers[_current_writer_index]->num_rows();
                 }
@@ -229,7 +229,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.segment_location(name)));
     SegmentWriterOptions opts;
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema.get(), opts);
-    RETURN_IF_ERROR(w->init(column_indexes, is_key));
+    RETURN_IF_ERROR(w->init(column_indexes, is_key, is_key));
     _files.emplace_back(std::move(name));
     return w;
 }

@@ -93,18 +93,19 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
 }
 
 Status SegmentWriter::init() {
-    return init(true);
+    return init(true, false);
 }
 
-Status SegmentWriter::init(bool has_key) {
+Status SegmentWriter::init(bool has_key, bool only_sort_key) {
     std::vector<uint32_t> all_column_indexes;
     for (uint32_t i = 0; i < _tablet_schema->num_columns(); ++i) {
         all_column_indexes.emplace_back(i);
     }
-    return init(all_column_indexes, has_key);
+    return init(all_column_indexes, has_key, only_sort_key);
 }
 
-Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has_key, SegmentFooterPB* footer) {
+Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has_key, bool only_sort_key,
+                           SegmentFooterPB* footer) {
     DCHECK(_column_writers.empty());
     DCHECK(_column_indexes.empty());
 
@@ -182,6 +183,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
     }
 
     _has_key = has_key;
+    _only_sort_key = only_sort_key;
     if (_has_key) {
         _index_builder = std::make_unique<ShortKeyIndexBuilder>(_segment_id, _opts.num_rows_per_block);
     }
@@ -324,7 +326,11 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
                 size_t keys = _tablet_schema->num_short_key_columns();
                 SeekTuple tuple(*chunk.schema(), chunk.get(i).datums());
                 std::string encoded_key;
-                encoded_key = tuple.short_key_encode(keys, _tablet_schema->sort_key_idxes(), 0);
+                if (_only_sort_key) {
+                    encoded_key = tuple.short_key_encode(keys, 0);
+                } else {
+                    encoded_key = tuple.short_key_encode(keys, _tablet_schema->sort_key_idxes(), 0);
+                }
                 RETURN_IF_ERROR(_index_builder->add_item(encoded_key));
             }
             ++_num_rows_written;

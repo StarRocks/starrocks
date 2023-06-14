@@ -86,7 +86,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     {
         // col0
         std::vector<uint32_t> column_indexes = {0};
-        ASSERT_OK(writer.init(column_indexes, true));
+        ASSERT_OK(writer.init(column_indexes, true, true));
         auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
@@ -102,7 +102,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     {
         // col1
         std::vector<uint32_t> column_indexes{1};
-        ASSERT_OK(writer.init(column_indexes, false));
+        ASSERT_OK(writer.init(column_indexes, false, false));
         auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
@@ -210,7 +210,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     {
         // col0
         std::vector<uint32_t> column_indexes = {0};
-        ASSERT_OK(writer.init(column_indexes, true));
+        ASSERT_OK(writer.init(column_indexes, true, true));
         auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
@@ -226,7 +226,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     {
         // col1
         std::vector<uint32_t> column_indexes{1};
-        ASSERT_OK(writer.init(column_indexes, false));
+        ASSERT_OK(writer.init(column_indexes, false, false));
         auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {

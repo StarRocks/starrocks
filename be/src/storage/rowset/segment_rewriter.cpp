@@ -49,7 +49,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 
     SegmentWriterOptions opts;
     SegmentWriter writer(std::move(wfile), segment_id, &tschema, opts);
-    RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
+    RETURN_IF_ERROR(writer.init(column_ids, false, false, &footer));
 
     auto schema = ChunkHelper::convert_schema(tschema, column_ids);
     auto chunk = ChunkHelper::new_chunk(schema, columns[0]->size());
@@ -136,7 +136,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 
     SegmentWriterOptions opts;
     SegmentWriter writer(std::move(wfile), segment_id, &tschema, opts);
-    RETURN_IF_ERROR(writer.init(full_column_ids, true));
+    RETURN_IF_ERROR(writer.init(full_column_ids, true, false));
 
     uint64_t index_size = 0;
     uint64_t segment_file_size;
@@ -164,7 +164,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema&
 
     SegmentWriterOptions opts;
     SegmentWriter writer(std::move(wfile), segment_id, &tschema, opts);
-    RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
+    RETURN_IF_ERROR(writer.init(column_ids, false, false, &footer));
 
     auto schema = ChunkHelper::convert_schema(tschema, column_ids);
     auto chunk = ChunkHelper::new_chunk(schema, columns[0]->size());

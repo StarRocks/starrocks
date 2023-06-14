@@ -341,8 +341,9 @@ StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_delta
     WritableFileOptions opts{.sync_on_close = true};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
-    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), rssid, tschema.get(), writer_options);
-    RETURN_IF_ERROR(segment_writer->init(false));
+    auto segment_writer =
+            std::make_unique<SegmentWriter>(std::move(wfile), rowsetid_segid.segment_id, tschema.get(), writer_options);
+    RETURN_IF_ERROR(segment_writer->init(false, false));
     return std::move(segment_writer);
 }
 

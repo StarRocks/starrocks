@@ -98,11 +98,12 @@ public:
 
     Status init();
 
-    Status init(bool has_key);
+    Status init(bool has_key, bool only_sort_key);
 
     // Used for vertical compaction
     // footer is used for partial update
-    Status init(const std::vector<uint32_t>& column_indexes, bool has_key, SegmentFooterPB* footer = nullptr);
+    Status init(const std::vector<uint32_t>& column_indexes, bool has_key, bool only_sort_key,
+                SegmentFooterPB* footer = nullptr);
 
     // |chunk| contains partial or all columns data corresponding to _column_writers.
     Status append_chunk(const Chunk& chunk);
@@ -144,6 +145,7 @@ private:
     std::vector<std::unique_ptr<ColumnWriter>> _column_writers;
     std::vector<uint32_t> _column_indexes;
     bool _has_key = true;
+    bool _only_sort_key = false;
 
     // num rows written when appending [partial] columns
     uint32_t _num_rows_written = 0;

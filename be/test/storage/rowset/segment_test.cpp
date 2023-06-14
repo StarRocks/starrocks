@@ -268,7 +268,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
     {
         // col1 col2
         std::vector<uint32_t> column_indexes{0, 1};
-        ASSERT_OK(writer.init(column_indexes, true));
+        ASSERT_OK(writer.init(column_indexes, true, true));
         auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
@@ -286,7 +286,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
     {
         // col3
         std::vector<uint32_t> column_indexes{2};
-        ASSERT_OK(writer.init(column_indexes, false));
+        ASSERT_OK(writer.init(column_indexes, false, false));
         auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
@@ -303,7 +303,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
     {
         // col4
         std::vector<uint32_t> column_indexes{3};
-        ASSERT_OK(writer.init(column_indexes, false));
+        ASSERT_OK(writer.init(column_indexes, false, false));
         auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
@@ -385,7 +385,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     {
         // col1 col2
         std::vector<uint32_t> column_indexes{0, 1};
-        ASSERT_OK(writer.init(column_indexes, true));
+        ASSERT_OK(writer.init(column_indexes, true, true));
         auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
@@ -403,7 +403,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     {
         // col3
         std::vector<uint32_t> column_indexes{2};
-        ASSERT_OK(writer.init(column_indexes, false));
+        ASSERT_OK(writer.init(column_indexes, false, false));
         auto schema = ChunkHelper::convert_schema(*tablet_schema, column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {

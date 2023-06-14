@@ -1050,7 +1050,7 @@ Status VerticalRowsetWriter::add_columns(const Chunk& chunk, const std::vector<u
         DCHECK_LE(num_rows_written, segment_num_rows);
 
         if (_current_writer_index == 0 && num_rows_written == 0) {
-            RETURN_IF_ERROR(_segment_writers[_current_writer_index]->init(column_indexes, is_key));
+            RETURN_IF_ERROR(_segment_writers[_current_writer_index]->init(column_indexes, is_key, is_key));
         }
 
         if (num_rows_written + chunk_num_rows <= segment_num_rows) {
@@ -1064,7 +1064,7 @@ Status VerticalRowsetWriter::add_columns(const Chunk& chunk, const std::vector<u
                 if (segment_num_rows == num_rows_written) {
                     RETURN_IF_ERROR(_flush_columns(&_segment_writers[_current_writer_index]));
                     ++_current_writer_index;
-                    RETURN_IF_ERROR(_segment_writers[_current_writer_index]->init(column_indexes, is_key));
+                    RETURN_IF_ERROR(_segment_writers[_current_writer_index]->init(column_indexes, is_key, is_key));
                     num_rows_written = _segment_writers[_current_writer_index]->num_rows_written();
                     segment_num_rows = _segment_writers[_current_writer_index]->num_rows();
                 }
@@ -1146,7 +1146,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> VerticalRowsetWriter::_create_segment_w
                                                                                   _context.rowset_id, _num_segment)));
     const auto* schema = _context.tablet_schema;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
-    RETURN_IF_ERROR(segment_writer->init(column_indexes, is_key));
+    RETURN_IF_ERROR(segment_writer->init(column_indexes, is_key, is_key));
     ++_num_segment;
     return std::move(segment_writer);
 }
