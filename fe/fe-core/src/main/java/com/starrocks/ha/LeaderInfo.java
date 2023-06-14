@@ -17,6 +17,7 @@
 
 package com.starrocks.ha;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
@@ -26,8 +27,11 @@ import java.io.IOException;
 
 public class LeaderInfo implements Writable {
 
+    @SerializedName("ip")
     private String ip;
+    @SerializedName("hp")
     private int httpPort;
+    @SerializedName("rp")
     private int rpcPort;
 
     public LeaderInfo() {

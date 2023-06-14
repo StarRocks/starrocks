@@ -35,6 +35,7 @@
 package com.starrocks.persist;
 
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 
@@ -45,14 +46,17 @@ import java.util.List;
 
 public class BackendTabletsInfo implements Writable {
 
+    @SerializedName("bc")
     private long backendId;
     // tablet id , schema hash
     // this structure is deprecated and be replaced by 'replicaPersistInfos'
     @Deprecated
     private List<Pair<Long, Integer>> tabletSchemaHash = Lists.newArrayList();
 
+    @SerializedName("bad")
     private boolean bad;
 
+    @SerializedName("rs")
     private List<ReplicaPersistInfo> replicaPersistInfos = Lists.newArrayList();
 
     private BackendTabletsInfo() {

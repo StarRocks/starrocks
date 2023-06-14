@@ -34,6 +34,7 @@
 
 package com.starrocks.persist;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -45,10 +46,15 @@ import java.io.IOException;
 
 public class DatabaseInfo implements Writable {
 
+    @SerializedName("db")
     private String dbName;
+    @SerializedName("ndb")
     private String newDbName;
+    @SerializedName("qt")
     private long quota;
+    @SerializedName("cn")
     private String clusterName;
+    @SerializedName("qp")
     private QuotaType quotaType;
 
     public DatabaseInfo() {

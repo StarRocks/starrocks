@@ -28,9 +28,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.DdlException;
-import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
-import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.persist.SinglePartitionPersistInfo;
@@ -65,7 +63,6 @@ public class PartitionUtils {
             List<Partition> sourcePartitions = sourcePartitionIds.stream()
                     .map(id -> targetTable.getPartition(id)).collect(Collectors.toList());
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
-            List<PartitionPersistInfo> partitionInfoList = Lists.newArrayListWithCapacity(newTempPartitions.size());
             List<PartitionPersistInfoV2> partitionInfoV2List = Lists.newArrayListWithCapacity(newTempPartitions.size());
             for (int i = 0; i < newTempPartitions.size(); i++) {
                 targetTable.addTempPartition(newTempPartitions.get(i));
@@ -84,41 +81,25 @@ public class PartitionUtils {
                             rangePartitionInfo.getRange(sourcePartitionId));
                     range = rangePartitionInfo.getRange(partition.getId());
                 }
-                if (targetTable.isCloudNativeTableOrMaterializedView()) {
-                    PartitionPersistInfoV2 info = null;
-                    if (range != null) {
-                        info = new RangePartitionPersistInfo(db.getId(), targetTable.getId(),
-                                partition, partitionInfo.getDataProperty(partition.getId()),
-                                partitionInfo.getReplicationNum(partition.getId()),
-                                partitionInfo.getIsInMemory(partition.getId()), true,
-                                range, partitionInfo.getStorageCacheInfo(partition.getId()));
-                    } else {
-                        info = new SinglePartitionPersistInfo(db.getId(), targetTable.getId(),
-                                partition, partitionInfo.getDataProperty(partition.getId()),
-                                partitionInfo.getReplicationNum(partition.getId()),
-                                partitionInfo.getIsInMemory(partition.getId()), true,
-                                partitionInfo.getStorageCacheInfo(partition.getId()));
-                    }
-                    partitionInfoV2List.add(info);
+                PartitionPersistInfoV2 info = null;
+                if (range != null) {
+                    info = new RangePartitionPersistInfo(db.getId(), targetTable.getId(),
+                            partition, partitionInfo.getDataProperty(partition.getId()),
+                            partitionInfo.getReplicationNum(partition.getId()),
+                            partitionInfo.getIsInMemory(partition.getId()), true,
+                            range, partitionInfo.getStorageCacheInfo(partition.getId()));
                 } else {
-                    PartitionPersistInfo info =
-                            new PartitionPersistInfo(db.getId(), targetTable.getId(), partition,
-                                    range,
-                                    partitionInfo.getDataProperty(partition.getId()),
-                                    partitionInfo.getReplicationNum(partition.getId()),
-                                    partitionInfo.getIsInMemory(partition.getId()),
-                                    true);
-                    partitionInfoList.add(info);
+                    info = new SinglePartitionPersistInfo(db.getId(), targetTable.getId(),
+                            partition, partitionInfo.getDataProperty(partition.getId()),
+                            partitionInfo.getReplicationNum(partition.getId()),
+                            partitionInfo.getIsInMemory(partition.getId()), true,
+                            partitionInfo.getStorageCacheInfo(partition.getId()));
                 }
+                partitionInfoV2List.add(info);
             }
 
-            if (targetTable.isCloudNativeTableOrMaterializedView()) {
-                AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoV2List);
-                GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
-            } else {
-                AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
-                GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
-            }
+            AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoV2List);
+            GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
 
             success = true;
         } finally {

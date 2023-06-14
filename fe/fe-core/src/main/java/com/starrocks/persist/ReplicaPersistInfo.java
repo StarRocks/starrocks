@@ -35,6 +35,7 @@
 package com.starrocks.persist;
 
 import com.google.common.base.Objects;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
@@ -98,23 +99,37 @@ public class ReplicaPersistInfo implements Writable {
     }
 
     // required
+    @SerializedName("ot")
     private ReplicaOperationType opType;
+    @SerializedName("db")
     private long dbId;
+    @SerializedName("tb")
     private long tableId;
+    @SerializedName("pt")
     private long partitionId;
+    @SerializedName("idx")
     private long indexId;
+    @SerializedName("tbt")
     private long tabletId;
 
+    @SerializedName("rp")
     private long replicaId;
+    @SerializedName("bc")
     private long backendId;
 
+    @SerializedName("vs")
     private long version;
     private long minReadableVersion = 0;
+    @SerializedName("sh")
     private int schemaHash = -1;
+    @SerializedName("ds")
     private long dataSize;
+    @SerializedName("rc")
     private long rowCount;
 
+    @SerializedName("lfv")
     private long lastFailedVersion = -1L;
+    @SerializedName("lsv")
     private long lastSuccessVersion = -1L;
 
     public static ReplicaPersistInfo createForAdd(long dbId, long tableId, long partitionId, long indexId,
@@ -397,7 +412,6 @@ public class ReplicaPersistInfo implements Writable {
         StringBuilder sb = new StringBuilder();
         sb.append("table id: ").append(tableId);
         sb.append(" partition id: ").append(partitionId);
-        sb.append(" index id: ").append(indexId);
         sb.append(" index id: ").append(indexId);
         sb.append(" tablet id: ").append(tabletId);
         sb.append(" backend id: ").append(backendId);
