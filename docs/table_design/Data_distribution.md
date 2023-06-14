@@ -35,7 +35,7 @@ To achieve more flexible data distribution, you can combine the preceding four p
 
 - **Hash**: A hash-partitioned table has only one partition (the entire table is considered a partition). The partition is divided into tablets based on the bucketing column and the number of buckets.
 
-  For example, the following statement creates a table `site_access`. The table is divided into tablets based on the `site_id` column.
+  For example, the following statement creates a table `site_access`. The table is divided into tablets based on the `site_id` column and the number of buckets.
 
   ```SQL
   CREATE TABLE site_access(
