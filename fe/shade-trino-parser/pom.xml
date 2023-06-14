@@ -11,6 +11,11 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
+    <properties>
+        <starrocks.home>${basedir}/../../</starrocks.home>
+        <fe_ut_parallel>1</fe_ut_parallel>
+    </properties>
+
     <artifactId>shade-trino-parser</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
@@ -44,6 +49,21 @@
                                 </relocation>
                             </relocations>
                         </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <executions>
+                    <execution>
+                        <id>compile-dependencies</id>
+                        <phase>process-test-classes</phase>
+                        <goals>
+                            <goal>testCompile</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>
