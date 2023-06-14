@@ -131,18 +131,18 @@ class ChooseCase(object):
 
             if "/T" in dir_path:
                 for file in file_names:
+                    if file.startswith("."):
+                        continue
                     if file_regex is not None and not file_regex.search(file):
-                        # assign filename regex and not match
-                        pass
-                    else:
-                        self.t.append(os.path.join(dir_path, file))
+                        continue
+                    self.t.append(os.path.join(dir_path, file))
             elif "/R" in dir_path:
                 for file in file_names:
+                    if file.startswith("."):
+                        continue
                     if file_regex is not None and not file_regex.search(file):
-                        # assign filename regex and not match
-                        pass
-                    else:
-                        self.r.append(os.path.join(dir_path, file))
+                        continue
+                    self.r.append(os.path.join(dir_path, file))
 
     def get_cases(self, record_mode, case_regex):
         """get cases"""
