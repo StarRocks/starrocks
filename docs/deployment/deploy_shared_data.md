@@ -194,7 +194,7 @@ CREATE TABLE IF NOT EXISTS detail_demo (
     ispass        BOOLEAN        COMMENT "true/false"
 )
 DUPLICATE KEY(recruit_date, region_num)
-DISTRIBUTED BY HASH(recruit_date, region_num) BUCKETS 96
+DISTRIBUTED BY HASH(recruit_date, region_num)
 PROPERTIES (
     "enable_storage_cache" = "true",
     "storage_cache_ttl" = "2592000",
