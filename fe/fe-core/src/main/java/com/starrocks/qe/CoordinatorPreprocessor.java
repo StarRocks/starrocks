@@ -438,14 +438,18 @@ public class CoordinatorPreprocessor {
         }
     }
 
+    private ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse() {
+        Map<Long, ComputeNode> computeNodes = new HashMap<>();
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+        for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
+            computeNodes.put(nodeId, GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId));
+        }
+        return ImmutableMap.copyOf(computeNodes);
+    }
+
     private ImmutableMap<Long, ComputeNode> buildComputeNodeInfo() {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-            Map<Long, ComputeNode> computeNodes = new HashMap<>();
-            for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                computeNodes.put(nodeId, GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId));
-            }
-            return ImmutableMap.copyOf(computeNodes);
+            return getComputeNodesFromWarehouse();
         }
 
         ImmutableMap<Long, ComputeNode> idToComputeNode
