@@ -38,8 +38,9 @@ Parameters in brackets [] are optional.
 
 The name of the materialized view. The naming requirements are as follows:
 
-- The name must consist of letters (a-z or A-Z), numbers (0-9), or underscores (_), and it can only start with a letter.
+- The name must consist of letters (a-z or A-Z), digits (0-9), or underscores (\_), and it can only start with a letter.
 - The length of the name cannot exceed 64 characters.
+- The name is case-sensitive.
 
 **COMMENT** (optional)
 
@@ -147,8 +148,9 @@ Parameters in brackets [] are optional.
 
 The name of the materialized view. The naming requirements are as follows:
 
-- The name must consist of letters (a-z or A-Z), numbers (0-9), or underscores (_), and it can only start with a letter.
+- The name must consist of letters (a-z or A-Z), digits (0-9), or underscores (\_), and it can only start with a letter.
 - The length of the name cannot exceed 64 characters.
+- The name is case-sensitive.
 
 > **CAUTION**
 >
